@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds / outputs
+dist/
+build/
+web-build/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# expo / react-native (managed workflow: native dirs are generated)
+.expo/
+ios/
+android/
+*.orig.*
+
+# cloudflare workers
+.wrangler/
+.dev.vars
+
+# env & logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

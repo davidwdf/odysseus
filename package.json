@@ -1,0 +1,38 @@
+{
+  "name": "nextbus-hk",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "dev:edge": "pnpm --filter @nextbus/edge dev",
+    "dev:mobile": "pnpm --filter @nextbus/mobile dev",
+    "dev:web": "pnpm --filter @nextbus/mobile exec expo start --web",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "git clean -xdf node_modules dist .turbo .expo .wrangler"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.16",
+    "turbo": "2.9.16",
+    "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild",
+      "workerd",
+      "@swc/core",
+      "sharp",
+      "@parcel/watcher",
+      "bufferutil",
+      "utf-8-validate"
+    ]
+  }
+}

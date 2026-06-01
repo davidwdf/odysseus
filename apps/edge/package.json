@@ -1,0 +1,21 @@
+{
+  "name": "@nextbus/edge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nextbus/core": "workspace:*",
+    "@nextbus/data-normalize": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250906.0",
+    "@nextbus/tsconfig": "workspace:*",
+    "typescript": "5.9.3",
+    "wrangler": "^4.95.0"
+  }
+}

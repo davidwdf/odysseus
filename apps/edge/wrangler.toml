@@ -1,0 +1,18 @@
+name = "nextbus-edge"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# Daily static-data crawl (~03:00 HKT = 19:00 UTC). See src/index.ts `scheduled`.
+[triggers]
+crons = ["0 19 * * *"]
+
+# Static normalized dataset + ETA cache live in KV / R2 (docs/03-architecture.md).
+# Create then uncomment:
+#   wrangler kv namespace create DATASET
+# [[kv_namespaces]]
+# binding = "DATASET"
+# id = "<id-from-the-command-above>"
