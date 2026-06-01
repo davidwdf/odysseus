@@ -79,6 +79,7 @@ packages/tsconfig    shared TS configs
 - **Types/bundle:** `pnpm typecheck`; `pnpm --filter @nextbus/edge exec wrangler deploy --dry-run`.
 
 ## Current status
+**The living status/handoff doc is [`docs/11`](./docs/11-status.md) — read it to resume.** Summary:
 Scaffold complete and verified. **Slice 1 — Nearby — is live and verified end-to-end**: the app
 geolocates → `DataSource.getNearby` → Worker `/v1/nearby` (memoized KMB index + bounded live ETAs)
 → themed `StopCard`/`EtaBadge`. KMB only and **server-side** for now (ADR-016). Next: Citybus

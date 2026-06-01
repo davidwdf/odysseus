@@ -17,6 +17,7 @@ order, or jump to what you need:
 | 08 | [Decision Log](./08-decision-log.md) | Every key decision with rationale (ADR-style) |
 | 09 | [Theme & Design System](./09-theme.md) | Tokens, palettes, type scale, livery-theme layering |
 | 10 | [Scaffold & Running It](./10-scaffold-and-running.md) | The actual monorepo skeleton + how to install/run/deploy |
+| 11 | [Status & Where to Continue](./11-status.md) | **Living handoff** — what's done, what's next (read to resume) |
 
 ## The 60-second summary
 
