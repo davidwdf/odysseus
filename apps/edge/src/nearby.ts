@@ -1,6 +1,6 @@
 import type { Eta, NearbyStop, Stop } from '@nextbus/core'
-import { fetchKmbEta, findNearbyKmb } from '@nextbus/data-normalize'
-import { getKmbIndex } from './kmb-index'
+import { fetchEta, findNearby } from '@nextbus/data-normalize'
+import { getStaticIndex } from './static-index'
 
 // Slice-1 bounds so a cold nearby request stays cheap (≤ MAX_STOPS × MAX_ROUTES
 // upstream ETA calls, all edge-cached). The v2 push engine + on-device index
@@ -8,16 +8,17 @@ import { getKmbIndex } from './kmb-index'
 const MAX_STOPS = 6
 const MAX_ROUTES_PER_STOP = 6
 
-export async function nearbyKmb(lat: number, lng: number, radiusM: number): Promise<NearbyStop[]> {
-  const index = await getKmbIndex()
-  const hits = findNearbyKmb(index, lat, lng, radiusM, MAX_STOPS)
+export async function nearby(lat: number, lng: number, radiusM: number): Promise<NearbyStop[]> {
+  const index = await getStaticIndex()
+  const hits = findNearby(index, lat, lng, radiusM, MAX_STOPS)
 
   return Promise.all(
     hits.map(async (hit): Promise<NearbyStop> => {
       const routes = hit.routes.slice(0, MAX_ROUTES_PER_STOP)
       const etaLists = await Promise.all(
         routes.map((r) =>
-          fetchKmbEta(hit.stop.stopId, r.route, r.serviceType).catch(() => [] as Eta[]),
+          // Dispatch by operator: KMB takes a service type, CTB does not.
+          fetchEta(r.operator, hit.stop.stopId, r.route, r.serviceType).catch(() => [] as Eta[]),
         ),
       )
       const etas = etaLists
@@ -26,10 +27,10 @@ export async function nearbyKmb(lat: number, lng: number, radiusM: number): Prom
         .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
 
       const stop: Stop = {
-        id: `KMB:${hit.stop.stopId}`,
+        id: hit.stop.id,
         name: hit.stop.name,
         location: { lat: hit.stop.lat, lng: hit.stop.lng },
-        sources: [{ operator: 'KMB', operatorStopId: hit.stop.stopId }],
+        sources: [{ operator: hit.stop.operator, operatorStopId: hit.stop.stopId }],
       }
       return { stop, distanceM: hit.distanceM, etas }
     }),

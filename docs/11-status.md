@@ -1,23 +1,25 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-02**. Branch: `hk-bus-arrival-app`. Last commit: Slice 2 (stop/route + favorites).
+> Snapshot: **2026-06-02**. Branch: `hk-bus-arrival-app`. Last commit: Citybus (multi-operator static index).
 
 ## TL;DR
-Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + a two-axis
-livery picker), and **Slice 2 (Stop detail · Route detail · Favorites · language picker)** are complete
-and **verified end-to-end against live HK open data**. KMB only; nearby/stop/route computed
-**server-side** for now. Pick up at **Citybus in nearby** or the **on-device index / daily crawl**.
+Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + two-axis livery
+picker), **Slice 2 (Stop · Route · Favorites · language picker)**, and **Citybus** are complete and
+**verified end-to-end against live HK open data**. Nearby/stop/route are **multi-operator (KMB + CTB)**,
+computed **server-side** from the hkbus consolidated static dataset ([ADR-021](./08-decision-log.md)); live
+ETAs come direct from the official APIs. Pick up at **same-kerb stop-merge**, **own crawl → KV**, or the **Routes tab**.
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
 - **packages:** `core` (canonical types, `DataSource` seam, honest-ETA helpers) · `data-normalize`
-  (KMB + Citybus ETA adapters, **KMB static index** via bulk endpoints + haversine) · `api-client`
-  (`EdgeClient` + `watch()` polling shim) · `i18n` (en / 繁 / 简 + `resolveLocale`) · `ui`
-  (NativeWind preset + `themes.ts` light/dark + liveries + tokens) · `tsconfig`.
-- **apps/edge:** `/v1/nearby`, **`/v1/stop/:id`** (StopDetail), **`/v1/route/:id`** (RouteDetail),
-  **`/v1/etas/:id`** (canonical Eta[]), and the low-level `/v1/eta/:co/:stop/:route` — KMB, one
-  **shared memoized index** (`kmb-index.ts`) + bounded ETA fetch + edge cache; daily-crawl cron is a **stub**.
+  (KMB + Citybus ETA adapters · **multi-operator static index** from the consolidated dataset `dataset.ts` ·
+  KMB bulk crawl `kmb-static.ts` kept for the future own-crawl) · `api-client` (`EdgeClient` + `watch()`
+  shim) · `i18n` (en / 繁 / 简 + `resolveLocale`) · `ui` (NativeWind preset + livery×mode themes + tokens) · `tsconfig`.
+- **apps/edge:** `/v1/nearby`, **`/v1/stop/:id`**, **`/v1/route/:id`**, **`/v1/etas/:id`** (canonical),
+  and the low-level `/v1/eta/:co/:stop/:route` — **multi-operator (KMB + CTB)** off one **shared memoized
+  index** (`static-index.ts`, built from the consolidated dataset) + bounded ETA fetch + edge cache;
+  daily-crawl cron is a **stub**.
 - **apps/mobile:** tabs shell · `QueryProvider` · `LocaleProvider` (device detection + **persisted**
   override) · **Nearby** (live, tappable cards) · **Stop detail** `/stop/[id]` (live ETAs, route dedup,
   save) · **Route detail** `/route/[id]` (ordered stops) · **Favorites** tab · **Settings** (language +
@@ -43,12 +45,20 @@ and **verified end-to-end against live HK open data**. KMB only; nearby/stop/rou
   (live ETAs, rider-duplicate routes collapsed, favorite toggle), Route detail (ordered stops), Favorites
   (Zustand store, reuses theme persistence), Settings language picker (persisted, live re-localization).
   Fixed an etabus **3-concurrent-fetch 403** quirk (route fetched solo, then the pair, + backoff retry).
-- **Docs:** plan `01–10`, ADRs `001–020`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
+- **Citybus — multi-operator** ([ADR-021](./08-decision-log.md)): static layer for **KMB + CTB** now built
+  from the hkbus **consolidated dataset** (one 8 MB fetch, memoized) → `data-normalize/dataset.ts` +
+  `edge/static-index.ts`; `nearby`/`stop`/`route` dispatch ETAs per operator. **Verified in-browser/curl**:
+  Central nearby = 4 CTB + 2 KMB with live ETAs; CTB stop/route detail render (yellow Citybus chip); KMB intact.
+- **Docs:** plan `01–10`, ADRs `001–021`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
-- All data is **server-side & KMB-only** ([ADR-016](./08-decision-log.md)). Citybus and the
-  **on-device index** ([ADR-007](./08-decision-log.md)) are pending.
-- The **daily crawl is a stub** — no canonical static dataset in KV/R2 yet (no offline).
+- All data is **server-side** (no [on-device index](./08-decision-log.md), ADR-007). KMB + CTB only;
+  other operators (NLB/GMB/MTR) are in the consolidated set but out of v1 scope.
+- **No same-kerb stop-merge yet** — a shared KMB+CTB kerb shows as two nearby entries ([ADR-021](./08-decision-log.md) / backlog).
+- **Simplified (zh-Hans) static names fall back to Traditional** (consolidated dataset has en + 繁 only);
+  live ETA text still has all three. Backlog: true zh-Hans via own crawl.
+- Static layer **depends on the hkbus gh-pages artifact** at runtime (no KV cache yet → their outage = stale once isolates recycle). Backlog: KV/R2 cache + own crawl.
+- The **daily crawl cron is a stub**; no offline.
 - The **Routes tab** is still a placeholder (no route search yet); stop/route detail are reached by tapping.
 - Stop detail's ETA fan-out is **capped** (`MAX_ETA_ROUTES`) and refreshes via `refetchInterval` polling,
   not the `watch()` socket (v2). No map · no push · no native build has been run.
@@ -62,10 +72,10 @@ and **verified end-to-end against live HK open data**. KMB only; nearby/stop/rou
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
 
 ## 🔜 Next steps (priority order)
-1. **Citybus in nearby/stop** — CTB stop crawl (per-route; no bulk stop endpoint) + stop-merge (`Place`)
-   for co-located KMB/CTB stops, then include CTB in `/v1/nearby` and `/v1/stop`.
-2. **Daily crawl → KV/R2 + on-device index** — implement the `scheduled` crawl writing a versioned
-   dataset; move nearby/stop on-device (ADR-007); enables offline. Retires the stub.
+1. **Same-kerb stop-merge (`Place`)** — cluster co-located KMB/CTB stops (~25–40 m + name) so a shared kerb
+   shows once with both operators' routes (own clustering; the dataset's `stopMap` over-clusters — ADR-021).
+2. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
+   resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
 3. **Routes tab** — route-number search → `/route/[id]` (the screen already exists).
 4. **Map view** (MapLibre) for Nearby.
 5. **Polish** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
@@ -73,7 +83,8 @@ and **verified end-to-end against live HK open data**. KMB only; nearby/stop/rou
 
 ## 📍 Key file pointers
 - DataSource seam → `packages/core/src/datasource.ts`; EdgeClient → `packages/api-client/src/index.ts`
-- Edge logic → `apps/edge/src/{nearby,stop-route,kmb-index}.ts`; KMB index → `packages/data-normalize/src/kmb-static.ts`
+- Edge logic → `apps/edge/src/{nearby,stop-route,static-index}.ts`; multi-op index →
+  `packages/data-normalize/src/dataset.ts` (KMB own-crawl in `kmb-static.ts`, for the future)
 - Screens → `apps/mobile/app/(tabs)/index.tsx` (Nearby), `app/stop/[id].tsx`, `app/route/[id].tsx`,
   `app/(tabs)/favorites.tsx`; location → `apps/mobile/lib/useLocation.ts`
 - Theme tokens → `packages/ui/src/themes.ts`, type scale → `packages/ui/src/typography.ts`,

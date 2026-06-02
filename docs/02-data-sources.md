@@ -55,6 +55,14 @@ are **not comparable** to each other and don't mean "older vs newer tech":
   already consolidates KMB/CTB route/stop/fare data aligned to the data.gov.hk ETA APIs. Great
   reference for the normalization mapping (license-permitting; verify before reuse).
 
+> **Current static source ([ADR-021](./08-decision-log.md)).** The static layer for **KMB + CTB** is built
+> from the hk-bus-crawling **consolidated dataset** (`routeFareList.min.json`, one ~8 MB daily-updated fetch,
+> memoized at the edge) — because the **official CTB API has no bulk stop/route-stop endpoint** (building a
+> CTB index from it is a ~6,800-call crawl). The dataset's stop ids in `routeList.stops` are the raw,
+> directly-ETA-callable operator ids; its `stopMap` over-clusters and is **not** used (it breaks ETA
+> resolution). **Live ETAs still come direct from the official KMB/CTB APIs.** Our own crawl + same-kerb
+> stop-merge + true Simplified static names are [backlog](./07-backlog.md) items.
+
 ## The two kinds of data (they have opposite needs)
 
 ### 1. Static-ish — routes, stops, sequences, fares, names
