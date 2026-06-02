@@ -45,6 +45,8 @@ export interface Messages {
   // Stop / route detail + favorites (Slice 2)
   routesAtStop: string
   stopsOnRoute: string
+  /** Route detail, when opened from a stop: the route's upcoming arrivals here. */
+  arrivalsHere: string
   save: string
   saved: string
   favoritesEmpty: string
@@ -86,6 +88,7 @@ const en: Messages = {
   languageAuto: 'Automatic',
   routesAtStop: 'Routes',
   stopsOnRoute: 'Stops',
+  arrivalsHere: 'Next buses at this stop',
   save: 'Save',
   saved: 'Saved',
   favoritesEmpty: 'No saved stops yet',
@@ -127,6 +130,7 @@ const zhHant: Messages = {
   languageAuto: '自動',
   routesAtStop: '路線',
   stopsOnRoute: '車站',
+  arrivalsHere: '本站即將到站',
   save: '收藏',
   saved: '已收藏',
   favoritesEmpty: '尚未收藏車站',
@@ -168,6 +172,7 @@ const zhHans: Messages = {
   languageAuto: '自动',
   routesAtStop: '路线',
   stopsOnRoute: '车站',
+  arrivalsHere: '本站即将到站',
   save: '收藏',
   saved: '已收藏',
   favoritesEmpty: '尚未收藏车站',

@@ -68,6 +68,23 @@ export interface IndexRouteStop {
   stopId: string
 }
 
+/**
+ * A same-kerb grouping of co-located stops from *different* operators (e.g. a KMB
+ * and a CTB stop on one pavement). Our own conservative clustering — the dataset's
+ * `stopMap` over-clusters and breaks ETA resolution (ADR-021), so we don't use it.
+ * Invariant: at most one member per operator (two same-operator stops that close
+ * are opposite-direction kerbs and must stay distinct).
+ */
+export interface IndexPlace {
+  /** `P:` + member canonical ids (sorted) joined by `+` — self-describing so the
+   *  edge can resolve members from the id alone. */
+  id: string
+  name: I18nText
+  lat: number
+  lng: number
+  members: IndexStop[]
+}
+
 export interface StaticIndex {
   stops: IndexStop[]
   /** canonical stop id → stop record. */
@@ -78,12 +95,113 @@ export interface StaticIndex {
   routeMeta: Map<string, IndexRouteMeta>
   /** canonical route id → ordered canonical stop ids. */
   routeToStops: Map<string, IndexRouteStop[]>
+  /** Same-kerb cross-operator groupings (KMB+CTB at one kerb). */
+  places: IndexPlace[]
+  /** canonical stop id → the place it belongs to (members only). */
+  placeByStopId: Map<string, IndexPlace>
 }
 
 /** Map the dataset's `{en, zh}` to our three-locale text (zh-Hans falls back to zh-Hant). */
 function datasetText(t: { en?: string; zh?: string }): I18nText {
   const zh = t.zh ?? ''
   return i18nText(t.en ?? '', zh, zh)
+}
+
+// Same-kerb merge tuning. Conservative on purpose: we'd rather under-merge (show a
+// genuine pair as two cards) than over-merge distinct stops into one. Both the radius
+// and the name-match are required (see buildPlaces). ADR-022.
+const MERGE_RADIUS_M = 30
+
+/**
+ * The landmark head of a stop name — everything before the first road/code separator,
+ * normalized (punctuation/spacing stripped, lowercased; CJK kept). The two operators
+ * name the same kerb differently — KMB as `LANDMARK (CW112)`, CTB as `Landmark, Road` —
+ * but both *lead* with the shared landmark (e.g. `怡和大廈` / "Jardine House"), so the
+ * landmark is the reliable match key, not the full string.
+ */
+function landmark(s: string): string {
+  const head = s.split(/[,，(（]/)[0] ?? s
+  return head.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase()
+}
+
+/** Two stops name-match if their English OR Chinese landmark heads are equal. */
+function namesMatch(a: I18nText, b: I18nText): boolean {
+  const aEn = landmark(a.en)
+  const bEn = landmark(b.en)
+  if (aEn && bEn && aEn === bEn) return true
+  const aZh = landmark(a['zh-Hant'])
+  const bZh = landmark(b['zh-Hant'])
+  return Boolean(aZh && bZh && aZh === bZh)
+}
+
+/**
+ * Cluster co-located, same-named stops from *different* operators into places.
+ * Greedy nearest-first pairing with a spatial grid for O(n·k) candidate lookup;
+ * each stop joins at most one place, preserving the one-member-per-operator invariant.
+ */
+function buildPlaces(stops: IndexStop[]): {
+  places: IndexPlace[]
+  placeByStopId: Map<string, IndexPlace>
+} {
+  // ~30 m in degrees (lat: 1° ≈ 111 km). A square cell of the merge radius means any
+  // pair within range shares a cell or a immediate neighbour, so a 3×3 sweep suffices.
+  const cell = MERGE_RADIUS_M / 111_000
+  const grid = new Map<string, number[]>()
+  const key = (lat: number, lng: number) => `${Math.round(lat / cell)},${Math.round(lng / cell)}`
+  stops.forEach((s, i) => {
+    const k = key(s.lat, s.lng)
+    const bucket = grid.get(k)
+    if (bucket) bucket.push(i)
+    else grid.set(k, [i])
+  })
+
+  // Collect cross-operator candidate pairs within range (each unordered pair once).
+  const candidates: Array<{ i: number; j: number; d: number }> = []
+  stops.forEach((s, i) => {
+    const ci = Math.round(s.lat / cell)
+    const cj = Math.round(s.lng / cell)
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        const bucket = grid.get(`${ci + di},${cj + dj}`)
+        if (!bucket) continue
+        for (const j of bucket) {
+          if (j <= i) continue // unordered: only j > i
+          const o = stops[j]
+          if (!o || o.operator === s.operator) continue // never merge same-operator kerbs
+          const d = haversineM(s.lat, s.lng, o.lat, o.lng)
+          if (d <= MERGE_RADIUS_M && namesMatch(s.name, o.name)) {
+            candidates.push({ i, j, d })
+          }
+        }
+      }
+    }
+  })
+
+  candidates.sort((a, b) => a.d - b.d) // nearest pairs win contention
+  const taken = new Set<number>()
+  const places: IndexPlace[] = []
+  const placeByStopId = new Map<string, IndexPlace>()
+  for (const { i, j } of candidates) {
+    if (taken.has(i) || taken.has(j)) continue
+    const a = stops[i]
+    const b = stops[j]
+    if (!a || !b) continue
+    taken.add(i)
+    taken.add(j)
+    const members = [a, b].sort((x, y) => x.id.localeCompare(y.id))
+    const rep = members[0]
+    if (!rep) continue
+    const place: IndexPlace = {
+      id: `P:${members.map((m) => m.id).join('+')}`,
+      name: rep.name,
+      lat: rep.lat,
+      lng: rep.lng,
+      members,
+    }
+    places.push(place)
+    for (const m of members) placeByStopId.set(m.id, place)
+  }
+  return { places, placeByStopId }
 }
 
 export async function fetchConsolidatedIndex(
@@ -161,7 +279,8 @@ export async function fetchConsolidatedIndex(
     }
   }
 
-  return { stops, stopById, stopToRoutes, routeMeta, routeToStops }
+  const { places, placeByStopId } = buildPlaces(stops)
+  return { stops, stopById, stopToRoutes, routeMeta, routeToStops, places, placeByStopId }
 }
 
 export interface NearbyHit {

@@ -318,3 +318,72 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   shared index; the edge KMB-only index (`kmb-index.ts`) is replaced by `static-index.ts`. `kmb-static.ts`
   (the official KMB bulk crawl) stays in `data-normalize` for the future own-crawl. Runtime now depends on
   the hkbus gh-pages artifact; backlog adds KV/R2 caching for resilience and an own-crawl for self-reliance.
+
+## ADR-022 — Same-kerb stop-merge: our own conservative landmark+distance clustering
+- **Context:** A KMB stop and a CTB stop on the same pavement are two separate canonical stops (distinct
+  operator ids, distinct ETA feeds). Pre-merge, nearby showed them as two cards and neither stop-detail
+  listed the other operator's routes. ADR-021 established we **can't** use the dataset's `stopMap` for this
+  (it over-clusters and its ids don't resolve ETAs), so the merge needs our own clustering.
+- **Decision:** Cluster co-located stops from **different** operators into a `Place`
+  (`packages/data-normalize/src/dataset.ts` → `buildPlaces`), built once with the index (memoized per
+  isolate). A pair merges iff it is **cross-operator**, within **`MERGE_RADIUS_M` = 30 m**, **and** their
+  **landmark names match**. Greedy nearest-first pairing with a spatial grid (O(n·k)); each stop joins at
+  most one place — preserving the invariant **≤ 1 member per operator** (two same-operator stops that close
+  are opposite-direction kerbs and must stay distinct).
+- **Why landmark, not full-name, matching:** the operators name the same kerb differently — KMB as
+  `LANDMARK (CW112)`, CTB as `Landmark, Road` (e.g. `怡和大廈 (CW112)` vs `怡和大廈, 干諾道中`). Full-string
+  equality almost never matches; both *lead* with the shared landmark, so we match on the name head before
+  the first `,`/`(` separator, in English **or** Chinese. This is deliberately conservative — verified it
+  merges "Jardine House" (KMB+CTB, 10.5 m apart) while **not** merging the genuinely-distinct "Alexandra
+  House" (CTB) and "The Landmark" (KMB) that sit only 10.8 m apart. We'd rather under-merge than over-merge.
+- **Representation (no new wire type):** a merged place reuses the canonical `Stop` shape — its `sources[]`
+  carries every member operator's id (the field was always defined for this). Place id is **self-describing**:
+  `P:<memberId>+<memberId>` (members sorted), so the edge resolves members from the id alone — robust for
+  Favorites that persist a place id across dataset rebuilds (if a place dissolves, the inner ids still
+  resolve as single stops). `/v1/nearby` collapses hits sharing a place; `/v1/stop` and `/v1/etas` resolve a
+  `P:` id to both members and fan ETAs out per operator (still direct from the official APIs).
+- **App:** `StopCard` already renders a per-ETA operator chip, so a merged card/stop shows mixed KMB(red)+
+  CTB(yellow) chips with no component change. The only change is stop-detail's `dedupeRoutes` key, now
+  including `operator` so joint-numbered services (e.g. KMB-680X and CTB-680X) stay distinct rows.
+- **Consequences:** retires the "shared kerb shows twice" limitation from ADR-021. Tunable knobs
+  (`MERGE_RADIUS_M`, landmark matcher) live in one place. Still v1-conservative: stops whose landmark
+  strings differ (e.g. KMB stop-code-only names) won't merge — acceptable, and improvable later (token
+  overlap, or the own-crawl's first-party coordinates) without changing the seam.
+
+## ADR-023 — ETA lists are de-duplicated once, server-side (canonical API)
+- **Context:** A stop is indexed **per direction** (and per operator service-type), but the upstream
+  KMB/CTB ETA feed returns **every direction of a route in a single response** (verified: `/eta/{stop}/E42/1`
+  returns both bounds; `/eta/{stop}/E42/2` → `[]`). So fetching a stop's routes once-per-ref re-fetches the
+  same response and emits each arrival **two+ times, identically** — the "two A41, same time" bug seen on the
+  Nearby card. The fix had initially been patched ad-hoc per call site (nearby, then the Favorites card),
+  while `/v1/etas` (used by `watch()`/polling) wasn't deduped at all — exactly the inconsistency to avoid.
+- **Decision:** De-duplicate **once, at a single server seam.** `dedupeEtas` (one definition, in
+  `@nextbus/core/eta`) collapses an `Eta[]` to **one rider line per `operator|routeNo|bound`**, keeping the
+  soonest. Every endpoint that returns an `Eta[]` flows through `stopArrivals` (`apps/edge/src/stop-route.ts`),
+  which (a) dedupes the **upstream calls** by `(route, serviceType)` and (b) applies `dedupeEtas`, soonest
+  first. `/v1/nearby` and `/v1/etas` both use it. **Contract:** any `Eta[]` the API returns is rider-deduped
+  and ordered — the frontend trusts it and never re-dedupes.
+- **Why server-side, not in the client DataSource:** the edge worker *is* the API; per ADR-004 the v1 client
+  is swappable for the v2 socket engine without touching the UI, so canonical data must come from the server,
+  not be re-derived in each client. It also avoids shipping duplicate-laden payloads and re-running the
+  redundant upstream fetches.
+- **Scope note:** `/v1/stop` deliberately still returns the **full route list** (all variants) with each
+  route's ETA — that's a navigable list, and its rider-level collapse is the screen's `dedupeRoutes` (keyed
+  by `operator|routeNo|bound`). The Favorites card derives an arrivals *summary* from `/v1/stop` and so reuses
+  the same shared `dedupeEtas`; a future cleanup is to store the stop name in the Favorites store so that card
+  can read the already-canonical `/v1/etas` directly.
+
+## ADR-024 — Stop-card navigation: stop vs. route are distinct tap targets
+- **Context:** The Nearby/Favorites `StopCard` was a single tap target → Stop detail, but its rows *look*
+  like per-route links, so tapping "A41" surprised users by opening the stop's full (longer) route list.
+  Two distinct rider needs: **(1)** open the **stop** (the next bus of each route), and **(2)** open a
+  **route** to see its **multiple upcoming arrivals at this stop**.
+- **Decision:** In `StopCard`, the **stop name** and **each route row** are **sibling** tap targets (never
+  nested — nested interactive elements are invalid HTML on web, which RN-web flagged). Name → `/stop/:id`;
+  route row → `/route/:routeId?stop=:stopId`. Stop detail's route rows pass the same `?stop=` context.
+- **Route-at-stop view:** `/route/[id]` reads the optional `?stop=` and, when present, shows an **"arrivals
+  here"** card — the route's next few arrivals at that stop (live `arrivals[]` via `getEtas(stopId,[routeId])`,
+  soonest urgency-coloured) — and **highlights** that stop in the ordered list. A merged place id (`P:a+b`)
+  matches either member. Without `?stop=` the screen is just the route + its stops (unchanged).
+- **Consequences:** the route row is the shortcut riders expect, and the stop drill-down stays one tap away.
+  New i18n `arrivalsHere`. Future polish: a chevron/affordance hint on the stop-name header.

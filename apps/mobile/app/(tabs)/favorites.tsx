@@ -1,4 +1,4 @@
-import type { Eta, Locale } from '@nextbus/core'
+import { dedupeEtas, type Eta, type Locale } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -44,6 +44,11 @@ export default function Favorites() {
                 locale={locale}
                 now={now}
                 onPress={() => router.push(`/stop/${encodeURIComponent(stopId)}`)}
+                onRoutePress={(routeId) =>
+                  router.push(
+                    `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(stopId)}`,
+                  )
+                }
               />
             ))}
           </View>
@@ -58,11 +63,13 @@ function FavoriteCard({
   locale,
   now,
   onPress,
+  onRoutePress,
 }: {
   stopId: string
   locale: Locale
   now: number
   onPress: () => void
+  onRoutePress: (routeId: string) => void
 }) {
   const query = useQuery({
     queryKey: ['stop', stopId],
@@ -73,10 +80,11 @@ function FavoriteCard({
   if (query.isLoading) return <Skeleton className="h-28 w-full" />
   if (!query.data) return null // skip a stop that failed to load rather than break the list
 
-  // Show the soonest few arrivals across all routes serving the stop.
-  const etas: Eta[] = query.data.routes
-    .map((r) => r.eta)
-    .filter((e): e is Eta => Boolean(e))
+  // Show the soonest few arrivals across all routes serving the stop, collapsing
+  // rider-duplicate lines (same route+direction surfaced via multiple refs).
+  const etas: Eta[] = dedupeEtas(
+    query.data.routes.map((r) => r.eta).filter((e): e is Eta => Boolean(e)),
+  )
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
     .slice(0, 4)
 
@@ -87,6 +95,7 @@ function FavoriteCard({
       locale={locale}
       now={now}
       onPress={onPress}
+      onRoutePress={onRoutePress}
     />
   )
 }

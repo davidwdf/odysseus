@@ -1,6 +1,7 @@
-import type { Eta, NearbyStop, Stop } from '@nextbus/core'
-import { fetchEta, findNearby } from '@nextbus/data-normalize'
+import type { NearbyStop } from '@nextbus/core'
+import { findNearby, type IndexStop } from '@nextbus/data-normalize'
 import { getStaticIndex } from './static-index'
+import { stopArrivals, toMergedStop } from './stop-route'
 
 // Slice-1 bounds so a cold nearby request stays cheap (≤ MAX_STOPS × MAX_ROUTES
 // upstream ETA calls, all edge-cached). The v2 push engine + on-device index
@@ -10,29 +11,33 @@ const MAX_ROUTES_PER_STOP = 6
 
 export async function nearby(lat: number, lng: number, radiusM: number): Promise<NearbyStop[]> {
   const index = await getStaticIndex()
-  const hits = findNearby(index, lat, lng, radiusM, MAX_STOPS)
+  // Pull extra hits so a merged same-kerb pair doesn't cost us a result slot.
+  const hits = findNearby(index, lat, lng, radiusM, MAX_STOPS * 2)
+
+  // Collapse hits sharing a same-kerb place into one merged entry. Hits are
+  // distance-ordered, so the first occurrence (the closer member) represents the place.
+  type Group = { id: string; rep: IndexStop; members: IndexStop[]; distanceM: number }
+  const groups: Group[] = []
+  const seen = new Set<string>()
+  for (const hit of hits) {
+    const place = index.placeByStopId.get(hit.stop.id)
+    const key = place?.id ?? hit.stop.id
+    if (seen.has(key)) continue
+    seen.add(key)
+    groups.push({
+      id: key,
+      rep: hit.stop,
+      members: place ? place.members : [hit.stop],
+      distanceM: hit.distanceM,
+    })
+    if (groups.length >= MAX_STOPS) break
+  }
 
   return Promise.all(
-    hits.map(async (hit): Promise<NearbyStop> => {
-      const routes = hit.routes.slice(0, MAX_ROUTES_PER_STOP)
-      const etaLists = await Promise.all(
-        routes.map((r) =>
-          // Dispatch by operator: KMB takes a service type, CTB does not.
-          fetchEta(r.operator, hit.stop.stopId, r.route, r.serviceType).catch(() => [] as Eta[]),
-        ),
-      )
-      const etas = etaLists
-        .flat()
-        .filter((e) => e.arrivals.length > 0)
-        .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
-
-      const stop: Stop = {
-        id: hit.stop.id,
-        name: hit.stop.name,
-        location: { lat: hit.stop.lat, lng: hit.stop.lng },
-        sources: [{ operator: hit.stop.operator, operatorStopId: hit.stop.stopId }],
-      }
-      return { stop, distanceM: hit.distanceM, etas }
+    groups.map(async (g): Promise<NearbyStop> => {
+      // Canonical, de-duplicated arrivals via the shared server seam.
+      const etas = await stopArrivals(index, g.members, MAX_ROUTES_PER_STOP)
+      return { stop: toMergedStop(g.id, g.members, g.rep), distanceM: g.distanceM, etas }
     }),
   )
 }

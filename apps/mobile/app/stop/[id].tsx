@@ -15,13 +15,14 @@ import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
 
 /** Collapse rider-duplicate variants (same route number + direction, e.g. two KMB
- *  service types to the same destination), keeping the one with a live ETA. */
+ *  service types to the same destination), keeping the one with a live ETA. Keyed by
+ *  operator too, so a merged same-kerb stop keeps KMB-6 and CTB-6 as distinct rows. */
 function dedupeRoutes(
   routes: Array<{ route: BusRoute; eta: Eta | null }>,
 ): Array<{ route: BusRoute; eta: Eta | null }> {
   const byKey = new Map<string, { route: BusRoute; eta: Eta | null }>()
   for (const r of routes) {
-    const key = `${r.route.routeNo}|${r.route.bound}`
+    const key = `${r.route.operator}|${r.route.routeNo}|${r.route.bound}`
     const existing = byKey.get(key)
     if (!existing || (!existing.eta && r.eta)) byKey.set(key, r)
   }
@@ -80,7 +81,11 @@ export default function StopDetail() {
                 <Pressable
                   key={r.route.id}
                   accessibilityRole="button"
-                  onPress={() => router.push(`/route/${encodeURIComponent(r.route.id)}`)}
+                  onPress={() =>
+                    router.push(
+                      `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(id as string)}`,
+                    )
+                  }
                   className={`flex-row items-center gap-3 px-4 py-3 active:opacity-70 ${
                     i === 0 ? '' : 'border-t border-border'
                   }`}

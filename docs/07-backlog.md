@@ -18,9 +18,10 @@ the `DataSource` interface and the UI do not change.
       run as an external job / GitHub Action since it exceeds the Worker subrequest cap). Self-reliance.
 - [ ] **Cache the snapshot in KV/R2** — so a hkbus gh-pages outage means *stale*, not broken (interim before
       the own-crawl). The `DATASET` binding is already stubbed in `wrangler.toml`.
-- [ ] **Same-kerb stop-merge (`Place`)** — cluster co-located KMB/CTB stops (~25–40 m + name check) so a
-      shared kerb shows once with both operators' routes. (The dataset's `stopMap` over-clusters and breaks
-      ETA resolution, so we build our own — see ADR-021.)
+- [x] **Same-kerb stop-merge (`Place`)** — DONE (ADR-022): our own cross-operator clustering (30 m +
+      landmark-name match, ≤1 member per operator) groups a shared kerb into one card/stop listing both
+      operators' routes. Follow-up: looser name matching (token overlap) to also merge stops whose landmark
+      strings differ (e.g. KMB stop-code-only names), ideally on the own-crawl's first-party coordinates.
 - [ ] **True Simplified (zh-Hans) static names** — the consolidated dataset only has en + Traditional, so
       Simplified stop/route names currently fall back to Traditional. Source real zh-Hans (official bulk
       endpoints have `name_sc`) once on our own crawl.
