@@ -2,11 +2,12 @@ import type { Locale, NearbyStop } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useCallback } from 'react'
-import { Linking, Platform, RefreshControl, ScrollView, Text, View } from 'react-native'
+import { Linking, Platform, RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../../components/Button'
 import { Skeleton } from '../../components/Skeleton'
 import { StopCard } from '../../components/StopCard'
+import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { useLocation } from '../../lib/useLocation'
 import { useLocale } from '../../providers/LocaleProvider'
@@ -33,8 +34,12 @@ export default function Nearby() {
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
       <View className="px-4 pb-3 pt-2">
-        <Text className="text-2xl font-bold text-text">{t(locale, 'nearbyTitle')}</Text>
-        <Text className="mt-1 text-sm text-muted">{t(locale, 'appName')}</Text>
+        <Text variant="h1" className="text-text">
+          {t(locale, 'nearbyTitle')}
+        </Text>
+        <Text variant="label" className="mt-1 text-muted">
+          {t(locale, 'appName')}
+        </Text>
       </View>
 
       {loc.status === 'undetermined' ? (
@@ -43,7 +48,10 @@ export default function Nearby() {
         // If the OS won't show the prompt again, send the user to Settings instead.
         <Denied
           locale={locale}
-          actionLabel={t(locale, !loc.canAskAgain && Platform.OS !== 'web' ? 'openSettings' : 'retry')}
+          actionLabel={t(
+            locale,
+            !loc.canAskAgain && Platform.OS !== 'web' ? 'openSettings' : 'retry',
+          )}
           onAction={
             !loc.canAskAgain && Platform.OS !== 'web'
               ? () => {
@@ -54,13 +62,17 @@ export default function Nearby() {
         />
       ) : loc.status === 'error' ? (
         <Centered>
-          <Text className="text-base text-danger">{loc.message}</Text>
+          <Text variant="body" className="text-danger">
+            {loc.message}
+          </Text>
         </Centered>
       ) : loc.status === 'loading' || query.isLoading ? (
         <LoadingList label={t(locale, 'locating')} />
       ) : query.isError ? (
         <Centered>
-          <Text className="text-base text-danger">{(query.error as Error).message}</Text>
+          <Text variant="body" className="text-danger">
+            {(query.error as Error).message}
+          </Text>
         </Centered>
       ) : (
         <ScrollView
@@ -78,7 +90,9 @@ export default function Nearby() {
               />
             ))}
             {data.length === 0 ? (
-              <Text className="px-1 text-muted">{t(locale, 'noService')}</Text>
+              <Text variant="body" className="px-1 text-muted">
+                {t(locale, 'noService')}
+              </Text>
             ) : null}
           </View>
         </ScrollView>
@@ -94,8 +108,10 @@ function Centered({ children }: { children: ReactNode }) {
 function Prime({ locale, onEnable }: { locale: Locale; onEnable: () => void }) {
   return (
     <Centered>
-      <Text className="text-center text-xl font-bold text-text">{t(locale, 'nearbyPrimeTitle')}</Text>
-      <Text className="mb-5 mt-2 text-center text-base text-muted">
+      <Text variant="h2" className="text-center text-text">
+        {t(locale, 'nearbyPrimeTitle')}
+      </Text>
+      <Text variant="body" className="mb-5 mt-2 text-center text-muted">
         {t(locale, 'nearbyPrimeBody')}
       </Text>
       <Button label={t(locale, 'enableLocation')} onPress={onEnable} />
@@ -114,8 +130,10 @@ function Denied({
 }) {
   return (
     <Centered>
-      <Text className="text-center text-base text-text">{t(locale, 'locationDenied')}</Text>
-      <Text className="mb-5 mt-2 text-center text-sm text-muted">
+      <Text variant="body" className="text-center text-text">
+        {t(locale, 'locationDenied')}
+      </Text>
+      <Text variant="label" className="mb-5 mt-2 text-center text-muted">
         {t(locale, 'locationDeniedHelp')}
       </Text>
       <Button label={actionLabel} onPress={onAction} />
@@ -126,7 +144,9 @@ function Denied({
 function LoadingList({ label }: { label: string }) {
   return (
     <View className="gap-3 px-4">
-      <Text className="text-sm text-muted">{label}</Text>
+      <Text variant="label" className="text-muted">
+        {label}
+      </Text>
       {[0, 1, 2].map((i) => (
         <Skeleton key={i} className="h-28 w-full" />
       ))}

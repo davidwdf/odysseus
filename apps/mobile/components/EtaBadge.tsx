@@ -1,6 +1,7 @@
 import type { Eta, Locale } from '@nextbus/core'
 import { etaView, formatRelative, isStale } from '@nextbus/core'
-import { Text, View } from 'react-native'
+import { View } from 'react-native'
+import { Text } from './Text'
 
 /**
  * Honest ETA readout (docs/09 §6, ADR-008): tabular figures, urgency colour,
@@ -21,10 +22,7 @@ export function EtaBadge({ eta, locale, now }: { eta: Eta; locale: Locale; now: 
 
   return (
     <View className="items-end">
-      <Text
-        className={`text-2xl font-bold ${urgency} ${stale ? 'opacity-45' : ''}`}
-        style={{ fontVariant: ['tabular-nums'] }}
-      >
+      <Text variant="h2" tabular className={`${urgency} ${stale ? 'opacity-45' : ''}`}>
         {next ? formatRelative(next, now, locale) : '—'}
       </Text>
     </View>

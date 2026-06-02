@@ -1,7 +1,9 @@
 import type { Eta, Locale } from '@nextbus/core'
-import { OPERATOR_ACCENT } from '@nextbus/ui'
-import { Text, View } from 'react-native'
+import { OPERATOR_ACCENT, OPERATOR_ACCENT_TEXT } from '@nextbus/ui'
+import { View } from 'react-native'
+import { Card } from './Card'
 import { EtaBadge } from './EtaBadge'
+import { Text } from './Text'
 
 function routeNo(routeId: string): string {
   return routeId.split(':')[1] ?? routeId
@@ -19,8 +21,10 @@ export function StopCard({
   now: number
 }) {
   return (
-    <View className="rounded-lg border border-border bg-surface p-4">
-      <Text className="mb-3 text-base font-semibold text-text">{name}</Text>
+    <Card className="p-4">
+      <Text variant="h3" className="mb-3 text-text">
+        {name}
+      </Text>
       <View className="gap-3">
         {etas.map((eta) => (
           <View key={eta.routeId} className="flex-row items-center justify-between">
@@ -31,20 +35,23 @@ export function StopCard({
                 style={{ backgroundColor: OPERATOR_ACCENT[eta.operator] }}
               >
                 <Text
-                  className="text-sm font-bold"
-                  style={{ color: eta.operator === 'CTB' ? '#0F172A' : '#FFFFFF' }}
+                  variant="label"
+                  weight="bold"
+                  style={{ color: OPERATOR_ACCENT_TEXT[eta.operator] }}
                 >
                   {routeNo(eta.routeId)}
                 </Text>
               </View>
               {eta.remark?.[locale] ? (
-                <Text className="text-sm text-muted">{eta.remark[locale]}</Text>
+                <Text variant="label" className="text-muted">
+                  {eta.remark[locale]}
+                </Text>
               ) : null}
             </View>
             <EtaBadge eta={eta} locale={locale} now={now} />
           </View>
         ))}
       </View>
-    </View>
+    </Card>
   )
 }

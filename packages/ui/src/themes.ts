@@ -1,6 +1,7 @@
-// Theme = a set of values for the semantic tokens (docs/09-theme.md, ADR-015).
+// Theme = a set of values for the semantic tokens (docs/09-theme.md, ADR-015, ADR-018).
 // Values are "R G B" triplets so Tailwind's `rgb(var(--x) / <alpha-value>)` works.
-// Apply on native with NativeWind's `vars(themes[name])` at the app root.
+// A theme is the cross-product of a LIVERY (colour identity) × a MODE (light/dark);
+// every livery ships both. Apply on native with NativeWind's `vars(themes[livery][mode])`.
 
 export type ThemeVars = Record<`--${string}`, string>
 
@@ -36,57 +37,137 @@ const dark: ThemeVars = {
   '--danger': '239 68 68',
 }
 
-export type ThemeName =
-  | 'light'
-  | 'dark'
-  | 'kmbLight'
-  | 'kmbDark'
-  | 'ctbLight'
-  | 'ctbDark'
-  | 'cmbNostalgia'
-  | 'dotMatrix'
-  | 'splitFlap'
+export type Mode = 'light' | 'dark'
+/** User-facing appearance preference; `auto` follows the OS scheme. */
+export type Appearance = 'auto' | 'light' | 'dark'
+export type LiveryId = 'classic' | 'kmb' | 'ctb' | 'cmb' | 'dotMatrix' | 'splitFlap'
 
-// Liveries remap ONLY accent / surface-tint / (display) tokens — never status or
-// contrast tokens — so legibility and ETA honesty stay constant across skins.
-export const themes: Record<ThemeName, ThemeVars> = {
-  light,
-  dark,
-  kmbLight: { ...light, '--accent': '215 40 47', '--accent-contrast': '255 255 255', '--focus': '215 40 47' },
-  kmbDark: { ...dark, '--accent': '215 40 47', '--accent-contrast': '255 255 255', '--focus': '215 40 47' },
-  ctbLight: { ...light, '--accent': '246 199 0', '--accent-contrast': '15 23 42', '--focus': '202 138 4' },
-  ctbDark: { ...dark, '--accent': '246 199 0', '--accent-contrast': '15 23 42', '--focus': '202 138 4' },
-  cmbNostalgia: {
-    ...light,
-    '--bg': '255 253 247',
-    '--surface': '250 246 236',
-    '--surface-2': '244 238 222',
-    '--accent': '30 58 138',
-    '--accent-contrast': '255 255 255',
-    '--focus': '30 58 138',
-  },
-  dotMatrix: {
-    ...dark,
-    '--bg': '10 10 10',
-    '--surface': '20 20 20',
-    '--surface-2': '31 31 31',
-    '--accent': '255 140 0',
-    '--accent-contrast': '10 10 10',
-    '--focus': '255 140 0',
-  },
-  splitFlap: {
-    ...dark,
-    '--bg': '26 26 26',
-    '--surface': '35 35 35',
-    '--surface-2': '46 46 46',
-    '--text': '240 237 228',
-    '--accent': '232 226 208',
-    '--accent-contrast': '26 26 26',
-  },
+/** Build a livery from per-mode overrides on top of the neutral light/dark base.
+ *  Liveries remap ONLY accent / surface-tint / (display) tokens — never status or
+ *  contrast tokens — so legibility and ETA honesty stay constant across skins. */
+function livery(overrides: {
+  light?: Partial<ThemeVars>
+  dark?: Partial<ThemeVars>
+}): Record<Mode, ThemeVars> {
+  // The base supplies every token, so the merge is always complete.
+  return {
+    light: { ...light, ...overrides.light } as ThemeVars,
+    dark: { ...dark, ...overrides.dark } as ThemeVars,
+  }
 }
 
-/** Liveries that swap the character-rendering treatment, not just color. */
-export const DISPLAY_LIVERIES: Partial<Record<ThemeName, 'dot-matrix' | 'split-flap'>> = {
+export const themes: Record<LiveryId, Record<Mode, ThemeVars>> = {
+  classic: { light, dark },
+  kmb: livery({
+    // KMB red + a faint red surface tint on light.
+    light: {
+      '--surface': '254 247 247',
+      '--surface-2': '253 240 240',
+      '--accent': '215 40 47',
+      '--focus': '215 40 47',
+    },
+    dark: { '--accent': '229 57 64', '--focus': '248 113 113' },
+  }),
+  ctb: livery({
+    // Citybus yellow — dark text on the accent; darker amber focus ring for visibility.
+    light: { '--accent': '246 199 0', '--accent-contrast': '15 23 42', '--focus': '202 138 4' },
+    dark: { '--accent': '246 199 0', '--accent-contrast': '15 23 42', '--focus': '250 204 21' },
+  }),
+  cmb: livery({
+    // CMB Nostalgia — deep blue on cream (light) / warm night (dark).
+    light: {
+      '--bg': '255 253 247',
+      '--surface': '250 246 236',
+      '--surface-2': '244 238 222',
+      '--border': '231 223 205',
+      '--accent': '30 58 138',
+      '--focus': '30 58 138',
+    },
+    dark: {
+      '--bg': '23 20 15',
+      '--surface': '38 33 25',
+      '--surface-2': '51 44 33',
+      '--border': '51 44 33',
+      '--text': '245 240 230',
+      '--text-muted': '180 170 150',
+      '--accent': '125 154 226',
+      '--focus': '147 178 240',
+    },
+  }),
+  dotMatrix: livery({
+    // LED orange. Dark is the canonical look; light is a daytime/printed variant.
+    light: { '--accent': '234 88 12', '--focus': '234 88 12' },
+    dark: {
+      '--bg': '10 10 10',
+      '--surface': '20 20 20',
+      '--surface-2': '31 31 31',
+      '--border': '38 38 38',
+      '--accent': '255 140 0',
+      '--accent-contrast': '10 10 10',
+      '--focus': '255 140 0',
+    },
+  }),
+  splitFlap: livery({
+    // Solari board — warm white on charcoal (dark) / paper board (light).
+    light: {
+      '--bg': '250 249 246',
+      '--surface': '243 241 235',
+      '--surface-2': '234 231 223',
+      '--border': '214 210 200',
+      '--text': '38 36 32',
+      '--accent': '60 56 50',
+      '--accent-contrast': '250 249 246',
+      '--focus': '120 110 95',
+    },
+    dark: {
+      '--bg': '26 26 26',
+      '--surface': '35 35 35',
+      '--surface-2': '46 46 46',
+      '--border': '60 60 60',
+      '--text': '240 237 228',
+      '--accent': '232 226 208',
+      '--accent-contrast': '26 26 26',
+      '--focus': '232 226 208',
+    },
+  }),
+}
+
+/** Liveries that swap the character-rendering treatment, not just colour (docs/09 §7). */
+export const DISPLAY_LIVERIES: Partial<Record<LiveryId, 'dot-matrix' | 'split-flap'>> = {
   dotMatrix: 'dot-matrix',
   splitFlap: 'split-flap',
+}
+
+/** Picker metadata — ordered. `labelKey` is an i18n key; `swatch` is the light-mode
+ *  accent as hex, for the selector chip (which needs a colour value, not a class). */
+export interface LiveryMeta {
+  id: LiveryId
+  labelKey: string
+  swatch: string
+}
+
+export const LIVERIES: readonly LiveryMeta[] = [
+  { id: 'classic', labelKey: 'liveryClassic', swatch: '#2563EB' },
+  { id: 'kmb', labelKey: 'liveryKmb', swatch: '#D7282F' },
+  { id: 'ctb', labelKey: 'liveryCtb', swatch: '#F6C700' },
+  { id: 'cmb', labelKey: 'liveryCmb', swatch: '#1E3A8A' },
+  { id: 'dotMatrix', labelKey: 'liveryDotMatrix', swatch: '#FF8C00' },
+  { id: 'splitFlap', labelKey: 'liverySplitFlap', swatch: '#3C3832' },
+]
+
+/** Resolve the appearance preference + OS scheme to a concrete mode. */
+export function resolveMode(appearance: Appearance, systemIsDark: boolean): Mode {
+  if (appearance === 'auto') return systemIsDark ? 'dark' : 'light'
+  return appearance
+}
+
+/**
+ * Resolve a semantic token to a concrete `rgb()` string for the rare cases that
+ * can't use a className — e.g. React Navigation's tab-bar / header options,
+ * which take colour values, not Tailwind classes. Components still use classes.
+ */
+export function themeColor(theme: ThemeVars, token: `--${string}`): string {
+  const triplet = theme[token]
+  if (!triplet) throw new Error(`Unknown theme token: ${token}`)
+  return `rgb(${triplet})`
 }

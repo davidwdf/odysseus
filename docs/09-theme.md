@@ -9,6 +9,16 @@ Utility-first, calm, fast. The UI gets out of the way; **the next-arrival data i
 is mostly neutral so that **status** (how soon / how fresh) and **operator accents** carry meaning.
 Delight is applied in small doses — motion *on change*, not decoration.
 
+> **Implementation status** ([ADR-017](./08-decision-log.md#adr-017--design-system-realization-fonts-text-scale-elevation-themed-nav-chrome),
+> [ADR-018](./08-decision-log.md#adr-018--two-axis-theme-livery--appearance-with-persistence)).
+> *Realized:* the token system (`packages/ui`), **Inter loaded** as weight cuts + splash-gated, the
+> **`<Text>` typography primitive** (the canonical consumer of the §3 scale), **elevation** tokens +
+> a `Card` primitive (§4), **themed nav chrome** (tab bar via `useTheme()`), and the **two-axis theme**
+> (livery × appearance) with a **Settings picker** + persistence (§7). *Still spec-only:* `font-display`
+> faces, auto-theme-by-operator, and the §5 motion / §6 number-flip animations. *Decided against for v1:*
+> bundling **Noto** for CJK — we use the platform face instead ([ADR-019](./08-decision-log.md#adr-019--cjk-use-the-platform-font-do-not-bundle-noto-v1)).
+> Per-component aesthetic: **role-based** type (`<Text variant>`), never raw Tailwind sizes.
+
 ---
 
 ## 1. Token architecture (3 layers)
@@ -61,11 +71,17 @@ export const themes = {
 ```tsx
 // Native: inject vars at the root via NativeWind's vars()
 import { vars } from 'nativewind';
-<View style={vars(themes[active])}>{/* app */}</View>
+<View style={vars(themes[livery][mode])}>{/* app */}</View>   // theme = livery × mode (ADR-018)
 // Web: the same triplets are written to :root[data-theme="…"]
 ```
 
 Components stay theme-agnostic: `className="bg-bg text-text"`, `className="text-accent"`, etc.
+
+The active theme is resolved in one place — **`useTheme()`** (`apps/mobile/lib/useTheme.ts`) — which
+returns the `vars()` set (injected at the app root) plus a `color(token)` resolver. The resolver
+(`themeColor()` in `packages/ui`) turns a token into a concrete `rgb()` string for the few surfaces
+that can't take a className — notably the **React Navigation tab bar** (it takes colour values). This
+hook is also the seam where the **livery override** (§7) will layer on top.
 
 ---
 
@@ -114,6 +130,14 @@ WCAG-AA before shipping.
 
 ## 3. Typography
 
+> **How it's wired:** Inter is loaded as discrete weight cuts (`Inter_400Regular` … `Inter_700Bold`)
+> via `@expo-google-fonts/inter` + `expo-font` in `apps/mobile/app/_layout.tsx`, with the splash held
+> until they load. The **`<Text variant weight tabular>`** primitive (`apps/mobile/components/Text.tsx`)
+> is the only thing that sets a size/family — it maps a type role + weight to the right cut through
+> `TYPE_SCALE` / `FONT_FAMILY` in `packages/ui/src/typography.ts`. On native `fontFamily` is single-valued,
+> so CJK renders in the **platform face** (PingFang HK / system Noto) — v1 bundles **no** CJK webfont by
+> decision ([ADR-019](./08-decision-log.md#adr-019--cjk-use-the-platform-font-do-not-bundle-noto-v1)).
+
 ### Fonts (bilingual is core)
 - **Latin UI → Inter** (variable). Clean, functional, superb small-size legibility.
 - **CJK (繁/简) → system first, Noto fallback.** Use the platform CJK face for zero-download speed
@@ -153,7 +177,9 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
   corners); chips/pills `full`.
 - **Elevation:** `e0` none · `e1` cards · `e2` sticky headers · `e3` sheet/FAB. On **dark**, prefer
   `surface-2` lightening + `border` over shadows (shadows read poorly on dark). RN needs both the
-  iOS `shadow*` and Android `elevation` recipes per token.
+  iOS `shadow*` and Android `elevation` recipes per token. **Implemented** as `ELEVATION` in
+  `packages/ui/src/tokens.ts`, applied by the **`Card`** primitive (`apps/mobile/components/Card.tsx`),
+  which shadows on light and switches to `surface-2` + border on dark automatically.
 
 ---
 
@@ -184,14 +210,24 @@ and (for the display liveries) a **display treatment** (`font-display` and/or th
 component). It **never** touches status/contrast tokens, so legibility and ETA honesty are identical
 across every skin. Each ships **light + dark**.
 
+> **Two independent axes** ([ADR-018](./08-decision-log.md#adr-018--two-axis-theme-livery--appearance-with-persistence)).
+> The user picks a **livery** (colour identity, below) *and* an **appearance** (`auto` follows the OS /
+> `light` / `dark`) — separately, in **Settings**. The active theme is the cross-product
+> `themes[livery][mode]`; both are persisted (Zustand + AsyncStorage) and survive reload with no flash.
+> So every livery below is defined for **both** modes — including light variants for the
+> normally-dark Dot-Matrix (daytime) and Split-Flap (paper board).
+
 | Livery | Accent | Notes |
 |---|---|---|
 | **Classic** (default) | wayfinding blue `#2563EB` | neutral, brand-agnostic |
-| **KMB** | red `#D7282F` | faint red surface tint |
+| **KMB** | red `#D7282F` | faint red surface tint (light) |
 | **Citybus** | yellow `#F6C700` | dark text on accent (contrast) |
-| **CMB Nostalgia** | deep blue on cream | cream `surface`, retro feel |
-| **Dot-Matrix** | LED orange `#FF8C00` | dark bg + `font-display` = dot-matrix; ETA as LED blind |
-| **Split-Flap (Solari)** | warm white on charcoal | airport/station **flip-tile** board; tiles flap to new values |
+| **CMB Nostalgia** | deep blue on cream / warm night | cream `surface` (light), warm dark (dark), retro feel |
+| **Dot-Matrix** | LED orange `#FF8C00` | dark bg + `font-display` = dot-matrix; light = daytime variant |
+| **Split-Flap (Solari)** | warm white on charcoal / paper | airport/station **flip-tile** board; tiles flap to new values |
+
+Picker metadata (id, label key, swatch) lives in `LIVERIES` (`packages/ui/src/themes.ts`); the Settings
+screen renders from it. State + persistence: `apps/mobile/lib/preferences.ts`.
 
 ### Display treatments: Dot-Matrix & Split-Flap
 These two liveries swap *how characters render*, not the layout:

@@ -200,3 +200,64 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   unchanged, so moving to the on-device index later is transparent to the app.
 - **Consequences:** not offline yet; the daily-crawl → KV/R2 dataset + on-device nearby (ADR-007)
   remain the target. The per-isolate memo of the index is a stopgap until that dataset store exists.
+
+## ADR-017 — Design-system realization: fonts, `<Text>` scale, elevation, themed nav chrome
+- **Context:** [ADR-015](#adr-015--theme--design-system-token-architecture--livery-themes) + [docs/09](./09-theme.md)
+  fully *specified* the system, but the running app under-realized it: Inter was never loaded (system-font
+  fallback), the named type scale lived only in the doc (components hand-picked raw Tailwind sizes), the
+  tab bar used React Navigation defaults, and elevation tokens didn't exist. The aesthetic was documented
+  but not visible.
+- **Decision:** (1) **Load Inter** as discrete weight cuts via `@expo-google-fonts/inter` + `expo-font`,
+  gating the splash on load (`expo-splash-screen`). (2) Add a **`<Text>` typography primitive** (in
+  `apps/mobile/components`) driven by a `TYPE_SCALE` token (`packages/ui/src/typography.ts`): `variant`
+  carries size + line-height + the correct Inter cut, `tabular` gives fixed-width ETA digits; colour/layout
+  stay semantic-token classNames. The scale is also exposed as `text-display/h1/h2/h3/body/label/caption`
+  utilities in the preset. (3) Add **elevation tokens** (`ELEVATION` e0–e3, iOS shadow + Android elevation)
+  consumed by a `Card` primitive that shadows on light and lifts with `surface-2` + border on dark. (4)
+  **Theme the nav chrome**: the tab bar reads resolved tokens via a new `useTheme()` hook + `themeColor()`
+  resolver (React Navigation takes colour values, not classes). `packages/ui` stays RN-free (data only);
+  RN primitives live in `apps/mobile`.
+- **Why:** A type *role* per call site (not ad-hoc `text-2xl`) is what actually enforces consistency;
+  one `useTheme()` hook is also the seam where the livery override (docs/09 §7) lands without touching
+  layouts. On native, `fontFamily` is single-valued, so mapping weight → exact Inter cut is more reliable
+  than weight synthesis; CJK falls back to the OS face (PingFang/Noto) per spec.
+- **Consequences:** Inter ships in the bundle (verified via `expo export --platform web`). `expo-font`,
+  `expo-splash-screen`, `@expo-google-fonts/inter` added to `apps/mobile`. Liveries are wired but not yet
+  user-selectable (now done — [ADR-018](#adr-018--two-axis-theme-livery--appearance-with-persistence));
+  bundled Noto CJK fallback + the number-flip/split-flap animation remain polish-slice work.
+
+## ADR-018 — Two-axis theme (livery × appearance) with persistence
+- **Context:** [ADR-015](#adr-015--theme--design-system-token-architecture--livery-themes) framed liveries
+  as one selectable skin. We want two *independent* user controls: a **livery** (colour identity) and an
+  **appearance** (auto/light/dark), and every livery must look right in both light and dark.
+- **Decision:** Restructure `themes` to a **livery × mode matrix** (`themes[livery][mode]`) where each of
+  the six liveries (Classic / KMB / Citybus / CMB Nostalgia / Dot-Matrix / Split-Flap) ships **both light
+  and dark** ThemeVars; liveries still remap only accent / surface-tint / display tokens. Two persisted
+  axes live in a **Zustand store** (`apps/mobile/lib/preferences.ts`, [ADR-010](#adr-010--client-state-tanstack-query--zustand))
+  backed by **AsyncStorage** (localStorage on web): `livery` + `appearance` (`auto` follows the OS scheme via
+  `resolveMode()`). `useTheme()` resolves the pair to the active ThemeVars; the **Settings screen** exposes a
+  segmented appearance control + a livery list. The splash is held until the store rehydrates, so there's no
+  wrong-theme flash.
+- **Why:** Appearance and brand identity are orthogonal — a user may want KMB red *and* dark mode. A matrix
+  keeps the "theme = value swap, zero component churn" property (verified live: switching livery/appearance
+  re-skins the tab bar, cards, accents, and surface tint instantly). Zustand was already the chosen client-
+  state lib; this is its first persisted use and the pattern favorites will reuse.
+- **Consequences:** `zustand` + `@react-native-async-storage/async-storage` added to `apps/mobile`. New i18n
+  keys (appearance + livery labels) in all three locales. Dot-Matrix/Split-Flap now have light variants
+  (daytime / paper-board) in addition to their canonical dark looks. Auto-theme-by-operator (docs/09 §7,
+  optional) and the display-livery character treatments remain future work.
+
+## ADR-019 — CJK: use the platform font; do **not** bundle Noto (v1)
+- **Context:** [docs/09 §3](./09-theme.md) floated bundling **Noto Sans HK / SC** as a cross-platform CJK
+  fallback. We evaluated actually doing it.
+- **Decision:** **Ship no bundled CJK webfont in v1.** Latin/UI uses bundled **Inter**; CJK renders in the
+  **platform face** (PingFang HK on iOS/macOS, system Noto on Android, JhengHei/YaHei et al. on Windows web).
+- **Why:** (1) **Size** — Noto Sans HK is ~7 MB/weight and SC ~10 MB/weight; even 400+700 of both is ~34 MB,
+  a serious regression for a fast-first PWA. (2) **Coverage risk** — HK stop names use rare characters
+  (e.g. 鰂/茘/氹) that a cheap ~1–2 MB *subset* would drop, while full coverage means the multi-MB download.
+  (3) **Low payoff on native** — iOS PingFang is excellent and Android's system CJK *is* Noto; RN's
+  single-valued `fontFamily` can't force a bundled CJK face per-glyph in mixed strings anyway. So bundling
+  would only affect web cross-browser consistency, at a cost out of proportion to the benefit.
+- **Consequences:** Zero CJK font weight in the bundle; full glyph coverage everywhere via the OS. The
+  preset's `fontFamily` fallback chain still *names* Noto so a future opt-in (web-only, lazy `unicode-range`,
+  or a curated HKSCS subset) is a small change. Revisit only if cross-browser web CJK proves visibly off.

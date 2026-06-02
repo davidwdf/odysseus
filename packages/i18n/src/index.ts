@@ -26,6 +26,19 @@ export interface Messages {
   nearbyPrimeBody: string
   enableLocation: string
   comingSoon: string
+  // Settings — theme
+  settingsAppearance: string
+  settingsTheme: string
+  appearanceAuto: string
+  appearanceLight: string
+  appearanceDark: string
+  // Livery names (docs/09 §7)
+  liveryClassic: string
+  liveryKmb: string
+  liveryCtb: string
+  liveryCmb: string
+  liveryDotMatrix: string
+  liverySplitFlap: string
 }
 
 const en: Messages = {
@@ -48,6 +61,17 @@ const en: Messages = {
   nearbyPrimeBody: 'Allow location access to see real-time arrivals at the stops around you.',
   enableLocation: 'Enable location',
   comingSoon: 'Coming soon',
+  settingsAppearance: 'Appearance',
+  settingsTheme: 'Theme',
+  appearanceAuto: 'Auto',
+  appearanceLight: 'Light',
+  appearanceDark: 'Dark',
+  liveryClassic: 'Classic',
+  liveryKmb: 'KMB',
+  liveryCtb: 'Citybus',
+  liveryCmb: 'CMB Nostalgia',
+  liveryDotMatrix: 'Dot-Matrix',
+  liverySplitFlap: 'Split-Flap',
 }
 
 const zhHant: Messages = {
@@ -70,6 +94,17 @@ const zhHant: Messages = {
   nearbyPrimeBody: '開啟定位權限，即可查看你附近車站的即時到站時間。',
   enableLocation: '開啟定位',
   comingSoon: '即將推出',
+  settingsAppearance: '外觀',
+  settingsTheme: '主題',
+  appearanceAuto: '自動',
+  appearanceLight: '淺色',
+  appearanceDark: '深色',
+  liveryClassic: '經典',
+  liveryKmb: '九巴',
+  liveryCtb: '城巴',
+  liveryCmb: '中巴懷舊',
+  liveryDotMatrix: '點陣',
+  liverySplitFlap: '翻牌',
 }
 
 const zhHans: Messages = {
@@ -92,6 +127,17 @@ const zhHans: Messages = {
   nearbyPrimeBody: '开启定位权限，即可查看你附近车站的实时到站时间。',
   enableLocation: '开启定位',
   comingSoon: '即将推出',
+  settingsAppearance: '外观',
+  settingsTheme: '主题',
+  appearanceAuto: '自动',
+  appearanceLight: '浅色',
+  appearanceDark: '深色',
+  liveryClassic: '经典',
+  liveryKmb: '九巴',
+  liveryCtb: '城巴',
+  liveryCmb: '中巴怀旧',
+  liveryDotMatrix: '点阵',
+  liverySplitFlap: '翻牌',
 }
 
 export const messages: Record<Locale, Messages> = {
