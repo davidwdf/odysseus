@@ -60,8 +60,9 @@ are **not comparable** to each other and don't mean "older vs newer tech":
 > memoized at the edge) — because the **official CTB API has no bulk stop/route-stop endpoint** (building a
 > CTB index from it is a ~6,800-call crawl). The dataset's stop ids in `routeList.stops` are the raw,
 > directly-ETA-callable operator ids; its `stopMap` over-clusters and is **not** used (it breaks ETA
-> resolution). **Live ETAs still come direct from the official KMB/CTB APIs.** Our own crawl + same-kerb
-> stop-merge + true Simplified static names are [backlog](./07-backlog.md) items.
+> resolution). **Live ETAs still come direct from the official KMB/CTB APIs.** Same-kerb KMB↔CTB merge is
+> now done with **our own** clustering ([ADR-022](./08-decision-log.md)). Our own crawl + true Simplified
+> static names remain [backlog](./07-backlog.md) items.
 
 ## The two kinds of data (they have opposite needs)
 
@@ -96,12 +97,19 @@ Place         { id, stopIds: [] }   // physical-location grouping (see below)
 i18n          { en, "zh-Hant", "zh-Hans" }   // all three; upstream supplies name_en/_tc/_sc
 ```
 
-### Stop merging (the interesting hard part)
+### Stop merging (the interesting hard part) — implemented, [ADR-022](./08-decision-log.md)
 For "nearby" to feel right, a single physical bus stop served by both KMB and Citybus should
-appear **once**, listing both operators' routes. We build a `Place` grouping by:
-1. **Proximity** — cluster operator stops whose coordinates fall within ~25–40 m.
-2. **Name similarity** — fuzzy-match localized names to disambiguate close-but-distinct stops.
-3. Manual override table for known tricky cases.
+appear **once**, listing both operators' routes. `buildPlaces` (`data-normalize/dataset.ts`) groups by:
+1. **Cross-operator only** — two same-operator stops that close are opposite-direction kerbs; never merged
+   (invariant: ≤ 1 member per operator per place).
+2. **Proximity** — within `MERGE_RADIUS_M` = **30 m**.
+3. **Landmark name match** — the two operators name a kerb differently (`怡和大廈 (CW112)` vs
+   `怡和大廈, 干諾道中`), so we match the **landmark head** (before the first `,`/`(`) in en **or** zh, not
+   the full string. Greedy nearest-first; conservative by design (under-merge over over-merge).
+
+A merged place reuses the canonical `Stop` (its `sources[]` carries both operator ids); the place id is
+self-describing (`P:<memberId>+<memberId>`) so the edge resolves members from the id alone. Future: looser
+token-overlap matching and a manual override table for tricky cases.
 
 This runs **offline in the daily crawl pipeline**, not at request time, so it never costs the
 user latency. (See [Architecture](./03-architecture.md) for where it runs.)

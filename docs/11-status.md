@@ -1,14 +1,15 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-02**. Branch: `hk-bus-arrival-app`. Last commit: Citybus (multi-operator static index).
+> Snapshot: **2026-06-02**. Branch: `hk-bus-arrival-app-v1`. Last commit: same-kerb stop-merge (ADR-022).
 
 ## TL;DR
 Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + two-axis livery
 picker), **Slice 2 (Stop · Route · Favorites · language picker)**, and **Citybus** are complete and
 **verified end-to-end against live HK open data**. Nearby/stop/route are **multi-operator (KMB + CTB)**,
 computed **server-side** from the hkbus consolidated static dataset ([ADR-021](./08-decision-log.md)); live
-ETAs come direct from the official APIs. Pick up at **same-kerb stop-merge**, **own crawl → KV**, or the **Routes tab**.
+ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged into one same-kerb place**
+([ADR-022](./08-decision-log.md)). Pick up at **own crawl → KV**, the **Routes tab**, or **map view**.
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
@@ -49,12 +50,29 @@ ETAs come direct from the official APIs. Pick up at **same-kerb stop-merge**, **
   from the hkbus **consolidated dataset** (one 8 MB fetch, memoized) → `data-normalize/dataset.ts` +
   `edge/static-index.ts`; `nearby`/`stop`/`route` dispatch ETAs per operator. **Verified in-browser/curl**:
   Central nearby = 4 CTB + 2 KMB with live ETAs; CTB stop/route detail render (yellow Citybus chip); KMB intact.
+- **Same-kerb stop-merge** ([ADR-022](./08-decision-log.md)): our own cross-operator clustering
+  (`data-normalize/dataset.ts` → `buildPlaces`; 30 m + landmark-name match, ≤1 member/operator) groups a
+  shared KMB+CTB kerb into one `Place`. Merged stops reuse the canonical `Stop` (`sources[]` spans both
+  operators); place id is self-describing `P:<id>+<id>`. `nearby` collapses, `stop`/`etas` fan out per
+  operator. **Verified:** Central's "Jardine House" now one merged card; merged stop detail shows CTB(yellow)
+  + KMB(red) routes with live ETAs in-browser; the distinct 10.8 m-apart "Alexandra House"/"The Landmark"
+  correctly stay separate; single-stop + Favorites unaffected.
 - **Docs:** plan `01–10`, ADRs `001–021`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
 - All data is **server-side** (no [on-device index](./08-decision-log.md), ADR-007). KMB + CTB only;
   other operators (NLB/GMB/MTR) are in the consolidated set but out of v1 scope.
-- **No same-kerb stop-merge yet** — a shared KMB+CTB kerb shows as two nearby entries ([ADR-021](./08-decision-log.md) / backlog).
+- Same-kerb merge is **conservative** ([ADR-022](./08-decision-log.md)): stops whose landmark strings differ
+  (e.g. KMB stop-code-only names) won't merge. Follow-up: token-overlap matching / own-crawl coordinates.
+- ETA lists are de-duplicated **once, server-side** ([ADR-023](./08-decision-log.md)): `stopArrivals` (one
+  upstream call per route+serviceType, then `dedupeEtas` → one rider line per route+direction) backs both
+  `/v1/nearby` and `/v1/etas`. Fixed the "two A41, same time" double-count. Favorites' summary reuses the
+  shared `dedupeEtas`; future: store the name in the Favorites store so it reads `/v1/etas` directly.
+- **Stop-card navigation** ([ADR-024](./08-decision-log.md)): in `StopCard` the **stop name** → Stop detail
+  and **each route row** → `/route/:id?stop=:stopId` are sibling tap targets (not nested). `/route/[id]`
+  reads `?stop=` to show an **"arrivals here"** card (the route's next few arrivals at that stop) and
+  highlights the current stop. **Verified in-browser**: route-row tap → route view with "Arriving / 9 / 17
+  min" + ST141 highlighted; name tap → stop detail; no nested-`<button>` warning.
 - **Simplified (zh-Hans) static names fall back to Traditional** (consolidated dataset has en + 繁 only);
   live ETA text still has all three. Backlog: true zh-Hans via own crawl.
 - Static layer **depends on the hkbus gh-pages artifact** at runtime (no KV cache yet → their outage = stale once isolates recycle). Backlog: KV/R2 cache + own crawl.
@@ -72,18 +90,19 @@ ETAs come direct from the official APIs. Pick up at **same-kerb stop-merge**, **
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
 
 ## 🔜 Next steps (priority order)
-1. **Same-kerb stop-merge (`Place`)** — cluster co-located KMB/CTB stops (~25–40 m + name) so a shared kerb
-   shows once with both operators' routes (own clustering; the dataset's `stopMap` over-clusters — ADR-021).
-2. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
+1. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
-3. **Routes tab** — route-number search → `/route/[id]` (the screen already exists).
-4. **Map view** (MapLibre) for Nearby.
-5. **Polish** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
+2. **Routes tab** — route-number search → `/route/[id]` (the screen already exists).
+3. **Map view** (MapLibre) for Nearby.
+4. **Polish** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
    reduced-motion + a11y pass, Lucide icons (incl. a real favorite star), swipe-to-favorite + haptics.
+5. **Looser stop-merge** (ADR-022 follow-up) — token-overlap name matching so landmark-only/code-only
+   names also merge; ideally on the own-crawl's first-party coordinates.
 
 ## 📍 Key file pointers
 - DataSource seam → `packages/core/src/datasource.ts`; EdgeClient → `packages/api-client/src/index.ts`
-- Edge logic → `apps/edge/src/{nearby,stop-route,static-index}.ts`; multi-op index →
+- Edge logic → `apps/edge/src/{nearby,stop-route,static-index}.ts` (`stop-route.ts` has `resolveMembers`/
+  `toMergedStop` for `P:` place ids); multi-op index + same-kerb `buildPlaces` →
   `packages/data-normalize/src/dataset.ts` (KMB own-crawl in `kmb-static.ts`, for the future)
 - Screens → `apps/mobile/app/(tabs)/index.tsx` (Nearby), `app/stop/[id].tsx`, `app/route/[id].tsx`,
   `app/(tabs)/favorites.tsx`; location → `apps/mobile/lib/useLocation.ts`

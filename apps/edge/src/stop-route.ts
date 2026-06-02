@@ -1,4 +1,12 @@
-import type { Eta, OperatorId, Route, RouteDetail, Stop, StopDetail } from '@nextbus/core'
+import {
+  dedupeEtas,
+  type Eta,
+  type OperatorId,
+  type Route,
+  type RouteDetail,
+  type Stop,
+  type StopDetail,
+} from '@nextbus/core'
 import {
   canonicalRouteId,
   fetchEta,
@@ -12,8 +20,6 @@ import { getStaticIndex } from './static-index'
 // Routes beyond the cap are still listed (static), just without a live ETA.
 const MAX_ETA_ROUTES = 24
 
-const OPERATORS: Record<string, OperatorId> = { KMB: 'KMB', LWB: 'LWB', CTB: 'CTB' }
-
 function toStop(s: IndexStop): Stop {
   return {
     id: s.id,
@@ -21,6 +27,24 @@ function toStop(s: IndexStop): Stop {
     location: { lat: s.lat, lng: s.lng },
     sources: [{ operator: s.operator, operatorStopId: s.stopId }],
   }
+}
+
+/** A merged same-kerb stop: one canonical `Stop` carrying every member operator's
+ *  source id. `rep` supplies the display name/location. */
+export function toMergedStop(id: string, members: IndexStop[], rep: IndexStop): Stop {
+  return {
+    id,
+    name: rep.name,
+    location: { lat: rep.lat, lng: rep.lng },
+    sources: members.map((m) => ({ operator: m.operator, operatorStopId: m.stopId })),
+  }
+}
+
+/** Resolve a canonical id — a single stop id, or a `P:`-prefixed same-kerb place id
+ *  (`P:<memberId>+<memberId>`) — to its member index stops, dropping any unknown ids. */
+export function resolveMembers(index: StaticIndex, id: string): IndexStop[] {
+  const ids = id.startsWith('P:') ? id.slice(2).split('+') : [id]
+  return ids.map((mid) => index.stopById.get(mid)).filter((s): s is IndexStop => Boolean(s))
 }
 
 function toRoute(ref: IndexRouteRef, index: StaticIndex): Route {
@@ -38,20 +62,14 @@ function toRoute(ref: IndexRouteRef, index: StaticIndex): Route {
   }
 }
 
-/** Parse a canonical stop id (`<OP>:<rawStopId>`), validating the operator. */
-function parseStopId(id: string): { operator: OperatorId; stopId: string } {
-  const [op, ...rest] = id.split(':')
-  const operator = OPERATORS[op ?? '']
-  if (!operator || rest.length === 0) throw new Error(`unsupported stop id: ${id}`)
-  return { operator, stopId: rest.join(':') }
-}
-
 /** Live ETAs for a single-operator stop's routes, deduping upstream calls by
- *  (route, serviceType) — the operator feed returns both bounds at once. */
+ *  (route, serviceType) — the operator feed returns *every direction* in one
+ *  response, so per-direction refs must not re-fetch (that's the double-count). */
 async function fetchStopEtas(
   operator: OperatorId,
   rawStopId: string,
   refs: IndexRouteRef[],
+  maxRoutes: number,
 ): Promise<Eta[]> {
   const seen = new Set<string>()
   const pairs: Array<{ route: string; serviceType: string }> = []
@@ -60,7 +78,7 @@ async function fetchStopEtas(
     if (seen.has(key)) continue
     seen.add(key)
     pairs.push({ route: r.route, serviceType: r.serviceType })
-    if (pairs.length >= MAX_ETA_ROUTES) break
+    if (pairs.length >= maxRoutes) break
   }
   const lists = await Promise.all(
     pairs.map((p) =>
@@ -70,34 +88,67 @@ async function fetchStopEtas(
   return lists.flat()
 }
 
-/** GET /v1/stop/:id — a stop and every route serving it, each with its next ETA. */
-export async function stopDetail(id: string): Promise<StopDetail> {
-  const { operator, stopId } = parseStopId(id)
-  const index = await getStaticIndex()
-  const rec = index.stopById.get(id)
-  if (!rec) throw new Error(`unknown stop: ${id}`)
-
-  const refs = index.stopToRoutes.get(id) ?? []
-  const etas = await fetchStopEtas(operator, stopId, refs)
-  const etaByRouteId = new Map<string, Eta>()
-  for (const e of etas) if (e.arrivals.length > 0) etaByRouteId.set(e.routeId, e)
-
-  const routes = refs.map((ref) => {
-    const route = toRoute(ref, index)
-    return { route, eta: etaByRouteId.get(route.id) ?? null }
-  })
-  return { stop: toStop(rec), routes }
+/** Raw (call-deduped, not yet rider-deduped) ETAs across every member of a
+ *  (possibly merged same-kerb) stop. Members are fetched concurrently. */
+async function memberEtaLists(
+  index: StaticIndex,
+  members: IndexStop[],
+  maxRoutes = MAX_ETA_ROUTES,
+): Promise<Eta[]> {
+  const lists = await Promise.all(
+    members.map((m) =>
+      fetchStopEtas(m.operator, m.stopId, index.stopToRoutes.get(m.id) ?? [], maxRoutes),
+    ),
+  )
+  return lists.flat().filter((e) => e.arrivals.length > 0)
 }
 
-/** GET /v1/etas/:id — flat ETA list for a stop (optionally filtered to routes). */
-export async function stopEtas(id: string, routeIds?: string[]): Promise<Eta[]> {
-  const { operator, stopId } = parseStopId(id)
+/**
+ * THE canonical live arrivals for a stop or merged place: upstream calls deduped by
+ * (route, serviceType), then collapsed to **one rider line per route+direction**
+ * (`dedupeEtas`), soonest first. The single source every `Eta[]`-returning endpoint
+ * (`/v1/nearby`, `/v1/etas`) flows through — so the API is consistently de-duplicated
+ * and the frontend never re-dedupes. (`/v1/stop` returns the full route *list* with
+ * per-route ETAs; its list-level collapse is the client's `dedupeRoutes`.)
+ */
+export async function stopArrivals(
+  index: StaticIndex,
+  members: IndexStop[],
+  maxRoutes = MAX_ETA_ROUTES,
+): Promise<Eta[]> {
+  const all = dedupeEtas(await memberEtaLists(index, members, maxRoutes))
+  return all.sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
+}
+
+/** GET /v1/stop/:id — a stop (or merged same-kerb place) and every route serving it,
+ *  each with its next ETA. A `P:`-prefixed id spans both operators at one kerb. */
+export async function stopDetail(id: string): Promise<StopDetail> {
   const index = await getStaticIndex()
-  const refs = index.stopToRoutes.get(id) ?? []
-  const etas = (await fetchStopEtas(operator, stopId, refs)).filter((e) => e.arrivals.length > 0)
-  if (!routeIds?.length) return etas
+  const members = resolveMembers(index, id)
+  const rep = members[0]
+  if (!rep) throw new Error(`unknown stop: ${id}`)
+
+  const etaByRouteId = new Map<string, Eta>()
+  for (const e of await memberEtaLists(index, members)) etaByRouteId.set(e.routeId, e)
+  const routes = members.flatMap((m) =>
+    (index.stopToRoutes.get(m.id) ?? []).map((ref) => {
+      const route = toRoute(ref, index)
+      return { route, eta: etaByRouteId.get(route.id) ?? null }
+    }),
+  )
+  return { stop: toMergedStop(id, members, rep), routes }
+}
+
+/** GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered). */
+export async function stopEtas(id: string, routeIds?: string[]): Promise<Eta[]> {
+  const index = await getStaticIndex()
+  const members = resolveMembers(index, id)
+  if (members.length === 0) throw new Error(`unknown stop: ${id}`)
+
+  const all = await stopArrivals(index, members)
+  if (!routeIds?.length) return all
   const wanted = new Set(routeIds)
-  return etas.filter((e) => wanted.has(e.routeId))
+  return all.filter((e) => wanted.has(e.routeId))
 }
 
 /** GET /v1/route/:id — a route and its ordered stop list (static). */

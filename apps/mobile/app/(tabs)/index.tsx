@@ -1,6 +1,6 @@
 import type { Locale, NearbyStop } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
-import { useQuery } from '@tanstack/react-query'
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { type ReactNode, useCallback } from 'react'
 import { Linking, Platform, RefreshControl, ScrollView, View } from 'react-native'
@@ -22,8 +22,9 @@ export default function Nearby() {
 
   const query = useQuery({
     queryKey: ['nearby', ready?.lat, ready?.lng],
-    enabled: !!ready,
-    queryFn: () => dataSource.getNearby({ lat: ready!.lat, lng: ready!.lng }, 500),
+    // skipToken disables the query until a location fix is ready, and narrows
+    // `ready` to non-null inside the queryFn — no assertion (TanStack Query v5).
+    queryFn: ready ? () => dataSource.getNearby({ lat: ready.lat, lng: ready.lng }, 500) : skipToken,
   })
 
   const onRefresh = useCallback(() => {
@@ -90,6 +91,11 @@ export default function Nearby() {
                 locale={locale}
                 now={now}
                 onPress={() => router.push(`/stop/${encodeURIComponent(n.stop.id)}`)}
+                onRoutePress={(routeId) =>
+                  router.push(
+                    `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(n.stop.id)}`,
+                  )
+                }
               />
             ))}
             {data.length === 0 ? (
