@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "NextBus HK",
+    "slug": "nextbus-hk",
+    "scheme": "nextbus",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        { "locationWhenInUsePermission": "Used to show bus stops and arrivals near you." }
+      ]
+    ]
+  }
+}
