@@ -1,7 +1,7 @@
-export * from './normalize'
-export { fetchKmbEta } from './kmb'
 export { fetchCitybusEta } from './citybus'
+export { fetchKmbEta } from './kmb'
 export * from './kmb-static'
+export * from './normalize'
 
 import type { Eta } from '@nextbus/core'
 import { fetchCitybusEta } from './citybus'

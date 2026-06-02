@@ -61,9 +61,14 @@ curl "http://localhost:8787/v1/eta/ctb/<stop-id>/720"
 
 # /v1/nearby?lat=&lng=[&radius=]  → NearbyStop[] with live ETAs (KMB; Mong Kok example)
 curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694&radius=500"
+
+# Slice 2 — canonical-id endpoints (ids are URL-encoded, e.g. KMB%3A<stopId>)
+curl "http://localhost:8787/v1/stop/KMB%3A<stopId>"            # → StopDetail (routes + next ETA)
+curl "http://localhost:8787/v1/route/KMB%3A6%3Aoutbound%3A1"   # → RouteDetail (ordered stops)
+curl "http://localhost:8787/v1/etas/KMB%3A<stopId>"            # → Eta[] (canonical; what getEtas calls)
 ```
-Responses are normalized and edge-cached (ETAs ~8s, nearby ~10s) — so many users on one stop = one
-upstream call.
+Responses are normalized and edge-cached (ETAs ~8s, nearby ~10s, route 1h) — so many users on one stop =
+one upstream call.
 
 ### Point the app at the edge
 The **Nearby** screen is wired to live data: it requests location permission, geolocates, and calls

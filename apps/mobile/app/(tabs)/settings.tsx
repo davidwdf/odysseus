@@ -1,3 +1,4 @@
+import type { Locale } from '@nextbus/core'
 import type { Messages } from '@nextbus/i18n'
 import { t } from '@nextbus/i18n'
 import { type Appearance, LIVERIES, type LiveryId } from '@nextbus/ui'
@@ -6,12 +7,20 @@ import { Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from '../../components/Text'
 import { usePreferences } from '../../lib/preferences'
-import { useLocale } from '../../providers/LocaleProvider'
+import { useLocale, useLocaleOverride, useSetLocale } from '../../providers/LocaleProvider'
 
 const APPEARANCES: { value: Appearance; labelKey: keyof Messages }[] = [
   { value: 'auto', labelKey: 'appearanceAuto' },
   { value: 'light', labelKey: 'appearanceLight' },
   { value: 'dark', labelKey: 'appearanceDark' },
+]
+
+// Language endonyms are shown in their own script regardless of the active UI locale;
+// only "Automatic" (follow device) is localized.
+const LANGUAGES: { value: Locale | null; label: string }[] = [
+  { value: 'en', label: 'English' },
+  { value: 'zh-Hant', label: '繁體中文' },
+  { value: 'zh-Hans', label: '简体中文' },
 ]
 
 export default function Settings() {
@@ -21,6 +30,8 @@ export default function Settings() {
   const appearance = usePreferences((s) => s.appearance)
   const setLivery = usePreferences((s) => s.setLivery)
   const setAppearance = usePreferences((s) => s.setAppearance)
+  const localeOverride = useLocaleOverride()
+  const setLocale = useSetLocale()
 
   return (
     <ScrollView
@@ -32,6 +43,26 @@ export default function Settings() {
           {t(locale, 'tabSettings')}
         </Text>
       </View>
+
+      {/* Language: Automatic (follow device) + per-language endonyms; persisted. */}
+      <Section title={t(locale, 'settingsLanguage')}>
+        <View className="overflow-hidden rounded-lg border border-border bg-surface">
+          <OptionRow
+            label={t(locale, 'languageAuto')}
+            selected={localeOverride === null}
+            first
+            onPress={() => setLocale(null)}
+          />
+          {LANGUAGES.map((l) => (
+            <OptionRow
+              key={l.value}
+              label={l.label}
+              selected={localeOverride === l.value}
+              onPress={() => setLocale(l.value)}
+            />
+          ))}
+        </View>
+      </Section>
 
       {/* Appearance: auto (default) / light / dark — independent of the livery. */}
       <Section title={t(locale, 'settingsAppearance')}>
@@ -66,7 +97,7 @@ export default function Settings() {
       <Section title={t(locale, 'settingsTheme')}>
         <View className="overflow-hidden rounded-lg border border-border bg-surface">
           {LIVERIES.map((l, i) => (
-            <LiveryRow
+            <OptionRow
               key={l.id}
               label={t(locale, l.labelKey as keyof Messages)}
               swatch={l.swatch}
@@ -92,7 +123,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function LiveryRow({
+function OptionRow({
   label,
   swatch,
   selected,
@@ -100,9 +131,10 @@ function LiveryRow({
   onPress,
 }: {
   label: string
-  swatch: string
+  /** Optional colour swatch (livery rows); omitted for plain rows like language. */
+  swatch?: string
   selected: boolean
-  first: boolean
+  first?: boolean
   onPress: () => void
 }) {
   return (
@@ -114,10 +146,12 @@ function LiveryRow({
         first ? '' : 'border-t border-border'
       }`}
     >
-      <View
-        className="h-6 w-6 rounded-full border border-border"
-        style={{ backgroundColor: swatch }}
-      />
+      {swatch ? (
+        <View
+          className="h-6 w-6 rounded-full border border-border"
+          style={{ backgroundColor: swatch }}
+        />
+      ) : null}
       <Text variant="body" weight={selected ? 'semibold' : 'regular'} className="flex-1 text-text">
         {label}
       </Text>

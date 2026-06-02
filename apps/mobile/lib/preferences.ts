@@ -1,20 +1,27 @@
+import type { Locale } from '@nextbus/core'
 import type { Appearance, LiveryId } from '@nextbus/ui'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
 // Persisted UI preferences (ADR-010: Zustand for theme/favorites; AsyncStorage =
-// localStorage on web, native KV on device). Theme has two independent axes:
-//   livery     — colour identity (Classic / KMB / Citybus / …)
-//   appearance — auto (follow OS) / light / dark
-// Every livery ships both modes, so the two combine freely (docs/09 §7, ADR-018).
+// localStorage on web, native KV on device). Axes:
+//   livery        — colour identity (Classic / KMB / Citybus / …)
+//   appearance    — auto (follow OS) / light / dark   (every livery ships both modes)
+//   localeOverride— manual UI language; null = follow the device
+//   favorites     — canonical stop ids the user has starred
+// (docs/09 §7, ADR-018; Slice 2 adds locale + favorites.)
 interface Preferences {
   livery: LiveryId
   appearance: Appearance
+  localeOverride: Locale | null
+  favorites: string[]
   /** Set false until the persisted value has rehydrated (avoids a wrong-theme flash). */
   hydrated: boolean
   setLivery: (livery: LiveryId) => void
   setAppearance: (appearance: Appearance) => void
+  setLocaleOverride: (locale: Locale | null) => void
+  toggleFavorite: (stopId: string) => void
 }
 
 export const usePreferences = create<Preferences>()(
@@ -22,14 +29,28 @@ export const usePreferences = create<Preferences>()(
     (set) => ({
       livery: 'classic',
       appearance: 'auto',
+      localeOverride: null,
+      favorites: [],
       hydrated: false,
       setLivery: (livery) => set({ livery }),
       setAppearance: (appearance) => set({ appearance }),
+      setLocaleOverride: (localeOverride) => set({ localeOverride }),
+      toggleFavorite: (stopId) =>
+        set((s) => ({
+          favorites: s.favorites.includes(stopId)
+            ? s.favorites.filter((id) => id !== stopId)
+            : [...s.favorites, stopId],
+        })),
     }),
     {
       name: 'nextbus.preferences',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ livery, appearance }) => ({ livery, appearance }),
+      partialize: ({ livery, appearance, localeOverride, favorites }) => ({
+        livery,
+        appearance,
+        localeOverride,
+        favorites,
+      }),
     },
   ),
 )

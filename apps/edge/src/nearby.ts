@@ -1,24 +1,12 @@
 import type { Eta, NearbyStop, Stop } from '@nextbus/core'
-import {
-  fetchKmbEta,
-  fetchKmbStatic,
-  findNearbyKmb,
-  type KmbStaticIndex,
-} from '@nextbus/data-normalize'
+import { fetchKmbEta, findNearbyKmb } from '@nextbus/data-normalize'
+import { getKmbIndex } from './kmb-index'
 
 // Slice-1 bounds so a cold nearby request stays cheap (≤ MAX_STOPS × MAX_ROUTES
 // upstream ETA calls, all edge-cached). The v2 push engine + on-device index
 // (ADR-004 / ADR-007) replace this fan-out later.
 const MAX_STOPS = 6
 const MAX_ROUTES_PER_STOP = 6
-
-// Memoize the KMB static index for the isolate's lifetime. Production swaps this
-// for the daily-crawl output served from KV/R2 (docs/03 "daily crawl").
-let indexPromise: Promise<KmbStaticIndex> | null = null
-function getKmbIndex(): Promise<KmbStaticIndex> {
-  if (!indexPromise) indexPromise = fetchKmbStatic()
-  return indexPromise
-}
 
 export async function nearbyKmb(lat: number, lng: number, radiusM: number): Promise<NearbyStop[]> {
   const index = await getKmbIndex()

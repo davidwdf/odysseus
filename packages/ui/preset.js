@@ -40,10 +40,38 @@ module.exports = {
       // give a proper fallback stack incl. CJK; on native fontFamily is single-valued
       // and the OS handles CJK glyph fallback. The <Text> primitive sets the cut directly.
       fontFamily: {
-        sans: ['Inter_400Regular', 'Noto Sans HK', 'Noto Sans SC', 'PingFang HK', 'system-ui', 'sans-serif'],
-        medium: ['Inter_500Medium', 'Noto Sans HK', 'Noto Sans SC', 'PingFang HK', 'system-ui', 'sans-serif'],
-        semibold: ['Inter_600SemiBold', 'Noto Sans HK', 'Noto Sans SC', 'PingFang HK', 'system-ui', 'sans-serif'],
-        bold: ['Inter_700Bold', 'Noto Sans HK', 'Noto Sans SC', 'PingFang HK', 'system-ui', 'sans-serif'],
+        sans: [
+          'Inter_400Regular',
+          'Noto Sans HK',
+          'Noto Sans SC',
+          'PingFang HK',
+          'system-ui',
+          'sans-serif',
+        ],
+        medium: [
+          'Inter_500Medium',
+          'Noto Sans HK',
+          'Noto Sans SC',
+          'PingFang HK',
+          'system-ui',
+          'sans-serif',
+        ],
+        semibold: [
+          'Inter_600SemiBold',
+          'Noto Sans HK',
+          'Noto Sans SC',
+          'PingFang HK',
+          'system-ui',
+          'sans-serif',
+        ],
+        bold: [
+          'Inter_700Bold',
+          'Noto Sans HK',
+          'Noto Sans SC',
+          'PingFang HK',
+          'system-ui',
+          'sans-serif',
+        ],
       },
     },
   },

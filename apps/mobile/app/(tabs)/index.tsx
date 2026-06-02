@@ -1,6 +1,7 @@
 import type { Locale, NearbyStop } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
+import { useRouter } from 'expo-router'
 import { type ReactNode, useCallback } from 'react'
 import { Linking, Platform, RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,6 +16,7 @@ import { useLocale } from '../../providers/LocaleProvider'
 export default function Nearby() {
   const locale = useLocale()
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const { state: loc, request } = useLocation()
   const ready = loc.status === 'ready' ? loc : null
 
@@ -87,6 +89,7 @@ export default function Nearby() {
                 etas={n.etas}
                 locale={locale}
                 now={now}
+                onPress={() => router.push(`/stop/${encodeURIComponent(n.stop.id)}`)}
               />
             ))}
             {data.length === 0 ? (
