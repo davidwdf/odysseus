@@ -12,6 +12,21 @@ the `DataSource` interface and the UI do not change.
 - [ ] **Light Rail (LRT) & MTR heavy rail** — different domain (rail), but the canonical model can host it.
 - [ ] **Ferries** (Star Ferry / franchised ferries) — if scope expands beyond buses.
 
+## Static data & multi-operator (follow-ups to [ADR-021](./08-decision-log.md))
+- [ ] **Own static crawl → KV/R2** — replace the runtime dependency on the hkbus consolidated dataset with
+      our own crawl (KMB bulk endpoints already in `kmb-static.ts`; CTB via the per-route + per-stop crawl,
+      run as an external job / GitHub Action since it exceeds the Worker subrequest cap). Self-reliance.
+- [ ] **Cache the snapshot in KV/R2** — so a hkbus gh-pages outage means *stale*, not broken (interim before
+      the own-crawl). The `DATASET` binding is already stubbed in `wrangler.toml`.
+- [ ] **Same-kerb stop-merge (`Place`)** — cluster co-located KMB/CTB stops (~25–40 m + name check) so a
+      shared kerb shows once with both operators' routes. (The dataset's `stopMap` over-clusters and breaks
+      ETA resolution, so we build our own — see ADR-021.)
+- [ ] **True Simplified (zh-Hans) static names** — the consolidated dataset only has en + Traditional, so
+      Simplified stop/route names currently fall back to Traditional. Source real zh-Hans (official bulk
+      endpoints have `name_sc`) once on our own crawl.
+- [ ] Additional consolidated operators already in the dataset (NLB, GMB, MTR feeder, light rail) — cheap to
+      light up once merge + UX are ready (overlaps "Additional operators" above).
+
 ## Realtime & data quality
 - [ ] Service-disruption / special-traffic-news surfacing (TD incident data).
 - [ ] Per-route remarks (e.g. "last bus departed", schedule-based vs GPS-based ETA labeling).

@@ -1,4 +1,5 @@
 export { fetchCitybusEta } from './citybus'
+export * from './dataset'
 export { fetchKmbEta } from './kmb'
 export * from './kmb-static'
 export * from './normalize'

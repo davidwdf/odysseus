@@ -1,6 +1,6 @@
 import { fetchEta } from '@nextbus/data-normalize'
-import { nearbyKmb } from './nearby'
-import { routeDetailKmb, stopDetailKmb, stopEtasKmb } from './stop-route'
+import { nearby } from './nearby'
+import { routeDetail, stopDetail, stopEtas } from './stop-route'
 
 // No bindings yet; the daily-crawl dataset will add e.g. `DATASET: KVNamespace`.
 export type Env = Record<string, never>
@@ -103,7 +103,7 @@ export default {
       if (hit) return hit
 
       try {
-        const stops = await nearbyKmb(lat, lng, radius)
+        const stops = await nearby(lat, lng, radius)
         const res = json(stops, 10)
         ctx.waitUntil(cache.put(cacheKey, res.clone()))
         return res
@@ -112,16 +112,16 @@ export default {
       }
     }
 
-    // GET /v1/stop/:id  → StopDetail (canonical id, e.g. KMB:<stopId>)
+    // GET /v1/stop/:id  → StopDetail (canonical id, e.g. KMB:<stopId> or CTB:<stopId>)
     if (parts[0] === 'v1' && parts[1] === 'stop' && parts[2]) {
       const id = decodeURIComponent(parts[2])
-      return cached(request, url, ctx, 8, () => stopDetailKmb(id), 'stop error')
+      return cached(request, url, ctx, 8, () => stopDetail(id), 'stop error')
     }
 
-    // GET /v1/route/:id  → RouteDetail (canonical id, e.g. KMB:6:outbound:1)
+    // GET /v1/route/:id  → RouteDetail (canonical id, e.g. KMB:6:outbound:1, CTB:1:outbound:1)
     if (parts[0] === 'v1' && parts[1] === 'route' && parts[2]) {
       const id = decodeURIComponent(parts[2])
-      return cached(request, url, ctx, 3600, () => routeDetailKmb(id), 'route error')
+      return cached(request, url, ctx, 3600, () => routeDetail(id), 'route error')
     }
 
     // GET /v1/etas/:id[?routes=a,b]  → Eta[] for a stop (canonical id). The app-facing
@@ -130,7 +130,7 @@ export default {
       const id = decodeURIComponent(parts[2])
       const routesParam = url.searchParams.get('routes')
       const routeIds = routesParam ? routesParam.split(',').filter(Boolean) : undefined
-      return cached(request, url, ctx, 8, () => stopEtasKmb(id, routeIds), 'etas error')
+      return cached(request, url, ctx, 8, () => stopEtas(id, routeIds), 'etas error')
     }
 
     return fail(404, 'not found')

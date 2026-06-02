@@ -285,3 +285,36 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   `fetchKmbStatic` now fetches the small `route` list solo, then the `stop`+`route-stop` pair (≤2 concurrent),
   with a backoff retry, and `getKmbIndex` no longer caches a rejected build. KMB-only (CTB stop crawl is the
   Citybus follow-up). Verified end-to-end in-browser against live data; typecheck 7/7.
+
+## ADR-021 — Citybus (and KMB) static data from the hkbus consolidated dataset
+- **Context:** Adding Citybus to nearby/stop/route needs a CTB stop index (coords + route-stops). The
+  official CTB ETA API has **no bulk stop or route-stop endpoint** (verified: `/stop` and `/route-stop`
+  both 422 without an id/route) — building the index from it means ~6,800 calls (1 route list + ~806
+  route-stop + ~6,000 per-stop). That's infeasible at request time *and* can't run in a Worker cron (the
+  ~1,000-subrequest cap is why hk-bus-crawling runs as an external GitHub Action).
+- **Decision:** Source the static layer for **both KMB and CTB** from the **hkbus/hk-bus-crawling**
+  consolidated dataset (`hkbus.github.io/hk-bus-crawling/routeFareList.min.json`, ~8 MB, daily-updated) in a
+  **single fetch**, memoized per isolate (`apps/edge/src/static-index.ts`), parsed into a multi-operator
+  canonical index (`packages/data-normalize/src/dataset.ts`). Live ETAs still come **direct from the official
+  KMB/CTB ETA APIs**. Attribute *Transport Department / KMB / Citybus via DATA.GOV.HK; consolidation via
+  hkbus/hk-bus-crawling*.
+- **Why this over the alternatives:**
+  - *Own CTB API crawl*: same underlying data, but ~6,800 calls + needs an external runner — deferred to a
+    backlog item (self-reliance), not a now-need.
+  - *Official GTFS*: investigated and rejected as a substitute — GTFS stop-ids ≠ ETA stop-ids (verified: CTB
+    ETA id `002403` = GTFS `3044`), so GTFS can't be called against the live ETA API and would still require
+    crawling CTB + fuzzy name/coord matching (`matchGtfs.py`). GTFS is a *backbone/merge* aid, not a CTB source.
+  - The consolidated set is the same official data, pre-crawled; reuse is intended (gh-pages + published
+    `hk-bus-eta` packages); GPL-v2 covers their crawler *code*, not the data output.
+- **Key data findings (encoded in `dataset.ts`):**
+  - `routeList[*].stops[co]` are the **raw, directly-ETA-callable** operator stop ids (verified
+    `/eta/CTB/001027/1` returns route-1 ETAs) — used as-is; canonical id `= <OP>:<rawId>`.
+  - `stopMap` is a **broad spatial cluster** for hkbus's own UX and is **wrong for ETA resolution** (the
+    clustered id returns no ETAs), so we **ignore it**. Same-kerb KMB↔CTB merge is deferred (backlog) — it
+    needs our own coordinate clustering. So a shared kerb currently shows as separate KMB and CTB stops.
+  - Names carry only `en` + `zh` (Traditional); we map `zh` → both zh-Hant and **zh-Hans (fallback)**. Live
+    ETA text still has all three from the operator APIs. True Simplified static names → backlog.
+- **Consequences:** `/v1/nearby`, `/v1/stop`, `/v1/route` are now **multi-operator** (KMB + CTB) off one
+  shared index; the edge KMB-only index (`kmb-index.ts`) is replaced by `static-index.ts`. `kmb-static.ts`
+  (the official KMB bulk crawl) stays in `data-normalize` for the future own-crawl. Runtime now depends on
+  the hkbus gh-pages artifact; backlog adds KV/R2 caching for resilience and an own-crawl for self-reliance.
