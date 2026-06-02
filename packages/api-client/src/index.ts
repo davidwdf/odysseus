@@ -55,8 +55,9 @@ export class EdgeClient implements DataSource {
   }
 
   getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]> {
+    // Canonical stop id → /v1/etas/:id (not the lower-level /v1/eta/:co/:stop/:route).
     const q = routeIds?.length ? `?routes=${encodeURIComponent(routeIds.join(','))}` : ''
-    return this.getJson<Eta[]>(`/v1/eta/${encodeURIComponent(stopId)}${q}`)
+    return this.getJson<Eta[]>(`/v1/etas/${encodeURIComponent(stopId)}${q}`)
   }
 
   watch(targets: WatchTarget[], onUpdate: EtaListener): Subscription {

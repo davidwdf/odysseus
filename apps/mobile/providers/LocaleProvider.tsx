@@ -1,11 +1,13 @@
 import type { Locale } from '@nextbus/core'
 import { resolveLocale } from '@nextbus/i18n'
 import { getLocales } from 'expo-localization'
-import { createContext, type ReactNode, useContext, useMemo, useState } from 'react'
+import { createContext, type ReactNode, useContext, useMemo } from 'react'
+import { usePreferences } from '../lib/preferences'
 
 interface LocaleContextValue {
   locale: Locale
-  /** Manual override (e.g. from a future Settings toggle). null = follow device. */
+  /** The persisted manual override (null = follow device) — drives the Settings picker. */
+  override: Locale | null
   setLocale: (locale: Locale | null) => void
 }
 
@@ -21,10 +23,12 @@ function detectDeviceLocale(): Locale {
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const device = useMemo(detectDeviceLocale, [])
-  const [override, setLocale] = useState<Locale | null>(null)
+  // The override is persisted in the preferences store so the choice survives reload.
+  const override = usePreferences((s) => s.localeOverride)
+  const setLocale = usePreferences((s) => s.setLocaleOverride)
   const value = useMemo<LocaleContextValue>(
-    () => ({ locale: override ?? device, setLocale }),
-    [override, device],
+    () => ({ locale: override ?? device, override, setLocale }),
+    [override, device, setLocale],
   )
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>
 }
@@ -32,6 +36,11 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 /** Current UI locale (device-detected, or the manual override). */
 export function useLocale(): Locale {
   return useContext(LocaleContext)?.locale ?? 'en'
+}
+
+/** The active manual override (null = following device), for the Settings picker. */
+export function useLocaleOverride(): Locale | null {
+  return useContext(LocaleContext)?.override ?? null
 }
 
 /** Set a manual locale override; pass null to follow the device again. */

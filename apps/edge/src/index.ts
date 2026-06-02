@@ -1,9 +1,9 @@
 import { fetchEta } from '@nextbus/data-normalize'
 import { nearbyKmb } from './nearby'
+import { routeDetailKmb, stopDetailKmb, stopEtasKmb } from './stop-route'
 
-export interface Env {
-  // DATASET: KVNamespace  // static normalized dataset (enable in wrangler.toml)
-}
+// No bindings yet; the daily-crawl dataset will add e.g. `DATASET: KVNamespace`.
+export type Env = Record<string, never>
 
 const CORS: Record<string, string> = {
   'access-control-allow-origin': '*',
@@ -26,6 +26,28 @@ function fail(status: number, message: string): Response {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', ...CORS },
   })
+}
+
+/** Edge-cache + coalesce a JSON producer: many users on the same key = one build per TTL. */
+async function cached(
+  request: Request,
+  url: URL,
+  ctx: ExecutionContext,
+  maxAge: number,
+  produce: () => Promise<unknown>,
+  errPrefix: string,
+): Promise<Response> {
+  const cache = caches.default
+  const cacheKey = new Request(url.toString(), request)
+  const hit = await cache.match(cacheKey)
+  if (hit) return hit
+  try {
+    const res = json(await produce(), maxAge)
+    ctx.waitUntil(cache.put(cacheKey, res.clone()))
+    return res
+  } catch (err) {
+    return fail(502, `${errPrefix}: ${(err as Error).message}`)
+  }
 }
 
 export default {
@@ -88,6 +110,27 @@ export default {
       } catch (err) {
         return fail(502, `nearby error: ${(err as Error).message}`)
       }
+    }
+
+    // GET /v1/stop/:id  → StopDetail (canonical id, e.g. KMB:<stopId>)
+    if (parts[0] === 'v1' && parts[1] === 'stop' && parts[2]) {
+      const id = decodeURIComponent(parts[2])
+      return cached(request, url, ctx, 8, () => stopDetailKmb(id), 'stop error')
+    }
+
+    // GET /v1/route/:id  → RouteDetail (canonical id, e.g. KMB:6:outbound:1)
+    if (parts[0] === 'v1' && parts[1] === 'route' && parts[2]) {
+      const id = decodeURIComponent(parts[2])
+      return cached(request, url, ctx, 3600, () => routeDetailKmb(id), 'route error')
+    }
+
+    // GET /v1/etas/:id[?routes=a,b]  → Eta[] for a stop (canonical id). The app-facing
+    // ETA endpoint; the lower-level /v1/eta/:co/:stop/:route stays for debugging.
+    if (parts[0] === 'v1' && parts[1] === 'etas' && parts[2]) {
+      const id = decodeURIComponent(parts[2])
+      const routesParam = url.searchParams.get('routes')
+      const routeIds = routesParam ? routesParam.split(',').filter(Boolean) : undefined
+      return cached(request, url, ctx, 8, () => stopEtasKmb(id, routeIds), 'etas error')
     }
 
     return fail(404, 'not found')

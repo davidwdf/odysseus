@@ -261,3 +261,27 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Consequences:** Zero CJK font weight in the bundle; full glyph coverage everywhere via the OS. The
   preset's `fontFamily` fallback chain still *names* Noto so a future opt-in (web-only, lazy `unicode-range`,
   or a curated HKSCS subset) is a small change. Revisit only if cross-browser web CJK proves visibly off.
+
+## ADR-020 — Slice 2: Stop/Route detail + Favorites + canonical id reconciliation
+- **Context:** Slice 2 needs Stop detail, Route detail and Favorites. The `DataSource` already declared
+  `getStop`/`getRoute`/`getEtas` but the worker had no `/v1/stop` or `/v1/route`, and `getEtas` sent a
+  **canonical** id (`KMB:<stop>`) to the operator-native `/v1/eta/:co/:stop/:route` route — a dead mismatch
+  flagged in [docs/11](./11-status.md).
+- **Decision:** (1) **Extend the KMB static index** (`packages/data-normalize`) with `stopById`, route
+  metadata (origin/destination from the bulk `route` endpoint) and ordered `routeToStops` (using `seq`).
+  (2) **Add worker endpoints** `/v1/stop/:id` → `StopDetail`, `/v1/route/:id` → `RouteDetail`, and a
+  canonical `/v1/etas/:id[?routes=]` → `Eta[]`; the index is memoized once and **shared** across nearby /
+  stop / route (`apps/edge/src/kmb-index.ts`). (3) **Reconcile `getEtas`** to call `/v1/etas/:id`; the
+  lower-level `/v1/eta/:co/:stop/:route` stays for debugging. (4) **App:** tappable `StopCard` →
+  `/stop/[id]` (live ETAs via `refetchInterval`, rider-duplicate route variants collapsed by route+bound,
+  a favorite toggle) → `/route/[id]` (ordered stops). **Favorites** + a persisted **locale override** are
+  added to the existing Zustand store ([ADR-018](#adr-018--two-axis-theme-livery--appearance-with-persistence));
+  the Settings language picker drives `LocaleProvider`.
+- **Why:** Canonical ids end at the seam — the app never speaks operator-native ids, so a v2 engine can
+  swap in unchanged ([ADR-004](#adr-004--phased-hybrid-data-layer-behind-a-datasource-interface)). One
+  shared memoized index keeps stop/route/nearby cheap. Favorites reuse the theme persistence pattern, so
+  no new storage machinery.
+- **Consequences:** Discovered + fixed an etabus quirk — **3 concurrent bulk fetches 403 the odd one out**;
+  `fetchKmbStatic` now fetches the small `route` list solo, then the `stop`+`route-stop` pair (≤2 concurrent),
+  with a backoff retry, and `getKmbIndex` no longer caches a rejected build. KMB-only (CTB stop crawl is the
+  Citybus follow-up). Verified end-to-end in-browser against live data; typecheck 7/7.

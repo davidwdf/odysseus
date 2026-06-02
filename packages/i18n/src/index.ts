@@ -39,6 +39,16 @@ export interface Messages {
   liveryCmb: string
   liveryDotMatrix: string
   liverySplitFlap: string
+  // Settings — language
+  settingsLanguage: string
+  languageAuto: string
+  // Stop / route detail + favorites (Slice 2)
+  routesAtStop: string
+  stopsOnRoute: string
+  save: string
+  saved: string
+  favoritesEmpty: string
+  favoritesEmptyHelp: string
 }
 
 const en: Messages = {
@@ -72,6 +82,14 @@ const en: Messages = {
   liveryCmb: 'CMB Nostalgia',
   liveryDotMatrix: 'Dot-Matrix',
   liverySplitFlap: 'Split-Flap',
+  settingsLanguage: 'Language',
+  languageAuto: 'Automatic',
+  routesAtStop: 'Routes',
+  stopsOnRoute: 'Stops',
+  save: 'Save',
+  saved: 'Saved',
+  favoritesEmpty: 'No saved stops yet',
+  favoritesEmptyHelp: 'Save a stop and it will appear here for quick access.',
 }
 
 const zhHant: Messages = {
@@ -105,6 +123,14 @@ const zhHant: Messages = {
   liveryCmb: '中巴懷舊',
   liveryDotMatrix: '點陣',
   liverySplitFlap: '翻牌',
+  settingsLanguage: '語言',
+  languageAuto: '自動',
+  routesAtStop: '路線',
+  stopsOnRoute: '車站',
+  save: '收藏',
+  saved: '已收藏',
+  favoritesEmpty: '尚未收藏車站',
+  favoritesEmptyHelp: '收藏車站後，即可在此快速查看。',
 }
 
 const zhHans: Messages = {
@@ -138,6 +164,14 @@ const zhHans: Messages = {
   liveryCmb: '中巴怀旧',
   liveryDotMatrix: '点阵',
   liverySplitFlap: '翻牌',
+  settingsLanguage: '语言',
+  languageAuto: '自动',
+  routesAtStop: '路线',
+  stopsOnRoute: '车站',
+  save: '收藏',
+  saved: '已收藏',
+  favoritesEmpty: '尚未收藏车站',
+  favoritesEmptyHelp: '收藏车站后，即可在此快速查看。',
 }
 
 export const messages: Record<Locale, Messages> = {
