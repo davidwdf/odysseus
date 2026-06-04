@@ -7,12 +7,16 @@
 //   splash-icon.png    1024, white mark on transparent, smaller (shown on ink via app.json)
 //   favicon.png        196,  full-bleed ink (web tab)
 //   icon-mono.png      1024, white mark on transparent (reuse: in-app logo / iOS tinted source)
+// And docs/social-preview.png (1280x640) — the GitHub repo social card (upload manually at
+// repo Settings → Social preview; GitHub has no API for it).
 
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
-const ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'mobile', 'assets')
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const ASSETS = join(ROOT, 'apps', 'mobile', 'assets')
+const DOCS = join(ROOT, 'docs')
 const INK = '#111827'
 const WHITE = '#ffffff'
 
@@ -70,7 +74,23 @@ async function run() {
     .png()
     .toFile(join(ASSETS, 'splash-icon.png'))
 
-  console.log('Generated: icon.png, favicon.png, icon-mono.png, adaptive-icon.png, splash-icon.png')
+  // GitHub social-preview card: ink field, centred mark (no text — name TBD).
+  const social = await sharp(MARK).resize(440, 440).png().toBuffer()
+  await sharp({
+    create: {
+      width: 1280,
+      height: 640,
+      channels: 4,
+      background: { r: 17, g: 24, b: 39, alpha: 1 },
+    },
+  })
+    .composite([{ input: social, gravity: 'center' }])
+    .png()
+    .toFile(join(DOCS, 'social-preview.png'))
+
+  console.log(
+    'Generated: icon.png, favicon.png, icon-mono.png, adaptive-icon.png, splash-icon.png, docs/social-preview.png',
+  )
 }
 run().catch((e) => {
   console.error(e)

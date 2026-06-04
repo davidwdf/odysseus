@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/mobile/assets/icon.png" alt="NextBus HK app icon — a double-decker bus" width="104" height="104" />
+</p>
+
 # NextBus HK (working title)
 
 A fast, beautiful, mobile-first app for **Hong Kong bus arrival times** — responsive web/PWA
