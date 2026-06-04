@@ -252,3 +252,29 @@ These two liveries swap *how characters render*, not the layout:
 - AA contrast both modes; **status never color-only**; visible **focus ring** (`focus`) for
   keyboard/web; honor **dynamic type**; **reduced-motion** downgrade; screen-reader labels on every
   icon button and ETA. (Cross-checked against the UX rules in [`docs/04`](./04-frontend-and-design.md).)
+
+## 9. App icon & brand mark
+The app icon is a **road-sign / transit pictogram**: a clean **side-profile double-decker** (HK's
+signature bus), rendered as a **white symbol on an ink field** (`BRAND.ink` = `#111827`, in
+`packages/ui/src/tokens.ts`). Construction (master: `apps/mobile/assets/icon.svg`):
+- **Body** rounded rect (radius 84); **two glassy window bands** as field-colour cut-outs, the top
+  one centred with an even 56px inset and a **concentric corner radius** (84 − 56 = 28); the lower
+  band shortened to imply a **door** and give the bus a front (orientation).
+- **Motion:** body + windows skewed **−8°** (leaning into travel, right-facing); **wheels stay round
+  and centred** (planted) — they're *not* skewed, so the cabin lunges forward over them.
+- **Wheels** are integrated white bumps (no second tone), so it reads as a bus without clutter.
+
+**Why this and not the alternatives:** we explored a bilingual **巴/車 character dual-read** and a
+**white-body negative-space** version; both consistently lost legibility (a clean bus *or* a clean
+glyph, never both; white bodies vanish on light backgrounds). Front-view read as tram/train. The
+side-profile pictogram is unambiguously a HK double-decker and pops on any wallpaper.
+
+**Assets** are generated from the master by `scripts/gen-icons.mjs` (uses `sharp`):
+`icon.png` (1024, full-bleed ink), `adaptive-icon.png` (Android foreground, mark in the safe zone),
+`splash-icon.png` (mark on transparent; ink background via `app.json`), `favicon.png`, and
+`icon-mono.png` (white mark on transparent — reused as the iOS **tinted** source and any in-app logo).
+`app.json` wires `icon`, `splash`, `android.adaptiveIcon`, `web.favicon`, and **iOS
+light/dark/tinted** variants. Regenerate after editing the SVG: `node scripts/gen-icons.mjs`.
+
+**Deferred (needs the app name):** the **巴士 / 香港巴士 wordmark** + splash lockup — see
+[`docs/07`](./07-backlog.md). The splash currently shows just the bus mark on ink.

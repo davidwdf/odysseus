@@ -1,5 +1,9 @@
 // Non-color design tokens shared across the app (docs/09-theme.md §4–5).
 
+/** Brand constants. `ink` is the app-icon field colour (apps/mobile/assets/icon.svg);
+ *  promoted to a token so the icon, splash, and any brand chrome stay one family. */
+export const BRAND = { ink: '#111827' } as const
+
 /** Animation durations in ms (micro-interactions stay 150–300ms). */
 export const MOTION = { fast: 120, base: 200, slow: 320 } as const
 
