@@ -57,6 +57,14 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   operator. **Verified:** Central's "Jardine House" now one merged card; merged stop detail shows CTB(yellow)
   + KMB(red) routes with live ETAs in-browser; the distinct 10.8 m-apart "Alexandra House"/"The Landmark"
   correctly stay separate; single-stop + Favorites unaffected.
+- **Design Workbench + app icon** (branch `design-workbench`, uncommitted): a dev-facing
+  **`/workbench`** route (`apps/mobile/app/workbench.tsx`) — a live gallery of the type scale, colour
+  tokens, radius/elevation, and every component in each state, driven by the real theme store (the
+  "mockup system" for revising components + the rules in `docs/09`). **App icon** finalized: a
+  road-sign side-profile double-decker, white-on-ink, −8° lean, centred round wheels — master
+  `apps/mobile/assets/icon.svg`, assets via `scripts/gen-icons.mjs`, wired in `app.json` (incl. iOS
+  light/dark/tinted), `BRAND.ink` token added. Verified: icon rasterizes correctly, web export emits
+  the favicon, `expo config` validates. Deferred (needs the name): 巴士 wordmark/splash lockup.
 - **Docs:** plan `01–10`, ADRs `001–021`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
