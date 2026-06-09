@@ -1,4 +1,5 @@
 import { BlurView } from 'expo-blur'
+import { cssInterop } from 'nativewind'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import {
   type LayoutChangeEvent,
@@ -11,6 +12,12 @@ import {
 import Animated, { type AnimatedProps } from 'react-native-reanimated'
 import { getDisplacementFilter, supportsBackdropFilterUrl } from '../lib/liquidGlass'
 import { useTheme } from '../lib/useTheme'
+
+// The glass root is an `Animated.View` (so a Reanimated opacity can ride on the same element that
+// carries the backdrop-filter — see RouteHeader). Reanimated's Animated.View isn't NativeWind-aware
+// by default, which silently drops `className` (border, the caller's layout classes). Register the
+// className→style interop so `<GlassView className=…>` works exactly like a plain View again.
+cssInterop(Animated.View, { className: 'style' })
 
 type GlassViewProps = AnimatedProps<ViewProps> & {
   /** Corner radius; the glass is clipped to it and the refractive rim follows it. */

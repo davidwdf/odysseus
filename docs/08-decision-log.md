@@ -678,11 +678,18 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   time. The back lens is unaffected (its opacity never changes). *Caveat: the broken state couldn't be
   reproduced in the headless automation harness — the fix is reasoned from the DOM signature + the reported
   fresh-vs-reused behaviour, to be confirmed on-device.*
+- **…and switching `GlassView`'s root to `Animated.View` needs a NativeWind interop:** Reanimated's
+  `Animated.View` is not NativeWind-aware, so after the root change `className` was **silently dropped** — the
+  hairline border vanished and the back lens's icon lost its `items-center justify-center` (it floated to the
+  top-left of the now-larger 54 px circle). Fix: register `cssInterop(Animated.View, { className: 'style' })`
+  once in `GlassView`, restoring `className` for every caller (the `bordered` border, the back lens, the
+  workbench panes). Verified it does **not** disturb Reanimated — the badge morph, marquee, and bus-token
+  tweens (all `Animated.View` + animated `style`, no `className`) still run.
 - **Consequences:** `RouteHeader` no longer renders a full-width `GlassView`; `expandedHeaderH`/
   `collapsedHeaderH`/`COLLAPSE` exports (consumed by `route/[id].tsx` for the top spacer + auto-scroll) are
-  unchanged in shape (`EXP_H` trimmed 150 → 132). `GlassView`'s root `View` → `Animated.View` is backward-
-  compatible (it already forwarded `style`; plain styles still apply) — a reusable win: any `GlassView` can
-  now be driven by a Reanimated style without the isolation trap. Supersedes ADR-030's *centred-shrink-in-place*
+  unchanged in shape (`EXP_H` trimmed 150 → 132). `GlassView`'s root is now an `Animated.View` (+ the
+  `cssInterop` registration above) — a reusable win: any `GlassView` can be driven by a Reanimated style
+  without the isolation trap, and `className` keeps working. Supersedes ADR-030's *centred-shrink-in-place*
   header. Tradeoff of "no background": stop text is faintly visible in the transparent gaps beside the pill
   while scrolling — accepted per the design intent; a subtle top scrim is the fallback if it ever reads as
   cluttered.
