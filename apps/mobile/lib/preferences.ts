@@ -1,24 +1,21 @@
 import type { Locale } from '@nextbus/core'
-import type { Appearance, LiveryId } from '@nextbus/ui'
+import type { Appearance } from '@nextbus/ui'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
 // Persisted UI preferences (ADR-010: Zustand for theme/favorites; AsyncStorage =
 // localStorage on web, native KV on device). Axes:
-//   livery        — colour identity (Classic / KMB / Citybus / …)
-//   appearance    — auto (follow OS) / light / dark   (every livery ships both modes)
+//   appearance    — auto (follow OS) / light / dark   (the one Ink theme, ADR-029)
 //   localeOverride— manual UI language; null = follow the device
 //   favorites     — canonical stop ids the user has starred
-// (docs/09 §7, ADR-018; Slice 2 adds locale + favorites.)
+// (docs/09 §7; Slice 2 adds locale + favorites.)
 interface Preferences {
-  livery: LiveryId
   appearance: Appearance
   localeOverride: Locale | null
   favorites: string[]
   /** Set false until the persisted value has rehydrated (avoids a wrong-theme flash). */
   hydrated: boolean
-  setLivery: (livery: LiveryId) => void
   setAppearance: (appearance: Appearance) => void
   setLocaleOverride: (locale: Locale | null) => void
   toggleFavorite: (stopId: string) => void
@@ -27,12 +24,10 @@ interface Preferences {
 export const usePreferences = create<Preferences>()(
   persist(
     (set) => ({
-      livery: 'classic',
       appearance: 'auto',
       localeOverride: null,
       favorites: [],
       hydrated: false,
-      setLivery: (livery) => set({ livery }),
       setAppearance: (appearance) => set({ appearance }),
       setLocaleOverride: (localeOverride) => set({ localeOverride }),
       toggleFavorite: (stopId) =>
@@ -45,8 +40,7 @@ export const usePreferences = create<Preferences>()(
     {
       name: 'nextbus.preferences',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ livery, appearance, localeOverride, favorites }) => ({
-        livery,
+      partialize: ({ appearance, localeOverride, favorites }) => ({
         appearance,
         localeOverride,
         favorites,

@@ -5,8 +5,8 @@
 > (ADR-025 / ADR-026); the Design Workbench + app icon landed via PRs #5/#6.
 
 ## TL;DR
-Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + two-axis livery
-picker), **Slice 2 (Stop · Route · Favorites · language picker)**, and **Citybus** are complete and
+Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + single **Ink**
+theme, light/dark/auto), **Slice 2 (Stop · Route · Favorites · language picker)**, and **Citybus** are complete and
 **verified end-to-end against live HK open data**. Nearby/stop/route are **multi-operator (KMB + CTB)**,
 computed **server-side** from the hkbus consolidated static dataset ([ADR-021](./08-decision-log.md)); live
 ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged into one same-kerb place**
@@ -94,7 +94,13 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   (dark). iOS-26 true Liquid Glass (`expo-glass-effect`) stays a deferred drop-in. **Verified in Chrome
   (Ink, light + dark):** bus chips scroll under the tab bar with a clean frosted transition (the earlier
   "white box"/pixelation is gone); lens magnifies the chips behind it.
-- **Docs:** plan `01–10`, ADRs `001–028`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
+- **Theming simplified to one Ink theme** ([ADR-029](./08-decision-log.md)): **retired the multi-livery
+  axis** (Classic/KMB/Citybus/CMB/Dot-Matrix/Split-Flap). Now a single **Ink** theme in **light/dark/auto**
+  (appearance only) — a monochrome "ink & paper" system: accent = ink on light, **paper on dark** (replaced
+  the old indigo-on-deep-slate dark). `themes` is `Record<Mode, ThemeVars>`; `LiveryId`/`LIVERIES`/
+  `DISPLAY_LIVERIES` removed; `preferences` drops `livery`; Settings/Workbench livery pickers + i18n
+  `livery*`/`settingsTheme` removed; `global.css` resynced. **Verified in Chrome (light + dark).**
+- **Docs:** plan `01–10`, ADRs `001–029`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
 - All data is **server-side** (no [on-device index](./08-decision-log.md), ADR-007). KMB + CTB only;
@@ -154,5 +160,5 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   **`StopRow.tsx`** (flat nearby/favorites item); distance/walk helpers → `packages/core/src/geo.ts`;
   theme resolver → `apps/mobile/lib/useTheme.ts`; fonts/splash → `apps/mobile/app/_layout.tsx`
 - Prefs (theme/appearance/locale/**favorites**, Zustand+persist) → `apps/mobile/lib/preferences.ts`;
-  Settings pickers → `apps/mobile/app/(tabs)/settings.tsx`; livery matrix + `LIVERIES` → `packages/ui/src/themes.ts`
+  Settings (language + appearance) → `apps/mobile/app/(tabs)/settings.tsx`; Ink theme (`themes[mode]`) → `packages/ui/src/themes.ts`
 - Decisions → [`docs/08`](./08-decision-log.md)

@@ -16,8 +16,8 @@ type GlassViewProps = ViewProps & {
   radius?: number
   /**
    * Translucent body laid over the glass so content stays legible. A NativeWind class
-   * with an alpha, e.g. `bg-surface/55`. Tinting toward `--surface` means each livery
-   * (incl. Ink) colours its own glass.
+   * with an alpha, e.g. `bg-surface/55`. Tinting toward `--surface` keeps the glass on
+   * the active theme (light/dark); `bg-ink/…` instead makes a fixed dark glass.
    */
   tintClassName?: string
   /** Draw the hairline edge that gives the pane its "glass" rim. Default true. */

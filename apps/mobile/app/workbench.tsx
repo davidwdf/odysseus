@@ -1,13 +1,5 @@
 import type { Eta, OperatorId } from '@nextbus/core'
-import { type Messages, t } from '@nextbus/i18n'
-import {
-  type Appearance,
-  LIVERIES,
-  OPERATOR_ACCENT,
-  RADIUS,
-  TYPE_SCALE,
-  type TypeVariant,
-} from '@nextbus/ui'
+import { type Appearance, OPERATOR_ACCENT, RADIUS, TYPE_SCALE, type TypeVariant } from '@nextbus/ui'
 import { Stack } from 'expo-router'
 import {
   Bell,
@@ -113,8 +105,6 @@ export default function Workbench() {
   const locale = useLocale()
   const now = Date.now()
 
-  const livery = usePreferences((s) => s.livery)
-  const setLivery = usePreferences((s) => s.setLivery)
   const appearance = usePreferences((s) => s.appearance)
   const setAppearance = usePreferences((s) => s.setAppearance)
 
@@ -139,27 +129,7 @@ export default function Workbench() {
         <Text variant="h2" className="text-text">
           Design Workbench
         </Text>
-        <View className="mt-3 flex-row flex-wrap gap-2">
-          {LIVERIES.map((l) => {
-            const on = l.id === livery
-            return (
-              <Pressable
-                key={l.id}
-                accessibilityRole="button"
-                onPress={() => setLivery(l.id)}
-                className={`flex-row items-center gap-2 rounded-full border px-3 py-1.5 ${
-                  on ? 'border-accent bg-surface-2' : 'border-border'
-                }`}
-              >
-                <View className="h-3 w-3 rounded-full" style={{ backgroundColor: l.swatch }} />
-                <Text variant="label" className={on ? 'text-text' : 'text-muted'}>
-                  {t(locale, l.labelKey as keyof Messages)}
-                </Text>
-              </Pressable>
-            )
-          })}
-        </View>
-        <View className="mt-2 flex-row gap-2">
+        <View className="mt-3 flex-row gap-2">
           {APPEARANCES.map((a) => {
             const on = a === appearance
             return (

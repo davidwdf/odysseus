@@ -41,7 +41,7 @@ export default function RootLayout() {
   })
 
   // Hold the splash until both fonts AND the persisted theme are ready, so the
-  // first paint is in-brand and on the user's chosen livery (no theme flash).
+  // first paint is in-brand and on the user's chosen appearance (no theme flash).
   const ready = fontsLoaded && prefsHydrated
 
   useEffect(() => {

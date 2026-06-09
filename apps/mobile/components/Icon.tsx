@@ -36,7 +36,7 @@ type IconProps = Omit<LucideProps, 'color'> & {
 
 /**
  * The single icon primitive. Wraps a Lucide glyph and resolves its colour from a
- * semantic token through `useTheme()`, so icons follow the active livery/appearance
+ * semantic token through `useTheme()`, so icons follow the active appearance
  * exactly like `<Text>` colours do. Decorative by default — put the
  * `accessibilityLabel` on the pressable that wraps it, not here.
  */

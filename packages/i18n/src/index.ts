@@ -26,20 +26,11 @@ export interface Messages {
   nearbyPrimeBody: string
   enableLocation: string
   comingSoon: string
-  // Settings — theme
+  // Settings — appearance (the one Ink theme, auto/light/dark)
   settingsAppearance: string
-  settingsTheme: string
   appearanceAuto: string
   appearanceLight: string
   appearanceDark: string
-  // Livery names (docs/09 §7)
-  liveryClassic: string
-  liveryInk: string
-  liveryKmb: string
-  liveryCtb: string
-  liveryCmb: string
-  liveryDotMatrix: string
-  liverySplitFlap: string
   // Settings — language
   settingsLanguage: string
   languageAuto: string
@@ -75,17 +66,9 @@ const en: Messages = {
   enableLocation: 'Enable location',
   comingSoon: 'Coming soon',
   settingsAppearance: 'Appearance',
-  settingsTheme: 'Theme',
   appearanceAuto: 'Auto',
   appearanceLight: 'Light',
   appearanceDark: 'Dark',
-  liveryClassic: 'Classic',
-  liveryInk: 'Ink',
-  liveryKmb: 'KMB',
-  liveryCtb: 'Citybus',
-  liveryCmb: 'CMB Nostalgia',
-  liveryDotMatrix: 'Dot-Matrix',
-  liverySplitFlap: 'Split-Flap',
   settingsLanguage: 'Language',
   languageAuto: 'Automatic',
   routesAtStop: 'Routes',
@@ -118,17 +101,9 @@ const zhHant: Messages = {
   enableLocation: '開啟定位',
   comingSoon: '即將推出',
   settingsAppearance: '外觀',
-  settingsTheme: '主題',
   appearanceAuto: '自動',
   appearanceLight: '淺色',
   appearanceDark: '深色',
-  liveryClassic: '經典',
-  liveryInk: '墨',
-  liveryKmb: '九巴',
-  liveryCtb: '城巴',
-  liveryCmb: '中巴懷舊',
-  liveryDotMatrix: '點陣',
-  liverySplitFlap: '翻牌',
   settingsLanguage: '語言',
   languageAuto: '自動',
   routesAtStop: '路線',
@@ -161,17 +136,9 @@ const zhHans: Messages = {
   enableLocation: '开启定位',
   comingSoon: '即将推出',
   settingsAppearance: '外观',
-  settingsTheme: '主题',
   appearanceAuto: '自动',
   appearanceLight: '浅色',
   appearanceDark: '深色',
-  liveryClassic: '经典',
-  liveryInk: '墨',
-  liveryKmb: '九巴',
-  liveryCtb: '城巴',
-  liveryCmb: '中巴怀旧',
-  liveryDotMatrix: '点阵',
-  liverySplitFlap: '翻牌',
   settingsLanguage: '语言',
   languageAuto: '自动',
   routesAtStop: '路线',

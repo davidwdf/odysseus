@@ -504,3 +504,29 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   Refraction never touches the glass's own children, so labels stay crisp. **Verified in Chrome (Ink, light
   + dark):** bus chips scroll under the tab bar with a clean frosted transition (no white box, no
   pixelation); the workbench lens magnifies the chips behind it. Still the seam for iOS-26 true Liquid Glass.
+
+## ADR-029 — Collapse to a single "Ink" theme (light/dark/auto); retire the livery axis
+- **Context:** [ADR-018](#adr-018--two-axis-theme-livery--appearance-with-persistence) shipped a two-axis
+  theme — **livery** (Classic/KMB/Citybus/CMB/Dot-Matrix/Split-Flap) × **appearance** (auto/light/dark).
+  In practice the liveries were scope/clutter we didn't want yet, and the default dark scheme (a deep-ink
+  bg with an **indigo** accent, from the Ink livery in [ADR-028](#adr-028--liquid-glass-material--ink-livery))
+  didn't feel right.
+- **Decision:** Drop the livery axis **for now**. One theme — **Ink** — in **light / dark**, chosen via the
+  **appearance** preference (auto follows the OS). Ink is a **monochrome "ink & paper"** system: the
+  `accent` is the *ink* (`#111827`) on light — a near-black mark on a white page — and **inverts to *paper***
+  (a soft off-white `#E2E8F0`) on dark. No coloured wayfinding accent in either mode. **Operator** colours
+  (RouteChip) and **status** colours (positive/warning/danger) are untouched, so data meaning is unaffected;
+  contrast stays AA both ways.
+- **Dark redesign:** replaced the old slate-blue dark (`--bg 2 6 23`, blue accent) with a cohesive ink ramp
+  — `--bg 13 17 28`, `--surface 22 27 41`, `--surface-2 32 38 54`, `--border 44 51 67`, paper text
+  `244 246 250`, and the **paper accent** `226 232 240` (active states read as white-on-ink, mirroring the
+  black-on-white of light).
+- **Implementation:** `themes` is now `Record<Mode, ThemeVars>` (`{ light, dark }`) — `livery()` helper,
+  `LiveryId`, `LIVERIES`, `LiveryMeta`, `DISPLAY_LIVERIES` removed from `@nextbus/ui`. `useTheme` resolves
+  `themes[mode]`. `preferences` drops `livery`/`setLivery` (persisted blobs with a stale `livery` key are
+  ignored on rehydration). Settings drops the **Theme** section (keeps Language + Appearance); the Workbench
+  drops its livery picker. i18n `settingsTheme` + `livery*` keys removed. `global.css` `:root`/`.dark`
+  resynced to the Ink palette.
+- **Consequences:** supersedes ADR-018's livery axis and the *Ink-livery* part of ADR-028 (the glass
+  material + ink-tint option still stand). Re-introducing liveries later is a localized change (restore the
+  map + picker). The `BRAND.ink` token and the `bg-ink` glass tint remain.

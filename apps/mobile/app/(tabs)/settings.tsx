@@ -1,7 +1,7 @@
 import type { Locale } from '@nextbus/core'
 import type { Messages } from '@nextbus/i18n'
 import { t } from '@nextbus/i18n'
-import { type Appearance, LIVERIES, type LiveryId } from '@nextbus/ui'
+import type { Appearance } from '@nextbus/ui'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -28,9 +28,7 @@ export default function Settings() {
   const locale = useLocale()
   const insets = useSafeAreaInsets()
   const tab = useTabBarLayout()
-  const livery = usePreferences((s) => s.livery)
   const appearance = usePreferences((s) => s.appearance)
-  const setLivery = usePreferences((s) => s.setLivery)
   const setAppearance = usePreferences((s) => s.setAppearance)
   const localeOverride = useLocaleOverride()
   const setLocale = useSetLocale()
@@ -66,7 +64,7 @@ export default function Settings() {
         </View>
       </Section>
 
-      {/* Appearance: auto (default) / light / dark — independent of the livery. */}
+      {/* Appearance: auto (default) / light / dark — the one Ink theme (ADR-029). */}
       <Section title={t(locale, 'settingsAppearance')}>
         <View className="flex-row gap-1 rounded-lg bg-surface-2 p-1">
           {APPEARANCES.map((opt) => {
@@ -93,23 +91,6 @@ export default function Settings() {
           })}
         </View>
       </Section>
-
-      {/* Theme / livery: colour identity. Each ships both light + dark, so it
-          combines freely with the appearance choice above. */}
-      <Section title={t(locale, 'settingsTheme')}>
-        <View className="overflow-hidden rounded-lg border border-border bg-surface">
-          {LIVERIES.map((l, i) => (
-            <OptionRow
-              key={l.id}
-              label={t(locale, l.labelKey as keyof Messages)}
-              swatch={l.swatch}
-              selected={livery === l.id}
-              first={i === 0}
-              onPress={() => setLivery(l.id as LiveryId)}
-            />
-          ))}
-        </View>
-      </Section>
     </ScrollView>
   )
 }
@@ -127,14 +108,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function OptionRow({
   label,
-  swatch,
   selected,
   first,
   onPress,
 }: {
   label: string
-  /** Optional colour swatch (livery rows); omitted for plain rows like language. */
-  swatch?: string
   selected: boolean
   first?: boolean
   onPress: () => void
@@ -148,12 +126,6 @@ function OptionRow({
         first ? '' : 'border-t border-border'
       }`}
     >
-      {swatch ? (
-        <View
-          className="h-6 w-6 rounded-full border border-border"
-          style={{ backgroundColor: swatch }}
-        />
-      ) : null}
       <Text variant="body" weight={selected ? 'semibold' : 'regular'} className="flex-1 text-text">
         {label}
       </Text>

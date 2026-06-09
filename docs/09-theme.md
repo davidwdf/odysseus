@@ -1,8 +1,8 @@
 # 09 — Theme & Design System
 
 Implemented with **NativeWind** (Tailwind) over a semantic token system ([ADR-009](./08-decision-log.md),
-[ADR-015](./08-decision-log.md)). This doc is the concrete spec: palettes, type, scales, tokens, and
-how the livery themes layer on top.
+[ADR-015](./08-decision-log.md)). This doc is the concrete spec: palettes, type, scales, tokens, and the
+single **Ink** theme (light/dark) layered on them.
 
 ## Philosophy
 Utility-first, calm, fast. The UI gets out of the way; **the next-arrival data is the hero.** Color
@@ -20,8 +20,9 @@ the last item still clears the chrome (see `useTabBarLayout().contentInset`,
 > [ADR-018](./08-decision-log.md#adr-018--two-axis-theme-livery--appearance-with-persistence)).
 > *Realized:* the token system (`packages/ui`), **Inter loaded** as weight cuts + splash-gated, the
 > **`<Text>` typography primitive** (the canonical consumer of the §3 scale), **elevation** tokens +
-> a `Card` primitive (§4), **themed nav chrome** (tab bar via `useTheme()`), the **two-axis theme**
-> (livery × appearance) with a **Settings picker** + persistence (§7), and **Lucide icons** behind an
+> a `Card` primitive (§4), **themed nav chrome** (tab bar via `useTheme()`), the **single Ink theme**
+> (light/dark/auto via a **Settings appearance** control + persistence; the multi-livery axis was
+> **retired** — [ADR-029](./08-decision-log.md#adr-029--collapse-to-a-single-ink-theme-lightdarkauto-retire-the-livery-axis)), and **Lucide icons** behind an
 > `<Icon tone>` primitive (§8, [ADR-025](./08-decision-log.md#adr-025--iconography-lucide-via-an-icon-primitive-on-the-token-system)).
 > The Nearby/Favorites home is a **flat `StopRow` list** (no card chrome) showing distance + walk time
 > ([ADR-026](./08-decision-log.md#adr-026--nearby-is-a-flat-list-not-cards-surface-distance--walk-time)).
@@ -37,15 +38,15 @@ the last item still clears the chrome (see `useTabBarLayout().contentInset`,
 ```
 Primitive tokens   →   Semantic tokens   →   Theme
 (raw palette:          (what components       (a set of VALUES for the
- slate-500, blue-600,   ever reference:        semantic tokens; light,
- op-kmb-red, …)         bg, text, accent,      dark, and each livery)
+ slate-500, ink, …)     ever reference:        semantic tokens; one Ink
+                        bg, text, accent,      theme, light + dark)
                         positive, eta-soon…)
 ```
 
 - **Components never use raw hex or primitive names** — only semantic classes (`bg-bg`,
   `text-muted`, `text-accent`, `bg-positive`…).
-- A **theme** is just a different set of values for the semantic tokens → swapping it re-skins the
-  whole app with **zero component changes**. This is what makes the livery themes cheap.
+- A **theme** is just a different set of values for the semantic tokens → swapping `light`↔`dark`
+  re-skins the whole app with **zero component changes** (and made re-adding liveries cheap, if ever).
 
 ### How it's wired (NativeWind)
 Semantic colors in Tailwind reference CSS variables holding `R G B` triplets:
@@ -69,21 +70,18 @@ theme: { extend: { colors: {
 ```
 
 ```ts
-// themes.ts — values are "R G B" triplets
-export const themes = {
-  light: { '--bg':'255 255 255', '--text':'15 23 42', '--accent':'37 99 235', /* … */ },
-  dark:  { '--bg':'2 6 23',      '--text':'248 250 252','--accent':'59 130 246', /* … */ },
-  kmbLight:  { /* …light, */ '--accent':'215 40 47',  '--accent-contrast':'255 255 255' },
-  ctbLight:  { /* …light, */ '--accent':'246 199 0',  '--accent-contrast':'15 23 42'  }, // yellow → dark text
-  // …one entry per livery × {light,dark}
+// themes.ts — values are "R G B" triplets; one Ink theme, two modes (ADR-029)
+export const themes: Record<Mode, ThemeVars> = {
+  light: { '--bg':'255 255 255', '--text':'17 24 39', '--accent':'17 24 39', /* ink on paper */ },
+  dark:  { '--bg':'13 17 28',    '--text':'244 246 250','--accent':'226 232 240', /* paper on ink */ },
 }
 ```
 
 ```tsx
 // Native: inject vars at the root via NativeWind's vars()
 import { vars } from 'nativewind';
-<View style={vars(themes[livery][mode])}>{/* app */}</View>   // theme = livery × mode (ADR-018)
-// Web: the same triplets are written to :root[data-theme="…"]
+<View style={vars(themes[mode])}>{/* app */}</View>   // mode = light | dark (ADR-029)
+// Web: the same triplets are the :root / .dark defaults in global.css
 ```
 
 Components stay theme-agnostic: `className="bg-bg text-text"`, `className="text-accent"`, etc.
@@ -91,31 +89,31 @@ Components stay theme-agnostic: `className="bg-bg text-text"`, `className="text-
 The active theme is resolved in one place — **`useTheme()`** (`apps/mobile/lib/useTheme.ts`) — which
 returns the `vars()` set (injected at the app root) plus a `color(token)` resolver. The resolver
 (`themeColor()` in `packages/ui`) turns a token into a concrete `rgb()` string for the few surfaces
-that can't take a className — notably the **React Navigation tab bar** (it takes colour values). This
-hook is also the seam where the **livery override** (§7) will layer on top.
+that can't take a className — notably the **React Navigation tab bar** (it takes colour values).
 
 ---
 
-## 2. Color
+## 2. Color — the **Ink** theme (one theme, light + dark; [ADR-029](./08-decision-log.md#adr-029--collapse-to-a-single-ink-theme-lightdarkauto-retire-the-livery-axis))
 
-### Neutral base (slate ramp)
+A monochrome **"ink & paper"** system: the accent is the *ink* on light and inverts to *paper* on dark.
 
+### Neutral base
 | Semantic | Light | Dark |
 |---|---|---|
-| `bg` | `#FFFFFF` | `#020617` (slate-950) |
-| `surface` | `#F8FAFC` (slate-50) | `#0F172A` (slate-900) |
-| `surface-2` | `#F1F5F9` (slate-100) | `#1E293B` (slate-800) |
-| `border` | `#E2E8F0` (slate-200) | `#1E293B` / `#334155` |
-| `text` | `#0F172A` (slate-900) | `#F8FAFC` (slate-50) |
-| `text-muted` | `#475569` (slate-600) | `#94A3B8` (slate-400) |
-| `text-subtle` | `#64748B` (slate-500) | `#64748B` (slate-500) |
+| `bg` | `#FFFFFF` | `#0D111C` (ink-950) |
+| `surface` | `#F8FAFC` (slate-50) | `#161B29` (ink-900) |
+| `surface-2` | `#F1F5F9` (slate-100) | `#202636` (ink-800) |
+| `border` | `#E2E8F0` (slate-200) | `#2C3343` (ink-700) |
+| `text` | `#111827` (ink) | `#F4F6FA` (paper) |
+| `text-muted` | `#475569` (slate-600) | `#9EA5B4` |
+| `text-subtle` | `#64748B` (slate-500) | `#6B7280` |
 
-### Accent (default "Classic" livery — a wayfinding blue, distinct from operator reds/yellows)
+### Accent — monochrome (ink ↔ paper; NOT a colour — distinct from operator reds/yellows & status)
 | Semantic | Light | Dark |
 |---|---|---|
-| `accent` | `#2563EB` (blue-600) | `#3B82F6` (blue-500) |
-| `accent-contrast` | `#FFFFFF` | `#FFFFFF` |
-| `focus` | `#2563EB` | `#60A5FA` |
+| `accent` | `#111827` (ink) | `#E2E8F0` (paper) |
+| `accent-contrast` | `#FFFFFF` | `#0D111C` (ink) |
+| `focus` | `#111827` | `#E2E8F0` |
 
 ### Status (always paired with an icon/label — **never color alone**)
 | Semantic | Meaning | Light | Dark |
@@ -205,7 +203,7 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
   **Chromium-only**, so **Safari & Firefox** fall back to a frosted `blur()`; **native** uses `expo-blur`.
   Props mirror the reference — `depth` (rim width), `strength` (bend), `blur` (frosting), `chroma`. The tint
   follows the appearance (`useTheme`) and a `bg-surface/55`-style body keeps labels legible — so **each
-  livery tints its own glass** (Ink → frosted ink). The `lens` prop = wider rim + chroma (the workbench
+  glass tints with the active theme** (frosted ink); `bg-ink` makes a fixed dark glass. The `lens` prop = wider rim + chroma (the workbench
   magnifier) vs. the subtle panel/tab-bar glass. It's the iOS-26 seam for Apple's true Liquid Glass
   (`expo-glass-effect`) — see [ADR-028](./08-decision-log.md#adr-028--liquid-glass-material--ink-livery).
 
@@ -232,47 +230,25 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 
 ---
 
-## 7. Livery themes (the fun-feature layering)
-Each livery is a theme that **remaps only** `accent`, `accent-contrast`, an optional `surface` tint,
-and (for the display liveries) a **display treatment** (`font-display` and/or the `<FlipTile>`
-component). It **never** touches status/contrast tokens, so legibility and ETA honesty are identical
-across every skin. Each ships **light + dark**.
+## 7. Theme: Ink (one theme, light + dark)
+There is **one** theme — **Ink** — chosen via the **appearance** axis only: `auto` (follows the OS) /
+`light` / `dark`, in **Settings**. The appearance is persisted (Zustand + AsyncStorage) and survives reload
+with no flash. The active theme is `themes[mode]`; `useTheme()` resolves it. See the palette in §2.
 
-> **Two independent axes** ([ADR-018](./08-decision-log.md#adr-018--two-axis-theme-livery--appearance-with-persistence)).
-> The user picks a **livery** (colour identity, below) *and* an **appearance** (`auto` follows the OS /
-> `light` / `dark`) — separately, in **Settings**. The active theme is the cross-product
-> `themes[livery][mode]`; both are persisted (Zustand + AsyncStorage) and survive reload with no flash.
-> So every livery below is defined for **both** modes — including light variants for the
-> normally-dark Dot-Matrix (daytime) and Split-Flap (paper board).
+It's a monochrome **"ink & paper"** system (the accent is the *ink* on light, *paper* on dark — §2). It
+**never** touches status or operator-accent tokens, so ETA honesty and operator identity are constant.
 
-| Livery | Accent | Notes |
-|---|---|---|
-| **Classic** (default) | wayfinding blue `#2563EB` | neutral, brand-agnostic |
-| **Ink** | ink `#111827` (light) / indigo `#818CF8` (dark) | the `BRAND.ink` identity: ink-on-paper on light, a deep ink world on dark; pairs with the liquid-glass material ([ADR-028](./08-decision-log.md#adr-028--liquid-glass-material--ink-livery)) |
-| **KMB** | red `#D7282F` | faint red surface tint (light) |
-| **Citybus** | yellow `#F6C700` | dark text on accent (contrast) |
-| **CMB Nostalgia** | deep blue on cream / warm night | cream `surface` (light), warm dark (dark), retro feel |
-| **Dot-Matrix** | LED orange `#FF8C00` | dark bg + `font-display` = dot-matrix; light = daytime variant |
-| **Split-Flap (Solari)** | warm white on charcoal / paper | airport/station **flip-tile** board; tiles flap to new values |
+> **Retired ([ADR-029](./08-decision-log.md#adr-029--collapse-to-a-single-ink-theme-lightdarkauto-retire-the-livery-axis)):**
+> the earlier multi-**livery** axis (Classic/KMB/Citybus/CMB/Dot-Matrix/Split-Flap × appearance, ADR-018)
+> was dropped. `LiveryId`/`LIVERIES`/`DISPLAY_LIVERIES` are gone; `themes` is `Record<Mode, ThemeVars>`.
+> Re-introducing liveries later is a localized change (restore the map + a Settings picker).
 
-Picker metadata (id, label key, swatch) lives in `LIVERIES` (`packages/ui/src/themes.ts`); the Settings
-screen renders from it. State + persistence: `apps/mobile/lib/preferences.ts`.
-
-### Display treatments: Dot-Matrix & Split-Flap
-These two liveries swap *how characters render*, not the layout:
-- **Dot-Matrix** is mostly a `font-display` swap (LED blind look).
-- **Split-Flap (Solari)** is a small reusable **`<FlipTile>`** component (one tile per character):
-  on a **real value change**, each tile animates a `rotateX` flap (top half down → bottom half up)
-  to the new glyph, optionally cascading left→right like a real board. It is the *premium
-  realization of the honest on-change animation* in §5 — **it only flaps when new data lands**, never
-  on a fake timer ([ADR-008](./08-decision-log.md)).
-- **Accessibility:** the rendered text is exposed to screen readers (`accessibilityLabel` /
-  `aria-live`), and **reduced-motion** collapses the flap to an instant swap with a brief highlight.
-- **Optional polish:** a soft flap *click* sound + haptic per settled tile (off by default; respects
-  the sound/haptic and reduced-motion preferences). Reusable for any value: route no., destination, ETA.
-
-**Auto-theme** (optional): the app adopts the livery of the operator you're currently viewing
-(viewing a KMB route → KMB accent), then reverts. User can also pin a favorite livery.
+### Backlog — display treatments (deferred with the liveries)
+A **`<FlipTile>`** Solari/split-flap component (one tile per character; flaps a `rotateX` on a **real**
+value change, never a fake timer — [ADR-008](./08-decision-log.md)) and a dot-matrix `font-display` face
+were specced for the display liveries. They're parked until liveries return; the honest on-change ETA
+animation (§5/§6) is the part worth building regardless. Reduced-motion would collapse the flap to an
+instant swap; the rendered text stays exposed to screen readers.
 
 ---
 
@@ -281,7 +257,7 @@ These two liveries swap *how characters render*, not the layout:
   ([ADR-025](./08-decision-log.md#adr-025--iconography-lucide-via-an-icon-primitive-on-the-token-system)):
   `lucide-react-native` (+ SDK-pinned `react-native-svg`) behind one primitive, **`<Icon icon tone>`**
   (`apps/mobile/components/Icon.tsx`). `tone` is a semantic role resolved through `useTheme().color()`,
-  so icons re-skin with the livery/appearance; an explicit `color` is the rare value-driven exception
+  so icons re-skin with the appearance (light/dark); an explicit `color` is the rare value-driven exception
   (operator accent, nav tab tint). In use: favorite **star** (`SaveButton`), **tab-bar icons**, an
   optional leading icon on `Button`, and the stop-heading `ChevronRight`.
 - AA contrast both modes; **status never color-only**; visible **focus ring** (`focus`) for
