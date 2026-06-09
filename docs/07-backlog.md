@@ -30,14 +30,14 @@ the `DataSource` interface and the UI do not change.
 
 ## Realtime & data quality
 - [ ] Service-disruption / special-traffic-news surfacing (TD incident data).
-- [ ] Per-route remarks (e.g. "last bus departed", schedule-based vs GPS-based ETA labeling).
+- [ ] Per-route remarks (e.g. "last bus departed", schedule-based vs GPS-based ETA labelling).
 - [ ] Crowding / occupancy data (if/when published).
 - [ ] Historical ETA accuracy tracking → show confidence ("usually on time here").
 
 ## Platform & engagement
 - [ ] **Push notifications:** "your bus is N stops / N minutes away" (needs native — Phase 3).
 - [ ] **Background location** geofenced alerts.
-- [ ] **Home-screen widgets** (iOS WidgetKit / Android App Widgets) for favorite stops.
+- [ ] **Home-screen widgets** (iOS WidgetKit / Android App Widgets) for favourite stops.
 - [ ] **Apple Watch app / Live Activities**; Android Wear.
 - [ ] **Accounts + cross-device sync** of favorites/settings (Cloudflare D1).
 - [ ] **Desktop / tablet-optimized layout** — adaptive multi-column / master-detail UI (e.g. map +
@@ -82,8 +82,13 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       don't publish raw GPS to us, so **approximate** position by interpolating along the route
       polyline from successive-stop ETAs (+ schedule). **Clearly label as estimated**; degrade
       gracefully when data is thin.
-- [ ] **Subway-style line strip** — a linear route diagram with a dot for the bus's approximate
-      progress; often more legible than a map for "where is it on the line."
+- [x] **Subway-style line strip** — **DONE** for KMB/LWB ([ADR-030](./08-decision-log.md#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens)):
+      the **route-detail** view is now a **vertical schematic timeline** with **bus tokens** that hop between
+      stops — at the upcoming stop when `isDue` (<1 min), else the **segment midpoint**, moving **only on
+      fresh data**. Located by **drop-off detection** (no vehicle id). `RouteDetail.stops[].eta` is fed by
+      KMB `route-eta` (one call per route); per-stop times + seq-in-node + a fixed glass header shipped with
+      it. Follow-ups: **per-bus identity** (one token gliding the whole line), and **CTB** (needs the
+      own-crawl — no bulk route-eta).
 - [ ] **Self-drawing route polyline** animation; animated "progress" fill toward your stop.
 - [ ] **Frequency heat** — visualize which nearby stops have the most buses arriving soon.
 

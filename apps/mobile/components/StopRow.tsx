@@ -45,7 +45,7 @@ export function StopRow({
 }: {
   name: string
   /** Straight-line distance, metres. Omit on screens where distance is irrelevant
-   *  (e.g. Favorites) — the distance/walk line is then hidden. */
+   *  (e.g. Favourites) — the distance/walk line is then hidden. */
   distanceM?: number
   etas: Eta[]
   locale: Locale

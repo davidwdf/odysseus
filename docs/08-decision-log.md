@@ -78,7 +78,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   name. Normalization runs in the **daily crawl pipeline**, never at request time.
 - **Why:** Adding an operator becomes "write an adapter"; merging offline keeps user latency at zero.
 - **Consequences:** Stop-merging needs tuning + a manual-override table; reference
-  `hkbus/hk-bus-crawling` for prior art (verify license).
+  `hkbus/hk-bus-crawling` for prior art (verify licence).
 
 ## ADR-006 — v1 operators: KMB/LWB + Citybus only
 - **Context:** Each operator is extra normalization + edge cases.
@@ -144,7 +144,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Context:** User wants documentation to stay in sync with the code and to be **automatically
   reminded before commits** if docs may be stale.
 - **Discussion:** In Claude Code, a *skill* is invoked on demand — it does **not** auto-trigger.
-  *Automatic* "before X" behavior requires a **hook** (the harness runs hooks, not the model). So
+  *Automatic* "before X" behaviour requires a **hook** (the harness runs hooks, not the model). So
   the right design is **both**: a hook that fires the check, and a skill that does the intelligent
   review/update.
 - **Decision:**
@@ -183,7 +183,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   **Noto Sans HK / SC** (CJK; system PingFang HK first for speed), with **tabular figures** for ETAs.
   Slate neutrals + status colors + operator accents used sparingly; **Lucide** icons; motion via
   **Reanimated** with a **reduced-motion** downgrade. Full spec: **[docs/09](./09-theme.md)**.
-- **Why:** Semantic tokens mean no component hard-codes a color, so a theme — including each livery —
+- **Why:** Semantic tokens mean no component hard-codes a colour, so a theme — including each livery —
   is just a value swap with **zero component churn**. Tabular figures stop ETA digits from jiggling
   on update, which is what makes the honest number-flip ([ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown)) feel clean.
 - **Consequences:** Liveries remap only **accent / surface-tint / display-font** tokens — never
@@ -274,12 +274,12 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   stop / route (`apps/edge/src/kmb-index.ts`). (3) **Reconcile `getEtas`** to call `/v1/etas/:id`; the
   lower-level `/v1/eta/:co/:stop/:route` stays for debugging. (4) **App:** tappable `StopCard` →
   `/stop/[id]` (live ETAs via `refetchInterval`, rider-duplicate route variants collapsed by route+bound,
-  a favorite toggle) → `/route/[id]` (ordered stops). **Favorites** + a persisted **locale override** are
+  a favourite toggle) → `/route/[id]` (ordered stops). **Favourites** + a persisted **locale override** are
   added to the existing Zustand store ([ADR-018](#adr-018--two-axis-theme-livery--appearance-with-persistence));
   the Settings language picker drives `LocaleProvider`.
 - **Why:** Canonical ids end at the seam — the app never speaks operator-native ids, so a v2 engine can
   swap in unchanged ([ADR-004](#adr-004--phased-hybrid-data-layer-behind-a-datasource-interface)). One
-  shared memoized index keeps stop/route/nearby cheap. Favorites reuse the theme persistence pattern, so
+  shared memoized index keeps stop/route/nearby cheap. Favourites reuse the theme persistence pattern, so
   no new storage machinery.
 - **Consequences:** Discovered + fixed an etabus quirk — **3 concurrent bulk fetches 403 the odd one out**;
   `fetchKmbStatic` now fetches the small `route` list solo, then the `stop`+`route-stop` pair (≤2 concurrent),
@@ -389,7 +389,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   New i18n `arrivalsHere`. Future polish: a chevron/affordance hint on the stop-name header.
 
 ## ADR-025 — Iconography: Lucide via an `<Icon>` primitive on the token system
-- **Context:** `docs/09` §8 mandates a single Lucide line-icon set, but v1 shipped none — the favorite
+- **Context:** `docs/09` §8 mandates a single Lucide line-icon set, but v1 shipped none — the favourite
   control was a text "Save" pill and the tab bar was label-only. We needed icons that follow the active
   livery/appearance like the rest of the system, with **no raw hex** (golden rule #4).
 - **Decision:** Adopt **`lucide-react-native`** (peer dep **`react-native-svg@15.15.4`**, pinned to the
@@ -399,13 +399,13 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   `rgb()` via **`useTheme().color()`** — the same `themeColor()` seam the tab bar already uses, so icons
   re-skin with the theme. An explicit `color` override exists for the two value-driven cases (operator
   accent; the nav-resolved tab tint) — used sparingly, like operator accents.
-- **Applied:** favorite **star** (`SaveButton`, fills with accent when saved; 44px round, labelled for
+- **Applied:** favourite **star** (`SaveButton`, fills with accent when saved; 44px round, labelled for
   SR), **tab-bar icons** (MapPin/Route/Star/Settings), an optional leading `icon` on `Button`
   (the location-prime CTA gets `LocateFixed`), and a `ChevronRight` affordance on the stop heading.
   Workbench gains an **ICONS** gallery (sample glyphs + every tone).
 - **Consequences:** decorative icons stay unlabeled (the wrapping pressable carries the
   `accessibilityLabel`); status icons remain paired with text/colour (never colour-alone, §8). Retires
-  the "Save pill" / "label-only tabs" / "favorite control is text" limitations. Bundle cost is modest
+  the "Save pill" / "label-only tabs" / "favourite control is text" limitations. Bundle cost is modest
   (tree-shaken per-glyph imports). Number-flip / freshness-pulse motion is still the separate motion slice.
 
 ## ADR-026 — Nearby is a flat list, not cards; surface distance + walk time
@@ -530,3 +530,162 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Consequences:** supersedes ADR-018's livery axis and the *Ink-livery* part of ADR-028 (the glass
   material + ink-tint option still stand). Re-introducing liveries later is a localized change (restore the
   map + picker). The `BRAND.ink` token and the `bg-ink` glass tint remain.
+
+## ADR-030 — Route view as a vertical schematic line-strip with two-state bus tokens
+- **Status:** **Implemented** for KMB/LWB (verified end-to-end in-browser against live data). Built on the
+  route-detail slice ([ADR-020](#adr-020--slice-2-stoproute-detail--favorites--canonical-id-reconciliation)).
+- **Context:** Idea raised: when viewing a route, render the ordered stops as a **vertical "timeline"**
+  (subway-style line strip) with little **bus icons that travel between stops** to show where buses are.
+  This is the backlog's *"subway-style line strip"* ([docs/07](./07-backlog.md) → Live map & motion) — and
+  is **distinct** from the map view's *"Uber-style moving bus icons"* (geographic, MapLibre, Phase 2). The
+  strip is cheaper than a map and usually **more legible for a single line** ("where is it on the line").
+  The hazard: animating a bus along the line *on a client clock* would be the spatial twin of the fake
+  per-second countdown that [ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown)
+  forbids.
+- **Options for positioning a bus (we worked down from precise to schematic):**
+  - (A) **Interpolated position** = `(S − T)/S` along the segment, where `T` is the live remaining time
+    and `S` the segment travel time. `S` from a **trailing-bus probe** (the bus behind still reports ETAs
+    at stops the lead bus has passed) or cross-stop ETA deltas; fallback **assume S = 2 min**; else
+    midpoint. Rejected as **false precision** — the schematic has no room to show it, and it dragged in
+    segment-time estimation, vehicle-identity inference, and schedule/historical data we don't have.
+  - (B) **Two-state position (chosen).** A bus is either **at its upcoming stop** (when that arrival is
+    **under a minute** — i.e. `isDue`) or at the **midpoint of the segment** between the stop it just left
+    and the stop it's approaching. No interpolation, no `S`, no 2-min constant.
+- **Decision:**
+  1. **Vertical schematic line-strip** as the route-detail presentation — schematic, **not** geographic
+     (real metro maps aren't to scale either), so segments are drawn at uniform visual length.
+  2. **Drop-off segment detection** locates each bus *reliably without a vehicle id*: a bus that has passed
+     stop *N* **disappears from stop *N*'s ETA list**, so walking the ordered stops, the **first** stop
+     still showing an arrival is the bus's *upcoming* stop and the one before it is the *stop it just left*.
+  3. **Two-state token position** (Option B): at-stop when `isDue` (reuses
+     `ETA_DUE_UNDER_SEC = 60` / `etaView().isDue` from `@nextbus/core/eta`), else segment **midpoint**.
+  4. **Snap/tween on update only.** A token changes lane (midpoint ↔ stop, or to the next segment) **only
+     when fresh data flips `isDue` or the drop-off segment changes** — never on a wall clock. A one-shot
+     ease to the new lane is fine; continuous between-poll motion is not.
+  5. **MVP is stop-centric** — render a token in the segment leading into each stop that has an imminent
+     arrival; **defer per-bus identity** (one token gliding the whole line) as a later enhancement.
+- **Why:** Position becomes a **spatial rendering of the real ETA value**, updated on the same trigger as
+  the number-flip — honest by construction (there is nothing continuous to fake). Choosing the two-state
+  model **deletes the hardest dependencies** (segment-time `S`, trailing-bus probe for positioning, the
+  2-min constant, schedule/historical data, vehicle-identity inference). Reusing the `isDue` threshold ties
+  the at-stop trigger to the same honesty rule that drives the "Arriving" label, so the strip and the badges
+  stay consistent.
+- **Data shape (the prerequisite — now built):** `RouteDetail.stops[]` gained a per-stop `eta: Eta | null`
+  (`packages/core/src/types.ts`) so a route view has the arrivals it needs in one payload. The worker fills
+  it from KMB's **`route-eta/{route}/{serviceType}`** endpoint — **every stop's ETA along the whole route in
+  ONE upstream call** (`fetchKmbRouteEta` in `@nextbus/data-normalize`); `/v1/route/:id` dropped from a 1 h
+  to an **8 s** cache TTL now that it carries live data. CTB has **no bulk route-eta** ([ADR-021](#adr-021--citybus-and-kmb-static-data-from-the-hkbus-consolidated-dataset)),
+  so it stays static-only (null ETAs) until the own-crawl. The position inference lives in a pure
+  `inferBusMarkers(soonest[], now)` in `@nextbus/core` (`route-position.ts`).
+- **Two route-eta realities** discovered while wiring it: (1) route-eta rows **carry no stop id** — only a
+  per-direction `seq` — so the worker maps `seq` → its own ordered stop and stamps the canonical stop id
+  back on; (2) the feed lists *just-departed* times, so the screen and the marker inference both use each
+  stop's **soonest _upcoming_** arrival (a stale time would mislabel which segment a bus is in).
+- **Route-page redesign shipped with it** (the screen is now the strip): the card list is gone; a **fixed
+  glass header** carries a floating **liquid-glass lens back button** + the **RouteChip as the title** + the
+  origin → destination as subtext (content scrolls underneath, per [ADR-027](#adr-027--floating-tab-bar-content-scrolls-underneath)/[ADR-028](#adr-028--liquid-glass-material--ink-livery));
+  each stop shows up to **3 upcoming times**; the **stop sequence number sits in its rail node**; opening
+  the route from a stop **auto-scrolls** to that stop. (The header and motion were then reworked — see the
+  presentation pass below — so some specifics here were superseded.)
+- **Presentation & motion pass** (follow-up polish, shipped): the rail is now animated and the chrome
+  refined —
+  - **Custom front-view double-decker glyph** (`BusGlyph`, a Lucide-style line icon — Lucide has none) on an
+    accent disc with a subtle continuous "in-motion" bob; **bus tokens tween along the rail** (`withTiming`)
+    when the inferred position changes on real data (the honest on-update ease, never a clock crawl).
+  - **Gradient "imprecision band"** on the rail (react-native-svg vertical gradient, accent fading out above
+    and below the token) communicates that the position is approximate — longer/softer for a bus mid-segment
+    (less certain) than one arriving at a stop.
+  - **Per-stop times animate** (`EtaTimes`): slots **slide over** when the soonest passes (Reanimated layout
+    transition) and a value change does an **odometer slide of only the characters that changed** (common
+    prefix/suffix held static — "52 min"→"51 min" slides just the "2"→"1"; "1 min"→"Soon" slides the whole
+    thing). Always-visible resting state (animations layered on, never required for legibility).
+  - **Names title-cased** for display (`titleCaseName`, minor words like "of"/"the" kept lower-case mid-title)
+    with the **operator stop code split out** smaller/muted (`splitStopCode`); names **wrap to two lines**;
+    the **sequence number sits in the rail node**, top-aligned to the name.
+  - **"Due" wording + colour** softened app-wide via `@nextbus/core/eta`: the sub-minute label is now the
+    shorter **"Soon"** (即將) and renders **positive/green**, not danger/red (also in `EtaBadge`, so Nearby /
+    Stop detail match). Still no fabricated number under a minute (ADR-008 intact).
+  - **Collapsing header** (`RouteHeader`): a **centred** badge over a centred `A → B` line; on scroll the
+    badge **shrinks in place** (stays centred) and the gap tightens — it never slides to a corner. The back
+    lens is pinned evenly in the top-left corner. `A → B` marquees back and forth (and on tap) if it
+    overflows. Rows are variable-height (wrapping), so **node centres are measured** and bus positions +
+    auto-scroll derive from those (auto-scroll fires once the first and last rows are measured, so it isn't
+    clamped to a still-growing list).
+- **Consequences:** No-subsequent-bus / sparse-service degrades naturally — a stop with no imminent arrival
+  simply has no token approaching it; nothing is fabricated. The KMB ETA feed has **no vehicle id**, so the
+  deferred identity-tracking enhancement would have to *infer* identity by matching arrival timestamps across
+  consecutive stops (fuzzy under bunching) — explicitly out of scope for the MVP. Bus tokens are keyed by
+  **ordinal** (buses keep order along the line), so most refreshes tween smoothly; a bus entering at the
+  origin or leaving at the terminus is a fade, not a glide.
+
+## ADR-032 — Favourites are **route-at-stop** pairs, not bare routes
+- **Status:** **Proposed / not yet built.** Design settled; implementation is a near-term follow-up (see [docs/11](./11-status.md)).
+- **Context:** Favourites today are **stop-only** — `favorites: string[]` of canonical stop ids
+  (`apps/mobile/lib/preferences.ts`); `SaveButton` toggles a stop and the Favourites tab lists saved stops.
+  Designing the route-detail header raised the question of a favourite **route**, partly for header symmetry
+  (a back-lens sits top-left with nothing top-right). Weighing it surfaced a sharper idea the user has found
+  genuinely useful in another app: favouriting a **route at a specific stop** — "the 6 from City One Station"
+  — so the next arrivals of the line you ride, at the kerb you catch it from, are glanceable.
+- **Options:**
+  - (A) **Favourite a bare route** (e.g. `KMB:6:outbound:1`). A *navigation bookmark* — tapping it opens the
+    schematic. But a route serves dozens of stops in both bounds, so it never answers "when's *my* bus?"; you
+    still scroll to find your stop. Its main pull was header symmetry — a weak reason to add an entity.
+  - (B) **Favourite a route-at-a-stop pair** (chosen). The atomic unit of a commute — a specific line at a
+    specific kerb. On the Favourites tab it renders the **next arrivals directly**, zero navigation. This is
+    the "open it every morning" feature.
+- **Decision:** Lead with **(B) the route-at-stop pair** as the favourite primitive. **Defer the bare-route
+  favourite** — it's only navigation and the pair subsumes the daily use case; it can be added later as a
+  second tier if asked. Specifics:
+  1. **Store:** a separate list in the Zustand prefs store — don't co-mingle with stop ids (different
+     entities, rendered differently). Recommended key shape: a flat **`favoriteRoutes: string[]`** of
+     `"${stopId}|${routeId}"` keys (mirrors the existing `favorites: string[]` and the **self-describing-id**
+     precedent of [ADR-022](#adr-022--same-kerb-stop-merge-our-own-conservative-landmarkdistance-clustering)'s
+     `P:<id>+<id>`, so a key still resolves after a dataset rebuild). A `{ stopId, routeId }` struct array is
+     the alternative — confirm at build time. The persisted `favorites` key and `toggleFavorite` symbol stay
+     ([ADR-031](#adr-031--british-english-oxford--ize-spelling-for-all-prose--user-facing-strings) — code is exempt).
+  2. **The star = the pair, everywhere.** The route screen is always reached **from a stop** (`route/[id].tsx`
+     carries the `?stop=` "here" context), so a **top-right glass-lens star** in the route header favourites
+     *this route at the stop you came from* — giving the header symmetry **and** the useful primitive with one
+     consistent meaning. Mirror it as a **per-route-row star** in Stop detail.
+  3. **Favourites tab** groups saved pairs **under their stop heading**, showing just the starred lines and
+     their next arrivals — reusing the existing **`StopRow`** (its `etas` array is already filterable, so pass
+     only the favourited routes' ETAs). Fetch per pair via `getEtas(stopId, [routeId])` /
+     `WatchTarget { stopId, routeIds }` — the seam already models the pair.
+- **Why:** The pair is the genuinely useful unit *and* the natural-fit primitive — the `DataSource` already
+  exposes it (`getEtas(stopId, routeIds?)`, `WatchTarget`, `StopDetail.routes[]`), so it's not the harder
+  option. Favourites stop being a list of places to navigate to and become a **dashboard of the buses you
+  actually take**. Symmetry is preserved without letting it drive the data model toward the weaker bare-route
+  entity.
+- **Consequences:** Store gains a route-at-stop list (+ a toggle); a `SaveRouteButton` (reuse the star) lands
+  **top-right in the route header** and **per-row in Stop detail**; the Favourites tab gains a pairs section
+  grouped by stop. New i18n keys for the route-save label. Bare-route favourites and cross-device sync of
+  favourites remain backlog ([docs/07](./07-backlog.md) — "Accounts + cross-device sync").
+
+## ADR-031 — British English (Oxford `-ize` spelling) for all prose & user-facing strings
+- **Context:** Spelling had drifted — the codebase already used British forms (`colour`, `centre`, `grey`,
+  `cancelled`, `labelled`) in most comments, but a handful of US spellings had crept into docs and one
+  user-facing string (`tabFavorites: 'Favorites'`). We want one consistent, documented standard so it
+  stops being a judgement call per edit.
+- **Options:** (1) US English (matches some library/CSS keywords); (2) British English with `-ise`
+  endings; (3) **British English with Oxford `-ize` endings**.
+- **Decision:** **British English, Oxford spelling** for all English prose (docs, comments) and all
+  **user-facing strings** (`@nextbus/i18n` `en`). Concretely:
+  - **Fix the clear Americanisms:** `colour` (not color), `centre`, `grey`, `favourite`, `behaviour`,
+    `honour`, `licence` (noun) / `license` (verb), doubled-l before suffixes (`labelling`, `cancelled`,
+    `travelled`), `-yse` (`analyse`, `paralyse`), `catalogue`, `dialogue`.
+  - **Keep the `-ize`/`-ization` ending** (`normalize`, `organize`, `optimize`, `realize`, `memoize`):
+    this is **Oxford British spelling**, not an Americanism, and it already matches the package name
+    **`@nextbus/data-normalize`** and the whole codebase. `-ise` is also acceptable but `-ize` is the
+    house default, so terms tied to code stay unchanged.
+  - **Code is exempt.** Identifiers, props, CSS/Tailwind keywords (`color`, `text-center`, `bg-gray-*`),
+    upstream API field names, package names, and route/file names follow their own ecosystem conventions —
+    e.g. the persisted `favorites` store key, `toggleFavorite`, the `app/(tabs)/favorites.tsx` route, and
+    the `color` prop on `<Icon>` stay as-is (renaming the store key would orphan persisted data). The UI
+    *label* is "Favourites"; the *code symbol* remains `favorites`. That split is intentional.
+- **Why:** British English fits a Hong Kong audience and our existing tone; Oxford `-ize` avoids a churny,
+  error-prone rename of `normalize`-family terms that are baked into the package name and APIs. Exempting
+  code keeps us from breaking keywords, persisted keys, and third-party field names.
+- **Consequences:** Recorded the rule in **CLAUDE.md** (golden rule #5, alongside the bilingual rule) so
+  every agent applies it by default. Initial sweep updated `docs/02/04/07/08/09/11`, `@nextbus/i18n`
+  (`Favourites`), and three prose comments (`SaveButton`, `datasource`, `StopRow`). Chinese strings are
+  unaffected.

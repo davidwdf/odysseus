@@ -5,7 +5,7 @@ Implemented with **NativeWind** (Tailwind) over a semantic token system ([ADR-00
 single **Ink** theme (light/dark) layered on them.
 
 ## Philosophy
-Utility-first, calm, fast. The UI gets out of the way; **the next-arrival data is the hero.** Color
+Utility-first, calm, fast. The UI gets out of the way; **the next-arrival data is the hero.** Colour
 is mostly neutral so that **status** (how soon / how fresh) and **operator accents** carry meaning.
 Delight is applied in small doses — motion *on change*, not decoration.
 
@@ -93,7 +93,7 @@ that can't take a className — notably the **React Navigation tab bar** (it tak
 
 ---
 
-## 2. Color — the **Ink** theme (one theme, light + dark; [ADR-029](./08-decision-log.md#adr-029--collapse-to-a-single-ink-theme-lightdarkauto-retire-the-livery-axis))
+## 2. Colour — the **Ink** theme (one theme, light + dark; [ADR-029](./08-decision-log.md#adr-029--collapse-to-a-single-ink-theme-lightdarkauto-retire-the-livery-axis))
 
 A monochrome **"ink & paper"** system: the accent is the *ink* on light and inverts to *paper* on dark.
 
@@ -115,7 +115,7 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
 | `accent-contrast` | `#FFFFFF` | `#0D111C` (ink) |
 | `focus` | `#111827` | `#E2E8F0` |
 
-### Status (always paired with an icon/label — **never color alone**)
+### Status (always paired with an icon/label — **never colour alone**)
 | Semantic | Meaning | Light | Dark |
 |---|---|---|---|
 | `positive` | arriving / good | `#16A34A` | `#22C55E` |
@@ -211,9 +211,9 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 
 ## 5. Motion tokens (Reanimated)
 - **Durations:** `fast` 120ms · `base` 200ms · `slow` 320ms (micro-interactions 150–300ms).
-- **Easing:** ease-out entering, ease-in exiting; spring for playful toggles (favorite, sheet drag).
+- **Easing:** ease-out entering, ease-in exiting; spring for playful toggles (favourite, sheet drag).
 - **Rules:** animate **1–2 elements per view**; transform/opacity only; no infinite decorative loops.
-- **Reduced-motion:** honor OS / `prefers-reduced-motion` → swap to instant or opacity-only.
+- **Reduced-motion:** honour OS / `prefers-reduced-motion` → swap to instant or opacity-only.
 - **ETA update:** per-digit **number-flip** (or crossfade) + a one-shot **freshness pulse** dot when
   new data lands. **No per-second decrement** ([ADR-008](./08-decision-log.md)). Reduced-motion → plain
   text swap with a brief highlight.
@@ -223,7 +223,7 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 ## 6. ETA display spec (the signature component)
 - Big **tabular** numeral + unit (`7 min`) **or** absolute clock (`3:42`); user-selectable, smart
   default (minutes when small, clock when large). Sub-minute → **"Arriving" / "Due"**.
-- Colored by `eta-*` urgency token **and** an icon — never color alone.
+- Coloured by `eta-*` urgency token **and** an icon — never colour alone.
 - **Freshness chip** "updated 12s ago"; past a threshold → `eta-stale` styling + a refresh affordance.
 - Up to 3 upcoming: first big, next two smaller/muted.
 - Screen-reader label spells it out: *"Route 6, arriving in 7 minutes, updated 10 seconds ago."*
@@ -258,10 +258,10 @@ instant swap; the rendered text stays exposed to screen readers.
   `lucide-react-native` (+ SDK-pinned `react-native-svg`) behind one primitive, **`<Icon icon tone>`**
   (`apps/mobile/components/Icon.tsx`). `tone` is a semantic role resolved through `useTheme().color()`,
   so icons re-skin with the appearance (light/dark); an explicit `color` is the rare value-driven exception
-  (operator accent, nav tab tint). In use: favorite **star** (`SaveButton`), **tab-bar icons**, an
+  (operator accent, nav tab tint). In use: favourite **star** (`SaveButton`), **tab-bar icons**, an
   optional leading icon on `Button`, and the stop-heading `ChevronRight`.
-- AA contrast both modes; **status never color-only**; visible **focus ring** (`focus`) for
-  keyboard/web; honor **dynamic type**; **reduced-motion** downgrade; screen-reader labels on every
+- AA contrast both modes; **status never colour-only**; visible **focus ring** (`focus`) for
+  keyboard/web; honour **dynamic type**; **reduced-motion** downgrade; screen-reader labels on every
   icon button and ETA. Decorative icons stay unlabeled — the wrapping pressable carries the label.
   (Cross-checked against the UX rules in [`docs/04`](./04-frontend-and-design.md).)
 

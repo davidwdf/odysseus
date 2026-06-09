@@ -10,6 +10,7 @@ import {
 import {
   canonicalRouteId,
   fetchEta,
+  fetchKmbRouteEta,
   type IndexRouteRef,
   type IndexStop,
   type StaticIndex,
@@ -151,17 +152,39 @@ export async function stopEtas(id: string, routeIds?: string[]): Promise<Eta[]> 
   return all.filter((e) => wanted.has(e.routeId))
 }
 
-/** GET /v1/route/:id — a route and its ordered stop list (static). */
+/** GET /v1/route/:id — a route and its ordered stop list, each stop carrying the route's
+ *  own next arrival there (ADR-030). KMB/LWB pull every stop's ETA in ONE upstream call
+ *  (`route-eta`); CTB has no bulk route-eta endpoint (ADR-021) so it stays static-only. */
 export async function routeDetail(id: string): Promise<RouteDetail> {
   const index = await getStaticIndex()
   const meta = index.routeMeta.get(id)
   const seqStops = index.routeToStops.get(id) ?? []
   if (!meta || seqStops.length === 0) throw new Error(`unknown route: ${id}`)
 
+  // Live arrivals along the whole route, keyed by sequence (the route-eta feed identifies
+  // stops only by `seq`). Best-effort: a failure degrades to a static-only route view
+  // rather than erroring the screen.
+  const etaBySeq = new Map<number, Eta>()
+  if (meta.operator === 'KMB' || meta.operator === 'LWB') {
+    try {
+      for (const entry of await fetchKmbRouteEta(meta.route, meta.serviceType)) {
+        if (entry.eta.routeId === id && entry.eta.arrivals.length > 0) {
+          etaBySeq.set(entry.seq, entry.eta)
+        }
+      }
+    } catch {
+      // ignore — static-only fallback
+    }
+  }
+
   const stops: RouteDetail['stops'] = []
   for (const rs of seqStops) {
     const rec = index.stopById.get(rs.stopId)
-    if (rec) stops.push({ seq: rs.seq, stop: toStop(rec) })
+    if (!rec) continue
+    // route-eta carries no stop id, so stamp the operator stop id we already know
+    // (matching the raw-id convention the other ETA endpoints use).
+    const eta = etaBySeq.get(rs.seq)
+    stops.push({ seq: rs.seq, stop: toStop(rec), eta: eta ? { ...eta, stopId: rec.stopId } : null })
   }
   return { route: toRoute(meta, index), stops }
 }

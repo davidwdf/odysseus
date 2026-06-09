@@ -53,7 +53,7 @@ are **not comparable** to each other and don't mean "older vs newer tech":
   of our canonical static dataset, then map its IDs to each operator's realtime API IDs.
 - Useful open-source prior art: [`hkbus/hk-bus-crawling`](https://github.com/hkbus/hk-bus-crawling)
   already consolidates KMB/CTB route/stop/fare data aligned to the data.gov.hk ETA APIs. Great
-  reference for the normalization mapping (license-permitting; verify before reuse).
+  reference for the normalization mapping (licence-permitting; verify before reuse).
 
 > **Current static source ([ADR-021](./08-decision-log.md)).** The static layer for **KMB + CTB** is built
 > from the hk-bus-crawling **consolidated dataset** (`routeFareList.min.json`, one ~8 MB daily-updated fetch,

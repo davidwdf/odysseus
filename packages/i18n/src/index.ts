@@ -49,7 +49,7 @@ const en: Messages = {
   appName: 'NextBus HK',
   tabNearby: 'Nearby',
   tabRoutes: 'Routes',
-  tabFavorites: 'Favorites',
+  tabFavorites: 'Favourites',
   tabSettings: 'Settings',
   searchPlaceholder: 'Search route number',
   nearbyTitle: 'Stops near you',

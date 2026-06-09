@@ -15,7 +15,7 @@ export function EtaBadge({ eta, locale, now }: { eta: Eta; locale: Locale; now: 
   const urgency = !view
     ? 'text-muted'
     : view.isDue
-      ? 'text-danger'
+      ? 'text-positive'
       : view.minutes <= 5
         ? 'text-warning'
         : 'text-text'

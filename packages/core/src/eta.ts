@@ -38,10 +38,12 @@ export function isStale(eta: Eta, now: number): boolean {
   return now - new Date(eta.dataTimestamp).getTime() > ETA_STALE_AFTER_MS
 }
 
+// Short, fixed-width-ish "imminent" label — under a minute we don't fake a number
+// (ADR-008). Kept brief ("Soon" / 即將) so promotion to the first slot barely shifts width.
 const DUE_LABEL: Record<Locale, string> = {
-  en: 'Arriving',
-  'zh-Hant': '即將抵達',
-  'zh-Hans': '即将抵达',
+  en: 'Soon',
+  'zh-Hant': '即將',
+  'zh-Hans': '即将',
 }
 const MIN_LABEL: Record<Locale, string> = {
   en: 'min',

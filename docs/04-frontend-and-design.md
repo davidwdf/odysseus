@@ -34,14 +34,14 @@ This directly resolves the two concerns you raised — see below.
   60/120 fps even when JS is busy. Springs, timing, sequences, **layout animations**,
   enter/exit animations. Has a **web implementation**, so the same code animates in the browser.
 - **React Native Gesture Handler** — native-thread gestures (pan/swipe/pinch) that drive
-  animations: drag-to-dismiss bottom sheets, swipe-to-favorite, pull-to-refresh.
+  animations: drag-to-dismiss bottom sheets, swipe-to-favourite, pull-to-refresh.
 - **Moti** — ergonomic declarative layer on Reanimated (`<MotiView animate={…}/>`); perfect for
   small delight; web + native.
 - **@shopify/react-native-skia** — 2D canvas/shaders/blur/gradients for custom visuals (animated
   route lines, fancy loaders). Runs on web via WASM.
 - **Lottie** — rich vector animations (empty states, success ticks); works web + native.
 - **Expo Haptics** — tactile feedback on native. **This is a delight lever the web simply can't
-  match** (e.g. a tiny tap when you favorite a stop or when your bus goes "Due").
+  match** (e.g. a tiny tap when you favourite a stop or when your bus goes "Due").
 
 **Honest trade-off:** Reanimated-on-web is a compatibility layer. ~95% of micro-interactions
 (springy transitions, list reordering, animated number-flips on ETA change, press feedback,
@@ -87,7 +87,7 @@ A smart, real concern — and the reason it pushes you toward PWA is exactly the
   sets swapped at runtime — full spec in **[`docs/09` — Theme & Design System](./09-theme.md)**.
 
 ### Design tokens (shared in `packages/ui`)
-- **Color:** semantic tokens (`bg`, `surface`, `text`, `accent`, per-operator brand accents —
+- **Colour:** semantic tokens (`bg`, `surface`, `text`, `accent`, per-operator brand accents —
   KMB red, Citybus yellow — used sparingly). Full **light & dark** themes (transit happens
   outdoors, day and night — dark mode is not optional).
 - **Type scale & spacing:** one modular scale; large, thumb-friendly tap targets.
@@ -98,7 +98,7 @@ A smart, real concern — and the reason it pushes you toward PWA is exactly the
   new number (never a fake per-second tick — see the ETA principle).
 - **Pull-to-refresh** with a springy, branded indicator.
 - **Bottom sheet** for stop detail; drag to expand/dismiss (Gesture Handler).
-- **Swipe-to-favorite** with a haptic tick (native).
+- **Swipe-to-favourite** with a haptic tick (native).
 - **Skeleton shimmer** while first data loads; content **fades/slides** in.
 - **Map markers** that gently animate in; **"Due"/"Arriving"** state pulses subtly.
 - **Shared-element / spring page transitions** via Expo Router.

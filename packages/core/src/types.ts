@@ -78,10 +78,12 @@ export interface Eta {
   observedAt: string
 }
 
-/** Route + its ordered stops (static) — returned by DataSource.getRoute. */
+/** Route + its ordered stops — returned by DataSource.getRoute. Each stop carries the
+ *  route's own next arrival *there* (`eta`), so a route view can show per-stop times and
+ *  infer bus positions (ADR-030). `eta` is null where no live reading is available. */
 export interface RouteDetail {
   route: Route
-  stops: Array<{ seq: number; stop: Stop }>
+  stops: Array<{ seq: number; stop: Stop; eta: Eta | null }>
 }
 
 /** A stop + the routes that serve it, each with its current ETA. */

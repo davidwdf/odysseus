@@ -55,6 +55,12 @@ packages/tsconfig    shared TS configs
    data names are `I18nText` from the canonical model. Never hard-code English labels. Screens read
    the active locale via **`useLocale()`** (device-detected through `expo-localization` +
    `resolveLocale`, with a manual-override hook) — never hard-code a locale constant in a screen.
+   **English prose and user-facing `en` strings use British English (Oxford `-ize` spelling)**
+   (ADR-031): write `colour`/`centre`/`grey`/`favourite`/`behaviour`/`licence` (noun); keep the
+   `-ize`/`-ization` ending (`normalize`, `optimize`, `memoize`) — that's Oxford British, not US, and
+   matches `@nextbus/data-normalize`. **Code is exempt:** identifiers, props, CSS/Tailwind keywords
+   (`color`, `text-center`, `bg-gray-*`), upstream API fields, and route/file names keep their existing
+   spelling (e.g. the `favorites` store key stays — only its UI *label* is "Favourites").
 6. **Pin SDK-aligned dependency versions — don't guess.** Expo packages are version-aligned to the
    SDK (e.g. `expo-router@56.x`). For RN-ecosystem libs, read the versions from
    `expo@<ver>/bundledNativeModules.json` (we did this for the scaffold). Tailwind stays on **3.4**

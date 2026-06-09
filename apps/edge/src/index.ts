@@ -119,9 +119,11 @@ export default {
     }
 
     // GET /v1/route/:id  → RouteDetail (canonical id, e.g. KMB:6:outbound:1, CTB:1:outbound:1)
+    // Now carries live per-stop ETAs (ADR-030) → short TTL like the other live endpoints,
+    // not the hour the static geometry alone could afford.
     if (parts[0] === 'v1' && parts[1] === 'route' && parts[2]) {
       const id = decodeURIComponent(parts[2])
-      return cached(request, url, ctx, 3600, () => routeDetail(id), 'route error')
+      return cached(request, url, ctx, 8, () => routeDetail(id), 'route error')
     }
 
     // GET /v1/etas/:id[?routes=a,b]  → Eta[] for a stop (canonical id). The app-facing

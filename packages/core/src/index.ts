@@ -1,4 +1,5 @@
 export * from './datasource'
 export * from './eta'
 export * from './geo'
+export * from './route-position'
 export * from './types'

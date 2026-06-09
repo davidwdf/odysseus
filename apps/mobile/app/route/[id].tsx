@@ -1,16 +1,31 @@
-import { type Eta, etaView, formatRelative, type Locale } from '@nextbus/core'
-import { t } from '@nextbus/i18n'
-import { FONT_FAMILY } from '@nextbus/ui'
+import { etaView, inferBusMarkers, type Locale } from '@nextbus/core'
 import { useQuery } from '@tanstack/react-query'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { Pressable, ScrollView, View } from 'react-native'
-import { Card } from '../../components/Card'
-import { RouteChip } from '../../components/RouteChip'
+import { useEffect, useRef, useState } from 'react'
+import { Pressable, type ScrollView, View } from 'react-native'
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { BusToken } from '../../components/BusToken'
+import { EtaTimes } from '../../components/EtaTimes'
+import { collapsedHeaderH, expandedHeaderH, RouteHeader } from '../../components/RouteHeader'
 import { Skeleton } from '../../components/Skeleton'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
-import { useTheme } from '../../lib/useTheme'
+import { splitStopCode, titleCaseName } from '../../lib/stopName'
 import { useLocale } from '../../providers/LocaleProvider'
+
+const RAIL_W = 52
+const NODE = 28
+const NODE_TOP = 12 // node top aligns with the stop name's top (paddingTop)
+const NODE_CENTER = NODE_TOP + NODE / 2
+const TOKEN = 26
 
 /** Does a route-sequence stop id refer to the stop we opened this route from?
  *  Handles a merged same-kerb place id (`P:<a>+<b>`) matching either member. */
@@ -20,167 +35,244 @@ function isOriginStop(routeStopId: string, origin?: string): boolean {
   return origin.startsWith('P:') && origin.slice(2).split('+').includes(routeStopId)
 }
 
+/** Upcoming (not-yet-departed) arrivals at a stop, soonest first, capped at 3. */
+function upcoming(arrivals: string[] | undefined, now: number): string[] {
+  return (arrivals ?? []).filter((a) => !etaView(a, now).hasDeparted).slice(0, 3)
+}
+
 export default function RouteDetail() {
   const params = useLocalSearchParams<{ id: string; stop?: string }>()
   const id = Array.isArray(params.id) ? params.id[0] : params.id
   const stopId = Array.isArray(params.stop) ? params.stop[0] : params.stop
   const locale = useLocale()
   const router = useRouter()
-  const { color } = useTheme()
+  const insets = useSafeAreaInsets()
 
-  // Route geometry is static — cache it hard (the worker caches an hour too).
+  // Each stop carries the route's live arrival there (ADR-030) → live query.
   const query = useQuery({
     queryKey: ['route', id],
     enabled: !!id,
     queryFn: () => dataSource.getRoute(id as string),
-    staleTime: 60 * 60_000,
-  })
-
-  // When opened from a stop, show this route's upcoming arrivals *here* (live).
-  const arrivalsQuery = useQuery({
-    queryKey: ['etas', stopId, id],
-    enabled: !!stopId && !!id,
-    queryFn: () => dataSource.getEtas(stopId as string, [id as string]),
     refetchInterval: 20_000,
   })
 
   const route = query.data?.route
   const stops = query.data?.stops ?? []
   const now = Date.now()
-  const hereEta = arrivalsQuery.data?.[0] ?? null
-  const hereStop = stops.find((s) => isOriginStop(s.stop.id, stopId))
+
+  const hereIndex = stops.findIndex((s) => isOriginStop(s.stop.id, stopId))
+  // Bus positions from each stop's soonest *upcoming* arrival (drop-off detection).
+  const markers = inferBusMarkers(
+    stops.map((s) => upcoming(s.eta?.arrivals, now)[0] ?? null),
+    now,
+  )
+
+  const topSpacer = expandedHeaderH(insets.top)
+
+  // Rows are variable-height (names wrap), so each reports its top; node centres — and thus
+  // bus positions and the auto-scroll target — are derived from those measurements.
+  const [tops, setTops] = useState<number[]>([])
+  const setTop = (i: number, y: number) =>
+    setTops((prev) => {
+      if (prev[i] === y) return prev
+      const next = prev.slice()
+      next[i] = y
+      return next
+    })
+  const nodeY = (i: number) => (tops[i] === undefined ? undefined : tops[i] + NODE_CENTER)
+
+  // Scroll offset drives the collapsing header.
+  const scrollY = useSharedValue(0)
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y
+  })
+
+  // Auto-scroll to the originating stop once BOTH it and the last row are measured — i.e.
+  // the full content height is settled, so the scroll target isn't clamped.
+  const scrollRef = useRef<ScrollView>(null)
+  const scrolled = useRef(false)
+  const hereTop = hereIndex >= 0 ? tops[hereIndex] : undefined
+  const lastTop = stops.length > 0 ? tops[stops.length - 1] : undefined
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fire once the relevant rows are measured
+  useEffect(() => {
+    if (scrolled.current || hereTop === undefined || lastTop === undefined) return
+    scrolled.current = true
+    const y = topSpacer + hereTop - collapsedHeaderH(insets.top) - 8
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: false }))
+  }, [hereTop, lastTop])
+
+  const routeLabel = route
+    ? `${titleCaseName(route.origin[locale])} → ${titleCaseName(route.destination[locale])}`
+    : ''
 
   return (
     <View className="flex-1 bg-bg">
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: route ? route.routeNo : '',
-          headerStyle: { backgroundColor: color('--surface') },
-          headerTintColor: color('--text'),
-          headerTitleStyle: { fontFamily: FONT_FAMILY.semibold },
-        }}
-      />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <Animated.ScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
+        <View style={{ height: topSpacer }} />
         {query.isLoading ? (
-          <View className="gap-3">
+          <View className="gap-3 px-4">
             {[0, 1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-10 w-full" />
+              <Skeleton key={i} className="h-12 w-full" />
             ))}
           </View>
         ) : query.isError ? (
-          <Text variant="body" className="text-danger">
+          <Text variant="body" className="px-4 text-danger">
             {(query.error as Error).message}
           </Text>
         ) : (
-          <>
-            {route ? (
-              <View className="mb-4 flex-row items-center gap-3">
-                <RouteChip operator={route.operator} routeNo={route.routeNo} />
-                <Text variant="body" className="flex-1 text-muted">
-                  {route.origin[locale]} → {route.destination[locale]}
-                </Text>
-              </View>
-            ) : null}
-
-            {stopId ? (
-              <ArrivalsHere
-                eta={hereEta}
-                stopName={hereStop?.stop.name[locale]}
-                locale={locale}
+          <View>
+            {stops.map((s, i) => (
+              <RouteStopRow
+                key={`${s.seq}-${s.stop.id}`}
+                seq={s.seq}
+                name={s.stop.name[locale]}
+                arrivals={upcoming(s.eta?.arrivals, now)}
                 now={now}
+                locale={locale}
+                here={i === hereIndex}
+                first={i === 0}
+                last={i === stops.length - 1}
+                onLayoutY={(y) => setTop(i, y)}
+                onPress={() => router.push(`/stop/${encodeURIComponent(s.stop.id)}`)}
               />
-            ) : null}
+            ))}
 
-            <Text variant="label" className="mb-2 text-subtle">
-              {t(locale, 'stopsOnRoute')}
-            </Text>
-            <Card className="overflow-hidden">
-              {stops.map((s, i) => {
-                const here = isOriginStop(s.stop.id, stopId)
-                return (
-                  <Pressable
-                    key={`${s.seq}-${s.stop.id}`}
-                    accessibilityRole="button"
-                    onPress={() => router.push(`/stop/${encodeURIComponent(s.stop.id)}`)}
-                    className={`flex-row items-center gap-3 px-4 py-3 active:opacity-70 ${
-                      i === 0 ? '' : 'border-t border-border'
-                    } ${here ? 'bg-surface-2' : ''}`}
-                  >
-                    <Text
-                      variant="label"
-                      className={`w-6 text-right ${here ? 'text-accent' : 'text-subtle'}`}
-                      tabular
-                    >
-                      {s.seq}
-                    </Text>
-                    <Text
-                      variant="body"
-                      className={`flex-1 ${here ? 'font-semibold text-accent' : 'text-text'}`}
-                      numberOfLines={1}
-                    >
-                      {s.stop.name[locale]}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </Card>
-          </>
+            {/* Bus tokens ride the rail at measured node positions; they tween on real data change. */}
+            {markers.map((m, i) => {
+              const atNode = m.atStop || m.toIndex === 0
+              const a = nodeY(m.toIndex)
+              const b = atNode ? a : nodeY(m.toIndex - 1)
+              if (a === undefined || b === undefined) return null
+              const y = atNode ? a : (a + b) / 2
+              // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is intentional — buses keep order, so the k-th token tweens to its new position (ADR-030)
+              return <RailBus key={i} y={y} />
+            })}
+          </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+
+      {route ? (
+        <RouteHeader
+          operator={route.operator}
+          routeNo={route.routeNo}
+          routeLabel={routeLabel}
+          scrollY={scrollY}
+          insetTop={insets.top}
+          onBack={() => router.back()}
+        />
+      ) : null}
     </View>
   )
 }
 
-/** The opened-from route's next few buses at the originating stop (live arrivals). */
-function ArrivalsHere({
-  eta,
-  stopName,
-  locale,
-  now,
-}: {
-  eta: Eta | null
-  stopName?: string
-  locale: Locale
-  now: number
-}) {
-  const arrivals = eta?.arrivals ?? []
+/** A bus token on the rail, tweening its y toward the target on real data change. */
+function RailBus({ y }: { y: number }) {
+  const ty = useSharedValue(y)
+  useEffect(() => {
+    ty.value = withTiming(y, { duration: 650 })
+  }, [y, ty])
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }))
   return (
-    <Card className="mb-4 p-4">
-      <Text variant="label" className="text-subtle">
-        {t(locale, 'arrivalsHere')}
-      </Text>
-      {stopName ? (
-        <Text variant="body" className="mt-0.5 text-muted" numberOfLines={1}>
-          {stopName}
-        </Text>
-      ) : null}
-      {arrivals.length === 0 ? (
-        <Text variant="h3" className="mt-2 text-subtle">
-          {t(locale, 'noService')}
-        </Text>
-      ) : (
-        <View className="mt-2 flex-row flex-wrap items-baseline gap-x-5 gap-y-1">
-          {arrivals.slice(0, 3).map((iso, i) => {
-            const view = etaView(iso, now)
-            const urgency = view.isDue
-              ? 'text-danger'
-              : view.minutes <= 5
-                ? 'text-warning'
-                : 'text-text'
-            return (
-              <Text
-                key={iso}
-                variant={i === 0 ? 'h2' : 'h3'}
-                tabular
-                className={i === 0 ? urgency : 'text-muted'}
-              >
-                {formatRelative(iso, now, locale)}
-              </Text>
-            )
-          })}
+    <Animated.View
+      entering={FadeIn}
+      exiting={FadeOut}
+      pointerEvents="none"
+      style={[{ position: 'absolute', left: RAIL_W / 2 - TOKEN / 2, top: -TOKEN / 2 }, style]}
+    >
+      <BusToken size={TOKEN} />
+    </Animated.View>
+  )
+}
+
+/** One stop on the vertical schematic: a top-aligned rail node (sequence number) wired to
+ *  its neighbours, the title-cased stop name (wraps to 2 lines, + muted stop code), and up
+ *  to 3 upcoming times. Reports its top so the overlay can place buses at node centres. */
+function RouteStopRow({
+  seq,
+  name,
+  arrivals,
+  now,
+  locale,
+  here,
+  first,
+  last,
+  onLayoutY,
+  onPress,
+}: {
+  seq: number
+  name: string
+  arrivals: string[]
+  now: number
+  locale: Locale
+  here: boolean
+  first: boolean
+  last: boolean
+  onLayoutY: (y: number) => void
+  onPress: () => void
+}) {
+  // Split the operator code off first, then title-case only the name (keep the code as-is).
+  const { label, code } = splitStopCode(name)
+  const display = titleCaseName(label)
+  const lineX = RAIL_W / 2 - 1
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      onLayout={(e) => onLayoutY(e.nativeEvent.layout.y)}
+      style={{ minHeight: 64 }}
+      className={`flex-row active:opacity-70 ${here ? 'bg-surface-2' : ''}`}
+    >
+      {/* Rail column — a continuous line behind a top-aligned node */}
+      <View style={{ width: RAIL_W }}>
+        {!first ? (
+          <View
+            className="absolute bg-border"
+            style={{ top: 0, height: NODE_CENTER, width: 2, left: lineX }}
+          />
+        ) : null}
+        {!last ? (
+          <View
+            className="absolute bg-border"
+            style={{ top: NODE_CENTER, bottom: 0, width: 2, left: lineX }}
+          />
+        ) : null}
+        <View
+          className={`absolute items-center justify-center rounded-full border ${
+            here ? 'border-accent bg-accent' : 'border-border bg-surface'
+          }`}
+          style={{ top: NODE_TOP, left: (RAIL_W - NODE) / 2, width: NODE, height: NODE }}
+        >
+          <Text variant="caption" tabular className={here ? 'text-accent-contrast' : 'text-subtle'}>
+            {seq}
+          </Text>
         </View>
-      )}
-    </Card>
+      </View>
+
+      {/* Stop label + arrivals. The bottom padding lives here (not on the row) so the rail
+          column stretches the full height and its connector reaches the next stop's line. */}
+      <View className="flex-1 pr-4" style={{ paddingTop: NODE_TOP, paddingBottom: 16 }}>
+        <Text
+          variant="body"
+          className={here ? 'font-semibold text-accent' : 'text-text'}
+          numberOfLines={2}
+        >
+          {display}
+          {code ? (
+            <Text variant="caption" className="text-subtle">
+              {'  '}
+              {code}
+            </Text>
+          ) : null}
+        </Text>
+        {arrivals.length > 0 ? <EtaTimes arrivals={arrivals} now={now} locale={locale} /> : null}
+      </View>
+    </Pressable>
   )
 }

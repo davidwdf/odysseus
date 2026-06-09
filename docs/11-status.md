@@ -1,8 +1,9 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-08**. Branch: `karachi`. Latest: **Lucide icons + flat Nearby list**
-> (ADR-025 / ADR-026); the Design Workbench + app icon landed via PRs #5/#6.
+> Snapshot: **2026-06-09**. Branch: `karachi`. Latest: the **route schematic** + collapsing glass header
+> (ADR-030); **favourite route-at-stop** design recorded as **ADR-032** (not yet built); a further
+> **route-header refinement** is queued (see Next steps). The Design Workbench + app icon landed via PRs #5/#6.
 
 ## TL;DR
 Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + single **Ink**
@@ -24,11 +25,12 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   daily-crawl cron is a **stub**.
 - **apps/mobile:** tabs shell · `QueryProvider` · `LocaleProvider` (device detection + **persisted**
   override) · **Nearby** (live, tappable cards) · **Stop detail** `/stop/[id]` (live ETAs, route dedup,
-  save) · **Route detail** `/route/[id]` (ordered stops) · **Favorites** tab · **Settings** (language +
+  save) · **Route detail** `/route/[id]` (**vertical schematic line-strip** with per-stop times + moving
+  bus tokens — [ADR-030](./08-decision-log.md#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens)) · **Favorites** tab · **Settings** (language +
   appearance + livery pickers) · components `StopCard`, `EtaBadge`, `RouteChip`, `SaveButton`, `Card`,
   `Text`, `Skeleton`.
 - **Verified:** `pnpm typecheck` 7/7 · live `/v1/nearby` · `/v1/stop` · `/v1/route` · `/v1/etas` return
-  real data · **full Slice 2 flow walked in-browser** (Nearby→Stop→Route, save→Favorites, language re-localizes).
+  real data · **full Slice 2 flow walked in-browser** (Nearby→Stop→Route, save→Favourites, language re-localizes).
 - **Design system realized** ([ADR-017](./08-decision-log.md)): **Inter loaded** (weight cuts +
   splash gate); **`<Text variant>`** typography primitive driving the docs/09 §3 scale (+ `text-*`
   utilities in the preset); **elevation** tokens + a **`Card`** primitive (shadow on light / surface-2
@@ -44,7 +46,7 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
 - **Slice 2 — Stop/Route/Favorites/Language** ([ADR-020](./08-decision-log.md)): KMB index extended with
   `stopById` + route origin/dest + ordered `routeToStops`; worker `/v1/stop`, `/v1/route`, `/v1/etas`
   (canonical) with a shared memoized index; **`getEtas` mismatch reconciled**. App: tappable Stop detail
-  (live ETAs, rider-duplicate routes collapsed, favorite toggle), Route detail (ordered stops), Favorites
+  (live ETAs, rider-duplicate routes collapsed, favourite toggle), Route detail (ordered stops), Favourites
   (Zustand store, reuses theme persistence), Settings language picker (persisted, live re-localization).
   Fixed an etabus **3-concurrent-fetch 403** quirk (route fetched solo, then the pair, + backoff retry).
 - **Citybus — multi-operator** ([ADR-021](./08-decision-log.md)): static layer for **KMB + CTB** now built
@@ -58,6 +60,14 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   operator. **Verified:** Central's "Jardine House" now one merged card; merged stop detail shows CTB(yellow)
   + KMB(red) routes with live ETAs in-browser; the distinct 10.8 m-apart "Alexandra House"/"The Landmark"
   correctly stay separate; single-stop + Favorites unaffected.
+- **Route schematic line-strip** ([ADR-030](./08-decision-log.md#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens)):
+  `RouteDetail.stops[]` now carries a per-stop `eta`, filled from KMB **`route-eta`** (every stop in one
+  upstream call → `fetchKmbRouteEta`); `/v1/route/:id` TTL dropped to 8 s. The route page is a **vertical
+  schematic** — fixed glass header (lens back button + RouteChip title + origin→dest subtext), seq-in-node
+  rail, up to 3 upcoming times per stop, **two-state bus tokens** (`inferBusMarkers` in `@nextbus/core`,
+  drop-off detection), and **auto-scroll** to the opened-from stop. CTB stays static-only (no bulk
+  route-eta). **Verified in-browser** against live route 1: 25/25 stops with ETAs, tokens on arriving
+  stops, auto-scroll lands on the origin stop; typecheck 7/7, Biome clean.
 - **Design Workbench + app icon** (branch `design-workbench`, uncommitted): a dev-facing
   **`/workbench`** route (`apps/mobile/app/workbench.tsx`) — a live gallery of the type scale, colour
   tokens, radius/elevation, and every component in each state, driven by the real theme store (the
@@ -68,7 +78,7 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   the favicon, `expo config` validates. Deferred (needs the name): 巴士 wordmark/splash lockup.
 - **Lucide icons** ([ADR-025](./08-decision-log.md)): `lucide-react-native` (+ SDK-pinned `react-native-svg`)
   behind one **`<Icon icon tone>`** primitive (`apps/mobile/components/Icon.tsx`) — `tone` is a semantic
-  role resolved via `useTheme().color()`, so icons follow the livery/appearance. In use: favorite **star**
+  role resolved via `useTheme().color()`, so icons follow the livery/appearance. In use: favourite **star**
   (`SaveButton`), **tab-bar icons** (MapPin/Route/Star/Settings), optional `Button` icon, stop-heading
   `ChevronRight`; Workbench has an ICONS gallery. **Verified in-browser** (icons re-theme on livery+mode switch).
 - **Nearby is a flat list, not cards** ([ADR-026](./08-decision-log.md)): new **`StopRow`** replaces
@@ -133,12 +143,23 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
 
 ## 🔜 Next steps (priority order)
+0. **Favourite routes-at-a-stop** ([ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes), *designed, not built*) —
+   add a route-at-stop favourite primitive: a `favoriteRoutes` list in the prefs store (recommended key
+   `"${stopId}|${routeId}"`), a glass-lens **star top-right** in the route header (favourites *this route at
+   the `?stop=` you came from*) mirrored as a per-row star in Stop detail, and a Favourites-tab section
+   grouping saved pairs under their stop heading (reuse `StopRow` with a filtered `etas`; fetch via
+   `getEtas(stopId,[routeId])`). Bare-route favourites stay deferred.
+0b. **Refine the route header further** (open design, not yet an ADR — supersedes part of the ADR-030 header):
+   drop the glass **background behind the back button + header** (no header bar fill); the header content (the
+   stop badge + the `A → B` route) should, on scroll, **resolve into a pill that sits to the right of the back
+   button** (rather than shrinking-in-place centred as it does today in `RouteHeader.tsx`). Capture as an ADR
+   once the behaviour is settled.
 1. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
 2. **Routes tab** — route-number search → `/route/[id]` (the screen already exists).
 3. **Map view** (MapLibre) for Nearby.
 4. **Honest-motion slice** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
-   reduced-motion + a11y pass (Reanimated is installed/wired but unused), swipe-to-favorite + haptics.
+   reduced-motion + a11y pass (Reanimated is installed/wired but unused), swipe-to-favourite + haptics.
 5. **Departure-board mode** (ADR-026 follow-up) — an alternate Nearby view: one ETA-sorted stream of next
    departures across nearby stops; the natural home for the Split-Flap / Dot-Matrix display liveries.
 6. **Looser stop-merge** (ADR-022 follow-up) — token-overlap name matching so landmark-only/code-only

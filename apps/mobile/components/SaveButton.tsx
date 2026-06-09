@@ -6,7 +6,7 @@ import { useTheme } from '../lib/useTheme'
 import { useLocale } from '../providers/LocaleProvider'
 import { Icon } from './Icon'
 
-/** Favorite toggle for a canonical stop id. A Lucide star that fills with the
+/** Favourite toggle for a canonical stop id. A Lucide star that fills with the
  *  accent when saved (docs/09 §8). Round 44px target; labelled for screen readers. */
 export function SaveButton({ stopId }: { stopId: string }) {
   const locale = useLocale()
