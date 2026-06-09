@@ -16,9 +16,10 @@ import { BusToken } from '../../components/BusToken'
 import { EtaTimes } from '../../components/EtaTimes'
 import { collapsedHeaderH, expandedHeaderH, RouteHeader } from '../../components/RouteHeader'
 import { Skeleton } from '../../components/Skeleton'
+import { StopName } from '../../components/StopName'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
-import { splitStopCode, titleCaseName } from '../../lib/stopName'
+import { titleCaseName } from '../../lib/stopName'
 import { useLocale } from '../../providers/LocaleProvider'
 
 const RAIL_W = 52
@@ -217,9 +218,6 @@ function RouteStopRow({
   onLayoutY: (y: number) => void
   onPress: () => void
 }) {
-  // Split the operator code off first, then title-case only the name (keep the code as-is).
-  const { label, code } = splitStopCode(name)
-  const display = titleCaseName(label)
   const lineX = RAIL_W / 2 - 1
   return (
     <Pressable
@@ -258,19 +256,7 @@ function RouteStopRow({
       {/* Stop label + arrivals. The bottom padding lives here (not on the row) so the rail
           column stretches the full height and its connector reaches the next stop's line. */}
       <View className="flex-1 pr-4" style={{ paddingTop: NODE_TOP, paddingBottom: 16 }}>
-        <Text
-          variant="body"
-          className={here ? 'font-semibold text-accent' : 'text-text'}
-          numberOfLines={2}
-        >
-          {display}
-          {code ? (
-            <Text variant="caption" className="text-subtle">
-              {'  '}
-              {code}
-            </Text>
-          ) : null}
-        </Text>
+        <StopName name={name} variant="body" emphasis={here} numberOfLines={2} />
         {arrivals.length > 0 ? <EtaTimes arrivals={arrivals} now={now} locale={locale} /> : null}
       </View>
     </Pressable>

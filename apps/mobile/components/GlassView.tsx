@@ -1,5 +1,5 @@
 import { BlurView } from 'expo-blur'
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import {
   type LayoutChangeEvent,
   Platform,
@@ -8,10 +8,11 @@ import {
   View,
   type ViewProps,
 } from 'react-native'
+import Animated, { type AnimatedProps } from 'react-native-reanimated'
 import { getDisplacementFilter, supportsBackdropFilterUrl } from '../lib/liquidGlass'
 import { useTheme } from '../lib/useTheme'
 
-type GlassViewProps = ViewProps & {
+type GlassViewProps = AnimatedProps<ViewProps> & {
   /** Corner radius; the glass is clipped to it and the refractive rim follows it. */
   radius?: number
   /**
@@ -111,7 +112,7 @@ export function GlassView({
   }
 
   return (
-    <View
+    <Animated.View
       {...rest}
       ref={ref}
       onLayout={onLayout}
@@ -126,7 +127,7 @@ export function GlassView({
         />
       ) : null}
       <View className={tintClassName} style={StyleSheet.absoluteFill} pointerEvents="none" />
-      {children}
-    </View>
+      {children as ReactNode}
+    </Animated.View>
   )
 }

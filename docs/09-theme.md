@@ -190,6 +190,14 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
   in `packages/ui/src/tokens.ts`, applied by the **`Card`** primitive (`apps/mobile/components/Card.tsx`)
   and the **floating tab bar** ([ADR-027](./08-decision-log.md#adr-027--floating-tab-bar-content-scrolls-underneath)),
   both of which shadow on light and switch to a defining `border` on dark automatically.
+  - **Why the dark branch ([ADR-035](./08-decision-log.md#adr-035--elevation-is-two-channels-opaque-shadowlighten-and-glass-defocus-led)):**
+    elevation is a lighting metaphor with two cues — a surface *casts a shadow* and *catches more light*. On
+    **light** the shadow has contrast to spend (bright field to darken) and added lightness has none
+    (already near-white); on **dark** it inverts — a drop shadow has almost no budget on a near-black field
+    (reads as haze), while *lightening* the surface has lots. So dark elevation makes **two** substitutions:
+    shadow's *lift* → surface lightness, shadow's *edge/silhouette* → the hairline `border`. Drop either and
+    it looks wrong. "Shadows read poorly on dark" is a *consequence* of this budget swap, not a style choice.
+  - **Glass is a separate channel, not an `ELEVATION` level** — see §"Glass legibility" below and ADR-035.
 - **Floating chrome:** the tab bar is a `position:absolute` rounded **pill** (`radius` 24) with side +
   bottom margins lifted clear of the safe-area inset; content **scrolls underneath** it (§1). Geometry is
   centralized in `apps/mobile/lib/tabBarLayout.ts` (`useTabBarLayout()` → `bottom` offset + `contentInset`
@@ -265,6 +273,17 @@ instant swap; the rendered text stays exposed to screen readers.
   icon button and ETA. Decorative icons stay unlabeled — the wrapping pressable carries the label.
   (Cross-checked against the UX rules in [`docs/04`](./04-frontend-and-design.md).)
 
+### Glass as elevation ([ADR-035](./08-decision-log.md#adr-035--elevation-is-two-channels-opaque-shadowlighten-and-glass-defocus-led))
+Glass is the app's **top-of-stack chrome (≈`e3`)** — the floating tab bar + route-header lens/pill — and a
+**distinct elevation channel** from the `ELEVATION` tokens above (it uses none of them, and casts no shadow).
+Its primary depth cue is the **blurred/refracted backdrop**: defocus reads as "behind glass = a nearer
+plane", and that cue is **theme-neutral** — it doesn't swap budgets between light and dark the way opaque
+shadow does, which is exactly why glass survives dark mode gracefully. On **dark**, refraction quietens
+(dark-on-dark has little contrast to bend), so glass leans on its **tint floor** (`bg-surface/55–60` over a
+darker `bg` = the dark-mode "raise = lighten" cue, for free) and its **rim-light** — whose values already
+encode the per-channel budget (white top highlight `0.42`→`0.12` light→dark; dark bottom inset shadow
+`0.06`→`0.16`, *stronger* on dark because the tint lightened the body for it to work against).
+
 ### Glass legibility (the rules for `GlassView`)
 Liquid glass is a **chrome material**, not a content surface — so legibility, not the effect, wins.
 Grounded in Apple's Liquid Glass HIG (controls layer adapts to stay readable; honour *Reduce
@@ -278,8 +297,15 @@ against the **effective** background — which, behind glass, is *variable*). Ou
 4. **Rim light is decoration, kept muted** — a thin top highlight, faint on dark (a white edge over-reads
    against a dark surface), tuned to sit no louder than the app's `--border`.
 5. **A dark tint (`bg-ink`) needs light content** — an ink-glass pane reads as a dark element regardless of
-   theme, so its labels/icons must be light to stay legible.
-6. **Backlog:** honour `prefers-reduced-transparency` → swap the glass for an opaque `surface`. Not yet done.
+   theme, so its labels/icons must be light to stay legible. Note it also **opts out of the dark-mode
+   lightening cue** (ink-over-ink barely lifts), so reserve it for recessive panes / the workbench showcase —
+   not live floating chrome.
+6. **Never stack glass on glass** — two translucent layers compound the blur + tint, muddy legibility, and
+   destroy the single clean "near plane". Glass marks *the* top of the stack; anything above it is opaque.
+7. **Cast shadow is light-only, never dark** — on **light**, blur + border can under-lift chrome off
+   scrolling content, so a faint cast shadow under floating glass is permissible; on **dark** it only adds
+   haze (the budget swap, ADR-035), so it stays off. *(The light cast shadow is **backlog** — not yet added.)*
+8. **Backlog:** honour `prefers-reduced-transparency` → swap the glass for an opaque `surface`. Not yet done.
 
 ## 9. App icon & brand mark
 The app icon is a **road-sign / transit pictogram**: a clean **side-profile double-decker** (HK's

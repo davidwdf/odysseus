@@ -118,7 +118,14 @@ export async function stopArrivals(
   maxRoutes = MAX_ETA_ROUTES,
 ): Promise<Eta[]> {
   const all = dedupeEtas(await memberEtaLists(index, members, maxRoutes))
-  return all.sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
+  // Stamp each reading with its route's destination (from canonical route meta) so flat
+  // ETA lists can show "→ dest" without the full Route object.
+  return all
+    .map((e) => {
+      const destination = index.routeMeta.get(e.routeId)?.destination
+      return destination ? { ...e, destination } : e
+    })
+    .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
 }
 
 /** GET /v1/stop/:id — a stop (or merged same-kerb place) and every route serving it,

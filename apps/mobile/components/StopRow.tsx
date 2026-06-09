@@ -2,24 +2,30 @@ import type { Eta, Locale } from '@nextbus/core'
 import { formatDistance, formatWalk } from '@nextbus/core'
 import { ChevronRight, MapPin } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
+import { titleCaseName } from '../lib/stopName'
 import { EtaBadge } from './EtaBadge'
 import { Icon } from './Icon'
 import { RouteChip } from './RouteChip'
+import { StopName } from './StopName'
 import { Text } from './Text'
 
 function routeNo(routeId: string): string {
   return routeId.split(':')[1] ?? routeId
 }
 
-/** One route's chip + remark + next-ETA badge — a row beneath a stop heading. */
+/** One route's chip + "→ destination" + next-ETA badge — a row beneath a stop heading.
+ *  Destination falls back to the operator remark when the feed omits it. */
 function RouteRow({ eta, locale, now }: { eta: Eta; locale: Locale; now: number }) {
+  const dest = eta.destination?.[locale]
+  const headed = dest ? titleCaseName(dest) : eta.remark?.[locale]
   return (
-    <View className="flex-row items-center justify-between py-1.5">
-      <View className="flex-1 flex-row items-center gap-3">
+    <View className="flex-row items-center justify-between gap-3 py-1.5">
+      <View className="flex-1 flex-row items-center gap-2.5">
         <RouteChip operator={eta.operator} routeNo={routeNo(eta.routeId)} />
-        {eta.remark?.[locale] ? (
-          <Text variant="label" className="flex-1 text-muted">
-            {eta.remark[locale]}
+        {headed ? (
+          <Text variant="body" className="flex-1 text-text" numberOfLines={1}>
+            <Text className="text-subtle">→ </Text>
+            {headed}
           </Text>
         ) : null}
       </View>
@@ -58,9 +64,7 @@ export function StopRow({
   const Heading = (
     <View className="flex-row items-start justify-between gap-3">
       <View className="flex-1">
-        <Text variant="h3" className="text-text">
-          {name}
-        </Text>
+        <StopName name={name} variant="h3" />
         {distanceM != null ? (
           <View className="mt-0.5 flex-row items-center gap-1">
             <Icon icon={MapPin} tone="subtle" size={13} />

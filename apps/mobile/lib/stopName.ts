@@ -5,8 +5,13 @@
 /** HK transit acronyms to keep upper-cased through title-casing. */
 const KEEP_UPPER = new Set(['MTR', 'KMB', 'CTB', 'LWB', 'NLB', 'GMB', 'BBI', 'HK', 'PTI', 'LRT'])
 
-/** Minor words kept lower-case when *inside* a title (never the first word). */
-const SMALL_WORDS = new Set(['of', 'the', 'and', 'to', 'at', 'in', 'on', 'for', 'by'])
+/**
+ * Minor words kept lower-case when *inside* a title (never the first word).
+ * NB: "on" is deliberately absent — in HK stop names it's almost always the
+ * romanised syllable 安 (On Tai, Tsz On, Hing On, Lok On Pai…), not the English
+ * preposition, so it should title-case like any other place-name word.
+ */
+const SMALL_WORDS = new Set(['of', 'the', 'and', 'to', 'at', 'in', 'for', 'by'])
 
 /** Split a trailing parenthesised stop code: "Foo Bar (ST311)" → { label: "Foo Bar", code: "ST311" }. */
 export function splitStopCode(name: string): { label: string; code?: string } {

@@ -624,6 +624,69 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   **ordinal** (buses keep order along the line), so most refreshes tween smoothly; a bus entering at the
   origin or leaving at the terminus is a fade, not a glide.
 
+## ADR-033 — Route header: no bar background; title morphs into a pill beside the back lens
+- **Status:** **Implemented** (KMB/LWB, verified in-browser). Refines the collapsing header from
+  [ADR-030](#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens)'s presentation pass.
+- **Context:** ADR-030's header was a **full-width glass bar** that the badge + `A → B` line shrank within
+  (staying centred). We wanted the chrome to feel lighter and more "floating": no bar fill behind the back
+  button and title, with the title **resolving into a pill** on scroll rather than just shrinking in place.
+- **Decision:**
+  1. **No bar background.** The header container is transparent (`pointerEvents="box-none"`, so content
+     scrolls under the empty regions); only the back lens and the collapsed pill carry glass. Drops the
+     `bg-bg/80` full-width fill.
+  2. **Two end-states across the collapse** (`scrollY` 0 → `COLLAPSE`):
+     - **Expanded:** a big **centred badge** (`RouteChip` scaled ~1.45) over a centred, full-width `A → B`.
+     - **Collapsed:** a glass **pill to the right of the back lens** (sharing its row/height) holding the
+       badge inline with `A → B`.
+  3. **The badge is a single morphing element** — it translates + scales from big-centre into the pill
+     (scaling is centre-anchored, so translating its centre to each target keeps it put). The **route label
+     cross-fades** between an expanded centred-below instance and a collapsed inline instance (expanded fades
+     out early, inline fades in late, so they never overlap; the travelling badge bridges the gap). The pill
+     glass fades in over the same range. When `A → B` overflows it does a **single** marquee round-trip —
+     auto-played once when it first appears, and again on each tap — then **rests at the start** (no continuous
+     loop), verified by sampling `translateX` (`0 → −overflow → 0`, then static).
+  4. **Frosted glass, not the `lens` magnifier, for chrome over scrolling content.** Because the header now
+     has no background, high-contrast stop text scrolls **under** the back lens and pill. The `lens` material
+     (chroma + strong displacement, no frost — [ADR-028](#adr-028--liquid-glass-material--ink-livery)) shreds
+     that moving text into rainbow chromatic fringing (the same class of artifact ADR-028 fixed on the tab
+     bar). So both the back lens and the pill use the **same frosted, zero-chroma** glass as the floating tab
+     bar (`strength 45 · depth 8 · blur 5`, tint `bg-surface/60`, bordered) — one shared material across all
+     chrome — and their **height = `TAB_BAR_HEIGHT`** (the back lens is a 54 px circle, the pill a 54 px
+     lozenge), so the top and bottom chrome read as a set. Content behind is softly frosted; the pill's own
+     label stays legible.
+- **Why:** Lighter, more immersive chrome (the "layered & immersive" principle, docs/09 §1) consistent with
+  the floating tab bar; the morphing badge gives a single continuous focal point while the label hand-off
+  stays clean. The frosted material is the only glass that reads correctly over moving content.
+- **Fade-opacity must ride on the glass element itself (backdrop-filter isolation):** the pill fades in via
+  an animated `opacity`. A first cut animated a **wrapper** `Animated.View` around the `GlassView` — and the
+  blur visibly **dropped out mid-scroll, snapping back at rest**. Cause: on web, an ancestor with `opacity < 1`
+  forms an isolated compositing group, so the descendant's `backdrop-filter` has no page backdrop to sample
+  (blur gone); at `opacity: 1` exactly there's no isolation (blur returns) — hence the flicker tied to scroll.
+  Fix: drive the fade opacity on the **same element** that carries the `backdrop-filter`, with no opacity
+  ancestor between it and the page. So **`GlassView`'s root is now an `Animated.View`** (props widened to
+  `AnimatedProps<ViewProps>`) and `RouteHeader` passes the animated opacity straight into the pill's
+  `GlassView style` — verified via DOM that the pill carries its own opacity and has zero opacity-<1
+  ancestors, with the blur present across the whole fade.
+- **…and the pill is conditionally mounted (backdrop-filter compositing drop):** a *second*, distinct
+  Chromium bug remained — after the pill's own opacity cycles **1 → 0 → 1** (scroll to collapsed, back to the
+  top, then collapse again) the blur turns **transparent** even though the computed `backdrop-filter` is still
+  present, `opacity` is `1`, and there's no isolating ancestor (DOM-confirmed). The compositor silently drops
+  the backdrop layer once opacity hits 0 and doesn't rebuild it; a **fresh** element always composites (the
+  refresh/autoscroll case worked, a reused element after a cycle didn't). Fix: **mount the pill only while
+  collapsed** (`pillMounted`, toggled by a `useAnimatedReaction` on `scrollY > PILL_APPEAR`) so each collapse
+  is a brand-new `GlassView` — verified the element count cycles `0→1→0→1` with the filter freshly applied each
+  time. The back lens is unaffected (its opacity never changes). *Caveat: the broken state couldn't be
+  reproduced in the headless automation harness — the fix is reasoned from the DOM signature + the reported
+  fresh-vs-reused behaviour, to be confirmed on-device.*
+- **Consequences:** `RouteHeader` no longer renders a full-width `GlassView`; `expandedHeaderH`/
+  `collapsedHeaderH`/`COLLAPSE` exports (consumed by `route/[id].tsx` for the top spacer + auto-scroll) are
+  unchanged in shape (`EXP_H` trimmed 150 → 132). `GlassView`'s root `View` → `Animated.View` is backward-
+  compatible (it already forwarded `style`; plain styles still apply) — a reusable win: any `GlassView` can
+  now be driven by a Reanimated style without the isolation trap. Supersedes ADR-030's *centred-shrink-in-place*
+  header. Tradeoff of "no background": stop text is faintly visible in the transparent gaps beside the pill
+  while scrolling — accepted per the design intent; a subtle top scrim is the fallback if it ever reads as
+  cluttered.
+
 ## ADR-032 — Favourites are **route-at-stop** pairs, not bare routes
 - **Status:** **Proposed / not yet built.** Design settled; implementation is a near-term follow-up (see [docs/11](./11-status.md)).
 - **Context:** Favourites today are **stop-only** — `favorites: string[]` of canonical stop ids
@@ -695,3 +758,82 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   every agent applies it by default. Initial sweep updated `docs/02/04/07/08/09/11`, `@nextbus/i18n`
   (`Favourites`), and three prose comments (`SaveButton`, `datasource`, `StopRow`). Chinese strings are
   unaffected.
+
+## ADR-034 — Nearby shows "→ destination" per route; one `StopName` for title-cased names app-wide
+- **Status:** **Implemented** (KMB/LWB, verified in-browser).
+- **Context:** Two related polish items on Nearby. (1) A nearby `StopRow` route row showed only the
+  **route chip + operator remark + ETA** — it never said *where the bus is going*, so "[6] … 3 min" left
+  the rider to recall the destination. (2) Stop names were rendered **inconsistently**: the route
+  schematic ([ADR-030](#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens))
+  title-cased the name and split off the muted operator code (`titleCaseName` + `splitStopCode`), but the
+  Nearby/Favourites `StopRow` heading and the Stop-detail header still printed the raw ALL-CAPS upstream
+  name (`CITY ONE STATION (ST311)`). We wanted **one** stop-name presentation everywhere.
+- **Decision:**
+  1. **"→ destination" on every flat ETA row.** The destination belongs to the *route*, but Nearby only
+     has `NearbyStop.etas` (`Eta[]`), not the full `Route`. Rather than ship route objects to the client,
+     add an **optional `destination?: I18nText` to the canonical `Eta`** and **server-populate it at the
+     shared `stopArrivals` seam** (from `index.routeMeta`) — so **both** `Eta[]` endpoints (`/v1/nearby`,
+     `/v1/etas`) carry it, and the frontend never re-derives it. Optional because not every path supplies a
+     route meta. `StopRow`'s route row now reads `[chip] → {titleCaseName(dest)} … [EtaBadge]`, falling back
+     to the operator remark when a feed omits the destination.
+  2. **A single `StopName` component** (`apps/mobile/components/StopName.tsx`) is now the only way to render
+     a stop name: title-cased label + smaller/muted operator code, with `variant`/`emphasis`/`numberOfLines`
+     props. `StopRow` heading and the route schematic row both use it (the schematic's inline copy is
+     retired). The **Stop-detail native header** title-cases the label too (`titleCaseName(splitStopCode…)`),
+     dropping the code — a native header can't render the two-tone muted code. Stop-detail route rows
+     title-case their `→ destination` as well, so destinations read consistently across screens.
+- **Why:** Destination is the single most useful disambiguator on a route row (which way is this 6 going?),
+  and the `DataSource` already had the data server-side — stamping the `Eta` keeps the UI dumb and consistent
+  with ADR-008's "display never re-computes data" stance. Centralising name presentation in `StopName` stops
+  the title-case/code-split logic drifting between screens (it had already diverged once).
+- **Consequences:** `Eta` gains an optional field (backward-compatible; ignored by paths that don't set it).
+  `stopArrivals` does one `routeMeta` lookup per deduped ETA. New shared `StopName` consumed by `StopRow`,
+  `route/[id].tsx`, and (label-only) `stop/[id].tsx`; the dev `workbench` `StopRow` inherits the new look for
+  free. CJK names pass through `titleCaseName` unchanged.
+- **Minor-word handling:** `titleCaseName` keeps a small set of English minor words lower-case mid-title
+  (`of`, `the`, `and`, `to`, `at`, `in`, `for`, `by`) so `UNIVERSITY OF HONG KONG` → "University of Hong
+  Kong". **`on` is deliberately *not* in that set:** in HK stop names it's almost always the romanised
+  syllable 安 (On Tai, Tsz On, Hing On, Lok On Pai…), not the English preposition, so it title-cases like
+  any other place-name word. The first word of a title is never treated as minor. `titleCaseName` /
+  `splitStopCode` are covered by `apps/mobile/lib/stopName.test.ts` (Vitest — the repo's first first-party
+  test; `pnpm --filter @nextbus/mobile test`).
+
+## ADR-035 — Elevation is two channels: opaque (shadow↔lighten) and glass (defocus-led)
+- **Status:** **Decided.** Documents shipped behaviour (`ELEVATION` + `Card`, `GlassView`) and pins two
+  rules: *no-glass-on-glass* (already practised; now explicit) and a *light-only cast shadow on floating
+  glass* (a refinement — the dark half is shipped, the light cast shadow is **backlog**).
+- **Context:** We have **two** ways a surface reads as "raised", and they resolve the light/dark asymmetry
+  differently. The asymmetry: elevation is a lighting metaphor with two cues — a surface **casts a shadow**
+  and **catches more light**. On **light** the shadow has a bright field to darken (high contrast) while
+  extra lightness has no headroom (already near-white); on **dark** it inverts — a drop shadow has almost no
+  contrast budget against a near-black field (reads as muddy haze), while *lightening* the surface has lots
+  of headroom. So opaque elevation must **swap its primary cue between themes**, but it wasn't written down
+  *why*, and glass (the floating chrome) was being reasoned about as if it obeyed the same rules. It doesn't.
+- **Decision:**
+  1. **Opaque elevation (`ELEVATION` tokens, applied by `Card`/tab bar):** on **light**, drop shadow
+     (`e1–e3`); on **dark**, **`surface`/`surface-2` lightening + a hairline `border`** instead — the border
+     restores the *edge/silhouette* cue the shadow used to draw, the lighter surface restores the *lift* cue.
+     Two substitutions, not one. (This is the existing `tokens.ts` recipe + the dark branch in `Card`.)
+  2. **Glass is a distinct elevation channel, reserved for top-of-stack chrome (≈`e3`)** — the floating tab
+     bar, the route-header back-lens + pill. Its primary depth cue is the **blurred/refracted backdrop**
+     (depth-of-field: defocus = "behind glass" = a nearer plane), which is **theme-neutral** — it does not
+     swap budgets between light and dark. That is *why* glass survives dark mode where opaque shadow fails,
+     and why `GlassView` carries **no drop shadow**. On dark, refraction quietens (dark-on-dark has less
+     contrast to bend), so glass leans on its **tint floor** (`bg-surface/55–60` over a darker `bg` =
+     the dark-mode "raise = lighten" move, for free) and its **rim-light**. The rim-light values already
+     encode the per-channel budget: white top highlight strong on light / faint on dark (`0.42`↔`0.12`),
+     dark bottom inset shadow faint on light / *stronger* on dark (`0.06`↔`0.16`) — the dark cue regains
+     contrast precisely because the tint lightened the body.
+  3. **Two rules fall out.** (a) **Never stack glass on glass** — two translucent layers compound blur +
+     tint, muddy legibility, and destroy the single clean "near plane"; glass marks *the* top, anything above
+     it must be opaque. (b) **A faint cast shadow on floating glass is light-only, never dark** — on light the
+     blur + border may under-lift chrome off scrolling content, so a soft cast shadow is permissible; on dark
+     it would only add haze, so it stays off. (The light cast shadow is not yet implemented — backlog.)
+- **Why:** The reasoning, not just the values, is the asset — the next agent tuning a surface needs to know
+  that "shadows read poorly on dark" is a *consequence* of the contrast-budget swap, and that glass opts out
+  of that swap by leading with defocus. Writing it down stops glass from being "fixed" with a dark drop
+  shadow, and stops opaque dark cards from losing their defining border.
+- **Consequences:** No code change required for (1)/(2)/3a — they describe shipped behaviour. 3b's light cast
+  shadow joins the backlog alongside the `prefers-reduced-transparency` opaque fallback (docs/09 §"Glass").
+  `bg-ink/55` (fixed-dark glass) deliberately **opts out** of the dark lightening cue — fine for a recessive
+  pane or the workbench showcase, but not for live floating chrome. See docs/09 §4 + §"Glass legibility".

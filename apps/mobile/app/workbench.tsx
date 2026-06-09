@@ -1,7 +1,15 @@
 import type { Eta, OperatorId } from '@nextbus/core'
-import { type Appearance, OPERATOR_ACCENT, RADIUS, TYPE_SCALE, type TypeVariant } from '@nextbus/ui'
+import {
+  type Appearance,
+  FONT_FAMILY,
+  OPERATOR_ACCENT,
+  RADIUS,
+  TYPE_SCALE,
+  type TypeVariant,
+} from '@nextbus/ui'
 import { Stack } from 'expo-router'
 import {
+  ArrowLeft,
   Bell,
   Bus,
   ChevronRight,
@@ -28,6 +36,7 @@ import { Skeleton } from '../components/Skeleton'
 import { StopRow } from '../components/StopRow'
 import { Text } from '../components/Text'
 import { usePreferences } from '../lib/preferences'
+import { TAB_BAR_HEIGHT, TAB_BAR_RADIUS } from '../lib/tabBarLayout'
 import { useLocale } from '../providers/LocaleProvider'
 
 // Design Workbench — a live gallery of every foundation + component in each state,
@@ -297,6 +306,16 @@ export default function Workbench() {
           </Text>
         </Section>
 
+        <Section title="APP CHROME — over content (review the specular rim)">
+          <ChromeOverContent />
+          <Text variant="caption" className="text-subtle">
+            faithful static copies of the floating tab bar, back lens + route-header pill (identical
+            GlassView params), laid over sample text + badges. The bright top edge is the rim light
+            in GlassView — flip light/dark above to judge it. Tune at GlassView.tsx (the inset top
+            highlight, `top`/`bottom`).
+          </Text>
+        </Section>
+
         <Section title="ICONS (Lucide)">
           <View className="flex-row flex-wrap gap-4">
             {ICON_SAMPLES.map((s) => (
@@ -388,6 +407,165 @@ export default function Workbench() {
           </View>
         </Section>
       </ScrollView>
+    </View>
+  )
+}
+
+// Sample backdrop for the chrome showcase: a stop-list-like wall of names + route
+// badges, so the liquid glass has real content to refract and the specular rim reads
+// against text/colour (not a flat fill).
+const CHROME_BACKDROP: Array<{ name: string; chips: Array<[OperatorId, string]> }> = [
+  {
+    name: 'Mong Kok Road, Nathan Road',
+    chips: [
+      ['KMB', '6'],
+      ['CTB', '720'],
+      ['KMB', '1A'],
+    ],
+  },
+  {
+    name: 'Jardine House, Connaught Road',
+    chips: [
+      ['CTB', '12'],
+      ['KMB', '680X'],
+      ['LWB', 'E11'],
+    ],
+  },
+  {
+    name: 'Tsim Sha Tsui, Star Ferry',
+    chips: [
+      ['KMB', '7'],
+      ['CTB', '973'],
+      ['KMB', '203'],
+    ],
+  },
+  {
+    name: 'Causeway Bay, Yee Wo Street',
+    chips: [
+      ['CTB', '8X'],
+      ['KMB', '116'],
+      ['CTB', '25'],
+    ],
+  },
+  {
+    name: 'Admiralty Station, Harcourt Road',
+    chips: [
+      ['KMB', '102'],
+      ['CTB', '90'],
+      ['LWB', 'A11'],
+    ],
+  },
+]
+
+const CHROME_TABS: Array<{ icon: LucideIcon; label: string; active?: boolean }> = [
+  { icon: MapPin, label: 'Nearby', active: true },
+  { icon: RouteIcon, label: 'Routes' },
+  { icon: Star, label: 'Favourites' },
+  { icon: SettingsIcon, label: 'Settings' },
+]
+
+const TAB_GAP = 12 // floating tab bar's side/bottom inset (TAB_BAR_GAP)
+const HEADER_CORNER = 16 // route header's corner inset (RouteHeader's CORNER)
+
+/**
+ * Static, faithful copies of the app chrome — the floating tab bar (app/(tabs)/_layout.tsx),
+ * the back lens and the collapsed route-header pill (RouteHeader.tsx) — using the SAME
+ * GlassView params, laid over a busy backdrop. Not the live components (those need nav +
+ * scroll context); this is the surface for judging the liquid-glass material and especially
+ * the specular top rim in situ. Flip light/dark with the controls above.
+ */
+function ChromeOverContent() {
+  return (
+    <View className="h-80 overflow-hidden rounded-lg border border-border">
+      {/* Backdrop — sample text + badges behind the glass */}
+      <View className="absolute inset-0 gap-3 p-3" pointerEvents="none">
+        {CHROME_BACKDROP.map((s) => (
+          <View key={s.name}>
+            <Text variant="h3" className="text-text">
+              {s.name}
+            </Text>
+            <View className="mt-1 flex-row flex-wrap gap-2">
+              {s.chips.map(([op, no]) => (
+                <RouteChip key={`${op}${no}`} operator={op} routeNo={no} />
+              ))}
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {/* Route-header chrome — back lens + collapsed pill, sharing one row */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: HEADER_CORNER,
+          right: HEADER_CORNER,
+          top: HEADER_CORNER,
+          height: TAB_BAR_HEIGHT,
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
+        <GlassView
+          radius={TAB_BAR_HEIGHT / 2}
+          tintClassName="bg-surface/60"
+          strength={45}
+          depth={8}
+          blur={5}
+          className="items-center justify-center"
+          style={{ width: TAB_BAR_HEIGHT, height: TAB_BAR_HEIGHT }}
+        >
+          <Icon icon={ArrowLeft} tone="text" size={24} />
+        </GlassView>
+        <GlassView
+          radius={TAB_BAR_HEIGHT / 2}
+          tintClassName="bg-surface/60"
+          strength={45}
+          depth={8}
+          blur={5}
+          className="ml-2.5 flex-1 flex-row items-center px-2.5"
+          style={{ height: TAB_BAR_HEIGHT }}
+        >
+          <RouteChip operator="KMB" routeNo="6" />
+          {/* Matches RouteHeader's collapsed route line: 13px, regular, muted (Marquee size=13) */}
+          <Text
+            className="ml-2 text-muted"
+            numberOfLines={1}
+            style={{ fontFamily: FONT_FAMILY.regular, fontSize: 13, lineHeight: 16 }}
+          >
+            Lok Fu → Tsim Sha Tsui
+          </Text>
+        </GlassView>
+      </View>
+
+      {/* Floating tab bar — the piece whose specular top border is under review */}
+      <GlassView
+        radius={TAB_BAR_RADIUS}
+        tintClassName="bg-surface/60"
+        blur={5}
+        strength={45}
+        depth={8}
+        style={{
+          position: 'absolute',
+          left: TAB_GAP,
+          right: TAB_GAP,
+          bottom: TAB_GAP,
+          height: TAB_BAR_HEIGHT,
+          flexDirection: 'row',
+        }}
+      >
+        {CHROME_TABS.map((tb) => (
+          <View key={tb.label} className="flex-1 items-center justify-center">
+            <Icon icon={tb.icon} tone={tb.active ? 'accent' : 'muted'} size={24} />
+            <Text
+              className={tb.active ? 'text-accent' : 'text-muted'}
+              style={{ fontFamily: FONT_FAMILY.medium, fontSize: 12, lineHeight: 16, marginTop: 2 }}
+            >
+              {tb.label}
+            </Text>
+          </View>
+        ))}
+      </GlassView>
     </View>
   )
 }

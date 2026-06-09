@@ -11,6 +11,7 @@ import { SaveButton } from '../../components/SaveButton'
 import { Skeleton } from '../../components/Skeleton'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
+import { splitStopCode, titleCaseName } from '../../lib/stopName'
 import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
 
@@ -53,7 +54,8 @@ export default function StopDetail() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: stop ? stop.name[locale] : '',
+          // Title-cased name only; the native header can't render the muted code two-tone.
+          title: stop ? titleCaseName(splitStopCode(stop.name[locale]).label) : '',
           headerStyle: { backgroundColor: color('--surface') },
           headerTintColor: color('--text'),
           headerTitleStyle: { fontFamily: FONT_FAMILY.semibold },
@@ -92,7 +94,8 @@ export default function StopDetail() {
                 >
                   <RouteChip operator={r.route.operator} routeNo={r.route.routeNo} />
                   <Text variant="body" className="flex-1 text-text" numberOfLines={1}>
-                    → {r.route.destination[locale]}
+                    <Text className="text-subtle">→ </Text>
+                    {titleCaseName(r.route.destination[locale])}
                   </Text>
                   {r.eta ? (
                     <EtaBadge eta={r.eta} locale={locale} now={now} />

@@ -70,6 +70,10 @@ export interface Eta {
   operator: OperatorId
   /** Up to ~3 upcoming arrivals, ISO-8601, soonest first. */
   arrivals: string[]
+  /** Where this service is headed (the route's destination), for flat ETA lists that
+   *  show "→ dest" without the full Route object (e.g. Nearby). Server-populated from
+   *  the canonical route meta; optional because not every feed/path supplies it. */
+  destination?: I18nText
   /** Free-text operator remark, if any (e.g. scheduled vs real-time). */
   remark?: I18nText
   /** When the upstream feed generated this reading (ISO-8601). */

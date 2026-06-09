@@ -1,9 +1,12 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-09**. Branch: `karachi`. Latest: the **route schematic** + collapsing glass header
-> (ADR-030); **favourite route-at-stop** design recorded as **ADR-032** (not yet built); a further
-> **route-header refinement** is queued (see Next steps). The Design Workbench + app icon landed via PRs #5/#6.
+> Snapshot: **2026-06-09**. Branch: `project-status-handoff`. Latest: **Nearby polish** (**ADR-034**) —
+> route rows now show **`[chip] → destination`** (server-stamped `Eta.destination`), and a single shared
+> **`StopName`** title-cases stop names + splits the muted operator code **everywhere** (Nearby, Favourites,
+> route schematic, Stop-detail header). Earlier: **route-header refinement** built
+> (**ADR-033** — no bar background; title morphs into a pill beside the back lens; frosted-not-lens glass over
+> scrolling content). **Favourite route-at-stop** design recorded as **ADR-032** (not yet built).
 
 ## TL;DR
 Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + single **Ink**
@@ -110,7 +113,17 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   the old indigo-on-deep-slate dark). `themes` is `Record<Mode, ThemeVars>`; `LiveryId`/`LIVERIES`/
   `DISPLAY_LIVERIES` removed; `preferences` drops `livery`; Settings/Workbench livery pickers + i18n
   `livery*`/`settingsTheme` removed; `global.css` resynced. **Verified in Chrome (light + dark).**
-- **Docs:** plan `01–10`, ADRs `001–029`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
+- **Route header refinement** ([ADR-033](./08-decision-log.md#adr-033--route-header-no-bar-background-title-morphs-into-a-pill-beside-the-back-lens)):
+  `RouteHeader` dropped its full-width glass bar — the chrome now floats over scrolling content. A big
+  **centred badge over `A → B`** at the top **morphs** on scroll into a **glass pill beside the back lens**
+  (single travelling/scaling badge; the route label cross-fades centred-below → inline; pill glass fades in).
+  Back lens + pill use a **frosted, zero-chroma** glass (not the `lens` magnifier) so high-contrast stop text
+  scrolling underneath doesn't refract into rainbow fringing. Also fixed a **backdrop-filter isolation** bug —
+  the pill's fade opacity had to move off a wrapper onto the `GlassView` root (now an `Animated.View`), or an
+  opacity-<1 ancestor isolated the blur and it flickered on/off during scroll. **Verified in-browser**
+  (expanded, mid-morph, collapsed at phone width; DOM-confirmed blur present across the fade); typecheck 7/7,
+  Biome clean.
+- **Docs:** plan `01–10`, ADRs `001–033`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
 - All data is **server-side** (no [on-device index](./08-decision-log.md), ADR-007). KMB + CTB only;
@@ -149,11 +162,6 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
    the `?stop=` you came from*) mirrored as a per-row star in Stop detail, and a Favourites-tab section
    grouping saved pairs under their stop heading (reuse `StopRow` with a filtered `etas`; fetch via
    `getEtas(stopId,[routeId])`). Bare-route favourites stay deferred.
-0b. **Refine the route header further** (open design, not yet an ADR — supersedes part of the ADR-030 header):
-   drop the glass **background behind the back button + header** (no header bar fill); the header content (the
-   stop badge + the `A → B` route) should, on scroll, **resolve into a pill that sits to the right of the back
-   button** (rather than shrinking-in-place centred as it does today in `RouteHeader.tsx`). Capture as an ADR
-   once the behaviour is settled.
 1. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
 2. **Routes tab** — route-number search → `/route/[id]` (the screen already exists).
