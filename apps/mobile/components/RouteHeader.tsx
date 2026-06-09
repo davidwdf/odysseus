@@ -232,7 +232,8 @@ export function RouteHeader({
           className="items-center justify-center active:opacity-70"
           style={{ width: BACK, height: BACK }}
         >
-          <Icon icon={ArrowLeft} tone="text" size={24} />
+          {/* `accent` matches the tab bar's active tint exactly (white in dark, dark in light). */}
+          <Icon icon={ArrowLeft} tone="accent" size={24} />
         </GlassView>
       </Pressable>
     </View>

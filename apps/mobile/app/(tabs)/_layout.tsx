@@ -56,10 +56,21 @@ export default function TabsLayout() {
           bottom: layout.bottom,
           height: layout.height,
           borderRadius: TAB_BAR_RADIUS,
+          // React Navigation's BottomTabBar always paints a default `borderTopWidth`
+          // hairline in the *light* nav theme's border colour (Expo Router's Stack sets
+          // no dark nav theme), which reads as a harsh light line along the top in dark
+          // mode. `borderWidth` doesn't override the per-side `borderTopWidth`, so zero it
+          // explicitly — the GlassView pane already supplies the hairline rim/border.
           borderWidth: 0,
+          borderTopWidth: 0,
           backgroundColor: 'transparent',
           ...shadow,
         },
+        // Always stack the glyph above its label. React Navigation otherwise switches to
+        // a beside-icon layout at wide widths (e.g. the PWA on a desktop viewport), which
+        // breaks the mobile-first floating-pill look — pin it to below-icon everywhere so
+        // the bar reads the same as on a phone (and as the workbench shows it).
+        tabBarLabelPosition: 'below-icon',
         // The bar is taller than the icon+label stack; the item defaults to
         // justify-content:flex-start, so without this the content hugs the top
         // (top-heavy). Centre the stack vertically within each tab.

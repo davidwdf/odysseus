@@ -201,7 +201,11 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 - **Floating chrome:** the tab bar is a `position:absolute` rounded **pill** (`radius` 24) with side +
   bottom margins lifted clear of the safe-area inset; content **scrolls underneath** it (§1). Geometry is
   centralized in `apps/mobile/lib/tabBarLayout.ts` (`useTabBarLayout()` → `bottom` offset + `contentInset`
-  for scroll views), so the bar and the screens that pad for it share one source of truth.
+  for scroll views), so the bar and the screens that pad for it share one source of truth. The bar
+  pins its label **below-icon** at every width (React Navigation otherwise flips to beside-icon on
+  wide/PWA viewports, breaking the phone look), and zeroes the default nav `borderTopWidth` — that
+  hairline paints in the *light* nav-theme colour (no dark nav theme under Expo Router's `Stack`) and
+  otherwise reads as a harsh light line along the top on dark; the `GlassView` rim/border carries the edge.
 - **Glass (liquid material):** the **`GlassView`** primitive (`apps/mobile/components/GlassView.tsx`) is a
   translucent pane that lets the content underneath show through. On **web** it does **true optical
   refraction**, ported from **nikdelvin/liquid-glass** (`apps/mobile/lib/liquidGlass.ts`): a smooth **vector
@@ -291,8 +295,12 @@ Transparency* / *Increase Contrast*; never stack glass on glass) and WCAG (text 
 against the **effective** background — which, behind glass, is *variable*). Our rules:
 1. **Always keep a tint floor** (`bg-surface/55`+). The translucent body is the legibility **scrim** that
    guarantees a worst-case background; raise it over busy content. A pure-blur (no tint) is too transparent.
+   The tint sits **below** the content, not over it — on web an absolutely-positioned scrim paints *above*
+   in-flow children (CSS painting order) and washes glyphs/labels grey, so it's pinned back with a negative
+   `z-index` (native already paints in declaration order).
 2. **High-contrast labels/icons.** On glass, dim greys fail — tab-bar inactive items use `muted`, not
-   `subtle`. Active state carries the `accent`.
+   `subtle`. Active state carries the `accent`; the route-header back lens takes that same `accent`, so the
+   back control matches the active tab in both modes.
 3. **Refraction/blur on chrome only** — never behind body text or long lists (legibility + GPU cost).
 4. **Rim light is decoration, kept muted** — a thin top highlight, faint on dark (a white edge over-reads
    against a dark surface), tuned to sit no louder than the app's `--border`.

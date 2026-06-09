@@ -516,7 +516,7 @@ function ChromeOverContent() {
           className="items-center justify-center"
           style={{ width: TAB_BAR_HEIGHT, height: TAB_BAR_HEIGHT }}
         >
-          <Icon icon={ArrowLeft} tone="text" size={24} />
+          <Icon icon={ArrowLeft} tone="accent" size={24} />
         </GlassView>
         <GlassView
           elevated

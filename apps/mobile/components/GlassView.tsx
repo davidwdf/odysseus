@@ -149,7 +149,16 @@ export function GlassView({
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <View className={tintClassName} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      {/* Translucent body over the refracted backdrop, BELOW the content. On web an
+          absolutely-positioned sibling paints *above* in-flow children (CSS painting order),
+          so without this the tint washes the content grey (e.g. a dark glyph reads as muted).
+          Pin it behind with a negative z-index; native paints in declaration order, so it's
+          already correct there and needs no change. */}
+      <View
+        className={tintClassName}
+        style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? { zIndex: -1 } : null]}
+        pointerEvents="none"
+      />
       {children as ReactNode}
     </Animated.View>
   )
