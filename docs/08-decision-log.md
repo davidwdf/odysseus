@@ -589,9 +589,15 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   presentation pass below — so some specifics here were superseded.)
 - **Presentation & motion pass** (follow-up polish, shipped): the rail is now animated and the chrome
   refined —
-  - **Custom front-view double-decker glyph** (`BusGlyph`, a Lucide-style line icon — Lucide has none) on an
-    accent disc with a subtle continuous "in-motion" bob; **bus tokens tween along the rail** (`withTiming`)
-    when the inferred position changes on real data (the honest on-update ease, never a clock crawl).
+  - **Custom front-view double-decker glyph** (`BusGlyph`, a Lucide-style line icon — Lucide has none): two
+    glazed window bands whose gap *is* the deck split (no divider), a **2px stroke** to match the Lucide set,
+    over **solid front-view tyre pills** (a deliberate break from Lucide's stroke-only rule — too small to
+    outline at 2px; see docs/09 §9). It rides a **stationary** accent disc; only the glyph animates — a gentle
+    eased **bob** with a ~4× slower side-to-side **rock** and a small **squash on impact**, all declarative
+    reanimated `withTiming`s on an ease-in-out curve (native-driven, **no JS clock**). This idle motion is
+    decorative (signals *buses move*, never an ETA — ADR-008); separately, **bus tokens tween along the rail**
+    (`withTiming`) when the inferred position changes on real data (the honest on-update ease, never a clock
+    crawl).
   - **Gradient "imprecision band"** on the rail (react-native-svg vertical gradient, accent fading out above
     and below the token) communicates that the position is approximate — longer/softer for a bus mid-segment
     (less certain) than one arriving at a stop.
