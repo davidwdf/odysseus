@@ -304,7 +304,9 @@ against the **effective** background — which, behind glass, is *variable*). Ou
    destroy the single clean "near plane". Glass marks *the* top of the stack; anything above it is opaque.
 7. **Cast shadow is light-only, never dark** — on **light**, blur + border can under-lift chrome off
    scrolling content, so a faint cast shadow under floating glass is permissible; on **dark** it only adds
-   haze (the budget swap, ADR-035), so it stays off. *(The light cast shadow is **backlog** — not yet added.)*
+   haze (the budget swap, ADR-035), so it stays off. Shipped as `GlassView`'s opt-in **`elevated`** prop
+   (web-only, gated on `!isDark`), on the route-header lens + pill; the tab bar lifts via its container's
+   `ELEVATION.e3` (native-safe).
 8. **Backlog:** honour `prefers-reduced-transparency` → swap the glass for an opaque `surface`. Not yet done.
 
 ## 9. App icon & brand mark

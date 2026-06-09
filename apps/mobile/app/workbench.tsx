@@ -507,6 +507,7 @@ function ChromeOverContent() {
         }}
       >
         <GlassView
+          elevated
           radius={TAB_BAR_HEIGHT / 2}
           tintClassName="bg-surface/60"
           strength={45}
@@ -518,6 +519,7 @@ function ChromeOverContent() {
           <Icon icon={ArrowLeft} tone="text" size={24} />
         </GlassView>
         <GlassView
+          elevated
           radius={TAB_BAR_HEIGHT / 2}
           tintClassName="bg-surface/60"
           strength={45}

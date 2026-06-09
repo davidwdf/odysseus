@@ -30,6 +30,14 @@ type GlassViewProps = AnimatedProps<ViewProps> & {
   tintClassName?: string
   /** Draw the hairline edge that gives the pane its "glass" rim. Default true. */
   bordered?: boolean
+  /**
+   * Lift floating chrome off the content scrolling underneath with a soft cast shadow.
+   * **Light-only** by design: on dark a cast shadow reads as haze, not lift (the
+   * contrast-budget swap, ADR-035), so the rim + border carry it there. Web-only for now,
+   * like the rim-light — native consumers put `ELEVATION` on a non-clipped wrapper (as the
+   * floating tab bar does). Default false; opt in for floating panes (the route-header lens/pill).
+   */
+  elevated?: boolean
   /** Strong magnifier refraction (the "lens" showcase) vs. the subtle panel glass. */
   lens?: boolean
   /** Refraction strength — the `feDisplacementMap` scale (px the rim bends). */
@@ -60,6 +68,7 @@ export function GlassView({
   radius = 0,
   tintClassName = 'bg-surface/55',
   bordered = true,
+  elevated = false,
   lens = false,
   strength,
   depth,
@@ -91,7 +100,14 @@ export function GlassView({
     // borders (a pure-white edge pops far more than the slate `--border`).
     const top = isDark ? 0.12 : 0.42
     const bottom = isDark ? 0.16 : 0.06
-    node.style.boxShadow = `inset 0 1px 0.5px rgba(255,255,255,${top}), inset 0 -1px 1px rgba(0,0,0,${bottom})`
+    const rim = `inset 0 1px 0.5px rgba(255,255,255,${top}), inset 0 -1px 1px rgba(0,0,0,${bottom})`
+    // Light-only cast shadow (ADR-035): floating glass lifts off the content scrolling under
+    // it. A two-stop shadow (tight contact + soft ambient) in the slate-900 ink reads as lift
+    // without muddiness. On dark it's omitted — a drop shadow there is haze, not depth, so the
+    // rim + border define the pane instead. (overflow:hidden clips children, not the outer shadow.)
+    const cast =
+      elevated && !isDark ? ', 0 1px 3px rgba(15,23,42,0.10), 0 8px 22px rgba(15,23,42,0.13)' : ''
+    node.style.boxShadow = rim + cast
     if (size.w < 4 || size.h < 4) return
     const r = Math.min(radius, size.w / 2, size.h / 2)
     if (supportsBackdropFilterUrl()) {
@@ -111,7 +127,7 @@ export function GlassView({
       // @ts-expect-error vendor-prefixed property
       node.style.WebkitBackdropFilter = `blur(${px}px) saturate(1.8)`
     }
-  }, [size.w, size.h, radius, cfgDepth, cfgStrength, cfgChroma, cfgBlur, isDark])
+  }, [size.w, size.h, radius, cfgDepth, cfgStrength, cfgChroma, cfgBlur, isDark, elevated])
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout

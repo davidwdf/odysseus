@@ -806,9 +806,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   test; `pnpm --filter @nextbus/mobile test`).
 
 ## ADR-035 — Elevation is two channels: opaque (shadow↔lighten) and glass (defocus-led)
-- **Status:** **Decided.** Documents shipped behaviour (`ELEVATION` + `Card`, `GlassView`) and pins two
-  rules: *no-glass-on-glass* (already practised; now explicit) and a *light-only cast shadow on floating
-  glass* (a refinement — the dark half is shipped, the light cast shadow is **backlog**).
+- **Status:** **Implemented** (verified in-browser, both modes). Documents shipped behaviour (`ELEVATION` +
+  `Card`, `GlassView`) and pins two rules: *no-glass-on-glass* (already practised; now explicit) and a
+  *light-only cast shadow on floating glass* — shipped via `GlassView`'s `elevated` prop (web), turned on for
+  the route-header back-lens + pill. Light lifts the chrome off the content; dark stays rim+border (no haze).
 - **Context:** We have **two** ways a surface reads as "raised", and they resolve the light/dark asymmetry
   differently. The asymmetry: elevation is a lighting metaphor with two cues — a surface **casts a shadow**
   and **catches more light**. On **light** the shadow has a bright field to darken (high contrast) while
@@ -835,7 +836,9 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      tint, muddy legibility, and destroy the single clean "near plane"; glass marks *the* top, anything above
      it must be opaque. (b) **A faint cast shadow on floating glass is light-only, never dark** — on light the
      blur + border may under-lift chrome off scrolling content, so a soft cast shadow is permissible; on dark
-     it would only add haze, so it stays off. (The light cast shadow is not yet implemented — backlog.)
+     it would only add haze, so it stays off. Shipped as `GlassView`'s opt-in **`elevated`** prop: web-only
+     (appended to the existing rim-light `boxShadow`, gated on `!isDark`), on the route-header lens + pill.
+     The floating tab bar already lifts on light via `ELEVATION.e3` on its container (native-safe; ADR-027).
 - **Why:** The reasoning, not just the values, is the asset — the next agent tuning a surface needs to know
   that "shadows read poorly on dark" is a *consequence* of the contrast-budget swap, and that glass opts out
   of that swap by leading with defocus. Writing it down stops glass from being "fixed" with a dark drop

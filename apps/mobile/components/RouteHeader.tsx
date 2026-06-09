@@ -144,6 +144,7 @@ export function RouteHeader({
       {pillMounted ? (
         <GlassView
           pointerEvents="none"
+          elevated
           radius={PILL_H / 2}
           tintClassName="bg-surface/60"
           strength={45}
@@ -222,6 +223,7 @@ export function RouteHeader({
         style={{ position: 'absolute', left: CORNER, top: insetTop + CORNER, zIndex: 4 }}
       >
         <GlassView
+          elevated
           radius={BACK / 2}
           tintClassName="bg-surface/60"
           strength={45}
