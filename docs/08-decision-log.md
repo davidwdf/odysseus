@@ -491,9 +491,12 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     `feBlend screen` (chromatic aberration; `chroma=0` ⇒ no fringe). `color-interpolation-filters="sRGB"`.
   - **Application:** the whole filter is a **data-URI SVG** referenced from
     `backdrop-filter: blur(b/2) url('data:…#displace') blur(b) brightness(1.05) saturate(1.4)` (no DOM
-    `<filter>` element, so react-native-svg + the per-instance/app-root filter machinery were removed). Soft
-    all-around inset rim via `box-shadow: inset 0 0 4px #fafafa80`. Re-derived from the measured size on
-    `onLayout`, so it always fits the element.
+    `<filter>` element, so react-native-svg + the per-instance/app-root filter machinery were removed).
+    Re-derived from the measured size on `onLayout`, so it always fits the element. **Rim light:** rather
+    than the reference's uniform `inset 0 0 4px` glow (which reads as a heavy all-around border, glaring on
+    dark), a **thin, top-weighted** highlight (`inset 0 1px 0.5px rgba(255,255,255,top)`) + a faint bottom
+    shadow — glass is lit from above, so the bright edge sits on top, not as a centred ring; `top` alpha is
+    **theme-aware** (≈0.22 dark / 0.42 light) since a white edge is high-contrast on a dark surface.
   `GlassView` props now mirror the reference: `depth` (rim width), `strength` (bend), `blur` (frosting),
   `chroma`. The **tab bar** uses `strength 45 · depth 8 · blur 5` (frosted + subtle bend — fixes the white
   box); the **lens** uses a wider rim + chroma. **Browser support:** SVG `backdrop-filter` is

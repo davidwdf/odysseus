@@ -75,8 +75,13 @@ export function GlassView({
     if (Platform.OS !== 'web') return
     const node = ref.current as unknown as HTMLElement | null
     if (!node) return
-    // Soft all-around inner rim light (matches the reference's `inset 0 0 4px #fafafa80`).
-    node.style.boxShadow = 'inset 0 0 4px 0 rgba(250,250,250,0.5)'
+    // Rim light: a thin, top-weighted inner highlight (glass is lit from above, so the
+    // bright edge belongs at the top — not a uniform all-around ring, which reads as a
+    // heavy border, especially on dark). A whisper of bottom shadow adds depth. Fainter
+    // on dark, where a white edge is high-contrast against the surface.
+    const top = isDark ? 0.22 : 0.42
+    const bottom = isDark ? 0.18 : 0.06
+    node.style.boxShadow = `inset 0 1px 0.5px rgba(255,255,255,${top}), inset 0 -1px 1px rgba(0,0,0,${bottom})`
     if (size.w < 4 || size.h < 4) return
     const r = Math.min(radius, size.w / 2, size.h / 2)
     if (supportsBackdropFilterUrl()) {
@@ -96,7 +101,7 @@ export function GlassView({
       // @ts-expect-error vendor-prefixed property
       node.style.WebkitBackdropFilter = `blur(${px}px) saturate(1.8)`
     }
-  }, [size.w, size.h, radius, cfgDepth, cfgStrength, cfgChroma, cfgBlur])
+  }, [size.w, size.h, radius, cfgDepth, cfgStrength, cfgChroma, cfgBlur, isDark])
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout
