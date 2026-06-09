@@ -441,7 +441,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   and never hugs the edge) and exposes a `contentInset` (`bottom + height + gap`) that Nearby/Favorites/
   Settings apply as scroll `paddingBottom`. The bar and the screens read the **same** source, so they
   can't drift. Label clipping fixed by sizing the bar from item needs (not bar padding) + explicit
-  `lineHeight: 16`.
+  `lineHeight: 16`. **Vertical centring:** React Navigation forces the tab item to
+  `justify-content: flex-start`, so any bar height beyond the icon+label stack dumps as a bottom gap and the
+  tabs read **top-heavy**. `TAB_BAR_HEIGHT` is therefore set **snug** (54) around the ~42px stack + the
+  item's default 5px padding, leaving no slack to mis-distribute — the content centres on its own.
 - **Safe area, overall:** top inset is handled per-screen (`paddingTop: insets.top`); the bottom inset is
   now owned by `useTabBarLayout` for tab screens. Verified in mobile-emulation (light + dark): pill floats
   with margins, labels uncl­ipped, content scrolls under and the last row clears the bar at scroll end.

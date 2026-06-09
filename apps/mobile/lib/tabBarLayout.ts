@@ -4,8 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 // position:absolute and thus out of layout flow) and the screens that must leave
 // room beneath their scroll content stay in agreement.
 
-/** Bar height — fits the 24px icon + 16px label stack with breathing room. */
-export const TAB_BAR_HEIGHT = 62
+/** Bar height — snug around the ~42px icon+label stack (incl. the item's default
+ *  5px vertical padding) so the content centres with no leftover slack. React
+ *  Navigation forces the item to `justify-content: flex-start`, so any extra height
+ *  here dumps as a bottom gap and the tabs read top-heavy. */
+export const TAB_BAR_HEIGHT = 54
 /** Side margins and the minimum gap below the bar / above scroll content. */
 export const TAB_BAR_GAP = 12
 /** Rounded-pill corner radius for the floating bar. */

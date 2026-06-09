@@ -58,6 +58,10 @@ export default function TabsLayout() {
           backgroundColor: 'transparent',
           ...shadow,
         },
+        // The bar is taller than the icon+label stack; the item defaults to
+        // justify-content:flex-start, so without this the content hugs the top
+        // (top-heavy). Centre the stack vertically within each tab.
+        tabBarItemStyle: { justifyContent: 'center' },
         tabBarLabelStyle: { fontFamily: FONT_FAMILY.medium, fontSize: 12, lineHeight: 16 },
       }}
     >
