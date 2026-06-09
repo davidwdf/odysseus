@@ -292,6 +292,18 @@ signature bus), rendered as a **white symbol on an ink field** (`BRAND.ink` = `#
   and centred** (planted) — they're *not* skewed, so the cabin lunges forward over them.
 - **Wheels** are integrated white bumps (no second tone), so it reads as a bus without clutter.
 
+**In-app bus glyph (distinct from the icon above).** The route schematic's rail token uses a **front-view**
+double-decker line glyph — `BusGlyph` (`apps/mobile/components/BusGlyph.tsx`), a custom **Lucide-style** icon
+(24px grid, round caps/joins, **2px stroke** to match the Lucide set; Lucide has no decker). Same decker DNA
+reworked head-on: **two glazed window bands** whose gap *is* the deck split (no divider line), over
+**front-view tyres** as **solid pills** at the corners — filled because at a 2px stroke their interior is too
+small to outline, a deliberate, documented break from Lucide's stroke-only convention. It rides a
+**stationary** accent disc as the `BusToken`: the disc stays put and only the glyph animates — a gentle eased
+**bob** with a ~4× slower side-to-side **rock** and a small **squash on impact** (squash-and-stretch),
+all declarative reanimated timings on an ease-in-out curve (native-driven, **no JS clock**). Decorative idle
+motion only — it signals *buses move*, never an ETA value (ADR-008). See
+[ADR-030](./08-decision-log.md#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens).
+
 **Why this and not the alternatives:** we explored a bilingual **巴/車 character dual-read** and a
 **white-body negative-space** version; both consistently lost legibility (a clean bus *or* a clean
 glyph, never both; white bodies vanish on light backgrounds). Front-view read as tram/train. The
