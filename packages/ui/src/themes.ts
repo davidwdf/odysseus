@@ -40,7 +40,7 @@ const dark: ThemeVars = {
 export type Mode = 'light' | 'dark'
 /** User-facing appearance preference; `auto` follows the OS scheme. */
 export type Appearance = 'auto' | 'light' | 'dark'
-export type LiveryId = 'classic' | 'kmb' | 'ctb' | 'cmb' | 'dotMatrix' | 'splitFlap'
+export type LiveryId = 'classic' | 'ink' | 'kmb' | 'ctb' | 'cmb' | 'dotMatrix' | 'splitFlap'
 
 /** Build a livery from per-mode overrides on top of the neutral light/dark base.
  *  Liveries remap ONLY accent / surface-tint / (display) tokens — never status or
@@ -58,6 +58,26 @@ function livery(overrides: {
 
 export const themes: Record<LiveryId, Record<Mode, ThemeVars>> = {
   classic: { light, dark },
+  ink: livery({
+    // Ink (BRAND.ink #111827). Light = ink-on-paper: ink *is* the accent on a white
+    // page. Dark = a deep ink world (ink surfaces) with a cool indigo accent so it
+    // pops against near-black. The glass tab bar tints toward these surfaces, so the
+    // pill reads as frosted ink. Pairs with the liquid-glass material (ADR-028).
+    light: {
+      '--accent': '17 24 39',
+      '--accent-contrast': '255 255 255',
+      '--focus': '17 24 39',
+    },
+    dark: {
+      '--bg': '8 11 20',
+      '--surface': '17 24 39',
+      '--surface-2': '30 41 59',
+      '--border': '38 48 66',
+      '--accent': '129 140 248',
+      '--accent-contrast': '8 11 20',
+      '--focus': '165 180 252',
+    },
+  }),
   kmb: livery({
     // KMB red + a faint red surface tint on light.
     light: {
@@ -148,6 +168,7 @@ export interface LiveryMeta {
 
 export const LIVERIES: readonly LiveryMeta[] = [
   { id: 'classic', labelKey: 'liveryClassic', swatch: '#2563EB' },
+  { id: 'ink', labelKey: 'liveryInk', swatch: '#111827' },
   { id: 'kmb', labelKey: 'liveryKmb', swatch: '#D7282F' },
   { id: 'ctb', labelKey: 'liveryCtb', swatch: '#F6C700' },
   { id: 'cmb', labelKey: 'liveryCmb', swatch: '#1E3A8A' },

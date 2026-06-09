@@ -1,7 +1,8 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-02**. Branch: `hk-bus-arrival-app-v1`. Last commit: same-kerb stop-merge (ADR-022).
+> Snapshot: **2026-06-08**. Branch: `karachi`. Latest: **Lucide icons + flat Nearby list**
+> (ADR-025 / ADR-026); the Design Workbench + app icon landed via PRs #5/#6.
 
 ## TL;DR
 Scaffold, **Slice 1 (Nearby)**, the **design system** (fonts/type/elevation/themed nav + two-axis livery
@@ -65,7 +66,35 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   `apps/mobile/assets/icon.svg`, assets via `scripts/gen-icons.mjs`, wired in `app.json` (incl. iOS
   light/dark/tinted), `BRAND.ink` token added. Verified: icon rasterizes correctly, web export emits
   the favicon, `expo config` validates. Deferred (needs the name): 巴士 wordmark/splash lockup.
-- **Docs:** plan `01–10`, ADRs `001–021`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
+- **Lucide icons** ([ADR-025](./08-decision-log.md)): `lucide-react-native` (+ SDK-pinned `react-native-svg`)
+  behind one **`<Icon icon tone>`** primitive (`apps/mobile/components/Icon.tsx`) — `tone` is a semantic
+  role resolved via `useTheme().color()`, so icons follow the livery/appearance. In use: favorite **star**
+  (`SaveButton`), **tab-bar icons** (MapPin/Route/Star/Settings), optional `Button` icon, stop-heading
+  `ChevronRight`; Workbench has an ICONS gallery. **Verified in-browser** (icons re-theme on livery+mode switch).
+- **Nearby is a flat list, not cards** ([ADR-026](./08-decision-log.md)): new **`StopRow`** replaces
+  `StopCard` (deleted) — full-bleed, hairline dividers, heading = name + `MapPin` + "{distance} · {n} min
+  walk" + chevron. Surfaces `NearbyStop.distanceM` (was unused) via new pure `@nextbus/core/geo` helpers
+  (`formatDistance`/`walkMinutes`/`formatWalk`, distance rounded — ADR-008 honesty). Nearby sorts by
+  distance; Favorites reuses `StopRow` (distance hidden). **Verified in-browser against live data.**
+- **Floating tab bar** ([ADR-027](./08-decision-log.md)): the tab bar is now a `position:absolute`
+  rounded **pill** (side + bottom margins, full border on dark / `e3` shadow on light) that **content
+  scrolls underneath** — a new "layered & immersive" design principle (docs/09 §1). Geometry centralized
+  in `apps/mobile/lib/tabBarLayout.ts` (`useTabBarLayout()` → safe-area `bottom` offset + `contentInset`);
+  Nearby/Favorites/Settings pad their scroll content by it. Also fixed a label-descender clip (bar padding
+  was shrinking the icon+label item). **Verified in mobile-emulation, light + dark.**
+- **Liquid-glass material + Ink livery** ([ADR-028](./08-decision-log.md)): new **`GlassView`** primitive
+  (`apps/mobile/components/GlassView.tsx`) — a translucent pane whose tint follows the appearance + active
+  livery. On **web** it does **true SVG refraction**, **ported from nikdelvin/liquid-glass**
+  (`apps/mobile/lib/liquidGlass.ts`): a smooth vector-SVG displacement map (gradients + blurred
+  neutral-centre mask → soft rim, no pixelation) in a data-URI filter (3-pass chromatic aberration, `sRGB`)
+  applied via `backdrop-filter: blur() url('…#displace') brightness() saturate()`. **Chromium-only**
+  (Safari/Firefox → frosted `blur()`); **native** → `expo-blur`. Props: `depth`/`strength`/`blur`/`chroma`;
+  `lens` = magnifier vs. subtle panel glass. Backs the **floating tab bar**; shown in the Workbench GLASS
+  section. New **Ink** livery (`themes.ts` + `liveryInk`): ink-on-paper (light) / deep ink + indigo accent
+  (dark). iOS-26 true Liquid Glass (`expo-glass-effect`) stays a deferred drop-in. **Verified in Chrome
+  (Ink, light + dark):** bus chips scroll under the tab bar with a clean frosted transition (the earlier
+  "white box"/pixelation is gone); lens magnifies the chips behind it.
+- **Docs:** plan `01–10`, ADRs `001–028`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
 - All data is **server-side** (no [on-device index](./08-decision-log.md), ADR-007). KMB + CTB only;
@@ -90,8 +119,8 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   not the `watch()` socket (v2). No map · no push · no native build has been run.
 - `Skeleton` is static; the number-flip / split-flap ETA animation isn't built; **CJK uses the platform
   face by decision** (no Noto bundled — [ADR-019](./08-decision-log.md)); `font-display` (dot-matrix) face
-  not added; display-livery character treatments (LED / flip-tile) are colour-only; Lucide icons pending
-  (the favorite control is a text "Save" pill for now).
+  not added; display-livery character treatments (LED / flip-tile) are colour-only. (Lucide icons now
+  shipped — [ADR-025](./08-decision-log.md).)
 
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
@@ -102,9 +131,11 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
 2. **Routes tab** — route-number search → `/route/[id]` (the screen already exists).
 3. **Map view** (MapLibre) for Nearby.
-4. **Polish** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
-   reduced-motion + a11y pass, Lucide icons (incl. a real favorite star), swipe-to-favorite + haptics.
-5. **Looser stop-merge** (ADR-022 follow-up) — token-overlap name matching so landmark-only/code-only
+4. **Honest-motion slice** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
+   reduced-motion + a11y pass (Reanimated is installed/wired but unused), swipe-to-favorite + haptics.
+5. **Departure-board mode** (ADR-026 follow-up) — an alternate Nearby view: one ETA-sorted stream of next
+   departures across nearby stops; the natural home for the Split-Flap / Dot-Matrix display liveries.
+6. **Looser stop-merge** (ADR-022 follow-up) — token-overlap name matching so landmark-only/code-only
    names also merge; ideally on the own-crawl's first-party coordinates.
 
 ## 📍 Key file pointers
@@ -113,11 +144,15 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   `toMergedStop` for `P:` place ids); multi-op index + same-kerb `buildPlaces` →
   `packages/data-normalize/src/dataset.ts` (KMB own-crawl in `kmb-static.ts`, for the future)
 - Screens → `apps/mobile/app/(tabs)/index.tsx` (Nearby), `app/stop/[id].tsx`, `app/route/[id].tsx`,
-  `app/(tabs)/favorites.tsx`; location → `apps/mobile/lib/useLocation.ts`
+  `app/(tabs)/favorites.tsx`; tab shell + floating bar → `app/(tabs)/_layout.tsx` (geometry in
+  `apps/mobile/lib/tabBarLayout.ts`); location → `apps/mobile/lib/useLocation.ts`
 - Theme tokens → `packages/ui/src/themes.ts`, type scale → `packages/ui/src/typography.ts`,
   elevation/operator tokens → `packages/ui/src/tokens.ts` (spec: [`docs/09`](./09-theme.md))
-- Design-system primitives → `apps/mobile/components/Text.tsx`, `Card.tsx`; theme resolver →
-  `apps/mobile/lib/useTheme.ts`; fonts/splash → `apps/mobile/app/_layout.tsx`
+- Design-system primitives → `apps/mobile/components/Text.tsx`, `Card.tsx`, **`Icon.tsx`** (Lucide),
+  **`GlassView.tsx`** (liquid-glass; web SVG refraction via `apps/mobile/lib/liquidGlass.ts`, ported from
+  nikdelvin/liquid-glass),
+  **`StopRow.tsx`** (flat nearby/favorites item); distance/walk helpers → `packages/core/src/geo.ts`;
+  theme resolver → `apps/mobile/lib/useTheme.ts`; fonts/splash → `apps/mobile/app/_layout.tsx`
 - Prefs (theme/appearance/locale/**favorites**, Zustand+persist) → `apps/mobile/lib/preferences.ts`;
   Settings pickers → `apps/mobile/app/(tabs)/settings.tsx`; livery matrix + `LIVERIES` → `packages/ui/src/themes.ts`
 - Decisions → [`docs/08`](./08-decision-log.md)

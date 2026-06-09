@@ -387,3 +387,114 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   matches either member. Without `?stop=` the screen is just the route + its stops (unchanged).
 - **Consequences:** the route row is the shortcut riders expect, and the stop drill-down stays one tap away.
   New i18n `arrivalsHere`. Future polish: a chevron/affordance hint on the stop-name header.
+
+## ADR-025 — Iconography: Lucide via an `<Icon>` primitive on the token system
+- **Context:** `docs/09` §8 mandates a single Lucide line-icon set, but v1 shipped none — the favorite
+  control was a text "Save" pill and the tab bar was label-only. We needed icons that follow the active
+  livery/appearance like the rest of the system, with **no raw hex** (golden rule #4).
+- **Decision:** Adopt **`lucide-react-native`** (peer dep **`react-native-svg@15.15.4`**, pinned to the
+  Expo SDK per golden rule #6; both render on web through RN-web). All icons go through one primitive,
+  **`apps/mobile/components/Icon.tsx`**: `<Icon icon={Star} tone="accent" />`. `tone` is a semantic role
+  (`text`/`muted`/`subtle`/`accent`/`accent-contrast`/`positive`/`warning`/`danger`) resolved to an
+  `rgb()` via **`useTheme().color()`** — the same `themeColor()` seam the tab bar already uses, so icons
+  re-skin with the theme. An explicit `color` override exists for the two value-driven cases (operator
+  accent; the nav-resolved tab tint) — used sparingly, like operator accents.
+- **Applied:** favorite **star** (`SaveButton`, fills with accent when saved; 44px round, labelled for
+  SR), **tab-bar icons** (MapPin/Route/Star/Settings), an optional leading `icon` on `Button`
+  (the location-prime CTA gets `LocateFixed`), and a `ChevronRight` affordance on the stop heading.
+  Workbench gains an **ICONS** gallery (sample glyphs + every tone).
+- **Consequences:** decorative icons stay unlabeled (the wrapping pressable carries the
+  `accessibilityLabel`); status icons remain paired with text/colour (never colour-alone, §8). Retires
+  the "Save pill" / "label-only tabs" / "favorite control is text" limitations. Bundle cost is modest
+  (tree-shaken per-glyph imports). Number-flip / freshness-pulse motion is still the separate motion slice.
+
+## ADR-026 — Nearby is a flat list, not cards; surface distance + walk time
+- **Context:** The Nearby home rendered each stop as an elevated `Card`. The boxes-in-a-scroll look fought
+  the "**data is the hero, UI gets out of the way**" philosophy (§1): heavy chrome, few stops per screen.
+  Separately, `NearbyStop.distanceM` was already returned by `/v1/nearby` but **never shown**.
+- **Decision:** Replace `StopCard` with a flat **`StopRow`** (`apps/mobile/components/StopRow.tsx`):
+  full-bleed, no surface/shadow, stops separated by a single `border-border` hairline. The heading is
+  name (`h3`) + a `MapPin` + "**{distance} · {walk} min walk**" caption + a `ChevronRight`; route rows sit
+  beneath. Heading and route rows stay **sibling** tap targets (ADR-024 carries over). Nearby sorts by
+  `distanceM` ascending. `distanceM` is **optional** on `StopRow` so **Favorites** reuses the same row
+  (distance is meaningless there → the line is hidden); `StopCard` is **deleted**.
+- **Distance honesty (ADR-008 applied to geography):** new pure helpers in **`@nextbus/core/geo`** —
+  `formatDistance` (metres rounded to the nearest 10, km to one decimal), `walkMinutes`
+  (≈80 m/min, floor 1), `formatWalk` (localized "min walk" label, like `formatRelative`). Straight-line
+  distance is an estimate, so we round rather than imply precision.
+- **Consequences:** lighter, denser, more legible home; the distance we already had is now useful. A
+  bolder **"departure board" mode** (one ETA-sorted stream, ideal for the Split-Flap/Dot-Matrix liveries)
+  is parked as a follow-up. Loading skeletons updated to flat rows.
+
+## ADR-027 — Floating tab bar; content scrolls underneath
+- **Context:** The tab bar was a solid bottom-anchored strip with a top hairline. We wanted a more
+  **immersive, layered** feel (a new design principle, §1): navigation that **floats** over the content
+  with content **scrolling beneath** it. A first attempt also surfaced a real bug — adding `paddingTop`/
+  extra `paddingBottom` to `tabBarStyle` shrinks the **item** area (the bar is a flex column: 28px icon
+  block + label), which squeezed the label box to ~5px and clipped descenders.
+- **Decision:** Make the bar a **floating pill** — `position: 'absolute'`, side + bottom margins,
+  `borderRadius` 24, a **full hairline border** (defines it on dark, where shadows read poorly — §4) plus
+  the **`e3` shadow on light**. Because `position:absolute` removes it from layout flow, content now
+  scrolls under it; each tab scroll view reserves bottom space so the last item still clears the bar.
+- **Geometry in one place:** **`apps/mobile/lib/tabBarLayout.ts`** — `useTabBarLayout()` derives the bar's
+  `bottom` offset from the **safe-area inset** (`max(insets.bottom, gap)`, so it clears the home indicator
+  and never hugs the edge) and exposes a `contentInset` (`bottom + height + gap`) that Nearby/Favorites/
+  Settings apply as scroll `paddingBottom`. The bar and the screens read the **same** source, so they
+  can't drift. Label clipping fixed by sizing the bar from item needs (not bar padding) + explicit
+  `lineHeight: 16`.
+- **Safe area, overall:** top inset is handled per-screen (`paddingTop: insets.top`); the bottom inset is
+  now owned by `useTabBarLayout` for tab screens. Verified in mobile-emulation (light + dark): pill floats
+  with margins, labels uncl­ipped, content scrolls under and the last row clears the bar at scroll end.
+- **Consequences:** new design principle "layered & immersive" (§1). Centred placeholder screens
+  (Routes/ComingSoon, the Nearby prime/empty states) need no inset — the bar simply hovers over empty
+  space. Detail screens (`/stop`, `/route`) are outside the `(tabs)` group, so they're unaffected.
+
+## ADR-028 — Liquid-glass material + Ink livery
+- **Context:** With the floating, scroll-under tab bar (ADR-027), the obvious next step is a **liquid-glass**
+  material so the content passing beneath the chrome shows through, blurred — the Apple "Liquid Glass"
+  idiom. Separately, `BRAND.ink` (`#111827`) was only an app-icon constant; we wanted an **Ink** colour
+  identity that pairs with the glass.
+- **Material decision:** a **`GlassView`** primitive (`apps/mobile/components/GlassView.tsx`) on
+  **`expo-blur`** (`~56.0.3`, SDK-pinned). Chosen over `expo-glass-effect` (Apple's *true* Liquid Glass)
+  as the **base** because the latter is **iOS-26-only**, and we're web-first (PWA) + Android; `expo-blur`'s
+  `BlurView` renders on web (CSS `backdrop-filter`), iOS and Android alike. `GlassView` = a clipped rounded
+  pane with `BlurView` (tint follows `useTheme` appearance) + a translucent `bg-surface/55` body (so labels
+  stay legible) + a hairline rim. Because the body tints toward `--surface`, **each livery colours its own
+  glass**. iOS-26 true Liquid Glass is a **drop-in enhancement** behind `isLiquidGlassAvailable()` (same
+  API, richer material) — deliberately deferred, not blocked.
+- **Applied:** the floating tab bar's `tabBarBackground` is a `GlassView` (the bar surface is transparent;
+  the glass *is* the surface). Workbench gains a **GLASS** section (a pane over route chips, so the blur
+  is visible).
+- **Ink livery:** new `ink` entry in `themes.ts` + `LIVERIES` + i18n `liveryInk`. **Light** = ink-on-paper
+  (ink `#111827` *is* the accent on a white page); **dark** = deep ink surfaces (`BRAND.ink` promoted to
+  `--surface`) with a cool **indigo** accent (`#818CF8`) that reads against near-black. Status/contrast
+  tokens untouched (ADR-015 rule), so honesty + AA hold. The glass tab bar then frosts toward ink.
+- **Consequences:** `GlassView` is reusable for future sheets/headers/FAB. Blur has a GPU cost — keep it to
+  chrome, not long lists. **Verified in-browser (web):** Ink livery (light + dark) + the tab bar and the
+  workbench pane show real backdrop blur of the content behind. Native (iOS/Android) blur + the iOS-26
+  liquid-glass upgrade remain to be verified on device.
+- **Refraction on web (addendum):** the web glass does **true optical refraction** — the backdrop is *bent*,
+  not just blurred. A first attempt generated the displacement map on a **canvas** (per-pixel SDF +
+  finite-difference normals); it worked but read **pixelated**, and high-contrast content scrolling under the
+  tab bar showed a "white box" artifact at chip edges. Rewrote it as a faithful **port of
+  nikdelvin/liquid-glass** (`apps/mobile/lib/liquidGlass.ts`), which is cleaner because the displacement map
+  is a **pure vector SVG**, not a raster:
+  - **Map** (`getDisplacementMap`): a neutral-grey base (`#808080` = no displacement), then X (red) and Y
+    (green) linear gradients screen-blended for the displacement field, then a **blurred neutral
+    rounded-rect painted over the centre** — masking the middle back to neutral so only a *soft* `depth`-wide
+    rim refracts. Vector gradients + blur ⇒ smooth, no pixelation, no hard edge.
+  - **Filter** (`getDisplacementFilter`): embeds that map as a `feImage`, then three `feDisplacementMap`
+    passes at `strength + chroma*2 / +chroma / +0`, split per-channel by `feColorMatrix` and recombined with
+    `feBlend screen` (chromatic aberration; `chroma=0` ⇒ no fringe). `color-interpolation-filters="sRGB"`.
+  - **Application:** the whole filter is a **data-URI SVG** referenced from
+    `backdrop-filter: blur(b/2) url('data:…#displace') blur(b) brightness(1.05) saturate(1.4)` (no DOM
+    `<filter>` element, so react-native-svg + the per-instance/app-root filter machinery were removed). Soft
+    all-around inset rim via `box-shadow: inset 0 0 4px #fafafa80`. Re-derived from the measured size on
+    `onLayout`, so it always fits the element.
+  `GlassView` props now mirror the reference: `depth` (rim width), `strength` (bend), `blur` (frosting),
+  `chroma`. The **tab bar** uses `strength 45 · depth 8 · blur 5` (frosted + subtle bend — fixes the white
+  box); the **lens** uses a wider rim + chroma. **Browser support:** SVG `backdrop-filter` is
+  **Chromium-only** — Safari & Firefox fall back to a frosted `blur()`; **native** keeps `expo-blur`.
+  Refraction never touches the glass's own children, so labels stay crisp. **Verified in Chrome (Ink, light
+  + dark):** bus chips scroll under the tab bar with a clean frosted transition (no white box, no
+  pixelation); the workbench lens magnifies the chips behind it. Still the seam for iOS-26 true Liquid Glass.

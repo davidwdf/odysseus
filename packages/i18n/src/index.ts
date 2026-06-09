@@ -34,6 +34,7 @@ export interface Messages {
   appearanceDark: string
   // Livery names (docs/09 §7)
   liveryClassic: string
+  liveryInk: string
   liveryKmb: string
   liveryCtb: string
   liveryCmb: string
@@ -79,6 +80,7 @@ const en: Messages = {
   appearanceLight: 'Light',
   appearanceDark: 'Dark',
   liveryClassic: 'Classic',
+  liveryInk: 'Ink',
   liveryKmb: 'KMB',
   liveryCtb: 'Citybus',
   liveryCmb: 'CMB Nostalgia',
@@ -121,6 +123,7 @@ const zhHant: Messages = {
   appearanceLight: '淺色',
   appearanceDark: '深色',
   liveryClassic: '經典',
+  liveryInk: '墨',
   liveryKmb: '九巴',
   liveryCtb: '城巴',
   liveryCmb: '中巴懷舊',
@@ -163,6 +166,7 @@ const zhHans: Messages = {
   appearanceLight: '浅色',
   appearanceDark: '深色',
   liveryClassic: '经典',
+  liveryInk: '墨',
   liveryKmb: '九巴',
   liveryCtb: '城巴',
   liveryCmb: '中巴怀旧',

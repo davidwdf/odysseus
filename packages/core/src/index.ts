@@ -1,3 +1,4 @@
 export * from './datasource'
 export * from './eta'
+export * from './geo'
 export * from './types'

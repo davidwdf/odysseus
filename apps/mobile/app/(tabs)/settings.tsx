@@ -7,6 +7,7 @@ import { Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from '../../components/Text'
 import { usePreferences } from '../../lib/preferences'
+import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useLocale, useLocaleOverride, useSetLocale } from '../../providers/LocaleProvider'
 
 const APPEARANCES: { value: Appearance; labelKey: keyof Messages }[] = [
@@ -26,6 +27,7 @@ const LANGUAGES: { value: Locale | null; label: string }[] = [
 export default function Settings() {
   const locale = useLocale()
   const insets = useSafeAreaInsets()
+  const tab = useTabBarLayout()
   const livery = usePreferences((s) => s.livery)
   const appearance = usePreferences((s) => s.appearance)
   const setLivery = usePreferences((s) => s.setLivery)
@@ -36,7 +38,7 @@ export default function Settings() {
   return (
     <ScrollView
       className="flex-1 bg-bg"
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 32 }}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: tab.contentInset }}
     >
       <View className="px-4 pb-4 pt-2">
         <Text variant="h1" className="text-text">

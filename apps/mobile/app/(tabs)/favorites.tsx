@@ -5,15 +5,17 @@ import { useRouter } from 'expo-router'
 import { ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Skeleton } from '../../components/Skeleton'
-import { StopCard } from '../../components/StopCard'
+import { StopRow } from '../../components/StopRow'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { usePreferences } from '../../lib/preferences'
+import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useLocale } from '../../providers/LocaleProvider'
 
 export default function Favorites() {
   const locale = useLocale()
   const insets = useSafeAreaInsets()
+  const tab = useTabBarLayout()
   const router = useRouter()
   const favorites = usePreferences((s) => s.favorites)
   const now = Date.now()
@@ -36,20 +38,21 @@ export default function Favorites() {
         </View>
       ) : (
         <ScrollView>
-          <View className="gap-3 px-4 pb-8">
-            {favorites.map((stopId) => (
-              <FavoriteCard
-                key={stopId}
-                stopId={stopId}
-                locale={locale}
-                now={now}
-                onPress={() => router.push(`/stop/${encodeURIComponent(stopId)}`)}
-                onRoutePress={(routeId) =>
-                  router.push(
-                    `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(stopId)}`,
-                  )
-                }
-              />
+          <View style={{ paddingBottom: tab.contentInset }}>
+            {favorites.map((stopId, i) => (
+              <View key={stopId} className={i === 0 ? '' : 'border-border border-t'}>
+                <FavoriteRow
+                  stopId={stopId}
+                  locale={locale}
+                  now={now}
+                  onPress={() => router.push(`/stop/${encodeURIComponent(stopId)}`)}
+                  onRoutePress={(routeId) =>
+                    router.push(
+                      `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(stopId)}`,
+                    )
+                  }
+                />
+              </View>
             ))}
           </View>
         </ScrollView>
@@ -58,7 +61,7 @@ export default function Favorites() {
   )
 }
 
-function FavoriteCard({
+function FavoriteRow({
   stopId,
   locale,
   now,
@@ -77,7 +80,14 @@ function FavoriteCard({
     refetchInterval: 20_000,
   })
 
-  if (query.isLoading) return <Skeleton className="h-28 w-full" />
+  if (query.isLoading) {
+    return (
+      <View className="px-4 py-4">
+        <Skeleton className="h-5 w-2/3" />
+        <Skeleton className="mt-3 h-6 w-full" />
+      </View>
+    )
+  }
   if (!query.data) return null // skip a stop that failed to load rather than break the list
 
   // Show the soonest few arrivals across all routes serving the stop, collapsing
@@ -89,7 +99,7 @@ function FavoriteCard({
     .slice(0, 4)
 
   return (
-    <StopCard
+    <StopRow
       name={query.data.stop.name[locale]}
       etas={etas}
       locale={locale}

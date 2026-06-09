@@ -9,16 +9,31 @@ import {
   type TypeVariant,
 } from '@nextbus/ui'
 import { Stack } from 'expo-router'
+import {
+  Bell,
+  Bus,
+  ChevronRight,
+  Clock,
+  type LucideIcon,
+  MapPin,
+  Navigation,
+  Route as RouteIcon,
+  Search,
+  Settings as SettingsIcon,
+  Star,
+} from 'lucide-react-native'
 import type { ReactNode } from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { EtaBadge } from '../components/EtaBadge'
+import { GlassView } from '../components/GlassView'
+import { Icon, type IconTone } from '../components/Icon'
 import { RouteChip } from '../components/RouteChip'
 import { SaveButton } from '../components/SaveButton'
 import { Skeleton } from '../components/Skeleton'
-import { StopCard } from '../components/StopCard'
+import { StopRow } from '../components/StopRow'
 import { Text } from '../components/Text'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
@@ -68,6 +83,30 @@ const COLOR_SWATCHES: Array<{ label: string; cls: string }> = [
 
 const TYPE_ORDER: TypeVariant[] = ['display', 'h1', 'h2', 'h3', 'body', 'label', 'caption']
 const APPEARANCES: Appearance[] = ['auto', 'light', 'dark']
+
+// A representative slice of the Lucide set we draw on, with their semantic role.
+const ICON_SAMPLES: Array<{ icon: LucideIcon; label: string }> = [
+  { icon: MapPin, label: 'MapPin' },
+  { icon: Navigation, label: 'Navigation' },
+  { icon: RouteIcon, label: 'Route' },
+  { icon: Bus, label: 'Bus' },
+  { icon: Star, label: 'Star' },
+  { icon: Clock, label: 'Clock' },
+  { icon: Search, label: 'Search' },
+  { icon: Bell, label: 'Bell' },
+  { icon: SettingsIcon, label: 'Settings' },
+  { icon: ChevronRight, label: 'ChevronRight' },
+]
+
+const ICON_TONES: IconTone[] = [
+  'text',
+  'muted',
+  'subtle',
+  'accent',
+  'positive',
+  'warning',
+  'danger',
+]
 
 export default function Workbench() {
   const insets = useSafeAreaInsets()
@@ -206,6 +245,100 @@ export default function Workbench() {
           </View>
         </Section>
 
+        <Section title="GLASS — liquid material (content shows through)">
+          <View className="h-44 overflow-hidden rounded-lg border border-border">
+            {/* Busy content filling the whole box, so the refraction is visible across
+                the entire pane/lens (not just the rim). */}
+            <View className="absolute inset-0 flex-row flex-wrap content-start gap-2 p-3">
+              {(
+                [
+                  ['KMB', '6'],
+                  ['CTB', '720'],
+                  ['KMB', '182'],
+                  ['LWB', 'E11'],
+                  ['CTB', '85A'],
+                  ['KMB', '49X'],
+                  ['KMB', 'N691'],
+                  ['CTB', '12'],
+                  ['KMB', '1A'],
+                  ['CTB', '5B'],
+                  ['LWB', 'A21'],
+                  ['KMB', '68X'],
+                  ['CTB', '90'],
+                  ['KMB', '203'],
+                  ['CTB', '788'],
+                  ['KMB', '40'],
+                  ['LWB', 'A22'],
+                  ['KMB', '7'],
+                  ['CTB', '11'],
+                  ['KMB', '234X'],
+                ] as Array<[OperatorId, string]>
+              ).map(([op, no]) => (
+                <RouteChip key={`${op}${no}`} operator={op} routeNo={no} />
+              ))}
+            </View>
+            <View
+              style={StyleSheet.absoluteFill}
+              className="flex-row items-center justify-center gap-3"
+            >
+              {/* Subtle panel glass (as on the tab bar). */}
+              <GlassView
+                radius={16}
+                blur={4}
+                className="items-center px-5 py-4"
+                tintClassName="bg-surface/55"
+              >
+                <Text variant="label" weight="semibold" className="text-text">
+                  Glass
+                </Text>
+                <Text variant="caption" className="text-muted">
+                  subtle
+                </Text>
+              </GlassView>
+              {/* Strong refraction — the magnifier "lens" (low tint shows the bend). */}
+              <GlassView
+                lens
+                radius={9999}
+                className="h-24 w-24 items-center justify-center"
+                tintClassName="bg-surface/15"
+              >
+                <Text variant="caption" weight="semibold" className="text-text">
+                  Lens
+                </Text>
+              </GlassView>
+            </View>
+          </View>
+          <Text variant="caption" className="text-subtle">
+            web: real SVG refraction (backdrop bends) · native: expo-blur fallback
+          </Text>
+        </Section>
+
+        <Section title="ICONS (Lucide)">
+          <View className="flex-row flex-wrap gap-4">
+            {ICON_SAMPLES.map((s) => (
+              <View key={s.label} className="w-16 items-center">
+                <Icon icon={s.icon} tone="text" />
+                <Text variant="caption" className="mt-1 text-subtle">
+                  {s.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <Text variant="label" className="mt-3 text-subtle">
+            tones (Star)
+          </Text>
+          <View className="flex-row flex-wrap items-center gap-4">
+            {ICON_TONES.map((tn) => (
+              <View key={tn} className="items-center">
+                <Icon icon={Star} tone={tn} />
+                <Text variant="caption" className="mt-1 text-subtle">
+                  {tn}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </Section>
+
         <Section title="ROUTE CHIPS">
           <View className="flex-row flex-wrap items-center gap-3">
             <RouteChip operator="KMB" routeNo="6" />
@@ -244,26 +377,31 @@ export default function Workbench() {
           <Skeleton className="mt-1 h-12 w-full" />
         </Section>
 
-        <Section title="STOP CARD — single operator">
-          <StopCard
-            name="Mong Kok Road, Nathan Road"
-            etas={single}
-            locale={locale}
-            now={now}
-            onPress={() => {}}
-            onRoutePress={() => {}}
-          />
-        </Section>
-
-        <Section title="STOP CARD — merged (KMB + CTB)">
-          <StopCard
-            name="Jardine House, Connaught Road Central"
-            etas={merged}
-            locale={locale}
-            now={now}
-            onPress={() => {}}
-            onRoutePress={() => {}}
-          />
+        <Section title="STOP ROW — nearby list (single + merged)">
+          {/* The flat list item used on the Nearby screen: no card chrome, a
+              distance/walk heading, hairline dividers between stops. */}
+          <View className="border-border border-y">
+            <StopRow
+              name="Mong Kok Road, Nathan Road"
+              distanceM={90}
+              etas={single}
+              locale={locale}
+              now={now}
+              onPress={() => {}}
+              onRoutePress={() => {}}
+            />
+            <View className="border-border border-t">
+              <StopRow
+                name="Jardine House, Connaught Road Central"
+                distanceM={340}
+                etas={merged}
+                locale={locale}
+                now={now}
+                onPress={() => {}}
+                onRoutePress={() => {}}
+              />
+            </View>
+          </View>
         </Section>
       </ScrollView>
     </View>

@@ -9,12 +9,23 @@ Utility-first, calm, fast. The UI gets out of the way; **the next-arrival data i
 is mostly neutral so that **status** (how soon / how fresh) and **operator accents** carry meaning.
 Delight is applied in small doses — motion *on change*, not decoration.
 
+**Layered & immersive.** Primary navigation **floats** over the content rather than boxing it in, and
+**content scrolls underneath** that chrome — it reads as one continuous, layered surface, not stacked
+panels. The floating bar is the realization of this (§4); scroll views therefore must reserve room so
+the last item still clears the chrome (see `useTabBarLayout().contentInset`,
+[ADR-027](./08-decision-log.md#adr-027--floating-tab-bar-content-scrolls-underneath)). Lists stay
+**full-bleed and flat** for the same reason (no floating cards — [ADR-026](./08-decision-log.md)).
+
 > **Implementation status** ([ADR-017](./08-decision-log.md#adr-017--design-system-realization-fonts-text-scale-elevation-themed-nav-chrome),
 > [ADR-018](./08-decision-log.md#adr-018--two-axis-theme-livery--appearance-with-persistence)).
 > *Realized:* the token system (`packages/ui`), **Inter loaded** as weight cuts + splash-gated, the
 > **`<Text>` typography primitive** (the canonical consumer of the §3 scale), **elevation** tokens +
-> a `Card` primitive (§4), **themed nav chrome** (tab bar via `useTheme()`), and the **two-axis theme**
-> (livery × appearance) with a **Settings picker** + persistence (§7). *Still spec-only:* `font-display`
+> a `Card` primitive (§4), **themed nav chrome** (tab bar via `useTheme()`), the **two-axis theme**
+> (livery × appearance) with a **Settings picker** + persistence (§7), and **Lucide icons** behind an
+> `<Icon tone>` primitive (§8, [ADR-025](./08-decision-log.md#adr-025--iconography-lucide-via-an-icon-primitive-on-the-token-system)).
+> The Nearby/Favorites home is a **flat `StopRow` list** (no card chrome) showing distance + walk time
+> ([ADR-026](./08-decision-log.md#adr-026--nearby-is-a-flat-list-not-cards-surface-distance--walk-time)).
+> *Still spec-only:* `font-display`
 > faces, auto-theme-by-operator, and the §5 motion / §6 number-flip animations. *Decided against for v1:*
 > bundling **Noto** for CJK — we use the platform face instead ([ADR-019](./08-decision-log.md#adr-019--cjk-use-the-platform-font-do-not-bundle-noto-v1)).
 > Per-component aesthetic: **role-based** type (`<Text variant>`), never raw Tailwind sizes.
@@ -175,11 +186,28 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
   Touch targets **≥ 44×44px**; **≥ 8px** (`gap-2`) between adjacent tappables.
 - **Radius:** `sm`=6 `md`=10 `lg`=14 `xl`=20 `full`=9999. Cards `md`/`lg`; bottom-sheets `xl` (top
   corners); chips/pills `full`.
-- **Elevation:** `e0` none · `e1` cards · `e2` sticky headers · `e3` sheet/FAB. On **dark**, prefer
-  `surface-2` lightening + `border` over shadows (shadows read poorly on dark). RN needs both the
-  iOS `shadow*` and Android `elevation` recipes per token. **Implemented** as `ELEVATION` in
-  `packages/ui/src/tokens.ts`, applied by the **`Card`** primitive (`apps/mobile/components/Card.tsx`),
-  which shadows on light and switches to `surface-2` + border on dark automatically.
+- **Elevation:** `e0` none · `e1` cards · `e2` sticky headers · `e3` sheet/FAB / **floating tab bar**.
+  On **dark**, prefer `surface-2` lightening + `border` over shadows (shadows read poorly on dark). RN
+  needs both the iOS `shadow*` and Android `elevation` recipes per token. **Implemented** as `ELEVATION`
+  in `packages/ui/src/tokens.ts`, applied by the **`Card`** primitive (`apps/mobile/components/Card.tsx`)
+  and the **floating tab bar** ([ADR-027](./08-decision-log.md#adr-027--floating-tab-bar-content-scrolls-underneath)),
+  both of which shadow on light and switch to a defining `border` on dark automatically.
+- **Floating chrome:** the tab bar is a `position:absolute` rounded **pill** (`radius` 24) with side +
+  bottom margins lifted clear of the safe-area inset; content **scrolls underneath** it (§1). Geometry is
+  centralized in `apps/mobile/lib/tabBarLayout.ts` (`useTabBarLayout()` → `bottom` offset + `contentInset`
+  for scroll views), so the bar and the screens that pad for it share one source of truth.
+- **Glass (liquid material):** the **`GlassView`** primitive (`apps/mobile/components/GlassView.tsx`) is a
+  translucent pane that lets the content underneath show through. On **web** it does **true optical
+  refraction**, ported from **nikdelvin/liquid-glass** (`apps/mobile/lib/liquidGlass.ts`): a smooth **vector
+  SVG displacement map** (X/Y gradients + a blurred neutral-centre mask → a soft refractive rim, no
+  pixelation), wrapped in a data-URI SVG filter (3-pass **chromatic aberration**, `sRGB`) and applied via
+  `backdrop-filter: blur() url('…#displace') brightness() saturate()`. SVG `backdrop-filter` is
+  **Chromium-only**, so **Safari & Firefox** fall back to a frosted `blur()`; **native** uses `expo-blur`.
+  Props mirror the reference — `depth` (rim width), `strength` (bend), `blur` (frosting), `chroma`. The tint
+  follows the appearance (`useTheme`) and a `bg-surface/55`-style body keeps labels legible — so **each
+  livery tints its own glass** (Ink → frosted ink). The `lens` prop = wider rim + chroma (the workbench
+  magnifier) vs. the subtle panel/tab-bar glass. It's the iOS-26 seam for Apple's true Liquid Glass
+  (`expo-glass-effect`) — see [ADR-028](./08-decision-log.md#adr-028--liquid-glass-material--ink-livery).
 
 ---
 
@@ -220,6 +248,7 @@ across every skin. Each ships **light + dark**.
 | Livery | Accent | Notes |
 |---|---|---|
 | **Classic** (default) | wayfinding blue `#2563EB` | neutral, brand-agnostic |
+| **Ink** | ink `#111827` (light) / indigo `#818CF8` (dark) | the `BRAND.ink` identity: ink-on-paper on light, a deep ink world on dark; pairs with the liquid-glass material ([ADR-028](./08-decision-log.md#adr-028--liquid-glass-material--ink-livery)) |
 | **KMB** | red `#D7282F` | faint red surface tint (light) |
 | **Citybus** | yellow `#F6C700` | dark text on accent (contrast) |
 | **CMB Nostalgia** | deep blue on cream / warm night | cream `surface` (light), warm dark (dark), retro feel |
@@ -248,10 +277,17 @@ These two liveries swap *how characters render*, not the layout:
 ---
 
 ## 8. Iconography & accessibility
-- **Lucide** icons (consistent 24px line set; RN + Web). **No emoji as icons.**
+- **Lucide** icons (consistent 24px line set; RN + Web). **No emoji as icons.** **Implemented**
+  ([ADR-025](./08-decision-log.md#adr-025--iconography-lucide-via-an-icon-primitive-on-the-token-system)):
+  `lucide-react-native` (+ SDK-pinned `react-native-svg`) behind one primitive, **`<Icon icon tone>`**
+  (`apps/mobile/components/Icon.tsx`). `tone` is a semantic role resolved through `useTheme().color()`,
+  so icons re-skin with the livery/appearance; an explicit `color` is the rare value-driven exception
+  (operator accent, nav tab tint). In use: favorite **star** (`SaveButton`), **tab-bar icons**, an
+  optional leading icon on `Button`, and the stop-heading `ChevronRight`.
 - AA contrast both modes; **status never color-only**; visible **focus ring** (`focus`) for
   keyboard/web; honor **dynamic type**; **reduced-motion** downgrade; screen-reader labels on every
-  icon button and ETA. (Cross-checked against the UX rules in [`docs/04`](./04-frontend-and-design.md).)
+  icon button and ETA. Decorative icons stay unlabeled — the wrapping pressable carries the label.
+  (Cross-checked against the UX rules in [`docs/04`](./04-frontend-and-design.md).)
 
 ## 9. App icon & brand mark
 The app icon is a **road-sign / transit pictogram**: a clean **side-profile double-decker** (HK's
