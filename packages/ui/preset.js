@@ -22,6 +22,9 @@ module.exports = {
         positive: 'rgb(var(--positive) / <alpha-value>)',
         warning: 'rgb(var(--warning) / <alpha-value>)',
         danger: 'rgb(var(--danger) / <alpha-value>)',
+        // Brand ink (BRAND.ink #111827) — a fixed, theme-independent value (NOT a
+        // semantic token). Use sparingly, e.g. a dark glass tint (`bg-ink/55`).
+        ink: 'rgb(17 24 39 / <alpha-value>)',
       },
       borderRadius: { sm: '6px', md: '10px', lg: '14px', xl: '20px' },
       // Named type scale (docs/09 §3) → `text-display`, `text-h1`, … as [size, lineHeight].

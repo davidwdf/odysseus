@@ -35,7 +35,9 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: color('--accent'),
-        tabBarInactiveTintColor: color('--text-subtle'),
+        // Inactive icons/labels sit on translucent glass — `subtle` was too low-contrast
+        // to read, so use the brighter `muted` for legibility (active stays the accent).
+        tabBarInactiveTintColor: color('--text-muted'),
         // The glass pane provides the rounded, blurred, bordered surface.
         tabBarBackground: () => (
           <GlassView

@@ -295,6 +295,20 @@ export default function Workbench() {
                   subtle
                 </Text>
               </GlassView>
+              {/* Ink tint — a fixed dark glass regardless of theme (needs light content). */}
+              <GlassView
+                radius={16}
+                blur={4}
+                className="items-center px-5 py-4"
+                tintClassName="bg-ink/55"
+              >
+                <Text variant="label" weight="semibold" className="text-white">
+                  Ink tint
+                </Text>
+                <Text variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                  dark glass
+                </Text>
+              </GlassView>
               {/* Strong refraction — the magnifier "lens" (low tint shows the bend). */}
               <GlassView
                 lens

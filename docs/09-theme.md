@@ -289,6 +289,22 @@ These two liveries swap *how characters render*, not the layout:
   icon button and ETA. Decorative icons stay unlabeled — the wrapping pressable carries the label.
   (Cross-checked against the UX rules in [`docs/04`](./04-frontend-and-design.md).)
 
+### Glass legibility (the rules for `GlassView`)
+Liquid glass is a **chrome material**, not a content surface — so legibility, not the effect, wins.
+Grounded in Apple's Liquid Glass HIG (controls layer adapts to stay readable; honour *Reduce
+Transparency* / *Increase Contrast*; never stack glass on glass) and WCAG (text ≥ 4.5:1, large/UI ≥ 3:1
+against the **effective** background — which, behind glass, is *variable*). Our rules:
+1. **Always keep a tint floor** (`bg-surface/55`+). The translucent body is the legibility **scrim** that
+   guarantees a worst-case background; raise it over busy content. A pure-blur (no tint) is too transparent.
+2. **High-contrast labels/icons.** On glass, dim greys fail — tab-bar inactive items use `muted`, not
+   `subtle`. Active state carries the `accent`.
+3. **Refraction/blur on chrome only** — never behind body text or long lists (legibility + GPU cost).
+4. **Rim light is decoration, kept muted** — a thin top highlight, faint on dark (a white edge over-reads
+   against a dark surface), tuned to sit no louder than the app's `--border`.
+5. **A dark tint (`bg-ink`) needs light content** — an ink-glass pane reads as a dark element regardless of
+   theme, so its labels/icons must be light to stay legible.
+6. **Backlog:** honour `prefers-reduced-transparency` → swap the glass for an opaque `surface`. Not yet done.
+
 ## 9. App icon & brand mark
 The app icon is a **road-sign / transit pictogram**: a clean **side-profile double-decker** (HK's
 signature bus), rendered as a **white symbol on an ink field** (`BRAND.ink` = `#111827`, in

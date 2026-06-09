@@ -79,8 +79,10 @@ export function GlassView({
     // bright edge belongs at the top — not a uniform all-around ring, which reads as a
     // heavy border, especially on dark). A whisper of bottom shadow adds depth. Fainter
     // on dark, where a white edge is high-contrast against the surface.
-    const top = isDark ? 0.22 : 0.42
-    const bottom = isDark ? 0.18 : 0.06
+    // On dark, keep the highlight faint so it reads as muted as the app's other
+    // borders (a pure-white edge pops far more than the slate `--border`).
+    const top = isDark ? 0.12 : 0.42
+    const bottom = isDark ? 0.16 : 0.06
     node.style.boxShadow = `inset 0 1px 0.5px rgba(255,255,255,${top}), inset 0 -1px 1px rgba(0,0,0,${bottom})`
     if (size.w < 4 || size.h < 4) return
     const r = Math.min(radius, size.w / 2, size.h / 2)
