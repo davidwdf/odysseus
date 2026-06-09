@@ -12,7 +12,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import { vars } from 'nativewind'
 import { useEffect } from 'react'
-import { View } from 'react-native'
+import { Platform, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { usePreferences } from '../lib/preferences'
@@ -27,8 +27,9 @@ void SplashScreen.preventAutoHideAsync()
 export default function RootLayout() {
   // The theme is just a set of semantic-token values injected as CSS vars; every
   // component reads them through NativeWind classes (bg-bg, text-text…). See docs/09.
-  const { vars: themeVars, isDark } = useTheme()
+  const { vars: themeVars, isDark, color } = useTheme()
   const prefsHydrated = usePreferences((s) => s.hydrated)
+  const bgColor = color('--bg')
 
   // Inter is loaded as discrete weight cuts; the <Text> primitive maps each weight
   // to its exact registered family (CJK glyphs fall back to the OS face).
@@ -46,6 +47,15 @@ export default function RootLayout() {
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync()
   }, [ready])
+
+  // The themed background lives on a RN <View>; the web document's html/body stay
+  // their default white, so overscroll rubber-band reveals white in dark mode. Paint
+  // html/body with the active theme bg (NativeWind vars() only reach the View subtree).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return
+    document.documentElement.style.backgroundColor = bgColor
+    document.body.style.backgroundColor = bgColor
+  }, [bgColor])
 
   if (!ready) return null
 
