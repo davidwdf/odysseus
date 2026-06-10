@@ -627,6 +627,12 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 ## ADR-033 — Route header: no bar background; title morphs into a pill beside the back lens
 - **Status:** **Implemented** (KMB/LWB, verified in-browser). Refines the collapsing header from
   [ADR-030](#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens)'s presentation pass.
+- **Follow-up (2026-06-10):** two interaction tweaks. (1) **Tap the header → scroll to top:** a transparent
+  press catcher over the collapsed-chrome band (above the pill/route/badge for hit-testing, below the back
+  lens so Back still works) calls `onTitlePress` → `scrollRef.scrollTo({y:0})`. (2) The `A → B` marquee now
+  **auto-loops continuously** (scroll to end, pause, return, pause, repeat) instead of one-shot-on-tap, and is
+  non-interactive so its taps fall through to the catcher. Also: the back lens is now the shared
+  `GlassIconButton`/`BackButton` (ADR-037), not an inline lens.
 - **Context:** ADR-030's header was a **full-width glass bar** that the badge + `A → B` line shrank within
   (staying centred). We wanted the chrome to feel lighter and more "floating": no bar fill behind the back
   button and title, with the title **resolving into a pill** on scroll rather than just shrinking in place.
@@ -695,9 +701,11 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   cluttered.
 
 ## ADR-032 — Favourites are **route-at-stop** pairs, not bare routes
-- **Status:** **Proposed / not yet built.** Design settled; implementation is a near-term follow-up (see [docs/11](./11-status.md)).
-- **Context:** Favourites today are **stop-only** — `favorites: string[]` of canonical stop ids
-  (`apps/mobile/lib/preferences.ts`); `SaveButton` toggles a stop and the Favourites tab lists saved stops.
+- **Status:** **Framework built; save UI pending.** The store + Favourites tab were migrated to the
+  route-at-stop model on 2026-06-10 (stop-only favourites removed — see "Update" below); the per-route
+  **star** that creates a pair is the remaining near-term follow-up (see [docs/11](./11-status.md)).
+- **Context:** Favourites *were* **stop-only** — `favorites: string[]` of canonical stop ids
+  (`apps/mobile/lib/preferences.ts`); a `SaveButton` toggled a stop and the Favourites tab listed saved stops.
   Designing the route-detail header raised the question of a favourite **route**, partly for header symmetry
   (a back-lens sits top-left with nothing top-right). Weighing it surfaced a sharper idea the user has found
   genuinely useful in another app: favouriting a **route at a specific stop** — "the 6 from City One Station"
@@ -717,8 +725,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      `"${stopId}|${routeId}"` keys (mirrors the existing `favorites: string[]` and the **self-describing-id**
      precedent of [ADR-022](#adr-022--same-kerb-stop-merge-our-own-conservative-landmarkdistance-clustering)'s
      `P:<id>+<id>`, so a key still resolves after a dataset rebuild). A `{ stopId, routeId }` struct array is
-     the alternative — confirm at build time. The persisted `favorites` key and `toggleFavorite` symbol stay
-     ([ADR-031](#adr-031--british-english-oxford--ize-spelling-for-all-prose--user-facing-strings) — code is exempt).
+     the alternative — confirm at build time. *(Built: a flat `favoriteRoutes: string[]` of
+     `"${stopId}\|${routeId}"` keys, with `toggleFavoriteRoute(stopId, routeId)` and a `favoriteRouteKey`
+     helper. The old `favorites`/`toggleFavorite` stop primitive was removed outright rather than kept for
+     migration — stop favourites are not a shipping feature, so there was nothing to preserve.)*
   2. **The star = the pair, everywhere.** The route screen is always reached **from a stop** (`route/[id].tsx`
      carries the `?stop=` "here" context), so a **top-right glass-lens star** in the route header favourites
      *this route at the stop you came from* — giving the header symmetry **and** the useful primitive with one
@@ -736,6 +746,13 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   **top-right in the route header** and **per-row in Stop detail**; the Favourites tab gains a pairs section
   grouped by stop. New i18n keys for the route-save label. Bare-route favourites and cross-device sync of
   favourites remain backlog ([docs/07](./07-backlog.md) — "Accounts + cross-device sync").
+- **Update (2026-06-10) — framework landed, save UI deferred:** stop-level favourites were **removed**: the
+  `SaveButton` component is gone, the store now holds `favoriteRoutes` (keyed `"${stopId}|${routeId}"`) via
+  `toggleFavoriteRoute`, and the Favourites tab now groups saved **pairs** under their stop heading (reusing
+  `StopRow` with the `etas` filtered to the starred routes). No save control ships yet, so the list stays
+  empty and the tab shows its empty state ("No saved routes yet") until the per-route star is built. In the
+  same pass, **Stop detail dropped its `Card`** wrapper for the flat, hairline-divided route-row idiom used on
+  Nearby (data-as-hero, [docs/09](./09-theme.md)) — the per-row star will slot into those rows.
 
 ## ADR-031 — British English (Oxford `-ize` spelling) for all prose & user-facing strings
 - **Context:** Spelling had drifted — the codebase already used British forms (`colour`, `centre`, `grey`,
@@ -788,7 +805,9 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      props. `StopRow` heading and the route schematic row both use it (the schematic's inline copy is
      retired). The **Stop-detail native header** title-cases the label too (`titleCaseName(splitStopCode…)`),
      dropping the code — a native header can't render the two-tone muted code. Stop-detail route rows
-     title-case their `→ destination` as well, so destinations read consistently across screens.
+     title-case their `→ destination` as well, so destinations read consistently across screens. The inline
+     code is `verticalAlign:'middle'` so it sits centred within the line rather than on the name's baseline
+     (effective on web/PWA; native falls back to baseline until RN supports inline-span vertical alignment).
 - **Why:** Destination is the single most useful disambiguator on a route row (which way is this 6 going?),
   and the `DataSource` already had the data server-side — stamping the `Eta` keeps the UI dumb and consistent
   with ADR-008's "display never re-computes data" stance. Centralising name presentation in `StopName` stops
@@ -801,7 +820,11 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   (`of`, `the`, `and`, `to`, `at`, `in`, `for`, `by`) so `UNIVERSITY OF HONG KONG` → "University of Hong
   Kong". **`on` is deliberately *not* in that set:** in HK stop names it's almost always the romanised
   syllable 安 (On Tai, Tsz On, Hing On, Lok On Pai…), not the English preposition, so it title-cases like
-  any other place-name word. The first word of a title is never treated as minor. `titleCaseName` /
+  any other place-name word. The first word of a title is never treated as minor. Conversely an explicit
+  `KEEP_UPPER` allowlist (operator/venue acronyms — `MTR`, `KMB`, …, `EKCC`) stays upper-cased: in an
+  ALL-CAPS source there's no safe way to auto-distinguish an initialism (`EKCC`) from a real word that can
+  also appear parenthesised (`(CIRCULAR)`), so codes are added explicitly as they surface — e.g. `EKCC` in a
+  route endpoint's `… (EKCC)`, which the header label title-cases without splitting the code. `titleCaseName` /
   `splitStopCode` are covered by `apps/mobile/lib/stopName.test.ts` (Vitest — the repo's first first-party
   test; `pnpm --filter @nextbus/mobile test`).
 
@@ -847,3 +870,294 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   shadow joins the backlog alongside the `prefers-reduced-transparency` opaque fallback (docs/09 §"Glass").
   `bg-ink/55` (fixed-dark glass) deliberately **opts out** of the dark lightening cue — fine for a recessive
   pane or the workbench showcase, but not for live floating chrome. See docs/09 §4 + §"Glass legibility".
+
+## ADR-036 — Surface fares, frequency, journey time & ETA remarks from data we already fetch
+- **Status:** **Implemented** (verified against the live worker: `/v1/route/KMB:1:outbound:1` →
+  `service {fareFull "6.7", journeyMin 45, headway 10–30, hours 05:35–23:40}` + per-stop fares; `/v1/nearby`
+  + `/v1/stop` → per-route boarding fare). Proposals [`docs/proposals/00`](../docs/proposals/00-fast-and-fun-wins.md) P1–P3.
+- **Context:** The research dive ([`docs/research`](../docs/research/README.md)) found the highest-leverage,
+  lowest-cost win is data **we already download and discard**. The consolidated dataset is a *route-**fare**
+  list*: its `RouteListEntry` carries `fares`/`faresHoliday` (sectional, HK$), `freq` (GTFS frequency bands),
+  and `jt` (journey-time minutes) — but `data-normalize/dataset.ts`'s `RawRoute` parsed only
+  `co/route/serviceType/bound/orig/dest/stops`. Separately, the live KMB/CTB ETA feeds' `rmk_*` were parsed
+  into `Eta.remark` but **never rendered**. HK open data has **no fares-by-passenger-type, no live GPS, no
+  route polylines** ([`docs/research/02`](../docs/research/02-data-availability-matrix.md)), so fares/freq/jt
+  are the richest facts cheaply available, and they're the **Static** honesty tier — not live.
+- **Decision:**
+  1. **Parse the discarded fields.** `RawRoute` gains `fares`/`faresHoliday`/`freq`/`jt`. A new
+     `RouteServiceInfo` (`@nextbus/core`) holds `fareFull`/`fareFullHoliday`/`journeyMin`/`headway{min,max}`/
+     `hours{start,end}`, computed once at index build (`buildService` + `summarizeFreq`) and hung on
+     `IndexRouteMeta.service`; raw sectional `fares` stay on the meta for per-stop lookup (`routeFareAtSeq`).
+  2. **Fares are sectional** — `fares[seq-1]` is the **boarding** fare at that stop (the terminus has none);
+     `fareFull` (= `fares[0]`) is the from-origin headline. The edge stamps the boarding fare onto each flat
+     `Eta` (like `destination`) for Nearby/Favourites, onto each `StopDetail.routes[]`, and per
+     `RouteDetail.stops[]`; `Route.service` rides on every route object.
+  3. **Frequency/hours are a coarse, honest summary** — `headway` is the min–max minutes across all GTFS
+     bands ("every 10–30 min"); `hours` is the earliest start → latest end across service patterns
+     ("05:35–23:40"). No fake single figure; past-midnight bands wrap (2535 → 01:35). Day-type/public-holiday
+     resolution is deferred (no calendar joined yet) — we show the standard fare and label a differing
+     **holiday** full fare; most routes have none.
+  4. **Surface remarks** — `Eta.remark` now renders as a small `RemarkTag`; `classifyRemark` tints a
+     timetable-based **"Scheduled"** reading as lower-confidence (extends ADR-008). New primitives:
+     `Fare`, `RemarkTag`, `RouteMeta` (a fare · journey · frequency · hours strip on route detail). On Stop
+     detail, a route with no live ETA shows **"every N–M min"** instead of "—" so a stop never looks dead.
+- **Why:** A tier jump in usefulness (fares are the #1 missing rider fact) for almost only UI cost — no new
+  data source, no native build, seam untouched (`DataSource` unchanged; new fields are optional). Transit-data
+  formatters (`formatFare`/`formatHeadway`/`formatJourney`/`formatServiceHours`) live in `@nextbus/core/eta`
+  beside `formatRelative`, the established home for bus-data formatting (the locale only selects a unit word).
+- **Consequences:** `RouteMeta` is placed as the **first child** of the route schematic's list so each stop
+  row's measured `y` includes its height — the bus-token + auto-scroll math (`topSpacer + tops[i]`) stays
+  correct. LWB-tagged ETAs (rare) still resolve no fare/destination (the static index folds LWB under `KMB`
+  ids — pre-existing). **Follow-ups:** public-holiday calendar for holiday fares; the **section-fare picker**
+  (tap board→alight — proposals P12); a frequency badge on Nearby's no-ETA routes (P2 extension).
+- **Refinement (post-feedback):** fares were **too crowded on the single-line per-stop route rows**, so they're
+  **dropped from Nearby + Stop-detail** and kept on **Route detail** (header strip + per-stop) — fare is one tap
+  deeper (progressive disclosure). The edge still stamps `Eta.fare` (cheap; stays available for `/v1/etas`/future).
+  ETA wording: **"Soon" → "Due"** (conventional countdown term, shorter); `EtaBadge` now renders the **minutes
+  number prominent with a small, muted, pinned unit** (`etaLabelParts` in core) so only the number shifts as the
+  value changes and it collapses to "Due" under a minute — concise without the width-jump. We **did not** adopt
+  "m" for minutes: the app already uses "m" for **metres** (walk distance) and "min" for walk time, so "9 m"
+  would clash and be internally inconsistent.
+- **Refinement (route-detail design pass, post-feedback):** a round of UI feedback reshaped the route-detail
+  presentation. Net changes:
+  - **`EtaTimes` repeats the unit per slot** — "4 min  20 min  32 min" — *superseding* the earlier
+    "unit once on the last value" call (it read as a single number with a trailing label, not three times).
+    The emphasised first value + odometer animation are unchanged.
+  - **`RouteMeta` is now a wrapping row of pills**, not a `·`-joined line. Full-round per docs/09 §4 (chips/pills
+    = `full`); lighter icon (`tone="text"`) + muted value so the chips stay calm. Icons:
+    `CreditCard`/`Repeat`/`ClockFading`/`MapPin`. The facts shown are **fare · frequency · hours · stop count**.
+  - **Fare is framed high → low** ("$6.7 → $5.8", `formatFareRange`) since the origin fare is dearest and each
+    later stage costs less — using the same arrow as the `A → B` route label. New core helpers `fareRange`
+    (min/max across the sectional stop fares, keeping the upstream strings) and `formatStopCount` (route length).
+  - **Whole-route journey time is hidden** — it's an origin→terminus figure with little relevance to a rider
+    boarding mid-route. `formatJourney` + `service.journeyMin` are **kept** (one-line re-add) but not rendered.
+  - **Range dashes are spaced** — `formatHeadway`/`formatServiceHours` emit "10 – 25" / "05:35 – 23:40"; the
+    unspaced en dash fused with the digits and hurt legibility.
+  - **Header spacing:** the expanded badge↔route gap was opened (`ROUTE_EXP_TOP`) and the header height trimmed
+    (`EXP_H`) so the meta block's top gap matches its gap to the schematic.
+  - **Origin bus token** is suppressed until the bus is ≤2 min from departing — a token permanently parked at
+    the start is noise (the origin always reads as a bus "arriving").
+  - **Per-stop row alignment:** the operator stop code stays **inline** at the end of the name (its last line),
+    so as part of the text it wraps to a new line rather than overlapping the fare when the line is full
+    (`min-w-0` on the name column lets it wrap on web, where flex children default to `min-width:auto`). The fare
+    is rendered the **same way as the inline code** — a caption-size child with `verticalAlign:'middle'` inside a
+    **body-size** line — so both centre against the same 16px line metrics and line up to the pixel; the row is
+    top-aligned so that body line sits on the name's **first line**. (A standalone line-height-centred fare sat
+    ~1px off the code's x-height middle — the two "middles" reference different things.)
+- **Refinement (remark tone, post-feedback):** `RemarkTag` no longer tints the `scheduled` class
+  `text-warning` (orange) — **all remark classes now render `text-subtle`**, the same muted tone as
+  "KMB Cycle" and other info remarks. The orange read as an alert rather than a confidence cue, and the
+  honesty signal is already carried by the operator's own wording ("Scheduled Bus" comes verbatim from
+  the upstream `rmk_*` field — we never relabel it). `classifyRemark` is retained (it still distinguishes
+  classes for future use), but the colour distinction is dropped.
+
+## ADR-037 — Search: on-device index, a smart route keypad, and extensible filter chips
+- **Status:** **Implemented** (verified against the live worker: `/v1/index` → 2002 routes + 8126 stops
+  (1179 same-kerb places merged), ~2 MB; keypad/category logic validated against the real route numbers —
+  79 night, 93 airport, 137 express; `next-after("")` = digits + valid start letters, `next-after(26)` =
+  `0,1,3,4,5,7,8,9,M,X`). Replaces the empty Routes tab with a standalone **Search** page (it's a search
+  surface, not a route list — see *Entry point* below) — proposals [`00`](../docs/proposals/00-fast-and-fun-wins.md) P6/P7/P8.
+- **Context:** The Routes tab was a placeholder and search was the most glaring missing basic
+  ([`research/04`](../docs/research/04-feature-gaps.md)). The static index (every KMB/CTB route + stop) is
+  already built and memoized on the edge for Nearby/Stop/Route, so the data exists — we only lacked a way to
+  query it. HK route numbers are short alphanumeric codes (`1A`, `N691`, `971P`, `269X`); riders enter them on
+  a **keypad that lights only valid next keys** (the App1933/KMB-app idiom), whereas stops/places are prose and
+  want a real text field. Filtering (operator, night, airport, express) is a long-standing want
+  ([`research/06`](../docs/research/06-feature-improvement-ideas.md)) — but only KMB+CTB are in v1 scope, so a
+  hard-coded "hide GMB/MTR" toggle would be dead UI today.
+- **Decision:**
+  1. **On-device search index (first realization of [ADR-007](#adr-007--on-device-static-index)).** A new edge
+     endpoint **`/v1/index`** ships a compact `SearchIndex` (`@nextbus/core/search`): routes **collapsed to one
+     `RouteLite` per (operator, number, direction)** — riders search numbers, not service-type variants — and
+     stops **pre-merged** so a same-kerb KMB+CTB place (`P:` id) appears once. Built off the shared memoized
+     static index (`apps/edge/src/search-index.ts`), long edge TTL (6 h). The app fetches it through the
+     `DataSource` seam (`getSearchIndex()`), caches it in AsyncStorage **stale-while-revalidate**
+     (`apps/mobile/lib/searchIndex.ts`, `version` = `routes.stops` count tag), so search + keypad work
+     instantly and offline. A true content hash for `version` is a follow-up.
+  2. **Hybrid entry, one screen.** A **Routes / Stops** segment (each with an icon; no page-title header — the
+     segment is the heading). Routes use a **smart keypad** (`RouteKeypad`): a prefix **trie** over every route
+     number drives `nextValidChars` — digit keys 1–9/0, plus only the letters this dataset uses
+     (`ABCDEFGHKMNPRSTWX`) in a **single horizontally-scrollable row above the pad** (keeps it compact so results
+     keep the screen), each **enabled only when appending it still leads to a real route**, dead keys visibly
+     dimmed. Stops use a normal `TextInput` (prose needs the OS keyboard), matching
+     stop/place names across **all locales** (English or Chinese input both find a stop). All pure search/keypad
+     logic lives in `@nextbus/core/search` (`buildRouteTrie`/`nextValidChars`/`searchRoutes`/`searchStops`/
+     `routeCategories`) — platform-free + testable.
+  3. **Extensible, data-driven filters.** `FilterChips` over two axes that AND together (OR within each):
+     **operator** chips are **derived from the operators present in the index** — so GMB/MTR/NLB light up
+     automatically the day those adapters land in `dataset.ts`, no UI change; **category** chips (Night `N…`,
+     Airport `A/E/NA/S…`, Express `…X…`) are pure predicates on the route number (`routeCategories`). The active
+     filter feeds **both** the keypad trie and the result list, so dimmed keys and results always agree. Stops
+     tab shows operator chips only (categories are route attributes).
+  4. **Recents.** Tapping a result records it in `preferences` (`recentRoutes`/`recentStops`, capped 8, persisted)
+     and navigates to the existing `/route/:id` or `/stop/:id`. Recents show when the query is empty.
+- **Why:** The keypad is the HK-native, thumb-first way to enter a route and needs the number set on-device for
+  instant feedback — so it's the natural lever to start the on-device index (offline + [ADR-007]) rather than a
+  per-keystroke server round-trip. Collapsing variants + pre-merging places keeps the payload ~2 MB (gzips
+  small) and the results clean. Making operators data-driven means the filter system is built once and scales to
+  every future operator without rework — the user's "filter in/out green minibus or MTR" works structurally the
+  moment the data is in scope, instead of shipping two dead toggles now.
+- **Consequences:** `DataSource` gains `getSearchIndex()` (optional-ish static data; v2 may bundle/push it
+  instead of fetching). The index is **server-computed for now** (consistent with ADR-016/021); the eventual
+  own-crawl → KV ([roadmap](./06-roadmap.md) step 1) writes the same shape. **Follow-ups:** a content-hash
+  `version`; an omnibox that searches route **and** stop in one box ([research/06](../docs/research/06-feature-improvement-ideas.md));
+  "routes to <place>" reverse search over origin/destination text; direction toggle on the route a result lands
+  on (P11); operator-coloured filter chips. Stop results navigate to a single canonical/place id — a stop that
+  isn't part of a merged place still shows only its own operator's routes (pre-existing, ADR-022 conservatism).
+- **Entry point — its own page, not a tab (decided & built):** search is **not a bottom tab**. It's a
+  standalone screen `app/search.tsx` (outside the `(tabs)` group, so it renders **with no tab bar** — which
+  also lets the keypad pad to just the safe-area inset, reclaiming the tab-bar band the keypad was fighting),
+  **pushed** from a **floating search button** that **shares the tab bar's row at the far right** (the bar
+  fills the space to its left); the button is a **glass lens** — the shared `GlassIconButton`, the same
+  material as the route-header back button. Search's header is the **standard back button** (`BackButton`, also
+  `GlassIconButton`) to the **left of the Routes/Stops segment**, using the route header's exact corner spacing
+  (16px). Tapping a result `push`es the detail screen on top, so **back returns to search with its query
+  intact** (native stack behaviour). Chosen over a gesture-draggable bottom sheet: a pushed page gives the same
+  space win and a cleaner result→back→search round-trip (a sheet isn't a navigation entry, making that
+  round-trip the awkward part). The bottom tabs are now Nearby / Favourites / Settings.
+- **Standard floating-chrome button (`GlassIconButton`):** the route-header back lens was extracted into a
+  shared `GlassIconButton` (+ a `BackButton` wrapper); the route header, the search launcher, and the search
+  back button all use it, so the glass treatment stays identical everywhere.
+- **Keypad sizing + the horizontal-scroll rule:** the original full letters **grid** ate the screen; letters
+  are now a single **horizontally-scrollable row above** a slightly tighter number pad, and are **filtered to
+  the valid next letters** as you type (digits stay a fixed pad, dimmed when invalid). Horizontal rows (the
+  letter row, the filter chips) follow a house rule: the scroller runs **edge-to-edge** with a default left
+  inset, items overflow under the right edge, and a matching trailing inset appears once scrolled to the end.
+- **Stop search field:** same footprint as the route number field; tapping anywhere in it (incl. the icon)
+  focuses the input, and the **whole box border** lights as the focus state (the inner web input outline is
+  suppressed) — not a separate inner ring.
+- **Two-tap-while-focused (react-native-web gotcha):** with the Stops field focused, the *first* tap on an
+  outside control (the segment, a filter chip) only **blurred** the input and was lost — RNW terminates the
+  press responder on blur, so `onPress` never fires (the second tap then works). Reproduced on desktop, so it's
+  not the mobile soft-keyboard. Fixes: the segment switches on **`onPressIn`** (press-down lands before the
+  blur cancels it); scroll containers with tappable children carry **`keyboardShouldPersistTaps="handled"`**
+  (the results list already did; added to the filter-chips scroller). Result rows sit inside the handled
+  results `ScrollView`, so they were already one-tap. Verified in-browser.
+
+## ADR-038 — "About the data" screen: open-data attribution & honesty notes
+- **Status:** **Implemented** (proposals [`00`](../docs/proposals/00-fast-and-fun-wins.md) P10; typecheck 7/7,
+  Biome clean for the new files).
+- **Context:** data.gov.hk content is provided under the Government's open-data terms and **attribution is
+  required before launch** ([docs/02 §Licensing](./02-data-sources.md)); until now nothing in the app credited
+  the sources. It's also the natural home for the **honesty stance** the app already lives by (ADR-008 fresh-ETA
+  promise, ADR-036 static fares/timings tier) — riders deserve a plain-language "where does this come from and
+  how fresh is it" page.
+- **Options:** (a) inline the attribution as a block at the bottom of **Settings**; (b) **dedicated pushed
+  screens** linked from a Settings **About** section; (c) a modal/about-box.
+- **Decision:** **(b)** — a new **About** section in Settings with two rows pushing two no-tab-bar screens
+  (the shared **`BackButton`** glass lens, like `app/search.tsx`):
+  1. **`app/about-data.tsx`** — attribution. **Full-width rows, no cards and no dividers** — rows are separated
+     by whitespace (a soft press-highlight gives the tap affordance). A **Sources** group of **tappable link
+     rows** — **DATA.GOV.HK** (the
+     open-data portal), **KMB / LWB**, **Citybus** — each opening the source in a **new tab** (`openExternal`:
+     `window.open(_blank, noopener)` on web, `Linking.openURL` on native) with a trailing **external-link icon**;
+     a **Licence** link row to the **locale-aware data.gov.hk Terms and Conditions of Use**; and the app
+     **version** (`expo-constants`).
+  2. **`app/faq.tsx`** — an **accordion**, **collapsed by default** (so the page is a tidy list of questions,
+     no dividers; tap a row to expand its answer, chevron flips, `LayoutAnimation` on native / no-op on web).
+     Data-driven from an `ITEMS` array of i18n key pairs. It **owns the honesty/freshness notes** and a broader
+     set of rider questions: freshness (~1-min ceiling + stale-greying), fares/timings being scheduled-not-live,
+     **operator coverage** (KMB/LWB/CTB now; others planned), **why some stops list two companies** (same-kerb
+     merge, ADR-022), **offline** (search works offline, live ETAs don't), **why there's no live bus map** (HK
+     open data has no live GPS/polylines), and **what "Scheduled"/"Last bus" remarks mean** (ADR-036).
+  All strings live in `@nextbus/i18n` across en/zh-Hant/zh-Hans.
+- **Why:** The attribution + licence text is multi-paragraph; inlining it in Settings would clutter the clean
+  option rows. **Full-width rows over cards** keep the long-form pages calm and let link rows read as a single
+  tappable target. **Links over prose** for the sources — each row is a real portal, so make it openable (new
+  tab so the PWA isn't navigated away). **Freshness → FAQ:** it's a "why" question, not an attribution fact, so
+  it belongs in a growable FAQ rather than padding the credits page. A row→screen is the platform-standard
+  "About" idiom and a stable place to grow (terms, privacy, credits, more FAQ) without touching the seam or any
+  data path — it's pure chrome.
+- **Consequences:** Settings gains an **About** section with **About the data** + **FAQ**; two new top-level
+  routes `/about-data` and `/faq`; a small `lib/openExternal.ts` helper (reusable for any future outbound link).
+  Fulfils the launch-blocking attribution requirement. **Follow-ups:** a real `app.json` version (currently
+  `0.0.0`); an acknowledgements/credits line if we reuse hk-bus-crawling mappings (ADR-021, licence-permitting);
+  more FAQ entries (coverage, offline, $2-scheme); a privacy note when one exists.
+
+## ADR-039 — One back button everywhere: the floating glass `BackButton`
+- **Status:** **Implemented** (typecheck 7/7; Biome clean for the touched files).
+- **Context:** the glass back lens was the route header's signature control and was extracted into the shared
+  `BackButton` (`GlassIconButton`) for reuse (ADR-037). In practice the screens had **drifted**: `app/faq.tsx`
+  and `app/about-data.tsx` shipped a **bare `ChevronLeft` in a plain `Pressable`** (despite ADR-038 saying they
+  used the shared lens), and **`app/stop/[id].tsx` used the platform's native `Stack.Screen` header** with the
+  OS back arrow — three different back affordances against one design.
+- **Decision:** the **floating glass `BackButton`** (the route-header lens) is the **only** back control across
+  the app. Concretely:
+  - `app/faq.tsx` + `app/about-data.tsx`: bare-icon pressable → shared `BackButton`, with the header row
+    re-spaced to the reference (`flex-row items-center gap-3 px-4 pb-1 pt-4`, matching `app/search.tsx`).
+  - `app/stop/[id].tsx`: native header **removed** (`headerShown: false`) and replaced by custom chrome — the
+    glass `BackButton`, the two-tone `StopName` (ADR-034) as the title, and the trailing `SaveButton` (the
+    favourite toggle that used to live in `headerRight`). Top inset now comes from `useSafeAreaInsets`.
+- **Why:** consistency — a rider should meet the same back control on every screen, and the glass lens reads on
+  any scrolling content beneath it (the reason it exists). Dropping the lone native header also removes the
+  platform-header styling fork (`headerTintColor`/`headerTitleStyle`) and lets the stop title render the muted
+  two-tone code the native title bar couldn't.
+- **Consequences:** route detail keeps its bespoke **collapsing** `RouteHeader` (same lens, animated) — the
+  standard is the *button*, not a single header layout. `app/workbench.tsx` keeps its hand-built glass replica
+  (it's a `pointerEvents="none"` design-demo of the header chrome, not a live control). No data-path or seam
+  changes — pure chrome.
+
+## ADR-040 — Don't scrape App1933 for live electric / occupancy; curate or crowd-source instead
+- **Status:** **Ruled out** (decision only; no code). Scopes [`docs/proposals/00`](../docs/proposals/00-fast-and-fun-wins.md) P15.
+- **Context:** App1933 (KMB's own app) shows two live, per-departure signals our open data lacks: a **green-leaf
+  electric-bus indicator** (the vehicle rostered to that trip is a battery-electric bus) and a **seat-occupancy /
+  remaining-upper-deck-seats** display (a **SmarTone × KMB** deployment, announced **6 Sep 2023**, IoT door/upper-deck
+  sensors → 5G → cloud ML, across **2,300+ buses**). The question was raised: should we **scrape** these to surface
+  them ourselves? Re-verified the data landscape (June 2026): the public keyless ETA API still returns **times only** —
+  `co, route, dir, service_type, seq, dest_*, eta_seq, eta, rmk_*, data_timestamp` — **no vehicle id, model, emission
+  flag, or occupancy**, and there is **still no HK GTFS-Realtime / `VehiclePositions` feed**. Both signals exist only
+  inside KMB's private app backend, off internal vehicle-roster + sensor data ([docs/02 §7–9, §11](./02-data-sources.md)).
+- **Options:** (a) **reverse-engineer App1933's private backend** and re-serve its green-leaf / occupancy live;
+  (b) **don't** — keep electric as a **hand-curated, dated route-level tag** (P15) and treat occupancy as **absent /
+  crowd-source-only**; (c) wait for an official feed.
+- **Decision:** **(b).** We will **not** scrape App1933's live signals. P15 ships only the **curated, clearly-dated
+  "🌱 often electric" route tag** (Info honesty tier) + the static accessibility/$2-scheme notes; **occupancy is
+  out-of-scope** as data (a future crowd-sourced "how full is it?" is the only honest path — [docs/06](./06-roadmap.md)).
+  The legitimate, separate scrape — the **fan-wiki fleet data** behind the curated electric table (CC-BY-SA, attribute) —
+  is unaffected and remains P15's source.
+- **Why:** Four reasons compound against the live scrape, for a ⭐⭐ feature: **(1) ToS/licence** — the app backend is
+  *not* open-licensed (unlike everything else we use, which is data.gov.hk open data), so pulling and re-publishing it
+  is against KMB's terms; **(2) fragility** — private endpoints have no versioning/SLA and sit behind auth signing +
+  TLS cert-pinning, so it's a permanent reverse-engineering treadmill; **(3) honesty (ADR-008)** — occupancy is a
+  sensor-derived *estimate* and the leaf is a per-trip roster value we can't validate or refresh reliably, so re-serving
+  it would fake a confidence we don't have; **(4) effort vs. payoff** — high, ongoing cost for a low-impact tag. The
+  curated route tag delivers most of the delight (eco + bus-fan appeal) at near-zero risk.
+- **Consequences:** P15 stays "best-effort, clearly-labelled Info tier", never live. We won't promise a live electric
+  indicator or any occupancy figure — these are documented as "things KMB's app does that open data can't", to omit
+  honestly. Revisit only if an **official** open feed exposes vehicle/emission/occupancy (none as of June 2026).
+
+## ADR-041 — Stop detail: a collapsing header (shared with Route), a keyless static mini-map, and an enriched summary
+- **Status:** **Built & in-app** (2026-06-10). Refines the Stop-detail screen (`apps/mobile/app/stop/[id].tsx`).
+- **Context:** Stop detail was a back-lens + stop name over a flat route list (the just-landed no-card list). Three
+  asks: (1) show **where the stop is** (we already carry `Stop.location` — the edge populates it); (2) bring the
+  **route-header aesthetic + transition** ([ADR-033](#adr-033--route-header-no-bar-background-title-morphs-into-a-pill-beside-the-back-lens)) here so the two detail screens feel like one family; (3) **enrich** the page with the
+  other facts we already hold.
+- **Decisions:**
+  1. **Shared `CollapsingHeader`.** ADR-033's route header was generalised into one `CollapsingHeader` component
+     (badge morph + glass pill + marquee label + tap-to-top + back lens), parametrised by a `badge` node, a `label`
+     string, label size/colour, and expanded height. **`RouteHeader`** (badge = route chip, label = `A → B`) and the
+     new **`StopHeader`** (badge = a **`MapPin` glyph**, label = the stop name in `--text`) are now thin wrappers — same
+     motion + frosted-not-lens glass, so Stop and Route collapse identically. The screen uses an `Animated.ScrollView`
+     with a `scrollY` shared value and a top spacer of `expandedHeaderH(insetTop)`, mirroring the route screen.
+  2. **Keyless static mini-map (`MiniMap`).** A small **non-interactive** map of the kerb, built **without a map
+     library or API key**: we compute the Web-Mercator tile coords for the centre and lay raster tiles as plain
+     `<Image>`s in a clipped viewport with a centre pin; tapping it hands off to the platform maps app
+     (`openInMaps` → Apple Maps / `geo:` / Google Maps web — also keyless). Tiles are **CARTO's free `light_all` /
+     `dark_all` basemaps** (OSM data) chosen by `useTheme().isDark`, so the map **re-skins with light/dark mode**.
+     Attribution ("© OpenStreetMap, © CARTO") is shown.
+  3. **Enriched summary.** A one-line meta strip under the map — **"Served by {operators} · N routes · {distance} ·
+     {walk}"** (distance/walk only when a location fix already exists; we **don't** prompt on this screen). Route rows
+     gained the **boarding fare** ([ADR-036](#adr-036--surface-fares-frequency-journey-time--eta-remarks-from-data-we-already-fetch)) beneath the destination.
+- **Why:** (1) one header implementation kills drift between the two screens and is the obvious home for the future
+  route-at-stop star ([ADR-032](#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes)); (2) the `<Image>`-tile
+  approach is genuinely trivial, dependency-free, and works on web **and** native today — it ships the map now without
+  pre-empting the bigger interactive **MapLibre** map (roadmap) or its tile-source decision; (3) the enrichment is all
+  data we already fetch (`Stop.sources`/route operators, `StopDetail.routes`, sectional fares) — no new calls.
+- **Honesty / caveats (ADR-008):** CARTO's free basemaps are a **dev/keyless choice** — the free tier discourages heavy
+  embedding, so a production/native build should repoint `MiniMap`'s `tileUrl` at our **own tiles** (the own-crawl → R2
+  roadmap step) or a proper provider; `MiniMap` is the seam for that swap. Distance is straight-line (already rounded,
+  never fake-precise).
+- **Consequences:** New components `CollapsingHeader`, `StopHeader`, `MiniMap`; `RouteHeader` reduced to a wrapper
+  (route screen unchanged). New `haversineMeters` in `@nextbus/core`, `openInMaps` in `lib/openExternal`, and i18n keys
+  `servedBy` / `routesLabel` / `openInMaps`. The interactive map + dark tiles + the route-at-stop star remain
+  follow-ups; this screen is explicitly a **first pass to iterate on**.

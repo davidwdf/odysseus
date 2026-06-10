@@ -1,4 +1,4 @@
-import { etaView, formatRelative, type Locale } from '@nextbus/core'
+import { etaLabelParts, type Locale } from '@nextbus/core'
 import { FONT_FAMILY } from '@nextbus/ui'
 import { useEffect, useState } from 'react'
 import { Text as RNText, StyleSheet, View } from 'react-native'
@@ -19,8 +19,9 @@ const DUR = 260
  *  1) when the soonest time passes, its slot fades out and the rest **slide over**
  *     (Reanimated layout transition, keyed by arrival minute so a bus keeps its slot);
  *  2) when a value changes, the text does an **odometer slide** (old up/out, new up/in).
- * The first slot is emphasised (larger + urgency colour). Resting state is always fully
- * visible — the animations are layered on top, never a prerequisite for legibility.
+ * The first slot is emphasised (larger + urgency colour). The unit ("min") is shown on **every**
+ * value — "12 min  27 min  42 min". Resting state is always fully visible — the animations are
+ * layered on top, never a prerequisite for legibility.
  */
 export function EtaTimes({
   arrivals,
@@ -42,7 +43,7 @@ export function EtaTimes({
           layout={LinearTransition.duration(DUR)}
           exiting={FadeOut.duration(160)}
         >
-          <TimeSlot iso={iso} now={now} locale={locale} first={i === 0} />
+          <TimeSlot iso={iso} now={now} locale={locale} first={i === 0} withUnit />
         </Animated.View>
       ))}
     </View>
@@ -54,19 +55,35 @@ function TimeSlot({
   now,
   locale,
   first,
+  withUnit,
 }: {
   iso: string
   now: number
   locale: Locale
   first: boolean
+  /** Append the "min" unit. Every slot sets this, so the row reads "12 min  27 min  42 min".
+   *  A "Due" slot never takes it. */
+  withUnit: boolean
 }) {
   const { color } = useTheme()
-  const view = etaView(iso, now)
-  const label = formatRelative(iso, now, locale)
-  const tone = view.isDue ? '--positive' : view.minutes <= 5 ? '--warning' : '--text'
+  const parts = etaLabelParts(iso, now, locale)
+  const tone =
+    parts.kind === 'due'
+      ? '--positive'
+      : parts.kind === 'mins' && parts.value <= 5
+        ? '--warning'
+        : '--text'
+  const value =
+    parts.kind === 'due'
+      ? parts.label
+      : parts.kind === 'mins'
+        ? withUnit
+          ? `${parts.value} ${parts.unit}`
+          : `${parts.value}`
+        : '—'
   return (
     <SlideNumber
-      value={label}
+      value={value}
       color={first ? color(tone) : color('--text-muted')}
       size={first ? 16 : 14}
       bold={first}
@@ -93,7 +110,7 @@ function SlideNumber({
   const [display, setDisplay] = useState(value)
   // The transition only animates the part that actually changed: the common prefix and
   // suffix stay put, the differing middle slides. So "52 min" → "51 min" slides just the
-  // "2"→"1"; "1 min" → "Soon" (no shared prefix) slides the whole thing.
+  // "2"→"1"; "1 min" → "Due" (no shared prefix) slides the whole thing.
   const [seg, setSeg] = useState<null | {
     prefix: string
     suffix: string

@@ -42,6 +42,26 @@ export interface Place {
   stopIds: string[]
 }
 
+/**
+ * Static service facts for a route direction, sourced from data we already fetch (the
+ * consolidated route-fare dataset — see docs/02). All optional; this is the **Static**
+ * honesty tier (never styled as live). Fares are HK$ kept as the upstream string to avoid
+ * float drift. Fares are *sectional* — riders boarding later pay less — so `fareFull` is
+ * the fare from the origin; the per-boarding-stop fare rides on the stop/ETA records.
+ */
+export interface RouteServiceInfo {
+  /** Full adult fare from the route origin (HK$, e.g. "6.7"). */
+  fareFull?: string
+  /** Holiday full fare, only when it differs from `fareFull`. */
+  fareFullHoliday?: string
+  /** Whole-route journey time, minutes. */
+  journeyMin?: number
+  /** Typical headway from the GTFS frequency bands, minutes (coarse range — no fake precision). */
+  headway?: { min: number; max: number }
+  /** Rough daily service span, local 24h "HH:mm" (earliest first departure → latest end). */
+  hours?: { start: string; end: string }
+}
+
 export interface Route {
   /** Canonical route id, e.g. `KMB:6:outbound:1`. */
   id: string
@@ -53,6 +73,8 @@ export interface Route {
   serviceType: string
   origin: I18nText
   destination: I18nText
+  /** Static service facts (fare/journey-time/frequency/hours), where the dataset supplies them. */
+  service?: RouteServiceInfo
 }
 
 /** One stop in a route's ordered sequence. */
@@ -74,6 +96,9 @@ export interface Eta {
    *  show "→ dest" without the full Route object (e.g. Nearby). Server-populated from
    *  the canonical route meta; optional because not every feed/path supplies it. */
   destination?: I18nText
+  /** Adult fare (HK$) for boarding this route *at this stop*, server-stamped from the
+   *  consolidated dataset like `destination`. Sectional — see RouteServiceInfo. */
+  fare?: string
   /** Free-text operator remark, if any (e.g. scheduled vs real-time). */
   remark?: I18nText
   /** When the upstream feed generated this reading (ISO-8601). */
@@ -87,13 +112,13 @@ export interface Eta {
  *  infer bus positions (ADR-030). `eta` is null where no live reading is available. */
 export interface RouteDetail {
   route: Route
-  stops: Array<{ seq: number; stop: Stop; eta: Eta | null }>
+  stops: Array<{ seq: number; stop: Stop; eta: Eta | null; fare?: string }>
 }
 
 /** A stop + the routes that serve it, each with its current ETA. */
 export interface StopDetail {
   stop: Stop
-  routes: Array<{ route: Route; eta: Eta | null }>
+  routes: Array<{ route: Route; eta: Eta | null; fare?: string }>
 }
 
 /** A nearby stop with distance + its soonest arrivals. */

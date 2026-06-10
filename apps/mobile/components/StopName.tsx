@@ -30,7 +30,9 @@ export function StopName({
     >
       {titleCaseName(label)}
       {code ? (
-        <Text variant="caption" className="text-subtle">
+        // verticalAlign centres the smaller code within the line rather than letting it sit on
+        // the name's baseline (low). Effective on web/PWA; native keeps baseline for now.
+        <Text variant="caption" className="text-subtle" style={{ verticalAlign: 'middle' }}>
           {'  '}
           {code}
         </Text>

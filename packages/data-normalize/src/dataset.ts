@@ -1,4 +1,4 @@
-import type { Bound, I18nText, OperatorId } from '@nextbus/core'
+import type { Bound, I18nText, OperatorId, RouteServiceInfo } from '@nextbus/core'
 import { haversineM } from './kmb-static'
 import { canonicalRouteId, i18nText, toBound } from './normalize'
 
@@ -16,7 +16,9 @@ import { canonicalRouteId, i18nText, toBound } from './normalize'
 //  - Names carry only `en` + `zh` (Traditional). We map zh → both zh-Hant and zh-Hans
 //    (Simplified falls back to Traditional for static names; live ETA text still has all
 //    three from the operator APIs). True Simplified static names is a backlog item.
-const DATASET_URL = 'https://hkbus.github.io/hk-bus-crawling/routeFareList.min.json'
+// Canonical host. The old `hkbus.github.io/hk-bus-crawling/…` path now 301-redirects here;
+// we pin the redirect target directly so we don't depend on redirect-following.
+const DATASET_URL = 'https://data.hkbus.app/routeFareList.min.json'
 
 /** Operators we ingest from the dataset's `co` field. */
 const CO_TO_OPERATOR: Record<string, OperatorId> = { kmb: 'KMB', ctb: 'CTB' }
@@ -29,6 +31,13 @@ interface RawRoute {
   orig: { en?: string; zh?: string }
   dest: { en?: string; zh?: string }
   stops: Record<string, string[]>
+  // Fields we previously discarded (ADR-036). Sectional fares: index = stop seq-1, length
+  // = stops-1 (the terminus has no boarding fare). `freq` = GTFS frequency bands keyed by
+  // service id then "HHMM" start → [endHHMM, headwaySeconds]. `jt` = whole-route minutes.
+  fares?: Array<string | null> | null
+  faresHoliday?: Array<string | null> | null
+  freq?: Record<string, Record<string, [string, string] | null>> | null
+  jt?: string | null
 }
 interface RawStopEntry {
   location: { lat: number; lng: number }
@@ -60,6 +69,11 @@ export interface IndexRouteRef {
 export interface IndexRouteMeta extends IndexRouteRef {
   origin: I18nText
   destination: I18nText
+  /** Sectional adult fares (HK$ strings), index = stop seq-1; the terminus has none. */
+  fares?: Array<string | null>
+  faresHoliday?: Array<string | null>
+  /** Computed static service facts (fare/journey-time/frequency/hours) — ADR-036. */
+  service?: RouteServiceInfo
 }
 
 export interface IndexRouteStop {
@@ -105,6 +119,72 @@ export interface StaticIndex {
 function datasetText(t: { en?: string; zh?: string }): I18nText {
   const zh = t.zh ?? ''
   return i18nText(t.en ?? '', zh, zh)
+}
+
+/** "HHMM" minutes-of-day number → "HH:mm", wrapping past-midnight bands (2535 → 01:35). */
+function hhmm(n: number): string {
+  const h = Math.floor(n / 100) % 24
+  const m = n % 100
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/** Reduce the GTFS frequency table to a coarse, honest summary: the headway range (minutes)
+ *  across all bands, and the daily span (earliest start → latest end). Either may be absent. */
+function summarizeFreq(freq: RawRoute['freq']): Pick<RouteServiceInfo, 'headway' | 'hours'> {
+  if (!freq) return {}
+  let minH = Number.POSITIVE_INFINITY
+  let maxH = 0
+  let minStart = Number.POSITIVE_INFINITY
+  let maxEnd = Number.NEGATIVE_INFINITY
+  for (const bands of Object.values(freq)) {
+    if (!bands) continue
+    for (const [start, val] of Object.entries(bands)) {
+      const s = Number(start)
+      if (Number.isFinite(s)) minStart = Math.min(minStart, s)
+      if (!val) continue
+      const end = Number(val[0])
+      const head = Number(val[1])
+      if (Number.isFinite(end)) maxEnd = Math.max(maxEnd, end)
+      if (Number.isFinite(head) && head > 0) {
+        minH = Math.min(minH, head)
+        maxH = Math.max(maxH, head)
+      }
+    }
+  }
+  const out: Pick<RouteServiceInfo, 'headway' | 'hours'> = {}
+  if (maxH > 0) out.headway = { min: Math.round(minH / 60), max: Math.round(maxH / 60) }
+  if (minStart < Number.POSITIVE_INFINITY && maxEnd > Number.NEGATIVE_INFINITY) {
+    out.hours = { start: hhmm(minStart), end: hhmm(maxEnd) }
+  }
+  return out
+}
+
+const asString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+
+/** Build the static service facts for a route entry, or undefined if the dataset has none. */
+function buildService(entry: RawRoute): RouteServiceInfo | undefined {
+  const { headway, hours } = summarizeFreq(entry.freq)
+  const fareFull = asString(entry.fares?.[0])
+  const holidayFull = asString(entry.faresHoliday?.[0])
+  const journeyMin = entry.jt && Number.isFinite(Number(entry.jt)) ? Number(entry.jt) : undefined
+  const info: RouteServiceInfo = {}
+  if (fareFull) info.fareFull = fareFull
+  if (holidayFull && holidayFull !== fareFull) info.fareFullHoliday = holidayFull
+  if (journeyMin) info.journeyMin = journeyMin
+  if (headway) info.headway = headway
+  if (hours) info.hours = hours
+  return Object.keys(info).length > 0 ? info : undefined
+}
+
+/** Adult boarding fare (HK$ string) at a 1-based stop `seq` on a route, or undefined. Fares
+ *  are sectional (index = seq-1; the terminus has none); falls back to the weekday fare. */
+export function routeFareAtSeq(
+  meta: IndexRouteMeta,
+  seq: number,
+  holiday = false,
+): string | undefined {
+  const arr = holiday && meta.faresHoliday ? meta.faresHoliday : meta.fares
+  return asString(arr?.[seq - 1])
 }
 
 // Same-kerb merge tuning. Conservative on purpose: we'd rather under-merge (show a
@@ -253,6 +333,9 @@ export async function fetchConsolidatedIndex(
         serviceType,
         origin: datasetText(entry.orig ?? {}),
         destination: datasetText(entry.dest ?? {}),
+        fares: entry.fares ?? undefined,
+        faresHoliday: entry.faresHoliday ?? undefined,
+        service: buildService(entry),
       })
 
       const ref: IndexRouteRef = { operator, route: entry.route, bound, serviceType }

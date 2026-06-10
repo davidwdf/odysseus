@@ -31,7 +31,6 @@ import { EtaBadge } from '../components/EtaBadge'
 import { GlassView } from '../components/GlassView'
 import { Icon, type IconTone } from '../components/Icon'
 import { RouteChip } from '../components/RouteChip'
-import { SaveButton } from '../components/SaveButton'
 import { Skeleton } from '../components/Skeleton'
 import { StopRow } from '../components/StopRow'
 import { Text } from '../components/Text'
@@ -372,11 +371,8 @@ export default function Workbench() {
           </View>
         </Section>
 
-        <Section title="BUTTONS / SAVE / SKELETON">
+        <Section title="BUTTONS / SKELETON">
           <Button label="Enable location" onPress={() => {}} />
-          <View className="mt-1 flex-row gap-3">
-            <SaveButton stopId="workbench:demo" />
-          </View>
           <Skeleton className="mt-1 h-12 w-full" />
         </Section>
 

@@ -5,6 +5,7 @@ import type {
   LatLng,
   NearbyStop,
   RouteDetail,
+  SearchIndex,
   StopDetail,
   Subscription,
   WatchTarget,
@@ -58,6 +59,10 @@ export class EdgeClient implements DataSource {
     // Canonical stop id → /v1/etas/:id (not the lower-level /v1/eta/:co/:stop/:route).
     const q = routeIds?.length ? `?routes=${encodeURIComponent(routeIds.join(','))}` : ''
     return this.getJson<Eta[]>(`/v1/etas/${encodeURIComponent(stopId)}${q}`)
+  }
+
+  getSearchIndex(): Promise<SearchIndex> {
+    return this.getJson<SearchIndex>('/v1/index')
   }
 
   watch(targets: WatchTarget[], onUpdate: EtaListener): Subscription {

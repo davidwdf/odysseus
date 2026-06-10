@@ -1,3 +1,4 @@
+import type { SearchIndex } from './search'
 import type { Eta, LatLng, NearbyStop, RouteDetail, StopDetail } from './types'
 
 /** A live subscription to ETA updates. Call `unsubscribe` to release it. */
@@ -33,4 +34,10 @@ export interface DataSource {
   getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]>
   /** Subscribe to live updates for the given targets. */
   watch(targets: WatchTarget[], onUpdate: EtaListener): Subscription
+  /**
+   * The compact static route + stop index for on-device search and the smart keypad
+   * (ADR-037). Large but cacheable; clients persist it and redownload only when its
+   * `version` changes. v1 fetches it from the edge; v2 may bundle or push it.
+   */
+  getSearchIndex(): Promise<SearchIndex>
 }

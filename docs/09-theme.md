@@ -270,8 +270,9 @@ instant swap; the rendered text stays exposed to screen readers.
   `lucide-react-native` (+ SDK-pinned `react-native-svg`) behind one primitive, **`<Icon icon tone>`**
   (`apps/mobile/components/Icon.tsx`). `tone` is a semantic role resolved through `useTheme().color()`,
   so icons re-skin with the appearance (light/dark); an explicit `color` is the rare value-driven exception
-  (operator accent, nav tab tint). In use: favourite **star** (`SaveButton`), **tab-bar icons**, an
-  optional leading icon on `Button`, and the stop-heading `ChevronRight`.
+  (operator accent, nav tab tint). In use: **tab-bar icons**, an
+  optional leading icon on `Button`, and the stop-heading `ChevronRight`. (The favourite **star** returns
+  per-route with [ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes).)
 - AA contrast both modes; **status never colour-only**; visible **focus ring** (`focus`) for
   keyboard/web; honour **dynamic type**; **reduced-motion** downgrade; screen-reader labels on every
   icon button and ETA. Decorative icons stay unlabeled — the wrapping pressable carries the label.

@@ -12,12 +12,33 @@ import { usePreferences } from '../../lib/preferences'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useLocale } from '../../providers/LocaleProvider'
 
+/** Group `${stopId}|${routeId}` favourite keys by stop, preserving save order.
+ *  Split on the first `|` — canonical ids carry colons, never a pipe (ADR-032). */
+function groupByStop(keys: string[]): Array<{ stopId: string; routeIds: string[] }> {
+  const order: string[] = []
+  const byStop = new Map<string, string[]>()
+  for (const key of keys) {
+    const sep = key.indexOf('|')
+    if (sep === -1) continue
+    const stopId = key.slice(0, sep)
+    const routeId = key.slice(sep + 1)
+    if (!byStop.has(stopId)) {
+      byStop.set(stopId, [])
+      order.push(stopId)
+    }
+    byStop.get(stopId)?.push(routeId)
+  }
+  return order.map((stopId) => ({ stopId, routeIds: byStop.get(stopId) ?? [] }))
+}
+
 export default function Favorites() {
   const locale = useLocale()
   const insets = useSafeAreaInsets()
   const tab = useTabBarLayout()
   const router = useRouter()
-  const favorites = usePreferences((s) => s.favorites)
+  // ADR-032: favourites are route-at-stop pairs. Group them under their stop heading.
+  const favoriteRoutes = usePreferences((s) => s.favoriteRoutes)
+  const groups = groupByStop(favoriteRoutes)
   const now = Date.now()
 
   return (
@@ -27,7 +48,7 @@ export default function Favorites() {
           {t(locale, 'tabFavorites')}
         </Text>
       </View>
-      {favorites.length === 0 ? (
+      {groups.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <Text variant="h3" className="text-center text-text">
             {t(locale, 'favoritesEmpty')}
@@ -39,16 +60,17 @@ export default function Favorites() {
       ) : (
         <ScrollView>
           <View style={{ paddingBottom: tab.contentInset }}>
-            {favorites.map((stopId, i) => (
-              <View key={stopId} className={i === 0 ? '' : 'border-border border-t'}>
-                <FavoriteRow
-                  stopId={stopId}
+            {groups.map((g, i) => (
+              <View key={g.stopId} className={i === 0 ? '' : 'border-border border-t'}>
+                <FavoriteStopGroup
+                  stopId={g.stopId}
+                  routeIds={g.routeIds}
                   locale={locale}
                   now={now}
-                  onPress={() => router.push(`/stop/${encodeURIComponent(stopId)}`)}
+                  onPress={() => router.push(`/stop/${encodeURIComponent(g.stopId)}`)}
                   onRoutePress={(routeId) =>
                     router.push(
-                      `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(stopId)}`,
+                      `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(g.stopId)}`,
                     )
                   }
                 />
@@ -61,14 +83,17 @@ export default function Favorites() {
   )
 }
 
-function FavoriteRow({
+function FavoriteStopGroup({
   stopId,
+  routeIds,
   locale,
   now,
   onPress,
   onRoutePress,
 }: {
   stopId: string
+  /** The favourited route ids at this stop — only these rows are shown. */
+  routeIds: string[]
   locale: Locale
   now: number
   onPress: () => void
@@ -90,10 +115,13 @@ function FavoriteRow({
   }
   if (!query.data) return null // skip a stop that failed to load rather than break the list
 
-  // Show the soonest few arrivals across all routes serving the stop, collapsing
-  // rider-duplicate lines (same route+direction surfaced via multiple refs).
+  // Keep only the favourited routes at this stop, collapsing rider-duplicate lines.
+  const wanted = new Set(routeIds)
   const etas: Eta[] = dedupeEtas(
-    query.data.routes.map((r) => r.eta).filter((e): e is Eta => Boolean(e)),
+    query.data.routes
+      .filter((r) => wanted.has(r.route.id))
+      .map((r) => r.eta)
+      .filter((e): e is Eta => Boolean(e)),
   )
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
     .slice(0, 4)

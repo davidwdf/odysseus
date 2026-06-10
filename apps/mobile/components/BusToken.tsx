@@ -57,10 +57,7 @@ export function BusToken({ size = 26 }: { size?: number }) {
   // Inner: squash — strongest at the bottom of the bounce (bob → 1). Anchored at the wheels
   // (transformOrigin bottom) so the top dips down rather than the whole glyph shrinking.
   const squashStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scaleX: 1 + SQUASH * 0.5 * bob.value },
-      { scaleY: 1 - SQUASH * bob.value },
-    ],
+    transform: [{ scaleX: 1 + SQUASH * 0.5 * bob.value }, { scaleY: 1 - SQUASH * bob.value }],
   }))
 
   // Disc is a plain (static) View; the animated glyph rides inside it.

@@ -1,4 +1,4 @@
-import { etaView, inferBusMarkers, type Locale } from '@nextbus/core'
+import { etaView, fareRange, inferBusMarkers, type Locale } from '@nextbus/core'
 import { useQuery } from '@tanstack/react-query'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
@@ -14,7 +14,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BusToken } from '../../components/BusToken'
 import { EtaTimes } from '../../components/EtaTimes'
+import { Fare } from '../../components/Fare'
 import { collapsedHeaderH, expandedHeaderH, RouteHeader } from '../../components/RouteHeader'
+import { RouteMeta } from '../../components/RouteMeta'
 import { Skeleton } from '../../components/Skeleton'
 import { StopName } from '../../components/StopName'
 import { Text } from '../../components/Text'
@@ -63,10 +65,10 @@ export default function RouteDetail() {
 
   const hereIndex = stops.findIndex((s) => isOriginStop(s.stop.id, stopId))
   // Bus positions from each stop's soonest *upcoming* arrival (drop-off detection).
-  const markers = inferBusMarkers(
-    stops.map((s) => upcoming(s.eta?.arrivals, now)[0] ?? null),
-    now,
-  )
+  const soonest = stops.map((s) => upcoming(s.eta?.arrivals, now)[0] ?? null)
+  const markers = inferBusMarkers(soonest, now)
+  // Sectional fare span across boarding stops (origin dearest → last stage) for the meta strip.
+  const fares = fareRange(stops.map((s) => s.fare))
 
   const topSpacer = expandedHeaderH(insets.top)
 
@@ -129,12 +131,22 @@ export default function RouteDetail() {
           </Text>
         ) : (
           <View>
+            {/* Static service facts (fare · frequency · hours · stop count) — ADR-036.
+                First child so each stop row's measured `y` includes its height, keeping the
+                bus-token + auto-scroll math (which use `topSpacer + tops[i]`) consistent. */}
+            <RouteMeta
+              service={route?.service}
+              fareRange={fares}
+              stopCount={stops.length}
+              locale={locale}
+            />
             {stops.map((s, i) => (
               <RouteStopRow
                 key={`${s.seq}-${s.stop.id}`}
                 seq={s.seq}
                 name={s.stop.name[locale]}
                 arrivals={upcoming(s.eta?.arrivals, now)}
+                fare={s.fare}
                 now={now}
                 locale={locale}
                 here={i === hereIndex}
@@ -147,6 +159,13 @@ export default function RouteDetail() {
 
             {/* Bus tokens ride the rail at measured node positions; they tween on real data change. */}
             {markers.map((m, i) => {
+              // The origin always reads as a bus "arriving" the moment it starts the route —
+              // a token permanently parked there is noise. Only surface stop 0's bus when it
+              // is about to depart (≤2 min away).
+              if (m.toIndex === 0) {
+                const first = soonest[0]
+                if (!first || etaView(first, now).seconds > 120) return null
+              }
               const atNode = m.atStop || m.toIndex === 0
               const a = nodeY(m.toIndex)
               const b = atNode ? a : nodeY(m.toIndex - 1)
@@ -167,6 +186,7 @@ export default function RouteDetail() {
           scrollY={scrollY}
           insetTop={insets.top}
           onBack={() => router.back()}
+          onTitlePress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
         />
       ) : null}
     </View>
@@ -199,6 +219,7 @@ function RouteStopRow({
   seq,
   name,
   arrivals,
+  fare,
   now,
   locale,
   here,
@@ -210,6 +231,7 @@ function RouteStopRow({
   seq: number
   name: string
   arrivals: string[]
+  fare?: string
   now: number
   locale: Locale
   here: boolean
@@ -256,7 +278,24 @@ function RouteStopRow({
       {/* Stop label + arrivals. The bottom padding lives here (not on the row) so the rail
           column stretches the full height and its connector reaches the next stop's line. */}
       <View className="flex-1 pr-4" style={{ paddingTop: NODE_TOP, paddingBottom: 16 }}>
-        <StopName name={name} variant="body" emphasis={here} numberOfLines={2} />
+        {/* The stop code flows inline at the end of the name (its last line); because it's part
+            of the text it wraps to a new line rather than overlapping the fare when the line is
+            full. `min-w-0` lets the name column actually wrap on web (flex children default to
+            min-width:auto). The fare is rendered the SAME way as the inline code — a caption
+            child with vertical-align:middle inside a body-size line — so both centre against the
+            same 16px line metrics and line up exactly (a standalone line-height-centred fare sat
+            ~1px off the code's x-height middle). The row is top-aligned, so that body line sits on
+            the name's FIRST line. */}
+        <View className="flex-row items-start justify-between gap-2">
+          <View className="min-w-0 flex-1">
+            <StopName name={name} variant="body" emphasis={here} numberOfLines={3} />
+          </View>
+          {fare ? (
+            <Text variant="body" className="shrink-0">
+              <Fare fare={fare} style={{ verticalAlign: 'middle' }} />
+            </Text>
+          ) : null}
+        </View>
         {arrivals.length > 0 ? <EtaTimes arrivals={arrivals} now={now} locale={locale} /> : null}
       </View>
     </Pressable>

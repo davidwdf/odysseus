@@ -19,6 +19,10 @@ order, or jump to what you need:
 | 10 | [Scaffold & Running It](./10-scaffold-and-running.md) | The actual monorepo skeleton + how to install/run/deploy |
 | 11 | [Status & Where to Continue](./11-status.md) | **Living handoff** — what's done, what's next (read to resume) |
 
+### Research & proposals (2026-06-09)
+- [`research/`](./research/README.md) — deep dive into **all HK bus open data** (by provider + availability matrix), our feature inventory & gaps, competitive analysis, and data-display ideas.
+- [`proposals/`](./proposals/README.md) — **fast & fun wins** and bigger bets derived from the research.
+
 ## The 60-second summary
 
 - **One codebase, three targets.** Expo (React Native + React Native for Web) ships an

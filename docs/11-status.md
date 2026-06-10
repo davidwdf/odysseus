@@ -1,7 +1,37 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-09**. Branch: `project-status-handoff`. Latest: **Nearby polish** (**ADR-034**) —
+> Snapshot: **2026-06-10**. Branch: `project-status-handoff`. Latest: **Stop-detail enrichment**
+> ([ADR-041](./08-decision-log.md#adr-041--stop-detail-a-collapsing-header-shared-with-route-a-keyless-static-mini-map-and-an-enriched-summary)) —
+> the route header was generalised into a shared **`CollapsingHeader`** so Stop detail now collapses its name into the
+> glass pill exactly like Route; a **keyless static `MiniMap`** (CARTO light/dark raster tiles laid down as `<Image>`s,
+> **re-skins with the theme**, no map lib/key, tap → platform maps) sits at the top; and a **"served by · N routes ·
+> distance"** summary + per-row **boarding fares** enrich it. *A deliberate first pass — to iterate (interactive
+> MapLibre map, the route-at-stop star).*
+> Earlier: **Route-detail design pass**
+> (ADR-036 refinement) — the static service facts are now a wrapping **pill** row (fare framed **high → low**,
+> frequency, service hours, stop count; **whole-route journey time hidden** — data kept); range dashes spaced
+> ("10 – 25", "05:35 – 23:40"); per-stop **fare aligned to the name's top line**, with the **stop code inline**
+> at the end of the name (wraps rather than overlapping the fare); `EtaTimes` shows the unit **per slot**
+> ("4 min 20 min 32 min"); the **origin
+> bus token** only appears ≤2 min before departure; and the consolidated-dataset fetch is repointed to its
+> canonical host `https://data.hkbus.app/` (old gh-pages path now 301-redirects). Earlier: **Search is live**
+> (**ADR-037**). The
+> empty *Routes* tab is gone; search is now its **own page** (`app/search.tsx`, no tab bar) **pushed from a
+> glass search button that shares the tab bar's row at the far right** (the bar fills the space to its left) —
+> bottom tabs are now Nearby / Favourites / Settings. The route-header back lens is now a shared
+> **`GlassIconButton`** (`BackButton`), reused by the search launcher and search's back button.
+> A new edge **`/v1/index`** ships a compact route+stop index; the app caches it stale-while-revalidate (the
+> first **on-device index**, ADR-007) and queries it locally. Header = back button left of a Routes/Stops
+> segment (icon per item): a **smart keypad** (prefix-trie → only valid next keys lit, dead keys dimmed;
+> letters in a compact scroll row above the pad) for route numbers, a
+> text field for stop/place names (matches any locale), **extensible filter chips** (operator chips
+> data-driven from the index so GMB/MTR light up automatically when added; Night/Airport/Express predicates),
+> and recents. Earlier: **Fares · frequency · journey time · remarks** (**ADR-036**, proposals P1–P3) — we
+> parse the `fares`/`faresHoliday`/`freq`/`jt` the consolidated dataset already gave us (and the `rmk_*` we
+> already fetched) and surface them across Nearby/Stop/Route.
+> A research dive + proposals also landed in [`docs/research`](./research/README.md) + [`docs/proposals`](./proposals/README.md).
+> Earlier: **Nearby polish** (**ADR-034**) —
 > route rows now show **`[chip] → destination`** (server-stamped `Eta.destination`), and a single shared
 > **`StopName`** title-cases stop names + splits the muted operator code **everywhere** (Nearby, Favourites,
 > route schematic, Stop-detail header). Earlier: **route-header refinement** built
@@ -14,7 +44,8 @@ theme, light/dark/auto), **Slice 2 (Stop · Route · Favorites · language picke
 **verified end-to-end against live HK open data**. Nearby/stop/route are **multi-operator (KMB + CTB)**,
 computed **server-side** from the hkbus consolidated static dataset ([ADR-021](./08-decision-log.md)); live
 ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged into one same-kerb place**
-([ADR-022](./08-decision-log.md)). Pick up at **own crawl → KV**, the **Routes tab**, or **map view**.
+([ADR-022](./08-decision-log.md)). Pick up at **own crawl → KV**, **map view**, or **Search polish** (walk
+it in-browser; Nearby filter chips; omnibox).
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
@@ -27,11 +58,14 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   index** (`static-index.ts`, built from the consolidated dataset) + bounded ETA fetch + edge cache;
   daily-crawl cron is a **stub**.
 - **apps/mobile:** tabs shell · `QueryProvider` · `LocaleProvider` (device detection + **persisted**
-  override) · **Nearby** (live, tappable cards) · **Stop detail** `/stop/[id]` (live ETAs, route dedup,
-  save) · **Route detail** `/route/[id]` (**vertical schematic line-strip** with per-stop times + moving
+  override) · **Nearby** (live, tappable cards) · **Stop detail** `/stop/[id]` (**collapsing header + keyless static
+  mini-map + served-by/route-count/distance summary**, live ETAs with boarding fares, route dedup, flat route rows —
+  [ADR-041](./08-decision-log.md#adr-041--stop-detail-a-collapsing-header-shared-with-route-a-keyless-static-mini-map-and-an-enriched-summary)) ·
+  **Route detail** `/route/[id]` (**vertical schematic line-strip** with per-stop times + moving
   bus tokens — [ADR-030](./08-decision-log.md#adr-030--route-view-as-a-vertical-schematic-line-strip-with-two-state-bus-tokens)) · **Favorites** tab · **Settings** (language +
-  appearance + livery pickers) · components `StopCard`, `EtaBadge`, `RouteChip`, `SaveButton`, `Card`,
-  `Text`, `Skeleton`.
+  appearance + livery pickers) · components `CollapsingHeader` (shared by `RouteHeader`/`StopHeader`), `MiniMap`,
+  `StopCard`, `EtaBadge`, `RouteChip`, `Fare`, `Card`, `Text`, `Skeleton`. *(The stop-level `SaveButton` was removed —
+  favourites move to route-at-stop, [ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes).)*
 - **Verified:** `pnpm typecheck` 7/7 · live `/v1/nearby` · `/v1/stop` · `/v1/route` · `/v1/etas` return
   real data · **full Slice 2 flow walked in-browser** (Nearby→Stop→Route, save→Favourites, language re-localizes).
 - **Design system realized** ([ADR-017](./08-decision-log.md)): **Inter loaded** (weight cuts +
@@ -81,8 +115,8 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   the favicon, `expo config` validates. Deferred (needs the name): 巴士 wordmark/splash lockup.
 - **Lucide icons** ([ADR-025](./08-decision-log.md)): `lucide-react-native` (+ SDK-pinned `react-native-svg`)
   behind one **`<Icon icon tone>`** primitive (`apps/mobile/components/Icon.tsx`) — `tone` is a semantic
-  role resolved via `useTheme().color()`, so icons follow the livery/appearance. In use: favourite **star**
-  (`SaveButton`), **tab-bar icons** (MapPin/Route/Star/Settings), optional `Button` icon, stop-heading
+  role resolved via `useTheme().color()`, so icons follow the livery/appearance. In use: **tab-bar icons**
+  (MapPin/Route/Star/Settings), optional `Button` icon, stop-heading
   `ChevronRight`; Workbench has an ICONS gallery. **Verified in-browser** (icons re-theme on livery+mode switch).
 - **Nearby is a flat list, not cards** ([ADR-026](./08-decision-log.md)): new **`StopRow`** replaces
   `StopCard` (deleted) — full-bleed, hairline dividers, heading = name + `MapPin` + "{distance} · {n} min
@@ -123,11 +157,47 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   opacity-<1 ancestor isolated the blur and it flickered on/off during scroll. **Verified in-browser**
   (expanded, mid-morph, collapsed at phone width; DOM-confirmed blur present across the fade); typecheck 7/7,
   Biome clean.
-- **Docs:** plan `01–10`, ADRs `001–033`, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
+- **Fares · frequency · journey time · remarks** ([ADR-036](./08-decision-log.md), proposals P1–P3): the
+  consolidated dataset's `fares`/`faresHoliday`/`freq`/`jt` are now parsed (`data-normalize/dataset.ts` →
+  `RouteServiceInfo` + sectional `routeFareAtSeq`) and threaded through `/v1/nearby` · `/v1/stop` · `/v1/route`
+  (boarding fare per stop, route full-fare/journey/frequency/hours). New `Fare`/`RemarkTag`/`RouteMeta`
+  primitives; the parsed-but-unshown `Eta.remark` now renders (`classifyRemark` tints "Scheduled" as
+  lower-confidence); Stop detail shows "every N–M min" for no-ETA routes. **Verified against the live worker**
+  (route 1 → fare $6.7, ~45 min, every 10–30 min, 05:35–23:40; Nearby/Stop boarding fares); typecheck 7/7, Biome clean.
+- **Research + proposals docs** (2026-06-10): a deep dive into all HK bus open data, our feature inventory/gaps,
+  competitive analysis, and data-display ideas in [`docs/research`](./research/README.md); fast-win + bigger-bet
+  proposals in [`docs/proposals`](./proposals/README.md). Key facts: no live GPS / no GTFS-RT / no route polylines in HK open data.
+- **Search — its own page** ([ADR-037](./08-decision-log.md#adr-037--search-on-device-index-a-smart-route-keypad-and-extensible-filter-chips)):
+  edge **`/v1/index`** (`apps/edge/src/search-index.ts`) ships a compact `SearchIndex` (2002 routes collapsed to
+  one per operator+number+direction, 8126 stops with 1179 same-kerb places pre-merged, ~2 MB) off the shared
+  memoized static index. New `DataSource.getSearchIndex()` (`EdgeClient`); the app caches it in AsyncStorage
+  stale-while-revalidate (`apps/mobile/lib/searchIndex.ts`) — the first **on-device index** (ADR-007). Pure
+  search/keypad logic in **`@nextbus/core/search`** (`buildRouteTrie`/`nextValidChars`/`searchRoutes`/
+  `searchStops`/`routeCategories`). UI: a standalone **`app/search.tsx`** (no tab bar) pushed from a **floating
+  search button** in `app/(tabs)/_layout.tsx` (Routes tab removed → tabs are Nearby/Favourites/Settings);
+  header = back button + Routes/Stops segment; **`RouteKeypad`** (trie-driven valid-next-key lighting; letters
+  in a scroll row above the pad), stop text search (any-locale), **`FilterChips`** (operator chips data-driven
+  from the index; Night/Airport/Express predicates), recents (`preferences`). **Verified:** live `/v1/index`
+  returns 2002/8126; keypad/category logic checked against real numbers (79 night, 93 airport, 137 express;
+  `next("")`=digits+start-letters, `next("26")`=`0,1,3,4,5,7,8,9,M,X`). typecheck 7/7, Biome clean.
+  *Not yet walked in-browser (visual pass pending).*
+- **About section: "About the data" + "FAQ"** ([ADR-038](./08-decision-log.md#adr-038--about-the-data-screen-open-data-attribution--honesty-notes), proposals P10):
+  two new no-tab-bar screens (shared `BackButton` glass lens), reached from an **About** section in Settings.
+  **`app/about-data.tsx`** — **full-width rows (not cards)**: a **Sources** group of tappable **link rows**
+  (DATA.GOV.HK / KMB·LWB / Citybus) that open the source in a **new tab** (`lib/openExternal.ts`) with an
+  external-link icon, a **Licence** link row to the locale-aware **data.gov.hk terms**, and the app **version**
+  (`expo-constants`) — satisfying the launch-blocking attribution requirement. **`app/faq.tsx`** — an
+  **accordion** (collapsed by default, no dividers; tap to expand) owning the **freshness/honesty notes** plus a
+  broader rider set: operator coverage, same-kerb merges, offline, no-live-map (no HK GPS/polylines), and what
+  "Scheduled"/"Last bus" remarks mean. Trilingual strings in `@nextbus/i18n`. typecheck 7/7, Biome clean.
+  **Verified in-browser** (all three screens render; FAQ expand/collapse works; Settings → both rows).
+- **Docs:** plan `01–10`, ADRs `001–038`, research + proposals sets, `CLAUDE.md` / `AGENTS.md`, pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
-- All data is **server-side** (no [on-device index](./08-decision-log.md), ADR-007). KMB + CTB only;
-  other operators (NLB/GMB/MTR) are in the consolidated set but out of v1 scope.
+- **Live ETA / nearby data is server-side**; the **search index is now on-device** (ADR-037 — first step of
+  [ADR-007](./08-decision-log.md)), but it's still **server-computed** and fetched (no own-crawl/KV yet). KMB +
+  CTB only; other operators (NLB/GMB/MTR) are in the consolidated set but out of v1 scope — search's operator
+  filter chips are data-driven, so they appear the moment those adapters land.
 - Same-kerb merge is **conservative** ([ADR-022](./08-decision-log.md)): stops whose landmark strings differ
   (e.g. KMB stop-code-only names) won't merge. Follow-up: token-overlap matching / own-crawl coordinates.
 - ETA lists are de-duplicated **once, server-side** ([ADR-023](./08-decision-log.md)): `stopArrivals` (one
@@ -143,7 +213,10 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
   live ETA text still has all three. Backlog: true zh-Hans via own crawl.
 - Static layer **depends on the hkbus gh-pages artifact** at runtime (no KV cache yet → their outage = stale once isolates recycle). Backlog: KV/R2 cache + own crawl.
 - The **daily crawl cron is a stub**; no offline.
-- The **Routes tab** is still a placeholder (no route search yet); stop/route detail are reached by tapping.
+- **Search** (the `/search` page, ADR-037) ships but **hasn't been walked in-browser** yet (logic + edge
+  endpoint verified by curl; visual/interaction pass on the floating button, keypad, chips and result lists is
+  pending). Route results navigate to a representative variant id (direction toggle / service-type picker =
+  follow-up). Filter chips live only on Search, not yet on Nearby (rest of proposals P8).
 - Stop detail's ETA fan-out is **capped** (`MAX_ETA_ROUTES`) and refreshes via `refetchInterval` polling,
   not the `watch()` socket (v2). No map · no push · no native build has been run.
 - `Skeleton` is static; the number-flip / split-flap ETA animation isn't built; **CJK uses the platform
@@ -156,15 +229,17 @@ ETAs come direct from the official APIs. Co-located KMB+CTB stops are **merged i
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
 
 ## 🔜 Next steps (priority order)
-0. **Favourite routes-at-a-stop** ([ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes), *designed, not built*) —
-   add a route-at-stop favourite primitive: a `favoriteRoutes` list in the prefs store (recommended key
-   `"${stopId}|${routeId}"`), a glass-lens **star top-right** in the route header (favourites *this route at
-   the `?stop=` you came from*) mirrored as a per-row star in Stop detail, and a Favourites-tab section
-   grouping saved pairs under their stop heading (reuse `StopRow` with a filtered `etas`; fetch via
-   `getEtas(stopId,[routeId])`). Bare-route favourites stay deferred.
+0. **Favourite routes-at-a-stop** ([ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes), *framework built — save UI pending*) —
+   the store + tab are now on the route-at-stop model (stop-only favourites **removed**, 2026-06-10):
+   `favoriteRoutes: string[]` keyed `"${stopId}|${routeId}"` with `toggleFavoriteRoute`, and the Favourites
+   tab groups saved pairs under their stop heading (reuses `StopRow` with `etas` filtered to the starred
+   routes). **Remaining:** the glass-lens **star top-right** in the route header (favourites *this route at
+   the `?stop=` you came from*), mirrored as a per-row star in Stop detail — until it ships the tab shows its
+   empty state. Bare-route favourites stay deferred.
 1. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
-2. **Routes tab** — route-number search → `/route/[id]` (the screen already exists).
+2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
+   (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
 3. **Map view** (MapLibre) for Nearby.
 4. **Honest-motion slice** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
    reduced-motion + a11y pass (Reanimated is installed/wired but unused), swipe-to-favourite + haptics.

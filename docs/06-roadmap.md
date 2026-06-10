@@ -19,7 +19,8 @@ omitted; the ordering and exit criteria are the commitment.
 **Status:** Slice 1 (Nearby) **live** for KMB — server-side `/v1/nearby` ([ADR-016](./08-decision-log.md)),
 verified end-to-end. Citybus, on-device index, and the other screens are next.
 - **Nearby** (hero): geolocate → on-device stop lookup → live ETAs (edge proxy + cache).
-- **Search** route → **route detail** (stop list, direction toggle, ETAs).
+- **Search** route → **route detail** (stop list, ETAs) — **done** (ADR-037): smart route keypad + stop/place
+  text search + filter chips over an on-device index. Direction toggle is a follow-up (P11).
 - **Stop detail:** all routes at a stop, soonest first.
 - **Favorites** (on-device), **EN/繁中**, **light/dark**.
 - ETA presentation per the honesty principle (no fake countdown; freshness chip; animate on change).

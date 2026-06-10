@@ -2,8 +2,25 @@
 // trailing operator stop code, e.g. "CITY ONE STATION (ST311)". We present them in title
 // case with the code split out (rendered smaller/muted). CJK names are returned unchanged.
 
-/** HK transit acronyms to keep upper-cased through title-casing. */
-const KEEP_UPPER = new Set(['MTR', 'KMB', 'CTB', 'LWB', 'NLB', 'GMB', 'BBI', 'HK', 'PTI', 'LRT'])
+/**
+ * HK transit acronyms / venue codes to keep upper-cased through title-casing. This is an
+ * allowlist on purpose: in an ALL-CAPS source there's no safe way to tell an initialism
+ * ("EKCC") from a real word that also appears parenthesised ("(CIRCULAR)"), so codes are
+ * added explicitly as they surface rather than guessed.
+ */
+const KEEP_UPPER = new Set([
+  'MTR',
+  'KMB',
+  'CTB',
+  'LWB',
+  'NLB',
+  'GMB',
+  'BBI',
+  'HK',
+  'PTI',
+  'LRT',
+  'EKCC',
+])
 
 /**
  * Minor words kept lower-case when *inside* a title (never the first word).

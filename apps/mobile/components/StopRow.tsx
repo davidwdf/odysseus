@@ -5,6 +5,7 @@ import { Pressable, View } from 'react-native'
 import { titleCaseName } from '../lib/stopName'
 import { EtaBadge } from './EtaBadge'
 import { Icon } from './Icon'
+import { RemarkTag } from './RemarkTag'
 import { RouteChip } from './RouteChip'
 import { StopName } from './StopName'
 import { Text } from './Text'
@@ -17,17 +18,22 @@ function routeNo(routeId: string): string {
  *  Destination falls back to the operator remark when the feed omits it. */
 function RouteRow({ eta, locale, now }: { eta: Eta; locale: Locale; now: number }) {
   const dest = eta.destination?.[locale]
+  // Keep the remark-as-headline fallback when the feed omits a destination; otherwise the
+  // remark shows as its own tag below (so we never duplicate it). Fare sits before the ETA.
   const headed = dest ? titleCaseName(dest) : eta.remark?.[locale]
   return (
     <View className="flex-row items-center justify-between gap-3 py-1.5">
       <View className="flex-1 flex-row items-center gap-2.5">
         <RouteChip operator={eta.operator} routeNo={routeNo(eta.routeId)} />
-        {headed ? (
-          <Text variant="body" className="flex-1 text-text" numberOfLines={1}>
-            <Text className="text-subtle">→ </Text>
-            {headed}
-          </Text>
-        ) : null}
+        <View className="flex-1">
+          {headed ? (
+            <Text variant="body" className="text-text" numberOfLines={1}>
+              <Text className="text-subtle">→ </Text>
+              {headed}
+            </Text>
+          ) : null}
+          {dest && eta.remark ? <RemarkTag remark={eta.remark} locale={locale} /> : null}
+        </View>
       </View>
       <EtaBadge eta={eta} locale={locale} now={now} />
     </View>

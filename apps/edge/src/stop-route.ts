@@ -13,6 +13,7 @@ import {
   fetchKmbRouteEta,
   type IndexRouteRef,
   type IndexStop,
+  routeFareAtSeq,
   type StaticIndex,
 } from '@nextbus/data-normalize'
 import { getStaticIndex } from './static-index'
@@ -60,7 +61,13 @@ function toRoute(ref: IndexRouteRef, index: StaticIndex): Route {
     serviceType: ref.serviceType,
     origin: meta?.origin ?? empty,
     destination: meta?.destination ?? empty,
+    service: meta?.service,
   }
+}
+
+/** 1-based sequence of a (canonical) stop on a route, if it serves it. */
+function seqOf(index: StaticIndex, routeId: string, stopId: string): number | undefined {
+  return index.routeToStops.get(routeId)?.find((rs) => rs.stopId === stopId)?.seq
 }
 
 /** Live ETAs for a single-operator stop's routes, deduping upstream calls by
@@ -118,12 +125,18 @@ export async function stopArrivals(
   maxRoutes = MAX_ETA_ROUTES,
 ): Promise<Eta[]> {
   const all = dedupeEtas(await memberEtaLists(index, members, maxRoutes))
-  // Stamp each reading with its route's destination (from canonical route meta) so flat
-  // ETA lists can show "→ dest" without the full Route object.
+  // Stamp each reading with its route's destination + boarding fare (from canonical route
+  // meta) so flat ETA lists can show "→ dest · $6.7" without the full Route object (ADR-036).
   return all
     .map((e) => {
-      const destination = index.routeMeta.get(e.routeId)?.destination
-      return destination ? { ...e, destination } : e
+      const meta = index.routeMeta.get(e.routeId)
+      if (!meta) return e
+      const seq = seqOf(index, e.routeId, `${e.operator}:${e.stopId}`)
+      const fare = seq ? routeFareAtSeq(meta, seq) : undefined
+      const stamped: Eta = { ...e }
+      if (meta.destination) stamped.destination = meta.destination
+      if (fare) stamped.fare = fare
+      return stamped
     })
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
 }
@@ -141,7 +154,10 @@ export async function stopDetail(id: string): Promise<StopDetail> {
   const routes = members.flatMap((m) =>
     (index.stopToRoutes.get(m.id) ?? []).map((ref) => {
       const route = toRoute(ref, index)
-      return { route, eta: etaByRouteId.get(route.id) ?? null }
+      const meta = index.routeMeta.get(route.id)
+      const seq = seqOf(index, route.id, m.id)
+      const fare = meta && seq ? routeFareAtSeq(meta, seq) : undefined
+      return { route, eta: etaByRouteId.get(route.id) ?? null, fare }
     }),
   )
   return { stop: toMergedStop(id, members, rep), routes }
@@ -191,7 +207,12 @@ export async function routeDetail(id: string): Promise<RouteDetail> {
     // route-eta carries no stop id, so stamp the operator stop id we already know
     // (matching the raw-id convention the other ETA endpoints use).
     const eta = etaBySeq.get(rs.seq)
-    stops.push({ seq: rs.seq, stop: toStop(rec), eta: eta ? { ...eta, stopId: rec.stopId } : null })
+    stops.push({
+      seq: rs.seq,
+      stop: toStop(rec),
+      eta: eta ? { ...eta, stopId: rec.stopId } : null,
+      fare: routeFareAtSeq(meta, rs.seq),
+    })
   }
   return { route: toRoute(meta, index), stops }
 }

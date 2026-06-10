@@ -1,5 +1,6 @@
 import { fetchEta } from '@nextbus/data-normalize'
 import { nearby } from './nearby'
+import { getSearchIndex } from './search-index'
 import { routeDetail, stopDetail, stopEtas } from './stop-route'
 
 // No bindings yet; the daily-crawl dataset will add e.g. `DATASET: KVNamespace`.
@@ -85,6 +86,13 @@ export default {
       } catch (err) {
         return fail(502, `upstream error: ${(err as Error).message}`)
       }
+    }
+
+    // GET /v1/index  → SearchIndex (compact route + stop list for on-device search +
+    // the smart keypad — ADR-037). Static-ish: collapsed/merged off the daily dataset,
+    // so it gets a long TTL; the client caches it and redownloads only when `version` moves.
+    if (parts[0] === 'v1' && parts[1] === 'index') {
+      return cached(request, url, ctx, 21_600, () => getSearchIndex(), 'index error')
     }
 
     // GET /v1/nearby?lat=&lng=[&radius=]  → NearbyStop[] (KMB; Citybus is a follow-up)

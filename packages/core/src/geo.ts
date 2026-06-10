@@ -1,8 +1,23 @@
-import type { Locale } from './types'
+import type { LatLng, Locale } from './types'
 
 // Distance / walk-time formatting for nearby stops. Straight-line distance is an
 // approximation, so we never show fake precision (ADR-008 honesty applied to
 // geography): metres are rounded to the nearest 10, and walk time to a whole minute.
+
+/** Mean Earth radius, metres (WGS84 authalic). */
+const EARTH_R = 6_371_008.8
+
+/** Great-circle (haversine) distance between two WGS84 points, in metres. A
+ *  straight-line approximation — never presented with fake precision (ADR-008). */
+export function haversineMeters(a: LatLng, b: LatLng): number {
+  const toRad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * toRad
+  const dLng = (b.lng - a.lng) * toRad
+  const lat1 = a.lat * toRad
+  const lat2 = b.lat * toRad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * EARTH_R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
 
 /** Average pedestrian pace, metres per minute (~4.8 km/h). */
 const WALK_M_PER_MIN = 80

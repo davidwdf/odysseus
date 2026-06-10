@@ -2,9 +2,12 @@ import type { Locale } from '@nextbus/core'
 import type { Messages } from '@nextbus/i18n'
 import { t } from '@nextbus/i18n'
 import type { Appearance } from '@nextbus/ui'
+import { useRouter } from 'expo-router'
+import { ChevronRight } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Icon } from '../../components/Icon'
 import { Text } from '../../components/Text'
 import { usePreferences } from '../../lib/preferences'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
@@ -32,6 +35,7 @@ export default function Settings() {
   const setAppearance = usePreferences((s) => s.setAppearance)
   const localeOverride = useLocaleOverride()
   const setLocale = useSetLocale()
+  const router = useRouter()
 
   return (
     <ScrollView
@@ -91,7 +95,41 @@ export default function Settings() {
           })}
         </View>
       </Section>
+
+      {/* About: data attribution + licence and the FAQ each live on their own
+          screen (P10, ADR-038) to keep this list clean — rows push to them. */}
+      <Section title={t(locale, 'settingsAbout')}>
+        <View className="overflow-hidden rounded-lg border border-border bg-surface">
+          <NavRow label={t(locale, 'aboutData')} onPress={() => router.push('/about-data')} first />
+          <NavRow label={t(locale, 'settingsFaq')} onPress={() => router.push('/faq')} />
+        </View>
+      </Section>
     </ScrollView>
+  )
+}
+
+function NavRow({
+  label,
+  onPress,
+  first,
+}: {
+  label: string
+  onPress: () => void
+  first?: boolean
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      className={`min-h-[52px] flex-row items-center gap-3 px-4 py-3 active:opacity-70 ${
+        first ? '' : 'border-t border-border'
+      }`}
+    >
+      <Text variant="body" className="flex-1 text-text">
+        {label}
+      </Text>
+      <Icon icon={ChevronRight} tone="subtle" size={20} />
+    </Pressable>
   )
 }
 

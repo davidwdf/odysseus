@@ -57,12 +57,21 @@ are **not comparable** to each other and don't mean "older vs newer tech":
 
 > **Current static source ([ADR-021](./08-decision-log.md)).** The static layer for **KMB + CTB** is built
 > from the hk-bus-crawling **consolidated dataset** (`routeFareList.min.json`, one ~8 MB daily-updated fetch,
-> memoized at the edge) — because the **official CTB API has no bulk stop/route-stop endpoint** (building a
+> memoized at the edge — fetched from its canonical host `https://data.hkbus.app/`, since the older
+> `hkbus.github.io/hk-bus-crawling/` path now 301-redirects there) — because the **official CTB API has no
+> bulk stop/route-stop endpoint** (building a
 > CTB index from it is a ~6,800-call crawl). The dataset's stop ids in `routeList.stops` are the raw,
 > directly-ETA-callable operator ids; its `stopMap` over-clusters and is **not** used (it breaks ETA
 > resolution). **Live ETAs still come direct from the official KMB/CTB APIs.** Same-kerb KMB↔CTB merge is
 > now done with **our own** clustering ([ADR-022](./08-decision-log.md)). Our own crawl + true Simplified
 > static names remain [backlog](./07-backlog.md) items.
+>
+> **We now also read the dataset's `fares`/`faresHoliday`/`freq`/`jt`** ([ADR-036](./08-decision-log.md)) —
+> previously parsed-and-dropped. The edge surfaces a **boarding fare** per stop (sectional: `fares[seq-1]`),
+> a route **full fare**, **journey time**, a **frequency** range, and **service hours** on the route/stop/ETA
+> responses; the live `rmk_*` ETA remark is now rendered too. This is the **Static** honesty tier (shown
+> plainly, never animated as live). HK open data has **no fares-by-passenger-type, no live bus GPS, and no
+> route polylines** — see [`research/02`](./research/02-data-availability-matrix.md).
 
 ## The two kinds of data (they have opposite needs)
 
@@ -122,5 +131,9 @@ network to fetch live ETAs for the routes at those stops.
 
 ## Licensing / attribution
 data.gov.hk content is provided under the Government's open-data terms — **attribution required**.
-We will display a "Data: Transport Department / KMB / Citybus via DATA.GOV.HK" credit and review
-the terms before launch. Static crawled data may be redistributed within those terms.
+This is now satisfied in-app by the **"About the data" screen** ([ADR-038](./08-decision-log.md)):
+Settings → About → *About the data* opens a dedicated page whose **Sources** are tappable **link rows**
+(DATA.GOV.HK, KMB/LWB, Citybus — each opening the source in a new tab) and a **Licence** link row to the
+locale-aware **data.gov.hk Terms and Conditions of Use**. The honesty/freshness notes (the ~1-min source
+ceiling, stale-greying, and that fares/timings are scheduled data shown as-is) live in the adjacent
+**FAQ** screen. Static crawled data may be redistributed within those terms.
