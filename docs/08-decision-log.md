@@ -1144,8 +1144,11 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      `<Image>`s in a clipped viewport with a centre pin; tapping it hands off to the platform maps app
      (`openInMaps` → Apple Maps / `geo:` / Google Maps web — also keyless). Tiles are the **standard OpenStreetMap**
      raster set; **dark mode is derived from the same light tiles with a CSS-style `filter`** (`invert` + `hueRotate`
-     180° + brightness/contrast trim, the array form so it works web + native on RN ≥0.76) applied to a tiles-only
-     layer — so the map keeps the familiar OSM look in both modes from one source. (We tried second dark tile sources —
+     180° + brightness/contrast trim) applied to a tiles-only layer — so the map keeps the familiar OSM look in both
+     modes from one source. The filter shape is **platform-split**: react-native-web (0.21) has no `filter` handler so
+     it needs the **CSS string** form (it passes strings straight to the DOM; the RN **array** form became an unusable
+     object and silently no-op'd — that was the "filter not applying" bug); native RN takes the array. (We tried second
+     dark tile sources —
      CARTO `dark_all` read too near-black, Esri's gray canvas dropped the OSM look — the filter on the preferred OSM
      tiles won.) The centre **pin uses a white halo behind a vivid fill** so it reads on any tile in either mode (a
      single themed pin washed out — `accent` is near-white in dark). Attribution ("© OpenStreetMap") is shown.

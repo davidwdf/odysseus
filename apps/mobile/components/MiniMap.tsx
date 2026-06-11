@@ -1,6 +1,6 @@
 import { MapPin } from 'lucide-react-native'
 import { useState } from 'react'
-import { Image, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
+import { Image, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import { openInMaps } from '../lib/openExternal'
 import { useTheme } from '../lib/useTheme'
 import { Icon } from './Icon'
@@ -24,15 +24,16 @@ const PIN_COLOR = '#E11D48'
 const TILE_URL = (z: number, x: number, y: number) =>
   `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
 // Turn the light OSM tiles into a dark map: invert the luminance, then hue-rotate 180° so water
-// and parks land back near their real colour; trim brightness/contrast so it isn't harsh. The
-// array form of `filter` works on web and native (RN ≥0.76). Applied to the tiles only — the pin
-// and attribution sit outside it.
-const DARK_TILE_FILTER: NonNullable<ViewStyle['filter']> = [
-  { invert: 1 },
-  { hueRotate: '180deg' },
-  { brightness: 0.9 },
-  { contrast: 0.9 },
-]
+// and parks land back near their real colour; trim brightness/contrast so it isn't harsh. Applied
+// to the tiles only — the pin and attribution sit outside it.
+//
+// The shape differs by platform: react-native-web (0.21) has no `filter` handler, so it passes a
+// **string** value straight to the DOM (the array form becomes an unusable object and is dropped);
+// native RN wants the **array** form. Hence the Platform split.
+const DARK_TILE_FILTER = Platform.select<NonNullable<ViewStyle['filter']>>({
+  web: 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9)',
+  default: [{ invert: 1 }, { hueRotate: '180deg' }, { brightness: 0.9 }, { contrast: 0.9 }],
+})
 
 const lngToWorldX = (lng: number, scale: number) => ((lng + 180) / 360) * scale
 const latToWorldY = (lat: number, scale: number) => {
