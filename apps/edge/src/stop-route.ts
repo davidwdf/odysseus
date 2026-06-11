@@ -1,7 +1,8 @@
 import {
   dedupeEtas,
   type Eta,
-  type OperatorId,
+  type I18nText,
+  type LatLng,
   type Route,
   type RouteDetail,
   type Stop,
@@ -11,6 +12,7 @@ import {
   canonicalRouteId,
   fetchEta,
   fetchKmbRouteEta,
+  fetchKmbStopEta,
   type IndexRouteRef,
   type IndexStop,
   routeFareAtSeq,
@@ -18,9 +20,11 @@ import {
 } from '@nextbus/data-normalize'
 import { getStaticIndex } from './static-index'
 
-// Cap the per-stop ETA fan-out so a cold stop request stays cheap (edge-cached).
-// Routes beyond the cap are still listed (static), just without a live ETA.
-const MAX_ETA_ROUTES = 24
+// Per-place CTB fan-out budget (ADR-042). KMB poles cost ONE call each (`stop-eta` returns
+// every route), so only CTB — which has no per-stop endpoint — needs bounding; this guards a
+// pathological interchange. Routes beyond it are still counted (static) and shown on the
+// Place page. The default is generous (≈ "all" in practice); Nearby passes a smaller one.
+const DEFAULT_CTB_BUDGET = 24
 
 function toStop(s: IndexStop): Stop {
   return {
@@ -31,13 +35,19 @@ function toStop(s: IndexStop): Stop {
   }
 }
 
-/** A merged same-kerb stop: one canonical `Stop` carrying every member operator's
- *  source id. `rep` supplies the display name/location. */
-export function toMergedStop(id: string, members: IndexStop[], rep: IndexStop): Stop {
+/** A merged same-kerb stop: one canonical `Stop` carrying every member operator's source id.
+ *  `name`/`location` are the place's chosen name + anchor (centroid) — picked once in
+ *  `buildPlaces` so every screen reads the same (ADR-042 "name once"). */
+export function toMergedStop(
+  id: string,
+  members: IndexStop[],
+  name: I18nText,
+  location: LatLng,
+): Stop {
   return {
     id,
-    name: rep.name,
-    location: { lat: rep.lat, lng: rep.lng },
+    name,
+    location,
     sources: members.map((m) => ({ operator: m.operator, operatorStopId: m.stopId })),
   }
 }
@@ -70,44 +80,43 @@ function seqOf(index: StaticIndex, routeId: string, stopId: string): number | un
   return index.routeToStops.get(routeId)?.find((rs) => rs.stopId === stopId)?.seq
 }
 
-/** Live ETAs for a single-operator stop's routes, deduping upstream calls by
- *  (route, serviceType) — the operator feed returns *every direction* in one
- *  response, so per-direction refs must not re-fetch (that's the double-count). */
-async function fetchStopEtas(
-  operator: OperatorId,
-  rawStopId: string,
-  refs: IndexRouteRef[],
-  maxRoutes: number,
-): Promise<Eta[]> {
-  const seen = new Set<string>()
-  const pairs: Array<{ route: string; serviceType: string }> = []
-  for (const r of refs) {
-    const key = `${r.route}|${r.serviceType}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    pairs.push({ route: r.route, serviceType: r.serviceType })
-    if (pairs.length >= maxRoutes) break
+/** Distinct rider lines (operator + route + direction) serving a place, from the static
+ *  index alone — no live call. The honest "N routes" count a compact card shows (ADR-042). */
+export function placeRouteCount(index: StaticIndex, members: IndexStop[]): number {
+  const lines = new Set<string>()
+  for (const m of members) {
+    for (const r of index.stopToRoutes.get(m.id) ?? [])
+      lines.add(`${r.operator}|${r.route}|${r.bound}`)
   }
-  const lists = await Promise.all(
-    pairs.map((p) =>
-      fetchEta(operator, rawStopId, p.route, p.serviceType).catch(() => [] as Eta[]),
-    ),
-  )
-  return lists.flat()
+  return lines.size
 }
 
-/** Raw (call-deduped, not yet rider-deduped) ETAs across every member of a
- *  (possibly merged same-kerb) stop. Members are fetched concurrently. */
+/** Raw (call-deduped, not yet rider-deduped) ETAs across every member pole of a place
+ *  (ADR-042). Each KMB pole is ONE `stop-eta` call (all its routes); CTB is per-route,
+ *  bounded by a per-place budget. Members and CTB routes are fetched concurrently. */
 async function memberEtaLists(
   index: StaticIndex,
   members: IndexStop[],
-  maxRoutes = MAX_ETA_ROUTES,
+  ctbBudget = DEFAULT_CTB_BUDGET,
 ): Promise<Eta[]> {
-  const lists = await Promise.all(
-    members.map((m) =>
-      fetchStopEtas(m.operator, m.stopId, index.stopToRoutes.get(m.id) ?? [], maxRoutes),
-    ),
-  )
+  const tasks: Array<Promise<Eta[]>> = []
+  let ctbRemaining = ctbBudget
+  for (const m of members) {
+    if (m.operator === 'CTB') {
+      const seen = new Set<string>()
+      for (const r of index.stopToRoutes.get(m.id) ?? []) {
+        if (seen.has(r.route)) continue
+        seen.add(r.route)
+        if (ctbRemaining <= 0) break
+        ctbRemaining--
+        tasks.push(fetchEta('CTB', m.stopId, r.route, '1').catch(() => [] as Eta[]))
+      }
+    } else {
+      // KMB/LWB: one call returns every route at this pole.
+      tasks.push(fetchKmbStopEta(m.stopId).catch(() => [] as Eta[]))
+    }
+  }
+  const lists = await Promise.all(tasks)
   return lists.flat().filter((e) => e.arrivals.length > 0)
 }
 
@@ -122,9 +131,9 @@ async function memberEtaLists(
 export async function stopArrivals(
   index: StaticIndex,
   members: IndexStop[],
-  maxRoutes = MAX_ETA_ROUTES,
+  ctbBudget = DEFAULT_CTB_BUDGET,
 ): Promise<Eta[]> {
-  const all = dedupeEtas(await memberEtaLists(index, members, maxRoutes))
+  const all = dedupeEtas(await memberEtaLists(index, members, ctbBudget))
   // Stamp each reading with its route's destination + boarding fare (from canonical route
   // meta) so flat ETA lists can show "→ dest · $6.7" without the full Route object (ADR-036).
   return all
@@ -151,16 +160,27 @@ export async function stopDetail(id: string): Promise<StopDetail> {
 
   const etaByRouteId = new Map<string, Eta>()
   for (const e of await memberEtaLists(index, members)) etaByRouteId.set(e.routeId, e)
+  // `stopId: m.id` records which member pole each route departs from, so the Place screen can
+  // group routes under their pole (ADR-042).
   const routes = members.flatMap((m) =>
     (index.stopToRoutes.get(m.id) ?? []).map((ref) => {
       const route = toRoute(ref, index)
       const meta = index.routeMeta.get(route.id)
       const seq = seqOf(index, route.id, m.id)
       const fare = meta && seq ? routeFareAtSeq(meta, seq) : undefined
-      return { route, eta: etaByRouteId.get(route.id) ?? null, fare }
+      return { route, eta: etaByRouteId.get(route.id) ?? null, fare, stopId: m.id }
     }),
   )
-  return { stop: toMergedStop(id, members, rep), routes }
+  const memberPoles = members.map((m) => ({
+    id: m.id,
+    name: m.name,
+    location: { lat: m.lat, lng: m.lng },
+  }))
+  // Use the place's chosen name + centroid (not the rep's) so all screens agree.
+  const place = index.placeByStopId.get(rep.id)
+  const name = place?.name ?? rep.name
+  const location = place ? { lat: place.lat, lng: place.lng } : { lat: rep.lat, lng: rep.lng }
+  return { stop: toMergedStop(id, members, name, location), routes, members: memberPoles }
 }
 
 /** GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered). */

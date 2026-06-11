@@ -250,15 +250,14 @@ it in-browser; Nearby filter chips; omnibox).
 6. **Direction-aware stop clustering** ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant) — study in `.context/stop-merge-study/`).
    **Quick win ✅ done (2026-06-11):** the existing cross-operator pair merge now applies a **direction gate** —
    reject a candidate whose stops' **mean travel bearings** disagree by >45°, unless a co-run KMB+CTB route lists
-   both at the same sequence position (`directionAgrees`/`bearingDeg` in `dataset.ts`). Splits the ≥4 confirmed
-   live opposite-kerb false merges; verified against the snapshot (`.context/verify-quickwin.ts`). **Still to
-   build (UI/query plan settled 2026-06-11 — see ADR-042):** full **N-member** single-linkage clustering (~37% fewer
-   Nearby cards) with cluster-level vetoes; **per-place ETA fetch** — switch KMB to the per-stop `stop-eta` endpoint
-   (1 call/pole; CTB stays per-route) + cross-member dedupe + a per-place budget; **honest cards** — soonest few +
-   true route count + "+N more" (count is free from the static index, never a silent filter); a **Place detail**
-   screen replacing Stop detail (multi-pin map, routes grouped by pole, walk *range*, route→stop→place navigation);
-   **name-once** in `buildPlaces`; and **member-keyed favourites** (couples with item 0). Update docs/02/03/07 then.
-   (Old "looser stop-merge / token-overlap" note folds in here.)
+   both at the same sequence position (`directionAgrees`/`bearingDeg` in `dataset.ts`). **Backend now fully built
+   & verified (2026-06-11):** N-member single-linkage clustering (`buildPlaces`) with cluster-level vetoes +
+   bearing-spread cap + same-operator members; per-place ETA fetch (KMB `stop-eta` 1 call/pole, CTB per-route to a
+   budget, dedupe) returning an honest `routeCount`; `/v1/stop` carries member poles + per-route pole ids; name
+   chosen once. Belair → 2 kerb-split places (live + snapshot); ≈2,010 clusters / 5,461 stops. **Still to build —
+   mobile UI (see ADR-042):** honest Nearby cards (soonest few + true count + "+N more"); a **Place detail** screen
+   replacing Stop detail (multi-pin map, routes grouped by pole, walk *range*, route→stop→place navigation); and
+   **member-keyed favourites** (couples with item 0). Update docs/02/03/07 then.
 
 ## 📍 Key file pointers
 - DataSource seam → `packages/core/src/datasource.ts`; EdgeClient → `packages/api-client/src/index.ts`

@@ -115,16 +115,26 @@ export interface RouteDetail {
   stops: Array<{ seq: number; stop: Stop; eta: Eta | null; fare?: string }>
 }
 
-/** A stop + the routes that serve it, each with its current ETA. */
+/** A stop (or merged same-kerb place) + the routes that serve it, each with its current
+ *  ETA. For a multi-pole place, `stopId` on each route is the canonical id of the *member
+ *  pole* it departs from (so the UI can group routes under their pole — ADR-042), and
+ *  `members` carries each pole's id/name/location for the multi-pin map + per-pole walk. */
 export interface StopDetail {
   stop: Stop
-  routes: Array<{ route: Route; eta: Eta | null; fare?: string }>
+  routes: Array<{ route: Route; eta: Eta | null; fare?: string; stopId: string }>
+  /** The place's member poles (one entry for a single stop; several for a merged place). */
+  members: Array<{ id: string; name: I18nText; location: LatLng }>
 }
 
-/** A nearby stop with distance + its soonest arrivals. */
+/** A nearby stop (or merged place) with distance + its soonest arrivals. */
 export interface NearbyStop {
   stop: Stop
   /** Straight-line distance from the query point, metres. */
   distanceM: number
+  /** Soonest arrivals (deduped to one per route+direction). May be fewer than `routeCount`
+   *  — routes without a live reading right now aren't listed here. */
   etas: Eta[]
+  /** True number of distinct routes serving the place, from the static index (no live call).
+   *  Lets a compact card show "soonest few of N · +N more" honestly, never a silent filter. */
+  routeCount: number
 }

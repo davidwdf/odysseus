@@ -1,6 +1,6 @@
 export { fetchCitybusEta } from './citybus'
 export * from './dataset'
-export { fetchKmbEta, fetchKmbRouteEta, type RouteEtaEntry } from './kmb'
+export { fetchKmbEta, fetchKmbRouteEta, fetchKmbStopEta, type RouteEtaEntry } from './kmb'
 export * from './kmb-static'
 export * from './normalize'
 

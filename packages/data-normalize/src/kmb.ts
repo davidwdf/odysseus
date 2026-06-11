@@ -43,6 +43,23 @@ export async function fetchKmbEta(
   return groupKmb(stopId, generated_timestamp, data)
 }
 
+/**
+ * Live ETAs for **every route** at one KMB/LWB stop in a SINGLE upstream call
+ * (`stop-eta/{stopId}`) — KMB's per-stop endpoint (verified: returns all routes serving
+ * the pole, both directions). Lets a merged place fetch a KMB pole once instead of once
+ * per route (ADR-042). `stopId` is the operator-native 16-char id and is stamped on each
+ * reading. CTB has no equivalent (its `stop-eta` 422s), so it stays per-route.
+ */
+export async function fetchKmbStopEta(
+  stopId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Eta[]> {
+  const res = await fetchImpl(`${KMB_BASE}/stop-eta/${stopId}`)
+  if (!res.ok) throw new Error(`KMB stop-ETA ${res.status} for ${stopId}`)
+  const { generated_timestamp, data } = KmbEtaResponse.parse(await res.json())
+  return groupKmb(stopId, generated_timestamp, data)
+}
+
 /** Build one canonical `Eta` from a bucket of rows sharing route+direction (+stop). */
 function rowsToEta(bucket: KmbRow[], stopId: string, generated: string, observedAt: string): Eta {
   // Caller guarantees a non-empty bucket.

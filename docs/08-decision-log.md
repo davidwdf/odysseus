@@ -1178,12 +1178,14 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   follow-ups; this screen is explicitly a **first pass to iterate on**.
 
 ## ADR-042 — Direction-aware same-kerb clustering (N-member places); supersedes ADR-022's pair-merge + invariant
-- **Status:** **Quick win shipped (2026-06-11); full N-member clustering still to build.** The direction gate +
-  joint-route signal now run inside the *existing* cross-operator pair merge (`buildPlaces` in
-  `packages/data-normalize/src/dataset.ts`) — verified to split all four confirmed live false merges (Causeway
-  Centre, Ko Po Tsuen, HK Heritage Museum, Yuk Ming Court) while genuine same-kerb pairs still merge. The
-  read-only feasibility study (incl. the full-clustering design) lives in `.context/stop-merge-study/`
-  (re-runnable scripts; 12-agent adversarial verification). The N-member clustering below is the remaining work.
+- **Status:** **Backend built & verified (2026-06-11); mobile UI in progress.** Shipped: the quick-win direction
+  gate, then the full **N-member single-linkage clustering** (`buildPlaces`) with cluster-level vetoes + bearing-
+  spread cap and same-operator members, and the **per-place ETA fetch** (KMB `stop-eta` = 1 call/pole, CTB per-route
+  to a budget, cross-member dedupe) returning an honest `routeCount`; `/v1/stop` now carries member poles + per-route
+  pole ids and a name chosen once in `buildPlaces`. Verified against the dataset snapshot and live APIs (Belair →
+  2 kerb-split places of 5 and 4 poles; the four confirmed false merges stay split; dataset-wide ≈2,010 clusters /
+  5,461 stops, matching the study's ~1,987 / 5,471). **Remaining:** the mobile UI (honest cards, Place detail,
+  member-keyed favourites). Study + re-runnable scripts: `.context/stop-merge-study/`.
 - **Context:** [ADR-022](#adr-022--same-kerb-stop-merge-our-own-conservative-landmarkdistance-clustering) merges only
   **cross-operator pairs** (one KMB + one CTB) within 30 m with a matching landmark name. Two limits surfaced in use:
   (1) **under-merge** — the Nearby list still shows several cards for what is really one or two physical kerbs
@@ -1265,9 +1267,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Consequences / build checklist:**
   - **Supersedes ADR-022's pair-only merge and its "≤ 1 member per operator" invariant** (clusters may now hold
     multiple same-operator members). ADR-022's landmark matcher and self-describing-id *representation* are retained.
-  - **Per-place ETA fetch** — replace the per-member `MAX_ROUTES_PER_STOP` cap with a per-place fetch (KMB `stop-eta`
-    = 1 call/pole; CTB per-route; cross-member dedupe) plus a per-place safety budget (see "Query strategy" above).
-    (Median **11** distinct routes per merged card, p90 = 30 — KMB collapsing to 1 call/pole keeps this bounded.)
+  - **Per-place ETA fetch** — ✅ done. `memberEtaLists`/`stopArrivals` now fetch KMB via `stop-eta` (1 call/pole)
+    and CTB per-route to a per-place budget (`NEARBY_CTB_BUDGET` = 12; `DEFAULT_CTB_BUDGET` = 24 on the Place page),
+    cross-member deduped; `placeRouteCount` gives the honest total. (Median **11** routes/card, p90 = 30 — KMB
+    collapsing to 1 call/pole keeps this bounded.)
   - **Card UX for more routes** — `StopRow` shows the soonest few + the **true route count and a "+N more"** affordance
     (count is free from the static index — honest, never a silent filter); the full grouped-by-pole list is the Place
     page. New i18n keys for the count / "more" / walk-range strings.
