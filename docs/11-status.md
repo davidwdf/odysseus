@@ -4,10 +4,10 @@
 > Snapshot: **2026-06-10**. Branch: `project-status-handoff`. Latest: **Stop-detail enrichment**
 > ([ADR-041](./08-decision-log.md#adr-041--stop-detail-a-collapsing-header-shared-with-route-a-keyless-static-mini-map-and-an-enriched-summary)) —
 > the route header was generalised into a shared **`CollapsingHeader`** so Stop detail now collapses its name into the
-> glass pill exactly like Route; a **keyless static `MiniMap`** (CARTO light/dark raster tiles laid down as `<Image>`s,
-> **re-skins with the theme**, no map lib/key, tap → platform maps) sits at the top; and a **"served by · N routes ·
-> distance"** summary + per-row **boarding fares** enrich it. *A deliberate first pass — to iterate (interactive
-> MapLibre map, the route-at-stop star).*
+> glass pill exactly like Route; a **keyless static `MiniMap`** (Esri light/dark **gray-canvas** raster tiles laid down
+> as `<Image>`s, **re-skins with the theme**, white-haloed pin, no map lib/key, tap → platform maps) sits at the top;
+> and a **"served by · N routes · distance"** summary + per-row **boarding fares** enrich it. *A deliberate first pass —
+> to iterate (interactive MapLibre map, the route-at-stop star).*
 > Earlier: **Route-detail design pass**
 > (ADR-036 refinement) — the static service facts are now a wrapping **pill** row (fare framed **high → low**,
 > frequency, service hours, stop count; **whole-route journey time hidden** — data kept); range dashes spaced

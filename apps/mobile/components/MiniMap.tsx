@@ -11,14 +11,21 @@ import { Text } from './Text'
 // tiles down as plain <Image>s in a clipped viewport, with a pin at the centre. Tapping it
 // hands off to the platform maps app (openInMaps).
 //
-// Tiles come from CARTO's free **light/dark** basemaps (OSM data) — keyless, and they give us a
-// real dark-mode map that re-skins with the theme (ADR-041). CARTO's free tier suits the PWA/dev
-// build but discourages heavy embedding, so a production/native build should repoint `tileUrl`
-// at our own tiles (the own-crawl → R2 roadmap step) or a proper provider — this is the seam.
+// Tiles come from Esri's **light/dark gray canvas** basemaps — keyless, and a matched neutral pair
+// so the map stays legible and re-skins with the theme (ADR-041): the dark canvas is a *mid*-grey
+// (not the near-black CARTO dark, which was too dim to read). It suits the PWA/dev build but a
+// production/native build should repoint `tileUrl` at our own tiles (the own-crawl → R2 roadmap
+// step) or a proper provider — this is the seam.
 const TILE = 256
 const DEFAULT_ZOOM = 16
-const tileUrl = (dark: boolean) => (z: number, x: number, y: number) =>
-  `https://basemaps.cartocdn.com/${dark ? 'dark_all' : 'light_all'}/${z}/${x}/${y}.png`
+// Vivid pin fill that reads on both the light and the dark-grey canvas.
+const PIN_COLOR = '#E11D48'
+const tileUrl = (dark: boolean) => {
+  const style = dark ? 'World_Dark_Gray_Base' : 'World_Light_Gray_Base'
+  // Esri tiles are addressed {z}/{row}/{col} → {z}/{y}/{x}.
+  return (z: number, x: number, y: number) =>
+    `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${style}/MapServer/tile/${z}/${y}/${x}`
+}
 
 const lngToWorldX = (lng: number, scale: number) => ((lng + 180) / 360) * scale
 const latToWorldY = (lat: number, scale: number) => {
@@ -89,21 +96,37 @@ export function MiniMap({
       ))}
 
       {/* Centre pin — its tip (bottom) sits on the exact coordinate. */}
-      {w > 0 ? (
-        <View style={{ position: 'absolute', left: w / 2 - 14, top: height / 2 - 28 }}>
-          <Icon icon={MapPin} tone="accent" size={28} fill="white" />
-        </View>
-      ) : null}
+      {w > 0 ? <CentrePin cx={w / 2} cy={height / 2} /> : null}
 
-      {/* Attribution — required by the OSM data + CARTO tile licences. */}
+      {/* Attribution — required by the Esri basemap licence. */}
       <View
         pointerEvents="none"
         className="absolute bottom-0 right-0 rounded-tl bg-bg/70 px-1 py-0.5"
       >
         <Text variant="caption" className="text-[9px] text-subtle">
-          © OpenStreetMap, © CARTO
+          © Esri
         </Text>
       </View>
     </Pressable>
+  )
+}
+
+/**
+ * The centre marker: a vivid pin with a **white halo** behind it, so it reads on any tile in
+ * both light and dark mode (a single themed pin washed out — accent is near-white in dark).
+ * Both glyphs are bottom-anchored, so each pin tip lands on `(cx, cy)` — the exact coordinate.
+ */
+function CentrePin({ cx, cy }: { cx: number; cy: number }) {
+  const HALO = 36
+  const PIN = 30
+  return (
+    <View pointerEvents="none">
+      <View style={{ position: 'absolute', left: cx - HALO / 2, top: cy - HALO }}>
+        <Icon icon={MapPin} color="#ffffff" fill="#ffffff" size={HALO} strokeWidth={2} />
+      </View>
+      <View style={{ position: 'absolute', left: cx - PIN / 2, top: cy - PIN }}>
+        <Icon icon={MapPin} color="#ffffff" fill={PIN_COLOR} size={PIN} strokeWidth={2} />
+      </View>
+    </View>
   )
 }
