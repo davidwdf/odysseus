@@ -320,6 +320,9 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   the hkbus gh-pages artifact; backlog adds KV/R2 caching for resilience and an own-crawl for self-reliance.
 
 ## ADR-022 — Same-kerb stop-merge: our own conservative landmark+distance clustering
+- **Status:** **Superseded in part by [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)** — the cross-operator *pair-only* merge and the "≤ 1 member per operator"
+  invariant are replaced by direction-aware N-member clustering. The landmark matcher and the self-describing
+  `P:` id *representation* below are retained.
 - **Context:** A KMB stop and a CTB stop on the same pavement are two separate canonical stops (distinct
   operator ids, distinct ETA feeds). Pre-merge, nearby showed them as two cards and neither stop-detail
   listed the other operator's routes. ADR-021 established we **can't** use the dataset's `stopMap` for this
@@ -729,6 +732,11 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      `"${stopId}\|${routeId}"` keys, with `toggleFavoriteRoute(stopId, routeId)` and a `favoriteRouteKey`
      helper. The old `favorites`/`toggleFavorite` stop primitive was removed outright rather than kept for
      migration — stop favourites are not a shipping feature, so there was nothing to preserve.)*
+     **Amended by [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant):** the `stopId` in the key must be the **raw, operator-scoped *member* stop id**
+     (e.g. `KMB:ST141`), **never** a `P:` place id. Place ids embed their member list, so direction-aware
+     clustering churns them and would orphan favourites; the member id is app-stable and ties the favourite to
+     the actual boarding pole. The Favourites tab derives its card grouping from the member's *current* place
+     (`placeByStopId`) at render time.
   2. **The star = the pair, everywhere.** The route screen is always reached **from a stop** (`route/[id].tsx`
      carries the `?stop=` "here" context), so a **top-right glass-lens star** in the route header favourites
      *this route at the stop you came from* — giving the header symmetry **and** the useful primitive with one
@@ -1168,3 +1176,106 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   (route screen unchanged). New `haversineMeters` in `@nextbus/core`, `openInMaps` in `lib/openExternal`, and i18n keys
   `servedBy` / `routesLabel` / `openInMaps`. The interactive map + dark tiles + the route-at-stop star remain
   follow-ups; this screen is explicitly a **first pass to iterate on**.
+
+## ADR-042 — Direction-aware same-kerb clustering (N-member places); supersedes ADR-022's pair-merge + invariant
+- **Status:** **Quick win shipped (2026-06-11); full N-member clustering still to build.** The direction gate +
+  joint-route signal now run inside the *existing* cross-operator pair merge (`buildPlaces` in
+  `packages/data-normalize/src/dataset.ts`) — verified to split all four confirmed live false merges (Causeway
+  Centre, Ko Po Tsuen, HK Heritage Museum, Yuk Ming Court) while genuine same-kerb pairs still merge. The
+  read-only feasibility study (incl. the full-clustering design) lives in `.context/stop-merge-study/`
+  (re-runnable scripts; 12-agent adversarial verification). The N-member clustering below is the remaining work.
+- **Context:** [ADR-022](#adr-022--same-kerb-stop-merge-our-own-conservative-landmarkdistance-clustering) merges only
+  **cross-operator pairs** (one KMB + one CTB) within 30 m with a matching landmark name. Two limits surfaced in use:
+  (1) **under-merge** — the Nearby list still shows several cards for what is really one or two physical kerbs
+  (the user's Belair Garden example: **9 ingested stops** — ST141/142/143/511/512/513/514 + two CTB poles — render as
+  6 cards, and the 6-card cap silently drops ST514); and (2) **a real false-merge bug** — the pair rule has no notion
+  of *direction*, so it fuses opposite kerbs that share a landmark name. Auditing the shipped merge with a direction
+  signal flagged **118 of 1,179 live merged pairs** as direction-divergent; sampling confirmed **≥4 genuine live false
+  merges** (Causeway Centre, Ko Po Tsuen, HK Heritage Museum, Yuk Ming Court — one fuses the **same N691 route in
+  opposite directions** onto one card). The fix needs a direction signal and N-member (not just pair) clustering.
+- **The signal — mean travel bearing:** for each stop, the **direction buses actually move through it**, computed as
+  the circular mean of each route's *previous→next* stop chord bearing along its sequence (the data is already in hand
+  — `fetchConsolidatedIndex` already walks every route's stop sequence). Covers **9,304 of 9,305 stops** and separates
+  kerbs cleanly (Belair: NE poles ~47–60° vs SW poles ~218–233°).
+- **Options:**
+  - (A) **Keep the conservative pair merge** — correct-but-incomplete; leaves both the under-merge and the live
+    false merges in place.
+  - (B) **Geometry-only N-member clustering** (distance + name, drop the per-operator cap) — collapses the cards but
+    *worsens* the false-merge bug: with no direction gate it freely fuses opposite kerbs.
+  - (C) **Direction-aware N-member clustering** (chosen) — distance + name **+ bearing gate + topology vetoes**.
+- **Decision:** Cluster stops (KMB **and** CTB, same-operator members now allowed) by **single-linkage** where every
+  linking edge satisfies **all** of: **≤ 30 m**, **landmark name match** (ADR-022's matcher, unchanged), **mean
+  bearing within 45°**, and **two hard vetoes** — (1) the two stops are **never consecutive on any route**, and
+  (2) **no single route+bound serves both** (kills circular/loop self-merges). Two corrections the verification forced:
+  - **Cluster-level veto enforcement + a bearing-spread cap (~60°).** The one bad cluster in 30 sampled (East Point
+    City) came from single-linkage *chaining* two stops whose **direct** edge the vetoes had rejected — so the vetoes
+    must hold for **every pair in the final cluster**, not just each linking edge, and a cluster's total bearing spread
+    is capped.
+  - **Production bearing must be per-route with terminus handling.** Of 12 sampled live-merge suspects, 8 were
+    **bearing artifacts** — terminus loops and right-turns where the single mean bearing is unreliable. The
+    **decisive positive signal** for "same physical pole" is **a jointly-run KMB+CTB route listing both stop ids at the
+    same sequence position**; use it to confirm cross-operator merges and to override a noisy bearing.
+- **Identity & favourites — persist the member, never the place id:** the place id stays **self-describing**
+  (`P:<memberId>+<memberId>...`, members sorted) and is used for **transient** request-time work only (Nearby grouping,
+  ETA fan-out, `resolveMembers`). It is the **wrong persistence key**: it embeds the member list, so re-tuning the
+  clustering churns the string and silently orphans anything stored under it. Therefore **favourites and recents key on
+  the raw, operator-scoped *member* stop id** (e.g. `KMB:ST141`), with the route id (`"${memberStopId}|${routeId}"`).
+  A route departs from exactly one member pole and the route id carries its operator, so the key is unambiguous **and
+  more correct** post-clustering (a multi-pole cluster spreads routes across poles; the favourite pins to the actual
+  boarding pole). **Display grouping is derived at render time** via `placeByStopId.get(memberId)` — merges/splits
+  re-group the card without touching stored data. This **amends [ADR-032](#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes) point 1** (which had floated the
+  place id as a possible key on the self-describing precedent) and removes the migration risk it noted.
+- **Name once, in `buildPlaces`:** today three code paths pick a place's display name (Nearby names a card after the
+  *closest* member — `nearby.ts`), so the same place can read differently per screen. Choose the name **once** when the
+  place is built and carry it on the place. **Start by picking the richest member name** (fullest en+zh landmark head);
+  iterate if it disappoints.
+- **Query strategy & honest counts (settled 2026-06-11):** the upstream ETA APIs differ — **KMB has a per-stop
+  endpoint** (`data.etabus.gov.hk/v1/transport/kmb/stop-eta/{stopId}`) that returns **all routes at a pole in one
+  call** (verified live), but **Citybus has none** (its `stop-eta` URL 422s; only per-route `eta/CTB/{stop}/{route}`
+  works). So: **switch the KMB live fetch to `stop-eta`** (1 call per KMB pole, any route count) and keep CTB per-route;
+  **dedupe** so a route serving two poles is fetched and listed once (the user-preferred behaviour;
+  [`dedupeEtas`](#adr-023--eta-lists-are-de-duplicated-once-server-side-canonical-api) already collapses
+  `operator|route|bound`). **Both** the Place page and the compact Nearby card fetch **every** route at the place
+  (KMB cheap, CTB per-route) so "the next few buses" are genuinely the soonest — a *capped* CTB fetch would silently
+  mis-rank (we'd show "soonest of KMB + sampled CTB", not of all). A **per-place fetch budget** stays only as a guard
+  for a pathological interchange; **honesty rule** (ADR-008): the **true route count is free from the static index**
+  (no live call), so a card always shows the real total + a **"+N more"** affordance and never implies completeness —
+  and if the guard ever trims CTB, the Place page (single place, on-demand) fills the rest without cross-card budget
+  pressure.
+- **Place detail (replaces "Stop detail"):** the detail screen becomes a **Place** view (a single stop = a one-pole
+  place). Routes are **grouped under the pole they depart from**; the **mini-map shows a pin per pole** (built so
+  flipping to centre-pin-only is a one-line change — the user expects to want that); a **walk *range*** ("4–6 min")
+  when poles differ enough for the minutes to differ (never "4–4"), with each pole's own walk time inside its group.
+  **Navigation:** tapping a stop on a route schematic resolves that stop to its place (`placeByStopId`) and opens
+  **Place detail anchored on that pole** — not the bare stop.
+- **Why:** restores direction-correctness (kills the live false merges) **and** delivers the collapse the user asked
+  for. Dataset-wide the rule forms **1,987 clusters absorbing 5,471 of 9,305 stops → ~37% fewer Nearby cards**, stable
+  to ±10% across radius/tolerance knobs; median cluster diameter 13 m; only ~1.9% geometrically risky. Adversarial
+  check: **29 of 30 sampled clusters confirmed good**, including termini and bus-bus interchanges. The Belair example
+  resolves to **exactly 2 cards** split by travel direction (NE: ST141/142/143 + CTB 001968; SW: ST511–514 + CTB
+  001965). Re your **u-turn concern:** a bearing can be corrupted at a turnaround, but the failure is mostly *safe*
+  (it splits a genuine same-kerb pair rather than fusing opposite ones), and the exact "next stop is across the road
+  after a u-turn" case is blocked outright by the **consecutive veto**; any route that traverses both kerbs is blocked
+  by the **shared route+bound veto** regardless of bearing.
+- **Lifecycle (unchanged seam):** the merge stays a **pure function recomputed in `buildPlaces`** — no stored artifact;
+  new/removed/moved upstream stops flow in for free on the next index rebuild. When the daily crawl
+  ([docs/03](./03-architecture.md), [docs/11](./11-status.md)) is implemented it will run this **same** `buildPlaces`
+  offline and write a versioned R2/KV snapshot — so building ADR-042 now works in both the live-recompute model and the
+  future snapshot model with no rework.
+- **Consequences / build checklist:**
+  - **Supersedes ADR-022's pair-only merge and its "≤ 1 member per operator" invariant** (clusters may now hold
+    multiple same-operator members). ADR-022's landmark matcher and self-describing-id *representation* are retained.
+  - **Per-place ETA fetch** — replace the per-member `MAX_ROUTES_PER_STOP` cap with a per-place fetch (KMB `stop-eta`
+    = 1 call/pole; CTB per-route; cross-member dedupe) plus a per-place safety budget (see "Query strategy" above).
+    (Median **11** distinct routes per merged card, p90 = 30 — KMB collapsing to 1 call/pole keeps this bounded.)
+  - **Card UX for more routes** — `StopRow` shows the soonest few + the **true route count and a "+N more"** affordance
+    (count is free from the static index — honest, never a silent filter); the full grouped-by-pole list is the Place
+    page. New i18n keys for the count / "more" / walk-range strings.
+  - **Sequencing — quick win first:** ✅ **done** — the **bearing gate + joint-route positive signal** now run on
+    the existing pair merge (`directionAgrees` in `dataset.ts`: reject a candidate whose stops' mean travel
+    bearings disagree by >45°, unless a co-run KMB+CTB route lists both at the same sequence position; a missing
+    bearing never rejects). *Then* land full N-member clustering with cluster-level vetoes, per-place caps,
+    member-keyed favourites, and name-once.
+  - **Docs to touch on implementation:** [docs/02](./02-data-sources.md) & [docs/03](./03-architecture.md) (drop the
+    one-member-per-operator wording), [docs/07](./07-backlog.md) (move "better name matching" notes), and
+    [docs/11](./11-status.md).

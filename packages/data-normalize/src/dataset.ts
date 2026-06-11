@@ -214,12 +214,68 @@ function namesMatch(a: I18nText, b: I18nText): boolean {
   return Boolean(aZh && bZh && aZh === bZh)
 }
 
+// Direction gate (ADR-042 quick win). Two co-located, same-named cross-operator stops can
+// still be OPPOSITE kerbs that merely share a landmark name; merging them fuses opposite-
+// direction ETAs onto one card (the live ADR-022 false merges the bearing audit found —
+// Causeway Centre, Ko Po Tsuen, HK Heritage Museum, Yuk Ming Court). We reject a candidate
+// pair whose MEAN TRAVEL BEARINGS (the direction buses move through each stop) disagree by
+// more than this tolerance — UNLESS a jointly-run KMB+CTB route lists both ids at the same
+// sequence position (the decisive "same physical pole" signal, which overrides a bearing
+// made noisy by a terminus loop or an immediate turn).
+const BEARING_TOL_DEG = 45
+
+const toRad = (deg: number): number => (deg * Math.PI) / 180
+
+/** Initial great-circle bearing from (lat1,lng1) to (lat2,lng2), degrees 0..360. */
+function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const lat1r = toRad(lat1)
+  const lat2r = toRad(lat2)
+  const dLng = toRad(lng2 - lng1)
+  const y = Math.sin(dLng) * Math.cos(lat2r)
+  const x = Math.cos(lat1r) * Math.sin(lat2r) - Math.sin(lat1r) * Math.cos(lat2r) * Math.cos(dLng)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
+/** Smallest absolute angle between two bearings (degrees, 0..180). */
+function angularDiffDeg(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360
+  return d > 180 ? 360 - d : d
+}
+
+/** A sorted, order-independent key for a stop pair (for the joint-route same-pole set). */
+const pairKey = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`)
+
+/**
+ * Whether a candidate same-kerb pair agrees on direction of travel (ADR-042). The
+ * joint-route signal is decisive (same physical pole); otherwise the mean bearings must
+ * agree within tolerance. A missing bearing on either side does NOT reject — we keep the
+ * conservative ADR-022 behaviour rather than drop a merge on absent geometry.
+ */
+function directionAgrees(
+  a: IndexStop,
+  b: IndexStop,
+  meanBearing: Map<string, number>,
+  jointPairs: Set<string>,
+): boolean {
+  if (jointPairs.has(pairKey(a.id, b.id))) return true
+  const ba = meanBearing.get(a.id)
+  const bb = meanBearing.get(b.id)
+  if (ba === undefined || bb === undefined) return true
+  return angularDiffDeg(ba, bb) <= BEARING_TOL_DEG
+}
+
 /**
  * Cluster co-located, same-named stops from *different* operators into places.
  * Greedy nearest-first pairing with a spatial grid for O(n·k) candidate lookup;
  * each stop joins at most one place, preserving the one-member-per-operator invariant.
+ * A candidate pair must also agree on direction of travel (ADR-042 `directionAgrees`),
+ * which kills the opposite-kerb false merges that pass the distance + name gates.
  */
-function buildPlaces(stops: IndexStop[]): {
+function buildPlaces(
+  stops: IndexStop[],
+  meanBearing: Map<string, number>,
+  jointPairs: Set<string>,
+): {
   places: IndexPlace[]
   placeByStopId: Map<string, IndexPlace>
 } {
@@ -249,7 +305,11 @@ function buildPlaces(stops: IndexStop[]): {
           const o = stops[j]
           if (!o || o.operator === s.operator) continue // never merge same-operator kerbs
           const d = haversineM(s.lat, s.lng, o.lat, o.lng)
-          if (d <= MERGE_RADIUS_M && namesMatch(s.name, o.name)) {
+          if (
+            d <= MERGE_RADIUS_M &&
+            namesMatch(s.name, o.name) &&
+            directionAgrees(s, o, meanBearing, jointPairs)
+          ) {
             candidates.push({ i, j, d })
           }
         }
@@ -296,6 +356,10 @@ export async function fetchConsolidatedIndex(
   const stopToRoutes = new Map<string, IndexRouteRef[]>()
   const routeMeta = new Map<string, IndexRouteMeta>()
   const routeToStops = new Map<string, IndexRouteStop[]>()
+  // Per-stop mean travel bearing, accumulated as circular-mean components (ADR-042).
+  const bearingAcc = new Map<string, { x: number; y: number }>()
+  // Stop pairs proven to be the same physical pole by a co-run KMB+CTB route.
+  const jointPairs = new Set<string>()
 
   const ensureStop = (operator: OperatorId, rawId: string): string | null => {
     const id = `${operator}:${rawId}`
@@ -344,6 +408,22 @@ export async function fetchConsolidatedIndex(
         const stopId = ensureStop(operator, rawId)
         if (!stopId) return
         ordered.push({ seq: i + 1, stopId })
+        // Travel bearing through this stop = chord from the previous to the next stop
+        // (skipping the stop itself). Termini, where prev === next, contribute nothing.
+        const prevRaw = seq[i - 1] ?? rawId
+        const nextRaw = seq[i + 1] ?? rawId
+        const p = data.stopList[prevRaw]?.location
+        const n = data.stopList[nextRaw]?.location
+        if (p && n && prevRaw !== nextRaw) {
+          const b = toRad(bearingDeg(p.lat, p.lng, n.lat, n.lng))
+          const acc = bearingAcc.get(stopId)
+          if (acc) {
+            acc.x += Math.cos(b)
+            acc.y += Math.sin(b)
+          } else {
+            bearingAcc.set(stopId, { x: Math.cos(b), y: Math.sin(b) })
+          }
+        }
         const list = stopToRoutes.get(stopId)
         if (!list) stopToRoutes.set(stopId, [ref])
         else if (
@@ -360,9 +440,32 @@ export async function fetchConsolidatedIndex(
       })
       routeToStops.set(routeId, ordered)
     }
+
+    // Joint-route same-pole signal (ADR-042): a co-run KMB+CTB route lists parallel,
+    // index-aligned stop sequences — the same physical pole under each operator's id. Used
+    // only to rescue an already-close, already-same-named candidate pair from the direction
+    // gate, so it cannot introduce a merge on its own.
+    const kmbSeq = entry.stops?.kmb
+    const ctbSeq = entry.stops?.ctb
+    if (entry.co.includes('kmb') && entry.co.includes('ctb') && kmbSeq && ctbSeq) {
+      const n = Math.min(kmbSeq.length, ctbSeq.length)
+      for (let i = 0; i < n; i++) {
+        const k = kmbSeq[i]
+        const c = ctbSeq[i]
+        if (k && c && data.stopList[k]?.location && data.stopList[c]?.location) {
+          jointPairs.add(pairKey(`KMB:${k}`, `CTB:${c}`))
+        }
+      }
+    }
   }
 
-  const { places, placeByStopId } = buildPlaces(stops)
+  // Reduce the accumulated circular-mean components to one bearing per stop.
+  const meanBearing = new Map<string, number>()
+  for (const [id, { x, y }] of bearingAcc) {
+    meanBearing.set(id, ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360)
+  }
+
+  const { places, placeByStopId } = buildPlaces(stops, meanBearing, jointPairs)
   return { stops, stopById, stopToRoutes, routeMeta, routeToStops, places, placeByStopId }
 }
 

@@ -235,7 +235,9 @@ it in-browser; Nearby filter chips; omnibox).
    tab groups saved pairs under their stop heading (reuses `StopRow` with `etas` filtered to the starred
    routes). **Remaining:** the glass-lens **star top-right** in the route header (favourites *this route at
    the `?stop=` you came from*), mirrored as a per-row star in Stop detail — until it ships the tab shows its
-   empty state. Bare-route favourites stay deferred.
+   empty state. Bare-route favourites stay deferred. **Key on the raw *member* stop id, not the `P:` place id**
+   ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)) — place ids churn under clustering and would orphan favourites; this couples with item 6,
+   so settle the id scheme before the save UI persists anything.
 1. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
 2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
@@ -245,8 +247,18 @@ it in-browser; Nearby filter chips; omnibox).
    reduced-motion + a11y pass (Reanimated is installed/wired but unused), swipe-to-favourite + haptics.
 5. **Departure-board mode** (ADR-026 follow-up) — an alternate Nearby view: one ETA-sorted stream of next
    departures across nearby stops; the natural home for the Split-Flap / Dot-Matrix display liveries.
-6. **Looser stop-merge** (ADR-022 follow-up) — token-overlap name matching so landmark-only/code-only
-   names also merge; ideally on the own-crawl's first-party coordinates.
+6. **Direction-aware stop clustering** ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant) — study in `.context/stop-merge-study/`).
+   **Quick win ✅ done (2026-06-11):** the existing cross-operator pair merge now applies a **direction gate** —
+   reject a candidate whose stops' **mean travel bearings** disagree by >45°, unless a co-run KMB+CTB route lists
+   both at the same sequence position (`directionAgrees`/`bearingDeg` in `dataset.ts`). Splits the ≥4 confirmed
+   live opposite-kerb false merges; verified against the snapshot (`.context/verify-quickwin.ts`). **Still to
+   build (UI/query plan settled 2026-06-11 — see ADR-042):** full **N-member** single-linkage clustering (~37% fewer
+   Nearby cards) with cluster-level vetoes; **per-place ETA fetch** — switch KMB to the per-stop `stop-eta` endpoint
+   (1 call/pole; CTB stays per-route) + cross-member dedupe + a per-place budget; **honest cards** — soonest few +
+   true route count + "+N more" (count is free from the static index, never a silent filter); a **Place detail**
+   screen replacing Stop detail (multi-pin map, routes grouped by pole, walk *range*, route→stop→place navigation);
+   **name-once** in `buildPlaces`; and **member-keyed favourites** (couples with item 0). Update docs/02/03/07 then.
+   (Old "looser stop-merge / token-overlap" note folds in here.)
 
 ## 📍 Key file pointers
 - DataSource seam → `packages/core/src/datasource.ts`; EdgeClient → `packages/api-client/src/index.ts`
