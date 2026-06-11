@@ -1,9 +1,7 @@
-import { MapPin } from 'lucide-react-native'
 import { useState } from 'react'
 import { Image, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import { openInMaps } from '../lib/openExternal'
 import { useTheme } from '../lib/useTheme'
-import { Icon } from './Icon'
 import { Text } from './Text'
 
 // A small, **static** map of one point — no map library, no API key, works on web + native.
@@ -129,14 +127,14 @@ export function MiniMap({
         ))}
       </View>
 
-      {/* A pin per pole, tip (bottom) on the exact coordinate; smaller when there are several. */}
+      {/* A dot per pole, centred on its exact coordinate; smaller when there are several. */}
       {w > 0
         ? pts.map((p) => (
             <Pin
               key={`${p.lat},${p.lng}`}
               cx={lngToWorldX(p.lng, scale) - left}
               cy={latToWorldY(p.lat, scale) - top}
-              size={pts.length > 1 ? 24 : 30}
+              size={pts.length > 1 ? 14 : 18}
             />
           ))
         : null}
@@ -155,20 +153,36 @@ export function MiniMap({
 }
 
 /**
- * A map marker: a vivid pin with a **white halo** behind it, so it reads on any tile in both
- * light and dark mode (a single themed pin washed out — accent is near-white in dark). Both
- * glyphs are bottom-anchored, so the pin tip lands on `(cx, cy)` — the exact coordinate.
+ * A clean circular marker centred on `(cx, cy)`: a vivid core inside a white ring with a soft
+ * drop shadow, so it reads on any tile in light or dark mode without a fussy glyph. The white
+ * ring is what separates it from the map; the shadow lifts it off the tiles.
  */
-function Pin({ cx, cy, size = 30 }: { cx: number; cy: number; size?: number }) {
-  const halo = size + 6
+function Pin({ cx, cy, size = 18 }: { cx: number; cy: number; size?: number }) {
+  const ring = Math.max(2, Math.round(size * 0.22))
   return (
-    <View pointerEvents="none">
-      <View style={{ position: 'absolute', left: cx - halo / 2, top: cy - halo }}>
-        <Icon icon={MapPin} color="#ffffff" fill="#ffffff" size={halo} strokeWidth={2} />
-      </View>
-      <View style={{ position: 'absolute', left: cx - size / 2, top: cy - size }}>
-        <Icon icon={MapPin} color="#ffffff" fill={PIN_COLOR} size={size} strokeWidth={2} />
-      </View>
-    </View>
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: cx - size / 2,
+        top: cy - size / 2,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: PIN_COLOR,
+        borderWidth: ring,
+        borderColor: '#ffffff',
+        // box-shadow on web (react-native-web 0.21 takes the string), shadow* on native.
+        ...Platform.select({
+          web: { boxShadow: '0 1px 4px rgba(0,0,0,0.35)' },
+          default: {
+            shadowColor: '#000000',
+            shadowOpacity: 0.35,
+            shadowRadius: 2,
+            shadowOffset: { width: 0, height: 1 },
+          },
+        }),
+      }}
+    />
   )
 }

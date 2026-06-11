@@ -154,9 +154,15 @@ export async function stopArrivals(
  *  each with its next ETA. A `P:`-prefixed id spans both operators at one kerb. */
 export async function stopDetail(id: string): Promise<StopDetail> {
   const index = await getStaticIndex()
-  const members = resolveMembers(index, id)
-  const rep = members[0]
+  const seed = resolveMembers(index, id)
+  const rep = seed[0]
   if (!rep) throw new Error(`unknown stop: ${id}`)
+  // Promote a bare member id to its *current* place, so tapping a stop on a route lands on the
+  // whole place (grouped by pole), not a lone pole (ADR-042). A `P:` id or standalone stop is
+  // unchanged. Member ids are stable; the place id is derived here from the live clustering.
+  const place = index.placeByStopId.get(rep.id)
+  const members = place ? place.members : seed
+  const placeId = place ? place.id : id
 
   const etaByRouteId = new Map<string, Eta>()
   for (const e of await memberEtaLists(index, members)) etaByRouteId.set(e.routeId, e)
@@ -177,10 +183,9 @@ export async function stopDetail(id: string): Promise<StopDetail> {
     location: { lat: m.lat, lng: m.lng },
   }))
   // Use the place's chosen name + centroid (not the rep's) so all screens agree.
-  const place = index.placeByStopId.get(rep.id)
   const name = place?.name ?? rep.name
   const location = place ? { lat: place.lat, lng: place.lng } : { lat: rep.lat, lng: rep.lng }
-  return { stop: toMergedStop(id, members, name, location), routes, members: memberPoles }
+  return { stop: toMergedStop(placeId, members, name, location), routes, members: memberPoles }
 }
 
 /** GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered). */

@@ -15,7 +15,6 @@ import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { expandedHeaderH } from '../../components/CollapsingHeader'
 import { EtaBadge } from '../../components/EtaBadge'
-import { Fare } from '../../components/Fare'
 import { MiniMap } from '../../components/MiniMap'
 import { RemarkTag } from '../../components/RemarkTag'
 import { RouteChip } from '../../components/RouteChip'
@@ -186,13 +185,12 @@ export default function StopDetail() {
                         </Text>
                       ) : null}
                     </View>
-                    {rs.map((r, j) => (
+                    {rs.map((r) => (
                       <RouteRowItem
                         key={r.route.id}
                         r={r}
                         locale={locale}
                         now={now}
-                        divider={j > 0}
                         onPress={() =>
                           router.push(
                             `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
@@ -208,13 +206,12 @@ export default function StopDetail() {
                 <Text variant="label" className="mb-1 px-4 text-subtle">
                   {t(locale, 'routesAtStop')}
                 </Text>
-                {routes.map((r, i) => (
+                {routes.map((r) => (
                   <RouteRowItem
                     key={r.route.id}
                     r={r}
                     locale={locale}
                     now={now}
-                    divider={i > 0}
                     onPress={() =>
                       router.push(
                         `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
@@ -242,29 +239,25 @@ export default function StopDetail() {
   )
 }
 
-/** One route row: chip + "→ destination" (+ fare/remark), and the live ETA or scheduled
- *  headway on the right. Shared by the flat and pole-grouped layouts. */
+/** One route row: chip + "→ destination" (+ remark), and the live ETA or scheduled headway on
+ *  the right. Compact, divider-free rows that mirror the Nearby list. Shared by the flat and
+ *  pole-grouped layouts. */
 function RouteRowItem({
   r,
   locale,
   now,
-  divider,
   onPress,
 }: {
   r: RouteEntry
   locale: Locale
   now: number
-  divider: boolean
   onPress: () => void
 }) {
-  const fare = r.fare ?? r.eta?.fare
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      className={`flex-row items-center justify-between gap-3 px-4 py-3.5 active:opacity-60 ${
-        divider ? 'border-border border-t' : ''
-      }`}
+      className="flex-row items-center justify-between gap-3 px-4 py-1.5 active:opacity-60"
     >
       <View className="flex-1 flex-row items-center gap-2.5">
         <RouteChip operator={r.route.operator} routeNo={r.route.routeNo} />
@@ -273,12 +266,7 @@ function RouteRowItem({
             <Text className="text-subtle">→ </Text>
             {titleCaseName(r.route.destination[locale])}
           </Text>
-          {fare || r.eta?.remark ? (
-            <View className="mt-0.5 flex-row items-center gap-2">
-              {fare ? <Fare fare={fare} /> : null}
-              {r.eta?.remark ? <RemarkTag remark={r.eta.remark} locale={locale} /> : null}
-            </View>
-          ) : null}
+          {r.eta?.remark ? <RemarkTag remark={r.eta.remark} locale={locale} /> : null}
         </View>
       </View>
       {r.eta ? (

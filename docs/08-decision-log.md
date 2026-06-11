@@ -1284,3 +1284,13 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   - **Docs to touch on implementation:** [docs/02](./02-data-sources.md) & [docs/03](./03-architecture.md) (drop the
     one-member-per-operator wording), [docs/07](./07-backlog.md) (move "better name matching" notes), and
     [docs/11](./11-status.md).
+- **Open follow-ups (raised 2026-06-11, to discuss):**
+  1. **Same-name pole disambiguation.** Within a multi-pole place the poles share a landmark name, and the current
+     group label (operator + stop code, e.g. "KMB · ST141") means nothing to a rider — a local resident still found
+     it unclear. Want a human "which pole / which way" cue. Options to explore: the road-name suffix already in the
+     stop name; a compass/side hint derived from the pole's **mean travel bearing** (we already compute it — e.g.
+     "north-east-bound side"); "towards {next stop}"; or relative position on the kerb. Undecided.
+  2. **Circular-route heading.** For loop routes (e.g. KMB **284**, a Sha Tin circular) the inbound/outbound bound +
+     single destination don't convey *which way round* the bus is going — confusing in route rows and the schematic.
+     Want a clearer heading cue for circulars ("via X" / direction-of-travel). Related to the bearing signal's
+     terminus-loop artifacts noted above.
