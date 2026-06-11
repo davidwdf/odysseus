@@ -1142,11 +1142,13 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   2. **Keyless static mini-map (`MiniMap`).** A small **non-interactive** map of the kerb, built **without a map
      library or API key**: we compute the Web-Mercator tile coords for the centre and lay raster tiles as plain
      `<Image>`s in a clipped viewport with a centre pin; tapping it hands off to the platform maps app
-     (`openInMaps` → Apple Maps / `geo:` / Google Maps web — also keyless). Tiles are **Esri's keyless `light` /
-     `dark` gray-canvas basemaps** chosen by `useTheme().isDark`, so the map **re-skins with light/dark mode** — a
-     matched neutral pair (the first dark try, CARTO `dark_all`, was too near-black to read). The centre **pin uses a
-     white halo behind a vivid fill** so it reads on any tile in either mode (a single themed pin washed out — `accent`
-     is near-white in dark). Attribution ("© Esri") is shown.
+     (`openInMaps` → Apple Maps / `geo:` / Google Maps web — also keyless). Tiles are the **standard OpenStreetMap**
+     raster set; **dark mode is derived from the same light tiles with a CSS-style `filter`** (`invert` + `hueRotate`
+     180° + brightness/contrast trim, the array form so it works web + native on RN ≥0.76) applied to a tiles-only
+     layer — so the map keeps the familiar OSM look in both modes from one source. (We tried second dark tile sources —
+     CARTO `dark_all` read too near-black, Esri's gray canvas dropped the OSM look — the filter on the preferred OSM
+     tiles won.) The centre **pin uses a white halo behind a vivid fill** so it reads on any tile in either mode (a
+     single themed pin washed out — `accent` is near-white in dark). Attribution ("© OpenStreetMap") is shown.
   3. **Enriched summary.** A one-line meta strip under the map — **"Served by {operators} · N routes · {distance} ·
      {walk}"** (distance/walk only when a location fix already exists; we **don't** prompt on this screen). Route rows
      gained the **boarding fare** ([ADR-036](#adr-036--surface-fares-frequency-journey-time--eta-remarks-from-data-we-already-fetch)) beneath the destination.
@@ -1155,10 +1157,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   approach is genuinely trivial, dependency-free, and works on web **and** native today — it ships the map now without
   pre-empting the bigger interactive **MapLibre** map (roadmap) or its tile-source decision; (3) the enrichment is all
   data we already fetch (`Stop.sources`/route operators, `StopDetail.routes`, sectional fares) — no new calls.
-- **Honesty / caveats (ADR-008):** Esri's public basemaps are a **dev/keyless choice** — heavy/commercial embedding
-  wants a proper plan, so a production/native build should repoint `MiniMap`'s `tileUrl` at our **own tiles** (the
-  own-crawl → R2 roadmap step) or a proper provider; `MiniMap` is the seam for that swap. The gray canvas carries no
-  street labels (fine for a locator). Distance is straight-line (already rounded, never fake-precise).
+- **Honesty / caveats (ADR-008):** the OSM public tile server is a **dev/keyless choice** — its tile-usage policy
+  discourages heavy embedding, so a production/native build should repoint `MiniMap`'s `TILE_URL` at our **own tiles**
+  (the own-crawl → R2 roadmap step) or a proper provider; `MiniMap` is the seam for that swap. Distance is
+  straight-line (already rounded, never fake-precise).
 - **Consequences:** New components `CollapsingHeader`, `StopHeader`, `MiniMap`; `RouteHeader` reduced to a wrapper
   (route screen unchanged). New `haversineMeters` in `@nextbus/core`, `openInMaps` in `lib/openExternal`, and i18n keys
   `servedBy` / `routesLabel` / `openInMaps`. The interactive map + dark tiles + the route-at-stop star remain
