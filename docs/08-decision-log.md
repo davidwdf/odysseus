@@ -1178,14 +1178,16 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   follow-ups; this screen is explicitly a **first pass to iterate on**.
 
 ## ADR-042 — Direction-aware same-kerb clustering (N-member places); supersedes ADR-022's pair-merge + invariant
-- **Status:** **Backend built & verified (2026-06-11); mobile UI in progress.** Shipped: the quick-win direction
-  gate, then the full **N-member single-linkage clustering** (`buildPlaces`) with cluster-level vetoes + bearing-
-  spread cap and same-operator members, and the **per-place ETA fetch** (KMB `stop-eta` = 1 call/pole, CTB per-route
-  to a budget, cross-member dedupe) returning an honest `routeCount`; `/v1/stop` now carries member poles + per-route
-  pole ids and a name chosen once in `buildPlaces`. Verified against the dataset snapshot and live APIs (Belair →
-  2 kerb-split places of 5 and 4 poles; the four confirmed false merges stay split; dataset-wide ≈2,010 clusters /
-  5,461 stops, matching the study's ~1,987 / 5,471). **Remaining:** the mobile UI (honest cards, Place detail,
-  member-keyed favourites). Study + re-runnable scripts: `.context/stop-merge-study/`.
+- **Status:** **Backend + place UI built & verified (2026-06-11); favourites star pending.** Shipped: the quick-win
+  direction gate, the full **N-member single-linkage clustering** (`buildPlaces`) with cluster-level vetoes + bearing-
+  spread cap and same-operator members, the **per-place ETA fetch** (KMB `stop-eta` = 1 call/pole, CTB per-route to a
+  budget, cross-member dedupe) with an honest `routeCount`, and the **mobile UI**: Nearby cards show the soonest few
+  + "+N more" (true count, never a silent filter); a **Place detail** screen (renamed concept) groups routes under
+  their pole, with a multi-pin `MiniMap`, a walk *range*, and route→stop→place navigation (`?pole` anchor). Name is
+  chosen once in `buildPlaces`. Verified vs the snapshot + live APIs (Belair → 2 kerb-split places of 5/4 poles;
+  the four false merges stay split; ≈2,010 clusters / 5,461 stops). **Remaining:** **member-keyed favourites** —
+  the per-route save star (ADR-032's deferred UI) keyed on the member pole id (`${operator}:${eta.stopId}`), and the
+  Favourites tab grouping by current place. Study + re-runnable scripts: `.context/stop-merge-study/`.
 - **Context:** [ADR-022](#adr-022--same-kerb-stop-merge-our-own-conservative-landmarkdistance-clustering) merges only
   **cross-operator pairs** (one KMB + one CTB) within 30 m with a matching landmark name. Two limits surfaced in use:
   (1) **under-merge** — the Nearby list still shows several cards for what is really one or two physical kerbs
@@ -1271,9 +1273,9 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     and CTB per-route to a per-place budget (`NEARBY_CTB_BUDGET` = 12; `DEFAULT_CTB_BUDGET` = 24 on the Place page),
     cross-member deduped; `placeRouteCount` gives the honest total. (Median **11** routes/card, p90 = 30 — KMB
     collapsing to 1 call/pole keeps this bounded.)
-  - **Card UX for more routes** — `StopRow` shows the soonest few + the **true route count and a "+N more"** affordance
-    (count is free from the static index — honest, never a silent filter); the full grouped-by-pole list is the Place
-    page. New i18n keys for the count / "more" / walk-range strings.
+  - **Card UX for more routes** — ✅ done. `StopRow` shows the soonest ≤6 + a tappable **"+N more routes"**
+    (`moreRoutes` i18n key; N from the honest `routeCount`) → opens the Place page. Place detail groups routes under
+    their pole, multi-pin `MiniMap`, walk *range* (`formatWalkRange`), route→stop→place nav via `?pole`.
   - **Sequencing — quick win first:** ✅ **done** — the **bearing gate + joint-route positive signal** now run on
     the existing pair merge (`directionAgrees` in `dataset.ts`: reject a candidate whose stops' mean travel
     bearings disagree by >45°, unless a co-run KMB+CTB route lists both at the same sequence position; a missing

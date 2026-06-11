@@ -41,14 +41,32 @@ const latToWorldY = (lat: number, scale: number) => {
   return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * scale
 }
 
+/** Highest zoom at which all points fit within ~70% of the viewport (so pins aren't clipped).
+ *  Single point → DEFAULT_ZOOM. The poles of a place sit ≤30 m apart, so this lands ~18–19. */
+function fitZoom(pts: Array<{ lat: number; lng: number }>, w: number, h: number): number {
+  if (pts.length < 2 || w <= 0) return DEFAULT_ZOOM
+  const minLat = Math.min(...pts.map((p) => p.lat))
+  const maxLat = Math.max(...pts.map((p) => p.lat))
+  const minLng = Math.min(...pts.map((p) => p.lng))
+  const maxLng = Math.max(...pts.map((p) => p.lng))
+  for (let z = 19; z > 11; z--) {
+    const scale = TILE * 2 ** z
+    const spanX = Math.abs(lngToWorldX(maxLng, scale) - lngToWorldX(minLng, scale))
+    const spanY = Math.abs(latToWorldY(maxLat, scale) - latToWorldY(minLat, scale))
+    if (spanX <= w * 0.7 && spanY <= h * 0.7) return z
+  }
+  return 12
+}
+
 /**
- * A static OSM mini-map centred on `{ lat, lng }`, with a centre pin, that opens the
- * platform maps app on tap. Full-bleed to its container width (measured on layout);
- * `height` and `zoom` are tunable. `label` names the dropped pin and the tap target.
+ * A static OSM mini-map that opens the platform maps app on tap. Centres on `{ lat, lng }`
+ * with a single pin; or pass `points` (a place's member poles, ADR-042) to drop a pin per
+ * pole, auto-zoomed to fit them all. Full-bleed to its container width (measured on layout).
  */
 export function MiniMap({
   lat,
   lng,
+  points,
   label,
   actionLabel,
   height = 150,
@@ -57,6 +75,8 @@ export function MiniMap({
 }: {
   lat: number
   lng: number
+  /** Member poles to pin (multi-pole place). Omit/≤1 → a single centre pin at `lat,lng`. */
+  points?: Array<{ lat: number; lng: number }>
   /** Stop name — names the maps pin. */
   label?: string
   /** Accessible label for the tap target, e.g. "Open in Maps". */
@@ -67,13 +87,16 @@ export function MiniMap({
 }) {
   const { isDark } = useTheme()
   const [w, setW] = useState(0)
-  const scale = TILE * 2 ** zoom
-  const n = 2 ** zoom
-  const cx = lngToWorldX(lng, scale)
-  const cy = latToWorldY(lat, scale)
-  // Viewport top-left in world pixels, so the point lands dead-centre.
-  const left = cx - w / 2
-  const top = cy - height / 2
+  const pts = points && points.length > 1 ? points : [{ lat, lng }]
+  // Centre on the points' centroid (so all pins are framed); zoom to fit them.
+  const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
+  const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
+  const z = pts.length > 1 ? fitZoom(pts, w, height) : zoom
+  const scale = TILE * 2 ** z
+  const n = 2 ** z
+  // Viewport top-left in world pixels, so the centroid lands dead-centre.
+  const left = lngToWorldX(cLng, scale) - w / 2
+  const top = latToWorldY(cLat, scale) - height / 2
 
   const tiles: Array<{ tx: number; ty: number; x: number; y: number }> = []
   if (w > 0) {
@@ -89,25 +112,34 @@ export function MiniMap({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={actionLabel}
-      onPress={() => openInMaps(lat, lng, label)}
+      onPress={() => openInMaps(cLat, cLng, label)}
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
       className={`overflow-hidden bg-surface-2 active:opacity-90 ${className ?? ''}`}
       style={{ height }}
     >
-      {/* Tiles live in their own layer so the dark `filter` recolours the map only — the pin
+      {/* Tiles live in their own layer so the dark `filter` recolours the map only — the pins
           and attribution below stay true-colour. */}
       <View style={[StyleSheet.absoluteFill, isDark ? { filter: DARK_TILE_FILTER } : null]}>
         {tiles.map((t) => (
           <Image
             key={`${t.tx}/${t.ty}`}
-            source={{ uri: TILE_URL(zoom, t.tx, t.ty) }}
+            source={{ uri: TILE_URL(z, t.tx, t.ty) }}
             style={{ position: 'absolute', left: t.x, top: t.y, width: TILE, height: TILE }}
           />
         ))}
       </View>
 
-      {/* Centre pin — its tip (bottom) sits on the exact coordinate. */}
-      {w > 0 ? <CentrePin cx={w / 2} cy={height / 2} /> : null}
+      {/* A pin per pole, tip (bottom) on the exact coordinate; smaller when there are several. */}
+      {w > 0
+        ? pts.map((p) => (
+            <Pin
+              key={`${p.lat},${p.lng}`}
+              cx={lngToWorldX(p.lng, scale) - left}
+              cy={latToWorldY(p.lat, scale) - top}
+              size={pts.length > 1 ? 24 : 30}
+            />
+          ))
+        : null}
 
       {/* Attribution — required by the OSM tile licence. */}
       <View
@@ -123,20 +155,19 @@ export function MiniMap({
 }
 
 /**
- * The centre marker: a vivid pin with a **white halo** behind it, so it reads on any tile in
- * both light and dark mode (a single themed pin washed out — accent is near-white in dark).
- * Both glyphs are bottom-anchored, so each pin tip lands on `(cx, cy)` — the exact coordinate.
+ * A map marker: a vivid pin with a **white halo** behind it, so it reads on any tile in both
+ * light and dark mode (a single themed pin washed out — accent is near-white in dark). Both
+ * glyphs are bottom-anchored, so the pin tip lands on `(cx, cy)` — the exact coordinate.
  */
-function CentrePin({ cx, cy }: { cx: number; cy: number }) {
-  const HALO = 36
-  const PIN = 30
+function Pin({ cx, cy, size = 30 }: { cx: number; cy: number; size?: number }) {
+  const halo = size + 6
   return (
     <View pointerEvents="none">
-      <View style={{ position: 'absolute', left: cx - HALO / 2, top: cy - HALO }}>
-        <Icon icon={MapPin} color="#ffffff" fill="#ffffff" size={HALO} strokeWidth={2} />
+      <View style={{ position: 'absolute', left: cx - halo / 2, top: cy - halo }}>
+        <Icon icon={MapPin} color="#ffffff" fill="#ffffff" size={halo} strokeWidth={2} />
       </View>
-      <View style={{ position: 'absolute', left: cx - PIN / 2, top: cy - PIN }}>
-        <Icon icon={MapPin} color="#ffffff" fill={PIN_COLOR} size={PIN} strokeWidth={2} />
+      <View style={{ position: 'absolute', left: cx - size / 2, top: cy - size }}>
+        <Icon icon={MapPin} color="#ffffff" fill={PIN_COLOR} size={size} strokeWidth={2} />
       </View>
     </View>
   )

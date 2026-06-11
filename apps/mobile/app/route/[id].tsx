@@ -153,7 +153,13 @@ export default function RouteDetail() {
                 first={i === 0}
                 last={i === stops.length - 1}
                 onLayoutY={(y) => setTop(i, y)}
-                onPress={() => router.push(`/stop/${encodeURIComponent(s.stop.id)}`)}
+                onPress={() =>
+                  // Land on the *place* this stop belongs to (the server promotes the member
+                  // id), anchored on this pole via `?pole` (ADR-042).
+                  router.push(
+                    `/stop/${encodeURIComponent(s.stop.id)}?pole=${encodeURIComponent(s.stop.id)}`,
+                  )
+                }
               />
             ))}
 

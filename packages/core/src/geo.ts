@@ -44,3 +44,16 @@ const WALK_LABEL: Record<Locale, string> = {
 export function formatWalk(distanceM: number, locale: Locale): string {
   return `${walkMinutes(distanceM)} ${WALK_LABEL[locale]}`
 }
+
+/** Localized walk estimate across a *range* of distances (a multi-pole place — ADR-042):
+ *  "4–6 min walk" when the poles differ in walking minutes, else a single "4 min walk"
+ *  (never "4–4"). Order-independent. */
+export function formatWalkRange(
+  minDistanceM: number,
+  maxDistanceM: number,
+  locale: Locale,
+): string {
+  const lo = walkMinutes(Math.min(minDistanceM, maxDistanceM))
+  const hi = walkMinutes(Math.max(minDistanceM, maxDistanceM))
+  return lo === hi ? `${lo} ${WALK_LABEL[locale]}` : `${lo}–${hi} ${WALK_LABEL[locale]}`
+}

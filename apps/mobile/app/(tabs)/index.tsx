@@ -96,6 +96,7 @@ export default function Nearby() {
                     name={n.stop.name[locale]}
                     distanceM={n.distanceM}
                     etas={n.etas}
+                    routeCount={n.routeCount}
                     locale={locale}
                     now={now}
                     onPress={() => router.push(`/stop/${encodeURIComponent(n.stop.id)}`)}

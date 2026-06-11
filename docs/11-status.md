@@ -254,10 +254,12 @@ it in-browser; Nearby filter chips; omnibox).
    & verified (2026-06-11):** N-member single-linkage clustering (`buildPlaces`) with cluster-level vetoes +
    bearing-spread cap + same-operator members; per-place ETA fetch (KMB `stop-eta` 1 call/pole, CTB per-route to a
    budget, dedupe) returning an honest `routeCount`; `/v1/stop` carries member poles + per-route pole ids; name
-   chosen once. Belair → 2 kerb-split places (live + snapshot); ≈2,010 clusters / 5,461 stops. **Still to build —
-   mobile UI (see ADR-042):** honest Nearby cards (soonest few + true count + "+N more"); a **Place detail** screen
-   replacing Stop detail (multi-pin map, routes grouped by pole, walk *range*, route→stop→place navigation); and
-   **member-keyed favourites** (couples with item 0). Update docs/02/03/07 then.
+   chosen once. Belair → 2 kerb-split places (live + snapshot); ≈2,010 clusters / 5,461 stops. **Place UI now built
+   (2026-06-11):** Nearby cards show soonest ≤6 + "+N more routes" (honest `routeCount`); **Place detail** groups
+   routes under their pole with a multi-pin `MiniMap`, a walk *range*, and route→stop→place nav (`?pole` anchor).
+   **Still to build:** **member-keyed favourites** — the per-route save star (ADR-032's deferred UI), keyed on the
+   member pole id (`${operator}:${eta.stopId}`), + Favourites-tab grouping by current place (couples with item 0).
+   Update docs/02/03/07 then.
 
 ## 📍 Key file pointers
 - DataSource seam → `packages/core/src/datasource.ts`; EdgeClient → `packages/api-client/src/index.ts`

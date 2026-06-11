@@ -1,5 +1,6 @@
 import type { Eta, Locale } from '@nextbus/core'
 import { formatDistance, formatWalk } from '@nextbus/core'
+import { t } from '@nextbus/i18n'
 import { ChevronRight, MapPin } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
 import { titleCaseName } from '../lib/stopName'
@@ -9,6 +10,10 @@ import { RemarkTag } from './RemarkTag'
 import { RouteChip } from './RouteChip'
 import { StopName } from './StopName'
 import { Text } from './Text'
+
+// A merged place can serve many routes; the compact card shows the soonest few and a
+// tappable "+N more" that opens the Place page for the full, grouped list (ADR-042).
+const MAX_ROWS = 6
 
 function routeNo(routeId: string): string {
   return routeId.split(':')[1] ?? routeId
@@ -50,6 +55,7 @@ export function StopRow({
   name,
   distanceM,
   etas,
+  routeCount,
   locale,
   now,
   onPress,
@@ -60,6 +66,9 @@ export function StopRow({
    *  (e.g. Favourites) — the distance/walk line is then hidden. */
   distanceM?: number
   etas: Eta[]
+  /** True total routes at this place (from the static index). When it exceeds the rows
+   *  shown, a "+N more" affordance appears — so the card is honest, never a silent filter. */
+  routeCount?: number
   locale: Locale
   now: number
   /** Tap the heading — navigates to the stop-detail screen. */
@@ -67,6 +76,10 @@ export function StopRow({
   /** Tap a single route row — navigates to that route (with this stop's context). */
   onRoutePress?: (routeId: string) => void
 }) {
+  const shown = etas.slice(0, MAX_ROWS)
+  // Routes beyond what we show: the honest total minus the rows shown (falls back to the
+  // fetched-ETA count when no total is supplied, e.g. on the Favourites screen).
+  const remaining = Math.max(0, (routeCount ?? etas.length) - shown.length)
   const Heading = (
     <View className="flex-row items-start justify-between gap-3">
       <View className="flex-1">
@@ -94,7 +107,7 @@ export function StopRow({
         Heading
       )}
       <View className="mt-2">
-        {etas.map((eta) =>
+        {shown.map((eta) =>
           onRoutePress ? (
             <Pressable
               key={eta.routeId}
@@ -108,6 +121,18 @@ export function StopRow({
             <RouteRow key={eta.routeId} eta={eta} locale={locale} now={now} />
           ),
         )}
+        {remaining > 0 && onPress ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onPress}
+            className="flex-row items-center gap-1 py-1.5 active:opacity-50"
+          >
+            <Text variant="label" className="text-accent">
+              {t(locale, 'moreRoutes').replace('{n}', String(remaining))}
+            </Text>
+            <Icon icon={ChevronRight} tone="accent" size={15} />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   )

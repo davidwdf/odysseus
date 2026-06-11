@@ -87,6 +87,8 @@ export interface Messages {
   servedBy: string
   /** Stop detail: the noun for the route count, e.g. "12 routes". */
   routesLabel: string
+  /** Nearby card: tappable row revealing the routes not shown. Template — replace {n}. */
+  moreRoutes: string
   /** Stop detail: accessible label for the map tap target. */
   openInMaps: string
   /** Route detail, when opened from a stop: the route's upcoming arrivals here. */
@@ -175,6 +177,7 @@ const en: Messages = {
   stopsOnRoute: 'Stops',
   servedBy: 'Served by',
   routesLabel: 'routes',
+  moreRoutes: '+{n} more routes',
   openInMaps: 'Open in Maps',
   arrivalsHere: 'Next buses at this stop',
   save: 'Save',
@@ -244,7 +247,8 @@ const zhHant: Messages = {
   faqCoverageA:
     '九巴、龍運及城巴（包括前新巴路線）。新大嶼山巴士、港鐵巴士、專線小巴及鐵路將陸續加入。',
   faqMergeQ: '為何部分車站會列出兩間公司？',
-  faqMergeA: '當九巴與城巴停靠同一個車站時，我們會將它們合併為一個車站，讓你一次過看到該站所有路線。',
+  faqMergeA:
+    '當九巴與城巴停靠同一個車站時，我們會將它們合併為一個車站，讓你一次過看到該站所有路線。',
   faqOfflineQ: 'App 可以離線使用嗎？',
   faqOfflineA:
     '路線及車站搜尋可離線使用（資料已下載至裝置）。即時到站時間則需連接網絡，因為它直接來自巴士公司。',
@@ -258,6 +262,7 @@ const zhHant: Messages = {
   stopsOnRoute: '車站',
   servedBy: '服務公司',
   routesLabel: '條路線',
+  moreRoutes: '另外 {n} 條路線',
   openInMaps: '在地圖開啟',
   arrivalsHere: '本站即將到站',
   save: '收藏',
@@ -327,7 +332,8 @@ const zhHans: Messages = {
   faqCoverageA:
     '九巴、龙运及城巴（包括前新巴路线）。新大屿山巴士、港铁巴士、专线小巴及铁路将陆续加入。',
   faqMergeQ: '为何部分车站会列出两家公司？',
-  faqMergeA: '当九巴与城巴停靠同一个车站时，我们会将它们合并为一个车站，让你一次过看到该站所有路线。',
+  faqMergeA:
+    '当九巴与城巴停靠同一个车站时，我们会将它们合并为一个车站，让你一次过看到该站所有路线。',
   faqOfflineQ: 'App 可以离线使用吗？',
   faqOfflineA:
     '路线及车站搜索可离线使用（数据已下载至设备）。实时到站时间则需连接网络，因为它直接来自巴士公司。',
@@ -341,6 +347,7 @@ const zhHans: Messages = {
   stopsOnRoute: '车站',
   servedBy: '服务公司',
   routesLabel: '条路线',
+  moreRoutes: '另外 {n} 条路线',
   openInMaps: '在地图打开',
   arrivalsHere: '本站即将到站',
   save: '收藏',
