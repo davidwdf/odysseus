@@ -1,9 +1,10 @@
 import type { Eta, Locale } from '@nextbus/core'
-import { formatDistance, formatWalk } from '@nextbus/core'
+import { formatBearing, formatDistance, formatWalk } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { ChevronRight, MapPin } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
 import { titleCaseName } from '../lib/stopName'
+import { BearingArrow } from './BearingArrow'
 import { EtaBadge } from './EtaBadge'
 import { Icon } from './Icon'
 import { RemarkTag } from './RemarkTag'
@@ -54,6 +55,7 @@ function RouteRow({ eta, locale, now }: { eta: Eta; locale: Locale; now: number 
 export function StopRow({
   name,
   distanceM,
+  bearingDeg,
   etas,
   routeCount,
   locale,
@@ -65,6 +67,9 @@ export function StopRow({
   /** Straight-line distance, metres. Omit on screens where distance is irrelevant
    *  (e.g. Favourites) — the distance/walk line is then hidden. */
   distanceM?: number
+  /** Mean travel bearing of a merged place (deg) → a compass direction that tells two
+   *  same-named places apart (ADR-042). Absent for a lone stop. */
+  bearingDeg?: number
   etas: Eta[]
   /** True total routes at this place (from the static index). When it exceeds the rows
    *  shown, a "+N more" affordance appears — so the card is honest, never a silent filter. */
@@ -80,15 +85,29 @@ export function StopRow({
   // Routes beyond what we show: the honest total minus the rows shown (falls back to the
   // fetched-ETA count when no total is supplied, e.g. on the Favourites screen).
   const remaining = Math.max(0, (routeCount ?? etas.length) - shown.length)
+  // Caption: a compass direction (when this is a merged place) then distance · walk.
+  // The direction distinguishes two same-named places in the list (ADR-042).
+  const meta = [
+    bearingDeg != null ? formatBearing(bearingDeg, locale) : undefined,
+    distanceM != null
+      ? `${formatDistance(distanceM)} · ${formatWalk(distanceM, locale)}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join('  ·  ')
   const Heading = (
     <View className="flex-row items-start justify-between gap-3">
       <View className="flex-1">
         <StopName name={name} variant="h3" />
-        {distanceM != null ? (
+        {meta ? (
           <View className="mt-0.5 flex-row items-center gap-1">
-            <Icon icon={MapPin} tone="subtle" size={13} />
+            {bearingDeg != null ? (
+              <BearingArrow bearingDeg={bearingDeg} />
+            ) : (
+              <Icon icon={MapPin} tone="subtle" size={13} />
+            )}
             <Text variant="caption" className="text-subtle">
-              {formatDistance(distanceM)} · {formatWalk(distanceM, locale)}
+              {meta}
             </Text>
           </View>
         ) : null}

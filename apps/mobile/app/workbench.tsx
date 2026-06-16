@@ -7,7 +7,6 @@ import {
   TYPE_SCALE,
   type TypeVariant,
 } from '@nextbus/ui'
-import { Stack } from 'expo-router'
 import {
   ArrowLeft,
   Bell,
@@ -129,8 +128,6 @@ export default function Workbench() {
 
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
-      <Stack.Screen options={{ headerShown: false }} />
-
       {/* Controls — drive the real theme store so the whole gallery (and Card's
           light/dark rule) renders faithfully. */}
       <View className="border-border border-b px-4 pb-3 pt-2">

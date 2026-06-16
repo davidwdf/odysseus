@@ -95,6 +95,7 @@ export default function Nearby() {
                   <StopRow
                     name={n.stop.name[locale]}
                     distanceM={n.distanceM}
+                    bearingDeg={n.stop.bearingDeg}
                     etas={n.etas}
                     routeCount={n.routeCount}
                     locale={locale}

@@ -95,6 +95,12 @@ export interface Messages {
   arrivalsHere: string
   save: string
   saved: string
+  /** Route schematic action sheet: favourite this route at the tapped stop. */
+  addFavorite: string
+  /** Route schematic action sheet: remove the favourite. */
+  removeFavorite: string
+  /** Route schematic action sheet: open the tapped stop's place detail. */
+  viewStop: string
   favoritesEmpty: string
   favoritesEmptyHelp: string
 }
@@ -182,6 +188,9 @@ const en: Messages = {
   arrivalsHere: 'Next buses at this stop',
   save: 'Save',
   saved: 'Saved',
+  addFavorite: 'Add to favourites',
+  removeFavorite: 'Remove from favourites',
+  viewStop: 'View stop',
   favoritesEmpty: 'No saved routes yet',
   favoritesEmptyHelp: 'Save a route at a stop and it will appear here for quick access.',
 }
@@ -267,6 +276,9 @@ const zhHant: Messages = {
   arrivalsHere: '本站即將到站',
   save: '收藏',
   saved: '已收藏',
+  addFavorite: '加入收藏',
+  removeFavorite: '移除收藏',
+  viewStop: '查看車站',
   favoritesEmpty: '尚未收藏路線',
   favoritesEmptyHelp: '收藏車站的路線後，即可在此快速查看。',
 }
@@ -352,6 +364,9 @@ const zhHans: Messages = {
   arrivalsHere: '本站即将到站',
   save: '收藏',
   saved: '已收藏',
+  addFavorite: '加入收藏',
+  removeFavorite: '移除收藏',
+  viewStop: '查看车站',
   favoritesEmpty: '尚未收藏路线',
   favoritesEmptyHelp: '收藏车站的路线后，即可在此快速查看。',
 }

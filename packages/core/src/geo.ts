@@ -28,10 +28,11 @@ export function walkMinutes(distanceM: number): number {
 }
 
 /** Human distance: rounded metres under 1 km, else one-decimal km. Unit symbols
- *  (`m` / `km`) are locale-neutral, so this needs no locale. */
+ *  (`m` / `km`) are locale-neutral, so this needs no locale. No space before the unit
+ *  ("200m", "1.2km") — reads tighter for a glanceable distance label. */
 export function formatDistance(distanceM: number): string {
-  if (distanceM < 1000) return `${Math.round(distanceM / 10) * 10} m`
-  return `${(distanceM / 1000).toFixed(1)} km`
+  if (distanceM < 1000) return `${Math.round(distanceM / 10) * 10}m`
+  return `${(distanceM / 1000).toFixed(1)}km`
 }
 
 const WALK_LABEL: Record<Locale, string> = {
@@ -43,6 +44,31 @@ const WALK_LABEL: Record<Locale, string> = {
 /** Localized walk estimate, e.g. "2 min walk" / "2 分鐘路程". */
 export function formatWalk(distanceM: number, locale: Locale): string {
   return `${walkMinutes(distanceM)} ${WALK_LABEL[locale]}`
+}
+
+/** 8-point compass labels (N, NE, E, … NW) as localized "-bound" directions. The cue that
+ *  tells two same-named places apart — the NE vs SW kerb of one landmark (ADR-042). */
+const COMPASS_LABELS: Record<Locale, readonly string[]> = {
+  en: [
+    'Northbound',
+    'Northeast-bound',
+    'Eastbound',
+    'Southeast-bound',
+    'Southbound',
+    'Southwest-bound',
+    'Westbound',
+    'Northwest-bound',
+  ],
+  'zh-Hant': ['北行', '東北行', '東行', '東南行', '南行', '西南行', '西行', '西北行'],
+  'zh-Hans': ['北行', '东北行', '东行', '东南行', '南行', '西南行', '西行', '西北行'],
+}
+
+/** Localized 8-point compass direction for a travel bearing (deg, any range), e.g.
+ *  "Northeast-bound" / "東北行". Snaps to the nearest octant. */
+export function formatBearing(deg: number, locale: Locale): string {
+  const octant = Math.round((((deg % 360) + 360) % 360) / 45) % 8
+  const labels = COMPASS_LABELS[locale] ?? COMPASS_LABELS.en
+  return labels[octant] ?? ''
 }
 
 /** Localized walk estimate across a *range* of distances (a multi-pole place — ADR-042):

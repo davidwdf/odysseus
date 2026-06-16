@@ -1,7 +1,16 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-10**. Branch: `project-status-handoff`. Latest: **Stop-detail enrichment**
+> Snapshot: **2026-06-16**. Branch: `project-status-handoff`. Latest: **Core navigation-animation system**
+> ([ADR-043](./08-decision-log.md#adr-043--a-core-navigation-animation-system-cross-fade-tabs-slide-and-reveal-stack-web-swipe-back)) —
+> rules centralised in **`lib/navTransitions.ts`** (+ the two `_layout`s), reduced-motion aware. **On web:** tab↔tab
+> **cross-fade** (flash fixed by painting the theme bg on the tabs wrapper + `sceneStyle`) and a left-edge
+> **swipe-back** gesture (`components/WebSwipeBack`). The **slide-in / reveal-on-back is native-only** (an instant cut
+> on web for now): a JS stack *did* animate it on web but **broke `Animated.ScrollView` scrolling** inside its cards,
+> so it was **tried and reverted** — we're back on the native `<Stack>` (scrolling/chrome/overlays solid). A
+> `usePageRevealReady()` hook is wired for the route page's **two-step reveal** (mechanism only). **Known gaps
+> (pre-existing / separate):** the route auto-scroll doesn't land on web, and `components/BottomSheet`'s slide-up
+> entrance doesn't complete on web — both [docs/07](./07-backlog.md). Earlier: **Stop-detail enrichment**
 > ([ADR-041](./08-decision-log.md#adr-041--stop-detail-a-collapsing-header-shared-with-route-a-keyless-static-mini-map-and-an-enriched-summary)) —
 > the route header was generalised into a shared **`CollapsingHeader`** so Stop detail now collapses its name into the
 > glass pill exactly like Route; a **keyless static `MiniMap`** (standard **OSM** raster tiles laid down as `<Image>`s,
@@ -229,15 +238,17 @@ it in-browser; Nearby filter chips; omnibox).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
 
 ## 🔜 Next steps (priority order)
-0. **Favourite routes-at-a-stop** ([ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes), *framework built — save UI pending*) —
-   the store + tab are now on the route-at-stop model (stop-only favourites **removed**, 2026-06-10):
-   `favoriteRoutes: string[]` keyed `"${stopId}|${routeId}"` with `toggleFavoriteRoute`, and the Favourites
-   tab groups saved pairs under their stop heading (reuses `StopRow` with `etas` filtered to the starred
-   routes). **Remaining:** the glass-lens **star top-right** in the route header (favourites *this route at
-   the `?stop=` you came from*), mirrored as a per-row star in Stop detail — until it ships the tab shows its
-   empty state. Bare-route favourites stay deferred. **Key on the raw *member* stop id, not the `P:` place id**
-   ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)) — place ids churn under clustering and would orphan favourites; this couples with item 6,
-   so settle the id scheme before the save UI persists anything.
+0. **Favourite routes-at-a-stop** ([ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes) + [ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant), **✅ done 2026-06-15**) —
+   the store + tab are on the route-at-stop model (stop-only favourites **removed**, 2026-06-10):
+   `favoriteRoutes: string[]` keyed `"${memberStopId}|${routeId}"` with `toggleFavoriteRoute`. **Save UI =
+   a bottom sheet** (`components/BottomSheet.tsx` + `SheetAction`): tapping a stop on the **route schematic**
+   opens **Favourite / Remove favourite** (this route at the tapped pole) + **View stop**. *(A glass save-star
+   in the route header was prototyped then dropped — didn't feel right.)* **Place detail** keeps a per-row
+   `SaveStar` as a saved-state **indicator only** (`hideWhenEmpty` — only saved routes show a filled star).
+   **Keys on the raw *member* pole id, never the `P:` place id** (place ids churn under clustering and would
+   orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
+   server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
+   once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
 1. **Own crawl → KV/R2** (+ snapshot cache) — replace the runtime hkbus dependency; enables offline +
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
 2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
@@ -257,9 +268,20 @@ it in-browser; Nearby filter chips; omnibox).
    chosen once. Belair → 2 kerb-split places (live + snapshot); ≈2,010 clusters / 5,461 stops. **Place UI now built
    (2026-06-11):** Nearby cards show soonest ≤6 + "+N more routes" (honest `routeCount`); **Place detail** groups
    routes under their pole with a multi-pin `MiniMap`, a walk *range*, and route→stop→place nav (`?pole` anchor).
-   **Still to build:** **member-keyed favourites** — the per-route save star (ADR-032's deferred UI), keyed on the
-   member pole id (`${operator}:${eta.stopId}`), + Favourites-tab grouping by current place (couples with item 0).
-   Update docs/02/03/07 then.
+   **Member-keyed favourites ✅ done (2026-06-15):** per-route saving keyed on the member pole id
+   (`${operator}:${eta.stopId}`) — favourite via the route-schematic bottom sheet + a per-row `SaveStar` in Place
+   detail; Favourites-tab groups by place (resolve each saved pole → place via `getStop`). See item 0.
+   **Direction tag ✅ done (2026-06-15):** a place's `meanBearingDeg` rides on the wire `Stop.bearingDeg`;
+   `formatBearing` (`@nextbus/core`) renders a localized 8-point "-bound" label preceded by a `BearingArrow`
+   (rotated compass arrow) on the Nearby card + Place summary — Belair now reads "↗ Northeast-bound" vs
+   "↙ Southwest-bound" (browser-confirmed). Same pass: operators comma-separate ("Citybus, KMB"); `formatDistance`
+   drops the unit space ("200m"). **Confidence + audit ✅ done (2026-06-15):** every `IndexPlace` carries a 0–100
+   `confidence` + `bearingSpreadDeg` (`placeConfidence`); high-spread audit cleared the risky tail (22 GOOD / 1
+   UNCERTAIN / 0 direction fusions — `.context/stop-merge-study/high-spread-audit.md`).
+   **Remaining (ADR-042 "Open follow-ups"):** (a) **circular-route heading** — a "which way round" cue for loop
+   routes like KMB 284; (b) **cluster-review UI** — a one-off internal tool to eyeball/accept-split groupings,
+   sorted by `confidence` worst-first; (c) optional **18-district gazetteer** to upgrade the direction tag to the
+   friendlier "towards {district}" wording (compass ships now; "towards X" isn't otherwise derivable).
 
 ## 📍 Key file pointers
 - DataSource seam → `packages/core/src/datasource.ts`; EdgeClient → `packages/api-client/src/index.ts`

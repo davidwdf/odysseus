@@ -83,11 +83,10 @@ export interface IndexRouteStop {
 }
 
 /**
- * A same-kerb grouping of co-located stops from *different* operators (e.g. a KMB
- * and a CTB stop on one pavement). Our own conservative clustering — the dataset's
+ * A same-kerb grouping of co-located stops travelling the same direction — possibly
+ * several poles, possibly multiple operators (ADR-042; the bearing gate, not the
+ * operator, separates kerbs). Our own conservative clustering — the dataset's
  * `stopMap` over-clusters and breaks ETA resolution (ADR-021), so we don't use it.
- * Invariant: at most one member per operator (two same-operator stops that close
- * are opposite-direction kerbs and must stay distinct).
  */
 export interface IndexPlace {
   /** `P:` + member canonical ids (sorted) joined by `+` — self-describing so the
@@ -97,6 +96,14 @@ export interface IndexPlace {
   lat: number
   lng: number
   members: IndexStop[]
+  /** Mean travel bearing of the place (deg, 0–360) — the direction buses move through
+   *  it. Undefined only if no member has bearing data (e.g. a place of pure termini). */
+  meanBearingDeg?: number
+  /** Max pairwise bearing spread among members (deg, 0–180). Higher = looser grouping. */
+  bearingSpreadDeg: number
+  /** Heuristic 0–100 confidence that this is ONE real boarding location, for prioritising
+   *  manual review (low = review first). Internal — never shown to riders. ADR-042. */
+  confidence: number
 }
 
 export interface StaticIndex {
@@ -283,6 +290,67 @@ function pickName(members: IndexStop[]): I18nText {
   }).name
 }
 
+/** Circular mean of a set of stops' known travel bearings (deg, 0..360), or undefined. */
+function meanBearingOf(ids: string[], meanBearing: Map<string, number>): number | undefined {
+  let x = 0
+  let y = 0
+  let n = 0
+  for (const id of ids) {
+    const b = meanBearing.get(id)
+    if (b === undefined) continue
+    x += Math.cos(toRad(b))
+    y += Math.sin(toRad(b))
+    n++
+  }
+  return n === 0 ? undefined : ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
+// Confidence tuning (ADR-042). A heuristic 0–100 score of how sure we are a cluster is one
+// real boarding location, used ONLY to prioritise manual review (low = review first) — never
+// shown to riders. Termini/BBIs score low because their loop geometry makes the bearing
+// signal unreliable, so they can't be vouched for automatically (not because they're wrong).
+const CONF_SPREAD_FREE_DEG = 15 // spread up to here is unpenalised (gentle road curve)
+const CONF_SPREAD_PENALTY = 1.1 // points lost per degree of spread beyond the free band
+const CONF_DIAM_FREE_M = 25 // diameter up to here is unpenalised
+const CONF_DIAM_PENALTY = 0.8 // points lost per metre of diameter beyond the free band
+const CONF_SIZE_FREE = 3 // member count up to here is unpenalised
+const CONF_SIZE_PENALTY = 2 // points lost per member beyond the free count
+const CONF_JOINT_BONUS = 12 // a joint-route same-pole proof raises confidence
+const CONF_TERMINUS_PENALTY = 10 // termini/BBIs have unreliable bearings → flag for review
+
+const TERMINUS_NAME = /TERMINUS|\bBBI\b|INTERCHANGE/i
+
+/** Heuristic 0–100 review-priority confidence for a built place (see CONF_* above). */
+function placeConfidence(
+  members: IndexStop[],
+  spreadDeg: number,
+  diameterM: number,
+  hasJointProof: boolean,
+): number {
+  let c = 100
+  c -= Math.max(0, spreadDeg - CONF_SPREAD_FREE_DEG) * CONF_SPREAD_PENALTY
+  c -= Math.max(0, diameterM - CONF_DIAM_FREE_M) * CONF_DIAM_PENALTY
+  c -= Math.max(0, members.length - CONF_SIZE_FREE) * CONF_SIZE_PENALTY
+  if (hasJointProof) c += CONF_JOINT_BONUS
+  if (members.some((m) => TERMINUS_NAME.test(m.name.en))) c -= CONF_TERMINUS_PENALTY
+  return Math.max(0, Math.min(100, Math.round(c)))
+}
+
+/** Max pairwise great-circle distance (m) among a set of stops; 0 if <2. */
+function clusterDiameterM(members: IndexStop[]): number {
+  let max = 0
+  for (let a = 0; a < members.length; a++) {
+    for (let b = a + 1; b < members.length; b++) {
+      // biome-ignore lint/style/noNonNullAssertion: a,b index within members.length
+      const x = members[a]!
+      // biome-ignore lint/style/noNonNullAssertion: a,b index within members.length
+      const y = members[b]!
+      max = Math.max(max, haversineM(x.lat, x.lng, y.lat, y.lng))
+    }
+  }
+  return max
+}
+
 /** Max pairwise angular spread (deg) among the known bearings of a set of stops; 0 if <2. */
 function bearingSpread(ids: string[], meanBearing: Map<string, number>): number {
   const bs = ids.map((id) => meanBearing.get(id)).filter((b): b is number => b !== undefined)
@@ -413,6 +481,20 @@ function buildPlaces(
       .filter((s): s is IndexStop => Boolean(s))
       .sort((x, y) => x.id.localeCompare(y.id))
     if (members.length < 2) continue
+    const ids = members.map((m) => m.id)
+    const spreadDeg = Math.round(bearingSpread(ids, meanBearing))
+    const meanBearingDeg = meanBearingOf(ids, meanBearing)
+    // Any joint-route same-pole proof among the members raises confidence.
+    let hasJointProof = false
+    for (let a = 0; a < ids.length && !hasJointProof; a++) {
+      for (let b = a + 1; b < ids.length; b++) {
+        // biome-ignore lint/style/noNonNullAssertion: a,b index within ids.length
+        if (jointPairs.has(pairKey(ids[a]!, ids[b]!))) {
+          hasJointProof = true
+          break
+        }
+      }
+    }
     const place: IndexPlace = {
       id: `P:${members.map((m) => m.id).join('+')}`,
       name: pickName(members),
@@ -420,6 +502,9 @@ function buildPlaces(
       lat: members.reduce((sum, m) => sum + m.lat, 0) / members.length,
       lng: members.reduce((sum, m) => sum + m.lng, 0) / members.length,
       members,
+      meanBearingDeg: meanBearingDeg === undefined ? undefined : Math.round(meanBearingDeg),
+      bearingSpreadDeg: spreadDeg,
+      confidence: placeConfidence(members, spreadDeg, clusterDiameterM(members), hasJointProof),
     }
     places.push(place)
     for (const m of members) placeByStopId.set(m.id, place)
