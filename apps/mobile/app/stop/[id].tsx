@@ -1,5 +1,6 @@
 import type { Route as BusRoute, Eta, LatLng, Locale, OperatorId } from '@nextbus/core'
 import {
+  formatBearing,
   formatDistance,
   formatHeadway,
   formatWalk,
@@ -8,16 +9,18 @@ import {
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useRef } from 'react'
 import { Pressable, type ScrollView, View } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { BearingArrow } from '../../components/BearingArrow'
 import { expandedHeaderH } from '../../components/CollapsingHeader'
 import { EtaBadge } from '../../components/EtaBadge'
 import { MiniMap } from '../../components/MiniMap'
 import { RemarkTag } from '../../components/RemarkTag'
 import { RouteChip } from '../../components/RouteChip'
+import { SaveStar } from '../../components/SaveStar'
 import { Skeleton } from '../../components/Skeleton'
 import { StopHeader } from '../../components/StopHeader'
 import { Text } from '../../components/Text'
@@ -116,8 +119,6 @@ export default function StopDetail() {
 
   return (
     <View className="flex-1 bg-bg">
-      <Stack.Screen options={{ headerShown: false }} />
-
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -160,6 +161,7 @@ export default function StopDetail() {
                     ? formatWalk(distanceM, locale)
                     : undefined
               }
+              bearingDeg={stop.bearingDeg}
               locale={locale}
             />
 
@@ -253,34 +255,41 @@ function RouteRowItem({
   now: number
   onPress: () => void
 }) {
+  // Row content and the save star are *sibling* tap targets (never nested — nested
+  // interactive elements are invalid HTML on web, which RN-web flags). The star is just a
+  // saved-state indicator here (hidden until saved); favouriting happens via the route
+  // schematic's action sheet. Keyed on the member pole (`r.stopId`), never the place id.
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      className="flex-row items-center justify-between gap-3 px-4 py-1.5 active:opacity-60"
-    >
-      <View className="flex-1 flex-row items-center gap-2.5">
-        <RouteChip operator={r.route.operator} routeNo={r.route.routeNo} />
-        <View className="flex-1">
-          <Text variant="body" className="text-text" numberOfLines={1}>
-            <Text className="text-subtle">→ </Text>
-            {titleCaseName(r.route.destination[locale])}
-          </Text>
-          {r.eta?.remark ? <RemarkTag remark={r.eta.remark} locale={locale} /> : null}
+    <View className="flex-row items-center gap-2 px-4">
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        className="min-w-0 flex-1 flex-row items-center justify-between gap-3 py-1.5 active:opacity-60"
+      >
+        <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
+          <RouteChip operator={r.route.operator} routeNo={r.route.routeNo} />
+          <View className="flex-1">
+            <Text variant="body" className="text-text" numberOfLines={1}>
+              <Text className="text-subtle">→ </Text>
+              {titleCaseName(r.route.destination[locale])}
+            </Text>
+            {r.eta?.remark ? <RemarkTag remark={r.eta.remark} locale={locale} /> : null}
+          </View>
         </View>
-      </View>
-      {r.eta ? (
-        <EtaBadge eta={r.eta} locale={locale} now={now} />
-      ) : r.route.service?.headway ? (
-        <Text variant="caption" className="max-w-[120px] text-right text-subtle">
-          {formatHeadway(r.route.service.headway, locale)}
-        </Text>
-      ) : (
-        <Text variant="h3" className="text-subtle">
-          —
-        </Text>
-      )}
-    </Pressable>
+        {r.eta ? (
+          <EtaBadge eta={r.eta} locale={locale} now={now} />
+        ) : r.route.service?.headway ? (
+          <Text variant="caption" className="max-w-[120px] text-right text-subtle">
+            {formatHeadway(r.route.service.headway, locale)}
+          </Text>
+        ) : (
+          <Text variant="h3" className="text-subtle">
+            —
+          </Text>
+        )}
+      </Pressable>
+      <SaveStar stopId={r.stopId} routeId={r.route.id} size={20} hideWhenEmpty />
+    </View>
   )
 }
 
@@ -291,23 +300,30 @@ function StopMeta({
   routeCount,
   distanceM,
   walk,
+  bearingDeg,
   locale,
 }: {
   operators: OperatorId[]
   routeCount: number
   distanceM?: number
   walk?: string
+  /** Travel direction of a merged place (deg) → a compass cue; absent for a lone stop. */
+  bearingDeg?: number
   locale: Locale
 }) {
   const parts: string[] = []
+  if (bearingDeg != null) parts.push(formatBearing(bearingDeg, locale))
   if (operators.length > 0) {
-    parts.push(`${t(locale, 'servedBy')} ${operators.map((o) => OPERATOR_LABEL[o]).join(' · ')}`)
+    parts.push(`${t(locale, 'servedBy')} ${operators.map((o) => OPERATOR_LABEL[o]).join(', ')}`)
   }
   parts.push(`${routeCount} ${t(locale, 'routesLabel')}`)
   if (distanceM != null && walk) parts.push(`${formatDistance(distanceM)} · ${walk}`)
   return (
-    <Text variant="caption" className="mb-3 px-4 text-muted">
-      {parts.join('  ·  ')}
-    </Text>
+    <View className="mb-3 flex-row items-start gap-1 px-4">
+      {bearingDeg != null ? <BearingArrow bearingDeg={bearingDeg} size={14} tone="muted" /> : null}
+      <Text variant="caption" className="flex-1 text-muted">
+        {parts.join('  ·  ')}
+      </Text>
+    </View>
   )
 }

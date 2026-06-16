@@ -15,6 +15,8 @@ import { useEffect } from 'react'
 import { Platform, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { WebSwipeBack } from '../components/WebSwipeBack'
+import { useRootStackScreenOptions } from '../lib/navTransitions'
 import { usePreferences } from '../lib/preferences'
 import { useTheme } from '../lib/useTheme'
 import { LocaleProvider } from '../providers/LocaleProvider'
@@ -30,6 +32,9 @@ export default function RootLayout() {
   const { vars: themeVars, isDark, color } = useTheme()
   const prefsHydrated = usePreferences((s) => s.hydrated)
   const bgColor = color('--bg')
+  // The single set of root-stack transition rules (slide in / reveal on back), reduced-motion
+  // aware — see lib/navTransitions / ADR-043. Animates on native; an instant cut on web.
+  const stackScreenOptions = useRootStackScreenOptions()
 
   // Inter is loaded as discrete weight cuts; the <Text> primitive maps each weight
   // to its exact registered family (CJK glyphs fall back to the OS face).
@@ -66,7 +71,8 @@ export default function RootLayout() {
           <LocaleProvider>
             <View style={[{ flex: 1 }, vars(themeVars)]}>
               <StatusBar style={isDark ? 'light' : 'dark'} />
-              <Stack screenOptions={{ headerShown: false }} />
+              <Stack screenOptions={stackScreenOptions} />
+              <WebSwipeBack />
             </View>
           </LocaleProvider>
         </QueryProvider>

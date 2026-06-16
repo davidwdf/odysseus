@@ -32,6 +32,10 @@ export interface Stop {
   location: LatLng
   /** The operator-native stop ids this canonical stop maps to. */
   sources: Array<{ operator: OperatorId; operatorStopId: string }>
+  /** Mean direction buses travel through this place (deg, 0–360), for a compass/direction
+   *  cue that distinguishes two same-named places (e.g. the NE vs SW kerb). Only set for
+   *  merged places; absent for a lone stop. ADR-042. */
+  bearingDeg?: number
 }
 
 /** A physical-location grouping of stops (e.g. KMB + CTB stops at the same kerb). */

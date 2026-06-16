@@ -1,6 +1,8 @@
-import { etaView, fareRange, inferBusMarkers, type Locale } from '@nextbus/core'
+import { etaView, fareRange, inferBusMarkers, type Locale, type OperatorId } from '@nextbus/core'
+import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { MapPin, Star } from 'lucide-react-native'
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, type ScrollView, View } from 'react-native'
 import Animated, {
@@ -8,20 +10,27 @@ import Animated, {
   FadeOut,
   useAnimatedScrollHandler,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { BottomSheet, SheetAction } from '../../components/BottomSheet'
 import { BusToken } from '../../components/BusToken'
 import { EtaTimes } from '../../components/EtaTimes'
 import { Fare } from '../../components/Fare'
+import { Icon } from '../../components/Icon'
+import { RouteChip } from '../../components/RouteChip'
 import { collapsedHeaderH, expandedHeaderH, RouteHeader } from '../../components/RouteHeader'
 import { RouteMeta } from '../../components/RouteMeta'
 import { Skeleton } from '../../components/Skeleton'
 import { StopName } from '../../components/StopName'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
-import { titleCaseName } from '../../lib/stopName'
+import { usePageRevealReady } from '../../lib/navTransitions'
+import { favoriteRouteKey, usePreferences } from '../../lib/preferences'
+import { splitStopCode, titleCaseName } from '../../lib/stopName'
+import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
 
 const RAIL_W = 52
@@ -29,6 +38,9 @@ const NODE = 28
 const NODE_TOP = 12 // node top aligns with the stop name's top (paddingTop)
 const NODE_CENTER = NODE_TOP + NODE / 2
 const TOKEN = 26
+// Saved-stop badge — a small accent star pinned to the node's corner (ADR-042). The node
+// itself is unchanged, so a saved stop still scans as an ordinary sequence node, just flagged.
+const BADGE = 15
 
 /** Does a route-sequence stop id refer to the stop we opened this route from?
  *  Handles a merged same-kerb place id (`P:<a>+<b>`) matching either member. */
@@ -63,6 +75,12 @@ export default function RouteDetail() {
   const stops = query.data?.stops ?? []
   const now = Date.now()
 
+  // Which stops on this route the rider has favourited (route-at-stop, keyed on the member
+  // stop id — ADR-042) → the rail node becomes a star at those stops.
+  const favoriteRoutes = usePreferences((s) => s.favoriteRoutes)
+  const favSet = new Set(favoriteRoutes)
+  const isSaved = (stopId: string) => !!id && favSet.has(favoriteRouteKey(stopId, id))
+
   const hereIndex = stops.findIndex((s) => isOriginStop(s.stop.id, stopId))
   // Bus positions from each stop's soonest *upcoming* arrival (drop-off detection).
   const soonest = stops.map((s) => upcoming(s.eta?.arrivals, now)[0] ?? null)
@@ -84,25 +102,37 @@ export default function RouteDetail() {
     })
   const nodeY = (i: number) => (tops[i] === undefined ? undefined : tops[i] + NODE_CENTER)
 
+  // Tapping a stop on the schematic opens an action sheet (favourite this route here / view
+  // stop) rather than navigating straight off — we hold the tapped stop here.
+  const [sheetStop, setSheetStop] = useState<{ id: string; name: string } | null>(null)
+
   // Scroll offset drives the collapsing header.
   const scrollY = useSharedValue(0)
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.value = e.contentOffset.y
   })
 
-  // Auto-scroll to the originating stop once BOTH it and the last row are measured — i.e.
-  // the full content height is settled, so the scroll target isn't clamped.
+  // Two-step reveal (ADR-043): the page slides in first, then — once it's settled AND the rows
+  // are measured — we smoothly scroll to the originating stop as a deliberate second beat.
+  // Gating on both the originating row and the last row means the full content height is settled,
+  // so the target isn't clamped; gating on `revealReady` keeps the scroll from fighting the
+  // incoming slide. The scroll is animated, so it reads as motion the user can follow.
+  const revealReady = usePageRevealReady()
+  const reduceMotion = useReducedMotion()
   const scrollRef = useRef<ScrollView>(null)
   const scrolled = useRef(false)
   const hereTop = hereIndex >= 0 ? tops[hereIndex] : undefined
   const lastTop = stops.length > 0 ? tops[stops.length - 1] : undefined
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fire once the relevant rows are measured
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fire once the reveal has settled and the relevant rows are measured
   useEffect(() => {
-    if (scrolled.current || hereTop === undefined || lastTop === undefined) return
+    if (scrolled.current || !revealReady || hereTop === undefined || lastTop === undefined) return
     scrolled.current = true
     const y = topSpacer + hereTop - collapsedHeaderH(insets.top) - 8
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: false }))
-  }, [hereTop, lastTop])
+    // Animated so it reads as a deliberate second beat — but instant under reduced motion.
+    requestAnimationFrame(() =>
+      scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: !reduceMotion }),
+    )
+  }, [hereTop, lastTop, revealReady])
 
   const routeLabel = route
     ? `${titleCaseName(route.origin[locale])} → ${titleCaseName(route.destination[locale])}`
@@ -110,8 +140,6 @@ export default function RouteDetail() {
 
   return (
     <View className="flex-1 bg-bg">
-      <Stack.Screen options={{ headerShown: false }} />
-
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -150,15 +178,15 @@ export default function RouteDetail() {
                 now={now}
                 locale={locale}
                 here={i === hereIndex}
+                saved={isSaved(s.stop.id)}
                 first={i === 0}
                 last={i === stops.length - 1}
                 onLayoutY={(y) => setTop(i, y)}
                 onPress={() =>
-                  // Land on the *place* this stop belongs to (the server promotes the member
-                  // id), anchored on this pole via `?pole` (ADR-042).
-                  router.push(
-                    `/stop/${encodeURIComponent(s.stop.id)}?pole=${encodeURIComponent(s.stop.id)}`,
-                  )
+                  setSheetStop({
+                    id: s.stop.id,
+                    name: titleCaseName(splitStopCode(s.stop.name[locale]).label),
+                  })
                 }
               />
             ))}
@@ -195,7 +223,93 @@ export default function RouteDetail() {
           onTitlePress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
         />
       ) : null}
+
+      {sheetStop ? (
+        <StopActionSheet
+          stop={sheetStop}
+          routeId={id as string}
+          operator={route?.operator}
+          routeNo={route?.routeNo}
+          destination={route ? titleCaseName(route.destination[locale]) : ''}
+          locale={locale}
+          onClose={() => setSheetStop(null)}
+          onViewStop={() =>
+            // Land on the *place* this stop belongs to (the server promotes the member id),
+            // anchored on this pole via `?pole` (ADR-042). Navigating unmounts the sheet.
+            router.push(
+              `/stop/${encodeURIComponent(sheetStop.id)}?pole=${encodeURIComponent(sheetStop.id)}`,
+            )
+          }
+        />
+      ) : null}
     </View>
+  )
+}
+
+/** The action sheet for a stop tapped on the route schematic. Its header spells out exactly
+ *  what a save would pin — *this route, towards its destination, at this pole* — so the
+ *  favourite (keyed on the member stop id, never a place id — ADR-042) is unambiguous. */
+function StopActionSheet({
+  stop,
+  routeId,
+  operator,
+  routeNo,
+  destination,
+  locale,
+  onClose,
+  onViewStop,
+}: {
+  stop: { id: string; name: string }
+  routeId: string
+  operator?: OperatorId
+  routeNo?: string
+  destination: string
+  locale: Locale
+  onClose: () => void
+  onViewStop: () => void
+}) {
+  const { color } = useTheme()
+  const key = favoriteRouteKey(stop.id, routeId)
+  const saved = usePreferences((s) => s.favoriteRoutes.includes(key))
+  const toggle = usePreferences((s) => s.toggleFavoriteRoute)
+  return (
+    <BottomSheet
+      closeLabel={t(locale, 'back')}
+      onClose={onClose}
+      header={
+        <View className="gap-1.5">
+          <View className="flex-row items-center gap-2.5">
+            {operator && routeNo ? <RouteChip operator={operator} routeNo={routeNo} /> : null}
+            <Text variant="body" className="flex-1 text-text" numberOfLines={1}>
+              <Text className="text-subtle">→ </Text>
+              {destination}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-1.5">
+            <Icon icon={MapPin} tone="subtle" size={13} />
+            <Text variant="caption" className="flex-1 text-muted" numberOfLines={1}>
+              {stop.name}
+            </Text>
+          </View>
+        </View>
+      }
+    >
+      {(close) => (
+        <>
+          <SheetAction
+            icon={Star}
+            tone="accent"
+            iconFill={saved ? color('--accent') : 'none'}
+            label={t(locale, saved ? 'removeFavorite' : 'addFavorite')}
+            onPress={() => {
+              toggle(stop.id, routeId)
+              close()
+            }}
+          />
+          <SheetAction icon={MapPin} label={t(locale, 'viewStop')} onPress={onViewStop} />
+        </>
+      )}
+    </BottomSheet>
   )
 }
 
@@ -229,6 +343,7 @@ function RouteStopRow({
   now,
   locale,
   here,
+  saved,
   first,
   last,
   onLayoutY,
@@ -241,11 +356,14 @@ function RouteStopRow({
   now: number
   locale: Locale
   here: boolean
+  /** This route is favourited at this stop — the node gets an accent star badge (ADR-042). */
+  saved: boolean
   first: boolean
   last: boolean
   onLayoutY: (y: number) => void
   onPress: () => void
 }) {
+  const { color } = useTheme()
   const lineX = RAIL_W / 2 - 1
   return (
     <Pressable
@@ -269,6 +387,7 @@ function RouteStopRow({
             style={{ top: NODE_CENTER, bottom: 0, width: 2, left: lineX }}
           />
         ) : null}
+        {/* Sequence node — identical for every stop, saved or not. */}
         <View
           className={`absolute items-center justify-center rounded-full border ${
             here ? 'border-accent bg-accent' : 'border-border bg-surface'
@@ -279,6 +398,22 @@ function RouteStopRow({
             {seq}
           </Text>
         </View>
+        {saved ? (
+          // Saved here (ADR-042): a small accent star pinned to the node's top-right, on a surface
+          // disc so it reads as a sticker over the rail rather than a hole in it. Rendered after
+          // the node so it stays on top; a passing bus token simply rides over it as anywhere else.
+          <View
+            className="absolute items-center justify-center rounded-full bg-surface"
+            style={{
+              top: NODE_TOP - BADGE * 0.4,
+              left: (RAIL_W - NODE) / 2 + NODE - BADGE * 0.6,
+              width: BADGE,
+              height: BADGE,
+            }}
+          >
+            <Icon icon={Star} size={BADGE - 3} tone="accent" fill={color('--accent')} />
+          </View>
+        ) : null}
       </View>
 
       {/* Stop label + arrivals. The bottom padding lives here (not on the row) so the rail

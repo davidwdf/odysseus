@@ -24,6 +24,7 @@ export async function nearby(lat: number, lng: number, radiusM: number): Promise
     location: { lat: number; lng: number }
     members: IndexStop[]
     distanceM: number
+    bearingDeg?: number
   }
   const groups: Group[] = []
   const seen = new Set<string>()
@@ -40,6 +41,7 @@ export async function nearby(lat: number, lng: number, radiusM: number): Promise
         : { lat: hit.stop.lat, lng: hit.stop.lng },
       members: place ? place.members : [hit.stop],
       distanceM: hit.distanceM,
+      bearingDeg: place?.meanBearingDeg,
     })
     if (groups.length >= MAX_STOPS) break
   }
@@ -51,7 +53,7 @@ export async function nearby(lat: number, lng: number, radiusM: number): Promise
       // shows the true `routeCount` (free, static) + "+N more" rather than a silent filter.
       const etas = await stopArrivals(index, g.members, NEARBY_CTB_BUDGET)
       return {
-        stop: toMergedStop(g.id, g.members, g.name, g.location),
+        stop: toMergedStop(g.id, g.members, g.name, g.location, g.bearingDeg),
         distanceM: g.distanceM,
         etas,
         routeCount: placeRouteCount(index, g.members),

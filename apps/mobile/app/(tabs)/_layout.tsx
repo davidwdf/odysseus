@@ -6,6 +6,7 @@ import { type ColorValue, Platform, StyleSheet, View } from 'react-native'
 import { GlassIconButton } from '../../components/GlassIconButton'
 import { GlassView } from '../../components/GlassView'
 import { Icon } from '../../components/Icon'
+import { useTabAnimation } from '../../lib/navTransitions'
 import {
   TAB_BAR_GAP,
   TAB_BAR_HEIGHT,
@@ -36,12 +37,20 @@ export default function TabsLayout() {
   // hairline border defines it (esp. on dark, where shadows read poorly — §4); on light
   // it also gets the e3 shadow to float.
   const layout = useTabBarLayout()
+  const tabAnimation = useTabAnimation()
   const shadow = isDark ? null : Platform.OS === 'android' ? ELEVATION.e3.android : ELEVATION.e3.ios
   return (
-    <View style={{ flex: 1 }}>
+    // The wrapper paints the active theme bg so the cross-fade never reveals the navigator's
+    // default *light* background between the two fading scenes — a pale flash in dark mode (ADR-043).
+    <View style={{ flex: 1, backgroundColor: color('--bg') }}>
       <Tabs
         screenOptions={{
           headerShown: false,
+          // Tab ↔ tab is a quick cross-fade (ADR-043). The one transition that animates the same
+          // on web and native; `shift` would slide horizontally and fight the floating glass pill.
+          animation: tabAnimation,
+          // Each scene is opaque on the theme bg too, so neither fading layer shows light through.
+          sceneStyle: { backgroundColor: color('--bg') },
           tabBarActiveTintColor: color('--accent'),
           // Inactive icons/labels sit on translucent glass — `subtle` was too low-contrast
           // to read, so use the brighter `muted` for legibility (active stays the accent).

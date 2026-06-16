@@ -1178,16 +1178,31 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   follow-ups; this screen is explicitly a **first pass to iterate on**.
 
 ## ADR-042 — Direction-aware same-kerb clustering (N-member places); supersedes ADR-022's pair-merge + invariant
-- **Status:** **Backend + place UI built & verified (2026-06-11); favourites star pending.** Shipped: the quick-win
-  direction gate, the full **N-member single-linkage clustering** (`buildPlaces`) with cluster-level vetoes + bearing-
-  spread cap and same-operator members, the **per-place ETA fetch** (KMB `stop-eta` = 1 call/pole, CTB per-route to a
-  budget, cross-member dedupe) with an honest `routeCount`, and the **mobile UI**: Nearby cards show the soonest few
-  + "+N more" (true count, never a silent filter); a **Place detail** screen (renamed concept) groups routes under
-  their pole, with a multi-pin `MiniMap`, a walk *range*, and route→stop→place navigation (`?pole` anchor). Name is
-  chosen once in `buildPlaces`. Verified vs the snapshot + live APIs (Belair → 2 kerb-split places of 5/4 poles;
-  the four false merges stay split; ≈2,010 clusters / 5,461 stops). **Remaining:** **member-keyed favourites** —
-  the per-route save star (ADR-032's deferred UI) keyed on the member pole id (`${operator}:${eta.stopId}`), and the
-  Favourites tab grouping by current place. Study + re-runnable scripts: `.context/stop-merge-study/`.
+- **Status:** **Built & verified — backend + place UI (2026-06-11), member-keyed favourites (2026-06-15).** Shipped:
+  the quick-win direction gate, the full **N-member single-linkage clustering** (`buildPlaces`) with cluster-level
+  vetoes + bearing-spread cap and same-operator members, the **per-place ETA fetch** (KMB `stop-eta` = 1 call/pole,
+  CTB per-route to a budget, cross-member dedupe) with an honest `routeCount`, and the **mobile UI**: Nearby cards
+  show the soonest few + "+N more" (true count, never a silent filter); a **Place detail** screen (renamed concept)
+  groups routes under their pole, with a multi-pin `MiniMap`, a walk *range*, and route→stop→place navigation (`?pole`
+  anchor). Name is chosen once in `buildPlaces`. Verified vs the snapshot + live APIs (Belair → 2 kerb-split places of
+  5/4 poles; the four false merges stay split; ≈2,010 clusters / 5,461 stops). **Member-keyed favourites (2026-06-15,
+  browser-verified):** all favourite keys are the **member pole id** (`favoriteRouteKey(memberStopId, routeId)`, never
+  the churning `P:` place id). **Favouriting UI is a glass bottom sheet** (`components/BottomSheet.tsx` + `SheetAction`):
+  tapping a stop on the **route schematic** opens it — a GlassView panel with a **draggable handle** (`Gesture.Pan`:
+  drag down / fling to dismiss; drag up rubber-bands and springs back) and a **controlled slide-out** on every dismiss
+  (scrim tap + drag, via a render-prop `close()`). Its header spells out *what* you'd save (route chip · → destination ·
+  stop); the actions are **Favourite / Remove favourite** (this route at the tapped pole) + **View stop**. *(A glass
+  save-star in the route header was prototyped then dropped — it didn't feel right; `CollapsingHeader` has no action slot.)* **Place detail** keeps a per-row `SaveStar` purely as a **saved-state
+  indicator** (`hideWhenEmpty` — only a saved route shows a filled star; favouriting itself is the sheet). On the
+  **route schematic** a favourited stop keeps its ordinary numbered rail node and gets a **small accent star badge**
+  pinned to the node's top-right corner (`saved` prop on `RouteStopRow`; star on a surface disc so it reads as a sticker
+  over the rail). *(An earlier build turned the whole node into a star that filled accent and swallowed the bus token's
+  disc when a bus dwelt there; the bus-dwell choreography was overengineered for a rare transient state and was dropped
+  in favour of the badge — saved stops now scan as ordinary sequence nodes, just flagged, and a passing bus rides over
+  the badge like any other node.)* The
+  **Favourites tab groups by place**: each saved pole resolves via `getStop` (the server promotes a member id to its
+  place), keyed by the returned place id, so a multi-pole place shows once with its starred routes from every pole.
+  Study + re-runnable scripts: `.context/stop-merge-study/`.
 - **Context:** [ADR-022](#adr-022--same-kerb-stop-merge-our-own-conservative-landmarkdistance-clustering) merges only
   **cross-operator pairs** (one KMB + one CTB) within 30 m with a matching landmark name. Two limits surfaced in use:
   (1) **under-merge** — the Nearby list still shows several cards for what is really one or two physical kerbs
@@ -1284,13 +1299,118 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   - **Docs to touch on implementation:** [docs/02](./02-data-sources.md) & [docs/03](./03-architecture.md) (drop the
     one-member-per-operator wording), [docs/07](./07-backlog.md) (move "better name matching" notes), and
     [docs/11](./11-status.md).
-- **Open follow-ups (raised 2026-06-11, to discuss):**
-  1. **Same-name pole disambiguation.** Within a multi-pole place the poles share a landmark name, and the current
-     group label (operator + stop code, e.g. "KMB · ST141") means nothing to a rider — a local resident still found
-     it unclear. Want a human "which pole / which way" cue. Options to explore: the road-name suffix already in the
-     stop name; a compass/side hint derived from the pole's **mean travel bearing** (we already compute it — e.g.
-     "north-east-bound side"); "towards {next stop}"; or relative position on the kerb. Undecided.
+- **Open follow-ups (raised 2026-06-11):**
+  1. **Same-name pole disambiguation.** Within a multi-pole place the poles share a landmark name; the group label
+     "KMB · ST141" reads as opaque at first — *but* `ST141`-style codes are **printed on KMB's physical stop flags
+     and shown in KMB's own app**, so they are a real-world anchor, not an internal id: **keep them as the pole
+     label.** (A "lead the group with its headline routes" tweak was tried 2026-06-15 and **reverted** — it didn't
+     read more clearly and duplicated the route rows directly beneath the header.) **Card-level direction tag —
+     shipped 2026-06-15 (compass octant).** A place's `meanBearingDeg` now rides on the wire `Stop` (`bearingDeg`,
+     set only for merged places), and `formatBearing` (`@nextbus/core`) snaps it to a localized 8-point "-bound"
+     label (en "Northeast-bound" / 中文 "東北行"), preceded by a **compass arrow** (`BearingArrow` — an `ArrowUp`
+     rotated to the bearing, 0° = N = up, clockwise) so the direction reads without parsing the word; rendered on the
+     Nearby card caption and the Place-detail summary. The two Belair cards now read **"↗ Northeast-bound …"**
+     (bearing 54°) vs **"↙ Southwest-bound …"** (225°) — verified live via `/v1/nearby`. (Same pass: the "served by"
+     operators comma-separate — "Citybus, KMB" — and `formatDistance` drops the space before the unit — "200m".)
+     Data findings (`.context/stop-merge-study/towards-and-confidence.mjs`): a clean **"towards {place}" is NOT
+     derivable** — the modal route *destination* covers only ~25% of a place's departures (median; ~10 distinct
+     destinations/place), and the modal *next stop* only ~50%; a **coarse 4-region** "towards" concentrates better
+     (median 70%) **but fails intra-region splits** — both Belair directions read "New Territories". Only the
+     **place mean bearing → compass** is reliable and always separates siblings, which is why compass shipped; the
+     friendlier **"towards {district}"** wording stays parked behind an **18-district
+     gazetteer** (coordinate→district) to reach the desired "NNE towards Sha Tin" wording later.
   2. **Circular-route heading.** For loop routes (e.g. KMB **284**, a Sha Tin circular) the inbound/outbound bound +
      single destination don't convey *which way round* the bus is going — confusing in route rows and the schematic.
      Want a clearer heading cue for circulars ("via X" / direction-of-travel). Related to the bearing signal's
      terminus-loop artifacts noted above.
+  3. **Cluster-review tooling + per-place confidence (confidence shipped 2026-06-15).** The grouping is good but not
+     perfect (the wide-bearing-spread tail is dominated by termini/BBIs, where the loop geometry makes the bearing
+     unreliable — mostly *correct* groupings we just can't auto-vouch for, plus a handful of genuine borderline
+     non-terminus cases e.g. Cleverly Street). To optimise it deliberately we want a **one-off internal review UI** to
+     eyeball clusters on a map and accept/split them. **Shipped now:** every `IndexPlace` carries a heuristic
+     **`confidence` (0–100)** + `bearingSpreadDeg` so the review queue can sort worst-first (`placeConfidence` in
+     `dataset.ts`: penalise bearing spread, diameter, member count; bonus for a joint-route same-pole proof; termini
+     flagged for review). Distribution: **~1,689 high / 276 medium / 45 low** of ~2,010 places. **TODO:** build the
+     review UI (one-off) and feed back any rule tweaks; the score is internal (never shown to riders) and tunable.
+     **High-spread audit (2026-06-15):** of the **42** places with bearing spread ≥ 50°, **19 are termini/BBIs**
+     (wide spread is expected loop-noise — trusted, not individually reviewed) and **23 are non-terminus** — those 23
+     were adversarially verified from route direction/destination evidence. Result: **22 GOOD, 1 UNCERTAIN, 0
+     opposite-direction fusions.** The wide spreads resolved to road curves, joint-route-proven same poles, or
+     terminus loops. The one UNCERTAIN ("Hung Kiu, Tuen Mun Road", southbound) is a **distinct-location** question —
+     two boarding spots ~42 m apart across a main road + parallel service road, but **same travel direction** (no
+     wrong-ETA risk; at worst it should be two cards). So the clustering holds up at the risky tail; the residual is
+     a few "should this be split into two same-direction cards" calls for the review UI, not direction errors.
+     Artefacts: `.context/stop-merge-study/extract-high-spread.mjs`, `high-spread-review.json`, `high-spread-audit.md`.
+
+## ADR-043 — A core navigation-animation system: cross-fade tabs, slide-and-reveal stack, web swipe-back
+- **Status:** **Partially implemented (web PWA)** — typecheck 7/7, Biome clean. **Shipped on web:** tab cross-fade,
+  a left-edge swipe-back gesture, reduced-motion support, and the two-step-reveal hook. **Tried and reverted:** a JS
+  stack to get animated push + reveal-on-back on web — it animated beautifully but **broke scrolling** (and chrome,
+  overlays) on react-native-web, so it's out. **On web today the down/back transition is an instant cut**; the slide
+  + reveal is **native-only and deferred** (it's free on the native stack later). See the JS-stack post-mortem below.
+- **Context:** navigation had no transitions — tabs cut instantly and detail pages popped in with no motion. We want
+  one *core, rule-based* feel, set once and never re-tuned per page: (1) tab↔tab = quick cross-fade; (2) opening a
+  sub/detail page = slide in from the right; (3) every back-able page = a left-to-right swipe-back gesture **and** a
+  back animation where the top page slides off to the right, revealing the page beneath; (4) the route page should
+  reveal in *two* beats — page transition first, then (once data lands) a smooth scroll to the originating stop.
+  The hard constraint: **we ship the PWA now** (`Platform.OS === 'web'`, react-native-web), native later. We
+  ground-truthed the platform behaviour against the *installed* `node_modules` + React Navigation docs and found:
+  - Expo Router's default `<Stack>` is react-native-screens' **native** stack. On **web** it neither animates nor
+    gestures — `NativeStackView.js` just toggles `display:flex/none` and `ScreenStack.web === View`. So
+    `animation:'slide_from_right'` and `gestureEnabled` are **silent no-ops in the PWA**.
+  - **Bottom Tabs `animation`** (`fade`/`shift`/`none`) is JS-driven and **does** animate on web — the one
+    transition that behaves identically everywhere.
+  - The **JS** stack (`@react-navigation/stack`, which expo-router *vendors*) **does** animate its cards on web
+    (push *and* reveal-on-pop), via Reanimated. But its swipe-**gesture** is iOS-only — stubbed on web — so a web
+    swipe-back must be hand-rolled regardless of navigator. `ExperimentalStack` is **not** a fix: it's a native
+    screens stack that falls back to the (non-animating) standard `Stack` on web.
+  - **JS-stack post-mortem (the deciding finding, learned by building it):** wrapping the root in the vendored JS
+    `createStackNavigator` (via `withLayoutContext`) *did* give a gorgeous web push + reveal-on-back. But each screen
+    is wrapped in the JS stack's `Card` (a `react-native-gesture-handler` `PanGestureHandler` + a transform-animated,
+    frequently-re-rendering container), and on react-native-web that **breaks scrolling**: on every
+    `Animated.ScrollView` + collapsing-header screen (route, stop) a wheel/touch scroll registers for a frame then
+    **snaps back to 0** (verified live on both). It also (a) flashed the JS stack's default *light* `CardContainer`
+    background in dark mode, (b) detached/froze off-screen cards (`detachInactiveScreens` defaults true on web),
+    making the floating tab bar / back button vanish, and (c) clipped the bottom-sheet overlay via the card's
+    `overflow:hidden`. `detachInactiveScreens={false}` only made it worse (unbounded scroller height, all history
+    cards mounted). **Conclusion: the JS stack is unviable for this PWA** — a working scroll beats an animated push.
+- **Decision:** keep Expo Router's **native `<Stack>`** (the proven baseline: scrolling, chrome, and overlays all
+  work on web) and animate only what's safe and additive on web. All rules live in
+  **`apps/mobile/lib/navTransitions.ts`** (single source of truth) + the two `_layout`s — never per page.
+  1. **Root stack = native `<Stack>`** with `screenOptions` from `useRootStackScreenOptions()`:
+     `{ headerShown:false, animation:'slide_from_right' }`. The `animation` is honoured on **native** (slide +
+     reveal, free) and is a **no-op on web** (instant cut) — the accepted trade for a rock-solid PWA.
+  2. **Tab cross-fade (1):** `animation:'fade'` on the `<Tabs>` `screenOptions` (not `shift` — a horizontal slide
+     would fight the floating glass tab pill). This is the one transition that animates on web. The flash it
+     originally showed (the bottom-tabs default *light* scene background bleeding through the fade) is fixed by
+     painting the theme bg on both the tabs wrapper `View` and the per-screen `sceneStyle`.
+  3. **Web swipe-back (3):** **`apps/mobile/components/WebSwipeBack.tsx`**, mounted once at the root — a left-edge
+     `react-native-gesture-handler` `Pan` that calls `router.back()` past a distance/velocity threshold. Web-only
+     (`Platform.OS !== 'web'` renders nothing); native keeps its own edge-swipe. A thin edge strip + `failOffsetY`
+     keep it off vertical scrolling (confirmed: scroll still works with it mounted). On web the back itself is
+     instant (no slide) until native lands.
+  4. **Two-step reveal (4):** a shared **`usePageRevealReady()`** hook gates entrance work on the stack's opening
+     `transitionEnd` (with a timer fallback for web / the initial route). `app/route/[id].tsx`'s auto-scroll waits on
+     it *and* the row measurements, then scrolls — so on native the page slides in, then the scroll reads as a
+     deliberate second beat. (Mechanism only; the web auto-scroll itself is a separate pre-existing bug — below.)
+  5. **Reduced motion:** every rule honours OS / `prefers-reduced-motion` (docs/09 §5) — `useReducedMotion` collapses
+     the cross-fade/slide to an instant cut and the route scroll to `animated:false`.
+- **Why native `<Stack>` over the JS stack:** a PWA that doesn't scroll is broken; nice transitions don't redeem it.
+  Native-stack web is a plain `display`-toggle — no gesture wrapper, no transform churn — so `Animated.ScrollView`,
+  the floating chrome, and the bottom sheet all behave. We keep the genuinely-cross-platform win (tab cross-fade) and
+  a functional swipe-back, and we get the real slide + reveal **for free on native** when we get there. No new
+  dependency; `JsStack.tsx` was deleted.
+- **Consequences / caveats:**
+  - **No down/back slide on web — it's an instant cut.** This is the deliberate cost of unbreaking scroll. Native
+    gets the slide + reveal from the same `animation` option. If a web push/back animation becomes a priority, the
+    path is a *purely additive* per-screen Reanimated `entering`/`exiting` (no navigator swap) — push-in is reliable;
+    reveal-on-pop is hard on web because native-stack hides the outgoing screen instantly. Tracked in docs/07.
+  - The web swipe-back is instant (no animation) and threshold-triggered, not finger-following — a future polish.
+  - **Pre-existing, separate issue (not from this change):** `app/route/[id].tsx`'s auto-scroll to the originating
+    stop does **not** fire on web (reproduced with this work's gate *and* `animated` flag fully neutralised — it
+    predates and is independent of the animation work). The two-step *mechanism* is in place; landing the scroll on
+    web is tracked separately (that screen is active stop-merge/favourites WIP). See [docs/07](./07-backlog.md).
+  - **`components/BottomSheet.tsx` (separate WIP component):** its slide-up entrance doesn't complete on web — the
+    panel mounts but only its grab handle peeks (the `onPanelLayout`→`withTiming(0)` entrance appears not to run /
+    gets cancelled on web, likely by the handle pan's `onBegin`→`cancelAnimation`). Reverting the JS stack removed
+    the card-clipping that had hidden it entirely, but the entrance bug is in that component, not the nav system.

@@ -43,12 +43,14 @@ export function toMergedStop(
   members: IndexStop[],
   name: I18nText,
   location: LatLng,
+  bearingDeg?: number,
 ): Stop {
   return {
     id,
     name,
     location,
     sources: members.map((m) => ({ operator: m.operator, operatorStopId: m.stopId })),
+    ...(bearingDeg === undefined ? {} : { bearingDeg }),
   }
 }
 
@@ -185,7 +187,11 @@ export async function stopDetail(id: string): Promise<StopDetail> {
   // Use the place's chosen name + centroid (not the rep's) so all screens agree.
   const name = place?.name ?? rep.name
   const location = place ? { lat: place.lat, lng: place.lng } : { lat: rep.lat, lng: rep.lng }
-  return { stop: toMergedStop(placeId, members, name, location), routes, members: memberPoles }
+  return {
+    stop: toMergedStop(placeId, members, name, location, place?.meanBearingDeg),
+    routes,
+    members: memberPoles,
+  }
 }
 
 /** GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered). */

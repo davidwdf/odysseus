@@ -18,10 +18,18 @@ the `DataSource` interface and the UI do not change.
       run as an external job / GitHub Action since it exceeds the Worker subrequest cap). Self-reliance.
 - [ ] **Cache the snapshot in KV/R2** — so a hkbus gh-pages outage means *stale*, not broken (interim before
       the own-crawl). The `DATASET` binding is already stubbed in `wrangler.toml`.
-- [x] **Same-kerb stop-merge (`Place`)** — DONE (ADR-022): our own cross-operator clustering (30 m +
-      landmark-name match, ≤1 member per operator) groups a shared kerb into one card/stop listing both
-      operators' routes. Follow-up: looser name matching (token overlap) to also merge stops whose landmark
-      strings differ (e.g. KMB stop-code-only names), ideally on the own-crawl's first-party coordinates.
+- [x] **Same-kerb stop-merge (`Place`)** — DONE (ADR-022 → generalised by ADR-042 to direction-aware N-member
+      clustering). Follow-up: looser name matching (token overlap) to also merge stops whose landmark strings differ
+      (e.g. KMB stop-code-only names), ideally on the own-crawl's first-party coordinates.
+- [ ] **Cluster-review tooling (one-off)** — an internal UI to eyeball `Place` groupings on a map and accept/split
+      them, to optimise the clustering deliberately. Prioritise by the per-place **`confidence`** score now carried on
+      `IndexPlace` (ADR-042 follow-up #3: ~45 low-confidence places, mostly termini/BBIs). Feed any rule tweaks back
+      into `buildPlaces`.
+- [~] **Direction tag for same-named places (ADR-042 follow-up #1)** — distinguish the NE vs SW cards of one
+      landmark. **Compass octant shipped** (`formatBearing` + wire `Stop.bearingDeg`; "Northeast-bound" / "東北行").
+      Optional upgrade: an **18-district gazetteer** (coordinate→district) for the friendlier "towards {district}"
+      wording. A single "towards {destination/next stop}" is not derivable (too many destinations per place — see
+      `.context/stop-merge-study/`).
 - [ ] **True Simplified (zh-Hans) static names** — the consolidated dataset only has en + Traditional, so
       Simplified stop/route names currently fall back to Traditional. Source real zh-Hans (official bulk
       endpoints have `name_sc`) once on our own crawl.
@@ -78,6 +86,27 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 - [ ] **Vintage / paper-timetable mode** — skeuomorphic ticket-and-timetable aesthetic.
 
 ### Live map & motion
+- [ ] **Build out the stop/place map from a static image into a real feature** — today `MiniMap`
+      ([`apps/mobile/components/MiniMap.tsx`](../apps/mobile/components/MiniMap.tsx), ADR-041) is a
+      **static** OSM raster: it drops a pin per pole ([ADR-042](./08-decision-log.md)) and, on tap,
+      just hands the centroid off to the platform maps app. Make the map genuinely **useful and
+      functional** rather than a thumbnail. Candidate improvements:
+      - **Sticky map on scroll** — fix the map to the top of Place/Stop detail and let the
+        pole/stop list scroll beneath it (a collapsing-header treatment, cf. `CollapsingHeader`),
+        so the map stays in view as you read down the stops.
+      - **Highlight the in-view stop's pin(s)** — as the list scrolls, emphasise the pin(s) for the
+        stop currently in view (and conversely scroll the list when a pin is selected), so map and
+        list stay linked.
+      - **Show stop ids / labels on the map** — render the stop id (and/or short name) on or beside
+        each pin so a pin is identifiable without leaving the screen.
+      - **Tappable pins → action sheet** — the whole-map tap currently opens the platform maps app
+        (good as a fallback). Make a tap **near a specific pin** instead open an action sheet
+        (`BottomSheet`) for *that* pin: **Open in Maps**, **show more data about this pin/stop**, and
+        **scroll to this stop** in the list. Needs per-pin hit-testing.
+      Implementation seam: either keep the keyless static-tile approach and add pin hit-testing +
+      a sticky container, or graduate to **MapLibre** (the Phase 2 "Map view for Nearby" step in the
+      [roadmap](./06-roadmap.md)) for a real interactive map. Either way the tile source should move
+      off OSM's public tiles for production (the own-crawl → R2 step).
 - [ ] **Uber-style moving bus icons** — animate buses along the route on the map. Franchised buses
       don't publish raw GPS to us, so **approximate** position by interpolating along the route
       polyline from successive-stop ETAs (+ schedule). **Clearly label as estimated**; degrade
@@ -117,6 +146,20 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 - [ ] **Shareable arrival card** — a "boarding-pass"-style card of a stop + next arrivals to send to friends.
 
 ## Infra / hardening
+- [ ] **Route auto-scroll doesn't land on web** — `app/route/[id].tsx` should scroll to the originating stop
+      (the two-step reveal's second beat, [ADR-043](./08-decision-log.md#adr-043--a-core-navigation-animation-system-cross-fade-tabs-slide-and-reveal-stack-web-swipe-back)),
+      but the `scrollTo` no-ops on react-native-web (reproduced with the ADR-043 reveal-gate **and** `animated` flag
+      neutralised, so it predates that work). The gating mechanism is in place; needs the underlying scroll fixed
+      (likely a measurement / `Animated.ScrollView` `scrollTo` timing issue on web). Native unaffected.
+- [ ] **Web down/back slide animation** — ADR-043 reverted the JS stack (it broke web scrolling), so on web the
+      down/back transition is an instant cut; the slide + reveal is native-only. If a web push/back animation is
+      wanted, do it *purely additively* with per-screen Reanimated `entering`/`exiting` (no navigator swap):
+      push-in is reliable; reveal-on-pop is hard on web (native-stack hides the outgoing screen instantly). Also
+      consider an interactive follow-the-finger web swipe-back (currently threshold-triggered + instant).
+- [ ] **`BottomSheet` slide-up doesn't complete on web** — `components/BottomSheet.tsx`'s `onPanelLayout`→
+      `withTiming(0)` entrance doesn't run on web; the panel mounts but only its grab handle peeks (likely cancelled
+      by the handle pan's `onBegin`→`cancelAnimation`, or the layout-driven entrance not firing on react-native-web).
+      Affects the route schematic's stop action sheet. Independent of ADR-043 (which only un-clipped it).
 - [ ] Upstash Redis (only if we need true Redis semantics beyond KV + Durable Objects).
 - [ ] Analytics (privacy-respecting) for most-watched stops → smarter pre-warming of caches.
 - [ ] Self-hosted MapLibre tiles (if tile-provider cost/limits become an issue).

@@ -226,6 +226,14 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 - **Easing:** ease-out entering, ease-in exiting; spring for playful toggles (favourite, sheet drag).
 - **Rules:** animate **1–2 elements per view**; transform/opacity only; no infinite decorative loops.
 - **Reduced-motion:** honour OS / `prefers-reduced-motion` → swap to instant or opacity-only.
+- **Navigation transitions** ([ADR-043](./08-decision-log.md#adr-043--a-core-navigation-animation-system-cross-fade-tabs-slide-and-reveal-stack-web-swipe-back)):
+  tab↔tab = quick **cross-fade** (web + native); opening a sub/detail page = **slide in from the right** and Back
+  **slides it off, revealing the page beneath** — **native only for now** (on the web PWA it's an instant cut; a JS
+  stack that animated it on web broke scrolling — see ADR-043). A left-edge **swipe-back** gesture works on web. The
+  rules live in one place — `apps/mobile/lib/navTransitions.ts` + the two `_layout`s — never per page, and all
+  collapse to an instant cut under reduced motion. **Two-step reveal:** a page appears *first*, then runs entrance
+  work (e.g. the route page's auto-scroll to the originating stop) as a deliberate second beat via
+  `usePageRevealReady()`.
 - **ETA update:** per-digit **number-flip** (or crossfade) + a one-shot **freshness pulse** dot when
   new data lands. **No per-second decrement** ([ADR-008](./08-decision-log.md)). Reduced-motion → plain
   text swap with a brief highlight.

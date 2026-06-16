@@ -33,7 +33,7 @@ const EASE = Easing.inOut(Easing.sin)
  * an ETA value, so it doesn't touch the ADR-008 honesty rule. Position along the rail is
  * animated by the parent on real data change.
  */
-export function BusToken({ size = 26 }: { size?: number }) {
+export function BusToken({ size = 26, disc = true }: { size?: number; disc?: boolean }) {
   const { color } = useTheme()
   const bob = useSharedValue(0) // 0 (top) .. 1 (bottom / "ground"), reverses
   const rock = useSharedValue(0) // 0..1, reverses
@@ -60,7 +60,8 @@ export function BusToken({ size = 26 }: { size?: number }) {
     transform: [{ scaleX: 1 + SQUASH * 0.5 * bob.value }, { scaleY: 1 - SQUASH * bob.value }],
   }))
 
-  // Disc is a plain (static) View; the animated glyph rides inside it.
+  // Disc is a plain (static) View; the animated glyph rides inside it. `disc={false}` drops the
+  // accent disc, leaving just the glyph — for a context that supplies its own backdrop.
   return (
     <View
       style={{
@@ -69,7 +70,7 @@ export function BusToken({ size = 26 }: { size?: number }) {
         borderRadius: size / 2,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: color('--accent'),
+        backgroundColor: disc ? color('--accent') : 'transparent',
       }}
     >
       <Animated.View style={bounceStyle}>
