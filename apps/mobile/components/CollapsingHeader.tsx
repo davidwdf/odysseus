@@ -21,9 +21,8 @@ import { useTheme } from '../lib/useTheme'
 import { BackButton } from './GlassIconButton'
 import { GlassView } from './GlassView'
 
-const CORNER = 16 // even top/left inset for the back button
+const CORNER = 16 // even top/left inset for the back button; also the content margin (list px-4)
 const BACK = TAB_BAR_HEIGHT // back-lens diameter — matches the floating tab bar's height
-const PAD = 16
 
 // Collapsed pill: shares the back button's row (same top + height) and sits to its right.
 const PILL_H = BACK
@@ -158,7 +157,9 @@ export function CollapsingHeader({
   const pillW = Math.max(0, screenW - PILL_LEFT - CORNER)
   const colLabelLeft = cxCol + badgeSize.w / 2 + INLINE_GAP
   const colLabelW = Math.max(0, screenW - CORNER - PILL_PAD - colLabelLeft)
-  const expLabelW = Math.max(0, screenW - 2 * (CORNER + PAD))
+  // Inset the expanded title to the content margin (`CORNER`, matching the list's `px-4`) so the
+  // title band lines up with the rows below it rather than sitting narrower.
+  const expLabelW = Math.max(0, screenW - 2 * CORNER)
 
   return (
     <View
