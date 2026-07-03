@@ -30,6 +30,21 @@ const KEEP_UPPER = new Set([
  */
 const SMALL_WORDS = new Set(['of', 'the', 'and', 'to', 'at', 'in', 'for', 'by'])
 
+// HK circular routes carry the loop marker in the destination name itself, e.g.
+// "TAI KOK TSUI (CIRCULAR)" / "大角咀(循環線)" (ADR-046). We detect that and strip it so the
+// UI can present a proper "Circular via …" treatment instead of a raw suffix.
+const CIRCULAR_SUFFIX = /\s*[（(][^（()]*(?:circular|循環|循环)[^）)]*[)）]\s*$/i
+
+/** Does a route destination name carry the circular-route marker? */
+export function isCircular(name: string): boolean {
+  return /circular|循環|循环/i.test(name)
+}
+
+/** Drop a trailing "(CIRCULAR)" / "(循環線)" marker: "Tai Kok Tsui (Circular)" → "Tai Kok Tsui". */
+export function stripCircular(name: string): string {
+  return name.replace(CIRCULAR_SUFFIX, '').trim()
+}
+
 /** Split a trailing parenthesised stop code: "Foo Bar (ST311)" → { label: "Foo Bar", code: "ST311" }. */
 export function splitStopCode(name: string): { label: string; code?: string } {
   const m = name.match(/^(.*\S)\s*\(([^()]+)\)\s*$/)

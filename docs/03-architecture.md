@@ -38,7 +38,7 @@ underneath without touching the apps:
 ```ts
 interface DataSource {
   getNearby(lat, lng, radiusM): Promise<StopWithEtas[]>   // mostly on-device in v1
-  getRoute(routeId): Promise<RouteDetail>                 // static + ETAs
+  getRoute(routeId): Promise<RouteDetail>                 // static + ETAs; carries `reverse?` (ADR-046)
   getStop(stopId): Promise<StopDetail>                    // static + ETAs
   getEtas(stopId, routeIds?): Promise<Eta[]>              // live
   watch(targets): Subscription                            // v1: polling shim; v2: WebSocket

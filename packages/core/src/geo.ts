@@ -19,6 +19,21 @@ export function haversineMeters(a: LatLng, b: LatLng): number {
   return 2 * EARTH_R * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
+/** Total straight-line length of a path through ordered points — the sum of great-circle hops
+ *  between consecutive points. Used as an APPROXIMATE bus-route distance from its stop
+ *  coordinates: HK open data carries no route polylines, so this under-counts the real road
+ *  distance (a bus follows curving roads, not straight hops) and is only ever shown as an
+ *  explicit estimate (ADR-008 / ADR-044). Returns 0 for fewer than two points. */
+export function routeDistanceM(points: LatLng[]): number {
+  let total = 0
+  let prev: LatLng | undefined
+  for (const p of points) {
+    if (prev) total += haversineMeters(prev, p)
+    prev = p
+  }
+  return total
+}
+
 /** Average pedestrian pace, metres per minute (~4.8 km/h). */
 const WALK_M_PER_MIN = 80
 

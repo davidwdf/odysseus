@@ -61,6 +61,8 @@ export const collapsedHeaderH = (insetTop: number) => insetTop + COL_H
 export function CollapsingHeader({
   badge,
   label,
+  collapsedLabel,
+  expandedSlot,
   scrollY,
   insetTop,
   onBack,
@@ -78,6 +80,12 @@ export function CollapsingHeader({
   badge: ReactNode
   /** The marquee line beneath the badge (route `A → B`, the stop name). */
   label: string
+  /** Collapsed-pill marquee text, when it should differ from `label` (e.g. `→ dest` on the
+   *  route screen, matching the stop-card form). Defaults to `label`. */
+  collapsedLabel?: string
+  /** Custom expanded content rendered in place of the centred label marquee (e.g. the route
+   *  screen's from/to card, which carries the direction toggle). Fades out on collapse. */
+  expandedSlot?: ReactNode
   scrollY: SharedValue<number>
   insetTop: number
   onBack: () => void
@@ -214,7 +222,10 @@ export function CollapsingHeader({
         />
       ) : null}
 
-      {/* Expanded label line — centred beneath the big badge, fades out first */}
+      {/* Expanded content beneath the big badge, fades out first. Either a centred label marquee
+          (default) or a custom slot (the route screen's from/to card + toggle). The slot carries
+          interactive controls, so it sits above the tap-to-top catcher (z4) and its host positions
+          it below the collapsed-chrome band via `labelExpTop`. */}
       <Animated.View
         pointerEvents="box-none"
         style={[
@@ -223,13 +234,16 @@ export function CollapsingHeader({
             left: 0,
             right: 0,
             top: insetTop + labelExpTop,
-            alignItems: 'center',
-            zIndex: 2,
+            alignItems: expandedSlot ? 'stretch' : 'center',
+            paddingHorizontal: expandedSlot ? CORNER : 0,
+            zIndex: expandedSlot ? 4 : 2,
           },
           expLabelStyle,
         ]}
       >
-        <Marquee width={expLabelW} text={label} size={expLabelSize} color={labelColor} />
+        {expandedSlot ?? (
+          <Marquee width={expLabelW} text={label} size={expLabelSize} color={labelColor} />
+        )}
       </Animated.View>
 
       {/* Collapsed label line — inline inside the pill, fades in last */}
@@ -247,7 +261,12 @@ export function CollapsingHeader({
           colLabelStyle,
         ]}
       >
-        <Marquee width={colLabelW} text={label} size={colLabelSize} color={labelColor} />
+        <Marquee
+          width={colLabelW}
+          text={collapsedLabel ?? label}
+          size={colLabelSize}
+          color={labelColor}
+        />
       </Animated.View>
 
       {/* The badge — a single element morphing from big-centre to small-in-pill */}
@@ -276,19 +295,25 @@ export function CollapsingHeader({
   )
 }
 
-/** Centred one-line label that, when it overflows `width`, **continuously** marquees — scroll to
- *  the end, pause, scroll back, pause, repeat — on an infinite loop. Centred + static when it fits.
- *  Non-interactive (taps fall through to the header's tap-to-top catcher). */
-function Marquee({
+/** One-line label that, when it overflows `width`, **continuously** marquees — scroll to the end,
+ *  pause, scroll back, pause, repeat — on an infinite loop. Static when it fits: centred by default,
+ *  or pinned left (`align="left"`, e.g. the route header's from/to card). Non-interactive (taps fall
+ *  through to the header's tap-to-top catcher). Exported so hosts can reuse the exact motion. */
+export function Marquee({
   width,
   text,
   size = 14,
   color = '--text-muted',
+  align = 'center',
+  lineHeight,
 }: {
   width: number
   text: string
   size?: number
   color?: `--${string}`
+  align?: 'left' | 'center'
+  /** Fix the line box height so callers can position lines in exact slots. */
+  lineHeight?: number
 }) {
   const { color: themeColor } = useTheme()
   const [textW, setTextW] = useState(0)
@@ -314,8 +339,8 @@ function Marquee({
   }, [overflow, x])
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }))
-  // Centre the label when it fits; pin left and marquee when it overflows.
-  const centerOffset = overflow > 0 ? 0 : Math.max(0, (width - textW) / 2)
+  // Centre a fitting label (unless pinned left); always pin left while marqueeing.
+  const centerOffset = overflow > 0 || align === 'left' ? 0 : Math.max(0, (width - textW) / 2)
 
   return (
     <View pointerEvents="none" style={{ width, overflow: 'hidden' }}>
@@ -327,7 +352,12 @@ function Marquee({
         <Text
           onLayout={(e) => setTextW(e.nativeEvent.layout.width)}
           numberOfLines={1}
-          style={{ fontFamily: FONT_FAMILY.regular, fontSize: size, color: themeColor(color) }}
+          style={{
+            fontFamily: FONT_FAMILY.regular,
+            fontSize: size,
+            color: themeColor(color),
+            ...(lineHeight ? { lineHeight } : {}),
+          }}
         >
           {text}
         </Text>

@@ -10,6 +10,7 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -26,11 +27,10 @@ const DISMISS_VELOCITY = 850
 // sheet, never the scrim behind it.
 const UNDERLAP = 320
 const RADIUS = 26
-// Settle easing: a single overshoot. `Easing.out(Easing.back)` runs *past* the target once in
-// the direction of travel, then eases back — so a slide-up overshoots a touch higher and drops
-// to rest, and a released stretch overshoots a touch lower and rises to rest. One bounce, never
-// the multi-oscillation of an under-damped spring.
-const SETTLE = Easing.out(Easing.back(2))
+// Entrance overshoot, in **pixels** — the panel eases a fixed 7px past rest, then settles. This is
+// deliberately a constant, NOT `Easing.back` (whose overshoot is a *fraction of the travel*, so a
+// tall sheet — which starts further down and travels further — visibly bounced more than a short one).
+const OVERSHOOT = 7
 
 /**
  * A bottom sheet. A solid `--surface` panel over a dimmed scrim; it slides up on mount and
@@ -83,8 +83,12 @@ export function BottomSheet({
     if (!opened.current) {
       opened.current = true
       ty.value = h - UNDERLAP // jump just below the edge (instant), then slide up
-      // Overshoot a touch higher than rest, then settle down — a single bounce.
-      ty.value = withTiming(0, { duration: 380, easing: SETTLE })
+      // Slide up a fixed 7px past rest, then settle down — one gentle bounce, the same size for a
+      // short or tall sheet (the overshoot is a constant, not a fraction of the slide distance).
+      ty.value = withSequence(
+        withTiming(-OVERSHOOT, { duration: 330, easing: Easing.out(Easing.cubic) }),
+        withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) }),
+      )
     }
   }
 
@@ -106,9 +110,9 @@ export function BottomSheet({
           },
         )
       } else {
-        // Settle back to rest with one overshoot (a released stretch dips a touch below rest,
-        // then rises to it) — not the under-damped spring's repeated bouncing.
-        ty.value = withTiming(0, { duration: 340, easing: SETTLE })
+        // Return to rest with a plain ease-out — no overshoot here, so a small drag-and-release
+        // doesn't bounce; the single gentle bounce is reserved for the entrance.
+        ty.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) })
       }
     })
 

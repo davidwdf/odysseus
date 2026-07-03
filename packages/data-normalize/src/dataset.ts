@@ -1,4 +1,11 @@
-import type { Bound, I18nText, OperatorId, RouteServiceInfo } from '@nextbus/core'
+import type {
+  Bound,
+  FreqPattern,
+  I18nText,
+  OperatorId,
+  RouteServiceInfo,
+  ServiceDayType,
+} from '@nextbus/core'
 import { haversineM } from './kmb-static'
 import { canonicalRouteId, i18nText, toBound } from './normalize'
 
@@ -46,6 +53,9 @@ interface RawStopEntry {
 interface RawDataset {
   routeList: Record<string, RawRoute>
   stopList: Record<string, RawStopEntry>
+  /** GTFS service-id → 7-day run mask `[Sun,Mon,Tue,Wed,Thu,Fri,Sat]` ("1" = runs). Resolves
+   *  the `freq` service ids to day-types for the per-day-type patterns (ADR-044). */
+  serviceDayMap?: Record<string, string[]>
 }
 
 export interface IndexStop {
@@ -166,11 +176,75 @@ function summarizeFreq(freq: RawRoute['freq']): Pick<RouteServiceInfo, 'headway'
   return out
 }
 
+type DayMap = RawDataset['serviceDayMap']
+
+/** Classify a service-day run mask `[Sun,Mon,Tue,Wed,Thu,Fri,Sat]` into a friendly day-type.
+ *  Clean weekday/Sat/Sun splits are the common case (ADR-044); anything else is `other` and the
+ *  UI renders the exact days from the mask. */
+function classifyDays(mask: string[]): ServiceDayType {
+  const [sun, mon, tue, wed, thu, fri, sat] = mask.map((d) => d === '1')
+  const weekdays = mon && tue && wed && thu && fri
+  if (sun && weekdays && sat) return 'daily'
+  if (weekdays && !sat && !sun) return 'weekday'
+  if (sat && !sun && !mon && !tue && !wed && !thu && !fri) return 'saturday'
+  if (sun && !sat && !mon && !tue && !wed && !thu && !fri) return 'sunday'
+  return 'other'
+}
+
+const DAY_TYPE_ORDER: ServiceDayType[] = ['weekday', 'saturday', 'sunday', 'daily', 'other']
+
+/**
+ * Turn the GTFS frequency table into per-day-type profiles by joining each `freq` service id to
+ * `serviceDayMap` (ADR-044). One profile per day-type; when several service ids share a day-type
+ * (seasonal variants) we keep the richest (most bands) as the representative — the Static tier is
+ * a coarse summary, not a promise of every variant. Bands are sorted by clock start; first/last
+ * are the earliest start → latest end (mirrors `summarizeFreq`, so the badge and sheet agree).
+ */
+function buildPatterns(freq: RawRoute['freq'], dayMap: DayMap): FreqPattern[] | undefined {
+  if (!freq || !dayMap) return undefined
+  const byType = new Map<ServiceDayType, { mask: string[]; bands: [string, string, string][] }>()
+  for (const [serviceId, bands] of Object.entries(freq)) {
+    const mask = dayMap[serviceId]
+    if (!bands || !mask) continue
+    const rows = Object.entries(bands)
+      .filter((e): e is [string, [string, string]] => e[1] != null)
+      .map(([start, v]) => [start, v[0], v[1]] as [string, string, string])
+    if (rows.length === 0) continue
+    const dayType = classifyDays(mask)
+    const prev = byType.get(dayType)
+    if (!prev || rows.length > prev.bands.length) byType.set(dayType, { mask, bands: rows })
+  }
+  const patterns: FreqPattern[] = []
+  for (const [dayType, { mask, bands }] of byType) {
+    const parsed = bands
+      .map(([start, end, head]) => ({
+        startN: Number(start),
+        endN: Number(end),
+        start: hhmm(Number(start)),
+        end: hhmm(Number(end)),
+        headwayMin: Math.round(Number(head) / 60),
+      }))
+      .filter((b) => Number.isFinite(b.startN) && Number.isFinite(b.endN) && b.headwayMin > 0)
+      .sort((a, b) => a.startN - b.startN)
+    if (parsed.length === 0) continue
+    patterns.push({
+      dayType,
+      days: mask.map((d) => d === '1'),
+      bands: parsed.map(({ start, end, headwayMin }) => ({ start, end, headwayMin })),
+      first: hhmm(Math.min(...parsed.map((b) => b.startN))),
+      last: hhmm(Math.max(...parsed.map((b) => b.endN))),
+    })
+  }
+  patterns.sort((a, b) => DAY_TYPE_ORDER.indexOf(a.dayType) - DAY_TYPE_ORDER.indexOf(b.dayType))
+  return patterns.length > 0 ? patterns : undefined
+}
+
 const asString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 
 /** Build the static service facts for a route entry, or undefined if the dataset has none. */
-function buildService(entry: RawRoute): RouteServiceInfo | undefined {
+function buildService(entry: RawRoute, dayMap: DayMap): RouteServiceInfo | undefined {
   const { headway, hours } = summarizeFreq(entry.freq)
+  const patterns = buildPatterns(entry.freq, dayMap)
   const fareFull = asString(entry.fares?.[0])
   const holidayFull = asString(entry.faresHoliday?.[0])
   const journeyMin = entry.jt && Number.isFinite(Number(entry.jt)) ? Number(entry.jt) : undefined
@@ -180,6 +254,7 @@ function buildService(entry: RawRoute): RouteServiceInfo | undefined {
   if (journeyMin) info.journeyMin = journeyMin
   if (headway) info.headway = headway
   if (hours) info.hours = hours
+  if (patterns) info.patterns = patterns
   return Object.keys(info).length > 0 ? info : undefined
 }
 
@@ -571,7 +646,7 @@ export async function fetchConsolidatedIndex(
         destination: datasetText(entry.dest ?? {}),
         fares: entry.fares ?? undefined,
         faresHoliday: entry.faresHoliday ?? undefined,
-        service: buildService(entry),
+        service: buildService(entry, data.serviceDayMap),
       })
 
       const ref: IndexRouteRef = { operator, route: entry.route, bound, serviceType }

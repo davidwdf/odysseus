@@ -1,10 +1,12 @@
 import {
+  type Bound,
   dedupeEtas,
   type Eta,
   type I18nText,
   type LatLng,
   type Route,
   type RouteDetail,
+  type RouteRef,
   type Stop,
   type StopDetail,
 } from '@nextbus/core'
@@ -13,6 +15,7 @@ import {
   fetchEta,
   fetchKmbRouteEta,
   fetchKmbStopEta,
+  type IndexRouteMeta,
   type IndexRouteRef,
   type IndexStop,
   routeFareAtSeq,
@@ -206,6 +209,34 @@ export async function stopEtas(id: string, routeIds?: string[]): Promise<Eta[]> 
   return all.filter((e) => wanted.has(e.routeId))
 }
 
+/** Prefer service type "1" as the representative variant, else the lowest (mirrors the
+ *  search index's collapsing so the toggle lands on the same "main" variant riders search). */
+function preferServiceType(a: string, b: string): string {
+  if (a === '1') return a
+  if (b === '1') return b
+  return a.localeCompare(b, 'en', { numeric: true }) <= 0 ? a : b
+}
+
+/** The same route number in the opposite bound, if the dataset carries one (absent for
+ *  circular / single-direction routes). Picks the representative service-type variant and
+ *  requires it to actually have a stop sequence, so the client can always load it. ADR-046. */
+function findReverse(index: StaticIndex, meta: IndexRouteMeta): RouteRef | undefined {
+  const opposite: Bound = meta.bound === 'inbound' ? 'outbound' : 'inbound'
+  let best: IndexRouteMeta | undefined
+  for (const m of index.routeMeta.values()) {
+    if (m.operator !== meta.operator || m.route !== meta.route || m.bound !== opposite) continue
+    const rid = canonicalRouteId(m.operator, m.route, m.bound, m.serviceType)
+    if (!index.routeToStops.get(rid)?.length) continue
+    if (!best || preferServiceType(m.serviceType, best.serviceType) === m.serviceType) best = m
+  }
+  if (!best) return undefined
+  return {
+    id: canonicalRouteId(best.operator, best.route, best.bound, best.serviceType),
+    origin: best.origin,
+    destination: best.destination,
+  }
+}
+
 /** GET /v1/route/:id — a route and its ordered stop list, each stop carrying the route's
  *  own next arrival there (ADR-030). KMB/LWB pull every stop's ETA in ONE upstream call
  *  (`route-eta`); CTB has no bulk route-eta endpoint (ADR-021) so it stays static-only. */
@@ -245,5 +276,6 @@ export async function routeDetail(id: string): Promise<RouteDetail> {
       fare: routeFareAtSeq(meta, rs.seq),
     })
   }
-  return { route: toRoute(meta, index), stops }
+  const reverse = findReverse(index, meta)
+  return { route: toRoute(meta, index), stops, ...(reverse ? { reverse } : {}) }
 }

@@ -1,7 +1,14 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-06-16**. Branch: `project-status-handoff`. Latest: **Core navigation-animation system**
+> Snapshot: **2026-07-04**. Branch: `fix-expo-start-web-error`. Latest: **Route-detail direction toggle**
+> ([ADR-046](./08-decision-log.md#adr-046--route-detail-direction-toggle-server-resolved-reverse-an-in-card-fromto-header-and-a-circular-route-treatment)) —
+> a server-resolved `RouteDetail.reverse` (edge picks the opposite bound + service-type variant; absent for circular /
+> one-way routes) drives an **in-card from/to header** whose reverse toggle flips direction *in place* (local state +
+> `keepPreviousData` + prefetch → no skeleton), with a `GitCompareArrows` glyph, a lyrics-style name swap, a staggered
+> list cascade, and bus tokens that slide down from the first stop. **Circular routes** (flagged `(CIRCULAR)` in the
+> destination name) show a loop glyph + "Circular via <turnaround>" and no toggle. Verified on web (KMB 1 + KMB 10).
+> Earlier: **Core navigation-animation system**
 > ([ADR-043](./08-decision-log.md#adr-043--a-core-navigation-animation-system-cross-fade-tabs-slide-and-reveal-stack-web-swipe-back)) —
 > rules centralised in **`lib/navTransitions.ts`** (+ the two `_layout`s), reduced-motion aware. **On web:** tab↔tab
 > **cross-fade** (flash fixed by painting the theme bg on the tabs wrapper + `sceneStyle`) and a left-edge

@@ -35,8 +35,11 @@
       "expo-router",
       [
         "expo-location",
-        { "locationWhenInUsePermission": "Used to show bus stops and arrivals near you." }
-      ]
+        {
+          "locationWhenInUsePermission": "Used to show bus stops and arrivals near you."
+        }
+      ],
+      "expo-font"
     ]
   }
 }
