@@ -150,8 +150,9 @@ export default function SearchScreen() {
 
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
-      {/* Header: the standard back button to the left of the Routes / Stops segment. Top/left/right
-          spacing (px-4 = 16, pt-4 = 16) matches the route header's back lens. */}
+      {/* Header: the standard 48px back button to the left of the Routes / Stops segment. Layout
+          (gap-3 px-4 pb-1 pt-4, default GlassIconButton size) matches the other pushed-page headers
+          — about-data and faq. The route/stop screens use a different, floating collapsing header. */}
       <View className="flex-row items-center gap-3 px-4 pb-1 pt-4">
         <BackButton onPress={() => router.back()} accessibilityLabel={t(locale, 'back')} />
         <View className="flex-1">

@@ -1,3 +1,5 @@
+import type { OperatorId } from '@nextbus/core'
+import { OPERATOR_ACCENT } from '@nextbus/ui'
 import { useState } from 'react'
 import { Image, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import { openInMaps } from '../lib/openExternal'
@@ -17,7 +19,8 @@ import { Text } from './Text'
 // own-crawl → R2 roadmap step) or a proper provider — this is the seam.
 const TILE = 256
 const DEFAULT_ZOOM = 16
-// Vivid pin fill that reads over the map in both modes.
+// Vivid pin fill (a lone stop, or a pole with no known operator) that reads over the map in
+// both modes. A multi-pole place colours each dot by its operator instead (OPERATOR_ACCENT).
 const PIN_COLOR = '#E11D48'
 const TILE_URL = (z: number, x: number, y: number) =>
   `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
@@ -32,6 +35,16 @@ const DARK_TILE_FILTER = Platform.select<NonNullable<ViewStyle['filter']>>({
   web: 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9)',
   default: [{ invert: 1 }, { hueRotate: '180deg' }, { brightness: 0.9 }, { contrast: 0.9 }],
 })
+
+/** A pinnable point on the map. `id` keys the dot for highlighting/tapping; `operator` picks its
+ *  brand colour; `label` is the short stop code shown beside it (multi-pole places, ADR-042). */
+export type MapPoint = {
+  id: string
+  lat: number
+  lng: number
+  operator?: OperatorId
+  label?: string
+}
 
 const lngToWorldX = (lng: number, scale: number) => ((lng + 180) / 360) * scale
 const latToWorldY = (lat: number, scale: number) => {
@@ -60,6 +73,10 @@ function fitZoom(pts: Array<{ lat: number; lng: number }>, w: number, h: number)
  * A static OSM mini-map that opens the platform maps app on tap. Centres on `{ lat, lng }`
  * with a single pin; or pass `points` (a place's member poles, ADR-042) to drop a pin per
  * pole, auto-zoomed to fit them all. Full-bleed to its container width (measured on layout).
+ *
+ * For a multi-pole place each dot is brand-coloured by operator and labelled with its stop code.
+ * `activeId` highlights one dot (the pole the list is scrolled to); `onPointPress(id)` fires when
+ * a dot is tapped (the caller scrolls its group into view) — see stop/[id].tsx.
  */
 export function MiniMap({
   lat,
@@ -69,27 +86,34 @@ export function MiniMap({
   actionLabel,
   height = 150,
   zoom = DEFAULT_ZOOM,
+  activeId,
+  onPointPress,
   className,
 }: {
   lat: number
   lng: number
   /** Member poles to pin (multi-pole place). Omit/≤1 → a single centre pin at `lat,lng`. */
-  points?: Array<{ lat: number; lng: number }>
+  points?: MapPoint[]
   /** Stop name — names the maps pin. */
   label?: string
   /** Accessible label for the tap target, e.g. "Open in Maps". */
   actionLabel: string
   height?: number
   zoom?: number
+  /** Id of the pole to highlight (dims the rest). Only meaningful with `points`. */
+  activeId?: string | null
+  /** Tapping a pole's dot fires this with its id (the caller scrolls to its group). */
+  onPointPress?: (id: string) => void
   className?: string
 }) {
   const { isDark } = useTheme()
   const [w, setW] = useState(0)
-  const pts = points && points.length > 1 ? points : [{ lat, lng }]
+  const multi = !!points && points.length > 1
+  const pts: MapPoint[] = multi ? (points as MapPoint[]) : [{ id: '__single__', lat, lng }]
   // Centre on the points' centroid (so all pins are framed); zoom to fit them.
   const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
   const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
-  const z = pts.length > 1 ? fitZoom(pts, w, height) : zoom
+  const z = multi ? fitZoom(pts, w, height) : zoom
   const scale = TILE * 2 ** z
   const n = 2 ** z
   // Viewport top-left in world pixels, so the centroid lands dead-centre.
@@ -106,17 +130,23 @@ export function MiniMap({
     }
   }
 
+  // Dim the non-active dots only once a dot is actually highlighted (scrolled-to pole).
+  const hasActive = multi && !!activeId
+  // Screen position per pole (needed both to draw dots and to decide label placement).
+  const placed = pts.map((p) => ({
+    p,
+    cx: lngToWorldX(p.lng, scale) - left,
+    cy: latToWorldY(p.lat, scale) - top,
+  }))
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={actionLabel}
-      onPress={() => openInMaps(cLat, cLng, label)}
+    <View
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
-      className={`overflow-hidden bg-surface-2 active:opacity-90 ${className ?? ''}`}
+      className={`overflow-hidden bg-surface-2 ${className ?? ''}`}
       style={{ height }}
     >
       {/* Tiles live in their own layer so the dark `filter` recolours the map only — the pins
-          and attribution below stay true-colour. */}
+          and attribution above stay true-colour. */}
       <View style={[StyleSheet.absoluteFill, isDark ? { filter: DARK_TILE_FILTER } : null]}>
         {tiles.map((t) => (
           <Image
@@ -127,16 +157,42 @@ export function MiniMap({
         ))}
       </View>
 
-      {/* A dot per pole, centred on its exact coordinate; smaller when there are several. */}
+      {/* Background tap target — hands the whole map off to the platform maps app. Sits above the
+          tiles (transparent, so the map still shows) but below the pins, which catch their own
+          taps. Kept a sibling of the pins (never a wrapper) so the two don't nest. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={actionLabel}
+        onPress={() => openInMaps(cLat, cLng, label)}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* A dot per pole, centred on its exact coordinate; smaller when there are several, brand-
+          coloured + labelled + tappable for a multi-pole place. Labels normally sit below the dot,
+          but flip **above** when another pole sits directly below within a chip's height — the
+          common along-the-kerb stack — so the label doesn't cover the next dot. */}
       {w > 0
-        ? pts.map((p) => (
-            <Pin
-              key={`${p.lat},${p.lng}`}
-              cx={lngToWorldX(p.lng, scale) - left}
-              cy={latToWorldY(p.lat, scale) - top}
-              size={pts.length > 1 ? 14 : 18}
-            />
-          ))
+        ? placed.map(({ p, cx, cy }) => {
+            const isActive = multi && p.id === activeId
+            const labelAbove = placed.some(
+              (o) => o.p.id !== p.id && o.cy > cy && o.cy - cy < 26 && Math.abs(o.cx - cx) < 44,
+            )
+            return (
+              <Pin
+                key={p.id}
+                cx={cx}
+                cy={cy}
+                size={multi ? 14 : 18}
+                color={(p.operator && OPERATOR_ACCENT[p.operator]) || PIN_COLOR}
+                active={isActive}
+                dim={hasActive && !isActive}
+                label={multi ? p.label : undefined}
+                labelAbove={labelAbove}
+                onPress={multi && onPointPress ? () => onPointPress(p.id) : undefined}
+                pressLabel={p.label}
+              />
+            )
+          })
         : null}
 
       {/* Attribution — required by the OSM tile licence. */}
@@ -148,41 +204,112 @@ export function MiniMap({
           © OpenStreetMap
         </Text>
       </View>
-    </Pressable>
+    </View>
   )
 }
 
 /**
  * A clean circular marker centred on `(cx, cy)`: a vivid core inside a white ring with a soft
  * drop shadow, so it reads on any tile in light or dark mode without a fussy glyph. The white
- * ring is what separates it from the map; the shadow lifts it off the tiles.
+ * ring is what separates it from the map; the shadow lifts it off the tiles. `active` swells it
+ * and lifts it above its siblings; `dim` fades it when another dot is the active one. An optional
+ * `label` (the short stop code) sits in a legibility chip just below the dot.
  */
-function Pin({ cx, cy, size = 18 }: { cx: number; cy: number; size?: number }) {
-  const ring = Math.max(2, Math.round(size * 0.22))
+function Pin({
+  cx,
+  cy,
+  size = 18,
+  color = PIN_COLOR,
+  active = false,
+  dim = false,
+  label,
+  labelAbove = false,
+  onPress,
+  pressLabel,
+}: {
+  cx: number
+  cy: number
+  size?: number
+  color?: string
+  active?: boolean
+  dim?: boolean
+  label?: string
+  labelAbove?: boolean
+  onPress?: () => void
+  pressLabel?: string
+}) {
+  const d = active ? size + 6 : size
+  const ring = Math.max(2, Math.round(d * 0.22))
+  // The visible dot stays small; the touch target is a comfortable fixed box (RN-web ignores
+  // hitSlop, so the box itself must be big enough to hit without catching the map behind it).
+  const tap = Math.max(d, 32)
+  const shadow = Platform.select({
+    web: { boxShadow: active ? '0 2px 6px rgba(0,0,0,0.45)' : '0 1px 4px rgba(0,0,0,0.35)' },
+    default: {
+      shadowColor: '#000000',
+      shadowOpacity: active ? 0.45 : 0.35,
+      shadowRadius: active ? 3 : 2,
+      shadowOffset: { width: 0, height: 1 },
+    },
+  })
   return (
-    <View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        left: cx - size / 2,
-        top: cy - size / 2,
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: PIN_COLOR,
-        borderWidth: ring,
-        borderColor: '#ffffff',
-        // box-shadow on web (react-native-web 0.21 takes the string), shadow* on native.
-        ...Platform.select({
-          web: { boxShadow: '0 1px 4px rgba(0,0,0,0.35)' },
-          default: {
-            shadowColor: '#000000',
-            shadowOpacity: 0.35,
-            shadowRadius: 2,
-            shadowOffset: { width: 0, height: 1 },
-          },
-        }),
-      }}
-    />
+    <>
+      {/* Tap target — a sibling under the (pointer-events-none) dot, so taps land here without
+          nesting a pressable inside the background one. Only present when the dot is interactive. */}
+      {onPress ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={pressLabel}
+          onPress={onPress}
+          hitSlop={8}
+          style={{
+            position: 'absolute',
+            left: cx - tap / 2,
+            top: cy - tap / 2,
+            width: tap,
+            height: tap,
+            zIndex: active ? 3 : 2,
+          }}
+        />
+      ) : null}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: cx - d / 2,
+          top: cy - d / 2,
+          width: d,
+          height: d,
+          borderRadius: d / 2,
+          backgroundColor: color,
+          borderWidth: ring,
+          borderColor: '#ffffff',
+          opacity: dim ? 0.5 : 1,
+          zIndex: active ? 3 : 2,
+          ...shadow,
+        }}
+      />
+      {label ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: cx - 30,
+            // Below the dot by default; flipped above when a pole sits directly beneath.
+            top: labelAbove ? cy - d / 2 - 16 : cy + d / 2 + 2,
+            width: 60,
+            alignItems: 'center',
+            opacity: dim ? 0.5 : 1,
+            zIndex: active ? 3 : 2,
+          }}
+        >
+          <View className="rounded bg-bg/85 px-1">
+            <Text variant="caption" className="text-[9px] text-text" numberOfLines={1}>
+              {label}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+    </>
   )
 }

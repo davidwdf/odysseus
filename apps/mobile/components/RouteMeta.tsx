@@ -8,13 +8,17 @@ import {
   type RouteServiceInfo,
 } from '@nextbus/core'
 import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat } from 'lucide-react-native'
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { Icon } from './Icon'
 import { Text } from './Text'
 
 const HOLIDAY: Record<Locale, string> = { en: 'hol', 'zh-Hant': '假日', 'zh-Hans': '假日' }
 
-type Fact = { key: string; icon: LucideIcon; value: string; note?: string }
+/** Which badge was tapped. `fare`/`freq`/`hours` open a detail sheet; `stops` is a navigation
+ *  affordance (scroll the list), never a sheet (ADR-044). */
+export type FactKey = 'fare' | 'freq' | 'hours' | 'stops'
+
+type Fact = { key: FactKey; icon: LucideIcon; value: string; note?: string }
 
 /**
  * The static-facts strip for a route — fare · frequency · service hours · stop count — from the
@@ -35,6 +39,7 @@ export function RouteMeta({
   fareRange,
   stopCount,
   locale,
+  onFactPress,
 }: {
   service?: RouteServiceInfo
   /** Sectional fare span across the route's boarding stops (min–max); falls back to the
@@ -43,6 +48,9 @@ export function RouteMeta({
   /** Number of stops on this route direction — a Static "route length" fact. */
   stopCount?: number
   locale: Locale
+  /** Tapping a badge asks for its detail (fare/freq/hours → a sheet; stops → scroll). When
+   *  omitted the badges are static (ADR-044). */
+  onFactPress?: (key: FactKey) => void
 }) {
   if (!service) return null
 
@@ -68,9 +76,12 @@ export function RouteMeta({
   return (
     <View className="mx-4 mb-3 flex-row flex-wrap gap-2">
       {facts.map((f) => (
-        <View
+        <Pressable
           key={f.key}
-          className="flex-row items-center gap-1.5 rounded-full bg-surface px-3 py-2"
+          accessibilityRole={onFactPress ? 'button' : undefined}
+          onPress={onFactPress ? () => onFactPress(f.key) : undefined}
+          disabled={!onFactPress}
+          className="flex-row items-center gap-1.5 rounded-full bg-surface px-3 py-2 active:opacity-60"
         >
           <Icon icon={f.icon} tone="text" size={15} />
           <Text variant="caption" weight="medium" tabular className="text-muted">
@@ -81,7 +92,7 @@ export function RouteMeta({
               · {f.note}
             </Text>
           ) : null}
-        </View>
+        </Pressable>
       ))}
     </View>
   )

@@ -10,12 +10,28 @@ import {
 import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useRef } from 'react'
-import { Pressable, type ScrollView, View } from 'react-native'
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
+import { type ReactNode, useRef, useState } from 'react'
+import {
+  Platform,
+  Pressable,
+  type ScrollView,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native'
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  type SharedValue,
+  useAnimatedReaction,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BearingArrow } from '../../components/BearingArrow'
-import { expandedHeaderH } from '../../components/CollapsingHeader'
+import { COLLAPSE, collapsedHeaderH, expandedHeaderH } from '../../components/CollapsingHeader'
 import { EtaBadge } from '../../components/EtaBadge'
 import { MiniMap } from '../../components/MiniMap'
 import { RemarkTag } from '../../components/RemarkTag'
@@ -27,10 +43,24 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { splitStopCode, titleCaseName } from '../../lib/stopName'
 import { useLocation } from '../../lib/useLocation'
+import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
 
 /** Operator display names for the "served by" line — brand names, locale-neutral. */
 const OPERATOR_LABEL: Record<OperatorId, string> = { KMB: 'KMB', LWB: 'LWB', CTB: 'Citybus' }
+
+/** The map is a **full-width hero at rest that shrinks into a right-aligned floating PIP on scroll**
+ *  (ADR-045). Its **height is constant** (`MAP_HEIGHT`); only the width animates, from the full hero
+ *  width to `SHRINK_FRAC` of it (capped by `PIP_MAX_WIDTH` on wide viewports). To keep this smooth on
+ *  a raster-tile map we **animate a crop, not a scale**: the map renders at the hero width and the
+ *  container clips it as it narrows, with the map sliding left to stay centred — so no horizontal
+ *  distortion and no per-frame tile recompute. `MAP_GUTTER` is the side gutter; `MAP_GAP` the
+ *  breathing room below the header. */
+const MAP_HEIGHT = 150
+const MAP_GAP = 8
+const MAP_GUTTER = 16
+const SHRINK_FRAC = 0.6
+const PIP_MAX_WIDTH = 300
 
 /** A route serving the place, plus the member pole (`stopId`) it departs from (ADR-042). */
 type RouteEntry = { route: BusRoute; eta: Eta | null; fare?: string; stopId: string }
@@ -70,6 +100,7 @@ export default function StopDetail() {
   const locale = useLocale()
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const { height: windowH, width: windowW } = useWindowDimensions()
   // Silent location read (never prompts here) → show distance/walk only if we already have a fix.
   const { state: loc } = useLocation()
 
@@ -117,13 +148,82 @@ export default function StopDetail() {
   const scrollRef = useRef<ScrollView>(null)
   const topSpacer = expandedHeaderH(insets.top)
 
+  // Map (ADR-045): a full-width hero that shrinks into a right-aligned floating PIP as you scroll.
+  // `heroW` is the rest width (full, minus side gutters); `pinnedW` the docked width; `mapTop` the
+  // viewport y it docks to; `stickAt` the scroll offset at which it gets there — the map now rests
+  // below the sub-details, so its dock point includes their measured height (`metaH`; native only —
+  // web pins via CSS sticky regardless).
+  const [metaH, setMetaH] = useState(0)
+  const heroW = windowW - 2 * MAP_GUTTER
+  const pinnedW = Math.min(PIP_MAX_WIDTH, Math.round(heroW * SHRINK_FRAC))
+  const mapTop = collapsedHeaderH(insets.top) + MAP_GAP
+  const stickAt = Math.max(0, topSpacer + metaH - mapTop)
+
+  // Scroll-spy: highlight the map dot for the pole the list is scrolled to. Each pole group
+  // reports its content-offset top (onLayout → `sectionOffsets`); as `scrollY` moves we pick the
+  // last group whose header has reached the top of the list (just under the pinned map), and
+  // highlight that dot. Falls back to the first group so a dot is always lit. `activePole` only
+  // re-renders on a *change* (runOnJS gated by `lastActive`), so the per-frame cost stays on the
+  // UI thread.
+  const [activePole, setActivePole] = useState<string | null>(null)
+  // Height of the bottom-most pole group → we pad the list with only *just* enough tail room to
+  // scroll that last group up under the pinned map (not a whole empty screen).
+  const [lastGroupH, setLastGroupH] = useState(0)
+  const sectionOffsets = useSharedValue<Array<{ id: string; y: number }>>([])
+  const lastActive = useSharedValue<string | null>(null)
+  // Content offset that currently sits at the top of the list (just below the floating PIP), so a
+  // scrolled-to group clears the card rather than hiding behind it.
+  const listTop = mapTop + MAP_HEIGHT + MAP_GAP
+  useAnimatedReaction(
+    () => scrollY.value,
+    (y) => {
+      const line = y + listTop
+      let active: string | null = null
+      let best = -1
+      let firstId: string | null = null
+      let firstY = Number.POSITIVE_INFINITY
+      for (const o of sectionOffsets.value) {
+        if (o.y < firstY) {
+          firstY = o.y
+          firstId = o.id
+        }
+        if (o.y <= line && o.y > best) {
+          best = o.y
+          active = o.id
+        }
+      }
+      if (active === null) active = firstId
+      if (active !== lastActive.value) {
+        lastActive.value = active
+        runOnJS(setActivePole)(active)
+      }
+    },
+    [listTop],
+  )
+  const recordSection = (poleId: string, y: number) => {
+    const rest = sectionOffsets.value.filter((o) => o.id !== poleId)
+    sectionOffsets.value = [...rest, { id: poleId, y }]
+  }
+  // Web-safe, reduced-motion-aware smooth scroll (see useScrollToY / ADR-045).
+  const scrollToY = useScrollToY(scrollRef)
+  // Tapping a dot (or its list header) scrolls its pole's group to the top, just under the map.
+  const scrollToPole = (poleId: string) => {
+    const o = sectionOffsets.value.find((s) => s.id === poleId)
+    if (o) scrollToY(o.y - listTop)
+  }
+
   return (
     <View className="flex-1 bg-bg">
       <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        // Just enough tail padding for the last group to scroll up to under the pinned map (so
+        // tapping the last dot/header highlights it) — not a whole empty screen. Once its height is
+        // measured we pad `viewport − listTop − lastGroupH`; a lone stop needs none.
+        contentContainerStyle={{
+          paddingBottom: multiPole ? Math.max(24, windowH - listTop - lastGroupH) : 32,
+        }}
       >
         <View style={{ height: topSpacer }} />
         {query.isLoading ? (
@@ -138,71 +238,115 @@ export default function StopDetail() {
           </Text>
         ) : stop ? (
           <>
-            {/* Map hero — a static, keyless preview; a pin per pole for a multi-pole place. */}
-            <View className="px-4 pb-4">
-              <MiniMap
-                lat={stop.location.lat}
-                lng={stop.location.lng}
-                points={multiPole ? members.map((m) => m.location) : undefined}
-                label={cleanName}
-                actionLabel={t(locale, 'openInMaps')}
-                className="rounded-2xl border border-border"
+            {/* Sub-details sit **above** the map so they tuck up behind the header as you scroll
+                (rather than wedged between the map and the list). */}
+            <View onLayout={(e) => setMetaH(e.nativeEvent.layout.height)}>
+              <StopMeta
+                operators={operatorsOf(routes)}
+                routeCount={routes.length}
+                distanceM={dists.length ? Math.min(...dists) : distanceM}
+                walk={
+                  dists.length > 1
+                    ? formatWalkRange(Math.min(...dists), Math.max(...dists), locale)
+                    : distanceM != null
+                      ? formatWalk(distanceM, locale)
+                      : undefined
+                }
+                bearingDeg={stop.bearingDeg}
+                locale={locale}
               />
             </View>
 
-            <StopMeta
-              operators={operatorsOf(routes)}
-              routeCount={routes.length}
-              distanceM={dists.length ? Math.min(...dists) : distanceM}
-              walk={
-                dists.length > 1
-                  ? formatWalkRange(Math.min(...dists), Math.max(...dists), locale)
-                  : distanceM != null
-                    ? formatWalk(distanceM, locale)
+            {/* Map — a **full-width hero that shrinks into a right-aligned floating PIP** as you
+                scroll (a static keyless preview; a pin per pole for a multi-pole place). Each dot is
+                brand-coloured + labelled, highlights the scrolled-to pole, and scrolls its group into
+                view on tap (ADR-045). The vertical dock uses **CSS `position: sticky` on web**
+                (browser-composited → no jitter) / a reanimated `translateY` clamp on native; the
+                width shrink is a reanimated crop. */}
+            <StickyMap
+              scrollY={scrollY}
+              stickAt={stickAt}
+              top={mapTop}
+              fullW={heroW}
+              pinnedW={pinnedW}
+            >
+              <MiniMap
+                lat={stop.location.lat}
+                lng={stop.location.lng}
+                height={MAP_HEIGHT}
+                points={
+                  multiPole
+                    ? members.map((m) => ({
+                        id: m.id,
+                        lat: m.location.lat,
+                        lng: m.location.lng,
+                        operator: m.id.split(':')[0] as OperatorId,
+                        label: splitStopCode(m.name[locale]).code ?? m.id.split(':')[1],
+                      }))
                     : undefined
-              }
-              bearingDeg={stop.bearingDeg}
-              locale={locale}
-            />
+                }
+                activeId={activePole}
+                onPointPress={scrollToPole}
+                label={cleanName}
+                actionLabel={t(locale, 'openInMaps')}
+              />
+            </StickyMap>
 
             {/* Flat list, no card chrome (docs/09: data is the hero). For a multi-pole place the
                 routes are grouped under their pole; otherwise one flat list under "Routes". */}
             {multiPole ? (
-              orderedPoles.map((m) => {
-                const rs = byPole.get(m.id) ?? []
-                if (rs.length === 0) return null
-                const op = m.id.split(':')[0] as OperatorId
-                const code = splitStopCode(m.name[locale]).code
-                const d = poleDist.get(m.id)
-                return (
-                  <View key={m.id}>
-                    <View className="flex-row items-end justify-between border-border border-t px-4 pt-4 pb-1">
-                      <Text variant="label" className="text-subtle">
-                        {OPERATOR_LABEL[op] ?? op}
-                        {code ? ` · ${code}` : ''}
-                      </Text>
-                      {d != null ? (
-                        <Text variant="caption" className="text-subtle">
-                          {formatWalk(d, locale)}
+              orderedPoles
+                .filter((m) => (byPole.get(m.id)?.length ?? 0) > 0)
+                .map((m, i, shown) => {
+                  const rs = byPole.get(m.id) ?? []
+                  const isLast = i === shown.length - 1
+                  const op = m.id.split(':')[0] as OperatorId
+                  const code = splitStopCode(m.name[locale]).code
+                  const d = poleDist.get(m.id)
+                  return (
+                    <View
+                      key={m.id}
+                      onLayout={(e) => {
+                        recordSection(m.id, e.nativeEvent.layout.y)
+                        if (isLast) setLastGroupH(e.nativeEvent.layout.height)
+                      }}
+                    >
+                      {/* Section divider, inset to the content margin (not full-bleed) so it lines up
+                          with the text and the map card. */}
+                      <View className="mx-4 border-border border-t" />
+                      {/* Tapping the pole header scrolls it to the top of the list and highlights its
+                        map dot — the list-side twin of tapping the dot. */}
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => scrollToPole(m.id)}
+                        className="flex-row items-end justify-between px-4 pt-4 pb-1 active:opacity-60"
+                      >
+                        <Text variant="label" className="text-subtle">
+                          {OPERATOR_LABEL[op] ?? op}
+                          {code ? ` · ${code}` : ''}
                         </Text>
-                      ) : null}
+                        {d != null ? (
+                          <Text variant="caption" className="text-subtle">
+                            {formatWalk(d, locale)}
+                          </Text>
+                        ) : null}
+                      </Pressable>
+                      {rs.map((r) => (
+                        <RouteRowItem
+                          key={r.route.id}
+                          r={r}
+                          locale={locale}
+                          now={now}
+                          onPress={() =>
+                            router.push(
+                              `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
+                            )
+                          }
+                        />
+                      ))}
                     </View>
-                    {rs.map((r) => (
-                      <RouteRowItem
-                        key={r.route.id}
-                        r={r}
-                        locale={locale}
-                        now={now}
-                        onPress={() =>
-                          router.push(
-                            `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
-                          )
-                        }
-                      />
-                    ))}
-                  </View>
-                )
-              })
+                  )
+                })
             ) : (
               <>
                 <Text variant="label" className="mb-1 px-4 text-subtle">
@@ -234,10 +378,65 @@ export default function StopDetail() {
         scrollY={scrollY}
         insetTop={insets.top}
         onBack={() => router.back()}
-        onTitlePress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+        onTitlePress={() => scrollToY(0)}
         backLabel={t(locale, 'back')}
       />
     </View>
+  )
+}
+
+/** The map: a **full-width hero that shrinks into a right-aligned floating PIP** as the list scrolls
+ *  (over the header's `COLLAPSE` distance). It's a **crop, not a scale** — the map renders at `fullW`
+ *  and the right-aligned outer container narrows to `pinnedW`, clipping it (`overflow: hidden`), while
+ *  the inner map slides left by half the lost width so it stays centred. Height is untouched, so no
+ *  horizontal distortion and no per-frame tile recompute. The vertical dock uses CSS `position:
+ *  sticky` on **web** (browser-composited, jitter-free) and a reanimated `translateY` clamp on
+ *  **native**; `top` is the viewport y it docks to. */
+function StickyMap({
+  scrollY,
+  stickAt,
+  top,
+  fullW,
+  pinnedW,
+  children,
+}: {
+  scrollY: SharedValue<number>
+  stickAt: number
+  top: number
+  fullW: number
+  pinnedW: number
+  children: ReactNode
+}) {
+  const outerStyle = useAnimatedStyle(() => {
+    const w = interpolate(scrollY.value, [0, COLLAPSE], [fullW, pinnedW], Extrapolation.CLAMP)
+    // Web pins vertically via CSS sticky; native counter-scrolls with translateY.
+    return Platform.OS === 'web'
+      ? { width: w }
+      : { width: w, transform: [{ translateY: Math.max(0, scrollY.value - stickAt) }] }
+  })
+  // Slide the (fixed-width) map left by half the cropped-off width so it stays centred in the window.
+  const innerStyle = useAnimatedStyle(() => {
+    const w = interpolate(scrollY.value, [0, COLLAPSE], [fullW, pinnedW], Extrapolation.CLAMP)
+    return { transform: [{ translateX: -(fullW - w) / 2 }] }
+  })
+  const base: ViewStyle = {
+    alignSelf: 'flex-end',
+    marginRight: MAP_GUTTER,
+    marginBottom: MAP_GAP + 4, // small gap before the list's first divider
+    height: MAP_HEIGHT,
+    overflow: 'hidden',
+    zIndex: 10,
+  }
+  const webPos = (Platform.OS === 'web' ? { position: 'sticky', top } : null) as ViewStyle | null
+  return (
+    <Animated.View
+      className="rounded-2xl border border-border bg-surface-2 shadow-lg"
+      style={[base, webPos, outerStyle]}
+    >
+      <Animated.View style={[{ width: fullW, height: MAP_HEIGHT }, innerStyle]}>
+        {children}
+      </Animated.View>
+    </Animated.View>
   )
 }
 
@@ -319,9 +518,14 @@ function StopMeta({
   parts.push(`${routeCount} ${t(locale, 'routesLabel')}`)
   if (distanceM != null && walk) parts.push(`${formatDistance(distanceM)} · ${walk}`)
   return (
-    <View className="mb-3 flex-row items-start gap-1 px-4">
-      {bearingDeg != null ? <BearingArrow bearingDeg={bearingDeg} size={14} tone="muted" /> : null}
-      <Text variant="caption" className="flex-1 text-muted">
+    <View className="mb-3 px-4">
+      {/* Icon lives *inside* the text so it sits on the first line and the meta wraps underneath it,
+          rather than a flex sibling that centres against the whole wrapped block. */}
+      <Text variant="caption" className="text-muted">
+        {bearingDeg != null ? (
+          <BearingArrow bearingDeg={bearingDeg} size={12} tone="muted" inline />
+        ) : null}
+        {bearingDeg != null ? '  ' : ''}
         {parts.join('  ·  ')}
       </Text>
     </View>

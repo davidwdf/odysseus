@@ -64,6 +64,38 @@ export interface RouteServiceInfo {
   headway?: { min: number; max: number }
   /** Rough daily service span, local 24h "HH:mm" (earliest first departure → latest end). */
   hours?: { start: string; end: string }
+  /** Per-day-type frequency profiles (weekday/Sat/Sun/…) — richer than the coarse `headway`,
+   *  drives the tap-to-expand frequency & service-hours sheets (ADR-044). Still the Static tier.
+   *  Absent when the dataset carries no frequency table for the route. */
+  patterns?: FreqPattern[]
+}
+
+/** Which days a frequency pattern runs. `other` = an uncommon mix (e.g. Mon–Sat); the UI
+ *  falls back to the exact `days` mask for those. Sourced from the dataset's service-day map. */
+export type ServiceDayType = 'weekday' | 'saturday' | 'sunday' | 'daily' | 'other'
+
+/** One frequency band within a day: buses roughly every `headwayMin` minutes between `start`
+ *  and `end` (local 24h "HH:mm"; past-midnight bands wrap, e.g. "25:35" → "01:35"). */
+export interface FreqBand {
+  start: string
+  end: string
+  headwayMin: number
+}
+
+/**
+ * A day-type's frequency profile — the bands the badge's coarse min–max is derived from, plus
+ * the first/last departure. From the GTFS frequency table joined to the dataset's service-day
+ * map (ADR-044). The **Static** honesty tier — a coarse timetable summary, never live.
+ */
+export interface FreqPattern {
+  dayType: ServiceDayType
+  /** Days this pattern runs, Sunday-first `[Sun…Sat]`, so the UI can render an exact day row
+   *  when `dayType` is `other`. */
+  days: boolean[]
+  bands: FreqBand[]
+  /** Earliest first departure / latest last departure across the bands, "HH:mm". */
+  first: string
+  last: string
 }
 
 export interface Route {
@@ -111,12 +143,25 @@ export interface Eta {
   observedAt: string
 }
 
+/** A lightweight pointer to another route direction — just enough to label a toggle and
+ *  load it (`getRoute(id)`); the full detail comes from that call. ADR-046. */
+export interface RouteRef {
+  /** Canonical route id, e.g. `KMB:6:inbound:1`. */
+  id: string
+  origin: I18nText
+  destination: I18nText
+}
+
 /** Route + its ordered stops — returned by DataSource.getRoute. Each stop carries the
  *  route's own next arrival *there* (`eta`), so a route view can show per-stop times and
  *  infer bus positions (ADR-030). `eta` is null where no live reading is available. */
 export interface RouteDetail {
   route: Route
   stops: Array<{ seq: number; stop: Stop; eta: Eta | null; fare?: string }>
+  /** The same route number in the opposite direction, when the dataset carries one — lets the
+   *  UI offer a direction toggle. Absent for circular / single-direction routes (ADR-046).
+   *  Server-resolved (correct service-type variant), so the client never guesses the id. */
+  reverse?: RouteRef
 }
 
 /** A stop (or merged same-kerb place) + the routes that serve it, each with its current

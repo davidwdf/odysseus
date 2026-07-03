@@ -101,8 +101,48 @@ export interface Messages {
   removeFavorite: string
   /** Route schematic action sheet: open the tapped stop's place detail. */
   viewStop: string
+  /** Route header: accessible label for the reverse-direction toggle / FAB (ADR-046). */
+  reverseDirection: string
+  /** Circular-route destination line; `{place}` is the loop's turnaround terminus (ADR-046). */
+  circularVia: string
   favoritesEmpty: string
   favoritesEmptyHelp: string
+  // Route detail — tap-to-expand fact sheets (ADR-044)
+  fareTitle: string
+  /** Honesty lead: fares drop boarding further along. */
+  fareSectionalNote: string
+  concessionsTitle: string
+  /** Honesty note: concessions are policy, shown as estimates. */
+  concessionsNote: string
+  fareAdult: string
+  fareChild: string
+  /** How the child estimate is derived. */
+  fareChildNote: string
+  fareElderly: string
+  /** How the elderly/PwD $2 Scheme is paid. */
+  fareElderlyNote: string
+  freqTitle: string
+  /** Honesty lead: frequencies are scheduled, not live. */
+  freqNote: string
+  hoursTitle: string
+  firstBus: string
+  lastBus: string
+  // Day-type labels for frequency/hours patterns.
+  dayWeekday: string
+  daySaturday: string
+  daySunday: string
+  dayDaily: string
+  dayOther: string
+  /** Comma-separated short day names, Sunday-first — split by the UI for `other` day masks. */
+  daysShort: string
+  // Route overview sheet (behind the stop-count badge — ADR-044)
+  overviewTitle: string
+  overviewJourney: string
+  /** Honesty note: journey time is scheduled/typical, not live. */
+  overviewJourneyNote: string
+  overviewDistance: string
+  /** Honesty note: distance is a straight-line-through-stops estimate. */
+  overviewDistanceNote: string
 }
 
 const en: Messages = {
@@ -191,8 +231,35 @@ const en: Messages = {
   addFavorite: 'Add to favourites',
   removeFavorite: 'Remove from favourites',
   viewStop: 'View stop',
+  reverseDirection: 'Reverse direction',
+  circularVia: 'Circular via {place}',
   favoritesEmpty: 'No saved routes yet',
   favoritesEmptyHelp: 'Save a route at a stop and it will appear here for quick access.',
+  fareTitle: 'Fares',
+  fareSectionalNote: 'Fares are sectional — you pay less boarding further along the route.',
+  concessionsTitle: 'Estimated concessions',
+  concessionsNote: 'Concessions are set by policy, not route data — these figures are estimates.',
+  fareAdult: 'Adult',
+  fareChild: 'Child (3–11)',
+  fareChildNote: 'Roughly half the adult fare.',
+  fareElderly: 'Elderly 65+ / disabled',
+  fareElderlyNote: '$2 Scheme, via a JoyYou or eligible Octopus (not cash).',
+  freqTitle: 'Frequency',
+  freqNote: 'How often buses run — scheduled frequencies, not live.',
+  hoursTitle: 'Service hours',
+  firstBus: 'First',
+  lastBus: 'Last',
+  dayWeekday: 'Mon – Fri',
+  daySaturday: 'Saturday',
+  daySunday: 'Sunday',
+  dayDaily: 'Daily',
+  dayOther: 'Other days',
+  daysShort: 'Sun,Mon,Tue,Wed,Thu,Fri,Sat',
+  overviewTitle: 'Route overview',
+  overviewJourney: 'Full journey',
+  overviewJourneyNote: 'Typical end-to-end time — scheduled, not live.',
+  overviewDistance: 'Distance',
+  overviewDistanceNote: 'Estimated from stop positions; the road distance is a little longer.',
 }
 
 const zhHant: Messages = {
@@ -279,8 +346,35 @@ const zhHant: Messages = {
   addFavorite: '加入收藏',
   removeFavorite: '移除收藏',
   viewStop: '查看車站',
+  reverseDirection: '反方向',
+  circularVia: '經{place}循環線',
   favoritesEmpty: '尚未收藏路線',
   favoritesEmptyHelp: '收藏車站的路線後，即可在此快速查看。',
+  fareTitle: '車費',
+  fareSectionalNote: '車費以分段收費 — 於路線較後位置上車，車費較平。',
+  concessionsTitle: '優惠車費（估算）',
+  concessionsNote: '優惠車費由政策制定，並非路線資料 — 以下數字僅為估算。',
+  fareAdult: '成人',
+  fareChild: '小童（3–11 歲）',
+  fareChildNote: '約為成人車費的一半。',
+  fareElderly: '長者 65+／殘疾人士',
+  fareElderlyNote: '$2 計劃，須使用「樂悠咭」或合資格八達通（不適用於現金）。',
+  freqTitle: '班次',
+  freqNote: '巴士班次頻率 — 為時間表資料，並非即時。',
+  hoursTitle: '服務時間',
+  firstBus: '首班',
+  lastBus: '尾班',
+  dayWeekday: '星期一至五',
+  daySaturday: '星期六',
+  daySunday: '星期日',
+  dayDaily: '每日',
+  dayOther: '其他日子',
+  daysShort: '日,一,二,三,四,五,六',
+  overviewTitle: '路線概覽',
+  overviewJourney: '全程時間',
+  overviewJourneyNote: '全程預計時間 — 為時間表資料，並非即時。',
+  overviewDistance: '路程',
+  overviewDistanceNote: '按車站位置估算；實際行車距離會稍長。',
 }
 
 const zhHans: Messages = {
@@ -367,8 +461,35 @@ const zhHans: Messages = {
   addFavorite: '加入收藏',
   removeFavorite: '移除收藏',
   viewStop: '查看车站',
+  reverseDirection: '反方向',
+  circularVia: '经{place}循环线',
   favoritesEmpty: '尚未收藏路线',
   favoritesEmptyHelp: '收藏车站的路线后，即可在此快速查看。',
+  fareTitle: '车费',
+  fareSectionalNote: '车费以分段收费 — 在路线较后位置上车，车费较便宜。',
+  concessionsTitle: '优惠车费（估算）',
+  concessionsNote: '优惠车费由政策制定，并非路线数据 — 以下数字仅为估算。',
+  fareAdult: '成人',
+  fareChild: '小童（3–11 岁）',
+  fareChildNote: '约为成人车费的一半。',
+  fareElderly: '长者 65+／残疾人士',
+  fareElderlyNote: '$2 计划，须使用「乐悠咭」或合资格八达通（不适用于现金）。',
+  freqTitle: '班次',
+  freqNote: '巴士班次频率 — 为时间表数据，并非实时。',
+  hoursTitle: '服务时间',
+  firstBus: '首班',
+  lastBus: '尾班',
+  dayWeekday: '周一至五',
+  daySaturday: '周六',
+  daySunday: '周日',
+  dayDaily: '每日',
+  dayOther: '其他日子',
+  daysShort: '日,一,二,三,四,五,六',
+  overviewTitle: '路线概览',
+  overviewJourney: '全程时间',
+  overviewJourneyNote: '全程预计时间 — 为时间表数据，并非实时。',
+  overviewDistance: '路程',
+  overviewDistanceNote: '按车站位置估算；实际行车距离会稍长。',
 }
 
 export const messages: Record<Locale, Messages> = {

@@ -169,6 +169,55 @@ export function formatFareRange(range: { min: string; max: string }): string {
     : `${formatFare(range.max)} → ${formatFare(range.min)}`
 }
 
+/** A contiguous run of stops sharing one boarding fare — a "fare stage". `fromSeq`/`toSeq` are
+ *  1-based stop sequence numbers (inclusive). HK fares are sectional, so a route reads as a
+ *  descending series of these stages, dearest from the origin (ADR-036/044). */
+export interface FareStage {
+  fare: string
+  fromSeq: number
+  toSeq: number
+}
+
+/**
+ * Collapse a route's per-stop sectional fares (index = seq-1) into contiguous fare stages:
+ * consecutive stops with an equal fare merge into one stage. Blank/missing/non-numeric fares
+ * (e.g. the terminus, which has no boarding fare) break a run and are skipped. Ordered by seq.
+ * Powers the fare-stage timeline (ADR-044).
+ */
+export function fareStages(fares: Array<string | undefined>): FareStage[] {
+  const stages: FareStage[] = []
+  fares.forEach((f, i) => {
+    const seq = i + 1
+    if (f == null || f === '' || Number.isNaN(Number(f))) return
+    const last = stages[stages.length - 1]
+    if (last && last.fare === f && last.toSeq === seq - 1) last.toSeq = seq
+    else stages.push({ fare: f, fromSeq: seq, toSeq: seq })
+  })
+  return stages
+}
+
+// --- Concession estimates (ADR-044) -------------------------------------------------------
+// HK open data carries NO fares-by-passenger-type — child/elderly figures don't exist upstream
+// (docs/research/02). These helpers derive a labelled ESTIMATE from policy, kept here as the
+// single source of truth so a scheme change (the $2 Scheme changed on 3 Apr 2026) is one edit.
+// A deliberate, bounded exception to ADR-008: always shown as an explicit estimate, never as data.
+
+/** Approximate child (3–11) fare — roughly half the adult fare, rounded to $0.1. Estimate. */
+export function estimateChildFare(adultFare: string): string | undefined {
+  const n = Number(adultFare)
+  if (!Number.isFinite(n)) return undefined
+  return (Math.round((n / 2) * 10) / 10).toFixed(1)
+}
+
+/** Approximate elderly-65+/PwD fare under the Government $2 Scheme (from 3 Apr 2026: $2 for
+ *  fares up to $10, otherwise 20% of the fare — i.e. `max($2, 20%)`). Requires an eligible/
+ *  JoyYou Octopus, not cash. Estimate. */
+export function estimateElderlyFare(adultFare: string): string | undefined {
+  const n = Number(adultFare)
+  if (!Number.isFinite(n)) return undefined
+  return (Math.round(Math.max(2, n * 0.2) * 10) / 10).toFixed(1)
+}
+
 const STOPS_LABEL: Record<Locale, string> = { en: 'stops', 'zh-Hant': '個站', 'zh-Hans': '个站' }
 
 /** Stop-count label, e.g. "24 stops" / "24 個站". A Static fact (route length), locale only

@@ -1414,3 +1414,249 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     panel mounts but only its grab handle peeks (the `onPanelLayout`→`withTiming(0)` entrance appears not to run /
     gets cancelled on web, likely by the handle pan's `onBegin`→`cancelAnimation`). Reverting the JS stack removed
     the card-clipping that had hidden it entirely, but the entrance bug is in that component, not the nav system.
+
+## ADR-044 — Route badges are tap-to-expand: fare-stage timeline, per-band frequency & hours, concession estimates
+- **Status:** **Implemented** — typecheck 7/7, Biome clean, web bundles (3251 modules). Verified against the
+  live worker: `/v1/route/KMB:1:outbound:1` → `service.patterns` = 3 day-types (weekday 8 bands / Saturday 10 /
+  Sunday 8), each with `first`/`last` + a Sunday-first `days` mask, plus per-stop sectional `fare`. Extends
+  ADR-036 (the static-facts strip) and follows the honesty tiers of ADR-008 / ADR-038. **The day-type labels
+  (weekday/Sat/Sun) shipped** — the dataset's top-level `serviceDayMap` (GTFS service-id → 7-day run mask) turned
+  the "stretch goal" into a join over data we already fetch, so ADR-036's day-type deferral is now lifted for
+  frequency/hours. Remaining: an in-browser visual pass of the three sheets.
+- **Context:** `RouteMeta` (route detail) shows four calm pills — **fare** (`$6.7 → $5.8`), **frequency**
+  (`10 – 30 min`), **service hours** (`05:35 – 23:40`), **stop count** (`42 stops`) — but each compresses
+  richer facts into one summary. Riders reasonably want the detail *behind* the summary: *where* does the fare
+  step down, *why* is the frequency range so wide (peak vs off-peak), *when* is the first/last bus. The app
+  already has a reusable `BottomSheet` (used for the stop-action sheet on this same screen), so tap-to-expand is
+  cheap mechanically. The open question was per-badge: is there honest detail to reveal, and is the data present?
+  Two investigations settled it — (1) the consolidated dataset's `freq` already carries **per-band** frequency
+  we currently collapse in `summarizeFreq`; (2) **no** concessionary (child / elderly / PwD) fare exists
+  anywhere upstream (GTFS, Routes-&-Fares, the consolidated dataset, operator APIs all carry adult fares only —
+  confirmed in [`docs/research/02`](../docs/research/02-data-availability-matrix.md)).
+- **Decision:**
+  1. **Make the `RouteMeta` pills pressable** → each opens the shared `BottomSheet` with a titled body
+     (`role="button"`, i18n labels, a subtle affordance since the pills currently read as static). One
+     interaction pattern, reused per badge. **The header route chip is left alone** (its only useful reveal —
+     direction — is being handled in a separate tab; a service-type sheet is too niche to earn the surface).
+     *(Superseded below: the stop-count pill, initially a scroll-to-top affordance, now opens a route-overview
+     sheet — see the refinement.)*
+  2. **Fare → a fare-stage timeline.** Per-stop **sectional** fares already exist (`IndexRouteMeta.fares`,
+     stamped per stop — ADR-036). The sheet shows only the **stage transition points** (where the boarding fare
+     steps down), as a compact vertical rail reusing the schematic style — not all N stops. This is the
+     data-ready, highest-value reveal; build it first.
+  3. **Fare → concession *estimates*, clearly labelled.** Since no concessionary data exists upstream, we show a
+     policy-derived **estimate** under an explicit "Estimated" heading + a shared disclaimer (*"Concessions are
+     set by policy, not route data — figures are estimates."*): **child (3–11) ≈ half** each adult stage
+     (rendered with a `~`); **elderly 65+/PwD** as the flat **$2 Scheme** rule (from **3 Apr 2026**: $2 for
+     fares ≤$10, else 20% of fare; JoyYou/eligible Octopus, not cash) — **not** a per-stage figure, since it's a
+     flat concession and per-stop numbers would misrepresent it. The rule (child multiplier + $2-scheme logic)
+     lives in **one helper in `@nextbus/core`** (e.g. `estimateConcessions`), never hardcoded in the UI, so a
+     policy change is a one-line edit. This is a deliberate, bounded exception to ADR-008's "never fake
+     precision": the estimate is labelled, rule-based, and centralised — not dressed up as measured data.
+  4. **Frequency & hours → enrich from data we already fetch.** `summarizeFreq` currently flattens the `freq`
+     bands to a single `{min,max}` + `{start,end}`. Expose the bands instead: `RouteServiceInfo` gains an
+     optional `bands: Array<{ start, end, headwayMin }>` so the **frequency sheet** shows the peak/off-peak
+     breakdown that explains the wide range, and the **hours sheet** shows true **first / last** departure. No
+     new upstream source — same daily `data.hkbus.app/routeFareList.min.json`; the change is in
+     `data-normalize/dataset.ts` (`buildPatterns` groups the `freq` bands by day-type) — the edge passes
+     `service` through wholesale, so **no edge change was needed**. **Day-type labels (weekday / Sat / Sun)
+     shipped**: the dataset's top-level `serviceDayMap` maps each `freq` service id to a 7-day run mask
+     `[Sun…Sat]`, so the join needs no new source (route 1 splits cleanly into `287`=Mon–Fri, `288`=Sat,
+     `448`=Sun). Where several service ids share a day-type we keep the richest (most bands) as representative;
+     an uncommon mask (e.g. Mon–Sat) falls to `other` and the UI renders the exact days from the mask. The coarse
+     `headway`/`hours` badge summary (`summarizeFreq`) is unchanged, so pill and sheet agree.
+- **Why:** A progressive-disclosure tier-jump for almost only UI cost. Fare detail and frequency/hours bands are
+  already on-device (ADR-036) — we're revealing data we fetch and discard, exactly the ADR-036 thesis. The
+  concession estimate is the one place we generate a figure; centralising it and labelling it keeps the honesty
+  contract intact. The `DataSource` seam is untouched (new `RouteServiceInfo.bands` is optional).
+- **Consequences / dependencies:**
+  - **`BottomSheet` has a known web-entrance bug** (ADR-043 tail: the panel mounts but only the grab handle peeks
+    on web). Since the PWA is the live target and every badge sheet depends on it, **fixing that entrance is a
+    prerequisite** for the pressable-pill slice.
+  - **Concession estimates are a maintenance surface** — the $2 Scheme *changed on 3 Apr 2026*; the single core
+    helper is the mitigation. If the child half-fare rule ever varies by operator/route we'd have to revisit.
+  - Slicing: (a) pressable-pill + sheet plumbing (incl. the web-entrance fix), (b) fare-stage timeline +
+    concession estimates, (c) `summarizeFreq` → bands + frequency/hours sheets. Backlog: [`docs/07`](./07-backlog.md).
+- **Refinement (concessions on the timeline, post-feedback):** the concession estimates moved *out* of a
+  bottom-only block and *onto each fare stage* — every stage row now carries the adult fare plus a child
+  (`Baby` glyph) and elderly/disabled (`Accessibility` glyph) estimate (`~$3.4` etc., `$`-prefixed to match the
+  adult figure), each marked with a trailing `*`. The bottom section became a **legend**: the same two glyphs
+  keyed to their passenger class + how the estimate is derived (child "roughly half the adult fare"; elderly the
+  $2-Scheme note), closing with `* Concessions are set by policy, not route data — these figures are estimates.`
+  The icon is the shared key between the per-stage figure and the legend; the `*` is the "these are estimates"
+  pointer. Verified in-browser (`/route/KMB:1:outbound:1`): two stages ($6.7 / $5.8), child `~$3.4` / `~$2.9`,
+  elderly `~$2.0` both (≤ $10 → flat $2). **The `BottomSheet` web entrance was fine in practice** — it slides up
+  (just not instantly), so the ADR-043 "prerequisite" concern didn't materialise; no sheet fix was needed.
+- **Refinement (stop-count → route-overview sheet, post-feedback):** the stop-count pill was initially a plain
+  scroll-to-top affordance, but that read as dead next to three sheet-opening pills, and a jump-to-stop list was
+  judged redundant (the screen *is* the stop list). So it now opens a **`Route overview` sheet** — three whole-route
+  stats: **stops** (count), **full journey** (`service.journeyMin`, e.g. `~44 min` · end-to-end), and **distance**
+  (`~8.0km`). Origin/destination are omitted (they already head the screen). **Journey time is resurfaced** here
+  despite ADR-036 hiding it as a *badge* — the ADR-036 objection ("misleading beside a mid-route rider's ETA")
+  doesn't apply in a sheet explicitly about the *whole route*; framed "typical end-to-end, scheduled not live".
+  **Distance is a new `routeDistanceM` (core/geo)** — the sum of great-circle hops between stop coordinates; HK
+  open data has no polylines, so it under-counts real road distance and is shown as an explicit `~` estimate with
+  a note (same honesty tier as the concession figures). Sanity-checked: route 1 = 8.0 km straight-line over 25
+  stops → ~11 km/h implied, plausible for a stop-heavy urban route. No new data/edge work — coordinates are
+  already on-device.
+- **Refinement (sheet polish, iterated over feedback):** (1) **Height-independent settle** — `Easing.back`'s
+  overshoot is a *fraction of the travel*, so a tall sheet (starting further down) bounced visibly more than a
+  short one. Replaced with a fixed **7px** overshoot via `withSequence` (slide to −7px, ease back to 0), so every
+  sheet bounces the same tiny amount regardless of height; the drag-release settle is a plain ease-out (no bounce
+  on a small drag). (2) **Stop-action sheet leads with the stop** — the schematic-tap sheet now makes the **stop**
+  the `h3` title (with a `MapPin`); the route context is a muted subtitle. The bright livery `RouteChip` was
+  dropped from that subtitle (it out-shouted the title, and the liveried chip is already large in the header
+  behind) — the route number instead sits in a **plain muted pill** that keeps the livery chip's rounded *shape*
+  (grammar consistency) but drops brand colour: fill = `--text-muted` (matching the subtitle text), number knocked
+  out in `--surface`. (An operator-accent tint was tried and rejected — too dark and not clearly brand-related.)
+  Save still pins route-at-stop (ADR-042); only the emphasis changed. (3) **Fare timeline** — child & elderly estimates sit on the adult fare's line at **near-equal
+  prominence** (body size, `muted` tone, size-16 icons), widely spaced (`gap-5`) so each reads as its own figure;
+  the **stop count moved down** beside the boarding-stop name (the price's start), leaving the top line to the
+  fares; the per-stage marker was **removed** entirely (the `~` prefix + the legend already signal "estimate").
+  Legend icons sit in a filled `bg-surface-2` disc (size 20, `text` tone) as a prominent key.
+
+## ADR-045 — Stop detail mini-map: pinned, with brand-coloured labelled dots and a scroll-linked pole highlight
+- **Status:** **Built & verified on web** (2026-07-03). Extends [ADR-041](#adr-041--stop-detail-a-collapsing-header-shared-with-route-a-keyless-static-mini-map-and-an-enriched-summary)'s
+  `MiniMap` and the multi-pole layout from [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant),
+  in `apps/mobile/components/MiniMap.tsx` + `apps/mobile/app/stop/[id].tsx`.
+- **Context:** For a multi-pole place the map dropped one plain red dot per pole (ADR-042) — no way to tell *which*
+  dot is *which* pole, and the map (an ADR-041 scroll-away "hero") left the screen entirely once you scrolled into the
+  route list. The ask was to make the map a **persistent, legible utility**: name the dots, colour them by operator,
+  keep the map on screen, and tie it to the list.
+- **Decisions:**
+  1. **A full-width hero that shrinks into a right-aligned floating "PIP" on scroll.** At rest the map is a full-width
+     hero card; as the header collapses (over `COLLAPSE`) it **shrinks to `SHRINK_FRAC` (~0.6) of its width and docks
+     top-right**, floating over the list. **Height is constant** (`MAP_HEIGHT` 150). This **reverses ADR-041's
+     scroll-away intent by design**; earlier cuts (a full-width *pinned bar*, then a fixed *corner card*) either had
+     content disappear behind the bar or lost the hero — the hero→PIP shrink keeps both. **The shrink is a crop, not a
+     scale:** a raster-tile map can't animate a non-uniform width without horizontal distortion (`scaleX`) or a
+     per-frame tile recompute (animating layout `width` re-runs `fitZoom`/tile layout). So the map renders at the hero
+     width and the right-aligned outer container **clips** it (`overflow: hidden`) as it narrows, while the inner map
+     **slides left by half the cropped width** to stay centred — no distortion, no recompute. **Docking is
+     platform-split (`StickyMap`):** the *vertical* pin uses CSS **`position: sticky`** on **web** (browser-composited,
+     jitter-free — a `translateY`-follows-scroll approach *jittered* because the JS handler lags the compositor a
+     frame) and a reanimated **`translateY`** clamp on **native**; the *width* crop is a reanimated interpolation (its
+     slight web lag is confined to the one-off collapse, then static). **Trade-off:** the floating card overlaps the
+     right edge (ETA column) of the rows behind it — the accepted cost of a PIP. `SHRINK_FRAC`/`PIP_MAX_WIDTH` (desktop
+     cap) / `MAP_HEIGHT` are the knobs.
+  2. **Brand-coloured, labelled, tappable dots.** Each dot is coloured by operator via `OPERATOR_ACCENT`
+     (`@nextbus/ui`) — KMB red / CTB yellow / LWB orange — derived from the member id prefix (`m.id.split(':')[0]`),
+     falling back to the default pin colour when unknown. A short **stop-code label** (from `splitStopCode(name).code`,
+     e.g. `MK513`) sits in a legibility chip by each dot — **flipped above the dot when another pole sits directly
+     below** within a chip's height (the along-the-kerb stack), so labels don't cover the next dot. The visible dot
+     stays 14 px but its **touch target is a fixed 32 px box** (RN-web ignores `hitSlop`, and small dots were too easy
+     to miss — you'd hit the map behind). `MiniMap` gained a `MapPoint[]` `points` type carrying `id`/`operator`/`label`
+     (was bare `{lat,lng}`), plus `activeId` and `onPointPress`.
+  3. **Scroll-linked highlight (scroll-spy).** Each pole group reports its content-offset top (`onLayout` →
+     a `sectionOffsets` shared value); a `useAnimatedReaction` on `scrollY` picks the last group whose header has
+     reached the top of the list (just under the pinned map) and highlights that dot (swelled + others dimmed), falling
+     back to the first group so a dot is always lit. Cost stays on the UI thread — `runOnJS` fires only on a *change*.
+     The scroll container carries **just enough tail padding** — `windowH − listTop − (last group's measured height)`
+     — so the **last** group can scroll up to under the map (which is what lets tapping the final dot/header highlight
+     it) **without** leaving a whole empty screen below it, and so it can't be scrolled entirely away.
+  4. **Two-way tap link, animated.** Tapping a **dot** *or* its **list group header** scrolls that pole's group to the
+     top and (via the spy) highlights it. Because **RN-web's `ScrollView.scrollTo()` is a no-op under reanimated v4**
+     (the animated ref never reaches the DOM node — this also silently broke the ADR-033 header *tap-to-top* on web
+     **and** the route screen's reveal-scroll), the shared **`useScrollToY`** hook sets the scrollable node's
+     **`scrollTop` directly on web** — and animates it with a **rAF easeOutCubic tween** (RN-web's DOM
+     `scrollTo({behavior:'smooth'})` is *also* a no-op here), honouring the OS **reduce-motion** setting; native keeps
+     the imperative `scrollTo({animated})`. `stop/[id].tsx` (dot/header taps, `onTitlePress`) and **all three
+     `scrollTo` sites in `route/[id].tsx`** route through it.
+     *(A scroll-triggered solid header backdrop was tried and then **reverted** — once the map is a corner PIP rather
+     than a full-width bar, the header can stay fully transparent per ADR-033, and the see-through floating look was
+     preferred.)*
+  5. **Sub-details above the map; a compass dial for the direction; inset dividers.** The meta strip (direction ·
+     operators · route count · distance · walk) sits **above** the map so it tucks up behind the header as you scroll,
+     rather than wedged between the map and the list (the map's native dock point adds the measured meta height,
+     `metaH`; web pins via CSS sticky regardless). The travel-direction cue is a small **bearing glyph** rotated to the
+     bus travel direction, **snapped to the nearest of the 8 compass points** so it agrees with `formatBearing`'s
+     octant label (a slightly-off raw angle read as wrong). It's rendered **ringless** — an arrow *in a circle* read as
+     the back button, so the ring (and its too-subtle north tick) was dropped. The glyph is **`Navigation2`** — a
+     symmetric cone that points straight **north (up)** by default, so `GLYPH_NORTH_OFFSET` is 0. (Rejected en route:
+     `ArrowUp`/a ring — back-button-y; `Navigation` — not true-north by default; `ArrowDownToDot` — liked the
+     toward-a-point idea but the shape didn't land, needed a 180° offset.) Swapping the glyph is a two-line change
+     (`GLYPH` + `GLYPH_NORTH_OFFSET`). It's rendered **inline inside the meta `Text`** (`BearingArrow inline` → an
+     inline-block glyph that rides the first line), so when the strip wraps on a narrow screen the text flows *under*
+     it rather than the glyph centring against the whole wrapped block. `vertical-align: middle` sits it on the taller
+     line-box centre (reads as high), so a small `INLINE_NUDGE` (−1.5 px, tuned on a scratch `/compass-test` page
+     across all 8 headings) and an `INLINE_GAP_TRIM` (−2 px) land it on the text's optical centre with the label
+     tucked close. Snapping is global (also the Nearby `StopRow` arrow); the dial ring stays available via the
+     `circle` prop but is unused. Section **dividers are inset to the content margin** (not full-bleed) so they line
+     up with the text and the map card, and the map carries a small **bottom gap** before the first divider.
+- **Why:** All of it is data we already hold (member `id`/`name`/`location` per ADR-042; the operator accents already
+  used by `RouteChip`). Pinning + spy turn the map from decoration into a two-way index of the place's poles — the
+  clearest way to disambiguate a same-kerb merge. The `DataSource` seam and `MiniMap`'s keyless-tile approach are
+  untouched.
+- **Consequences / caveats:**
+  - **Label crowding** (poles sit ≤~30 m apart) is **mitigated** by the above/below stagger — clean for a straight
+    kerb stack; a genuinely 2-D cluster could still overlap, where leader lines / numbered badges would be the next
+    step.
+  - The header stays **background-less** (ADR-033); with the map now a corner PIP (not a full-width bar), content
+    scrolling under the transparent chrome reads as the intended floating look rather than the earlier "rows above the
+    map" artifact.
+  - Verified end-to-end on the PWA against a 3-pole KMB place: web-sticky pin (no jitter), staggered labels, 32 px tap
+    targets, KMB-red dots (`#D7282F`, not the default), spy highlight, tap-to-scroll (smooth) from **both** the dot and
+    the list header, the **last** group reaching the top, and trimmed tail padding. Cross-operator colour variation is
+    the same code path (untested visually — no KMB+CTB merge to hand).
+
+## ADR-046 — Route detail direction toggle: server-resolved reverse, an in-card from/to header, and a circular-route treatment
+- **Status:** **Built & verified on web** (2026-07-04). Touches the `DataSource` seam (`@nextbus/core`), the edge
+  (`apps/edge/src/stop-route.ts`), and the route screen + header (`apps/mobile/app/route/[id].tsx`,
+  `components/RouteHeader.tsx`, `components/CollapsingHeader.tsx`, `components/DirectionSwapIcon.tsx`, `RouteMeta.tsx`,
+  `lib/stopName.ts`, `@nextbus/i18n`).
+- **Context:** Route detail showed a **single direction** with no way to see the return trip; the only place a
+  "direction" hint lived was the dropped route-chip sheet idea (ADR-044 fork). Riders want to flip to the opposite
+  direction in place. Two data realities shaped it: (a) the opposite bound is a *separate* canonical route id
+  (`operator:no:bound:serviceType`) whose service-type variant the client can't safely guess; (b) ~102 routes are
+  **circular** (loop back to origin) and ~284 more are one-way — neither has a reverse, and a circular route's first
+  and last stops are *identical*, so naïve origin→destination shows a useless "A → A".
+- **Decisions:**
+  1. **The reverse is resolved server-side, not guessed.** `RouteDetail` gains an optional `reverse?: RouteRef`
+     (`{ id, origin, destination }`). The edge's `findReverse` scans the static index for the same operator+number in
+     the **opposite bound**, picks the representative service-type variant (the `preferServiceType` rule mirrored from
+     the search index), and returns it **only when that id actually has a stop sequence** — so circular / one-way
+     routes correctly carry **no** `reverse`, and the client never constructs an id that 404s. Flows cleanly through
+     the `DataSource` seam (ADR-004); the client just calls `getRoute(reverse.id)`.
+  2. **The "F" header layout — an in-card from/to block.** Below the morphing route chip sits a **from/to card**
+     (origin over destination, full **first/last stop names** — richer than the route's abbreviated `orig`/`dest`),
+     with the **reverse toggle *inside* the card** on its right. On scroll it condenses to the collapsed pill
+     `→ destination` (matching the stop-card form). *Rejected en route, via interactive HTML mockups:* a segmented
+     "Towards A / B" control (long HK names force marquee-in-a-tab-bar, reads as a filter), a maps-style from/to+swap
+     (imports a "trip planner" mental model, heaviest chrome, worst collapse), and a **floating collapsed FAB** for
+     reversing while scrolled (over-engineered — the toggle lives only in the card now). `CollapsingHeader` gained
+     `collapsedLabel`, an `expandedSlot`, and an exported `Marquee` (with a `lineHeight` + `align` option) to support this.
+  3. **Flip in place, no skeleton, no misleading anchor.** The flip is **local state** (`overrideId`), not a nav push,
+     so Back exits the screen rather than un-flipping. `keepPreviousData` + a **prefetch** of `reverse.id` mean the
+     first flip doesn't flash the loading skeleton — it swaps when ready (usually instant from cache). Once flipped the
+     **here-anchor is dropped** (the reverse serves the opposite kerbs, so the boarding stop no longer applies) and the
+     one-time auto-scroll is skipped. Favourites already key on `(stopId, routeId)` (ADR-032/042), so they re-key to
+     the active direction for free.
+  4. **Motion makes an instant, cached swap read as a deliberate flip.** A `swapNonce` bumps on each flip and drives:
+     the toggle glyph (Lucide **`GitCompareArrows`**, chosen over a point-symmetric `⇄` whose spin is an ambiguous
+     wobble — its two end-dots make the counter-clockwise half-turn legible); a **lyrics-style name swap**
+     (Material shared-axis-Y — the old destination rises into the origin slot and shrinks to origin style, the old
+     origin slides up and out, the new destination rises from the bottom), fired on the **name change** not the raw
+     tap so it never animates stale text; a **staggered list cascade** on flip (rows fade+rise, delay capped); and
+     **bus tokens that slide *down* from the first stop** on entry (start at the origin node, tween to position). All
+     honour reduce-motion. Reanimated **layout animations were avoided** (flaky on web, our current target) in favour
+     of shared-value + `useAnimatedStyle`.
+  5. **Circular routes get their own treatment (no reverse).** Detected by the loop marker HK bakes into the
+     destination name — `CIRCULAR` / `循環` / `循环` (`isCircular`/`stripCircular` in `lib/stopName.ts`). Because a
+     loop's first == last stop, the card switches to the route's own labels: the **boarding terminus** over
+     **"Circular via <turnaround>"** (`circularVia` i18n; turnaround = destination with the marker stripped), the
+     connector arrow becomes a **loop glyph**, and there's no toggle. A meta-strip "Circular" chip was built then
+     **dropped** — non-interactive with nothing behind it, and the header already says it. Genuine **one-way** routes
+     (racecourse specials) are *not* circular and keep the plain, no-toggle card.
+- **Why:** the reverse is data we already hold; resolving it on the edge keeps the id/service-type logic where the full
+  dataset lives and the UI honest to the `DataSource` seam. The header reuses `CollapsingHeader` so route and stop
+  screens stay one family. The motion is the cheapest way to signal "this is now a different journey" when the payload
+  is already cached (so nothing visibly "loads").
+- **Consequences / caveats:**
+  - New i18n: `reverseDirection`, `circularVia`. New dep-of-note: none (Lucide + reanimated already present).
+  - The **collapsed pill uses the full destination stop name** (e.g. `→ Star Ferry, Harbour City`), which diverges
+    slightly from the stop-card `→ Star Ferry` convention. Left as-is deliberately; switching just the pill to the
+    clean route destination is a one-line change if we revisit.
+  - Two multi-bound routes are *flagged* circular yet have a reverse; they'd show a toggle (harmless, negligible).
+  - `biome.json` now ignores `**/.context` so the gitignored interactive mockups don't fail `pnpm lint`.
+  - Verified on the PWA: KMB 1 (bidirectional — flip swaps the list + live ETAs + meta, first flip has no skeleton,
+    all four animations play, Back exits) and KMB 10 (circular — loop glyph, "Circular via Tai Kok Tsui", no toggle).
