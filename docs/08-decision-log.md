@@ -1660,3 +1660,77 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   - `biome.json` now ignores `**/.context` so the gitignored interactive mockups don't fail `pnpm lint`.
   - Verified on the PWA: KMB 1 (bidirectional — flip swaps the list + live ETAs + meta, first flip has no skeleton,
     all four animations play, Back exits) and KMB 10 (circular — loop glyph, "Circular via Tai Kok Tsui", no toggle).
+
+## ADR-047 — Green Minibus (GMB): a third operator, keyed on `gtfsId`, with per-arrival live/scheduled honesty
+- **Status:** **Built & verified end-to-end on the edge** (2026-07-09). Widens `OperatorId` in `@nextbus/core`; adds
+  the `gmb` adapter (`packages/data-normalize/src/gmb.ts`) + dataset ingest (`dataset.ts`); wires the edge
+  (`apps/edge/src/stop-route.ts`, `search-index.ts`, `index.ts`); touches UI tokens (`@nextbus/ui`),
+  `apps/mobile/app/stop/[id].tsx`, `@nextbus/i18n`, and `classifyRemark` (`@nextbus/core/eta`).
+- **Context:** GMB (green minibus) is a documented backlog operator (docs/07) and the first non-franchised operator we
+  ship. Investigation established that (a) the consolidated dataset we already fetch (ADR-021) **already carries GMB** —
+  1,149 route entries, 4,743 stops with coordinates, inline `freq`/`fares`, and each entry's globally-unique numeric
+  GMB `route_id` in `gtfsId`; and (b) the live ETA host `data.etagmb.gov.hk` has a **batch stop board**
+  (`/eta/stop/{id}`) like KMB, and **mixes live and timetable arrivals** (`remarks:"Scheduled"/未開出`). Two wrinkles
+  differ from KMB/CTB: GMB **public numbers repeat across regions** (route "1" exists in HKI *and* NT — 145 such
+  collisions), and its live board identifies routes by numeric `route_id` + `route_seq` (1/2), **not** public number.
+- **Decisions:**
+  1. **`gtfsId` is the GMB uniqueness key, folded into the canonical id's service-type slot.** Canonical GMB route ids
+     are `GMB:{no}:{bound}:{gtfsId}` (e.g. `GMB:1:outbound:2006408`). `(gtfsId, bound)` is globally unique (verified: 0
+     dupes), so this can't collide the way `GMB:1:outbound:1` would. The public number stays in slot 1 for display; the
+     `gtfsId` doubles as the **live ETA route_id**. Ingest builds a `gmbCanonicalByLive` map (`${gtfsId}:${bound}` →
+     canonical id) so the edge can resolve the live board's raw ids back to us.
+  2. **`route_seq` 1 → outbound, 2 → inbound** (verified against both feeds). The edge maps each stop-board entry via
+     that rule + `gmbCanonicalByLive`; entries whose route isn't in the index, or with no arrivals, are dropped.
+  3. **Live-vs-scheduled honesty rides the existing remark path (ADR-008) — no new `Eta` flag.** GMB's per-arrival
+     `remarks:"Scheduled"` flows through `optionalRemark` into `Eta.remark`; `classifyRemark` already tags it
+     `scheduled` (via the English "Scheduled"; the Chinese `未開出`/`未开出` were added for robustness). The muted
+     `RemarkTag` renders it. This is genuinely per-direction: at the Peak, route 1 outbound reads "Scheduled" while
+     inbound is live tracked, and it flips at the other terminus.
+  4. **GMB is one stop-board call per pole** (like KMB, not CTB's per-route fan-out), so it costs one subrequest per
+     GMB member and needs no fan-out budget. It joins the KMB branch conceptually in `memberEtaLists`.
+  5. **Two collapse scopes, because GMB numbers aren't network-unique.** GMB `route_code` is unique **only within a
+     region** (HKI/KLN/NT); the same number in two regions is a different route, but within one region a number can have
+     several `route_id`s that are just variants ("Normal Route" vs "Special Departure" — e.g. NT 803 has a 22-stop and a
+     19-stop outbound). Region isn't in the dataset, so:
+     - **Network-wide (search index):** key GMB on **number + direction + origin + destination** — the rider-facing
+       identity. Cross-region routes differ in from/to and stay separate; same-route variants share from/to and collapse
+       to one hit (representative = the fullest variant by stop count, tie-broken by id). KMB/CTB still collapse
+       service-type variants by `(operator, no, bound)`.
+     - **Per-stop (`dedupeEtas` in `@nextbus/core`; the stop screen's `dedupeRoutes`):** plain `operator|no|bound` for
+       **all** operators — safe for GMB too, because a stop belongs to one region and codes are unique within a region,
+       so two arrivals at a stop sharing number+direction are always variants of the same route (collapse, keep the
+       sooner). *Corrects an earlier attempt to key these by the full `gtfsId` id — that surfaced the 803 variants as
+       two rows, the opposite of what we want.*
+
+     **Known v1 limitations:** a GMB number can still appear more than once in search across regions with no region label
+     (a region/area tag is a follow-up); and the rare KLN/NT boundary case where two regions' same-numbered routes share
+     one physical stop would over-collapse at that stop (same risk profile the app already accepts for dedupe).
+  6. **Green accent `#00845C` (white text)** in `OPERATOR_ACCENT`; `OPERATOR_LABEL` shows "GMB" for now (a friendlier
+     "Minibus" is a one-line swap). Filter chips, `RouteChip`, Nearby, fare/frequency sheets are all data-driven and
+     needed no code change — GMB lit up automatically once ingested (ADR-037).
+- **Consequences / notes:**
+  - **`data.etagmb.gov.hk` 403s an empty User-Agent** (which the Workers runtime sends by default), unlike the KMB/CTB
+    hosts. The `gmb` adapter sends an identifying `User-Agent`. This cost an hour of head-scratching — noted here so it
+    doesn't again.
+  - Same-kerb merging currently keeps GMB poles separate (no cross-operator GMB↔KMB/CTB joint-route proof exists); the
+    bearing/name clustering still applies among GMB poles. GMB stop-merge edge cases are a known follow-up.
+  - Route detail for GMB is **static-only** for now (no per-stop live ETAs), mirroring CTB (ADR-021) — the stop board
+    and Nearby are fully live. GMB has **no bulk route-ETA endpoint** (the route-level `/eta/route-stop/{id}/{seq}` 500s);
+    per-stop live would mean one call per stop (routes are short — median 10, p90 21 — and the host tolerates concurrent
+    calls, so a bounded fan-out behind the 8s-cached `/v1/route` is feasible), deferred as too resource-heavy per request
+    for now.
+  - **GMB fares are shown at the route level only, not per stop.** Verified that GMB sectional/staged fares are **not in
+    any open-data feed**: the consolidated dataset (0/1,149 route-dirs vary), the official TD Routes-and-Fares GeoJSON
+    (0/1,160 — `fullFare` is one value repeated per stop), and the GMB API (no fare field at all) all carry a single
+    flat fare; real en-route fare changes live only on the physical fare board. (Contrast: KMB 1,110/1,614 and CTB
+    741/957 route-dirs *do* publish sectional fares, which we stamp per stop.) So ingest drops the flat per-stop `fares`
+    array for GMB and keeps only `service.fareFull`; `routeFareAtSeq` returns nothing for GMB, so Nearby rows, stop-detail
+    rows, and the route timeline show no per-stop GMB fare — only the route-level fact. A per-route fare-board scrape /
+    region-aware sectional model is a follow-up.
+  - Verified on the edge: `/v1/etas/GMB:20014489` (Peak Galleria) returns route 1 both directions with correct
+    destinations, sectional fare ($11.8 outbound; none at the inbound terminus), and the live/Scheduled split;
+    `/v1/nearby` near the Peak surfaces the GMB pole with live ETAs. The static index holds 1,149 GMB route-directions;
+    the **search index collapses variants to 1,089 GMB hits** — NT 803's "Normal" (22-stop) and "Special" (19-stop)
+    outbound fold to one hit (the fuller "Normal" wins), while route "1" in HKI vs NT stays as 4 distinct entries, and
+    "803" vs "803K" stay separate. At Hin Keng (a stop both 803 variants leave from) `/v1/etas` returns a single 803
+    outbound row (`dedupeEtas` collapse), keeping the sooner arrival.

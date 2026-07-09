@@ -20,6 +20,7 @@ export interface Messages {
   searchStopPrompt: string
   searchNoResults: string
   searchRecent: string
+  searchClearRecent: string
   back: string
   filterNight: string
   filterAirport: string
@@ -159,6 +160,7 @@ const en: Messages = {
   searchStopPrompt: 'Search by stop or place name',
   searchNoResults: 'No matches',
   searchRecent: 'Recent',
+  searchClearRecent: 'Clear',
   back: 'Back',
   filterNight: 'Night',
   filterAirport: 'Airport',
@@ -206,7 +208,7 @@ const en: Messages = {
     'No — fares, frequencies and journey times are scheduled reference data, shown as published, not live.',
   faqCoverageQ: 'Which bus operators are covered?',
   faqCoverageA:
-    'KMB, LWB (Long Win) and Citybus — including the former New World First Bus routes. New Lantao Bus, MTR Bus, minibuses and rail are planned.',
+    'KMB, LWB (Long Win), Citybus — including the former New World First Bus routes — and green minibuses (GMB). New Lantao Bus, MTR Bus and rail are planned.',
   faqMergeQ: 'Why do some stops list two companies?',
   faqMergeA:
     'When KMB and Citybus serve the same kerb, we merge them into one stop so you see every route arriving there at once.',
@@ -276,6 +278,7 @@ const zhHant: Messages = {
   searchStopPrompt: '以車站或地點名稱搜尋',
   searchNoResults: '沒有相符結果',
   searchRecent: '最近',
+  searchClearRecent: '清除',
   back: '返回',
   filterNight: '通宵',
   filterAirport: '機場',
@@ -321,7 +324,7 @@ const zhHant: Messages = {
   faqTimingsA: '不是 — 車費、班次頻率及行車時間屬時間表參考資料，按發布內容顯示，並非即時。',
   faqCoverageQ: '涵蓋哪些巴士公司？',
   faqCoverageA:
-    '九巴、龍運及城巴（包括前新巴路線）。新大嶼山巴士、港鐵巴士、專線小巴及鐵路將陸續加入。',
+    '九巴、龍運、城巴（包括前新巴路線）及專線小巴（綠色小巴）。新大嶼山巴士、港鐵巴士及鐵路將陸續加入。',
   faqMergeQ: '為何部分車站會列出兩間公司？',
   faqMergeA:
     '當九巴與城巴停靠同一個車站時，我們會將它們合併為一個車站，讓你一次過看到該站所有路線。',
@@ -391,6 +394,7 @@ const zhHans: Messages = {
   searchStopPrompt: '以车站或地点名称搜索',
   searchNoResults: '没有相符结果',
   searchRecent: '最近',
+  searchClearRecent: '清除',
   back: '返回',
   filterNight: '通宵',
   filterAirport: '机场',
@@ -436,7 +440,7 @@ const zhHans: Messages = {
   faqTimingsA: '不是 — 车费、班次频率及行车时间属时间表参考数据，按发布内容显示，并非实时。',
   faqCoverageQ: '涵盖哪些巴士公司？',
   faqCoverageA:
-    '九巴、龙运及城巴（包括前新巴路线）。新大屿山巴士、港铁巴士、专线小巴及铁路将陆续加入。',
+    '九巴、龙运、城巴（包括前新巴路线）及专线小巴（绿色小巴）。新大屿山巴士、港铁巴士及铁路将陆续加入。',
   faqMergeQ: '为何部分车站会列出两家公司？',
   faqMergeA:
     '当九巴与城巴停靠同一个车站时，我们会将它们合并为一个车站，让你一次过看到该站所有路线。',

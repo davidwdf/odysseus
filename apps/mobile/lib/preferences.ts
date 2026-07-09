@@ -37,6 +37,8 @@ interface Preferences {
   toggleFavoriteRoute: (stopId: string, routeId: string) => void
   pushRecentRoute: (routeId: string) => void
   pushRecentStop: (stopId: string) => void
+  clearRecentRoutes: () => void
+  clearRecentStops: () => void
 }
 
 /** Move `id` to the front of `list`, de-duplicated, capped at `RECENTS_MAX`. */
@@ -67,6 +69,8 @@ export const usePreferences = create<Preferences>()(
       pushRecentRoute: (routeId) =>
         set((s) => ({ recentRoutes: bumpRecent(s.recentRoutes, routeId) })),
       pushRecentStop: (stopId) => set((s) => ({ recentStops: bumpRecent(s.recentStops, stopId) })),
+      clearRecentRoutes: () => set({ recentRoutes: [] }),
+      clearRecentStops: () => set({ recentStops: [] }),
     }),
     {
       name: 'nextbus.preferences',

@@ -47,7 +47,12 @@ import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
 
 /** Operator display names for the "served by" line — brand names, locale-neutral. */
-const OPERATOR_LABEL: Record<OperatorId, string> = { KMB: 'KMB', LWB: 'LWB', CTB: 'Citybus' }
+const OPERATOR_LABEL: Record<OperatorId, string> = {
+  KMB: 'KMB',
+  LWB: 'LWB',
+  CTB: 'Citybus',
+  GMB: 'GMB',
+}
 
 /** The map is a **full-width hero at rest that shrinks into a right-aligned floating PIP on scroll**
  *  (ADR-045). Its **height is constant** (`MAP_HEIGHT`); only the width animates, from the full hero
@@ -73,8 +78,11 @@ type Pole = {
 }
 
 /** Collapse rider-duplicate variants (same route number + direction, e.g. two KMB
- *  service types to the same destination), keeping the one with a live ETA. Keyed by
- *  operator too, so a merged same-kerb stop keeps KMB-6 and CTB-6 as distinct rows. */
+ *  service types to the same destination, or GMB "Normal"/"Special" variants of one route),
+ *  keeping the one with a live ETA. Keyed by operator too, so a merged same-kerb stop keeps
+ *  KMB-6 and CTB-6 as distinct rows. Safe for GMB even though its numbers repeat across
+ *  regions: a stop is in one region and route_code is unique within a region, so two rows
+ *  here sharing number+direction are always variants of the same route (ADR-047). */
 function dedupeRoutes(routes: RouteEntry[]): RouteEntry[] {
   const byKey = new Map<string, RouteEntry>()
   for (const r of routes) {

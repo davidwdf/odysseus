@@ -109,6 +109,10 @@ export function dedupeEtas(etas: Eta[]): Eta[] {
   const byLine = new Map<string, Eta>()
   for (const eta of etas) {
     const [, routeNo = '', bound = ''] = eta.routeId.split(':')
+    // Keyed by operator + number + direction. Safe even for GMB, whose numbers repeat across
+    // regions: a stop belongs to one region and route_code is unique within a region, so two
+    // arrivals here sharing number+direction are always variants of the same route — collapsing
+    // them (keeping the sooner) is exactly right (ADR-047).
     const key = `${eta.operator}|${routeNo}|${bound}`
     const existing = byLine.get(key)
     if (!existing) {
@@ -256,7 +260,7 @@ export type RemarkKind = 'scheduled' | 'lastBus' | 'info'
 export function classifyRemark(remark: I18nText): RemarkKind {
   const en = remark.en.toLowerCase()
   const zh = `${remark['zh-Hant']}${remark['zh-Hans']}`
-  if (/schedul/.test(en) || /原定|預定|预定/.test(zh)) return 'scheduled'
+  if (/schedul/.test(en) || /原定|預定|预定|未開出|未开出/.test(zh)) return 'scheduled'
   if (/last bus|final bus/.test(en) || /尾班|最後一?班|最后一?班/.test(zh)) return 'lastBus'
   return 'info'
 }

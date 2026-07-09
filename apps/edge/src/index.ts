@@ -77,6 +77,11 @@ export default {
       if (hit) return hit
 
       const upper = co.toUpperCase()
+      // GMB has no per-route debug fetch (its live board is keyed by numeric route_id, not
+      // public number); use /v1/etas/:id, which resolves GMB via the static index (ADR-047).
+      if (upper === 'GMB') {
+        return fail(400, 'GMB live ETAs are served via /v1/etas/:id (stop board), not /v1/eta')
+      }
       const operator = upper === 'CTB' ? 'CTB' : upper === 'LWB' ? 'LWB' : 'KMB'
       try {
         const etas = await fetchEta(operator, stop, route, service)

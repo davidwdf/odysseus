@@ -1,7 +1,19 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-04**. Branch: `fix-expo-start-web-error`. Latest: **Route-detail direction toggle**
+> Snapshot: **2026-07-09**. Branch: `gmb-timing-integration`. Latest: **Green Minibus (GMB) — third operator**
+> ([ADR-047](./08-decision-log.md#adr-047--green-minibus-gmb-a-third-operator-keyed-on-gtfsid-with-per-arrival-livescheduled-honesty)).
+> GMB is now a v1 operator. Static geometry/fares/frequency come free from the consolidated dataset (one line in
+> `CO_TO_OPERATOR`); a new `packages/data-normalize/src/gmb.ts` adapter fetches the live **stop board**
+> (`data.etagmb.gov.hk/eta/stop/{id}`, one call per pole like KMB). GMB numbers repeat across regions, so routes are
+> keyed on the globally-unique `gtfsId` (canonical `GMB:{no}:{bound}:{gtfsId}`); the edge resolves the live board's
+> numeric `route_id`+`route_seq` back via a `gmbCanonicalByLive` map. Live-vs-**Scheduled** honesty rides the existing
+> remark path (no new `Eta` flag). UI is data-driven — a green accent + `OPERATOR_LABEL` entry were the only UI edits;
+> chips/Nearby/fare+frequency sheets lit up automatically. **Verified end-to-end on the edge** (etas, nearby, index);
+> the app UI (`pnpm dev:web`) still wants an eyeball. **Gotcha for next time:** the GMB host 403s an empty
+> `User-Agent` (Workers-runtime default) — the adapter sends one. Follow-ups in [docs/07](./07-backlog.md): friendlier
+> "Minibus" label, a region tag in search, GMB route-level live ETAs (static-only today), GMB stop-merge edge cases.
+> Earlier: **Route-detail direction toggle**
 > ([ADR-046](./08-decision-log.md#adr-046--route-detail-direction-toggle-server-resolved-reverse-an-in-card-fromto-header-and-a-circular-route-treatment)) —
 > a server-resolved `RouteDetail.reverse` (edge picks the opposite bound + service-type variant; absent for circular /
 > one-way routes) drives an **in-card from/to header** whose reverse toggle flips direction *in place* (local state +

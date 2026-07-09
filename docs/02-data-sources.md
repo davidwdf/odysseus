@@ -15,7 +15,7 @@ not have to scrape anything.**
 | **Citybus (CTB)** — incl. former NWFB routes (merged 2023) | `https://rt.data.gov.hk/v2/transport/citybus/…` | **v1** |
 | **New Lantao Bus (NLB)** | `data.gov.hk` dataset | [backlog](./07-backlog.md) |
 | **MTR Bus / Feeder Bus** | `data.gov.hk` dataset | [backlog](./07-backlog.md) |
-| **Green Minibus (GMB)** | `data.gov.hk` dataset (all routes since Oct 2022) | [backlog](./07-backlog.md) |
+| **Green Minibus (GMB)** | `https://data.etagmb.gov.hk/…` (all routes since Oct 2022) | **v1** (ADR-047) |
 | **Light Rail / MTR** | `data.gov.hk` datasets | [backlog](./07-backlog.md) |
 
 ### KMB / LWB — `data.etabus.gov.hk` (in our v1 scope)
@@ -27,6 +27,20 @@ not have to scrape anything.**
 - Endpoints: route, route-stop list, stop, ETA (e.g. `/v2/transport/citybus/eta/CTB/{stopId}/{route}`).
 - **Use V2** — V1.x is being discontinued. JSON, keyless.
 - Spec: `https://www.citybus.com.hk/datagovhk/bus_eta_api_specifications.pdf`
+
+### Green Minibus (GMB) — `data.etagmb.gov.hk` (in our v1 scope, ADR-047)
+- Endpoints: route list `/route/{region}`, route detail (hours/headway) `/route/{region}/{code}` or `/route/{route_id}`,
+  stop `/stop/{id}`, route-stop `/route-stop/{route_id}/{route_seq}`, and the **stop board** `/eta/stop/{stop_id}` — the
+  one we use (all routes at a pole in one call, like KMB's `stop-eta`). JSON, keyless, trilingual.
+- **Identity quirks:** routes are keyed by a numeric `route_id` (globally unique) + `route_seq` (1/2); the public
+  `route_code` is **only unique within a region** (`HKI`/`KLN`/`NT`). We take the `route_id` straight from the
+  consolidated dataset's `gtfsId`, fold it into the canonical id (`GMB:{no}:{bound}:{gtfsId}`), and never do the
+  two-step code→id resolution live. `route_seq` 1 → outbound, 2 → inbound.
+- **Live + scheduled mixed:** the ETA feed marks timetable (not tracked) arrivals with `remarks:"Scheduled"/未開出`; we
+  pass the remark through and `classifyRemark` tags it so the UI styles it honestly (ADR-008). Whole route-stops can be
+  `enabled:false` (we skip them).
+- **Gotcha:** the host **403s an empty `User-Agent`** (the Workers-runtime default). The adapter sends one. See ADR-047.
+- Spec: `https://data.etagmb.gov.hk/static/GMB_ETA_API_Specification.pdf`
 
 ### Why the hosts & versions differ (KMB `v1` vs Citybus `v2`, and the `rt.` subdomain)
 Each operator publishes **independently**, so base host and API version differ per operator. They
