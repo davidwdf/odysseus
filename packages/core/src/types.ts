@@ -7,8 +7,9 @@ export type Locale = 'en' | 'zh-Hant' | 'zh-Hans'
 /** Localized text; every name from the operators carries these variants. */
 export type I18nText = Record<Locale, string>
 
-/** Operators in scope. v1 = KMB/LWB + Citybus; others tracked in the backlog. */
-export type OperatorId = 'KMB' | 'LWB' | 'CTB'
+/** Operators in scope. v1 = KMB/LWB + Citybus + Green Minibus (GMB); rail/NLB/MTR-Bus
+ *  tracked in the backlog. */
+export type OperatorId = 'KMB' | 'LWB' | 'CTB' | 'GMB'
 
 /** Direction of travel. */
 export type Bound = 'inbound' | 'outbound'

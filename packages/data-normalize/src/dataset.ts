@@ -10,9 +10,9 @@ import { haversineM } from './kmb-static'
 import { canonicalRouteId, i18nText, toBound } from './normalize'
 
 // Multi-operator static index built from the hkbus/hk-bus-crawling consolidated
-// dataset (ADR-021). It folds KMB + CTB route/stop geometry into one canonical
-// model in a SINGLE ~8 MB fetch — no per-operator crawl, no Worker subrequest-limit
-// problem. Source data is data.gov.hk (official); we attribute both.
+// dataset (ADR-021). It folds KMB + CTB + GMB (ADR-047) route/stop geometry into one
+// canonical model in a SINGLE ~8 MB fetch — no per-operator crawl, no Worker
+// subrequest-limit problem. Source data is data.gov.hk (official); we attribute both.
 //
 // Key facts established by investigation (see ADR-021):
 //  - `routeList[*].stops[co]` holds the RAW, directly-ETA-callable operator stop ids
@@ -28,7 +28,7 @@ import { canonicalRouteId, i18nText, toBound } from './normalize'
 const DATASET_URL = 'https://data.hkbus.app/routeFareList.min.json'
 
 /** Operators we ingest from the dataset's `co` field. */
-const CO_TO_OPERATOR: Record<string, OperatorId> = { kmb: 'KMB', ctb: 'CTB' }
+const CO_TO_OPERATOR: Record<string, OperatorId> = { kmb: 'KMB', ctb: 'CTB', gmb: 'GMB' }
 
 interface RawRoute {
   co: string[]
@@ -45,6 +45,11 @@ interface RawRoute {
   faresHoliday?: Array<string | null> | null
   freq?: Record<string, Record<string, [string, string] | null>> | null
   jt?: string | null
+  // GMB only: the globally-unique numeric GMB route_id (as a string). GMB public numbers
+  // repeat across regions, so this — not the number — is what makes a GMB route unique and
+  // is the id its live ETA API takes. We fold it into the canonical route id's service-type
+  // slot (ADR-047).
+  gtfsId?: string | null
 }
 interface RawStopEntry {
   location: { lat: number; lng: number }
@@ -130,6 +135,10 @@ export interface StaticIndex {
   places: IndexPlace[]
   /** canonical stop id → the place it belongs to (members only). */
   placeByStopId: Map<string, IndexPlace>
+  /** GMB live-ETA resolution (ADR-047): `${gtfsId}:${bound}` → canonical route id. The GMB
+   *  stop-board feed identifies routes by numeric route_id (= `gtfsId`) + `route_seq`; this
+   *  maps that back to our canonical id (public numbers repeat across regions, so we can't). */
+  gmbCanonicalByLive: Map<string, string>
 }
 
 /** Map the dataset's `{en, zh}` to our three-locale text (zh-Hans falls back to zh-Hant). */
@@ -607,6 +616,8 @@ export async function fetchConsolidatedIndex(
   // route lines (canonical route id) serving each stop.
   const consecutivePairs = new Set<string>()
   const linesByStop = new Map<string, Set<string>>()
+  // GMB live-ETA resolution (ADR-047): `${gtfsId}:${bound}` → canonical route id.
+  const gmbCanonicalByLive = new Map<string, string>()
 
   const ensureStop = (operator: OperatorId, rawId: string): string | null => {
     const id = `${operator}:${rawId}`
@@ -629,13 +640,18 @@ export async function fetchConsolidatedIndex(
   for (const entry of Object.values(data.routeList)) {
     for (const co of entry.co) {
       const operator = CO_TO_OPERATOR[co]
-      if (!operator) continue // skip GMB/NLB/MTR/etc — out of v1 scope
+      if (!operator) continue // skip NLB/MTR-Bus/rail/etc — out of v1 scope
       const dir = entry.bound[co]
       const seq = entry.stops?.[co]
       if (!dir || !seq?.length) continue
       const bound = toBound(dir)
-      const serviceType = entry.serviceType
+      // GMB public numbers repeat across regions, so the number+bound isn't unique; fold the
+      // globally-unique route_id (`gtfsId`) into the service-type slot to disambiguate, and it
+      // doubles as the live ETA route_id (ADR-047). KMB/CTB keep their real service type.
+      const gmbId = operator === 'GMB' ? (entry.gtfsId ?? undefined) : undefined
+      const serviceType = gmbId ?? entry.serviceType
       const routeId = canonicalRouteId(operator, entry.route, bound, serviceType)
+      if (gmbId) gmbCanonicalByLive.set(`${gmbId}:${bound}`, routeId)
 
       routeMeta.set(routeId, {
         operator,
@@ -644,8 +660,13 @@ export async function fetchConsolidatedIndex(
         serviceType,
         origin: datasetText(entry.orig ?? {}),
         destination: datasetText(entry.dest ?? {}),
-        fares: entry.fares ?? undefined,
-        faresHoliday: entry.faresHoliday ?? undefined,
+        // GMB fares are flat/non-sectional in EVERY open-data feed (the consolidated dataset,
+        // the TD Routes-and-Fares dataset, and the GMB API — verified all 1,149 route-dirs are a
+        // single fare repeated; ADR-047). Any real fare change en route is only on the physical
+        // fare board, not in open data. So we drop the misleading per-stop array for GMB and
+        // expose only the route-level full fare via `service.fareFull` (computed below).
+        fares: operator === 'GMB' ? undefined : (entry.fares ?? undefined),
+        faresHoliday: operator === 'GMB' ? undefined : (entry.faresHoliday ?? undefined),
         service: buildService(entry, data.serviceDayMap),
       })
 
@@ -731,7 +752,16 @@ export async function fetchConsolidatedIndex(
     consecutivePairs,
     linesByStop,
   )
-  return { stops, stopById, stopToRoutes, routeMeta, routeToStops, places, placeByStopId }
+  return {
+    stops,
+    stopById,
+    stopToRoutes,
+    routeMeta,
+    routeToStops,
+    places,
+    placeByStopId,
+    gmbCanonicalByLive,
+  }
 }
 
 export interface NearbyHit {

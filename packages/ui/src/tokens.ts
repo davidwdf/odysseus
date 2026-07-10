@@ -15,6 +15,7 @@ export const OPERATOR_ACCENT = {
   KMB: '#D7282F',
   LWB: '#E8A33D',
   CTB: '#F6C700',
+  GMB: '#00845C',
 } as const
 
 /** Contrast-safe text colour to sit on each operator accent (docs/09 §2: the
@@ -23,6 +24,7 @@ export const OPERATOR_ACCENT_TEXT: Record<keyof typeof OPERATOR_ACCENT, string> 
   KMB: '#FFFFFF',
   LWB: '#FFFFFF',
   CTB: '#0F172A',
+  GMB: '#FFFFFF',
 }
 
 /** Opacity applied to stale ETA readings. */

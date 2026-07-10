@@ -8,7 +8,9 @@ the `DataSource` interface and the UI do not change.
 
 - [ ] **New Lantao Bus (NLB)** — `data.gov.hk` realtime dataset.
 - [ ] **MTR Bus / Feeder Bus** — `data.gov.hk` realtime schedule dataset.
-- [ ] **Green Minibus (GMB)** — `data.gov.hk`; all routes covered since Oct 2022. (More routes/stops → more stop-merging edge cases.)
+- [x] **Green Minibus (GMB)** — **shipped in v1** (ADR-047): `data.etagmb.gov.hk` live stop board + consolidated-dataset
+  static geometry/fares/frequency. Follow-ups: friendlier "Minibus" label, a region/area tag in search (numbers repeat
+  across regions), GMB route-level live ETAs (static-only today), GMB stop-merge edge cases.
 - [ ] **Light Rail (LRT) & MTR heavy rail** — different domain (rail), but the canonical model can host it.
 - [ ] **Ferries** (Star Ferry / franchised ferries) — if scope expands beyond buses.
 

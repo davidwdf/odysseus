@@ -17,17 +17,35 @@ function preferServiceType(a: string, b: string): string {
 
 export function buildSearchIndex(index: StaticIndex): SearchIndex {
   // Collapse directional/service-type variants to one route per (operator, no, bound).
+  // GMB needs a different key: its public numbers repeat across regions (route "1" exists in
+  // HKI *and* NT — genuinely different routes we must keep separate), yet within a region a
+  // number can have several route_ids that are just variants ("Normal"/"Special" departures of
+  // one route). Region isn't in the dataset, so we key GMB on **number + direction + origin +
+  // destination** — the rider-facing identity: cross-region routes differ in from/to and stay
+  // split; same-route variants share from/to and collapse. The representative is the fullest
+  // variant (most stops), tie-broken by id. A true region/area tag is a follow-up. ADR-047.
   const byNumber = new Map<string, RouteLite>()
   for (const meta of index.routeMeta.values()) {
-    const key = `${meta.operator}:${meta.route}:${meta.bound}`
+    const id = canonicalRouteId(meta.operator, meta.route, meta.bound, meta.serviceType)
+    const key =
+      meta.operator === 'GMB'
+        ? `${meta.operator}:${meta.route}:${meta.bound}:${meta.origin.en}:${meta.destination.en}`
+        : `${meta.operator}:${meta.route}:${meta.bound}`
     const existing = byNumber.get(key)
     if (existing) {
-      // Keep the representative service type; the id encodes it.
-      const existingSt = existing.id.split(':')[3] ?? '1'
-      if (preferServiceType(meta.serviceType, existingSt) === existingSt) continue
+      if (meta.operator === 'GMB') {
+        // Prefer the fuller routing (most stops); tie → lower id. Deterministic.
+        const curN = index.routeToStops.get(existing.id)?.length ?? 0
+        const newN = index.routeToStops.get(id)?.length ?? 0
+        if (newN < curN || (newN === curN && id >= existing.id)) continue
+      } else {
+        // Keep the representative service type; the id encodes it.
+        const existingSt = existing.id.split(':')[3] ?? '1'
+        if (preferServiceType(meta.serviceType, existingSt) === existingSt) continue
+      }
     }
     byNumber.set(key, {
-      id: canonicalRouteId(meta.operator, meta.route, meta.bound, meta.serviceType),
+      id,
       operator: meta.operator,
       routeNo: meta.route,
       bound: meta.bound,

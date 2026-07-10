@@ -14,9 +14,23 @@ import {
 } from '@nextbus/core'
 import { type Messages, t } from '@nextbus/i18n'
 import { useRouter } from 'expo-router'
-import { ChevronRight, type LucideIcon, MapPin, Route, Search, X } from 'lucide-react-native'
-import { type ReactNode, useMemo, useRef, useState } from 'react'
+import {
+  ChevronRight,
+  Keyboard,
+  type LucideIcon,
+  MapPin,
+  Route,
+  Search,
+  X,
+} from 'lucide-react-native'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FilterChips, FilterChipsBar } from '../components/FilterChips'
 import { BackButton } from '../components/GlassIconButton'
@@ -56,11 +70,23 @@ export default function SearchScreen() {
   const [stopFocused, setStopFocused] = useState(false)
   const stopInputRef = useRef<TextInput>(null)
   const [filter, setFilter] = useState<RouteFilter>(EMPTY_FILTER)
+  // Keypad dismiss-on-scroll: scrolling down the results collapses the keypad (like the OS
+  // keyboard), so browsing gets the whole screen; tapping the number field brings it back.
+  // onScrollBeginDrag covers touch instantly; onScroll catches wheel scrolling on web, where
+  // drag events never fire — downward movement only, so overscroll bounce doesn't dismiss.
+  const [padShown, setPadShown] = useState(true)
+  const lastScrollY = useRef(0)
+  const onResultsScroll = (y: number) => {
+    if (y > lastScrollY.current + 2 && y > 10) setPadShown(false)
+    lastScrollY.current = y
+  }
 
   const recentRoutes = usePreferences((s) => s.recentRoutes)
   const recentStops = usePreferences((s) => s.recentStops)
   const pushRecentRoute = usePreferences((s) => s.pushRecentRoute)
   const pushRecentStop = usePreferences((s) => s.pushRecentStop)
+  const clearRecentRoutes = usePreferences((s) => s.clearRecentRoutes)
+  const clearRecentStops = usePreferences((s) => s.clearRecentStops)
 
   // Operators present in the index drive the operator chips — so GMB/MTR appear
   // automatically the day those adapters land (ADR-037), no UI change needed.
@@ -158,7 +184,10 @@ export default function SearchScreen() {
         <View className="flex-1">
           <Segment
             mode={mode}
-            onChange={setMode}
+            onChange={(m) => {
+              setMode(m)
+              setPadShown(true)
+            }}
             routesLabel={t(locale, 'searchSegRoutes')}
             stopsLabel={t(locale, 'searchSegStops')}
           />
@@ -178,17 +207,30 @@ export default function SearchScreen() {
           <NumberField
             value={routeQuery}
             placeholder={t(locale, 'searchRoutePrompt')}
-            onClear={() => setRouteQuery('')}
+            padHidden={!padShown}
+            onPress={() => setPadShown(true)}
+            onClear={() => {
+              setRouteQuery('')
+              setPadShown(true)
+            }}
           />
           <FilterChipsBar>
             <FilterChips chips={chips} onToggle={onToggleChip} />
           </FilterChipsBar>
-          <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+          <ScrollView
+            className="flex-1"
+            keyboardShouldPersistTaps="handled"
+            onScrollBeginDrag={() => setPadShown(false)}
+            onScroll={(e) => onResultsScroll(e.nativeEvent.contentOffset.y)}
+            scrollEventThrottle={32}
+          >
             {routeQuery === '' ? (
               <RecentRoutes
                 items={recentRouteItems}
                 locale={locale}
                 label={t(locale, 'searchRecent')}
+                clearLabel={t(locale, 'searchClearRecent')}
+                onClear={clearRecentRoutes}
                 onOpen={openRoute}
               />
             ) : routeResults.length === 0 ? (
@@ -201,17 +243,19 @@ export default function SearchScreen() {
               ))
             )}
           </ScrollView>
-          <View
-            className="border-border border-t pt-3"
-            style={{ paddingBottom: insets.bottom + BOTTOM_GAP }}
-          >
-            <RouteKeypad
-              value={routeQuery}
-              trie={trie}
-              letters={letters}
-              onChange={setRouteQuery}
-            />
-          </View>
+          <CollapsibleFooter shown={padShown}>
+            <View
+              className="border-border border-t pt-3"
+              style={{ paddingBottom: insets.bottom + BOTTOM_GAP }}
+            >
+              <RouteKeypad
+                value={routeQuery}
+                trie={trie}
+                letters={letters}
+                onChange={setRouteQuery}
+              />
+            </View>
+          </CollapsibleFooter>
         </>
       ) : (
         <>
@@ -266,6 +310,8 @@ export default function SearchScreen() {
                   items={recentStopItems}
                   locale={locale}
                   label={t(locale, 'searchRecent')}
+                  clearLabel={t(locale, 'searchClearRecent')}
+                  onClear={clearRecentStops}
                   onOpen={openStop}
                 />
               ) : stopResults.length === 0 ? (
@@ -302,10 +348,13 @@ function Segment({
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        // onPressIn (press-down), not onPress: when the Stops text field is focused, the first
-        // outside tap is consumed blurring it (react-native-web terminates the press responder on
-        // blur, so onPress never fires → the dreaded two-tap). Press-down lands before that.
+        // onPressIn (press-down): when the Stops text field is focused, the first outside tap is
+        // consumed blurring it (react-native-web terminates the press responder on blur, so
+        // onPress never fires → the dreaded two-tap). Press-down lands before that. onPress stays
+        // too — it's what keyboard activation (Enter/Space → click) reaches; duplicate calls are
+        // idempotent.
         onPressIn={() => onChange(value)}
+        onPress={() => onChange(value)}
         className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${
           active ? 'bg-bg' : ''
         }`}
@@ -329,18 +378,26 @@ function Segment({
   )
 }
 
-/** Read-only display of the keypad-entered route number (no OS keyboard). */
+/** Read-only display of the keypad-entered route number (no OS keyboard). Tapping it re-opens
+ *  a dismissed keypad — a subtle keypad glyph on the right signals that while it's hidden. */
 function NumberField({
   value,
   placeholder,
+  padHidden,
+  onPress,
   onClear,
 }: {
   value: string
   placeholder: string
+  padHidden: boolean
+  onPress: () => void
   onClear: () => void
 }) {
   return (
-    <View className="mx-4 mb-1 mt-1 h-12 flex-row items-center justify-between rounded-xl border border-border bg-surface px-4">
+    <Pressable
+      onPress={onPress}
+      className="mx-4 mb-1 mt-1 h-12 flex-row items-center justify-between rounded-xl border border-border bg-surface px-4"
+    >
       {value === '' ? (
         <Text variant="body" className="text-subtle">
           {placeholder}
@@ -350,12 +407,37 @@ function NumberField({
           {value}
         </Text>
       )}
-      {value !== '' ? (
-        <Pressable accessibilityRole="button" onPress={onClear} hitSlop={8}>
-          <Icon icon={X} tone="muted" size={18} />
-        </Pressable>
-      ) : null}
-    </View>
+      <View className="flex-row items-center gap-3">
+        {padHidden ? <Icon icon={Keyboard} tone="subtle" size={18} /> : null}
+        {value !== '' ? (
+          <Pressable accessibilityRole="button" onPress={onClear} hitSlop={8}>
+            <Icon icon={X} tone="muted" size={18} />
+          </Pressable>
+        ) : null}
+      </View>
+    </Pressable>
+  )
+}
+
+/** Collapses the keypad footer to zero height (and back) with a short ease — the search page's
+ *  keyboard-dismiss. Children keep their natural height inside; the wrapper clips. */
+function CollapsibleFooter({ shown, children }: { shown: boolean; children: ReactNode }) {
+  const [contentH, setContentH] = useState(0)
+  const progress = useSharedValue(1)
+  useEffect(() => {
+    progress.value = withTiming(shown ? 1 : 0, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    })
+  }, [shown, progress])
+  const style = useAnimatedStyle(
+    () => (contentH > 0 ? { height: progress.value * contentH, opacity: progress.value } : {}),
+    [contentH],
+  )
+  return (
+    <Animated.View style={[{ overflow: 'hidden' }, style]}>
+      <View onLayout={(e) => setContentH(e.nativeEvent.layout.height)}>{children}</View>
+    </Animated.View>
   )
 }
 
@@ -411,17 +493,21 @@ function RecentRoutes({
   items,
   locale,
   label,
+  clearLabel,
+  onClear,
   onOpen,
 }: {
   items: RouteLite[]
   locale: Locale
   label: string
+  clearLabel: string
+  onClear: () => void
   onOpen: (id: string) => void
 }) {
   if (items.length === 0) return null
   return (
     <View>
-      <SectionLabel label={label} />
+      <SectionLabel label={label} clearLabel={clearLabel} onClear={onClear} />
       {items.map((r, i) => (
         <View key={r.id} className={i === 0 ? '' : 'border-border border-t'}>
           <RouteResultRow route={r} locale={locale} onPress={() => onOpen(r.id)} />
@@ -435,17 +521,21 @@ function RecentStops({
   items,
   locale,
   label,
+  clearLabel,
+  onClear,
   onOpen,
 }: {
   items: StopLite[]
   locale: Locale
   label: string
+  clearLabel: string
+  onClear: () => void
   onOpen: (id: string) => void
 }) {
   if (items.length === 0) return null
   return (
     <View>
-      <SectionLabel label={label} />
+      <SectionLabel label={label} clearLabel={clearLabel} onClear={onClear} />
       {items.map((s, i) => (
         <View key={s.id} className={i === 0 ? '' : 'border-border border-t'}>
           <StopResultRow stop={s} locale={locale} onPress={() => onOpen(s.id)} />
@@ -455,11 +545,38 @@ function RecentStops({
   )
 }
 
-function SectionLabel({ label }: { label: string }) {
+/** A section header. When `onClear` is given, a muted "Clear" affordance sits on the right —
+ *  used by the recent-search lists to wipe that kind's history (kept muted, not brand, per the
+ *  restraint on secondary UI). */
+function SectionLabel({
+  label,
+  clearLabel,
+  onClear,
+}: {
+  label: string
+  clearLabel?: string
+  onClear?: () => void
+}) {
   return (
-    <Text variant="label" weight="medium" className="px-4 pb-1 pt-3 text-muted">
-      {label}
-    </Text>
+    <View className="flex-row items-center justify-between px-4 pb-1 pt-3">
+      <Text variant="label" weight="medium" className="text-muted">
+        {label}
+      </Text>
+      {onClear ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={clearLabel}
+          onPress={onClear}
+          hitSlop={8}
+          className="flex-row items-center gap-1"
+        >
+          <Icon icon={X} tone="muted" size={14} />
+          <Text variant="label" weight="medium" className="text-muted">
+            {clearLabel}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   )
 }
 

@@ -13,8 +13,10 @@ import {
 import {
   canonicalRouteId,
   fetchEta,
+  fetchGmbStopEta,
   fetchKmbRouteEta,
   fetchKmbStopEta,
+  type GmbEtaEntry,
   type IndexRouteMeta,
   type IndexRouteRef,
   type IndexStop,
@@ -96,8 +98,31 @@ export function placeRouteCount(index: StaticIndex, members: IndexStop[]): numbe
   return lines.size
 }
 
+/** Map a GMB stop-board's raw (route_id, route_seq) entries to canonical `Eta`s, resolving
+ *  the route via the index (ADR-047). `route_seq` 1 → outbound, 2 → inbound; entries whose
+ *  route isn't in our index (or with no arrivals) are dropped. */
+function gmbEtasFrom(entries: GmbEtaEntry[], index: StaticIndex): Eta[] {
+  const out: Eta[] = []
+  for (const en of entries) {
+    if (en.arrivals.length === 0) continue
+    const bound: Bound = en.routeSeq === 2 ? 'inbound' : 'outbound'
+    const routeId = index.gmbCanonicalByLive.get(`${en.routeId}:${bound}`)
+    if (!routeId) continue
+    out.push({
+      routeId,
+      stopId: en.stopId,
+      operator: 'GMB',
+      arrivals: en.arrivals,
+      dataTimestamp: en.dataTimestamp,
+      observedAt: en.observedAt,
+      ...(en.remark ? { remark: en.remark } : {}),
+    })
+  }
+  return out
+}
+
 /** Raw (call-deduped, not yet rider-deduped) ETAs across every member pole of a place
- *  (ADR-042). Each KMB pole is ONE `stop-eta` call (all its routes); CTB is per-route,
+ *  (ADR-042). Each KMB or GMB pole is ONE stop-board call (all its routes); CTB is per-route,
  *  bounded by a per-place budget. Members and CTB routes are fetched concurrently. */
 async function memberEtaLists(
   index: StaticIndex,
@@ -116,6 +141,14 @@ async function memberEtaLists(
         ctbRemaining--
         tasks.push(fetchEta('CTB', m.stopId, r.route, '1').catch(() => [] as Eta[]))
       }
+    } else if (m.operator === 'GMB') {
+      // GMB: one stop-board call returns every route at this pole (like KMB); the edge
+      // resolves its raw route_id/seq to our canonical ids (ADR-047).
+      tasks.push(
+        fetchGmbStopEta(m.stopId)
+          .then((entries) => gmbEtasFrom(entries, index))
+          .catch(() => [] as Eta[]),
+      )
     } else {
       // KMB/LWB: one call returns every route at this pole.
       tasks.push(fetchKmbStopEta(m.stopId).catch(() => [] as Eta[]))

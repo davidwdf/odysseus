@@ -5,29 +5,36 @@ import { Pressable, ScrollView, View } from 'react-native'
 import { Icon } from './Icon'
 import { Text } from './Text'
 
-// The smart route-number keypad (ADR-037). A phone-style 1–9/0 pad, with the letters
-// HK route numbers actually use sitting in a single horizontally-scrollable row above
-// it (so the pad stays compact and results keep the screen). Digits are always shown,
-// dimmed when they can't continue the number; letters are **filtered to only the valid
-// next ones** as you type (fewer, changing options — clearer than a wall of dimmed keys),
-// both driven by a prefix-trie lookup. The letter row runs edge-to-edge: default left
-// inset, items overflowing under the right edge, with matching padding once scrolled. */
+// The smart route-number keypad (ADR-037). Digits sit in a compact keyboard-style
+// 5×2 strip (1–5 / 6–0) with a double-height backspace on the right — half the
+// height of the old phone-style 3×4 pad, so results keep the screen. The letters
+// HK route numbers actually use sit in a single horizontally-scrollable row above
+// it. Digits are always shown, dimmed when they can't continue the number; letters
+// are **filtered to only the valid next ones** as you type (fewer, changing options —
+// clearer than a wall of dimmed keys), both driven by a prefix-trie lookup. There is
+// no clear key: the number field's ✕ clears, and long-pressing backspace does too.
+// The letter row runs edge-to-edge: default left inset, items overflowing under the
+// right edge, with matching padding once scrolled.
 
 const DIGIT_ROWS: string[][] = [
-  ['1', '2', '3'],
-  ['4', '5', '6'],
-  ['7', '8', '9'],
+  ['1', '2', '3', '4', '5'],
+  ['6', '7', '8', '9', '0'],
 ]
 
 function Key({
   label,
   enabled,
   onPress,
+  onLongPress,
+  tall,
   children,
 }: {
   label?: string
   enabled: boolean
   onPress: () => void
+  onLongPress?: () => void
+  /** Stretch to the full grid height (the backspace column) instead of one row. */
+  tall?: boolean
   children?: ReactNode
 }) {
   return (
@@ -37,9 +44,10 @@ function Key({
       accessibilityLabel={label}
       disabled={!enabled}
       onPress={onPress}
-      className={`flex-1 items-center justify-center rounded-xl border border-border bg-surface py-3 ${
-        enabled ? 'active:opacity-60' : 'opacity-25'
-      }`}
+      onLongPress={onLongPress}
+      className={`flex-1 items-center justify-center rounded-xl border border-border bg-surface ${
+        tall ? '' : 'h-11'
+      } ${enabled ? 'active:opacity-60' : 'opacity-25'}`}
     >
       {children ?? (
         <Text variant="h3" weight="bold" tabular className="text-text">
@@ -95,26 +103,27 @@ export function RouteKeypad({
         </ScrollView>
       ) : null}
 
-      {/* Digit pad — phone layout; bottom row is clear · 0 · backspace. */}
-      <View className="gap-2 px-4">
-        {DIGIT_ROWS.map((row) => (
-          <View key={row.join('')} className="flex-row gap-2">
-            {row.map((d) => (
-              <Key key={d} label={d} enabled={valid.has(d)} onPress={() => append(d)} />
-            ))}
-          </View>
-        ))}
-        <View className="flex-row gap-2">
-          <Key label="Clear" enabled={value.length > 0} onPress={() => onChange('')}>
-            <Text variant="label" weight="medium" className="text-muted">
-              ✕
-            </Text>
-          </Key>
-          <Key label="0" enabled={valid.has('0')} onPress={() => append('0')} />
-          <Key label="Backspace" enabled={value.length > 0} onPress={backspace}>
-            <Icon icon={Delete} tone={value.length > 0 ? 'text' : 'muted'} size={22} />
-          </Key>
+      {/* Digit strip — keyboard order (1–5 / 6–0), backspace spanning both rows on the right.
+          Long-press backspace clears the whole number. */}
+      <View className="flex-row gap-2 px-4">
+        <View className="flex-[5] gap-2">
+          {DIGIT_ROWS.map((row) => (
+            <View key={row[0]} className="flex-row gap-2">
+              {row.map((d) => (
+                <Key key={d} label={d} enabled={valid.has(d)} onPress={() => append(d)} />
+              ))}
+            </View>
+          ))}
         </View>
+        <Key
+          label="Backspace"
+          tall
+          enabled={value.length > 0}
+          onPress={backspace}
+          onLongPress={() => onChange('')}
+        >
+          <Icon icon={Delete} tone={value.length > 0 ? 'text' : 'muted'} size={22} />
+        </Key>
       </View>
     </View>
   )
