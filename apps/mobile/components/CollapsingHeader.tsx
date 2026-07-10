@@ -266,6 +266,7 @@ export function CollapsingHeader({
           text={collapsedLabel ?? label}
           size={colLabelSize}
           color={labelColor}
+          align="left"
         />
       </Animated.View>
 
