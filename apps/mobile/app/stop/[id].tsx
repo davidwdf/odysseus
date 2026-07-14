@@ -282,6 +282,7 @@ export default function StopDetail() {
                 lat={stop.location.lat}
                 lng={stop.location.lng}
                 height={MAP_HEIGHT}
+                operator={stop.id.split(':')[0] as OperatorId}
                 points={
                   multiPole
                     ? members.map((m) => ({

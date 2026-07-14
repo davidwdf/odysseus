@@ -330,12 +330,19 @@ against the **effective** background — which, behind glass, is *variable*). Ou
 The app icon is a **road-sign / transit pictogram**: a clean **side-profile double-decker** (HK's
 signature bus), rendered as a **white symbol on an ink field** (`BRAND.ink` = `#111827`, in
 `packages/ui/src/tokens.ts`). Construction (master: `apps/mobile/assets/icon.svg`):
-- **Body** rounded rect (radius 84); **two glassy window bands** as field-colour cut-outs, the top
-  one centred with an even 56px inset and a **concentric corner radius** (84 − 56 = 28); the lower
-  band shortened to imply a **door** and give the bus a front (orientation).
-- **Motion:** body + windows skewed **−8°** (leaning into travel, right-facing); **wheels stay round
-  and centred** (planted) — they're *not* skewed, so the cabin lunges forward over them.
-- **Wheels** are integrated white bumps (no second tone), so it reads as a bus without clutter.
+- **Body** rounded rect (radius **64** — a crisp, purposeful corner that still reads friendly, and
+  holds up down to the 28px favicon); **two glassy window bands** as field-colour cut-outs, the top
+  one centred with an even 56px inset, both with a softly-rounded **radius 21** (kept legible rather
+  than strictly concentric with the crisper body). **Both bands run the full length (equal decks)** —
+  the front/rear read is carried entirely by the tandem wheels + lean, so the lower deck is *not*
+  shortened (an earlier "engine bay" cut was dropped as redundant and slightly lopsided at small sizes).
+- **Motion:** body + windows skewed **−9°** (leaning into travel, right-facing); **wheels stay round
+  and level** (planted) — they're *not* skewed, so the cabin lunges forward over them.
+- **Wheels — tri-axle** (authentic HK double-decker): a **single front wheel** (right) and a **rear
+  tandem pair** (left), radius 48. The doubled-up rear is both true to the real vehicle and the
+  clearest **front/rear signal** in the mark. They're integrated white bumps (no second tone), and are
+  positioned by visual balance — deliberately **rear-biased**, like a real tri-axle — rather than
+  centred to the icon frame.
 
 **In-app bus glyph (distinct from the icon above).** The route schematic's rail token uses a **front-view**
 double-decker line glyph — `BusGlyph` (`apps/mobile/components/BusGlyph.tsx`), a custom **Lucide-style** icon
@@ -358,8 +365,18 @@ side-profile pictogram is unambiguously a HK double-decker and pops on any wallp
 `icon.png` (1024, full-bleed ink), `adaptive-icon.png` (Android foreground, mark in the safe zone),
 `splash-icon.png` (mark on transparent; ink background via `app.json`), `favicon.png`, and
 `icon-mono.png` (white mark on transparent — reused as the iOS **tinted** source and any in-app logo).
+The **favicon uses the full tri-axle mark scaled up ~1.24×** (wheels and all): the padded launcher
+mark gets mushy shrunk into a 16–24px tab, so the browser-tab variant fills the frame so the wheels
+stay legible small. It lives alongside the full mark in `scripts/gen-icons.mjs` (`FAVICON_MASK`).
 `app.json` wires `icon`, `splash`, `android.adaptiveIcon`, `web.favicon`, and **iOS
 light/dark/tinted** variants. Regenerate after editing the SVG: `node scripts/gen-icons.mjs`.
+
+**PWA / install icons** (ADR-048) are also generated into `apps/mobile/public/` (copied to the web
+root by `expo export`): `apple-touch-icon.png` (180, opaque — iOS Add-to-Home-Screen), `icon-192.png`
+/ `icon-512.png` (manifest "any"), and `icon-maskable-512.png` (mark in the ~66% safe zone on ink,
+manifest "maskable"). They're referenced by `public/manifest.webmanifest` + `app/+html.tsx`, which
+injects the manifest/apple-touch-icon/`theme-color`/`apple-mobile-web-app-*` `<head>` tags that Expo's
+default HTML omits. (Installing over HTTPS + the standalone status bar are pending verification.)
 
 **Deferred (needs the app name):** the **巴士 / 香港巴士 wordmark** + splash lockup — see
 [`docs/07`](./07-backlog.md). The splash currently shows just the bus mark on ink.

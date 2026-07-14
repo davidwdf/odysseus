@@ -1,17 +1,19 @@
 <!-- NextBus HK app icon — master source.
      Double-decker pictogram, ink field, white symbol (windows knocked out via mask),
-     body+windows leaned -8deg over centred round wheels. Regenerate PNGs with
+     body+windows leaned -9deg over a tri-axle wheelbase (front wheel + rear tandem).
+     Regenerate PNGs with
      `node scripts/gen-icons.mjs`. See docs/09 + docs/design. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
     <mask id="bus" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
-      <g transform="translate(0,500) skewX(-8) translate(0,-500)">
-        <rect x="176" y="300" width="672" height="372" rx="84" fill="#fff"/>
-        <rect x="232" y="356" width="560" height="86" rx="28" fill="#000"/>
-        <rect x="232" y="502" width="450" height="86" rx="28" fill="#000"/>
+      <g transform="translate(0,500) skewX(-9) translate(0,-500)">
+        <rect x="176" y="300" width="672" height="372" rx="64" fill="#fff"/>
+        <rect x="232" y="356" width="560" height="86" rx="21" fill="#000"/>
+        <rect x="232" y="502" width="560" height="86" rx="21" fill="#000"/>
       </g>
-      <circle cx="350" cy="676" r="60" fill="#fff"/>
-      <circle cx="674" cy="676" r="60" fill="#fff"/>
+      <circle cx="276" cy="676" r="48" fill="#fff"/>
+      <circle cx="394" cy="676" r="48" fill="#fff"/>
+      <circle cx="692" cy="676" r="48" fill="#fff"/>
     </mask>
   </defs>
   <rect width="1024" height="1024" fill="#111827"/>
