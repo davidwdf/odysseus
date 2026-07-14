@@ -371,5 +371,12 @@ stay legible small. It lives alongside the full mark in `scripts/gen-icons.mjs` 
 `app.json` wires `icon`, `splash`, `android.adaptiveIcon`, `web.favicon`, and **iOS
 light/dark/tinted** variants. Regenerate after editing the SVG: `node scripts/gen-icons.mjs`.
 
+**PWA / install icons** (ADR-048) are also generated into `apps/mobile/public/` (copied to the web
+root by `expo export`): `apple-touch-icon.png` (180, opaque — iOS Add-to-Home-Screen), `icon-192.png`
+/ `icon-512.png` (manifest "any"), and `icon-maskable-512.png` (mark in the ~66% safe zone on ink,
+manifest "maskable"). They're referenced by `public/manifest.webmanifest` + `app/+html.tsx`, which
+injects the manifest/apple-touch-icon/`theme-color`/`apple-mobile-web-app-*` `<head>` tags that Expo's
+default HTML omits. (Installing over HTTPS + the standalone status bar are pending verification.)
+
 **Deferred (needs the app name):** the **巴士 / 香港巴士 wordmark** + splash lockup — see
 [`docs/07`](./07-backlog.md). The splash currently shows just the bus mark on ink.

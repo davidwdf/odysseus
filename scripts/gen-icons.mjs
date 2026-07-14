@@ -7,15 +7,24 @@
 //   splash-icon.png    1024, white mark on transparent, smaller (shown on ink via app.json)
 //   favicon.png        196,  full-bleed ink (web tab) — enlarged full mark (fills the tab, crisper small)
 //   icon-mono.png      1024, white mark on transparent (reuse: in-app logo / iOS tinted source)
+//
+// And to apps/mobile/public/ (copied verbatim to the web root by `expo export`, for the PWA):
+//   apple-touch-icon.png   180, opaque — iOS "Add to Home Screen" (iOS ignores the manifest here)
+//   icon-192.png           192, opaque — PWA manifest icon (purpose "any")
+//   icon-512.png           512, opaque — PWA manifest icon (purpose "any")
+//   icon-maskable-512.png  512, mark in the ~66% safe zone on ink — manifest "maskable" (Android)
+//
 // And docs/social-preview.png (1280x640) — the GitHub repo social card (upload manually at
 // repo Settings → Social preview; GitHub has no API for it).
 
+import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ASSETS = join(ROOT, 'apps', 'mobile', 'assets')
+const PUBLIC = join(ROOT, 'apps', 'mobile', 'public')
 const DOCS = join(ROOT, 'docs')
 const INK = '#111827'
 const WHITE = '#ffffff'
@@ -94,6 +103,33 @@ async function run() {
     .png()
     .toFile(join(ASSETS, 'splash-icon.png'))
 
+  // Web/PWA icons → apps/mobile/public (served at the web root by `expo export`).
+  mkdirSync(PUBLIC, { recursive: true })
+  // iOS Add-to-Home-Screen + PWA "any" icons: opaque, full-bleed (transparency renders black on iOS).
+  await sharp(FULL)
+    .resize(180, 180)
+    .flatten({ background: INK })
+    .png()
+    .toFile(join(PUBLIC, 'apple-touch-icon.png'))
+  await sharp(FULL)
+    .resize(192, 192)
+    .flatten({ background: INK })
+    .png()
+    .toFile(join(PUBLIC, 'icon-192.png'))
+  await sharp(FULL)
+    .resize(512, 512)
+    .flatten({ background: INK })
+    .png()
+    .toFile(join(PUBLIC, 'icon-512.png'))
+  // Android maskable: mark inside the ~66% safe zone on an ink field (launchers crop the edges).
+  const maskable = await sharp(MARK).resize(340, 340).png().toBuffer()
+  await sharp({
+    create: { width: 512, height: 512, channels: 4, background: { r: 17, g: 24, b: 39, alpha: 1 } },
+  })
+    .composite([{ input: maskable, gravity: 'center' }])
+    .png()
+    .toFile(join(PUBLIC, 'icon-maskable-512.png'))
+
   // GitHub social-preview card: ink field, centred mark (no text — name TBD).
   const social = await sharp(MARK).resize(440, 440).png().toBuffer()
   await sharp({
@@ -109,7 +145,8 @@ async function run() {
     .toFile(join(DOCS, 'social-preview.png'))
 
   console.log(
-    'Generated: icon.png, favicon.png, icon-mono.png, adaptive-icon.png, splash-icon.png, docs/social-preview.png',
+    'Generated assets/: icon, favicon, icon-mono, adaptive-icon, splash-icon; ' +
+      'public/: apple-touch-icon, icon-192, icon-512, icon-maskable-512; docs/social-preview.png',
   )
 }
 run().catch((e) => {

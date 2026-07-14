@@ -1734,3 +1734,27 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     outbound fold to one hit (the fuller "Normal" wins), while route "1" in HKI vs NT stays as 4 distinct entries, and
     "803" vs "803K" stay separate. At Hin Keng (a stop both 803 variants leave from) `/v1/etas` returns a single 803
     outbound row (`dedupeEtas` collapse), keeping the sooner arrival.
+
+## ADR-048 — PWA install metadata: web app manifest + iOS `apple-touch-icon` via a custom `+html`
+- **Status:** **Icons/manifest/head built (2026-07-14); on-device install not yet verified.** Adds
+  `apps/mobile/app/+html.tsx`, `apps/mobile/public/manifest.webmanifest`, and four generated icons in
+  `apps/mobile/public/` (`apple-touch-icon.png` 180, `icon-192/512.png`, `icon-maskable-512.png`) from
+  `scripts/gen-icons.mjs`. No app-logic or data changes.
+- **Context:** We ship the installable PWA first (ADR-002), but nothing emitted install metadata. Expo's
+  `web.output: "static"` + Metro only injects the tab **favicon** (`web.favicon`); it does **not** generate a
+  web app manifest (that was a webpack-era feature). So there was no manifest and no `apple-touch-icon`.
+  Symptom: iOS Safari "Add to Home Screen" showed a **screenshot of the page**, not our icon — because iOS
+  uses `<link rel="apple-touch-icon">` (falling back to a page snapshot), and ignores `rel="icon"` there.
+- **Decisions:**
+  1. **Own the web `<head>` via expo-router's `app/+html.tsx`** — the supported hook for static head content.
+     Inject `<link rel="manifest">`, `<link rel="apple-touch-icon">`, `theme-color`, and the
+     `apple-mobile-web-app-*` meta. The favicon stays auto-injected from `app.json` (not duplicated here).
+  2. **`apple-touch-icon` is the load-bearing icon for iOS** (not the manifest). It's **180×180 and opaque**
+     (full-bleed ink) — iOS renders transparency as black and applies its own rounded mask.
+  3. **Manifest declares 192/512 "any" + a 512 "maskable"** icon. Maskable = the mark inside the ~66% safe
+     zone on ink, so Android launcher crops don't clip it. Icons live in `public/` (copied to the web root by
+     `expo export`), generated alongside the launcher assets in one script.
+  4. **`display: standalone`, ink `background_color`/`theme_color` (#111827)**, portrait, `start_url: "/"`.
+- **Deferred (needs a device + HTTPS):** actually installing over the cloudflared tunnel and confirming the
+  home-screen icon renders, plus the standalone **status-bar style** (`black-translucent`) + safe-area handling.
+  Install requires a secure origin, so it can't be checked on `localhost`.
