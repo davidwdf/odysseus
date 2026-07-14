@@ -69,9 +69,24 @@ export const getDisplacementFilter = ({
     </defs>
 </svg>`)}`}#displace`
 
-/** Feature-detect Chromium's non-standard `backdrop-filter: url(#…)` support. */
+/**
+ * Feature-detect Chromium's non-standard `backdrop-filter: url(#…)` support.
+ *
+ * Safari and Firefox *parse* the `url()` value (it shares the `filter` grammar), so the
+ * syntactic probe below is truthy there too — a false positive. But only Chromium/Blink
+ * actually **renders** an SVG filter referenced from `backdrop-filter`; on Safari the
+ * whole (unrenderable) declaration is dropped and the glass goes fully see-through. So
+ * gate on the engine first: every iOS browser is WebKit under the hood, and desktop
+ * Safari/Firefox can't do it either — bail before trusting the probe.
+ */
 export function supportsBackdropFilterUrl(): boolean {
-  if (typeof document === 'undefined') return false
+  if (typeof document === 'undefined' || typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  const isWebKitOrGecko =
+    /iP(hone|ad|od)/.test(ua) ||
+    /firefox|fxios/i.test(ua) ||
+    (/safari/i.test(ua) && !/chrome|chromium|crios|edg|android/i.test(ua))
+  if (isWebKitOrGecko) return false
   const el = document.createElement('div')
   el.style.cssText = 'backdrop-filter: url(#test)'
   return el.style.backdropFilter === 'url(#test)' || el.style.backdropFilter === 'url("#test")'
