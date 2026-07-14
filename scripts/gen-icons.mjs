@@ -5,7 +5,7 @@
 //   icon.png           1024, full-bleed ink (iOS/PWA; OS masks the corners)
 //   adaptive-icon.png  1024, white mark on transparent, scaled into Android's safe zone
 //   splash-icon.png    1024, white mark on transparent, smaller (shown on ink via app.json)
-//   favicon.png        196,  full-bleed ink (web tab)
+//   favicon.png        196,  full-bleed ink (web tab) — enlarged full mark (fills the tab, crisper small)
 //   icon-mono.png      1024, white mark on transparent (reuse: in-app logo / iOS tinted source)
 // And docs/social-preview.png (1280x640) — the GitHub repo social card (upload manually at
 // repo Settings → Social preview; GitHub has no API for it).
@@ -21,15 +21,17 @@ const INK = '#111827'
 const WHITE = '#ffffff'
 
 // Bus mask: white = keep, black = knock out (the two windows become transparent so the
-// mark composites on any background). Body + windows lean -8deg; wheels stay round/centred.
+// mark composites on any background). Body + windows lean -9deg; tri-axle wheels stay round
+// (front wheel + rear tandem — the doubled rear also signals the engine end).
 const MASK = `<defs><mask id="b" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
-  <g transform="translate(0,500) skewX(-8) translate(0,-500)">
-    <rect x="176" y="300" width="672" height="372" rx="84" fill="#fff"/>
-    <rect x="232" y="356" width="560" height="86" rx="28" fill="#000"/>
-    <rect x="232" y="502" width="450" height="86" rx="28" fill="#000"/>
+  <g transform="translate(0,500) skewX(-9) translate(0,-500)">
+    <rect x="176" y="300" width="672" height="372" rx="64" fill="#fff"/>
+    <rect x="232" y="356" width="560" height="86" rx="21" fill="#000"/>
+    <rect x="232" y="502" width="560" height="86" rx="21" fill="#000"/>
   </g>
-  <circle cx="350" cy="676" r="60" fill="#fff"/>
-  <circle cx="674" cy="676" r="60" fill="#fff"/>
+  <circle cx="276" cy="676" r="48" fill="#fff"/>
+  <circle cx="394" cy="676" r="48" fill="#fff"/>
+  <circle cx="692" cy="676" r="48" fill="#fff"/>
 </mask></defs>`
 const BUS = `<rect width="1024" height="1024" fill="${WHITE}" mask="url(#b)"/>`
 const svg = (inner) =>
@@ -38,6 +40,24 @@ const svg = (inner) =>
   )
 const FULL = svg(`<rect width="1024" height="1024" fill="${INK}"/>${MASK}${BUS}`)
 const MARK = svg(`${MASK}${BUS}`)
+
+// Favicon mark: the FULL tri-axle mark (wheels and all) scaled up ~1.24x about centre so it fills
+// the browser tab and the wheels stay legible small — rather than shrinking the padded launcher mark.
+const FAVICON_MASK = `<defs><mask id="fb" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+  <g transform="translate(512,512) scale(1.24) translate(-512,-512)">
+    <g transform="translate(0,500) skewX(-9) translate(0,-500)">
+      <rect x="176" y="300" width="672" height="372" rx="64" fill="#fff"/>
+      <rect x="232" y="356" width="560" height="86" rx="21" fill="#000"/>
+      <rect x="232" y="502" width="560" height="86" rx="21" fill="#000"/>
+    </g>
+    <circle cx="276" cy="676" r="48" fill="#fff"/>
+    <circle cx="394" cy="676" r="48" fill="#fff"/>
+    <circle cx="692" cy="676" r="48" fill="#fff"/>
+  </g>
+</mask></defs>`
+const FAVICON = svg(
+  `<rect width="1024" height="1024" fill="${INK}"/>${FAVICON_MASK}<rect width="1024" height="1024" fill="${WHITE}" mask="url(#fb)"/>`,
+)
 
 const blank = () =>
   sharp({
@@ -51,7 +71,7 @@ async function run() {
     .flatten({ background: INK })
     .png()
     .toFile(join(ASSETS, 'icon.png'))
-  await sharp(FULL)
+  await sharp(FAVICON)
     .resize(196, 196)
     .flatten({ background: INK })
     .png()
