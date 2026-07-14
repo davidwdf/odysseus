@@ -19,8 +19,9 @@ import { Text } from './Text'
 // own-crawl → R2 roadmap step) or a proper provider — this is the seam.
 const TILE = 256
 const DEFAULT_ZOOM = 16
-// Vivid pin fill (a lone stop, or a pole with no known operator) that reads over the map in
-// both modes. A multi-pole place colours each dot by its operator instead (OPERATOR_ACCENT).
+// Vivid pin fill fallback (a stop with no known operator) that reads over the map in both modes.
+// A lone stop is brand-coloured by its `operator`, and a multi-pole place colours each dot by its
+// own operator (OPERATOR_ACCENT) — e.g. GMB green; this rose is only the last-resort default.
 const PIN_COLOR = '#E11D48'
 const TILE_URL = (z: number, x: number, y: number) =>
   `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
@@ -82,6 +83,7 @@ export function MiniMap({
   lat,
   lng,
   points,
+  operator,
   label,
   actionLabel,
   height = 150,
@@ -94,6 +96,9 @@ export function MiniMap({
   lng: number
   /** Member poles to pin (multi-pole place). Omit/≤1 → a single centre pin at `lat,lng`. */
   points?: MapPoint[]
+  /** Operator of the lone stop — brand-colours the single centre pin (e.g. GMB green). Ignored
+   *  when `points` drives a multi-pole place (each dot is coloured by its own operator). */
+  operator?: OperatorId
   /** Stop name — names the maps pin. */
   label?: string
   /** Accessible label for the tap target, e.g. "Open in Maps". */
@@ -109,7 +114,9 @@ export function MiniMap({
   const { isDark } = useTheme()
   const [w, setW] = useState(0)
   const multi = !!points && points.length > 1
-  const pts: MapPoint[] = multi ? (points as MapPoint[]) : [{ id: '__single__', lat, lng }]
+  const pts: MapPoint[] = multi
+    ? (points as MapPoint[])
+    : [{ id: '__single__', lat, lng, operator }]
   // Centre on the points' centroid (so all pins are framed); zoom to fit them.
   const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
   const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
