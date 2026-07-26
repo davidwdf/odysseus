@@ -34,7 +34,13 @@ verified end-to-end. Citybus, on-device index, and the other screens are next.
 - **Durable Objects + WebSockets** behind `DataSource.watch()` for **watched stops & favorites**.
 - Freshness/stale states wired to live pushes; graceful upstream-outage handling.
 - Performance pass (bundle, TTI, animation jank); offline hardening.
-- Map view for Nearby (MapLibre).
+- **Basemap migration off OSM's public tiles → HK Lands Department** ([ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)):
+  keyless gov raster, Worker-cached, with `en`/`tc`/`sc` labels as a per-locale overlay. **This is now a
+  prerequisite, not polish** — the OSMF tile policy (rev. 2026-07-22) prohibits our current usage and would
+  block a native build outright.
+- **Street-level stop photos** ([ADR-050](./08-decision-log.md#adr-050--stop-imagery-google-street-view-deep-link-now-hk-streetscape-360-as-the-inline-target)):
+  Google Street View deep link first (free, keyless, hours of work), then HK **Streetscape 360** inline.
+- Map view for Nearby (MapLibre) — on LandsD tiles per ADR-049; Protomaps/R2 is the recorded fallback.
 
 **Exit:** watched stops update by push; the app holds up when upstream is flaky.
 

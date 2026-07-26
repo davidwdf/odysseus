@@ -272,12 +272,22 @@ it in-browser; Nearby filter chips; omnibox).
    resilience + true zh-Hans. Retires the cron stub. (ADR-021 backlog; `DATASET` binding already stubbed.)
 2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
    (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
-3. **Map view** (MapLibre) for Nearby.
-4. **Honest-motion slice** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
+3. **Basemap → HK Lands Department** ([ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay), decided 2026-07-26, **not started**) —
+   repoint `MiniMap` off OSM's public tiles (whose policy, rev. 2026-07-22, prohibits our usage and would
+   block a native build) onto keyless LandsD raster + the per-locale `{lang}` label overlay, Worker-cached.
+   **Two small fixes to land first:** link the `© OpenStreetMap` credit to `openstreetmap.org/copyright`
+   (`MiniMap.tsx:211`) and move `TILE_URL` (`MiniMap.tsx:26`) into config. Research + rejected options:
+   [`proposals/02`](./proposals/02-basemap-and-street-imagery.md).
+4. **Street-level stop photos** ([ADR-050](./08-decision-log.md#adr-050--stop-imagery-google-street-view-deep-link-now-hk-streetscape-360-as-the-inline-target)) —
+   the Google Street View **deep link** is hours of work, keyless and free; do it with or before the map work.
+   Then **Streetscape 360** inline, once we know whether a coordinate→panorama lookup works without their JS
+   SDK (email `3dmap@landsd.gov.hk` for the free key and ask).
+5. **Map view** (MapLibre) for Nearby — on LandsD tiles per ADR-049.
+6. **Honest-motion slice** — number-flip / split-flap ETA animation, freshness pulse, shimmer skeleton,
    reduced-motion + a11y pass (Reanimated is installed/wired but unused), swipe-to-favourite + haptics.
-5. **Departure-board mode** (ADR-026 follow-up) — an alternate Nearby view: one ETA-sorted stream of next
+7. **Departure-board mode** (ADR-026 follow-up) — an alternate Nearby view: one ETA-sorted stream of next
    departures across nearby stops; the natural home for the Split-Flap / Dot-Matrix display liveries.
-6. **Direction-aware stop clustering** ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant) — study in `.context/stop-merge-study/`).
+8. **Direction-aware stop clustering** ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant) — study in `.context/stop-merge-study/`).
    **Quick win ✅ done (2026-06-11):** the existing cross-operator pair merge now applies a **direction gate** —
    reject a candidate whose stops' **mean travel bearings** disagree by >45°, unless a co-run KMB+CTB route lists
    both at the same sequence position (`directionAgrees`/`bearingDeg` in `dataset.ts`). **Backend now fully built

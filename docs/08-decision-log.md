@@ -974,7 +974,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   ([`research/06`](../docs/research/06-feature-improvement-ideas.md)) — but only KMB+CTB are in v1 scope, so a
   hard-coded "hide GMB/MTR" toggle would be dead UI today.
 - **Decision:**
-  1. **On-device search index (first realization of [ADR-007](#adr-007--on-device-static-index)).** A new edge
+  1. **On-device search index (first realization of [ADR-007](#adr-007--nearby-computed-on-device)).** A new edge
      endpoint **`/v1/index`** ships a compact `SearchIndex` (`@nextbus/core/search`): routes **collapsed to one
      `RouteLite` per (operator, number, direction)** — riders search numbers, not service-type variants — and
      stops **pre-merged** so a same-kerb KMB+CTB place (`P:` id) appears once. Built off the shared memoized
@@ -1758,3 +1758,87 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Deferred (needs a device + HTTPS):** actually installing over the cloudflared tunnel and confirming the
   home-screen icon renders, plus the standalone **status-bar style** (`black-translucent`) + safe-area handling.
   Install requires a secure origin, so it can't be checked on `localhost`.
+
+## ADR-049 — The basemap is the HK Lands Department's, self-cached, with labels as a per-locale overlay
+- **Status:** **Decided 2026-07-26, not yet implemented.** Supersedes the interim OSM raster choice inside
+  [ADR-041](#adr-041--stop-detail-a-collapsing-header-shared-with-route-a-keyless-static-mini-map-and-an-enriched-summary) / [ADR-045](#adr-045--stop-detail-mini-map-pinned-with-brand-coloured-labelled-dots-and-a-scroll-linked-pole-highlight)
+  (which never claimed to be production-ready). Full option comparison, costs and verbatim licence clauses:
+  [`docs/proposals/02`](./proposals/02-basemap-and-street-imagery.md).
+- **Context:** `MiniMap` drew **OpenStreetMap's public raster tiles**, which cannot ship. The OSMF Tile
+  Usage Policy — **rewritten 2026-07-22, materially stricter** — now has a section headed *"Prohibited"*
+  covering prefetching, and states that library-default User-Agents (i.e. React Native's `<Image>` on
+  iOS/Android) *"will be blocked"*; proxying to fix the UA trips its separate anti-proxy clause. It also
+  warns commercial/donation-seeking services that *"access may be withdrawn at any point"*. Separately we
+  needed **real `zh-Hant`/`zh-Hans` map labels** — OSM's HK Chinese names are volunteer-contributed and
+  uneven — and we wanted to stay **keyless** ([ADR-016](#adr-016--slice-1-server-side-v1nearby-on-device-index-deferred)).
+- **Decisions:**
+  1. **Adopt the HK Lands Department (LandsD) tiles** via the CSDI Portal — keyless, free, no billing
+     account, explicitly licensed for commercial use. `https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png`
+     (z10–20). Authoritative HK geometry from the body that actually surveys the territory, so new
+     footbridges, reclamation and estates appear well before OSM has them.
+  2. **Labels are a separate overlay keyed on locale**, not part of the basemap:
+     `.../xyz/label/hk/{lang}/WGS84/{z}/{x}/{y}.png` with `{lang}` = `en` | `tc` | `sc` — a 1:1 match for our
+     three locales, so **`useLocale()` swaps one URL and the map relabels** with no restyling. This is the
+     single strongest reason to prefer LandsD and it satisfies golden rule 5 (bilingual is core) for the map
+     surface, which OSM never could.
+  3. **The dense survey cartography is a feature, not a flaw.** Pedestrian footbridges, subways and
+     landmark buildings are *exactly* what tells a rider which side of a road they're on — the hardest part
+     of finding an HK stop. We accept a less "pretty" map in exchange for self-location utility. This
+     reverses the concern raised in proposals/02 §4 and removes the dark-restyle spike from the critical path.
+  4. **Cache tiles ourselves in the Worker.** The [CSDI T&C](https://portal.csdi.gov.hk/csdi-webpage/doc/TNC)
+     affirmatively grant *"download, distribute, reproduce … for both commercial and non-commercial
+     purposes"* including *"digital copies and copies placed on other websites"*, and contain **no** caching,
+     scraping or mirroring prohibition. Caching also **helps** us honour the one stated limit (*"shall not
+     invoke the API with large amount of requests within a short period"*). Two implementation notes: their
+     responses carry `Cache-Control: private`, which we must deliberately override for a Worker/CDN cache to
+     store anything; and **no speculative territory-wide pre-warm** — demand-driven caching only, since a
+     full pyramid crawl is precisely what that sentence forbids.
+  5. **Attribution is a hard requirement, not best-effort.** The LandsD **logo on the map face**
+     (28×28 px in their own reference sample) plus a *"Map from Lands Department"* / *"地圖由地政總署提供"*
+     notice linking to their disclaimer. **Self-host a copy of the logo** — the asset URL is undocumented and
+     could move. This extends the ADR-038 "About the data" sources list.
+  6. **Stay on raster for now; vector is a later upgrade.** Raster reaches **z20** (our mini-map lives at
+     z16–17) and needs no renderer change. The vector service exists (`/vt/basemap/...`, style is Mapbox GL
+     spec v8, 813 layers) but documents only z9–15 and would need a scripted recolour for dark mode.
+  7. **Keep Protomaps/PMTiles-on-R2 as the documented fallback**, not the primary. A measured **38 MB** for
+     all of HK at z0–15, genuinely themeable, ~$0–5/month. Take it if we later need a real dark flavour or
+     offline packs. Recorded so the fallback isn't re-researched from scratch.
+  8. **Google Maps is rejected on architecture, not price.** Its ToS §3.2.3(a)/(b) prohibit caching and
+     re-hosting tiles and imagery, and §3.2.3(e) bans Google imagery on the same screen as a non-Google map —
+     which our Place-detail layout is. Deep links out remain fine (ADR-050).
+- **Consequences:** the map becomes free, keyless, more accurate for HK, and properly trilingual, and we own
+  the cache. We give up client-side theming until/unless we move to vector, so the existing
+  `DARK_TILE_FILTER` CSS-invert hack stays for dark mode in the interim.
+- **Do first, independent of the migration:** link the `© OpenStreetMap` credit to
+  `openstreetmap.org/copyright` (currently plain text — an ODbL requirement) and move the hard-coded
+  `TILE_URL` into config so the source can be repointed without an app release.
+
+## ADR-050 — Stop imagery: Google Street View deep link now, HK Streetscape 360 as the inline target
+- **Status:** **Decided 2026-07-26, not yet implemented.** Two-step: the deep link is unblocked; the inline
+  panorama depends on one open question. See [`docs/proposals/02` §6](./proposals/02-basemap-and-street-imagery.md#6-street-level-imagery-compared).
+- **Context:** HK stops are frequently one of several poles outside a mall exit or across a flyover, and
+  neither a map pin nor a stop name reliably answers *"am I at the right pole?"*. A photo of the kerb does.
+  We already carry `Stop.bearingDeg` ([ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant) follow-up), so we
+  can aim a panorama the way the bus travels — the view that actually identifies the stop.
+- **Decisions:**
+  1. **Ship the keyless Google deep link first.** `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat}%2C{lng}&heading={bearingDeg}`
+     — the Maps URLs API needs **no API key**, has no SKU, quota or billing account, and because Google
+     renders the imagery in its own app the caching/attribution/no-mixing terms don't reach us. Slots in
+     beside the existing "Open in Maps" hand-off (the ADR-045 pin action sheet). Hours of work, £0.
+  2. **Target LandsD's own Streetscape 360 for inline imagery.** `https://data.map.gov.hk/api/3d-mms-data/{panorama}?key={key}`
+     — HK government 360° street panoramas, **territory-wide since March 2025**, free API key from
+     `3dmap@landsd.gov.hk`, published limits of 5 GB/s and 100 concurrent users. Under the same CSDI grant as
+     ADR-049 it is very likely **cacheable**, which no Google product permits — the difference between a
+     per-stop photo being free forever and being metered per view. It also sits on the same screen as our map
+     without a licence conflict, which Street View Static cannot.
+  3. **Reject the Street View Static API** for inline use. Caching/re-hosting imagery is prohibited outright
+     (the much-cited "30-day rule" covers lat/lng values, not imagery — only `pano_ID` may be stored
+     indefinitely), and showing it beside a non-Google map is separately banned.
+  4. **Honesty applies to imagery too** ([ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown)): panoramas go stale —
+     HK stops move for roadworks — and coverage is thin inside termini/BBIs. Label the capture date where the
+     source gives us one, treat the photo as a **hint**, and keep the map plus stop name authoritative.
+- **Open question blocking (2):** the docs don't describe a coordinate → panorama lookup (paths are said to be
+  *"returned using the JavaScript SDK included in the demonstration code"*) and the format appears to be a
+  bespoke `.pano`. **Whether a stop coordinate can be resolved to a panorama without running their JS SDK,
+  and whether the format is renderable in React Native, decides this.** Ask when requesting the key. If the
+  answer is no, decision (1) stands as the shipped feature and this becomes a watch item.

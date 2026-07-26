@@ -143,6 +143,34 @@ to ship to the device and query **locally** (distance over a typed array, or a g
 So "nearby" is **instant and offline**: no server round-trip to find stops; we only hit the
 network to fetch live ETAs for the routes at those stops.
 
+## Map tiles & street imagery — HK Lands Department (ADR-049, ADR-050)
+Not bus data, but the same keyless-HK-gov shape, so it belongs here. The basemap comes from the
+**Lands Department (地政總署)** via the [CSDI Portal](https://portal.csdi.gov.hk/csdi-webpage/apilist) —
+**no API key, free, commercial use explicitly permitted, and cacheable by us**. Pin `v1.0.0`; the docs
+warn old versions are removed without notice.
+
+| Service | Endpoint | Notes |
+|---|---|---|
+| **Topographic** (basemap) | `https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png` | z10–20. Dense survey cartography — footbridges/subways/landmarks, which is *why* we chose it (ADR-049). |
+| **Map Label** (labels overlay) | `.../xyz/label/hk/{lang}/WGS84/{z}/{x}/{y}.png` | `{lang}` = `en`\|`tc`\|`sc` — **our three locales exactly**. Separate layer, so `useLocale()` swaps one URL. |
+| **Vector** (later) | `.../vt/basemap/WGS84/tile/{z}/{y}/{x}.pbf` | ⚠️ axis order is **`{z}/{y}/{x}`** (ESRI). Style is Mapbox GL spec v8, 813 layers. Docs say z9–15. |
+| **Streetscape 360** | `https://data.map.gov.hk/api/3d-mms-data/{panorama}?key={key}` | Gov 360° street panoramas, territory-wide since Mar 2025. Free key: `3dmap@landsd.gov.hk`. |
+
+**Also available, keyless, and useful later** ([backlog](./07-backlog.md)): **3D Pedestrian Route Search**
+(footbridge-aware walking times — the honest way to do "leave now"), **Location Search** (text → HK
+addresses/buildings; its `districtEN`/`districtZH` gives us the 18-district gazetteer ADR-042 wanted) and
+**Search Nearby** (facilities within 1 km). ⚠️ Both search APIs return **HK80 Easting/Northing, not
+WGS84** — they need an HK80↔WGS84 conversion in `@nextbus/core`. **Avoid the Imagery/satellite layers**:
+they drag in Copernicus Sentinel-2 / Landsat third-party citation obligations that the plain topographic
+and vector basemaps do not.
+
+Caching is permitted by the CSDI grant, but note tiles arrive with `Cache-Control: private` (must be
+deliberately overridden in the Worker) and **no speculative territory-wide pre-warm** — the one stated
+limit is against "large amount of requests within a short period". Attribution is stricter than for the
+bus data: the **LandsD logo on the map face** plus a "Map from Lands Department" notice. Full research,
+costs, rejected alternatives and verbatim licence clauses:
+[`proposals/02`](./proposals/02-basemap-and-street-imagery.md).
+
 ## Licensing / attribution
 data.gov.hk content is provided under the Government's open-data terms — **attribution required**.
 This is now satisfied in-app by the **"About the data" screen** ([ADR-038](./08-decision-log.md)):

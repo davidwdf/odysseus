@@ -120,6 +120,36 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       KMB `route-eta` (one call per route); per-stop times + seq-in-node + a fixed glass header shipped with
       it. Follow-ups: **per-bus identity** (one token gliding the whole line), and **CTB** (needs the
       own-crawl — no bulk route-eta).
+- [~] **Street-level photo of the stop ("what does the kerb look like?")** — **DECIDED, [ADR-050](./08-decision-log.md#adr-050--stop-imagery-google-street-view-deep-link-now-hk-streetscape-360-as-the-inline-target).**
+      HK stops are often one of several poles outside a mall exit or across a flyover, and a photo answers
+      "am I in the right place?" faster than a map pin. Two steps:
+      1. **Google Street View deep link** — free, keyless, no ToS exposure; `Stop.bearingDeg` makes the pano
+         open facing the direction of travel. **Unblocked, do first**, beside the existing "Open in Maps"
+         hand-off (see the tappable-pin action sheet above).
+      2. **Streetscape 360 (HK Lands Department)** — the government's *own* 360° panoramas, territory-wide
+         since Mar 2025, free key from `3dmap@landsd.gov.hk`, cacheable under the CSDI grant. **Blocked on one
+         question:** can a stop coordinate be resolved to a panorama without running their JS SDK, and is
+         `.pano` renderable in RN? Ask when requesting the key.
+      **Street View Static API is ruled out** — not on price: the Maps ToS bans caching/re-hosting imagery
+      *and* bans showing Street View "on the same screen" as a non-Google map, which our Place-detail layout
+      is. Caveats for any source: panos go stale (HK stops move for works), coverage is thin inside termini /
+      BBIs — treat imagery as a hint, label its capture date, keep map + name authoritative.
+- [~] **Basemap migration off OSM → LandsD** — **DECIDED, [ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay).**
+      `MiniMap`'s `tile.openstreetmap.org` raster is dev-only: the OSMF policy (rewritten 2026-07-22) now
+      *prohibits* prefetching and says library-default User-Agents — i.e. RN's `<Image>` on native —
+      **"will be blocked"**. Moving to **LandsD raster** (keyless, $0, z10–20, official `en`/`tc`/`sc` labels
+      as a separate overlay, Worker-cacheable) with **Protomaps→R2** (measured 38 MB for all of HK z0–15) as
+      the documented fallback if we later need true dark mode or offline packs. Two fixes to make **now**,
+      before the migration: link the `© OpenStreetMap` credit to `openstreetmap.org/copyright`
+      (`MiniMap.tsx:211`, currently plain text — an ODbL requirement) and move the hard-coded `TILE_URL`
+      (`MiniMap.tsx:26`) into config so the source can be repointed without an app release.
+- [ ] **Bonus HK-gov APIs that come with LandsD** (all keyless, see
+      [proposals/02 §5](./proposals/02-basemap-and-street-imagery.md#5-bonus-features-that-come-along-for-free)):
+      **3D Pedestrian Route Search** — the honest way to do "leave now" walking times in a city where a 50 m
+      straight line is a 400 m footbridge detour; **Location Search** — extend search to buildings/places, and
+      its `districtEN`/`districtZH` field supplies the 18-district gazetteer that ADR-042 follow-up #1 wanted
+      for "towards {district}"; **Search Nearby** — landmark context on a stop card. Both return **HK80
+      Easting/Northing**, so this needs an HK80↔WGS84 conversion in `@nextbus/core`.
 - [ ] **Self-drawing route polyline** animation; animated "progress" fill toward your stop.
 - [ ] **Frequency heat** — visualize which nearby stops have the most buses arriving soon.
 
