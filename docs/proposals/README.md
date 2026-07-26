@@ -7,6 +7,7 @@
 > | [00 — Fast & Fun Wins](./00-fast-and-fun-wins.md) | High impact / low effort, mostly on **data we already download**. Start here. |
 > | [01 — Bigger Bets](./01-bigger-bets.md) | Larger, higher-ceiling work (map, alarms, offline, multimodal, widgets). |
 > | [02 — Basemap & street imagery](./02-basemap-and-street-imagery.md) | Where map tiles and stop photos should come from — **HK Lands Department** vs Protomaps vs Google — with costs, licence terms and the bonus HK-gov APIs that come with it (2026-07-26). Includes two compliance fixes to make now. |
+> | [03 — Clean separation, native readiness & Phase 2](./03-clean-separation-and-phase2-plan.md) | The **work plan** for segmenting the codebase behind generated contracts so hand-written iOS/Android clients can't diverge — plus launch blockers, mechanical boundary enforcement, and where Durable Objects + WebSockets slot in with a costed model (2026-07-26). |
 ## How these are scored
 - **Impact** ⭐–⭐⭐⭐⭐⭐ — value to a daily rider / how visible.
 - **Effort** S (hours) · M (a day or few) · L (a slice/sprint).
