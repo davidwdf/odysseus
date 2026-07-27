@@ -61,11 +61,42 @@ const latToWorldY = (lat: number, scale: number) => {
   return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * scale
 }
 
+/** Ground metres per screen pixel at a zoom and latitude (Web Mercator, 256 px tiles). */
+const metresPerPixel = (lat: number, z: number) =>
+  (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** z
+
+/**
+ * Highest zoom whose viewport still shows at least `metres` of ground across.
+ *
+ * This is how a **lone** stop gets framed. It used to take a flat `DEFAULT_ZOOM = 16` while a
+ * multi-pole place went through `fitZoom` and landed at 18–19 — eight times the ground per axis,
+ * so a single-pole stop (every GMB stand, most Citybus stops) rendered visibly more zoomed-out
+ * than its multi-pole neighbour for no reason a rider could see. Framing by metres rather than by
+ * a zoom constant also makes the two agree on a tablet, where a fixed zoom covers far more ground
+ * than it does on a phone.
+ */
+function zoomForSpan(metres: number, w: number, lat: number): number {
+  for (let z = Math.min(19, tileSource.maxZoom); z > tileSource.minZoom; z--) {
+    if (w * metresPerPixel(lat, z) >= metres) return z
+  }
+  return tileSource.minZoom
+}
+
+/**
+ * **Minimum** ground a single-pin map must show across. 100 m is just under what z19 covers on a
+ * ~390 px phone (108 m), so a lone stop lands on the same z19 a real place's poles do — the two
+ * read at exactly one scale — and steps down only on a genuinely narrow viewport. Close enough to
+ * see which side of the road the pin is on, which is why we took LandsD's dense cartography
+ * (ADR-049).
+ */
+const SINGLE_PIN_MIN_SPAN_M = 100
+
 /** Highest zoom at which all points fit within ~70% of the viewport (so pins aren't clipped).
- *  Single point → DEFAULT_ZOOM. The poles of a place sit ≤30 m apart, so this lands ~18–19,
- *  inside LandsD's z10–20 raster range. */
+ *  The poles of a place sit ≤30 m apart, so this lands ~18–19, inside LandsD's z10–20 range. */
 function fitZoom(pts: Array<{ lat: number; lng: number }>, w: number, h: number): number {
-  if (pts.length < 2 || w <= 0) return DEFAULT_ZOOM
+  if (w <= 0) return DEFAULT_ZOOM
+  const lat = pts[0]?.lat ?? 22.3
+  if (pts.length < 2) return zoomForSpan(SINGLE_PIN_MIN_SPAN_M, w, lat)
   const minLat = Math.min(...pts.map((p) => p.lat))
   const maxLat = Math.max(...pts.map((p) => p.lat))
   const minLng = Math.min(...pts.map((p) => p.lng))
@@ -96,7 +127,7 @@ export function MiniMap({
   label,
   actionLabel,
   height = 150,
-  zoom = DEFAULT_ZOOM,
+  zoom,
   activeId,
   onPointPress,
   className,
@@ -113,6 +144,7 @@ export function MiniMap({
   /** Accessible label for the tap target, e.g. "Open in Maps". */
   actionLabel: string
   height?: number
+  /** Override the automatic framing. Omit it — `fitZoom` frames one pin and many consistently. */
   zoom?: number
   /** Id of the pole to highlight (dims the rest). Only meaningful with `points`. */
   activeId?: string | null
@@ -130,10 +162,11 @@ export function MiniMap({
   // Centre on the points' centroid (so all pins are framed); zoom to fit them.
   const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
   const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
-  // Clamp into the source's supported range — outside it LandsD 404s and we'd render a hole.
+  // One framing rule for one pin and for many (see `fitZoom`), clamped into the source's
+  // supported range — outside it LandsD 404s and we'd render a hole.
   const z = Math.min(
     tileSource.maxZoom,
-    Math.max(tileSource.minZoom, multi ? fitZoom(pts, w, height) : zoom),
+    Math.max(tileSource.minZoom, zoom ?? fitZoom(pts, w, height)),
   )
   const scale = TILE * 2 ** z
   const n = 2 ** z

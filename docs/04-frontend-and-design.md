@@ -179,6 +179,13 @@ name, rather than implying a live position.
 - Labels are a **separate per-locale overlay** (`en`/`tc`/`sc`), so switching language relabels the
   map with no restyling. Dark mode is derived with a CSS invert filter (`invertForDark`) because the
   raster service ships no dark cartography.
+- **One framing rule, in metres, not zoom levels.** `fitZoom` frames a multi-pole place so every pin
+  fits inside 70% of the viewport (poles sit ≤30 m apart, so it lands z18–19). A **lone** stop has
+  nothing to fit, and used to fall back to a flat `DEFAULT_ZOOM = 16` — eight times the ground per
+  axis, so every single-pole stop (all of GMB, most of Citybus) looked conspicuously zoomed-out next
+  to its multi-pole neighbour. It now asks for a **minimum ground span** (`SINGLE_PIN_MIN_SPAN_M`,
+  100 m) and takes the highest zoom that still shows it, which lands on the same z19 a place does and
+  keeps the two agreeing on a tablet, where a fixed zoom covers far more ground than on a phone.
 - Today's map is the static `MiniMap` on Stop/Place detail. **MapLibre GL**
   (`@maplibre/maplibre-react-native` + `maplibre-gl`) remains the route to a real interactive map in
   Phase 2; it consumes the same `TileSource`, so the tile question is already settled.
