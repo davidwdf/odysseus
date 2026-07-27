@@ -356,6 +356,35 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
   was served as 0, 0 and returned an empty list with a **200** instead of a 400. Fixed.
   **Known-wrong-but-faithful** (left alone deliberately; WP1-1 changes no shapes — see ADR-052): errors are
   `{error}` not `{code, message, retryable}`, and `Route.service` is served at two fidelities under one type.
+- **Wave 1 complete — WP1-2 · WP1-3 · WP1-4 · WP1-5** (ADR-051 · ADR-059 · ADR-060), built by four agents in
+  parallel worktrees and integrated one at a time:
+  - **`packages/ports`** — the six platform seams (`KeyValueStore`, `LocationProvider`, `LocaleProvider`,
+    `LinkOpener`, `Clock`, `TileSource`) as **declaration-only** interfaces; `ls packages/ports/src` is the
+    iOS/Android porting checklist. Imports nothing, so ports take domain types as *type parameters* —
+    `TileSource<LocaleId, ImageAsset>`. `apps/mobile/lib/tileSource.ts` now **binds** the port rather than
+    re-declaring it, so the compiler checks the equivalence. **Nothing is wired to the other five yet** — that is
+    Wave 2/3, one adapter at a time.
+  - **The id grammar** — one parser in `packages/core/src/ids.ts` (not in `contract`, because `core/src/eta.ts`
+    needs it and ADR-052's type-only gate forbids that edge at runtime); ABNF + a 60-row corpus in
+    `packages/contract/src/ids/`. The plan listed **8** ad-hoc parse sites; a grep found **12**. All drained —
+    **the allowlist is empty** — and the gate is keyed on file + snippet, not line numbers, which had already
+    drifted.
+  - **The boundary engine** — `layers.json` is the single declaration, generating both the dependency-cruiser
+    ruleset and `biome.json`'s overrides, with drift gated. **13 injected violations, every gate fires**,
+    including the two transitive cases. Two tools because neither suffices: the cruiser sees paths, `import type`
+    and reach; Biome is textual and catches platform globals that need no import.
+  - **The fixture corpus** — `@spec <module>#<export>` + `scripts/check-spec-coverage.mjs`, **36 rules, 274
+    language-neutral JSON cases, 100% branch coverage gated**, both rot directions checked, 18 named boundary
+    rows asserted by name. This is the equivalence mechanism for the *hand-ported* half that no schema can cover.
+  - **Two real bugs fixed as a result.** `formatClock` used `toLocaleTimeString`, whose output depends on the
+    host ICU build *and the device timezone* — a rider abroad saw their own local time on a Hong Kong board; now
+    computed arithmetically from a fixed HK offset, and the kernel bans the `toLocale*` pattern. And
+    **`inferBusMarkers` could drop a bus entirely** — a stale departed reading acted as its successor's
+    predecessor, so a bus one minute away vanished from the route view; departed readings are now discarded
+    before the discontinuity scan. Six further defects are recorded as `knownDefect` corpus rows.
+  - **Verified:** typecheck 9/9 · 22 edge + 88 mobile + 282 core · 4 script gates · 13 boundary self-tests ·
+    100% `core` branch coverage · Biome at the 7 pre-existing findings. WP1-2 also drove the Worker by `curl`
+    and walked the PWA in a browser.
 - **Docs:** plan `01–10`, the full ADR set in [`docs/08`](./08-decision-log.md) (Wave 0 adds **055** ·
   **057** · **058** and implements **049**), research + proposals sets, `CLAUDE.md` / `AGENTS.md`,
   pre-commit docs-check skill + hook.
@@ -426,23 +455,27 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
-1. **Waves 1–2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
-   **WP1-1 (`packages/contract`) is ✅ done** — see *Done & verified* and
-   [ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe).
-   Remaining in Wave 1, and **WP1-3/WP1-4 have no dependencies so they can start immediately in parallel**:
-   - **WP1-2 — id grammar.** ABNF + one parser for `KMB:1:outbound:1`, `P:<a>+<b>`, `GMB:{no}:{bound}:{gtfsId}`.
-     ⚠️ **Seed `check-no-adhoc-id-parsing.mjs`'s allowlist by *grepping*, not by copying the plan's line
-     numbers** — they have already drifted: `app/stop/[id].tsx:312` is no longer a parse site. The other seven
-     were re-verified 2026-07-27 (`app/search.tsx:163` · `app/stop/[id].tsx:285`, `:292` · `app/route/[id].tsx:58`
-     · `components/StopRow.tsx:20` · `packages/core/src/eta.ts:111`).
-   - **WP1-3 — `packages/ports`** (the 6 type-only interfaces). The `import type` + emit-and-check pattern from
-     WP1-1 is directly reusable for its "emits no non-empty `.js`" acceptance.
-   - **WP1-4 — the `layers.json` enforcement engine.** Note the dependency it must encode: **core → contract,
-     type-only**; contract may never import core.
-   - **WP1-5 — fixture harness** (`@spec` ↔ corpus cross-check). This is the mechanism for the *hand-ported*
-     half of cross-platform equivalence, which no schema can cover — see ADR-052's context.
-   Then Wave 2. **WP2-6 (`snapFix`) already landed** in `apps/mobile/lib/geoSnap.ts` and just needs moving;
-   **WP2-5 is a known-broken-scheme migration** — fix the favourite id scheme before ADR-032 ships.
+1. **Wave 2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
+   **Wave 1 is ✅ complete — WP1-1 … WP1-5 all landed and verified** (ADR-051, ADR-052, ADR-059, ADR-060); see
+   *Done & verified*. Wave 2 is the parity-guarded domain extraction, and it is now much safer than the plan
+   assumed, because the *"near-zero test coverage"* risk it was written against is closed: `packages/core` has a
+   274-case corpus at 100% branch coverage, so a "mechanical, zero-behaviour-change" move is now checkable
+   rather than asserted. **WP2-6 (`snapFix`) already landed** in `apps/mobile/lib/geoSnap.ts` and just needs
+   moving; **WP2-5 is a known-broken-scheme migration** — fix the favourite id scheme before ADR-032 ships, and
+   note WP1-2 left `apps/mobile/lib/preferences.ts`'s own `favoriteRouteKey` template in place precisely because
+   folding it into the shared formatter *is* that migration.
+   **Highest-value loose ends Wave 1 left, in priority order:**
+   - **Six recorded `knownDefect` rows in `packages/core/spec/`** (ADR-060) — real bugs in shipped code, each
+     with its corrected expectation already written. Cheapest correctness work available: `formatDistance`
+     printing `"1000m"` for 995–999 m; `estimateChildFare('')` → `"0.0"`; `formatStopCount(1)` → `"1 stops"`;
+     `formatServiceHours` leaking a raw `"25:35"`; `buildRouteTrie('')` making the trie root terminal.
+   - **The error taxonomy** (ADR-052 (a) + ADR-059's last follow-up) — `{error}` → `{code, message, retryable}`,
+     and a malformed id returning `502` where `400` is correct. One job, because a `502` reads as *retryable* and
+     an iOS Widget holding a stale favourite would retry forever.
+   - **Settle the corpus format** before WP3-3 (ADR-060's open question): `groups` + `doc` repo-wide, so a native
+     scaffold doesn't have to read two shapes.
+   - **`layers.json` is 44% over its line budget** — per the plan's own risk row that is the signal to simplify
+     the generator, not to grow it.
 2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
    (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
 3. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL, and **deliberately

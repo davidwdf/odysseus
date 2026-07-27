@@ -194,6 +194,22 @@ others in the same wave** — this matters because agents will be fanned across 
 
 ### Wave 1 — Contract foundation (WP1-1 first, then parallel)
 
+> **Status 2026-07-28: Wave 1 is COMPLETE — WP1-1 … WP1-5 all landed and verified** (ADR-051, ADR-052,
+> ADR-059, ADR-060). WP1-2…5 were built by four agents in parallel worktrees and integrated one at a
+> time. Four corrections to what is written below, recorded because the plan was wrong in ways worth
+> knowing:
+> **(1)** WP1-2's parser could **not** live in `packages/contract` — `packages/core/src/eta.ts` needs it,
+> and ADR-052's type-only gate forbids a runtime `core → contract` edge. Parser in `core`, ABNF + corpus
+> in `contract`. **(2)** There were **12** ad-hoc id-parsing sites, not 8; the four extras were in
+> `apps/edge/src/{dataset,search-index,stop-route}.ts` and `data-normalize/src/shards.ts`, and the line
+> numbers listed below had already drifted. The allowlist is now empty. **(3)** WP1-1 as sketched would
+> have made zod a *runtime* dependency of the package every screen imports; it is `import type` only, so
+> zod never enters the client bundle. **(4)** WP1-4 came in at **216 lines against the ~150 budget**,
+> which by the risk table below is the trigger to simplify rather than grow.
+> Two real bugs fell out of the work: `formatClock` consulted the device timezone and host ICU, and
+> `inferBusMarkers` could drop an approaching bus from the route view entirely. Both fixed; six further
+> defects are recorded as `knownDefect` corpus rows.
+
 | ID | Title | Scope | Acceptance | Depends |
 |---|---|---|---|---|
 | **WP1-1** | `packages/contract` | Transcribe today's types to Zod with **no shape changes**; `packages/core/src/types.ts` becomes `z.infer` re-exports | **Zero diff in `apps/mobile/**` and `apps/edge/**`.** OpenAPI 3.1 emits; drift-gated | — |

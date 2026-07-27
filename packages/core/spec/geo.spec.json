@@ -1,0 +1,622 @@
+{
+  "module": "geo",
+  "source": "src/geo.ts",
+  "version": 1,
+  "doc": "Distance, walk-time and bearing rules. ADR-008's honesty applies to geography as much as to time: straight-line distance is an approximation, so metres are rounded to the nearest 10 and walk time to a whole minute, and nothing here pretends to be a road distance. Two conventions specific to this file: (1) the four float-returning groups compare with a `tolerance` in the same unit as the value, because no two languages' trigonometry libraries agree to the last bit — a port must assert |actual - expected| <= tolerance, NOT equality; (2) every rounding in this file is HALF-AWAY-FROM-ZERO on positives (JS `Math.round`, Swift `rounded()`, Kotlin `Math.round`). It is NOT banker's rounding: Kotlin's `Math.rint`, Python's `round()` and .NET's `Math.Round` default to half-to-even and will disagree on the .5 cases, which are called out individually below.",
+  "groups": {
+    "haversineMeters": {
+      "doc": "Great-circle distance between two WGS84 points, in metres, on a sphere of mean radius 6 371 008.8 m (the WGS84 authalic radius — a port must use the same constant or every figure drifts). Compare within `tolerance`.",
+      "cases": [
+        {
+          "name": "central-to-tsim-sha-tsui",
+          "why": "Across Victoria Harbour. About 2.35 km straight line; the real walk is a tunnel or a ferry, which is exactly why this is only ever shown as an approximation.",
+          "args": {
+            "a": {
+              "lat": 22.2819,
+              "lng": 114.1585
+            },
+            "b": {
+              "lat": 22.2988,
+              "lng": 114.1722
+            }
+          },
+          "expect": {
+            "meters": 2349.0794,
+            "tolerance": 0.001
+          }
+        },
+        {
+          "name": "identical-points-are-exactly-zero",
+          "why": "Tolerance 0: this must be exact, not near-zero. A port whose formula loses precision at zero would show a rider standing at the pole a non-zero distance.",
+          "args": {
+            "a": {
+              "lat": 22.3193,
+              "lng": 114.1694
+            },
+            "b": {
+              "lat": 22.3193,
+              "lng": 114.1694
+            }
+          },
+          "expect": {
+            "meters": 0,
+            "tolerance": 0
+          }
+        },
+        {
+          "name": "two-poles-of-one-place",
+          "why": "The scale that matters most: two kerbs of the same interchange, ~68 m apart. ADR-042 clustering lives at this scale, so a port that is accurate over kilometres but sloppy over tens of metres breaks place merging rather than distance labels.",
+          "args": {
+            "a": {
+              "lat": 22.3193,
+              "lng": 114.1694
+            },
+            "b": {
+              "lat": 22.31975,
+              "lng": 114.16985
+            }
+          },
+          "expect": {
+            "meters": 68.1649,
+            "tolerance": 0.001
+          }
+        },
+        {
+          "name": "one-degree-of-latitude",
+          "why": "A scale-check independent of Hong Kong: one degree of latitude on this sphere. Equal to one degree of longitude at the equator, which catches a lat/lng transposition.",
+          "args": {
+            "a": {
+              "lat": 0,
+              "lng": 0
+            },
+            "b": {
+              "lat": 1,
+              "lng": 0
+            }
+          },
+          "expect": {
+            "meters": 111195.0802,
+            "tolerance": 0.001
+          }
+        },
+        {
+          "name": "antipodal-points-do-not-overflow",
+          "why": "Half the sphere's circumference. The formula clamps the argument of asin to 1, so floating-point error just past the antipode yields the maximum distance rather than NaN. A port that omits the clamp returns NaN here on some inputs and the distance column silently blanks.",
+          "args": {
+            "a": {
+              "lat": 0,
+              "lng": 0
+            },
+            "b": {
+              "lat": 0,
+              "lng": 180
+            }
+          },
+          "expect": {
+            "meters": 20015114.442,
+            "tolerance": 0.01
+          }
+        }
+      ]
+    },
+    "routeDistanceM": {
+      "doc": "Total straight-line length of an ordered path — the sum of great-circle hops. Used as an APPROXIMATE bus-route distance from its stop coordinates, because HK open data carries no route polylines. It therefore UNDER-counts: a bus follows curving roads, not straight hops between stops. Only ever shown as an explicit estimate (ADR-008/ADR-044).",
+      "cases": [
+        {
+          "name": "empty-path-is-zero",
+          "args": {
+            "points": []
+          },
+          "expect": {
+            "meters": 0,
+            "tolerance": 0
+          }
+        },
+        {
+          "name": "single-point-is-zero",
+          "why": "One stop is not a journey. Guards the loop's first iteration, which has no predecessor.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.2819,
+                "lng": 114.1585
+              }
+            ]
+          },
+          "expect": {
+            "meters": 0,
+            "tolerance": 0
+          }
+        },
+        {
+          "name": "three-stops-sum-two-hops",
+          "why": "2349.0794 + 2297.6258. Proves the hops are summed consecutively rather than measured origin-to-terminus, which would give a much shorter figure for any route that curves back.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.2819,
+                "lng": 114.1585
+              },
+              {
+                "lat": 22.2988,
+                "lng": 114.1722
+              },
+              {
+                "lat": 22.3193,
+                "lng": 114.1694
+              }
+            ]
+          },
+          "expect": {
+            "meters": 4646.7052,
+            "tolerance": 0.001
+          }
+        },
+        {
+          "name": "a-circular-route-returns-to-its-origin-with-a-non-zero-length",
+          "why": "The origin and terminus coincide, as on a circular route. Straight-line displacement is zero but the path length is not — the row that catches a port measuring first-to-last.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.3193,
+                "lng": 114.1694
+              },
+              {
+                "lat": 22.2988,
+                "lng": 114.1722
+              },
+              {
+                "lat": 22.3193,
+                "lng": 114.1694
+              }
+            ]
+          },
+          "expect": {
+            "meters": 4595.2517,
+            "tolerance": 0.001
+          }
+        }
+      ]
+    },
+    "walkMinutes": {
+      "doc": "Estimated walking minutes for a straight-line distance at 80 m/min (~4.8 km/h), rounded to a whole minute with a floor of 1. The floor exists because '0 min walk' is not information.",
+      "cases": [
+        {
+          "name": "zero-distance-is-floored-to-one-minute",
+          "why": "Standing at the pole still reads '1 min walk'. Never 0.",
+          "args": {
+            "distanceM": 0
+          },
+          "expect": 1
+        },
+        {
+          "name": "very-short-walk-is-floored-to-one-minute",
+          "args": {
+            "distanceM": 39
+          },
+          "expect": 1
+        },
+        {
+          "name": "half-minute-rounds-up-to-one",
+          "why": "40 m is exactly 0.5 min. Half-away-from-zero gives 1; the floor would give 1 anyway, so this row is only a partial discriminator — see the 200 m row for the real one.",
+          "args": {
+            "distanceM": 40
+          },
+          "expect": 1
+        },
+        {
+          "name": "one-and-a-half-minutes-rounds-up",
+          "args": {
+            "distanceM": 120
+          },
+          "expect": 2
+        },
+        {
+          "name": "exact-half-minute-rounds-away-from-zero",
+          "why": "THE ROUNDING-MODE ROW. 200 m is exactly 2.5 min. Half-away-from-zero gives 3. Banker's rounding (Kotlin Math.rint, Python round, .NET default) gives 2 and this row goes red — which is the point.",
+          "args": {
+            "distanceM": 200
+          },
+          "expect": 3
+        },
+        {
+          "name": "rounds-down-below-the-half",
+          "args": {
+            "distanceM": 199
+          },
+          "expect": 2
+        },
+        {
+          "name": "four-minute-pole",
+          "args": {
+            "distanceM": 320
+          },
+          "expect": 4
+        },
+        {
+          "name": "six-minute-pole",
+          "args": {
+            "distanceM": 480
+          },
+          "expect": 6
+        },
+        {
+          "name": "long-walk",
+          "args": {
+            "distanceM": 1000
+          },
+          "expect": 13
+        }
+      ]
+    },
+    "formatDistance": {
+      "doc": "Human distance. Under 1 km: metres rounded to the nearest 10, no space before the unit ('200m'). At or above 1 km: one decimal ('1.2km'). Unit symbols are locale-neutral, so this takes no locale. The tight spacing is deliberate — this is a glanceable label, not prose.",
+      "cases": [
+        {
+          "name": "at-the-pole",
+          "args": {
+            "distanceM": 0
+          },
+          "expect": "0m"
+        },
+        {
+          "name": "under-five-metres-reads-as-zero",
+          "why": "Rounding to the nearest 10 means 4 m shows '0m'. Acceptable: the rider is standing at the stop.",
+          "args": {
+            "distanceM": 4
+          },
+          "expect": "0m"
+        },
+        {
+          "name": "five-metres-rounds-up-to-ten",
+          "why": "Half-away-from-zero on the tens.",
+          "args": {
+            "distanceM": 5
+          },
+          "expect": "10m"
+        },
+        {
+          "name": "rounds-to-the-nearest-ten",
+          "args": {
+            "distanceM": 994
+          },
+          "expect": "990m"
+        },
+        {
+          "name": "just-under-a-kilometre-prints-1000m",
+          "why": "DEFECT. 995 m is below the 1 000 m branch, so it takes the metres path, and rounding to the nearest 10 lands on 1000 — the label reads '1000m' where it should read '1.0km'. Affects 995-999 m, i.e. one metre in every 200 shown. Cosmetic but visibly inconsistent next to a neighbouring stop's '1.0km'. Recorded so all platforms agree while it stands; the fix is to compare the ROUNDED metres against 1000, and it must land everywhere at once.",
+          "knownDefect": true,
+          "args": {
+            "distanceM": 995
+          },
+          "expect": "1000m"
+        },
+        {
+          "name": "one-metre-under-a-kilometre-prints-1000m",
+          "why": "The far end of the same defect: 999 m also prints '1000m' rather than '1.0km'. Two rows because the range 995-999 is what the fix must cover, and a single row invites a port to special-case one value. Both become '1.0km' when the rounded metres are compared against 1000.",
+          "knownDefect": true,
+          "args": {
+            "distanceM": 999
+          },
+          "expect": "1000m"
+        },
+        {
+          "name": "exactly-one-kilometre-switches-unit",
+          "why": "The first value on the km branch. One decimal is mandatory, so '1.0km' not '1km'.",
+          "args": {
+            "distanceM": 1000
+          },
+          "expect": "1.0km"
+        },
+        {
+          "name": "km-rounds-down",
+          "args": {
+            "distanceM": 1049
+          },
+          "expect": "1.0km"
+        },
+        {
+          "name": "km-rounds-up",
+          "args": {
+            "distanceM": 1050
+          },
+          "expect": "1.1km"
+        },
+        {
+          "name": "km-exact-half-decimal-rounds-away-from-zero",
+          "why": "1.25 km. Half-away-from-zero on the first decimal gives '1.3km'.",
+          "args": {
+            "distanceM": 1250
+          },
+          "expect": "1.3km"
+        },
+        {
+          "name": "whole-kilometres-keep-the-decimal",
+          "args": {
+            "distanceM": 2000
+          },
+          "expect": "2.0km"
+        }
+      ]
+    },
+    "formatWalk": {
+      "doc": "Localized walk estimate for a single distance. The locale selects only the unit phrase; the figure is not localized. Note the English form has a space ('2 min walk') where formatDistance has none — the two labels sit next to each other and this asymmetry is intentional.",
+      "cases": [
+        {
+          "name": "en",
+          "args": {
+            "distanceM": 320,
+            "locale": "en"
+          },
+          "expect": "4 min walk"
+        },
+        {
+          "name": "zh-hant",
+          "args": {
+            "distanceM": 320,
+            "locale": "zh-Hant"
+          },
+          "expect": "4 分鐘路程"
+        },
+        {
+          "name": "zh-hans",
+          "args": {
+            "distanceM": 320,
+            "locale": "zh-Hans"
+          },
+          "expect": "4 分钟路程"
+        },
+        {
+          "name": "at-the-pole-still-reads-one-minute",
+          "args": {
+            "distanceM": 0,
+            "locale": "en"
+          },
+          "expect": "1 min walk"
+        }
+      ]
+    },
+    "formatWalkRange": {
+      "doc": "Localized walk estimate across a RANGE of distances — the multi-pole place of ADR-042, where the poles of one place sit different walks away and quoting a single figure would be a guess about which kerb the rider wants. Collapses to one figure when the poles round to the same minute (never '4–4'), and is order-independent, so a caller may pass the two bounds either way round. The separator is U+2013 EN DASH with NO surrounding spaces — unlike formatHeadway, which spaces it. Both forms are deliberate and a port must not unify them.",
+      "cases": [
+        {
+          "name": "four-member-place-spans-two-walk-times",
+          "why": "NAMED BOUNDARY ROW (a 4-member place). Clustering has been N-member since ADR-042, so the interesting case is not a pair. A four-pole interchange with member walks of 320 m / 350 m / 410 m / 480 m reduces to 4 min and 6 min; the caller passes the extremes. A port that only ever handled two poles, or that averaged them, gets this wrong — and averaging would be the worse failure, because it invents a walk to a kerb that does not exist.",
+          "args": {
+            "minDistanceM": 320,
+            "maxDistanceM": 480,
+            "locale": "en"
+          },
+          "expect": "4–6 min walk"
+        },
+        {
+          "name": "four-member-place-order-independent",
+          "why": "The same four-pole place with the bounds swapped. Must produce the identical label, not '6–4'.",
+          "args": {
+            "minDistanceM": 480,
+            "maxDistanceM": 320,
+            "locale": "en"
+          },
+          "expect": "4–6 min walk"
+        },
+        {
+          "name": "four-member-place-collapses-when-every-pole-rounds-alike",
+          "why": "A four-pole place whose members are 310 m / 320 m / 330 m / 350 m — all 4 min. Never '4–4 min walk'.",
+          "args": {
+            "minDistanceM": 310,
+            "maxDistanceM": 350,
+            "locale": "en"
+          },
+          "expect": "4 min walk"
+        },
+        {
+          "name": "range-zh-hant",
+          "args": {
+            "minDistanceM": 320,
+            "maxDistanceM": 480,
+            "locale": "zh-Hant"
+          },
+          "expect": "4–6 分鐘路程"
+        },
+        {
+          "name": "range-zh-hans",
+          "args": {
+            "minDistanceM": 320,
+            "maxDistanceM": 480,
+            "locale": "zh-Hans"
+          },
+          "expect": "4–6 分钟路程"
+        },
+        {
+          "name": "identical-bounds-collapse",
+          "args": {
+            "minDistanceM": 320,
+            "maxDistanceM": 320,
+            "locale": "en"
+          },
+          "expect": "4 min walk"
+        },
+        {
+          "name": "both-bounds-under-the-floor-collapse-to-one-minute",
+          "why": "Two poles 10 m and 30 m away both floor to 1 min, so no range appears.",
+          "args": {
+            "minDistanceM": 10,
+            "maxDistanceM": 30,
+            "locale": "en"
+          },
+          "expect": "1 min walk"
+        }
+      ]
+    },
+    "formatBearing": {
+      "doc": "Localized 8-point compass direction for a MEAN TRAVEL BEARING, snapped to the nearest octant. This is the cue that tells two same-named places apart — the NE kerb from the SW kerb of one landmark (ADR-042) — so the label is '-bound' (a direction of travel), not a plain compass point. The input is degrees in ANY range: negatives and values over 360 are normalized first, which matters because a mean of bearings can legitimately come out negative. Octant index = round(normalized / 45) mod 8, over the table [N, NE, E, SE, S, SW, W, NW].",
+      "cases": [
+        {
+          "name": "octant-0-north-en",
+          "args": {
+            "deg": 0,
+            "locale": "en"
+          },
+          "expect": "Northbound"
+        },
+        {
+          "name": "octant-1-northeast-en",
+          "args": {
+            "deg": 45,
+            "locale": "en"
+          },
+          "expect": "Northeast-bound"
+        },
+        {
+          "name": "octant-2-east-en",
+          "args": {
+            "deg": 90,
+            "locale": "en"
+          },
+          "expect": "Eastbound"
+        },
+        {
+          "name": "octant-3-southeast-en",
+          "args": {
+            "deg": 135,
+            "locale": "en"
+          },
+          "expect": "Southeast-bound"
+        },
+        {
+          "name": "octant-4-south-en",
+          "args": {
+            "deg": 180,
+            "locale": "en"
+          },
+          "expect": "Southbound"
+        },
+        {
+          "name": "octant-5-southwest-en",
+          "args": {
+            "deg": 225,
+            "locale": "en"
+          },
+          "expect": "Southwest-bound"
+        },
+        {
+          "name": "octant-6-west-en",
+          "args": {
+            "deg": 270,
+            "locale": "en"
+          },
+          "expect": "Westbound"
+        },
+        {
+          "name": "octant-7-northwest-en",
+          "args": {
+            "deg": 315,
+            "locale": "en"
+          },
+          "expect": "Northwest-bound"
+        },
+        {
+          "name": "snaps-down-just-below-the-midpoint",
+          "why": "22 deg is nearer N than NE.",
+          "args": {
+            "deg": 22,
+            "locale": "en"
+          },
+          "expect": "Northbound"
+        },
+        {
+          "name": "snaps-up-just-above-the-midpoint",
+          "args": {
+            "deg": 23,
+            "locale": "en"
+          },
+          "expect": "Northeast-bound"
+        },
+        {
+          "name": "exact-octant-midpoint-rounds-away-from-zero",
+          "why": "22.5 deg is exactly between N and NE, i.e. round(0.5). Half-away-from-zero gives octant 1 (NE); half-to-even gives octant 0 (N). This row separates the two rounding modes.",
+          "args": {
+            "deg": 22.5,
+            "locale": "en"
+          },
+          "expect": "Northeast-bound"
+        },
+        {
+          "name": "wraps-past-northwest-back-to-north",
+          "why": "337.5 deg rounds to octant 8, which is taken modulo 8 back to North. A port that indexes an 8-element table without the modulo reads out of bounds here — a crash, or an empty label.",
+          "args": {
+            "deg": 337.5,
+            "locale": "en"
+          },
+          "expect": "Northbound"
+        },
+        {
+          "name": "just-under-a-full-turn-is-north",
+          "args": {
+            "deg": 359,
+            "locale": "en"
+          },
+          "expect": "Northbound"
+        },
+        {
+          "name": "full-turn-is-north",
+          "args": {
+            "deg": 360,
+            "locale": "en"
+          },
+          "expect": "Northbound"
+        },
+        {
+          "name": "negative-bearing-is-normalized",
+          "why": "-45 deg is 315 deg. A mean of bearings either side of north can come out negative, so this is reachable, not hypothetical. A port using a bare `%` on a negative gets a negative index.",
+          "args": {
+            "deg": -45,
+            "locale": "en"
+          },
+          "expect": "Northwest-bound"
+        },
+        {
+          "name": "over-a-full-turn-is-normalized",
+          "args": {
+            "deg": 725,
+            "locale": "en"
+          },
+          "expect": "Northbound"
+        },
+        {
+          "name": "octant-0-north-zh-hant",
+          "args": {
+            "deg": 0,
+            "locale": "zh-Hant"
+          },
+          "expect": "北行"
+        },
+        {
+          "name": "octant-1-northeast-zh-hant",
+          "why": "Traditional and Simplified differ for the eastern octants (東 vs 东) and agree for the others.",
+          "args": {
+            "deg": 45,
+            "locale": "zh-Hant"
+          },
+          "expect": "東北行"
+        },
+        {
+          "name": "octant-1-northeast-zh-hans",
+          "args": {
+            "deg": 45,
+            "locale": "zh-Hans"
+          },
+          "expect": "东北行"
+        },
+        {
+          "name": "octant-7-northwest-zh-hans",
+          "args": {
+            "deg": 315,
+            "locale": "zh-Hans"
+          },
+          "expect": "西北行"
+        }
+      ]
+    }
+  }
+}

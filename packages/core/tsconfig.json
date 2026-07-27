@@ -1,5 +1,5 @@
 {
   "extends": "@nextbus/tsconfig/base.json",
   "compilerOptions": { "types": [] },
-  "include": ["src"]
+  "include": ["src", "test", "vitest.config.ts"]
 }

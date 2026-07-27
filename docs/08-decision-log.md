@@ -2272,3 +2272,64 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     correct. It matters more than it looks: `502` reads as *retryable*, so an iOS Widget holding a malformed
     favourite would retry forever. Fix it together with ADR-052's `{code, message, retryable}` error taxonomy,
     since that is the same defect wearing a different hat.
+
+## ADR-060 — The fixture corpus is the equivalence mechanism for domain rules
+- **Status:** **Decided and implemented 2026-07-28** (WP1-5). Implementation: `packages/core/spec/*.spec.json`,
+  `packages/core/test/`, `scripts/check-spec-coverage.mjs`. Completes Wave 1.
+- **Context:** [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+  separates three kinds of change and solves only one of them. Wire *shapes* are generated, so every platform
+  agrees by construction. **Domain rules cannot be generated** — `dedupeEtas`, the honest-ETA thresholds,
+  bearing labels, fare formatting — they get hand-written again in Swift and Kotlin. Nothing about a Zod schema
+  or an OpenAPI document constrains them, so without a shared, language-neutral specification three platforms
+  will quietly disagree about when a bus is "due". This is the mechanism for that half.
+- **Decision:**
+  1. **Corpora are pure JSON at `packages/core/spec/<module>.spec.json`** — one file per kernel module, beside
+     the `src` that implements it, so moving a package takes its spec along. `groups` keyed by export name;
+     cases are `{name, why?, knownDefect?, args, expect}`; `version: 1`. **No `undefined`, no functions, no
+     comments** — JSON `null` is the absent value and is translated at the boundary in `test/corpus.ts` — because
+     an XCTest or JUnit suite has to read these rows verbatim. **36 groups, 274 cases.**
+  2. **`@spec <module>#<export>`** in an export's JSDoc marks it corpus-specified. Both halves are checked
+     against the file stem and the symbol, so a tag cannot drift onto the wrong corpus or outlive a rename.
+  3. **`check-spec-coverage.mjs` enforces both directions** — a tagged export with an empty or missing corpus,
+     *and* an orphan corpus file or group that no tag references (rot in the other direction: rows that specify
+     nothing). It also asserts **18 named boundary rows** by name, so deleting one is a red build. `--selftest`
+     runs 8 synthetic scenarios proving each failure mode fires; same standard as ADR-052's gates — watched
+     failing before trusted.
+  4. **Branch coverage on `packages/core` is gated at 100%** (149/149), not line coverage: these defects live in
+     the branch nobody thought of. No unexplained slack, so a rule added without rows fails rather than diluting
+     an average. Two branches are covered by hand-written tests rather than rows, and argued in place: an unknown
+     `Locale` (genuinely reachable — ADR-052 marks the enum `x-unknown-tolerant` and the client does no runtime
+     validation) and a `NaN` bearing (JSON cannot express NaN).
+  5. **`knownDefect` is a first-class corpus state.** A row may assert behaviour we agree is *wrong*, so that
+     all platforms stay wrong *identically* and the fix becomes one coordinated change; the `why` must state what
+     `expect` becomes when fixed. The gate prints the count every run. **This lifecycle already ran for real:**
+     the literal-`|` row was written as a defect (`dedupeEtas` collapsed two distinct rider lines into one, so an
+     arrival disappeared), WP1-2's `parseRouteId` landed, the row went red, and it was updated to expect both
+     ids — which is exactly what will force every native suite to port the parser.
+  6. **A kernel rule may not consult the host locale, ICU version or time zone.** Generalised from `formatClock`
+     (see ADR-051): a corpus cannot pin a property of the machine. WP1-4's `toLocale*` ban is the mechanical half.
+- **Consequences — the defects this found in shipped code.** Eight, of which one is fixed and seven remain
+  recorded as `knownDefect` rows (each asserting today's behaviour, with the corrected expectation written in):
+  - **✅ FIXED: `inferBusMarkers` could drop a bus entirely.** Departed readings were discarded *inside* the
+    discontinuity scan, so a stale departed reading still acted as its successor's predecessor — the bus
+    genuinely approaching the next stop was then judged "not a lead" and dropped too. **No marker anywhere: a
+    bus one minute away vanished from the route view.** Since upstream only republishes about once a minute,
+    stale departed readings are common rather than exotic. Departed readings are now nulled *before* the scan,
+    which is what the drop-off rule always said; the change is strictly additive — it can restore a marker the
+    old ordering discarded but never invent one. This is the clearest argument for the whole harness: the defect
+    is invisible without a fixture that pins the interaction between two tests that each look correct alone.
+  - `formatDistance` prints `"1000m"` for 995–999 m instead of `"1.0km"` — compare the *rounded* metres.
+  - `estimateChildFare('')` → `"0.0"` and `estimateElderlyFare('')` → `"2.0"`: `Number('')` is 0, so a missing
+    fare becomes a confident concession estimate.
+  - `formatStopCount(1, 'en')` → `"1 stops"` — needs a plural-aware i18n key, not a per-platform patch.
+  - `formatServiceHours` passes a past-midnight wrap straight through, so a raw GTFS `"25:35"` reaches a rider.
+  - `buildRouteTrie('')` makes the *root* terminal, so `isCompleteRoute(root, '')` is true and submit-on-empty
+    looks meaningful. Unreachable today; armed by any bad dataset build.
+  - Doc inaccuracy, not a defect: `search.ts` offers `NA` as the night+airport example, but the family patterns
+    require a digit, so bare `NA` is night-only. Recorded as `bare-na-is-night-only` so nobody "corrects" the regex.
+- **Open format question, deliberately left for whoever writes WP3-3.** WP1-5's corpus and WP1-2's
+  `id-corpus.json` agree on `name`/`why`/`version` but still differ two ways: `doc` (a string) versus
+  `$comment` (an array of lines), and cases nested under `groups` keyed by export versus flat sections.
+  **Settle on `groups` + `doc` before WP3-3 generates a native scaffold that would otherwise have to read both**
+  — `$comment` conventionally means "ignore me", and this prose is the deliverable, since the reason has to
+  travel to the next language and not just the value.

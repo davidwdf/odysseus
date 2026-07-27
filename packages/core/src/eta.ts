@@ -1,6 +1,13 @@
 import { parseRouteId } from './ids'
 import type { Eta, I18nText, Locale } from './types'
 
+// `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
+// JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
+// one kind of change no schema can generate (ADR-052 context, kind 2), so they are hand-ported to
+// Swift and Kotlin and the corpus is the only thing keeping the ports equal. Change a rule and you
+// edit the corpus; every platform's suite then goes red until it has been ported.
+// `scripts/check-spec-coverage.mjs` fails a tagged export with no corpus **and** a corpus with no tag.
+
 /** Readings older than this are shown as stale (data quality, not a hard error). */
 export const ETA_STALE_AFTER_MS = 90_000
 /** Under a minute → "Arriving"/"Due" rather than a fabricated "0:59…". */
@@ -23,6 +30,8 @@ export interface EtaView {
  * IMPORTANT: derived from the upstream timestamp on demand — NOT a client-side
  * countdown. We recompute when fresh data arrives and never tick a fake decrement
  * (see ADR-008). `now` is passed in so this stays a pure function.
+ *
+ * @spec eta#etaView
  */
 export function etaView(arrivalIso: string, now: number): EtaView {
   const seconds = Math.round((new Date(arrivalIso).getTime() - now) / 1000)
@@ -34,7 +43,11 @@ export function etaView(arrivalIso: string, now: number): EtaView {
   }
 }
 
-/** Whether an ETA reading should be treated as stale. */
+/**
+ * Whether an ETA reading should be treated as stale.
+ *
+ * @spec eta#isStale
+ */
 export function isStale(eta: Eta, now: number): boolean {
   return now - new Date(eta.dataTimestamp).getTime() > ETA_STALE_AFTER_MS
 }
@@ -56,6 +69,8 @@ const MIN_LABEL: Record<Locale, string> = {
 /**
  * Honest relative label: "Arriving" under a minute, otherwise "N min". Never
  * fabricates sub-minute precision; never shows a number for a departed bus.
+ *
+ * @spec eta#formatRelative
  */
 export function formatRelative(arrivalIso: string, now: number, locale: Locale): string {
   const { isDue, minutes, hasDeparted } = etaView(arrivalIso, now)
@@ -74,6 +89,12 @@ export type EtaLabelParts =
   | { kind: 'departed' }
   | { kind: 'due'; label: string }
   | { kind: 'mins'; value: number; unit: string }
+/**
+ * The `EtaLabelParts` above, for one arrival — same rule as `formatRelative`, split so the
+ * number and the unit can be styled separately.
+ *
+ * @spec eta#etaLabelParts
+ */
 export function etaLabelParts(arrivalIso: string, now: number, locale: Locale): EtaLabelParts {
   const { isDue, minutes, hasDeparted } = etaView(arrivalIso, now)
   if (hasDeparted) return { kind: 'departed' }
@@ -81,39 +102,38 @@ export function etaLabelParts(arrivalIso: string, now: number, locale: Locale): 
   return { kind: 'mins', value: Math.max(minutes, 1), unit: MIN_LABEL[locale] }
 }
 
-/** Hong Kong is UTC+8 year-round and has observed no DST since 1979, so a fixed offset is exact
- *  rather than an approximation — which is what lets `formatClock` avoid a timezone database. */
+/** Hong Kong is UTC+8 all year — no DST since 1979 — so the offset is a constant, not a lookup. */
 const HK_UTC_OFFSET_MS = 8 * 60 * 60 * 1000
 
 /**
- * Absolute clock time in Hong Kong, `HH:mm` 24-hour — preferred for longer waits
- * (proposals/00 P5, the countdown⇄clock toggle).
+ * Hong Kong wall-clock time of an arrival, `HH:mm` on a 24-hour clock — preferred for longer waits
+ * (proposals/00 P5, the countdown⇄clock toggle). Returns `''` for an unparseable timestamp.
  *
- * Deliberately computed with arithmetic rather than `toLocaleTimeString`, which this used to call.
- * Two reasons, and neither is style:
+ * Computed arithmetically rather than through `toLocaleTimeString`, which is why it can be pinned by
+ * a corpus at all. Two distinct reasons, and neither is style:
  *
- *  1. **`toLocaleTimeString` is not reproducible across platforms.** Its output depends on the
- *     host's ICU version and the *device's* timezone. Three clients formatting the identical ISO
- *     string could render three different strings — and a rider abroad checking HK departures got
- *     their own local time, which for a Hong Kong bus board is simply wrong. `packages/core` is the
- *     layer we intend to hand-port to Swift and Kotlin; a function whose output the platform gets
- *     to influence cannot be ported faithfully, and no fixture corpus could pin it.
+ *  1. **The locale-formatting version was not reproducible.** It read the *device's* time zone and
+ *     the host's ICU version, so the same ISO string rendered three different ways on three
+ *     platforms — and a rider abroad got their own local time on a Hong Kong bus board. Neither is a
+ *     property of this code, so no fixture could have caught either, and `packages/core` is the layer
+ *     we intend to hand-port to Swift and Kotlin.
  *  2. **It slipped past the kernel's determinism ban.** `Intl` is in the denied-globals list
  *     (ADR-051), but `toLocaleTimeString` is a method on `Date`, so no global was ever referenced.
- *     `layers.json` now also bans the `toLocale*` pattern in the kernel, so this class of
- *     regression fails the build rather than waiting to be noticed.
+ *     `layers.json` now bans the `toLocale*` *pattern* in the kernel too, so this class of regression
+ *     fails the build instead of waiting to be noticed.
  *
- * Fixed once while the function still had **no callers**, which made it free; after P5 ships it
- * would have been a visible change to every arrival row.
+ * Shift the instant into HK and read the UTC fields back: one branch, no locale, byte-reproducible
+ * everywhere. Fixed while the function still had **zero callers**, which made it free — after P5
+ * ships it would have been a visible change to every arrival row.
  *
- * The `locale` parameter is gone because it never affected the output: all three locales rendered
- * ASCII digits under `hour12: false`.
+ * There is deliberately no `locale` parameter. A 24-hour `HH:mm` is identical in all three of our
+ * locales, so a locale argument could only introduce a difference we do not want.
+ *
+ * @spec eta#formatClock
  */
 export function formatClock(arrivalIso: string): string {
-  const t = new Date(arrivalIso).getTime()
+  const t = Date.parse(arrivalIso)
   if (Number.isNaN(t)) return ''
-  // Shift the instant into HK wall-clock time, then read it back with the `getUTC*` accessors —
-  // the only ones that don't consult the host timezone.
   const hk = new Date(t + HK_UTC_OFFSET_MS)
   const hh = String(hk.getUTCHours()).padStart(2, '0')
   const mm = String(hk.getUTCMinutes()).padStart(2, '0')
@@ -129,6 +149,8 @@ export function formatClock(arrivalIso: string): string {
  * service-type variants show the same line twice. A rider thinks "route + direction",
  * so we key by operator + route number + bound. Pure function; arrivals are ISO-8601
  * with a fixed +08:00 offset, so lexical comparison is chronological.
+ *
+ * @spec eta#dedupeEtas
  */
 export function dedupeEtas(etas: Eta[]): Eta[] {
   const byLine = new Map<string, Eta>()
@@ -166,7 +188,11 @@ export function dedupeEtas(etas: Eta[]): Eta[] {
 const EVERY_LABEL: Record<Locale, string> = { en: 'every', 'zh-Hant': '每', 'zh-Hans': '每' }
 const ABOUT_LABEL: Record<Locale, string> = { en: '~', 'zh-Hant': '約', 'zh-Hans': '约' }
 
-/** HK$ fare for display, e.g. "6.7" → "$6.7". Kept as the upstream string (no float maths). */
+/**
+ * HK$ fare for display, e.g. "6.7" → "$6.7". Kept as the upstream string (no float maths).
+ *
+ * @spec eta#formatFare
+ */
 export function formatFare(fare: string): string {
   return `$${fare}`
 }
@@ -177,6 +203,8 @@ export function formatFare(fare: string): string {
  * origin (dearest) down to the last fare stage. We compare numerically but keep the
  * **original** upstream strings as the min/max values (no float maths on the figures
  * themselves, see RouteServiceInfo). Returns undefined when no usable fare is present.
+ *
+ * @spec eta#fareRange
  */
 export function fareRange(
   fares: Array<string | undefined>,
@@ -198,6 +226,8 @@ export function fareRange(
  * the dearest fare is paid boarding at the origin, less from each later stage — "$6.7 → $5.8".
  * Uses the same arrow as the `A → B` route label so the framing reads as "origin → later stops".
  * Collapses to a single figure when the fare is flat across the route.
+ *
+ * @spec eta#formatFareRange
  */
 export function formatFareRange(range: { min: string; max: string }): string {
   return range.min === range.max
@@ -219,6 +249,8 @@ export interface FareStage {
  * consecutive stops with an equal fare merge into one stage. Blank/missing/non-numeric fares
  * (e.g. the terminus, which has no boarding fare) break a run and are skipped. Ordered by seq.
  * Powers the fare-stage timeline (ADR-044).
+ *
+ * @spec eta#fareStages
  */
 export function fareStages(fares: Array<string | undefined>): FareStage[] {
   const stages: FareStage[] = []
@@ -238,7 +270,11 @@ export function fareStages(fares: Array<string | undefined>): FareStage[] {
 // single source of truth so a scheme change (the $2 Scheme changed on 3 Apr 2026) is one edit.
 // A deliberate, bounded exception to ADR-008: always shown as an explicit estimate, never as data.
 
-/** Approximate child (3–11) fare — roughly half the adult fare, rounded to $0.1. Estimate. */
+/**
+ * Approximate child (3–11) fare — roughly half the adult fare, rounded to $0.1. Estimate.
+ *
+ * @spec eta#estimateChildFare
+ */
 export function estimateChildFare(adultFare: string): string | undefined {
   const n = Number(adultFare)
   if (!Number.isFinite(n)) return undefined
@@ -247,7 +283,10 @@ export function estimateChildFare(adultFare: string): string | undefined {
 
 /** Approximate elderly-65+/PwD fare under the Government $2 Scheme (from 3 Apr 2026: $2 for
  *  fares up to $10, otherwise 20% of the fare — i.e. `max($2, 20%)`). Requires an eligible/
- *  JoyYou Octopus, not cash. Estimate. */
+ *  JoyYou Octopus, not cash. Estimate.
+ *
+ * @spec eta#estimateElderlyFare
+ */
 export function estimateElderlyFare(adultFare: string): string | undefined {
   const n = Number(adultFare)
   if (!Number.isFinite(n)) return undefined
@@ -257,12 +296,19 @@ export function estimateElderlyFare(adultFare: string): string | undefined {
 const STOPS_LABEL: Record<Locale, string> = { en: 'stops', 'zh-Hant': '個站', 'zh-Hans': '个站' }
 
 /** Stop-count label, e.g. "24 stops" / "24 個站". A Static fact (route length), locale only
- *  selects the unit word — same pattern as the fare/frequency formatters above. */
+ *  selects the unit word — same pattern as the fare/frequency formatters above.
+ *
+ * @spec eta#formatStopCount
+ */
 export function formatStopCount(n: number, locale: Locale): string {
   return `${n} ${STOPS_LABEL[locale]}`
 }
 
-/** Honest journey-time label, e.g. "~45 min" / "約 45 分鐘". */
+/**
+ * Honest journey-time label, e.g. "~45 min" / "約 45 分鐘".
+ *
+ * @spec eta#formatJourney
+ */
 export function formatJourney(min: number, locale: Locale): string {
   return locale === 'en'
     ? `~${min} ${MIN_LABEL.en}`
@@ -271,7 +317,10 @@ export function formatJourney(min: number, locale: Locale): string {
 
 /** Typical headway, e.g. "every 10 – 25 min" / "每 10 – 25 分鐘". A coarse range from the GTFS
  *  frequency bands — honest, not a fabricated single figure. The en dash is spaced so it doesn't
- *  read as touching the digits on both sides. */
+ *  read as touching the digits on both sides.
+ *
+ * @spec eta#formatHeadway
+ */
 export function formatHeadway(headway: { min: number; max: number }, locale: Locale): string {
   const span = headway.min === headway.max ? `${headway.min}` : `${headway.min} – ${headway.max}`
   return locale === 'en'
@@ -280,7 +329,10 @@ export function formatHeadway(headway: { min: number; max: number }, locale: Loc
 }
 
 /** Daily service span, "05:35 – 23:40" (24h clock; locale-independent). Spaced en dash for
- *  legibility — an unspaced dash visually fuses with the times on either side. */
+ *  legibility — an unspaced dash visually fuses with the times on either side.
+ *
+ * @spec eta#formatServiceHours
+ */
 export function formatServiceHours(hours: { start: string; end: string }): string {
   return `${hours.start} – ${hours.end}`
 }
@@ -289,6 +341,9 @@ export function formatServiceHours(hours: { start: string; end: string }): strin
  *  = timetable-based (not a tracked bus); `lastBus` = final departure. Matched on the en + zh
  *  free text since the feeds carry prose, not codes. */
 export type RemarkKind = 'scheduled' | 'lastBus' | 'info'
+/**
+ * @spec eta#classifyRemark
+ */
 export function classifyRemark(remark: I18nText): RemarkKind {
   const en = remark.en.toLowerCase()
   const zh = `${remark['zh-Hant']}${remark['zh-Hans']}`
