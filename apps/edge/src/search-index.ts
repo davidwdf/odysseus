@@ -1,4 +1,4 @@
-import type { RouteLite, SearchIndex, StopLite } from '@nextbus/core'
+import { parseRouteId, type RouteLite, type SearchIndex, type StopLite } from '@nextbus/core'
 import { canonicalRouteId, type StaticIndex } from '@nextbus/data-normalize'
 
 // Build the compact on-device search index (ADR-037). Routes are collapsed to one record per
@@ -41,8 +41,9 @@ export function buildSearchIndex(index: StaticIndex): SearchIndex {
         const newN = index.routeToStops.get(id)?.length ?? 0
         if (newN < curN || (newN === curN && id >= existing.id)) continue
       } else {
-        // Keep the representative service type; the id encodes it.
-        const existingSt = existing.id.split(':')[3] ?? '1'
+        // Keep the representative service type; the id encodes it. Default to "1" when the id
+        // cannot be read, which is what `preferServiceType` treats as the representative anyway.
+        const existingSt = parseRouteId(existing.id)?.serviceType ?? '1'
         if (preferServiceType(meta.serviceType, existingSt) === existingSt) continue
       }
     }

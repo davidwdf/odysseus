@@ -1,4 +1,4 @@
-import type { SearchIndex } from '@nextbus/core'
+import { memberStopIds, type SearchIndex } from '@nextbus/core'
 import {
   allGeoCells,
   type BuildManifest,
@@ -155,12 +155,13 @@ function kvSource(env: Env, manifest: BuildManifest): DatasetSource {
       if (direct) return direct
       // Miss. Two reasons that happens, and both resolve through the alias table:
       //  - `id` is a bare member pole (the common case — a route's stop list gives pole ids);
-      //  - `id` is a **stale place id**. `P:` ids are `P:<memberId>+<memberId>`, so they change
+      //  - `id` is a **stale place id**. `P:` ids are `P:<memberId>+<memberId>+…`, so they change
       //    whenever clustering does, and riders have them persisted in favourites.
       // Try **every** member, not just the first: a retired pole at the head of a saved id must not
       // take the whole favourite down with it. (The id scheme itself is WP2-5's to fix properly;
-      // this keeps already-saved favourites resolving in the meantime.)
-      const seeds = id.startsWith('P:') ? id.slice(2).split('+').filter(Boolean) : [id]
+      // this keeps already-saved favourites resolving in the meantime.) `memberStopIds` is the id
+      // grammar's answer to "which poles?" — members for a place id, itself for a lone pole.
+      const seeds = memberStopIds(id)
       for (const seed of seeds) {
         const placeId = await kv.get(datasetKeys.alias(hash, seed), { type: 'text', ...opts })
         if (placeId) {

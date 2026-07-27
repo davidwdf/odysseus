@@ -148,21 +148,26 @@ export default function SearchScreen() {
         : [...f.categories, c],
     }))
 
+  // Each chip carries its own toggle in a lookup keyed by the same string React uses as its key.
+  // This is NOT id parsing (a chip key is `op:KMB`, not a stop or route id) but it read exactly
+  // like it — `key.split(':')` with the halves cast to two different unions — which is why the
+  // check that bans ad-hoc id parsing flagged it. A key that is never taken apart cannot be taken
+  // apart wrongly, so the string stays opaque and the intent is visible.
   const opChips = operators.map((op) => ({
     key: `op:${op}`,
     label: op,
     active: filter.operators.includes(op),
+    toggle: () => toggleOperator(op),
   }))
   const catChips = CATEGORIES.map((c) => ({
     key: `cat:${c}`,
     label: t(locale, CATEGORY_LABELS[c]),
     active: filter.categories.includes(c),
+    toggle: () => toggleCategory(c),
   }))
   const chips = mode === 'routes' ? [...opChips, ...catChips] : opChips
   const onToggleChip = (key: string) => {
-    const [kind, val] = key.split(':')
-    if (kind === 'op') toggleOperator(val as OperatorId)
-    else if (kind === 'cat') toggleCategory(val as RouteCategory)
+    chips.find((c) => c.key === key)?.toggle()
   }
 
   const openRoute = (id: string) => {
