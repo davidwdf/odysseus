@@ -36,7 +36,8 @@ Full guide incl. deploy: [`docs/10`](./docs/10-scaffold-and-running.md).
 apps/mobile          Expo app (iOS/Android/Web-PWA)
 apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health;
                      reads precomputed dataset shards from KV/R2 — ADR-055)
-packages/core        canonical types · DataSource interface · ETA helpers
+packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
+packages/core        canonical types (`z.infer` of contract, `import type` only) · DataSource · ETA helpers
 packages/data-normalize  KMB + Citybus adapters (upstream → canonical)
 packages/api-client  EdgeClient (the v1 DataSource) + watch() polling shim
 packages/i18n        en / zh-Hant / zh-Hans UI strings

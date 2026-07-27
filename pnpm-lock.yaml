@@ -192,6 +192,19 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/contract:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@nextbus/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/core:
     devDependencies:
       '@nextbus/tsconfig':

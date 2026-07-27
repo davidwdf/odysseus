@@ -1857,6 +1857,82 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   and whether the format is renderable in React Native, decides this.** Ask when requesting the key. If the
   answer is no, decision (1) stands as the shipped feature and this becomes a watch item.
 
+## ADR-052 — The wire contract: Zod is the single declaration, types erase, and the schema stays additive-safe
+- **Status:** **Decided 2026-07-27; being implemented** (WP1-1 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). `packages/contract` exists with
+  the primitives and the JSON-Schema emit; the remaining shapes, the OpenAPI document and the conformance test
+  are in progress on the same branch. Amends the plan's WP1-1 sketch in one respect — see decision (2).
+- **Context:** The requirement driving this is **not** "add validation". It is: *a change we make to the system
+  must reach every supported platform equivalently, and the data structures must still be adjustable later.*
+  Those two pull against each other — the usual way to guarantee cross-platform agreement is to freeze the
+  shape. Today one Expo codebase ships the PWA and will ship iOS/Android, so "equivalently" currently costs
+  nothing; the moment a native repo exists, every shape is transcribed by a human in two more languages, and
+  hand-transcription is where platforms silently diverge.
+  There are three separable kinds of change, and only one of them is a schema problem:
+  1. **Wire shapes** — generated everywhere from one declaration, so equivalence is by construction.
+  2. **Domain rules** (`dedupeEtas`, honest-ETA thresholds, bearing labels) — cannot be generated; they get
+     hand-ported, so their equivalence mechanism is the language-neutral fixture corpus (WP1-5), not the
+     schema. A rule change edits the corpus and every platform's suite goes red until it is ported.
+  3. **Tunable policy** (`maxArrivals`, `dueUnderSec`, `staleAfterMs`) — strongest case: serve it at runtime
+     (ADR-053's `ClientPolicy`) and no platform holds the value, so a change is one edge deploy. Prefer this
+     for anything that is a number rather than a behaviour. It also settles the live three-way disagreement
+     between `app/route/[id].tsx` `.slice(0, 3)`, `favorites.tsx` `.slice(0, 4)` and `StopRow.tsx MAX_ROWS = 6`.
+- **Decision:**
+  1. **The Zod schemas in `packages/contract/src/wire/` are the single declaration of every wire shape.**
+     `packages/core`'s canonical types become `z.infer` of them. One declaration cannot fall out of sync with
+     itself, which is why this beat the alternative below.
+  2. **`core` imports the schemas with `import type` only, so zod never enters a client's runtime graph.**
+     This is the amendment to the plan: WP1-1 as written would have made zod a runtime dependency of the
+     package every screen imports. Verified by spike before committing to it — `types.js` emits `export {};`,
+     no emitted client file references zod, and renaming a schema field surfaces as a **typecheck error in
+     `apps/mobile`**, not at runtime. Consequence worth stating plainly: the web client performs **no runtime
+     validation at all**, so unknown-enum tolerance (4) is an obligation on *generated native decoders*, and
+     nothing in the TS build can fail to remind us of it. It must be enforced at codegen in WP3-3.
+     *Rejected alternative:* keep hand-written types in `core` and prove them equivalent to the schemas with a
+     type-level `Equal<>` assertion. It reads well and costs no dependency, but it needs **two** declarations
+     to agree, and its assertion file can silently under-cover a type added later — a gate with a hole in it
+     is worse than no gate, because it is trusted.
+  3. **Wire objects emit as *open* JSON Schema.** Zod reports `z.object()`'s key-stripping as
+     `additionalProperties: false`; correct for a validator, wrong for a published contract, because a strict
+     generated decoder then **rejects any payload containing a field it does not know**. Adding one optional
+     field would break every already-installed copy of the app — a failure on phones we cannot update, for a
+     change that is by construction backward-compatible. `WIRE_JSON_SCHEMA_OPTIONS` in
+     `packages/contract/src/json-schema.ts` strips it. **This hook, not the schemas, is what makes the schema
+     adjustable**, so it is documented there at length and must not be "tidied away". We keep `z.object()`
+     rather than `z.looseObject()` because loose objects infer an index signature, and since `core`'s types are
+     `z.infer` of these, every consumer would lose typo-checking on every wire shape. Strict where it buys type
+     safety (TS), open where it buys forward compatibility (the wire).
+  4. **Closed enums are marked `x-unknown-tolerant: true`** (`Locale`, `OperatorId`, `Bound`, and
+     `ServiceDayType` when it lands) so generators emit `case unknown(String)` / Kotlin fallbacks. Without it,
+     shipping a fourth operator bricks decoding on every deployed phone — a store release, at review speed,
+     for what should be a data change.
+  5. **Evolution policy.** Additive-optional is free (3) and ships without ceremony. Removal, rename and type
+     change are breaking: they need the `oasdiff` gate, an ADR, and a deprecation window in which both shapes
+     are served. `/v1` in the path leaves room for a `/v2` if that ever fails.
+  6. **No `zod-to-openapi`.** OpenAPI 3.1's Schema Object *is* JSON Schema draft 2020-12, and Zod 4's built-in
+     `z.toJSONSchema()` emits exactly that — one less generator to keep in step. Verified: `.meta({ id })`
+     hoists a named shape into `$defs` with a `$ref` (so it becomes a reusable component, not the same object
+     inlined nine times), custom `x-` keys survive the emit, and the `override` hook can open the objects.
+- **Consequences / notes for whoever touches this next:**
+  - **`zod@4.4.3` is pinned exactly**, matching `@nextbus/data-normalize`. There are already **two** zod majors
+    in the tree — v3.25.76 hoisted at the root by `@cloudflare/vitest-pool-workers` and `@expo/metro-runtime`,
+    v4.4.3 nested under `data-normalize`. Any package using v4 features **must declare zod itself**, or
+    `node_modules` resolution walks up to the root v3 and `.meta()` is not a function. Do **not** add a
+    `pnpm.overrides` entry to force v4 repo-wide: those two dependencies expect v3, and golden rule 6 is the
+    scar from exactly that fight over esbuild.
+  - **Two shapes transcribe faithfully but are wrong, and are deliberately left wrong here** (WP1-1 is
+    "no shape changes"; fixing them under cover of a refactor makes the refactor unreviewable). Both are the
+    first candidates for the evolution policy in (5):
+    (a) **Errors are `{error: string}`**, not the `{code, message, retryable}` taxonomy the plan specifies. An
+    iOS Widget holding a deleted favourite cannot currently tell "prune permanently" from "retry later", so it
+    retries forever. Fix additively: serve `code`/`retryable` alongside `error`, then retire `error`.
+    (b) **`Route.service` is served at two different fidelities under one type** — `/v1/stop/:id` omits
+    `patterns` (the summary tier; duplicating it was 54 MB of an 82 MB build, ADR-055) while `/v1/route/:id`
+    carries it. Both satisfy the same optional-`patterns` schema, so a native client cannot tell which tier it
+    received and will read "absent" as "this route has no frequency table". Needs either two named schemas or
+    an explicit tier discriminator.
+  - `StopLite` carries flat `lat`/`lng` while `Stop` nests `location: LatLng`. Harmless, faithful, noted.
+
 ## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
 - **Status:** **Decided and implemented 2026-07-27** (WP0-1 of
   [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Supersedes the "daily crawl
