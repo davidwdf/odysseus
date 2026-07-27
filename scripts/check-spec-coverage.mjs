@@ -49,7 +49,7 @@ const SPEC_DIR = join(repoRoot, 'packages', 'core', 'spec')
 
 /**
  * The boundary rows WP1-5 is required to carry, as `module#group:caseId`. Each one is a bug waiting
- * to happen rather than a decorative example — see the `note` on each case for what it catches. Do
+ * to happen rather than a decorative example — see the `why` on each case for what it catches. Do
  * not remove an entry to make a build green: removing the row and removing the entry is the same
  * act, and it needs the same conversation as any other coverage regression.
  */
@@ -75,6 +75,12 @@ const REQUIRED_ROWS = [
   'search#searchStops:circular-route-blank-en-found-by-chinese-name',
   'search#searchRoutes:circular-route-blank-en-found-by-number',
   'eta#classifyRemark:blank-en-circular-route-last-bus',
+  // Hong Kong wall-clock time must not depend on the device's zone. The `Z` row is the one that
+  // fails on a CI runner outside HK if anyone reaches for a locale formatter again.
+  'eta#formatClock:utc-input-renders-as-hong-kong-time',
+  'eta#formatClock:crosses-midnight-into-the-next-hong-kong-day',
+  'eta#formatClock:sub-minute-precision-is-truncated-not-rounded',
+  'eta#formatClock:an-unparseable-string-has-no-clock-time',
 ]
 
 // ── Collection ──────────────────────────────────────────────────────────────
@@ -148,6 +154,8 @@ function analyse({ srcDir, specDir, required = [] }) {
           'CORPUS_MODULE_MISMATCH',
           `${c.file}: "module" is "${c.data.module}", expected "${c.module}"`,
         )
+      if (c.data.version !== 1)
+        fail('CORPUS_MODULE_MISMATCH', `${c.file}: "version" must be 1 (the corpus format version)`)
       if (typeof c.data.doc !== 'string' || c.data.doc.length < 40)
         fail('CORPUS_UNDOCUMENTED', `${c.file}: needs a "doc" explaining the file to a porter`)
       if (typeof c.data.source !== 'string')
@@ -213,28 +221,35 @@ function analyse({ srcDir, specDir, required = [] }) {
     const ids = new Set()
     for (const [i, c] of g.cases.entries()) {
       const at = `${module}#${group}[${i}]`
-      if (typeof c.id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(c.id)) {
+      // `name` / `why` rather than `id` / `note`: WP1-2's id corpus
+      // (`packages/contract/src/ids/id-corpus.json`) already uses those names, and one corpus format
+      // across the repo is the difference between a native scaffold having one reader and two.
+      if (typeof c.name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(c.name)) {
         fail(
           'CASE_INVALID',
-          `${at}: "id" must be a lower-kebab-case string, got ${JSON.stringify(c.id)}`,
+          `${at}: "name" must be a lower-kebab-case string, got ${JSON.stringify(c.name)}`,
         )
         continue
       }
-      if (ids.has(c.id)) fail('CASE_INVALID', `${module}#${group}: duplicate case id "${c.id}"`)
-      ids.add(c.id)
+      if (ids.has(c.name))
+        fail('CASE_INVALID', `${module}#${group}: duplicate case name "${c.name}"`)
+      ids.add(c.name)
       if (!c.args || typeof c.args !== 'object' || Array.isArray(c.args))
         fail(
           'CASE_INVALID',
-          `${module}#${group}:${c.id}: "args" must be an object of named arguments`,
+          `${module}#${group}:${c.name}: "args" must be an object of named arguments`,
         )
       if (!('expect' in c))
-        fail('CASE_INVALID', `${module}#${group}:${c.id}: needs an "expect" (use null for absent)`)
+        fail(
+          'CASE_INVALID',
+          `${module}#${group}:${c.name}: needs an "expect" (use null for absent)`,
+        )
       if (c.knownDefect === true) {
         defectCount++
-        if (typeof c.note !== 'string' || c.note.length < 40)
+        if (typeof c.why !== 'string' || c.why.length < 40)
           fail(
             'CASE_INVALID',
-            `${module}#${group}:${c.id}: a knownDefect row must carry a "note" saying what is wrong and what the row becomes once it is fixed`,
+            `${module}#${group}:${c.name}: a knownDefect row must carry a "why" saying what is wrong and what the row becomes once it is fixed`,
           )
       }
       caseCount++
@@ -262,12 +277,21 @@ function analyse({ srcDir, specDir, required = [] }) {
     }
   }
 
-  // The named boundary rows.
+  // The named boundary rows. Matched with one regex rather than `split(':')` for two reasons: it
+  // validates the reference's shape instead of silently accepting a typo as a missing row, and it
+  // keeps this file clear of WP1-2's `check-no-adhoc-id-parsing.mjs` gate, which reasonably reads a
+  // bare `split(':')` as somebody parsing a canonical id by hand. This is a corpus-row reference —
+  // `<module>#<group>:<case>` — not an id, so it belongs in neither the parser nor that allowlist.
+  const ROW_REF = /^([a-z0-9-]+)#(\w+):([a-z0-9-]+)$/
   for (const row of required) {
-    const [ref, caseId] = row.split(':')
-    const [module, group] = ref.split('#')
+    const ref = ROW_REF.exec(row)
+    if (!ref) {
+      fail('REQUIRED_ROW_MISSING', `"${row}" is not a "<module>#<group>:<case>" reference`)
+      continue
+    }
+    const [, module, group, caseName] = ref
     const cases = byModule.get(module)?.data?.groups?.[group]?.cases
-    if (!Array.isArray(cases) || !cases.some((c) => c.id === caseId))
+    if (!Array.isArray(cases) || !cases.some((c) => c.name === caseName))
       fail(
         'REQUIRED_ROW_MISSING',
         `${row} is a named boundary row required by docs/proposals/03 (WP1-5) and is not in the corpus`,
@@ -314,7 +338,7 @@ function scaffold(
     groups.twice = {
       doc: 'Doubles its argument. Exists only to give the selftest something well-formed to break.',
       cases: Array.from({ length: cases }, (_, i) => ({
-        id: `doubles-${i + 1}`,
+        name: `doubles-${i + 1}`,
         args: { n: i + 1 },
         expect: (i + 1) * 2,
       })),
@@ -323,11 +347,12 @@ function scaffold(
   if (extraGroup)
     groups.thrice = {
       doc: 'A group no tag references — this is what rot looks like.',
-      cases: [{ id: 'x', args: { n: 1 }, expect: 3 }],
+      cases: [{ name: 'x', args: { n: 1 }, expect: 3 }],
     }
   const file = {
     module: 'demo',
     source: 'src/demo.ts',
+    version: 1,
     doc: 'A synthetic corpus used only by check-spec-coverage.mjs --selftest, so the gate can be watched failing.',
     groups,
   }
@@ -335,7 +360,7 @@ function scaffold(
   if (extraFile)
     writeFileSync(
       join(spec, 'ghost.spec.json'),
-      `${JSON.stringify({ ...file, module: 'ghost', source: 'src/ghost.ts', groups: { gone: { doc: 'The export this specified was deleted or renamed.', cases: [{ id: 'x', args: {}, expect: null }] } } }, null, 2)}\n`,
+      `${JSON.stringify({ ...file, module: 'ghost', source: 'src/ghost.ts', groups: { gone: { doc: 'The export this specified was deleted or renamed.', cases: [{ name: 'x', args: {}, expect: null }] } } }, null, 2)}\n`,
     )
 }
 

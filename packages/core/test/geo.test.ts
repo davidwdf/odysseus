@@ -23,7 +23,7 @@ function expectApprox(actual: number, e: Approx) {
 
 describe('geo#haversineMeters', () => {
   for (const c of cases<{ a: LatLng; b: LatLng }, Approx>('haversineMeters')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expectApprox(haversineMeters(c.args.a, c.args.b), c.expect)
     })
   }
@@ -42,7 +42,7 @@ describe('geo#haversineMeters', () => {
 
 describe('geo#routeDistanceM', () => {
   for (const c of cases<{ points: LatLng[] }, Approx>('routeDistanceM')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expectApprox(routeDistanceM(c.args.points), c.expect)
     })
   }
@@ -50,7 +50,7 @@ describe('geo#routeDistanceM', () => {
 
 describe('geo#walkMinutes', () => {
   for (const c of cases<{ distanceM: number }, number>('walkMinutes')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(walkMinutes(c.args.distanceM)).toBe(c.expect)
     })
   }
@@ -58,7 +58,7 @@ describe('geo#walkMinutes', () => {
 
 describe('geo#formatDistance', () => {
   for (const c of cases<{ distanceM: number }, string>('formatDistance')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(formatDistance(c.args.distanceM)).toBe(c.expect)
     })
   }
@@ -66,7 +66,7 @@ describe('geo#formatDistance', () => {
 
 describe('geo#formatWalk', () => {
   for (const c of cases<{ distanceM: number; locale: Locale }, string>('formatWalk')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(formatWalk(c.args.distanceM, c.args.locale)).toBe(c.expect)
     })
   }
@@ -76,7 +76,7 @@ describe('geo#formatWalkRange', () => {
   for (const c of cases<{ minDistanceM: number; maxDistanceM: number; locale: Locale }, string>(
     'formatWalkRange',
   )) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(formatWalkRange(c.args.minDistanceM, c.args.maxDistanceM, c.args.locale)).toBe(
         c.expect,
       )
@@ -86,7 +86,7 @@ describe('geo#formatWalkRange', () => {
 
 describe('geo#formatBearing', () => {
   for (const c of cases<{ deg: number; locale: Locale }, string>('formatBearing')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(formatBearing(c.args.deg, c.args.locale)).toBe(c.expect)
     })
   }

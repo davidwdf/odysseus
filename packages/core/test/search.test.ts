@@ -37,7 +37,7 @@ const toShape = (node: RouteTrieNode): TrieShape => ({
 
 describe('search#routeCategories', () => {
   for (const c of cases<{ routeNo: string }, RouteCategory[]>('routeCategories')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(routeCategories(c.args.routeNo)).toEqual(c.expect)
     })
   }
@@ -45,7 +45,7 @@ describe('search#routeCategories', () => {
 
 describe('search#routeMatchesFilter', () => {
   for (const c of cases<{ route: RouteLite; filter: RouteFilter }, boolean>('routeMatchesFilter')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(routeMatchesFilter(c.args.route, c.args.filter)).toBe(c.expect)
     })
   }
@@ -55,7 +55,7 @@ describe('search#stopMatchesOperators', () => {
   for (const c of cases<{ stopId: string; operators: OperatorId[] }, boolean>(
     'stopMatchesOperators',
   )) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(stopMatchesOperators(c.args.stopId, c.args.operators)).toBe(c.expect)
     })
   }
@@ -63,7 +63,7 @@ describe('search#stopMatchesOperators', () => {
 
 describe('search#buildRouteTrie', () => {
   for (const c of cases<{ routeNos: string[] }, TrieShape>('buildRouteTrie')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(toShape(buildRouteTrie(c.args.routeNos))).toEqual(c.expect)
     })
   }
@@ -71,7 +71,7 @@ describe('search#buildRouteTrie', () => {
 
 describe('search#nextValidChars', () => {
   for (const c of cases<{ routeNos: string[]; prefix: string }, string[]>('nextValidChars')) {
-    it(c.id, () => {
+    it(c.name, () => {
       const got = [...nextValidChars(buildRouteTrie(c.args.routeNos), c.args.prefix)].sort()
       expect(got).toEqual(c.expect)
     })
@@ -80,7 +80,7 @@ describe('search#nextValidChars', () => {
 
 describe('search#isCompleteRoute', () => {
   for (const c of cases<{ routeNos: string[]; prefix: string }, boolean>('isCompleteRoute')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(isCompleteRoute(buildRouteTrie(c.args.routeNos), c.args.prefix)).toBe(c.expect)
     })
   }
@@ -90,7 +90,7 @@ describe('search#indexAlphabet', () => {
   for (const c of cases<{ routeNos: string[] }, { digits: string[]; letters: string[] }>(
     'indexAlphabet',
   )) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(indexAlphabet(c.args.routeNos)).toEqual(c.expect)
     })
   }
@@ -98,7 +98,7 @@ describe('search#indexAlphabet', () => {
 
 describe('search#compareRouteNo', () => {
   for (const c of cases<{ a: string; b: string }, number>('compareRouteNo')) {
-    it(c.id, () => {
+    it(c.name, () => {
       // The corpus states the SIGN only — collator magnitudes are platform-specific.
       expect(Math.sign(compareRouteNo(c.args.a, c.args.b))).toBe(c.expect)
     })
@@ -107,7 +107,7 @@ describe('search#compareRouteNo', () => {
 
 describe('search#normalizeRouteQuery', () => {
   for (const c of cases<{ q: string }, string>('normalizeRouteQuery')) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(normalizeRouteQuery(c.args.q)).toBe(c.expect)
     })
   }
@@ -118,7 +118,7 @@ describe('search#searchRoutes', () => {
     { routes: RouteLite[]; query: string; filter: RouteFilter; limit: number },
     string[]
   >('searchRoutes')) {
-    it(c.id, () => {
+    it(c.name, () => {
       const got = searchRoutes(c.args.routes, c.args.query, c.args.filter, c.args.limit)
       expect(got.map((r) => r.id)).toEqual(c.expect)
     })
@@ -144,7 +144,7 @@ describe('search#searchStops', () => {
     { stops: StopLite[]; query: string; locale: Locale; operators: OperatorId[]; limit: number },
     string[]
   >('searchStops')) {
-    it(c.id, () => {
+    it(c.name, () => {
       const got = searchStops(
         c.args.stops,
         c.args.query,

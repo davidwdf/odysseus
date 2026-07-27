@@ -1,181 +1,320 @@
 {
   "module": "search",
   "source": "src/search.ts",
+  "version": 1,
   "doc": "On-device search: route classification for the filter chips, the smart keypad's prefix trie, and the two search functions (ADR-037). All pure and platform-free, which is what makes the index queryable offline. Conventions for this file: (1) `buildRouteTrie` cases express the trie as nested JSON — `{ terminal, children: { <char>: node } }` — because a Map is not JSON; compare structurally, ignoring key order. (2) `nextValidChars` returns a SET; cases express it as a SORTED array, so a port must sort before comparing rather than assume iteration order. (3) The two search functions take whole records but `expect` only the resulting ids, in result order. (4) `compareRouteNo` cases expect the SIGN of the comparison (-1, 0, 1), never a magnitude — magnitudes are collator-specific and no two platforms agree on them.",
   "groups": {
     "routeCategories": {
       "doc": "Which filter categories a route number belongs to, derived from the number alone — no lookup, no dataset. A route can belong to several. The returned order is fixed: night, then airport, then express. Matching is case-insensitive. Night = leading N. Airport/Lantau = the A/NA/E/S families, which require a DIGIT after the letters. Express = an X anywhere in the number.",
       "cases": [
-        { "id": "night-service", "args": { "routeNo": "N121" }, "expect": ["night"] },
         {
-          "id": "night-airport-service",
-          "note": "NA10 is both: it leads with N and matches the NA family with a digit. Proves the categories are additive, and pins the array ORDER as night-before-airport.",
-          "args": { "routeNo": "NA10" },
+          "name": "night-service",
+          "args": {
+            "routeNo": "N121"
+          },
+          "expect": ["night"]
+        },
+        {
+          "name": "night-airport-service",
+          "why": "NA10 is both: it leads with N and matches the NA family with a digit. Proves the categories are additive, and pins the array ORDER as night-before-airport.",
+          "args": {
+            "routeNo": "NA10"
+          },
           "expect": ["night", "airport"]
         },
         {
-          "id": "bare-na-is-night-only",
-          "note": "The family patterns require a digit, so a bare 'NA' is night only — even though src/search.ts's own comment offers 'NA' as the night+airport example. No such route number exists (the real ones are NA10, NA11, NA20), so this is a doc inaccuracy rather than a behavioural bug. Recorded so a port reading that comment does not 'correct' the regex and quietly reclassify things.",
-          "args": { "routeNo": "NA" },
+          "name": "bare-na-is-night-only",
+          "why": "The family patterns require a digit, so a bare 'NA' is night only — even though src/search.ts's own comment offers 'NA' as the night+airport example. No such route number exists (the real ones are NA10, NA11, NA20), so this is a doc inaccuracy rather than a behavioural bug. Recorded so a port reading that comment does not 'correct' the regex and quietly reclassify things.",
+          "args": {
+            "routeNo": "NA"
+          },
           "expect": ["night"]
         },
-        { "id": "airport-a-family", "args": { "routeNo": "A11" }, "expect": ["airport"] },
-        { "id": "airport-e-family", "args": { "routeNo": "E23" }, "expect": ["airport"] },
-        { "id": "airport-s-family", "args": { "routeNo": "S1" }, "expect": ["airport"] },
         {
-          "id": "airport-family-with-a-trailing-letter",
-          "args": { "routeNo": "E23S" },
+          "name": "airport-a-family",
+          "args": {
+            "routeNo": "A11"
+          },
           "expect": ["airport"]
         },
         {
-          "id": "a-single-letter-matches-no-family",
-          "note": "'A' alone has no digit, so it is uncategorized. Same rule as the bare-NA row.",
-          "args": { "routeNo": "A" },
+          "name": "airport-e-family",
+          "args": {
+            "routeNo": "E23"
+          },
+          "expect": ["airport"]
+        },
+        {
+          "name": "airport-s-family",
+          "args": {
+            "routeNo": "S1"
+          },
+          "expect": ["airport"]
+        },
+        {
+          "name": "airport-family-with-a-trailing-letter",
+          "args": {
+            "routeNo": "E23S"
+          },
+          "expect": ["airport"]
+        },
+        {
+          "name": "a-single-letter-matches-no-family",
+          "why": "'A' alone has no digit, so it is uncategorized. Same rule as the bare-NA row.",
+          "args": {
+            "routeNo": "A"
+          },
           "expect": []
         },
         {
-          "id": "express-suffix",
-          "note": "The X test is `includes`, not a suffix test — 269X and X1 both qualify.",
-          "args": { "routeNo": "269X" },
+          "name": "express-suffix",
+          "why": "The X test is `includes`, not a suffix test — 269X and X1 both qualify.",
+          "args": {
+            "routeNo": "269X"
+          },
           "expect": ["express"]
         },
-        { "id": "express-prefix", "args": { "routeNo": "X1" }, "expect": ["express"] },
         {
-          "id": "night-and-express",
-          "note": "NX would be both. Pins the order as night-before-express.",
-          "args": { "routeNo": "NX" },
+          "name": "express-prefix",
+          "args": {
+            "routeNo": "X1"
+          },
+          "expect": ["express"]
+        },
+        {
+          "name": "night-and-express",
+          "why": "NX would be both. Pins the order as night-before-express.",
+          "args": {
+            "routeNo": "NX"
+          },
           "expect": ["night", "express"]
         },
         {
-          "id": "lower-case-input-is-upper-cased-first",
-          "note": "Reachable: the text search path passes whatever the rider typed.",
-          "args": { "routeNo": "n121" },
+          "name": "lower-case-input-is-upper-cased-first",
+          "why": "Reachable: the text search path passes whatever the rider typed.",
+          "args": {
+            "routeNo": "n121"
+          },
           "expect": ["night"]
         },
-        { "id": "ordinary-route-has-no-categories", "args": { "routeNo": "6" }, "expect": [] }
+        {
+          "name": "ordinary-route-has-no-categories",
+          "args": {
+            "routeNo": "6"
+          },
+          "expect": []
+        }
       ]
     },
     "routeMatchesFilter": {
       "doc": "Whether a route passes the active filter. The two axes AND together; selections WITHIN an axis OR together. An empty array on an axis means no restriction on that axis — NOT 'match nothing', which is the mistake worth guarding.",
       "cases": [
         {
-          "id": "empty-filter-matches-everything",
+          "name": "empty-filter-matches-everything",
           "args": {
             "route": {
               "id": "KMB:10:outbound:1",
               "operator": "KMB",
               "routeNo": "10",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": [], "categories": [] }
+            "filter": {
+              "operators": [],
+              "categories": []
+            }
           },
           "expect": true
         },
         {
-          "id": "operator-matches",
+          "name": "operator-matches",
           "args": {
             "route": {
               "id": "KMB:10:outbound:1",
               "operator": "KMB",
               "routeNo": "10",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": ["KMB"], "categories": [] }
+            "filter": {
+              "operators": ["KMB"],
+              "categories": []
+            }
           },
           "expect": true
         },
         {
-          "id": "operator-does-not-match",
+          "name": "operator-does-not-match",
           "args": {
             "route": {
               "id": "KMB:10:outbound:1",
               "operator": "KMB",
               "routeNo": "10",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": ["CTB"], "categories": [] }
+            "filter": {
+              "operators": ["CTB"],
+              "categories": []
+            }
           },
           "expect": false
         },
         {
-          "id": "operators-within-an-axis-or-together",
+          "name": "operators-within-an-axis-or-together",
           "args": {
             "route": {
               "id": "KMB:10:outbound:1",
               "operator": "KMB",
               "routeNo": "10",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": ["CTB", "KMB"], "categories": [] }
+            "filter": {
+              "operators": ["CTB", "KMB"],
+              "categories": []
+            }
           },
           "expect": true
         },
         {
-          "id": "category-matches",
+          "name": "category-matches",
           "args": {
             "route": {
               "id": "KMB:N121:outbound:1",
               "operator": "KMB",
               "routeNo": "N121",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": [], "categories": ["night"] }
+            "filter": {
+              "operators": [],
+              "categories": ["night"]
+            }
           },
           "expect": true
         },
         {
-          "id": "category-does-not-match",
+          "name": "category-does-not-match",
           "args": {
             "route": {
               "id": "KMB:10:outbound:1",
               "operator": "KMB",
               "routeNo": "10",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": [], "categories": ["night"] }
+            "filter": {
+              "operators": [],
+              "categories": ["night"]
+            }
           },
           "expect": false
         },
         {
-          "id": "axes-and-together-so-one-failure-rejects",
-          "note": "A night route, but the wrong operator. Passing one axis is not enough.",
+          "name": "axes-and-together-so-one-failure-rejects",
+          "why": "A night route, but the wrong operator. Passing one axis is not enough.",
           "args": {
             "route": {
               "id": "KMB:N121:outbound:1",
               "operator": "KMB",
               "routeNo": "N121",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": ["CTB"], "categories": ["night"] }
+            "filter": {
+              "operators": ["CTB"],
+              "categories": ["night"]
+            }
           },
           "expect": false
         },
         {
-          "id": "both-axes-satisfied",
+          "name": "both-axes-satisfied",
           "args": {
             "route": {
               "id": "KMB:269X:outbound:1",
               "operator": "KMB",
               "routeNo": "269X",
               "bound": "outbound",
-              "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-              "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+              "origin": {
+                "en": "A",
+                "zh-Hant": "甲",
+                "zh-Hans": "甲"
+              },
+              "destination": {
+                "en": "B",
+                "zh-Hant": "乙",
+                "zh-Hans": "乙"
+              }
             },
-            "filter": { "operators": ["KMB"], "categories": ["express"] }
+            "filter": {
+              "operators": ["KMB"],
+              "categories": ["express"]
+            }
           },
           "expect": true
         }
@@ -185,8 +324,8 @@
       "doc": "Whether a stop or place id involves any of the given operators. Places are pre-merged on the edge into a self-describing id — `P:` followed by member canonical ids joined by `+` — so the operators of a place are read straight out of its id with no lookup. An empty operator list means no restriction.",
       "cases": [
         {
-          "id": "four-member-place-any-member-operator",
-          "note": "NAMED BOUNDARY ROW (a 4-member place). Clustering has been N-member since ADR-042, so a two-member fixture proves nothing about the general case. This id has FOUR members across THREE operators, including two poles of the same operator: `P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142`. Filtering by GMB must match on the THIRD member, so a port that only inspects the id's prefix, or only the first member, passes a two-member fixture and fails here.",
+          "name": "four-member-place-any-member-operator",
+          "why": "NAMED BOUNDARY ROW (a 4-member place). Clustering has been N-member since ADR-042, so a two-member fixture proves nothing about the general case. This id has FOUR members across THREE operators, including two poles of the same operator: `P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142`. Filtering by GMB must match on the THIRD member, so a port that only inspects the id's prefix, or only the first member, passes a two-member fixture and fails here.",
           "args": {
             "stopId": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
             "operators": ["GMB"]
@@ -194,7 +333,7 @@
           "expect": true
         },
         {
-          "id": "four-member-place-first-member-operator",
+          "name": "four-member-place-first-member-operator",
           "args": {
             "stopId": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
             "operators": ["CTB"]
@@ -202,8 +341,8 @@
           "expect": true
         },
         {
-          "id": "four-member-place-repeated-member-operator",
-          "note": "Two of the four poles are KMB. One match is enough; nothing counts occurrences.",
+          "name": "four-member-place-repeated-member-operator",
+          "why": "Two of the four poles are KMB. One match is enough; nothing counts occurrences.",
           "args": {
             "stopId": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
             "operators": ["KMB"]
@@ -211,8 +350,8 @@
           "expect": true
         },
         {
-          "id": "four-member-place-absent-operator",
-          "note": "LWB serves no pole of this place. Note LWB is a distinct operator from KMB in the canonical model even though they share a feed.",
+          "name": "four-member-place-absent-operator",
+          "why": "LWB serves no pole of this place. Note LWB is a distinct operator from KMB in the canonical model even though they share a feed.",
           "args": {
             "stopId": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
             "operators": ["LWB"]
@@ -220,7 +359,7 @@
           "expect": false
         },
         {
-          "id": "four-member-place-or-across-the-operator-axis",
+          "name": "four-member-place-or-across-the-operator-axis",
           "args": {
             "stopId": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
             "operators": ["LWB", "CTB"]
@@ -228,24 +367,36 @@
           "expect": true
         },
         {
-          "id": "no-operator-filter-matches-any-id",
-          "args": { "stopId": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142", "operators": [] },
+          "name": "no-operator-filter-matches-any-id",
+          "args": {
+            "stopId": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
+            "operators": []
+          },
           "expect": true
         },
         {
-          "id": "lone-pole-matches-its-operator",
-          "args": { "stopId": "KMB:ST141", "operators": ["KMB"] },
+          "name": "lone-pole-matches-its-operator",
+          "args": {
+            "stopId": "KMB:ST141",
+            "operators": ["KMB"]
+          },
           "expect": true
         },
         {
-          "id": "lone-pole-rejects-another-operator",
-          "args": { "stopId": "KMB:ST141", "operators": ["CTB"] },
+          "name": "lone-pole-rejects-another-operator",
+          "args": {
+            "stopId": "KMB:ST141",
+            "operators": ["CTB"]
+          },
           "expect": false
         },
         {
-          "id": "the-operator-code-must-be-followed-by-a-colon",
-          "note": "A raw stop code that merely contains an operator's letters must not match: 'KMB:CTB999' is a KMB pole whose upstream code happens to read CTB. The colon is what makes the test a code test rather than a substring test.",
-          "args": { "stopId": "KMB:CTB999", "operators": ["CTB"] },
+          "name": "the-operator-code-must-be-followed-by-a-colon",
+          "why": "A raw stop code that merely contains an operator's letters must not match: 'KMB:CTB999' is a KMB pole whose upstream code happens to read CTB. The colon is what makes the test a code test rather than a substring test.",
+          "args": {
+            "stopId": "KMB:CTB999",
+            "operators": ["CTB"]
+          },
           "expect": false
         }
       ]
@@ -254,63 +405,111 @@
       "doc": "A prefix trie over every route number, upper-cased on insertion. Drives the smart keypad. Expressed here as nested JSON: `{ terminal, children }`, where `children` maps a single character to a child node and `terminal` is true when the path to that node is itself a complete route number.",
       "cases": [
         {
-          "id": "empty-input-is-a-bare-root",
-          "args": { "routeNos": [] },
-          "expect": { "terminal": false, "children": {} }
-        },
-        {
-          "id": "a-route-and-its-own-prefix",
-          "note": "'1' is both a route and a prefix of '1A', so its node is terminal AND has a child. A port modelling terminality as 'a leaf' gets this wrong and the keypad stops offering the submit action on '1'.",
-          "args": { "routeNos": ["1", "1A"] },
+          "name": "empty-input-is-a-bare-root",
+          "args": {
+            "routeNos": []
+          },
           "expect": {
             "terminal": false,
-            "children": {
-              "1": { "terminal": true, "children": { "A": { "terminal": true, "children": {} } } }
-            }
+            "children": {}
           }
         },
         {
-          "id": "input-is-upper-cased",
-          "args": { "routeNos": ["1a"] },
-          "expect": {
-            "terminal": false,
-            "children": {
-              "1": { "terminal": false, "children": { "A": { "terminal": true, "children": {} } } }
-            }
-          }
-        },
-        {
-          "id": "duplicates-are-idempotent",
-          "args": { "routeNos": ["1A", "1a", "1A"] },
-          "expect": {
-            "terminal": false,
-            "children": {
-              "1": { "terminal": false, "children": { "A": { "terminal": true, "children": {} } } }
-            }
-          }
-        },
-        {
-          "id": "branching-numbers-share-a-prefix",
-          "args": { "routeNos": ["10", "1A"] },
+          "name": "a-route-and-its-own-prefix",
+          "why": "'1' is both a route and a prefix of '1A', so its node is terminal AND has a child. A port modelling terminality as 'a leaf' gets this wrong and the keypad stops offering the submit action on '1'.",
+          "args": {
+            "routeNos": ["1", "1A"]
+          },
           "expect": {
             "terminal": false,
             "children": {
               "1": {
-                "terminal": false,
+                "terminal": true,
                 "children": {
-                  "0": { "terminal": true, "children": {} },
-                  "A": { "terminal": true, "children": {} }
+                  "A": {
+                    "terminal": true,
+                    "children": {}
+                  }
                 }
               }
             }
           }
         },
         {
-          "id": "a-blank-route-number-makes-the-root-terminal",
-          "note": "DEFECT. An empty string walks no characters, so it marks the ROOT as terminal — which makes `isCompleteRoute(root, '')` true and tells the keypad that submitting an empty query is meaningful. Unreachable today (the edge index never emits a blank route number) but nothing rejects one, so a bad dataset build would arm it. Recorded rather than left to each platform to handle differently; the fix is to skip blanks on insertion.",
+          "name": "input-is-upper-cased",
+          "args": {
+            "routeNos": ["1a"]
+          },
+          "expect": {
+            "terminal": false,
+            "children": {
+              "1": {
+                "terminal": false,
+                "children": {
+                  "A": {
+                    "terminal": true,
+                    "children": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "duplicates-are-idempotent",
+          "args": {
+            "routeNos": ["1A", "1a", "1A"]
+          },
+          "expect": {
+            "terminal": false,
+            "children": {
+              "1": {
+                "terminal": false,
+                "children": {
+                  "A": {
+                    "terminal": true,
+                    "children": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "branching-numbers-share-a-prefix",
+          "args": {
+            "routeNos": ["10", "1A"]
+          },
+          "expect": {
+            "terminal": false,
+            "children": {
+              "1": {
+                "terminal": false,
+                "children": {
+                  "0": {
+                    "terminal": true,
+                    "children": {}
+                  },
+                  "A": {
+                    "terminal": true,
+                    "children": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "a-blank-route-number-makes-the-root-terminal",
+          "why": "DEFECT. An empty string walks no characters, so it marks the ROOT as terminal — which makes `isCompleteRoute(root, '')` true and tells the keypad that submitting an empty query is meaningful. Unreachable today (the edge index never emits a blank route number) but nothing rejects one, so a bad dataset build would arm it. Recorded rather than left to each platform to handle differently; the fix is to skip blanks on insertion.",
           "knownDefect": true,
-          "args": { "routeNos": [""] },
-          "expect": { "terminal": true, "children": {} }
+          "args": {
+            "routeNos": [""]
+          },
+          "expect": {
+            "terminal": true,
+            "children": {}
+          }
         }
       ]
     },
@@ -318,35 +517,53 @@
       "doc": "The characters that, appended to `prefix`, still lead to a real route — the smart keypad's live key-enabling. Cases give `routeNos` (build the trie from these) and `prefix`; `expect` is the sorted set. Descent upper-cases the prefix. A prefix that leads nowhere yields the empty set, never an error.",
       "cases": [
         {
-          "id": "root-offers-every-first-character",
-          "args": { "routeNos": ["1", "1A", "10", "N121"], "prefix": "" },
+          "name": "root-offers-every-first-character",
+          "args": {
+            "routeNos": ["1", "1A", "10", "N121"],
+            "prefix": ""
+          },
           "expect": ["1", "N"]
         },
         {
-          "id": "one-character-in",
-          "args": { "routeNos": ["1", "1A", "10", "N121"], "prefix": "1" },
+          "name": "one-character-in",
+          "args": {
+            "routeNos": ["1", "1A", "10", "N121"],
+            "prefix": "1"
+          },
           "expect": ["0", "A"]
         },
         {
-          "id": "a-complete-route-with-no-continuation-offers-nothing",
-          "note": "'1A' is a real route and nothing extends it, so every key goes dead. Distinct from a dead prefix — the keypad must enable submit here but no keys.",
-          "args": { "routeNos": ["1", "1A", "10", "N121"], "prefix": "1A" },
+          "name": "a-complete-route-with-no-continuation-offers-nothing",
+          "why": "'1A' is a real route and nothing extends it, so every key goes dead. Distinct from a dead prefix — the keypad must enable submit here but no keys.",
+          "args": {
+            "routeNos": ["1", "1A", "10", "N121"],
+            "prefix": "1A"
+          },
           "expect": []
         },
         {
-          "id": "a-dead-prefix-offers-nothing",
-          "note": "'Z' matches no route at all. Empty, not an error — the keypad never lets a rider reach this, but the text field can.",
-          "args": { "routeNos": ["1", "1A", "10", "N121"], "prefix": "Z" },
+          "name": "a-dead-prefix-offers-nothing",
+          "why": "'Z' matches no route at all. Empty, not an error — the keypad never lets a rider reach this, but the text field can.",
+          "args": {
+            "routeNos": ["1", "1A", "10", "N121"],
+            "prefix": "Z"
+          },
           "expect": []
         },
         {
-          "id": "descent-is-case-insensitive",
-          "args": { "routeNos": ["1", "1A", "10", "N121"], "prefix": "n" },
+          "name": "descent-is-case-insensitive",
+          "args": {
+            "routeNos": ["1", "1A", "10", "N121"],
+            "prefix": "n"
+          },
           "expect": ["1"]
         },
         {
-          "id": "deep-prefix",
-          "args": { "routeNos": ["1", "1A", "10", "N121"], "prefix": "N12" },
+          "name": "deep-prefix",
+          "args": {
+            "routeNos": ["1", "1A", "10", "N121"],
+            "prefix": "N12"
+          },
           "expect": ["1"]
         }
       ]
@@ -355,62 +572,109 @@
       "doc": "Whether the prefix is itself a complete route number, so submitting it is meaningful. A prefix of a real route is NOT complete.",
       "cases": [
         {
-          "id": "a-complete-route-that-is-also-a-prefix",
-          "args": { "routeNos": ["1", "1A", "N121"], "prefix": "1" },
+          "name": "a-complete-route-that-is-also-a-prefix",
+          "args": {
+            "routeNos": ["1", "1A", "N121"],
+            "prefix": "1"
+          },
           "expect": true
         },
         {
-          "id": "a-complete-leaf-route",
-          "args": { "routeNos": ["1", "1A", "N121"], "prefix": "1A" },
+          "name": "a-complete-leaf-route",
+          "args": {
+            "routeNos": ["1", "1A", "N121"],
+            "prefix": "1A"
+          },
           "expect": true
         },
         {
-          "id": "a-prefix-that-is-not-a-route",
-          "args": { "routeNos": ["1", "1A", "N121"], "prefix": "N12" },
+          "name": "a-prefix-that-is-not-a-route",
+          "args": {
+            "routeNos": ["1", "1A", "N121"],
+            "prefix": "N12"
+          },
           "expect": false
         },
         {
-          "id": "a-dead-prefix",
-          "args": { "routeNos": ["1", "1A", "N121"], "prefix": "Z" },
+          "name": "a-dead-prefix",
+          "args": {
+            "routeNos": ["1", "1A", "N121"],
+            "prefix": "Z"
+          },
           "expect": false
         },
         {
-          "id": "the-empty-prefix-is-not-a-route",
-          "note": "Submitting nothing must never be meaningful. Contrast the blank-route-number defect recorded under buildRouteTrie, which is exactly what would break this.",
-          "args": { "routeNos": ["1", "1A", "N121"], "prefix": "" },
+          "name": "the-empty-prefix-is-not-a-route",
+          "why": "Submitting nothing must never be meaningful. Contrast the blank-route-number defect recorded under buildRouteTrie, which is exactly what would break this.",
+          "args": {
+            "routeNos": ["1", "1A", "N121"],
+            "prefix": ""
+          },
           "expect": false
         },
-        { "id": "case-insensitive", "args": { "routeNos": ["1A"], "prefix": "1a" }, "expect": true }
+        {
+          "name": "case-insensitive",
+          "args": {
+            "routeNos": ["1A"],
+            "prefix": "1a"
+          },
+          "expect": true
+        }
       ]
     },
     "indexAlphabet": {
       "doc": "The digits and letters appearing anywhere in the dataset's route numbers, each sorted ascending, so the keypad renders a stable layout of only the keys this dataset can ever use. Anything that is neither an ASCII digit nor an A-Z letter is dropped.",
       "cases": [
         {
-          "id": "digits-and-letters-are-collected-separately-and-sorted",
-          "args": { "routeNos": ["1A", "N121", "6X"] },
-          "expect": { "digits": ["1", "2", "6"], "letters": ["A", "N", "X"] }
+          "name": "digits-and-letters-are-collected-separately-and-sorted",
+          "args": {
+            "routeNos": ["1A", "N121", "6X"]
+          },
+          "expect": {
+            "digits": ["1", "2", "6"],
+            "letters": ["A", "N", "X"]
+          }
         },
         {
-          "id": "lower-case-is-folded-up",
-          "args": { "routeNos": ["6x"] },
-          "expect": { "digits": ["6"], "letters": ["X"] }
+          "name": "lower-case-is-folded-up",
+          "args": {
+            "routeNos": ["6x"]
+          },
+          "expect": {
+            "digits": ["6"],
+            "letters": ["X"]
+          }
         },
         {
-          "id": "punctuation-is-dropped",
-          "note": "A hyphen is neither a digit nor a letter, so no key is offered for it.",
-          "args": { "routeNos": ["1-A"] },
-          "expect": { "digits": ["1"], "letters": ["A"] }
+          "name": "punctuation-is-dropped",
+          "why": "A hyphen is neither a digit nor a letter, so no key is offered for it.",
+          "args": {
+            "routeNos": ["1-A"]
+          },
+          "expect": {
+            "digits": ["1"],
+            "letters": ["A"]
+          }
         },
         {
-          "id": "duplicates-collapse",
-          "args": { "routeNos": ["11", "1A", "1A"] },
-          "expect": { "digits": ["1"], "letters": ["A"] }
+          "name": "duplicates-collapse",
+          "args": {
+            "routeNos": ["11", "1A", "1A"]
+          },
+          "expect": {
+            "digits": ["1"],
+            "letters": ["A"]
+          }
         },
         {
-          "id": "empty-index",
-          "args": { "routeNos": [] },
-          "expect": { "digits": [], "letters": [] }
+          "name": "empty-index",
+          "args": {
+            "routeNos": []
+          },
+          "expect": {
+            "digits": [],
+            "letters": []
+          }
         }
       ]
     },
@@ -418,52 +682,104 @@
       "doc": "Natural comparison of route numbers, so a rider sees 2 before 10 rather than 10 before 2. Numeric-aware and case-insensitive. `expect` is the SIGN only: a port must not assume a magnitude, because collators differ. Ports need an explicitly numeric, case-insensitive collation (Swift: `compare(options: [.numeric, .caseInsensitive])`; Kotlin: a natural-order comparator) — plain byte comparison fails the very first row.",
       "cases": [
         {
-          "id": "numeric-not-lexical",
-          "note": "The whole reason this function exists. Byte comparison puts '10' before '2'.",
-          "args": { "a": "2", "b": "10" },
+          "name": "numeric-not-lexical",
+          "why": "The whole reason this function exists. Byte comparison puts '10' before '2'.",
+          "args": {
+            "a": "2",
+            "b": "10"
+          },
           "expect": -1
         },
         {
-          "id": "a-number-sorts-before-its-lettered-variant",
-          "args": { "a": "10", "b": "10A" },
+          "name": "a-number-sorts-before-its-lettered-variant",
+          "args": {
+            "a": "10",
+            "b": "10A"
+          },
           "expect": -1
         },
         {
-          "id": "lettered-variants-sort-alphabetically",
-          "args": { "a": "10A", "b": "10B" },
+          "name": "lettered-variants-sort-alphabetically",
+          "args": {
+            "a": "10A",
+            "b": "10B"
+          },
           "expect": -1
         },
         {
-          "id": "a-letter-prefix-sorts-after-a-bare-number",
-          "note": "Night routes land at the end of the list, which is what riders expect.",
-          "args": { "a": "N10", "b": "10" },
+          "name": "a-letter-prefix-sorts-after-a-bare-number",
+          "why": "Night routes land at the end of the list, which is what riders expect.",
+          "args": {
+            "a": "N10",
+            "b": "10"
+          },
           "expect": 1
         },
         {
-          "id": "express-prefix-sorts-after-a-bare-number",
-          "args": { "a": "X1", "b": "1" },
+          "name": "express-prefix-sorts-after-a-bare-number",
+          "args": {
+            "a": "X1",
+            "b": "1"
+          },
           "expect": 1
         },
         {
-          "id": "case-is-not-significant",
-          "note": "Equal, not merely close. searchRoutes relies on this returning 0 so its secondary operator comparison decides the order.",
-          "args": { "a": "10a", "b": "10A" },
+          "name": "case-is-not-significant",
+          "why": "Equal, not merely close. searchRoutes relies on this returning 0 so its secondary operator comparison decides the order.",
+          "args": {
+            "a": "10a",
+            "b": "10A"
+          },
           "expect": 0
         },
-        { "id": "identical", "args": { "a": "1", "b": "1" }, "expect": 0 },
-        { "id": "multi-digit-numeric-run", "args": { "a": "99", "b": "269X" }, "expect": -1 }
+        {
+          "name": "identical",
+          "args": {
+            "a": "1",
+            "b": "1"
+          },
+          "expect": 0
+        },
+        {
+          "name": "multi-digit-numeric-run",
+          "args": {
+            "a": "99",
+            "b": "269X"
+          },
+          "expect": -1
+        }
       ]
     },
     "normalizeRouteQuery": {
       "doc": "Normalize a typed route query from the keypad or the text field: trim, then upper-case. Nothing else — no stripping of punctuation, no collapsing of internal spaces.",
       "cases": [
-        { "id": "trims-and-upper-cases", "args": { "q": "  10a " }, "expect": "10A" },
-        { "id": "already-normalized", "args": { "q": "N121" }, "expect": "N121" },
-        { "id": "empty", "args": { "q": "" }, "expect": "" },
         {
-          "id": "whitespace-only-normalizes-to-empty",
-          "note": "Which searchRoutes then treats as 'no query', returning nothing rather than everything.",
-          "args": { "q": "   " },
+          "name": "trims-and-upper-cases",
+          "args": {
+            "q": "  10a "
+          },
+          "expect": "10A"
+        },
+        {
+          "name": "already-normalized",
+          "args": {
+            "q": "N121"
+          },
+          "expect": "N121"
+        },
+        {
+          "name": "empty",
+          "args": {
+            "q": ""
+          },
+          "expect": ""
+        },
+        {
+          "name": "whitespace-only-normalizes-to-empty",
+          "why": "Which searchRoutes then treats as 'no query', returning nothing rather than everything.",
+          "args": {
+            "q": "   "
+          },
           "expect": ""
         }
       ]
@@ -472,8 +788,8 @@
       "doc": "Routes whose number begins with the normalized query and pass the filter, sorted by number then operator. An EMPTY query returns NOTHING — deliberately, so an empty search box shows an empty state instead of the entire network. `expect` is the resulting ids in order.",
       "cases": [
         {
-          "id": "prefix-match-sorted-by-number-then-operator",
-          "note": "Three routes start with '1'. 10 sorts before 10A; the two 10s tie on number, so the operator breaks it and CTB comes before KMB.",
+          "name": "prefix-match-sorted-by-number-then-operator",
+          "why": "Three routes start with '1'. 10 sorts before 10A; the two 10s tie on number, so the operator breaks it and CTB comes before KMB.",
           "args": {
             "routes": [
               {
@@ -481,43 +797,78 @@
                 "operator": "KMB",
                 "routeNo": "10",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               },
               {
                 "id": "CTB:10:outbound:1",
                 "operator": "CTB",
                 "routeNo": "10",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               },
               {
                 "id": "KMB:2:outbound:1",
                 "operator": "KMB",
                 "routeNo": "2",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               },
               {
                 "id": "KMB:10A:outbound:1",
                 "operator": "KMB",
                 "routeNo": "10A",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               }
             ],
             "query": "1",
-            "filter": { "operators": [], "categories": [] },
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
             "limit": 60
           },
           "expect": ["CTB:10:outbound:1", "KMB:10:outbound:1", "KMB:10A:outbound:1"]
         },
         {
-          "id": "empty-query-returns-nothing",
-          "note": "Not 'everything'. A port that treats an empty prefix as matching all would dump the network into the results list.",
+          "name": "empty-query-returns-nothing",
+          "why": "Not 'everything'. A port that treats an empty prefix as matching all would dump the network into the results list.",
           "args": {
             "routes": [
               {
@@ -525,18 +876,29 @@
                 "operator": "KMB",
                 "routeNo": "10",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               }
             ],
             "query": "",
-            "filter": { "operators": [], "categories": [] },
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
             "limit": 60
           },
           "expect": []
         },
         {
-          "id": "query-is-trimmed-and-case-folded",
+          "name": "query-is-trimmed-and-case-folded",
           "args": {
             "routes": [
               {
@@ -544,18 +906,29 @@
                 "operator": "KMB",
                 "routeNo": "10A",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               }
             ],
             "query": " 10a ",
-            "filter": { "operators": [], "categories": [] },
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
             "limit": 60
           },
           "expect": ["KMB:10A:outbound:1"]
         },
         {
-          "id": "operator-filter-applies",
+          "name": "operator-filter-applies",
           "args": {
             "routes": [
               {
@@ -563,27 +936,46 @@
                 "operator": "KMB",
                 "routeNo": "10",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               },
               {
                 "id": "CTB:10:outbound:1",
                 "operator": "CTB",
                 "routeNo": "10",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               }
             ],
             "query": "10",
-            "filter": { "operators": ["CTB"], "categories": [] },
+            "filter": {
+              "operators": ["CTB"],
+              "categories": []
+            },
             "limit": 60
           },
           "expect": ["CTB:10:outbound:1"]
         },
         {
-          "id": "both-filter-axes-apply-together",
-          "note": "Query '2' matches both a plain KMB route and an express one; the category axis keeps only the express.",
+          "name": "both-filter-axes-apply-together",
+          "why": "Query '2' matches both a plain KMB route and an express one; the category axis keeps only the express.",
           "args": {
             "routes": [
               {
@@ -591,27 +983,46 @@
                 "operator": "KMB",
                 "routeNo": "2",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               },
               {
                 "id": "KMB:269X:outbound:1",
                 "operator": "KMB",
                 "routeNo": "269X",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               }
             ],
             "query": "2",
-            "filter": { "operators": ["KMB"], "categories": ["express"] },
+            "filter": {
+              "operators": ["KMB"],
+              "categories": ["express"]
+            },
             "limit": 60
           },
           "expect": ["KMB:269X:outbound:1"]
         },
         {
-          "id": "limit-truncates-after-sorting",
-          "note": "The limit is applied to the SORTED list, so it keeps the routes a rider most expects, not the first two the index happened to hold.",
+          "name": "limit-truncates-after-sorting",
+          "why": "The limit is applied to the SORTED list, so it keeps the routes a rider most expects, not the first two the index happened to hold.",
           "args": {
             "routes": [
               {
@@ -619,27 +1030,46 @@
                 "operator": "KMB",
                 "routeNo": "10A",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               },
               {
                 "id": "KMB:10:outbound:1",
                 "operator": "KMB",
                 "routeNo": "10",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               }
             ],
             "query": "1",
-            "filter": { "operators": [], "categories": [] },
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
             "limit": 1
           },
           "expect": ["KMB:10:outbound:1"]
         },
         {
-          "id": "circular-route-blank-en-found-by-number",
-          "note": "NAMED BOUNDARY ROW (empty `en` on a circular route). Upstream really ships GMB circular services with a blank English origin/destination while the Chinese reads '大角咀(循環線)' — the '(CIRCULAR)' marker that ADR-046 detects to suppress the direction toggle. Route search must be unaffected, because it matches on the NUMBER and never reads the name: a rider on an English UI can still find route 2 even though the app has no English words to show for either end of it. The row exists so nobody 'improves' route search into a name search and thereby makes blank-`en` routes unfindable in English — a regression no schema could catch, since a blank string is a perfectly valid string.",
+          "name": "circular-route-blank-en-found-by-number",
+          "why": "NAMED BOUNDARY ROW (empty `en` on a circular route). Upstream really ships GMB circular services with a blank English origin/destination while the Chinese reads '大角咀(循環線)' — the '(CIRCULAR)' marker that ADR-046 detects to suppress the direction toggle. Route search must be unaffected, because it matches on the NUMBER and never reads the name: a rider on an English UI can still find route 2 even though the app has no English words to show for either end of it. The row exists so nobody 'improves' route search into a name search and thereby makes blank-`en` routes unfindable in English — a regression no schema could catch, since a blank string is a perfectly valid string.",
           "args": {
             "routes": [
               {
@@ -647,7 +1077,11 @@
                 "operator": "GMB",
                 "routeNo": "2",
                 "bound": "outbound",
-                "origin": { "en": "", "zh-Hant": "大角咀(循環線)", "zh-Hans": "大角咀(循环线)" },
+                "origin": {
+                  "en": "",
+                  "zh-Hant": "大角咀(循環線)",
+                  "zh-Hans": "大角咀(循环线)"
+                },
                 "destination": {
                   "en": "",
                   "zh-Hant": "大角咀(循環線)",
@@ -656,13 +1090,16 @@
               }
             ],
             "query": "2",
-            "filter": { "operators": [], "categories": [] },
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
             "limit": 60
           },
           "expect": ["GMB:2:outbound:1023"]
         },
         {
-          "id": "no-match-returns-nothing",
+          "name": "no-match-returns-nothing",
           "args": {
             "routes": [
               {
@@ -670,12 +1107,23 @@
                 "operator": "KMB",
                 "routeNo": "10",
                 "bound": "outbound",
-                "origin": { "en": "A", "zh-Hant": "甲", "zh-Hans": "甲" },
-                "destination": { "en": "B", "zh-Hant": "乙", "zh-Hans": "乙" }
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
               }
             ],
             "query": "99",
-            "filter": { "operators": [], "categories": [] },
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
             "limit": 60
           },
           "expect": []
@@ -686,19 +1134,27 @@
       "doc": "Stops and places whose name contains the query in ANY locale, so a Chinese rider and an English rider both find a stop regardless of the UI language. A prefix match ranks above a mid-string match; ties keep index order, which means a port needs a STABLE sort (Swift's `sorted(by:)` is not stable — use an index tiebreak). The query is trimmed and lower-cased on both sides. An empty query returns nothing. The operator filter, if any, is applied through the id. `expect` is the resulting ids in order.",
       "cases": [
         {
-          "id": "prefix-ranks-above-mid-string",
-          "note": "Both names contain 'city'; the one that STARTS with it comes first, even though it is second in the index.",
+          "name": "prefix-ranks-above-mid-string",
+          "why": "Both names contain 'city'; the one that STARTS with it comes first, even though it is second in the index.",
           "args": {
             "stops": [
               {
                 "id": "CTB:002451",
-                "name": { "en": "NORTH POINT CITY", "zh-Hant": "北角城", "zh-Hans": "北角城" },
+                "name": {
+                  "en": "NORTH POINT CITY",
+                  "zh-Hant": "北角城",
+                  "zh-Hans": "北角城"
+                },
                 "lat": 22.2911,
                 "lng": 114.2005
               },
               {
                 "id": "KMB:ST141",
-                "name": { "en": "CITY ONE STATION", "zh-Hant": "第一城站", "zh-Hans": "第一城站" },
+                "name": {
+                  "en": "CITY ONE STATION",
+                  "zh-Hant": "第一城站",
+                  "zh-Hans": "第一城站"
+                },
                 "lat": 22.3833,
                 "lng": 114.2044
               }
@@ -711,19 +1167,27 @@
           "expect": ["KMB:ST141", "CTB:002451"]
         },
         {
-          "id": "equal-rank-keeps-index-order",
-          "note": "Two prefix matches must come back in index order, which requires a STABLE sort. Swift's sort is not stable, so a naive port can flip these two and the results list reshuffles between keystrokes for no visible reason.",
+          "name": "equal-rank-keeps-index-order",
+          "why": "Two prefix matches must come back in index order, which requires a STABLE sort. Swift's sort is not stable, so a naive port can flip these two and the results list reshuffles between keystrokes for no visible reason.",
           "args": {
             "stops": [
               {
                 "id": "KMB:ST141",
-                "name": { "en": "CITY ONE STATION", "zh-Hant": "第一城站", "zh-Hans": "第一城站" },
+                "name": {
+                  "en": "CITY ONE STATION",
+                  "zh-Hant": "第一城站",
+                  "zh-Hans": "第一城站"
+                },
                 "lat": 22.3833,
                 "lng": 114.2044
               },
               {
                 "id": "KMB:CIT02",
-                "name": { "en": "CITY GARDEN", "zh-Hant": "城市花園", "zh-Hans": "城市花园" },
+                "name": {
+                  "en": "CITY GARDEN",
+                  "zh-Hant": "城市花園",
+                  "zh-Hans": "城市花园"
+                },
                 "lat": 22.2925,
                 "lng": 114.1953
               }
@@ -736,12 +1200,16 @@
           "expect": ["KMB:ST141", "KMB:CIT02"]
         },
         {
-          "id": "empty-query-returns-nothing",
+          "name": "empty-query-returns-nothing",
           "args": {
             "stops": [
               {
                 "id": "KMB:ST141",
-                "name": { "en": "CITY ONE STATION", "zh-Hant": "第一城站", "zh-Hans": "第一城站" },
+                "name": {
+                  "en": "CITY ONE STATION",
+                  "zh-Hant": "第一城站",
+                  "zh-Hans": "第一城站"
+                },
                 "lat": 22.3833,
                 "lng": 114.2044
               }
@@ -754,12 +1222,16 @@
           "expect": []
         },
         {
-          "id": "query-is-trimmed-and-case-folded",
+          "name": "query-is-trimmed-and-case-folded",
           "args": {
             "stops": [
               {
                 "id": "KMB:ST141",
-                "name": { "en": "CITY ONE STATION", "zh-Hant": "第一城站", "zh-Hans": "第一城站" },
+                "name": {
+                  "en": "CITY ONE STATION",
+                  "zh-Hant": "第一城站",
+                  "zh-Hans": "第一城站"
+                },
                 "lat": 22.3833,
                 "lng": 114.2044
               }
@@ -772,13 +1244,17 @@
           "expect": ["KMB:ST141"]
         },
         {
-          "id": "circular-route-blank-en-found-by-chinese-name",
-          "note": "NAMED BOUNDARY ROW (empty `en` on a circular route). The GMB circular terminus whose English name upstream is an empty string. Two things must hold at once: the Chinese query finds it, AND the active locale is `en` — so the candidate list must fall through the two blank English entries to the Chinese ones. A port that reads only the active locale's name, or that treats a blank name as a reason to skip the stop entirely, makes this stop unsearchable for the majority of HK riders, who type Chinese. That is why the row is not decorative: the blank is in the field the code looks at FIRST.",
+          "name": "circular-route-blank-en-found-by-chinese-name",
+          "why": "NAMED BOUNDARY ROW (empty `en` on a circular route). The GMB circular terminus whose English name upstream is an empty string. Two things must hold at once: the Chinese query finds it, AND the active locale is `en` — so the candidate list must fall through the two blank English entries to the Chinese ones. A port that reads only the active locale's name, or that treats a blank name as a reason to skip the stop entirely, makes this stop unsearchable for the majority of HK riders, who type Chinese. That is why the row is not decorative: the blank is in the field the code looks at FIRST.",
           "args": {
             "stops": [
               {
                 "id": "GMB:TKT01",
-                "name": { "en": "", "zh-Hant": "大角咀(循環線)", "zh-Hans": "大角咀(循环线)" },
+                "name": {
+                  "en": "",
+                  "zh-Hant": "大角咀(循環線)",
+                  "zh-Hans": "大角咀(循环线)"
+                },
                 "lat": 22.3216,
                 "lng": 114.1595
               }
@@ -791,13 +1267,17 @@
           "expect": ["GMB:TKT01"]
         },
         {
-          "id": "a-blank-en-cannot-be-matched-by-an-english-query",
-          "note": "The honest converse of the row above: there is no English name, so an English query finds nothing. A port must NOT make a blank name match everything, which is what an unguarded `indexOf` on an empty candidate would do.",
+          "name": "a-blank-en-cannot-be-matched-by-an-english-query",
+          "why": "The honest converse of the row above: there is no English name, so an English query finds nothing. A port must NOT make a blank name match everything, which is what an unguarded `indexOf` on an empty candidate would do.",
           "args": {
             "stops": [
               {
                 "id": "GMB:TKT01",
-                "name": { "en": "", "zh-Hant": "大角咀(循環線)", "zh-Hans": "大角咀(循环线)" },
+                "name": {
+                  "en": "",
+                  "zh-Hant": "大角咀(循環線)",
+                  "zh-Hans": "大角咀(循环线)"
+                },
                 "lat": 22.3216,
                 "lng": 114.1595
               }
@@ -810,19 +1290,27 @@
           "expect": []
         },
         {
-          "id": "four-member-place-appears-once",
-          "note": "NAMED BOUNDARY ROW (a 4-member place). The edge pre-merges a same-kerb group into ONE index row carrying a 4-member `P:` id, so a query returns one result for the place, not one per pole — and the id the rider navigates to is the whole place. A port that re-derived rows per member would show the same kerb four times.",
+          "name": "four-member-place-appears-once",
+          "why": "NAMED BOUNDARY ROW (a 4-member place). The edge pre-merges a same-kerb group into ONE index row carrying a 4-member `P:` id, so a query returns one result for the place, not one per pole — and the id the rider navigates to is the whole place. A port that re-derived rows per member would show the same kerb four times.",
           "args": {
             "stops": [
               {
                 "id": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
-                "name": { "en": "CHOI HUNG ESTATE", "zh-Hant": "彩虹邨", "zh-Hans": "彩虹邨" },
+                "name": {
+                  "en": "CHOI HUNG ESTATE",
+                  "zh-Hant": "彩虹邨",
+                  "zh-Hans": "彩虹邨"
+                },
                 "lat": 22.3346,
                 "lng": 114.2085
               },
               {
                 "id": "KMB:ST141",
-                "name": { "en": "CITY ONE STATION", "zh-Hant": "第一城站", "zh-Hans": "第一城站" },
+                "name": {
+                  "en": "CITY ONE STATION",
+                  "zh-Hant": "第一城站",
+                  "zh-Hans": "第一城站"
+                },
                 "lat": 22.3833,
                 "lng": 114.2044
               }
@@ -835,13 +1323,17 @@
           "expect": ["P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142"]
         },
         {
-          "id": "four-member-place-passes-a-third-member-operator-filter",
-          "note": "The GMB filter must reach the place through its THIRD member id. Pairs the stopMatchesOperators row with the search path that actually calls it.",
+          "name": "four-member-place-passes-a-third-member-operator-filter",
+          "why": "The GMB filter must reach the place through its THIRD member id. Pairs the stopMatchesOperators row with the search path that actually calls it.",
           "args": {
             "stops": [
               {
                 "id": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
-                "name": { "en": "CHOI HUNG ESTATE", "zh-Hant": "彩虹邨", "zh-Hans": "彩虹邨" },
+                "name": {
+                  "en": "CHOI HUNG ESTATE",
+                  "zh-Hant": "彩虹邨",
+                  "zh-Hans": "彩虹邨"
+                },
                 "lat": 22.3346,
                 "lng": 114.2085
               }
@@ -854,12 +1346,16 @@
           "expect": ["P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142"]
         },
         {
-          "id": "four-member-place-fails-an-absent-operator-filter",
+          "name": "four-member-place-fails-an-absent-operator-filter",
           "args": {
             "stops": [
               {
                 "id": "P:CTB:002451+GMB:HK1234+KMB:ST141+KMB:ST142",
-                "name": { "en": "CHOI HUNG ESTATE", "zh-Hant": "彩虹邨", "zh-Hans": "彩虹邨" },
+                "name": {
+                  "en": "CHOI HUNG ESTATE",
+                  "zh-Hant": "彩虹邨",
+                  "zh-Hans": "彩虹邨"
+                },
                 "lat": 22.3346,
                 "lng": 114.2085
               }
@@ -872,13 +1368,17 @@
           "expect": []
         },
         {
-          "id": "a-simplified-query-matches-the-simplified-name",
-          "note": "The candidate list covers all three locales, so a Simplified reader finds a stop whose Traditional and Simplified names differ.",
+          "name": "a-simplified-query-matches-the-simplified-name",
+          "why": "The candidate list covers all three locales, so a Simplified reader finds a stop whose Traditional and Simplified names differ.",
           "args": {
             "stops": [
               {
                 "id": "KMB:CIT02",
-                "name": { "en": "CITY GARDEN", "zh-Hant": "城市花園", "zh-Hans": "城市花园" },
+                "name": {
+                  "en": "CITY GARDEN",
+                  "zh-Hant": "城市花園",
+                  "zh-Hans": "城市花园"
+                },
                 "lat": 22.2925,
                 "lng": 114.1953
               }
@@ -891,18 +1391,26 @@
           "expect": ["KMB:CIT02"]
         },
         {
-          "id": "limit-truncates",
+          "name": "limit-truncates",
           "args": {
             "stops": [
               {
                 "id": "KMB:ST141",
-                "name": { "en": "CITY ONE STATION", "zh-Hant": "第一城站", "zh-Hans": "第一城站" },
+                "name": {
+                  "en": "CITY ONE STATION",
+                  "zh-Hant": "第一城站",
+                  "zh-Hans": "第一城站"
+                },
                 "lat": 22.3833,
                 "lng": 114.2044
               },
               {
                 "id": "KMB:CIT02",
-                "name": { "en": "CITY GARDEN", "zh-Hant": "城市花園", "zh-Hans": "城市花园" },
+                "name": {
+                  "en": "CITY GARDEN",
+                  "zh-Hant": "城市花園",
+                  "zh-Hans": "城市花园"
+                },
                 "lat": 22.2925,
                 "lng": 114.1953
               }
@@ -915,12 +1423,16 @@
           "expect": ["KMB:ST141"]
         },
         {
-          "id": "no-match-returns-nothing",
+          "name": "no-match-returns-nothing",
           "args": {
             "stops": [
               {
                 "id": "KMB:ST141",
-                "name": { "en": "CITY ONE STATION", "zh-Hant": "第一城站", "zh-Hans": "第一城站" },
+                "name": {
+                  "en": "CITY ONE STATION",
+                  "zh-Hant": "第一城站",
+                  "zh-Hans": "第一城站"
+                },
                 "lat": 22.3833,
                 "lng": 114.2044
               }

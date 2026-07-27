@@ -102,30 +102,32 @@ export function etaLabelParts(arrivalIso: string, now: number, locale: Locale): 
   return { kind: 'mins', value: Math.max(minutes, 1), unit: MIN_LABEL[locale] }
 }
 
-/**
- * Absolute clock time (HH:mm, 24h) — preferred for longer waits.
- *
- * Deliberately **not** `@spec`-tagged, and the only formatter in this file that isn't. It delegates
- * to the platform's ICU implementation *and to the host time zone*, so its output is not a
- * language-neutral rule and a JSON corpus row for it would assert a property of the machine rather
- * than of this code. Two consequences worth knowing before porting it: `Intl` here reads the
- * **device** zone, not Asia/Hong_Kong, so this renders the wrong clock time anywhere outside HK
- * (see docs/08 — a fix belongs with the timetable work, not with the fixture harness); and the
- * contract a port must honour is the *shape* — 24h, zero-padded, colon-separated — never "whatever
- * the platform's short time style gives you".
- */
-export function formatClock(arrivalIso: string, locale: Locale): string {
-  return new Date(arrivalIso).toLocaleTimeString(localeTag(locale), {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
+/** Hong Kong is UTC+8 all year — no DST since 1979 — so the offset is a constant, not a lookup. */
+const HK_UTC_OFFSET_MS = 8 * 60 * 60 * 1000
 
-function localeTag(locale: Locale): string {
-  if (locale === 'en') return 'en-HK'
-  if (locale === 'zh-Hant') return 'zh-Hant-HK'
-  return 'zh-Hans-CN'
+/**
+ * Hong Kong wall-clock time of an arrival, `HH:mm` on a 24-hour clock — preferred for longer waits.
+ * Returns `''` for an input that is not a parseable timestamp.
+ *
+ * Computed arithmetically rather than through `toLocaleTimeString`, which is why it can be pinned by
+ * a corpus at all. The locale-formatting version this replaced read the **device** time zone and the
+ * host ICU version, so the same ISO string rendered three different ways on three platforms, and a
+ * rider abroad got their own local time on a Hong Kong bus board. Neither is a property of this
+ * code, so no fixture could have caught either. Shift the instant into HK and read the UTC fields
+ * back: one branch, no locale, byte-reproducible everywhere.
+ *
+ * Note there is deliberately no `locale` parameter. A 24-hour `HH:mm` is identical in all three of
+ * our locales, so a locale argument could only introduce a difference we do not want.
+ *
+ * @spec eta#formatClock
+ */
+export function formatClock(arrivalIso: string): string {
+  const t = Date.parse(arrivalIso)
+  if (Number.isNaN(t)) return ''
+  const hk = new Date(t + HK_UTC_OFFSET_MS)
+  const hh = String(hk.getUTCHours()).padStart(2, '0')
+  const mm = String(hk.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }
 
 /**

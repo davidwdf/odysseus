@@ -10,7 +10,7 @@ describe('route-position#inferBusMarkers', () => {
     corpus,
     'inferBusMarkers',
   )) {
-    it(c.id, () => {
+    it(c.name, () => {
       expect(inferBusMarkers(c.args.soonest, at(c.args.nowIso))).toEqual(c.expect)
     })
   }

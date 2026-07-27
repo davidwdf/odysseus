@@ -23,14 +23,16 @@
 
 /** One row of a corpus group. `args` is named arguments; `expect` is the whole expected result. */
 export interface SpecCase<Args, Expected> {
-  id: string
+  /** Lower-kebab-case, unique within the group. `name` and `why` match the field names WP1-2's id
+   *  corpus already uses (`packages/contract/src/ids/id-corpus.json`), so one reader serves both. */
+  name: string
   /** Prose for a porter: what this row catches, and why it is not decorative. */
-  note?: string
+  why?: string
   /**
    * True when the row records behaviour we agree is WRONG. It still asserts, so every platform stays
    * wrong in the same way rather than three different ways — and so the fix is a single coordinated
-   * edit. The `note` says what `expect` becomes once it is fixed. `check-spec-coverage.mjs` requires
-   * that note, and prints a count of these rows on every run so the number cannot creep unnoticed.
+   * edit. The `why` says what `expect` becomes once it is fixed. `check-spec-coverage.mjs` requires
+   * that prose, and prints a count of these rows on every run so the number cannot creep unnoticed.
    */
   knownDefect?: boolean
   args: Args
@@ -45,6 +47,7 @@ interface RawGroup {
 interface RawFile {
   module: string
   source: string
+  version: number
   doc: string
   groups: Record<string, RawGroup>
 }
