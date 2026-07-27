@@ -4,41 +4,28 @@
 // and route/stop search work offline. This is the first realization of the on-device
 // index (ADR-007). Everything here is pure + platform-free so it's reusable + testable.
 
-import type { Bound, I18nText, Locale, OperatorId } from './types'
+// The three wire shapes below are `z.infer` of the schemas in `@nextbus/contract` — the single
+// declaration, imported type-only so nothing reaches the runtime graph (ADR-052). See `types.ts`.
+import type { RouteLiteSchema, SearchIndexSchema, StopLiteSchema } from '@nextbus/contract'
+import type { z } from 'zod'
+import type { Locale, OperatorId } from './types'
 
 /**
  * One searchable route, collapsed to a single record per (operator, route number,
  * direction) — riders search by number, not by the operator's service-type variants.
  * `id` is a representative canonical route id to navigate to.
  */
-export interface RouteLite {
-  id: string
-  operator: OperatorId
-  routeNo: string
-  bound: Bound
-  origin: I18nText
-  destination: I18nText
-}
+export type RouteLite = z.infer<typeof RouteLiteSchema>
 
 /**
  * One searchable stop or same-kerb place. `id` is a canonical stop id
  * (`KMB:…`/`CTB:…`) or a merged place id (`P:…`) — both resolve in `/v1/stop/:id`.
  * Same-kerb pairs are pre-merged on the edge so they appear once.
  */
-export interface StopLite {
-  id: string
-  name: I18nText
-  lat: number
-  lng: number
-}
+export type StopLite = z.infer<typeof StopLiteSchema>
 
 /** The compact static index shipped to the client for on-device search. */
-export interface SearchIndex {
-  /** Coarse content tag; the client redownloads when it changes. */
-  version: string
-  routes: RouteLite[]
-  stops: StopLite[]
-}
+export type SearchIndex = z.infer<typeof SearchIndexSchema>
 
 // ── Route classification (for the filter chips) ─────────────────────────────
 // Derived purely from the route number — the categories HK riders actually filter

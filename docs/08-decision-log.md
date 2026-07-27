@@ -1858,10 +1858,11 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   answer is no, decision (1) stands as the shipped feature and this becomes a watch item.
 
 ## ADR-052 — The wire contract: Zod is the single declaration, types erase, and the schema stays additive-safe
-- **Status:** **Decided 2026-07-27; being implemented** (WP1-1 of
-  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). `packages/contract` exists with
-  the primitives and the JSON-Schema emit; the remaining shapes, the OpenAPI document and the conformance test
-  are in progress on the same branch. Amends the plan's WP1-1 sketch in one respect — see decision (2).
+- **Status:** **Decided and implemented 2026-07-27** (WP1-1 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). `packages/contract` holds every
+  wire shape, `packages/core`'s types are `z.infer` of them, `openapi.json` is emitted and committed, and three
+  gates enforce the decisions below. **`apps/mobile` has a literally zero diff**, which was the acceptance
+  criterion. Amends the plan's WP1-1 sketch in one respect — see decision (2).
 - **Context:** The requirement driving this is **not** "add validation". It is: *a change we make to the system
   must reach every supported platform equivalently, and the data structures must still be adjustable later.*
   Those two pull against each other — the usual way to guarantee cross-platform agreement is to freeze the
@@ -1913,6 +1914,33 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      `z.toJSONSchema()` emits exactly that — one less generator to keep in step. Verified: `.meta({ id })`
      hoists a named shape into `$defs` with a `$ref` (so it becomes a reusable component, not the same object
      inlined nine times), custom `x-` keys survive the emit, and the `override` hook can open the objects.
+- **The three gates** (all run by `pnpm test`, and each one was verified to *fail* on an injected violation —
+  a gate nobody has watched fail is not known to work):
+  1. **`packages/core/scripts/check-type-only-contract.mjs`** — emits `core` with tsc and reads the output:
+     no emitted `.js` may reference zod or `@nextbus/contract`, and `types.js` must be an empty module. It
+     asserts the property (nothing survives into the JavaScript) rather than a proxy for it (the source says
+     `import type`), so a re-export chain or an accidental value import cannot slip past a grep. Note it needs
+     `--removeComments`: without it the check fails on its own documentation, which names both forbidden
+     strings in prose.
+  2. **`apps/edge/test/wire-conformance.test.ts`** — parses every endpoint's real response through its
+     published schema, inside workerd. Two assertions, and the second is the one that is easy to miss:
+     the response must satisfy the schema, **and must carry nothing the schema doesn't describe**. `z.object()`
+     *strips* unknown keys rather than rejecting them, so `parse()` alone would accept an undocumented field
+     and silently discard it — drift in the direction that hurts most, because the data exists, the web app
+     reads it, and no native client can see it. Endpoint ids are discovered from a live `/v1/nearby` response
+     rather than hard-coded, so the test cannot drift away from the fixture.
+  3. **`packages/contract/scripts/check-openapi-current.mjs`** — rebuilds the document and compares it to the
+     committed `openapi.json`, so forgetting to re-emit is a red build rather than a native client generated
+     from last month's contract. Compares parsed documents, not bytes, so formatting alone can't fail it.
+     `openapi.json` is excluded from Biome (`biome.json`) — a generated artefact formatted by two tools with
+     different opinions would be permanently dirty.
+- **A real bug the conformance gate found on its first run** (fixed in the same branch, `apps/edge/src/index.ts`):
+  `/v1/nearby` read its coordinates with `Number(url.searchParams.get('lat'))`, and **`Number(null)` is `0`, not
+  `NaN`**. A request with *missing* lat/lng was therefore served as the coordinates 0, 0 — the Gulf of Guinea —
+  returning an empty list with a **200** instead of the 400 the handler intended. Malformed values (`lat=abc`)
+  were rejected all along; only absent ones slipped through. A client with a broken location permission got a
+  confident "no stops near you" rather than an error it could report. This is the argument for the gate in
+  miniature: the bug was invisible from the inside and obvious the moment something asserted the contract.
 - **Consequences / notes for whoever touches this next:**
   - **`zod@4.4.3` is pinned exactly**, matching `@nextbus/data-normalize`. There are already **two** zod majors
     in the tree — v3.25.76 hoisted at the root by `@cloudflare/vitest-pool-workers` and `@expo/metro-runtime`,

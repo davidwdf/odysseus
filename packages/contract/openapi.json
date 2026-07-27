@@ -1,0 +1,1103 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "NextBus HK — wire API",
+    "version": "1.0.0",
+    "description": "Hong Kong bus arrival times, normalized across KMB/LWB, Citybus and Green Minibus.\n\nConventions that are easy to get wrong, and are stated per-field in the schemas:\n\n- **Timestamps** are ISO-8601 with a `+08:00` offset.\n- **`\"HH:mm\"` may exceed 24** — `\"25:35\"` means 01:35 the next day.\n- **Fares are decimal strings.** Compare numerically, display verbatim, never parse to a float.\n- **Objects are open.** Additional properties are permitted by design, so a client generated\n  from an older revision of this document keeps decoding after a field is added. Do not\n  configure your generator to reject unknown keys.\n- **Enums marked `x-unknown-tolerant`** will gain members without a major version bump.\n  Generate a fallback case (`case unknown(String)`); do not throw on an unrecognized value.\n- **ETAs are approximations.** Do not run a per-second countdown; refresh the value only when\n  a new reading arrives, and use `observedAt` to show staleness."
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Dataset tier and in-isolate build count for this isolate.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Dataset tier and in-isolate build count for this isolate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nearby": {
+      "get": {
+        "operationId": "getNearby",
+        "summary": "Stops and merged places near a coordinate, with their soonest arrivals.",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "description": "Latitude, WGS84 degrees.",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "required": true,
+            "description": "Longitude, WGS84 degrees.",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "radius",
+            "in": "query",
+            "required": false,
+            "description": "Search radius in metres, default 500. **Clamped server-side to 50–2000**: since ADR-055 the radius decides how many KV keys a request reads (one per ~1.1 km cell, quadratic), so an unclamped value is a remote amplification from one query parameter.",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stops and merged places near a coordinate, with their soonest arrivals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearbyList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stop/{id}": {
+      "get": {
+        "operationId": "getStop",
+        "summary": "A stop or merged place, the routes serving it, and their current ETAs.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical stop id (e.g. \"KMB:1234\") or merged place id (\"P:<a>+<b>\"). A member pole id is promoted to its place. **Percent-encode it** — place ids contain \"+\", which decodes to a space.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A stop or merged place, the routes serving it, and their current ETAs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/route/{id}": {
+      "get": {
+        "operationId": "getRoute",
+        "summary": "A route direction with its ordered stops and per-stop ETAs.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical route id, e.g. \"KMB:6:outbound:1\". Percent-encode it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A route direction with its ordered stops and per-stop ETAs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/etas/{id}": {
+      "get": {
+        "operationId": "getStopEtas",
+        "summary": "Live arrivals for a stop or place, deduped to one line per route+direction.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical stop or place id. Percent-encode it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "routes",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated canonical route ids to restrict the fan-out to.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Live arrivals for a stop or place, deduped to one line per route+direction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtaList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/index": {
+      "get": {
+        "operationId": "getSearchIndex",
+        "summary": "The compact route + stop index for on-device search.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The compact route + stop index for on-device search.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchIndex"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request could not be served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Locale": {
+        "$id": "#/components/schemas/Locale",
+        "type": "string",
+        "enum": [
+          "en",
+          "zh-Hant",
+          "zh-Hans"
+        ],
+        "x-unknown-tolerant": true
+      },
+      "I18nText": {
+        "$id": "#/components/schemas/I18nText",
+        "type": "object",
+        "properties": {
+          "en": {
+            "type": "string"
+          },
+          "zh-Hant": {
+            "type": "string"
+          },
+          "zh-Hans": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "en",
+          "zh-Hant",
+          "zh-Hans"
+        ]
+      },
+      "OperatorId": {
+        "$id": "#/components/schemas/OperatorId",
+        "type": "string",
+        "enum": [
+          "KMB",
+          "LWB",
+          "CTB",
+          "GMB"
+        ],
+        "x-unknown-tolerant": true
+      },
+      "Bound": {
+        "$id": "#/components/schemas/Bound",
+        "type": "string",
+        "enum": [
+          "inbound",
+          "outbound"
+        ],
+        "x-unknown-tolerant": true
+      },
+      "LatLng": {
+        "$id": "#/components/schemas/LatLng",
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
+      },
+      "Operator": {
+        "$id": "#/components/schemas/Operator",
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/OperatorId"
+          },
+          "name": {
+            "$ref": "#/components/schemas/I18nText"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "Eta": {
+        "$id": "#/components/schemas/Eta",
+        "type": "object",
+        "properties": {
+          "routeId": {
+            "type": "string"
+          },
+          "stopId": {
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/OperatorId"
+          },
+          "arrivals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to ~3 upcoming arrivals, ISO-8601 with a +08:00 offset, soonest first."
+          },
+          "destination": {
+            "description": "Where this service is headed, for flat ETA lists that show \"→ dest\" without the full Route object (e.g. Nearby). Server-populated; optional because not every feed/path supplies it.",
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "fare": {
+            "description": "Adult fare for boarding this route *at this stop*, HK$ decimal string. Sectional — see RouteServiceInfo. Compare numerically, display verbatim, never parse to float.",
+            "type": "string"
+          },
+          "remark": {
+            "description": "Free-text operator remark, if any (e.g. scheduled vs real-time). Classified client-side; a \"Scheduled\" remark is a lower-confidence reading, not a live one.",
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "dataTimestamp": {
+            "type": "string",
+            "description": "When the upstream feed generated this reading. ISO-8601 with a +08:00 offset."
+          },
+          "observedAt": {
+            "type": "string",
+            "description": "When our layer fetched/observed it. ISO-8601 with a +08:00 offset. Survives offline replay — use it for staleness."
+          }
+        },
+        "required": [
+          "routeId",
+          "stopId",
+          "operator",
+          "arrivals",
+          "dataTimestamp",
+          "observedAt"
+        ]
+      },
+      "ServiceDayType": {
+        "$id": "#/components/schemas/ServiceDayType",
+        "type": "string",
+        "enum": [
+          "weekday",
+          "saturday",
+          "sunday",
+          "daily",
+          "other"
+        ],
+        "x-unknown-tolerant": true
+      },
+      "FreqBand": {
+        "$id": "#/components/schemas/FreqBand",
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "description": "Local 24h \"HH:mm\". May exceed 24 — \"25:35\" means 01:35 next day."
+          },
+          "end": {
+            "type": "string",
+            "description": "Local 24h \"HH:mm\". May exceed 24 — \"25:35\" means 01:35 next day."
+          },
+          "headwayMin": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "headwayMin"
+        ]
+      },
+      "FreqPattern": {
+        "$id": "#/components/schemas/FreqPattern",
+        "type": "object",
+        "properties": {
+          "dayType": {
+            "$ref": "#/components/schemas/ServiceDayType"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "boolean"
+            }
+          },
+          "bands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FreqBand"
+            }
+          },
+          "first": {
+            "type": "string",
+            "description": "Earliest first departure across the bands, \"HH:mm\" (may exceed 24)."
+          },
+          "last": {
+            "type": "string",
+            "description": "Latest last departure across the bands, \"HH:mm\" (may exceed 24)."
+          }
+        },
+        "required": [
+          "dayType",
+          "days",
+          "bands",
+          "first",
+          "last"
+        ]
+      },
+      "RouteServiceInfo": {
+        "$id": "#/components/schemas/RouteServiceInfo",
+        "type": "object",
+        "properties": {
+          "fareFull": {
+            "description": "Full adult fare from the route origin, HK$ as a decimal string, e.g. \"6.7\". Compare numerically, display verbatim, never parse to float.",
+            "type": "string"
+          },
+          "fareFullHoliday": {
+            "description": "Holiday full fare, HK$ decimal string. Present only when it differs from fareFull.",
+            "type": "string"
+          },
+          "journeyMin": {
+            "description": "Whole-route journey time, minutes.",
+            "type": "number"
+          },
+          "headway": {
+            "description": "Typical headway from the GTFS frequency bands, minutes. Coarse range — no fake precision.",
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ]
+          },
+          "hours": {
+            "description": "Rough daily service span, local 24h \"HH:mm\" (may exceed 24). Earliest first departure → latest end.",
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "start",
+              "end"
+            ]
+          },
+          "patterns": {
+            "description": "Per-day-type frequency profiles (ADR-044). Absent on /v1/stop/:id by design — see the schema note.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FreqPattern"
+            }
+          }
+        }
+      },
+      "Route": {
+        "$id": "#/components/schemas/Route",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical route id, e.g. \"KMB:6:outbound:1\". GMB is \"GMB:{no}:{bound}:{gtfsId}\"."
+          },
+          "operator": {
+            "$ref": "#/components/schemas/OperatorId"
+          },
+          "routeNo": {
+            "type": "string",
+            "description": "Public route number shown on the bus, e.g. \"6\", \"720\", \"N691\"."
+          },
+          "bound": {
+            "$ref": "#/components/schemas/Bound"
+          },
+          "serviceType": {
+            "type": "string",
+            "description": "Operator service-type discriminator (KMB has variants per route). A string — some upstream entries are numeric and are coerced."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "service": {
+            "$ref": "#/components/schemas/RouteServiceInfo"
+          }
+        },
+        "required": [
+          "id",
+          "operator",
+          "routeNo",
+          "bound",
+          "serviceType",
+          "origin",
+          "destination"
+        ]
+      },
+      "RouteStop": {
+        "$id": "#/components/schemas/RouteStop",
+        "type": "object",
+        "properties": {
+          "routeId": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number",
+            "description": "1-based position along the route."
+          },
+          "stopId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "routeId",
+          "seq",
+          "stopId"
+        ]
+      },
+      "RouteRef": {
+        "$id": "#/components/schemas/RouteRef",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical route id, e.g. \"KMB:6:inbound:1\"."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/I18nText"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "destination"
+        ]
+      },
+      "Stop": {
+        "$id": "#/components/schemas/Stop",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LatLng"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "$ref": "#/components/schemas/OperatorId"
+                },
+                "operatorStopId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "operator",
+                "operatorStopId"
+              ]
+            }
+          },
+          "bearingDeg": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "location",
+          "sources"
+        ]
+      },
+      "Place": {
+        "$id": "#/components/schemas/Place",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LatLng"
+          },
+          "stopIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "location",
+          "stopIds"
+        ]
+      },
+      "RouteDetail": {
+        "$id": "#/components/schemas/RouteDetail",
+        "type": "object",
+        "properties": {
+          "route": {
+            "$ref": "#/components/schemas/Route"
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seq": {
+                  "type": "number"
+                },
+                "stop": {
+                  "$ref": "#/components/schemas/Stop"
+                },
+                "eta": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Eta"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fare": {
+                  "description": "Boarding fare at this stop, HK$ decimal string.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "seq",
+                "stop",
+                "eta"
+              ]
+            }
+          },
+          "reverse": {
+            "description": "The same route number in the opposite direction, when the dataset carries one — lets the UI offer a direction toggle. Absent for circular / single-direction routes (ADR-046). Server-resolved with the correct service-type variant, so the client never guesses the id.",
+            "$ref": "#/components/schemas/RouteRef"
+          }
+        },
+        "required": [
+          "route",
+          "stops"
+        ]
+      },
+      "StopDetail": {
+        "$id": "#/components/schemas/StopDetail",
+        "type": "object",
+        "properties": {
+          "stop": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "route": {
+                  "$ref": "#/components/schemas/Route"
+                },
+                "eta": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Eta"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fare": {
+                  "description": "Boarding fare here, HK$ decimal string.",
+                  "type": "string"
+                },
+                "stopId": {
+                  "type": "string",
+                  "description": "Canonical id of the member pole this route departs from."
+                }
+              },
+              "required": [
+                "route",
+                "eta",
+                "stopId"
+              ]
+            }
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "$ref": "#/components/schemas/I18nText"
+                },
+                "location": {
+                  "$ref": "#/components/schemas/LatLng"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "location"
+              ]
+            }
+          }
+        },
+        "required": [
+          "stop",
+          "routes",
+          "members"
+        ]
+      },
+      "NearbyStop": {
+        "$id": "#/components/schemas/NearbyStop",
+        "type": "object",
+        "properties": {
+          "stop": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "distanceM": {
+            "type": "number",
+            "description": "Straight-line distance from the query point, metres. Round it for display — ADR-008."
+          },
+          "etas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Eta"
+            },
+            "description": "Soonest arrivals, deduped to one per route+direction. May be fewer than routeCount — routes with no live reading right now are not listed."
+          },
+          "routeCount": {
+            "type": "number",
+            "description": "True number of distinct routes serving the place, from the static index (no live call). Lets a compact card say \"soonest few of N · +N more\" honestly, never a silent filter."
+          }
+        },
+        "required": [
+          "stop",
+          "distanceM",
+          "etas",
+          "routeCount"
+        ]
+      },
+      "RouteLite": {
+        "$id": "#/components/schemas/RouteLite",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/OperatorId"
+          },
+          "routeNo": {
+            "type": "string"
+          },
+          "bound": {
+            "$ref": "#/components/schemas/Bound"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/I18nText"
+          }
+        },
+        "required": [
+          "id",
+          "operator",
+          "routeNo",
+          "bound",
+          "origin",
+          "destination"
+        ]
+      },
+      "StopLite": {
+        "$id": "#/components/schemas/StopLite",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "lat",
+          "lng"
+        ]
+      },
+      "SearchIndex": {
+        "$id": "#/components/schemas/SearchIndex",
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Coarse content tag; the client redownloads when it changes. Currently derived from collection sizes — a content hash is WP2-7."
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteLite"
+            }
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StopLite"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "routes",
+          "stops"
+        ]
+      },
+      "ErrorResponse": {
+        "$id": "#/components/schemas/ErrorResponse",
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "DatasetOrigin": {
+        "$id": "#/components/schemas/DatasetOrigin",
+        "type": "string",
+        "enum": [
+          "kv",
+          "inline"
+        ],
+        "x-unknown-tolerant": true
+      },
+      "HealthResponse": {
+        "$id": "#/components/schemas/HealthResponse",
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "dataset": {
+            "$ref": "#/components/schemas/DatasetOrigin"
+          },
+          "buildHash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "datasetBuildsThisIsolate": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ok",
+          "dataset",
+          "buildHash",
+          "datasetBuildsThisIsolate"
+        ]
+      },
+      "RootResponse": {
+        "$id": "#/components/schemas/RootResponse",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "ok"
+        ]
+      },
+      "EtaList": {
+        "$id": "#/components/schemas/EtaList",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Eta"
+        }
+      },
+      "NearbyList": {
+        "$id": "#/components/schemas/NearbyList",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/NearbyStop"
+        }
+      }
+    }
+  }
+}

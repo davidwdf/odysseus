@@ -3,8 +3,13 @@
 > **Living handoff doc — update it at the end of each working session.**
 > Snapshot: **2026-07-27**. All of the below is **merged to `main`** (PRs #11, #12). Latest: **Wave 0 of the
 > clean-separation plan — WP0-1 … WP0-4 landed and verified**
-> ([`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). **Next: Wave 1 — the contract
-> foundation**; WP0-5/deploy is deferred on purpose (see *Next steps*).
+> ([`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)), and **Wave 1's WP1-1 — the wire
+> contract — is done** ([ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)):
+> `packages/contract` is the single declaration of every wire shape, `packages/core`'s types are `z.infer` of
+> it through **`import type` only** (so zod never reaches the client's runtime graph), `openapi.json` is emitted
+> and committed, and **three gates** hold it together — each verified to fail on an injected violation.
+> `apps/mobile` has a **literally zero diff**. Next: **WP1-2 … WP1-5**; WP0-5/deploy is deferred on purpose
+> (see *Next steps*).
 > Four things changed, all of them load-bearing for launch. **(1) The dataset left the request path**
 > ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)): a daily GitHub Action precomputes content-addressed shards into KV + R2 and the
 > Worker reads a handful of point keys — cold `/v1/nearby` went **3.97 s → 0.74 s**. `static-index.ts` and the Worker
@@ -327,6 +332,30 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
   as a string, but a minority of entries carry a **number**, which crashed `localeCompare`.
   `packages/data-normalize/src/dataset.ts` now coerces with `String(...)`. The old per-request path had only
   ever touched the string-typed majority — precomputing *everything* is what surfaced it.
+- **The wire contract — WP1-1** ([ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)):
+  new **`packages/contract`** holds the Zod schemas that are the **single declaration** of every shape crossing
+  the network (`src/wire/{primitives,stop,route,eta,detail,search,responses}.ts`), plus the OpenAPI 3.1
+  assembly (`src/openapi.ts` → committed **`openapi.json`**, 6 paths · 28 component schemas). No
+  `zod-to-openapi`: OpenAPI 3.1's Schema Object *is* JSON Schema 2020-12, which Zod 4 emits natively.
+  `packages/core/src/types.ts` + the three search shapes are now **`z.infer` re-exports imported with
+  `import type`**, so `types.js` emits `export {};` and **zod never enters the client bundle** — `core`'s
+  runtime dependency list stays empty, which is what keeps it hand-portable to Swift/Kotlin.
+  **The one decision that makes the schema adjustable** is `WIRE_JSON_SCHEMA_OPTIONS` in
+  `src/json-schema.ts`: it strips `additionalProperties: false` from the emit, so adding an optional field is
+  a deploy rather than a migration — otherwise a strict generated decoder on an already-installed phone would
+  reject any payload containing a field it didn't know. Closed enums carry `x-unknown-tolerant` so a fourth
+  operator can't brick deployed clients. **Three gates, each verified to fail on an injected violation:**
+  the type-only boundary check (`packages/core/scripts/check-type-only-contract.mjs`), the response-conformance
+  suite (`apps/edge/test/wire-conformance.test.ts` — asserts responses satisfy their schema **and carry no
+  undocumented field**), and the OpenAPI staleness check
+  (`packages/contract/scripts/check-openapi-current.mjs`). All three run under `pnpm test`.
+  **Verified:** typecheck 8/8 · **22 edge + 17 mobile tests + both script gates** · Biome clean (only the 7
+  pre-existing findings) · **`apps/mobile` diff vs `main` is empty**, the WP1-1 acceptance criterion.
+  **The conformance gate found a real bug on its first run:** `/v1/nearby` used
+  `Number(url.searchParams.get('lat'))`, and `Number(null)` is `0` — so a request with *missing* coordinates
+  was served as 0, 0 and returned an empty list with a **200** instead of a 400. Fixed.
+  **Known-wrong-but-faithful** (left alone deliberately; WP1-1 changes no shapes — see ADR-052): errors are
+  `{error}` not `{code, message, retryable}`, and `Route.service` is served at two fidelities under one type.
 - **Docs:** plan `01–10`, the full ADR set in [`docs/08`](./08-decision-log.md) (Wave 0 adds **055** ·
   **057** · **058** and implements **049**), research + proposals sets, `CLAUDE.md` / `AGENTS.md`,
   pre-commit docs-check skill + hook.
@@ -397,16 +426,23 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
-1. **Waves 1–2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here** —
-   `packages/contract` (Zod → OpenAPI), the id grammar, `packages/ports`, the `layers.json` enforcement engine,
-   then the parity-guarded domain extraction into `packages/core`. Note **WP2-6 (`snapFix`) already landed** in
-   `apps/mobile/lib/geoSnap.ts` and just needs moving; and **WP2-5 is a known-broken-scheme migration** — fix
-   the favourite id scheme before ADR-032 ships. **WP1-1 shape decided (2026-07-27, ADR-052):** the schemas are
-   the single declaration of every wire shape and `packages/core/src/types.ts` re-exports `z.infer` of them
-   through **`import type`** only, so zod stays out of the client's runtime graph entirely — proven by spike:
-   `types.js` emits `export {};` and schema drift surfaces as a *typecheck* failure in `apps/mobile`. Prefer
-   this over hand-written types plus an equivalence assertion: one declaration cannot fall out of sync with
-   itself, and an assertion file can silently under-cover a newly added type.
+1. **Waves 1–2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
+   **WP1-1 (`packages/contract`) is ✅ done** — see *Done & verified* and
+   [ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe).
+   Remaining in Wave 1, and **WP1-3/WP1-4 have no dependencies so they can start immediately in parallel**:
+   - **WP1-2 — id grammar.** ABNF + one parser for `KMB:1:outbound:1`, `P:<a>+<b>`, `GMB:{no}:{bound}:{gtfsId}`.
+     ⚠️ **Seed `check-no-adhoc-id-parsing.mjs`'s allowlist by *grepping*, not by copying the plan's line
+     numbers** — they have already drifted: `app/stop/[id].tsx:312` is no longer a parse site. The other seven
+     were re-verified 2026-07-27 (`app/search.tsx:163` · `app/stop/[id].tsx:285`, `:292` · `app/route/[id].tsx:58`
+     · `components/StopRow.tsx:20` · `packages/core/src/eta.ts:111`).
+   - **WP1-3 — `packages/ports`** (the 6 type-only interfaces). The `import type` + emit-and-check pattern from
+     WP1-1 is directly reusable for its "emits no non-empty `.js`" acceptance.
+   - **WP1-4 — the `layers.json` enforcement engine.** Note the dependency it must encode: **core → contract,
+     type-only**; contract may never import core.
+   - **WP1-5 — fixture harness** (`@spec` ↔ corpus cross-check). This is the mechanism for the *hand-ported*
+     half of cross-platform equivalence, which no schema can cover — see ADR-052's context.
+   Then Wave 2. **WP2-6 (`snapFix`) already landed** in `apps/mobile/lib/geoSnap.ts` and just needs moving;
+   **WP2-5 is a known-broken-scheme migration** — fix the favourite id scheme before ADR-032 ships.
 2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
    (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
 3. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL, and **deliberately

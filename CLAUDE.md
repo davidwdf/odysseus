@@ -24,6 +24,8 @@ pnpm test               # vitest: apps/edge (inside workerd, simulated KV/R2) + 
 pnpm lint               # Biome
 pnpm format             # Biome --write
 
+pnpm --filter @nextbus/contract openapi:emit   # regenerate packages/contract/openapi.json (ADR-052)
+                        # …it's committed + gated: `pnpm test` fails if it's stale
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path

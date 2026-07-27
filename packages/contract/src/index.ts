@@ -11,4 +11,11 @@
 // WP1-4's `layers.json` enforces it.
 
 export * from './json-schema'
+export * from './openapi'
+export * from './wire/detail'
+export * from './wire/eta'
 export * from './wire/primitives'
+export * from './wire/responses'
+export * from './wire/route'
+export * from './wire/search'
+export * from './wire/stop'

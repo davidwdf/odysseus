@@ -15,7 +15,8 @@
       "!**/.expo",
       "!**/.wrangler",
       "!**/.context",
-      "!**/*.gen.ts"
+      "!**/*.gen.ts",
+      "!packages/contract/openapi.json"
     ]
   },
   "formatter": {

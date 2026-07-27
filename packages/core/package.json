@@ -9,10 +9,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/check-type-only-contract.mjs",
+    "check:type-only-contract": "node scripts/check-type-only-contract.mjs"
   },
   "devDependencies": {
+    "@nextbus/contract": "workspace:*",
     "@nextbus/tsconfig": "workspace:*",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "zod": "4.4.3"
   }
 }
