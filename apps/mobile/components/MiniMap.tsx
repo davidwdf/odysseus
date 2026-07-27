@@ -61,11 +61,42 @@ const latToWorldY = (lat: number, scale: number) => {
   return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * scale
 }
 
+/** Ground metres per screen pixel at a zoom and latitude (Web Mercator, 256 px tiles). */
+const metresPerPixel = (lat: number, z: number) =>
+  (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** z
+
+/**
+ * Highest zoom whose viewport still shows at least `metres` of ground across.
+ *
+ * This is how a **lone** stop gets framed. It used to take a flat `DEFAULT_ZOOM = 16` while a
+ * multi-pole place went through `fitZoom` and landed at 18–19 — eight times the ground per axis,
+ * so a single-pole stop (every GMB stand, most Citybus stops) rendered visibly more zoomed-out
+ * than its multi-pole neighbour for no reason a rider could see. Framing by metres rather than by
+ * a zoom constant also makes the two agree on a tablet, where a fixed zoom covers far more ground
+ * than it does on a phone.
+ */
+function zoomForSpan(metres: number, w: number, lat: number): number {
+  for (let z = Math.min(19, tileSource.maxZoom); z > tileSource.minZoom; z--) {
+    if (w * metresPerPixel(lat, z) >= metres) return z
+  }
+  return tileSource.minZoom
+}
+
+/**
+ * **Minimum** ground a single-pin map must show across. 100 m is just under what z19 covers on a
+ * ~390 px phone (108 m), so a lone stop lands on the same z19 a real place's poles do — the two
+ * read at exactly one scale — and steps down only on a genuinely narrow viewport. Close enough to
+ * see which side of the road the pin is on, which is why we took LandsD's dense cartography
+ * (ADR-049).
+ */
+const SINGLE_PIN_MIN_SPAN_M = 100
+
 /** Highest zoom at which all points fit within ~70% of the viewport (so pins aren't clipped).
- *  Single point → DEFAULT_ZOOM. The poles of a place sit ≤30 m apart, so this lands ~18–19,
- *  inside LandsD's z10–20 raster range. */
+ *  The poles of a place sit ≤30 m apart, so this lands ~18–19, inside LandsD's z10–20 range. */
 function fitZoom(pts: Array<{ lat: number; lng: number }>, w: number, h: number): number {
-  if (pts.length < 2 || w <= 0) return DEFAULT_ZOOM
+  if (w <= 0) return DEFAULT_ZOOM
+  const lat = pts[0]?.lat ?? 22.3
+  if (pts.length < 2) return zoomForSpan(SINGLE_PIN_MIN_SPAN_M, w, lat)
   const minLat = Math.min(...pts.map((p) => p.lat))
   const maxLat = Math.max(...pts.map((p) => p.lat))
   const minLng = Math.min(...pts.map((p) => p.lng))
@@ -96,9 +127,10 @@ export function MiniMap({
   label,
   actionLabel,
   height = 150,
-  zoom = DEFAULT_ZOOM,
+  zoom,
   activeId,
   onPointPress,
+  deferAttribution,
   className,
 }: {
   lat: number
@@ -113,11 +145,16 @@ export function MiniMap({
   /** Accessible label for the tap target, e.g. "Open in Maps". */
   actionLabel: string
   height?: number
+  /** Override the automatic framing. Omit it — `fitZoom` frames one pin and many consistently. */
   zoom?: number
   /** Id of the pole to highlight (dims the rest). Only meaningful with `points`. */
   activeId?: string | null
   /** Tapping a pole's dot fires this with its id (the caller scrolls to its group). */
   onPointPress?: (id: string) => void
+  /** The parent renders `<MapAttribution />` itself. **Not** a licence opt-out: LandsD require the
+   *  credit on the map face (ADR-049). Set it only when the parent crops or transforms the map and
+   *  must anchor the credit to the visible window instead — as `StickyMap` in stop/[id].tsx does. */
+  deferAttribution?: boolean
   className?: string
 }) {
   const { isDark } = useTheme()
@@ -130,10 +167,11 @@ export function MiniMap({
   // Centre on the points' centroid (so all pins are framed); zoom to fit them.
   const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
   const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
-  // Clamp into the source's supported range — outside it LandsD 404s and we'd render a hole.
+  // One framing rule for one pin and for many (see `fitZoom`), clamped into the source's
+  // supported range — outside it LandsD 404s and we'd render a hole.
   const z = Math.min(
     tileSource.maxZoom,
-    Math.max(tileSource.minZoom, multi ? fitZoom(pts, w, height) : zoom),
+    Math.max(tileSource.minZoom, zoom ?? fitZoom(pts, w, height)),
   )
   const scale = TILE * 2 ** z
   const n = 2 ** z
@@ -231,31 +269,48 @@ export function MiniMap({
           })
         : null}
 
-      {/* Attribution. LandsD's terms make BOTH parts mandatory and on the map face: the
-          department logo, and the copyright notice linked to their disclaimer. Their own
-          sample renders the logo at 28×28 bottom-right; no size or placement rules are
-          published. The notice is a real link (not plain text) — the mistake the old OSM
-          attribution made. Kept above the dark filter so the logo stays true-colour. */}
-      <View className="absolute bottom-0 right-0 flex-row items-center gap-1 rounded-tl-md bg-bg/85 pl-1.5 pr-2 py-1">
-        {tileSource.attribution.logo ? (
-          <Image
-            source={tileSource.attribution.logo}
-            accessibilityLabel="Lands Department"
-            style={{ width: 16, height: 16 }}
-            resizeMode="contain"
-          />
-        ) : null}
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={tileSource.attribution.a11yLabel[locale]}
-          onPress={() => openExternal(tileSource.attribution.href)}
-          hitSlop={8}
-        >
-          <Text variant="caption" className="text-[9px] leading-3 text-subtle">
-            {tileSource.attribution.notice[locale]}
-          </Text>
-        </Pressable>
-      </View>
+      {deferAttribution ? null : <MapAttribution />}
+    </View>
+  )
+}
+
+/**
+ * The mandatory LandsD credit: the department logo plus the copyright notice, linked to their
+ * disclaimer. Their terms make **both** parts required and **on the map face**, so this is a
+ * licence obligation, not decoration — see ADR-049. Their own sample renders the logo at 28×28
+ * bottom-right; no size or placement rules are published. The notice is a real link (not plain
+ * text) — the mistake the old OSM attribution made.
+ *
+ * It's a separate component because it must anchor to whatever the viewer actually *sees*. When
+ * the map is cropped rather than resized — as `StickyMap` in stop/[id].tsx does to shrink the hero
+ * into a PIP — an attribution pinned to the map canvas slides out of the visible window with the
+ * rest of the right-hand crop. The clipping container renders this itself instead, and passes
+ * `deferAttribution` to `MiniMap`. Position it with `className`; the default is bottom-right.
+ */
+export function MapAttribution({ className }: { className?: string }) {
+  const locale = useLocale()
+  return (
+    <View
+      className={`absolute bottom-0 right-0 flex-row items-center gap-1 rounded-tl-md bg-bg/85 py-1 pl-1.5 pr-2 ${className ?? ''}`}
+    >
+      {tileSource.attribution.logo ? (
+        <Image
+          source={tileSource.attribution.logo}
+          accessibilityLabel="Lands Department"
+          style={{ width: 16, height: 16 }}
+          resizeMode="contain"
+        />
+      ) : null}
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={tileSource.attribution.a11yLabel[locale]}
+        onPress={() => openExternal(tileSource.attribution.href)}
+        hitSlop={8}
+      >
+        <Text variant="caption" className="text-[9px] leading-3 text-subtle">
+          {tileSource.attribution.notice[locale]}
+        </Text>
+      </Pressable>
     </View>
   )
 }

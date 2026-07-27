@@ -1803,6 +1803,14 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      (28×28 px in their own reference sample) plus a *"Map from Lands Department"* / *"地圖由地政總署提供"*
      notice linking to their disclaimer. **Self-host a copy of the logo** — the asset URL is undocumented and
      could move. This extends the ADR-038 "About the data" sources list.
+     **The credit anchors to the visible map, not to the map canvas** (fixed 2026-07-27). It lives in its own
+     `MapAttribution` component, and any container that **crops** the map renders it *itself* and passes
+     `deferAttribution` to `MiniMap`. This is not a style preference: ADR-045's hero→PIP shrink is a crop, so
+     the inner canvas keeps its full width and slides left, and a credit pinned to that canvas's right edge is
+     exactly what the crop discards — on a wide viewport, where `PIP_MAX_WIDTH` caps the PIP at 300 px, the
+     entire chip was clipped away while the map stayed on screen. Anchoring it to the clipping container costs
+     nothing per frame and leaves the at-rest appearance identical. **Any future map surface that scales,
+     crops or transforms the map owes the same check.**
   6. **Stay on raster for now; vector is a later upgrade.** Raster reaches **z20** (our mini-map lives at
      z16–17) and needs no renderer change. The vector service exists (`/vt/basemap/...`, style is Mapbox GL
      spec v8, 813 layers) but documents only z9–15 and would need a scripted recolour for dark mode.

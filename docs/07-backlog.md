@@ -29,6 +29,53 @@ the `DataSource` interface and the UI do not change.
 - [x] **Same-kerb stop-merge (`Place`)** — DONE (ADR-022 → generalised by ADR-042 to direction-aware N-member
       clustering). Follow-up: looser name matching (token overlap) to also merge stops whose landmark strings differ
       (e.g. KMB stop-code-only names), ideally on the own-crawl's first-party coordinates.
+- [ ] **GMB never merges with franchised buses — the operators name stops in opposite orders.** The single
+      highest-value clustering fix we know of, and it is one function. `namesMatch` compares only the **head**
+      segment of a name (everything before the first comma/bracket). GMB names lead with the **road**
+      (`"Tai Chung Kiu Road, outside Belair Gardens"` → `taichungkiuroad`); KMB and Citybus lead with the
+      **landmark** (`"BELAIR GARDEN (ST141)"`, `"Belair Garden, Tai Chung Kiu Road"` → `belairgarden`). The heads
+      never match, so a GMB stand 29 m from a franchised pole is rejected before distance or bearing is even
+      considered — and a rider standing at Belair Garden gets **three cards for one place** (the KMB+CTB place,
+      plus each GMB kerb).
+      **Candidate rule, simulated against the live dataset 2026-07-27:** compare **every** name segment rather
+      than the head; drop road-like segments (`Road|Street|Avenue|…` / `道街路徑里坊巷`) so the shared token has to
+      be a *landmark*, not a road that runs for kilometres; de-pluralise (GMB says "Belair Garden**s**", KMB says
+      "BELAIR GARDEN"); and exploit the fact that **GMB's naming already encodes the kerb** — a shared landmark
+      with *conflicting* positional qualifiers (`outside` vs `opposite` vs `near`) is a same-kerb **veto**, not a
+      match.
+
+      **Reproduce it: `pnpm study:gmb-names`** (`apps/edge/scripts/studies/gmb-name-matching.mts`) —
+      it re-derives the pair-level figures from the live dataset on every run, so this argument can be
+      re-checked, or falsified, against tomorrow's data rather than trusted from a table.
+
+      | | today | candidate |
+      |---|---|---|
+      | candidate pairs within 30 m that name-match | 9,548 | 10,933 (+1,385) |
+      | …of the new pairs, cross-operator | — | 1,299, of which **1,232 GMB↔franchised** |
+      | pairs rejected by the new qualifier veto | — | 3 |
+      | places | 2,397 | 2,553 |
+      | stops absorbed into a place | 6,351 | 7,017 |
+      | GMB poles inside a place | 828 (17.4%) | **1,205 (25.3%)** |
+      | mixed-operator places | 119 | **556** |
+      | largest place | 11 members | **11** (unchanged) |
+      | places with `confidence` < 40 | 14 | **14** (unchanged) |
+
+      Belair Garden merges at bearing spread **14°**, confidence **81**. That the largest place and the
+      low-confidence count both stay put is the reassuring part: the bearing gate and the `linesShared` /
+      `consecutivePairs` vetoes still carry the load, and the qualifier veto fires on only 3 pairs — but the 3 it
+      catches are exactly right (`opposite Queen Elizabeth Stadium` vs `outside Queen Elizabeth Stadium`, 26 m).
+      **Two things to fix in the same change, or it regresses the UI:**
+      (1) `pickName` scores by string length, and GMB's road-first names are longer — the merged Belair place comes
+      out named *"Tai Chung Kiu Road, outside Belair Gardens"* instead of *"Belair Garden"*. Prefer the
+      **landmark-led** name, not the longest.
+      (2) Absorbing GMB poles mints new `P:` ids, which silently orphans saved favourites — this must land **after**
+      or **with** the WP2-5 favourite-id migration, not before.
+      **Not fixable here, and worth knowing before anyone tries:** `GMB:20001553` is a *single* id for two
+      physically separate boarding points at opposite ends of the Belair kerb (65A/65S/67A/67K at one, 803/804 at
+      the other). Verified against the GMB government API directly — `route-stop/2009119/1` and
+      `route-stop/2010275/1` both return `stop_id 20001553`. No open-data source distinguishes them, so no
+      clustering rule can. Merging is still right; it just can't tell a rider which end to walk to.
+      Before shipping, re-run the ADR-042 adversarial sample audit — this moves 666 stops.
 - [ ] **Cluster-review tooling (one-off)** — an internal UI to eyeball `Place` groupings on a map and accept/split
       them, to optimise the clustering deliberately. Prioritise by the per-place **`confidence`** score now carried on
       `IndexPlace` (ADR-042 follow-up #3: ~45 low-confidence places, mostly termini/BBIs). Feed any rule tweaks back

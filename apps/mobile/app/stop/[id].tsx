@@ -33,7 +33,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BearingArrow } from '../../components/BearingArrow'
 import { COLLAPSE, collapsedHeaderH, expandedHeaderH } from '../../components/CollapsingHeader'
 import { EtaBadge } from '../../components/EtaBadge'
-import { MiniMap } from '../../components/MiniMap'
+import { MapAttribution, MiniMap } from '../../components/MiniMap'
 import { RemarkTag } from '../../components/RemarkTag'
 import { RouteChip } from '../../components/RouteChip'
 import { SaveStar } from '../../components/SaveStar'
@@ -298,6 +298,8 @@ export default function StopDetail() {
                 onPointPress={scrollToPole}
                 label={cleanName}
                 actionLabel={t(locale, 'openInMaps')}
+                // StickyMap renders the LandsD credit itself — the crop would clip it. See below.
+                deferAttribution
               />
             </StickyMap>
 
@@ -445,6 +447,13 @@ function StickyMap({
       <Animated.View style={[{ width: fullW, height: MAP_HEIGHT }, innerStyle]}>
         {children}
       </Animated.View>
+      {/* The LandsD credit is a licence obligation and must stay on the map face at every collapse
+          point (ADR-049). It belongs to *this* container, not to the map inside it: the inner
+          canvas keeps its full `fullW` width and slides left, so anything anchored to its right
+          edge is exactly what the crop throws away — at `PIP_MAX_WIDTH` on a wide viewport that's
+          the whole chip. Anchored out here it tracks the visible window for free, with no
+          per-frame work and no change to how it looks at rest. */}
+      <MapAttribution />
     </Animated.View>
   )
 }
