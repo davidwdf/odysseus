@@ -81,19 +81,43 @@ export function etaLabelParts(arrivalIso: string, now: number, locale: Locale): 
   return { kind: 'mins', value: Math.max(minutes, 1), unit: MIN_LABEL[locale] }
 }
 
-/** Absolute clock time (HH:mm, 24h) — preferred for longer waits. */
-export function formatClock(arrivalIso: string, locale: Locale): string {
-  return new Date(arrivalIso).toLocaleTimeString(localeTag(locale), {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
+/** Hong Kong is UTC+8 year-round and has observed no DST since 1979, so a fixed offset is exact
+ *  rather than an approximation — which is what lets `formatClock` avoid a timezone database. */
+const HK_UTC_OFFSET_MS = 8 * 60 * 60 * 1000
 
-function localeTag(locale: Locale): string {
-  if (locale === 'en') return 'en-HK'
-  if (locale === 'zh-Hant') return 'zh-Hant-HK'
-  return 'zh-Hans-CN'
+/**
+ * Absolute clock time in Hong Kong, `HH:mm` 24-hour — preferred for longer waits
+ * (proposals/00 P5, the countdown⇄clock toggle).
+ *
+ * Deliberately computed with arithmetic rather than `toLocaleTimeString`, which this used to call.
+ * Two reasons, and neither is style:
+ *
+ *  1. **`toLocaleTimeString` is not reproducible across platforms.** Its output depends on the
+ *     host's ICU version and the *device's* timezone. Three clients formatting the identical ISO
+ *     string could render three different strings — and a rider abroad checking HK departures got
+ *     their own local time, which for a Hong Kong bus board is simply wrong. `packages/core` is the
+ *     layer we intend to hand-port to Swift and Kotlin; a function whose output the platform gets
+ *     to influence cannot be ported faithfully, and no fixture corpus could pin it.
+ *  2. **It slipped past the kernel's determinism ban.** `Intl` is in the denied-globals list
+ *     (ADR-051), but `toLocaleTimeString` is a method on `Date`, so no global was ever referenced.
+ *     `layers.json` now also bans the `toLocale*` pattern in the kernel, so this class of
+ *     regression fails the build rather than waiting to be noticed.
+ *
+ * Fixed once while the function still had **no callers**, which made it free; after P5 ships it
+ * would have been a visible change to every arrival row.
+ *
+ * The `locale` parameter is gone because it never affected the output: all three locales rendered
+ * ASCII digits under `hour12: false`.
+ */
+export function formatClock(arrivalIso: string): string {
+  const t = new Date(arrivalIso).getTime()
+  if (Number.isNaN(t)) return ''
+  // Shift the instant into HK wall-clock time, then read it back with the `getUTC*` accessors —
+  // the only ones that don't consult the host timezone.
+  const hk = new Date(t + HK_UTC_OFFSET_MS)
+  const hh = String(hk.getUTCHours()).padStart(2, '0')
+  const mm = String(hk.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }
 
 /**

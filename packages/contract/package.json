@@ -11,8 +11,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "openapi:emit": "node --import tsx scripts/emit-openapi.mts",
-    "test": "node scripts/check-openapi-current.mjs && node ../../scripts/check-no-adhoc-id-parsing.mjs",
-    "check:no-adhoc-id-parsing": "node ../../scripts/check-no-adhoc-id-parsing.mjs"
+    "test": "node scripts/check-openapi-current.mjs"
   },
   "dependencies": {
     "zod": "4.4.3"

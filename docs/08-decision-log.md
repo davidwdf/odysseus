@@ -1858,9 +1858,8 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   answer is no, decision (1) stands as the shipped feature and this becomes a watch item.
 
 ## ADR-051 — Layered package boundaries; `packages/ports` is declaration-only and imports nothing
-- **Status:** **Ports half decided and implemented 2026-07-27** (WP1-3). The **enforcement half (WP1-4 —
-  `layers.json` → dependency-cruiser + Biome) is in progress** and will extend this ADR rather than take a new
-  number. Implementation: `packages/ports/`.
+- **Status:** **Decided and implemented 2026-07-27/28** — ports (WP1-3) *and* the enforcement engine (WP1-4).
+  Implementation: `packages/ports/`, `layers.json`, `scripts/boundaries/`.
 - **Context:** One Expo codebase ships the PWA today and iOS/Android later. The expensive failure is not a
   missing abstraction, it is a *wrong* one — over-abstracting the view layer, or under-declaring the handful of
   genuinely platform-bound seams so a native developer has to rediscover them by reading React Native code. The
@@ -1911,6 +1910,61 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   - **`openInMaps`/`openExternal` fail silently.** A blocked pop-up, or a device with no maps app, gives the
     rider no feedback at all. Noted in `link-opener.ts` as a known rough edge.
   - `getLocales()` + `resolveLocale` already match `LocaleProvider` exactly; that adapter is mechanical.
+- **The enforcement engine (WP1-4).** `layers.json` is the **single declaration** of the layer graph;
+  `pnpm boundaries:gen` regenerates both `.dependency-cruiser.json` and `biome.json`'s `overrides` block from
+  it, and `pnpm boundaries:check` fails if either drifted. Edit the declaration, never the outputs.
+  - **Eight layers, keyed by *policed directories* rather than by package** — so a package's own build scripts
+    are Node tooling outside its layer. Without that, `packages/core/scripts/check-type-only-contract.mjs`
+    importing `node:fs` would read as a kernel violation:
+    `contract` → (nothing, + `zod`) · `ports` → (nothing) · `kernel` (`packages/core/src`) → `contract`
+    **type-only** · `tokens` (`ui`, `i18n`) · `client` (`api-client`) · `adapters` (`data-normalize`) ·
+    `server` (`apps/edge`) · `view` (`apps/mobile`, the only layer that may render).
+  - **Two tools, because neither is sufficient.** dependency-cruiser resolves module paths, distinguishes
+    `import type` (`tsPreCompilationDeps`) and — critically — computes **transitive reach**. Biome is textual,
+    which is what catches platform globals that need no import at all, and it gives the in-editor signal.
+    Both are **pinned exactly** (Biome `2.4.16`, dependency-cruiser `18.1.0`) so an upgrade cannot silently
+    change pattern semantics. dependency-cruiser drags in no `esbuild`, so golden rule 6's hoisting trap and
+    `wrangler dev` are unaffected.
+  - **The type-only `core → contract` edge is covered by two checks that cover different halves, and deleting
+    either leaves a hole.** dependency-cruiser is *syntactic and general* — it sees `import type` across every
+    layer and module, but not what survives compilation. ADR-052's emit check is *semantic and narrow* — it
+    reads the emitted JavaScript, but only for `core`, and only for `zod`/`@nextbus/contract`. Note also that
+    `zod` sits in kernel's npm allowlist purely so the closed-world rule doesn't fire; the **type-only rule does
+    the real work**, and the allowlist entry alone would pass a runtime import.
+  - **Reach rules never target npm packages.** Reachability is type-blind, and `core` legitimately reaches
+    `zod` through a legal type-only hop — so a transitive "kernel must not reach zod" rule would be a false
+    positive by construction.
+  - **The acceptance criterion is falsifiability, not passing.** `pnpm boundaries:selftest` injects **13**
+    violations and every gate fires, including the two transitive cases that matter
+    (`view → client → adapters`, and `core →(type-only)→ contract → apps/mobile`). Anti-vacuity is defended
+    three ways: a **clean control** fixture (a rule that fired on everything would fail it), a guard that fails
+    any cruise fixture reading zero modules, and `boundaries:check` printing modules-per-layer and failing if a
+    layer whose directories exist contributes none.
+  - **tsconfig project references stay rejected.** `composite` requires declaration emit, which contradicts
+    golden rule 1 (source-only packages, no build step). `"types": []` on `contract`/`core`/`ports` gives the
+    platform-global isolation we wanted from them without it. A future agent must not "helpfully" add them.
+  - **A real hazard this surfaced, and fixed:** `formatClock` in the kernel used `toLocaleTimeString`, whose
+    output depends on the host's ICU version **and the device's timezone** — so three platforms could render
+    the same ISO string three different ways, and a rider abroad saw their own local time on a Hong Kong bus
+    board. It is unportable by construction and no fixture corpus could have pinned it. It now computes
+    `HH:mm` arithmetically from a fixed `HK_UTC_OFFSET_MS` (Hong Kong is UTC+8 year-round, no DST since 1979)
+    and reads the result back with `getUTC*`, the only accessors that ignore the host zone. It slipped past the
+    `Intl` denied-global because `toLocaleTimeString` is a *method*, not the global, so `layers.json` now also
+    bans the `toLocale*` **pattern** in the kernel — watched firing. **Fixed while the function had zero
+    callers**, which made it free; it is not dead code (`proposals/00` P5, the countdown⇄clock toggle, is built
+    on it), so after P5 shipped this would have been a visible change to every arrival row.
+  - **Known gaps, left visible rather than papered over:** a raw upstream URL *literal* in a screen
+    (`fetch('https://data.etabus.gov.hk…')`) is invisible to both tools — golden rule 2 is encoded only as
+    `view` ✗→ `adapters`; `packages/ui/preset.js` and `global.css` sit outside the policed `src` directories
+    and are unpoliced; and the full `Date`/`Intl` ban in the kernel still waits on Wave 2 moving time
+    *formatting* out to the view layer (`eta.ts` legitimately does `new Date(iso).getTime()`).
+  - **Budget: over, and recorded as over.** `layers.json` (70) + `generate.mjs` (146) = **216 lines against the
+    plan's ~150** (+44%), of which ~37 lines are the determinism *policy* data (14 denied globals, 4 banned
+    patterns) that Biome's JSON formatter expands one per line. It generates 759 lines of config, so the
+    leverage is real, but per the plan's own risk row this is the trigger to **revisit rather than grow**: if
+    it needs to expand again, collapse the generator instead.
+  - **Manifest tidy-up noted:** `@nextbus/i18n` and `@nextbus/api-client` declare `@nextbus/core` as a runtime
+    `dependency` but import only types from it. Harmless overstatement; worth correcting when their adapters land.
 
 ## ADR-052 — The wire contract: Zod is the single declaration, types erase, and the schema stays additive-safe
 - **Status:** **Decided and implemented 2026-07-27** (WP1-1 of
@@ -2165,3 +2219,56 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   `observedAt` intact. **Not verified:** the Nearby *screen* offline — Chrome's geolocation in the dev
   environment resolves outside Hong Kong, so the data path was exercised directly instead. Worth checking on
   a real phone alongside the other install checks ADR-048 left open.
+
+## ADR-059 — The id grammar: one parser in `core`, the spec and corpus in `contract`
+- **Status:** **Decided and implemented 2026-07-28** (WP1-2). Implementation: `packages/core/src/ids.ts`;
+  spec + corpus `packages/contract/src/ids/{id-grammar.abnf,id-corpus.json}`; gate
+  `scripts/check-no-adhoc-id-parsing.mjs`.
+- **Context:** ids were parsed inline wherever they were needed. The plan counted eight such sites; a grep found
+  **twelve** — the four the plan missed were in `apps/edge/src/{dataset,search-index,stop-route}.ts` and
+  `packages/data-normalize/src/shards.ts`. That undercount is itself the argument: a hand-maintained list of
+  parse sites drifts, which is why the allowlist is now derived by grep and gated.
+  The reason this matters more than tidiness: **`split()` cannot fail.** A malformed id doesn't throw, it yields
+  a plausible wrong answer — `"P"` cast to `OperatorId`, a place id silently resolving to a different place, or
+  every unparseable reading from one operator collapsing into a single ETA row. Ids also arrive from persisted
+  rider state (favourites saved months ago) and from URLs, so malformed input is *ordinary*, not exceptional.
+- **Decision:**
+  1. **The parser and formatter live in `packages/core/src/ids.ts`; the ABNF and the corpus live in
+     `packages/contract`.** This **amends the plan**, which put the whole thing in `contract`: `core/src/eta.ts`
+     needs the parser, and ADR-052's type-only gate forbids `core → contract` at runtime. The split is the
+     better shape anyway — the parser is pure kernel logic, while the ABNF and the language-neutral corpus are
+     the artefacts a Swift or Kotlin port consumes, and the TS tests drive that same corpus. That shared corpus
+     *is* the cross-platform equivalence mechanism for hand-ported logic.
+  2. **Total functions** returning `null` or a discriminated union — never throwing — because unparseable is
+     ordinary input, not a bug.
+  3. **Strict on the three delimiters (`:` `+` `|`), permissive inside a field.** Operators mint the field
+     values, so over-strictness would 404 a favourite a rider saved last year. `operator` is validated as a
+     *shape* rather than against a fixed vocabulary, so a fifth operator degrades gracefully (ADR-052 §4), with
+     **one documented `as OperatorId` cast** replacing five scattered ones. `bound` is closed and guarded by a
+     type-level exhaustiveness assert, because we mint it ourselves.
+  4. **A favourite key has exactly one `|`.** A place id on the left-hand side parses and is flagged *legacy* —
+     the migration is WP2-5's, and this is what will let it detect what needs migrating.
+  5. **`formatPlaceId` deliberately does not sort members.** The builder's `localeCompare` ordering is baked
+     into published datasets and into saved favourites, so changing the collation is a migration, not
+     formatting.
+  6. **The gate is keyed on file + matched snippet, not line number** (the plan's own line numbers had already
+     drifted — `:312` → `:314`), and it fails **both** on growth *and* on a stale entry, so a fixed site can't
+     leave a permanent exception behind. The allowlist reached **zero**.
+- **Consequences — two deliberate behaviour changes:**
+  - a malformed place id (`P:…+`, `P:a++b`) now resolves to **nothing** instead of silently resolving to a
+    different place;
+  - unparseable route ids in `dedupeEtas` now key on the whole id rather than collapsing every malformed
+    reading from one operator into one rider line.
+- **Follow-ups, recorded rather than done:**
+  - `stopMatchesOperators` (`packages/core/src/search.ts`) still introspects ids with
+    `` includes(`${op}:`) `` — the same class of bug (a KMB pole whose raw id begins `CTB…` would false-match
+    Citybus). Left because the grep that would catch it is too noisy to gate on; a four-line fix with
+    `parseStopOrPlaceId` when someone owns that file.
+  - `apps/mobile/lib/preferences.ts` keeps its own `favoriteRouteKey` template. Folding it into the formatter
+    needs the migration, which is WP2-5's by the plan.
+  - `lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`' key construction (both now go
+    through the shared parser, with a comment tying them). Exporting one line-key helper from `core` is WP2-2.
+  - **A malformed id now returns `502`, which is wrong** — it is a permanent client error, so a `400` is
+    correct. It matters more than it looks: `502` reads as *retryable*, so an iOS Widget holding a malformed
+    favourite would retry forever. Fix it together with ADR-052's `{code, message, retryable}` error taxonomy,
+    since that is the same defect wearing a different hat.

@@ -58,6 +58,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "@nextbus/ports",
                       "@nextbus/core",
                       "@nextbus/ui",
                       "@nextbus/i18n",
@@ -129,6 +130,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "@nextbus/ports",
                       "@nextbus/ui",
                       "@nextbus/i18n",
                       "@nextbus/api-client",
@@ -184,6 +186,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "@nextbus/ports",
                       "@nextbus/api-client",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
@@ -249,6 +252,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "@nextbus/ports",
                       "@nextbus/ui",
                       "@nextbus/i18n",
                       "@nextbus/api-client",

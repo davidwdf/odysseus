@@ -16,6 +16,7 @@
 // test-only file is not in the app's runtime graph either way.
 
 import {
+  formatClock,
   formatFavoriteRouteKey,
   formatPlaceId,
   formatRouteId,
@@ -182,5 +183,37 @@ describe('id grammar — the bug the favourite key used to have', () => {
     expect(naiveRouteId).toBe('CD')
     // What the grammar says.
     expect(parseFavoriteRouteKey(corrupt)).toBeNull()
+  })
+})
+
+// ── formatClock: Hong Kong wall-clock, independent of the host ───────────────────────────────
+// Lives here only because `packages/core` has no test runner yet (WP1-5 is adding one); it moves
+// to `packages/core/src/eta.test.ts` alongside the id corpus when it does.
+//
+// The point of these rows is that they are *host-independent*. The old implementation used
+// `toLocaleTimeString`, whose output depends on the device timezone and the platform's ICU build,
+// so none of these assertions could have been written at all — which is precisely why it was
+// replaced (ADR-051).
+describe('formatClock', () => {
+  it('renders Hong Kong wall-clock time from an explicit +08:00 offset', () => {
+    expect(formatClock('2026-07-27T22:30:00+08:00')).toBe('22:30')
+  })
+
+  it('renders the same instant given as UTC in Hong Kong time, not the host timezone', () => {
+    // 14:30Z is 22:30 in HK. A machine in London or New York must still print 22:30.
+    expect(formatClock('2026-07-27T14:30:00Z')).toBe('22:30')
+  })
+
+  it('zero-pads both fields', () => {
+    expect(formatClock('2026-07-27T01:05:00+08:00')).toBe('01:05')
+  })
+
+  it('crosses midnight into the next HK day', () => {
+    // 16:20Z on the 27th is 00:20 on the 28th in HK — the case a naive UTC read gets wrong.
+    expect(formatClock('2026-07-27T16:20:00Z')).toBe('00:20')
+  })
+
+  it('returns an empty string for an unparseable input rather than "NaN:NaN"', () => {
+    expect(formatClock('not a timestamp')).toBe('')
   })
 })

@@ -11,8 +11,16 @@
   ],
   "viewOnly": ["react*", "expo*", "@expo/*", "nativewind*", "zustand", "@tanstack/*", "lucide-*"],
   "layers": {
-    "contract": { "dirs": ["packages/contract/src"], "use": [], "npm": ["zod"] },
-    "ports": { "dirs": ["packages/ports/src"], "use": [], "npm": [] },
+    "contract": {
+      "dirs": ["packages/contract/src"],
+      "use": [],
+      "npm": ["zod"]
+    },
+    "ports": {
+      "dirs": ["packages/ports/src"],
+      "use": [],
+      "npm": []
+    },
     "kernel": {
       "dirs": ["packages/core/src"],
       "use": [],
@@ -36,9 +44,22 @@
         "WebSocket"
       ],
       "bannedSyntax": [
-        { "pattern": "Date\\.now\\s*\\(", "why": "take the clock as an explicit `now: number`" },
-        { "pattern": "new Date\\s*\\(\\s*\\)", "why": "same — no implicit clock in the kernel" },
-        { "pattern": "Math\\.random\\s*\\(", "why": "the kernel must be byte-reproducible" }
+        {
+          "pattern": "Date\\.now\\s*\\(",
+          "why": "take the clock as an explicit `now: number`"
+        },
+        {
+          "pattern": "new Date\\s*\\(\\s*\\)",
+          "why": "same — no implicit clock in the kernel"
+        },
+        {
+          "pattern": "Math\\.random\\s*\\(",
+          "why": "the kernel must be byte-reproducible"
+        },
+        {
+          "pattern": "toLocale[A-Za-z]*\\s*\\(",
+          "why": "host ICU + device timezone decide the output, so it cannot be hand-ported or pinned by a fixture"
+        }
       ]
     },
     "tokens": {
