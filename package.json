@@ -18,7 +18,8 @@
     "test": "turbo run test",
     "clean": "git clean -xdf node_modules dist .turbo .expo .wrangler",
     "dataset:build": "pnpm --filter @nextbus/edge dataset:build",
-    "dataset:publish": "pnpm --filter @nextbus/edge dataset:publish"
+    "dataset:publish": "pnpm --filter @nextbus/edge dataset:publish",
+    "study:gmb-names": "pnpm --filter @nextbus/edge exec node --import tsx scripts/studies/gmb-name-matching.mts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

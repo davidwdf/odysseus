@@ -44,10 +44,15 @@ the `DataSource` interface and the UI do not change.
       with *conflicting* positional qualifiers (`outside` vs `opposite` vs `near`) is a same-kerb **veto**, not a
       match.
 
+      **Reproduce it: `pnpm study:gmb-names`** (`apps/edge/scripts/studies/gmb-name-matching.mts`) —
+      it re-derives the pair-level figures from the live dataset on every run, so this argument can be
+      re-checked, or falsified, against tomorrow's data rather than trusted from a table.
+
       | | today | candidate |
       |---|---|---|
-      | candidate pairs within 30 m that name-match | 9,548 | 10,936 (+1,388) |
+      | candidate pairs within 30 m that name-match | 9,548 | 10,933 (+1,385) |
       | …of the new pairs, cross-operator | — | 1,299, of which **1,232 GMB↔franchised** |
+      | pairs rejected by the new qualifier veto | — | 3 |
       | places | 2,397 | 2,553 |
       | stops absorbed into a place | 6,351 | 7,017 |
       | GMB poles inside a place | 828 (17.4%) | **1,205 (25.3%)** |
