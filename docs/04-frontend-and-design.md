@@ -128,9 +128,57 @@ A smart, real concern — and the reason it pushes you toward PWA is exactly the
 - **TanStack Query (React Query)** — server-state caching, dedupe, background refresh; the v2
   socket pushes updates straight into the query cache.
 - **Zustand** — light local UI state (selected direction, theme, favorites).
-- **MMKV** (native) / **IndexedDB** (web) — persist the static dataset + favorites for offline.
+- **AsyncStorage** — one persistence API across all three targets (`localStorage` on web, the
+  native store on iOS/Android). It backs the preferences store (theme · appearance · locale ·
+  favourites), the on-device search index (`lib/searchIndex.ts`, stale-while-revalidate), the last
+  known location, **and** the persisted query cache below. MMKV stays a native-only optimisation to
+  reach for if profiling ever asks for it — one store beats two.
+
+### Offline & the service worker
+See [ADR-058](./08-decision-log.md#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier).
+Offline is not a nicety for a transit app: the moment you most need the next departure is often the
+moment you're underground or out of data. Four caching strategies, one per kind of thing — the
+differences between them *are* the design:
+
+- **App shell → precache.** `apps/mobile/workbox.config.mjs` + `scripts/build-web.mjs` generate
+  `dist/sw.js` over Expo's static export (`pnpm --filter @nextbus/mobile build:web`). Expo's output
+  is content-hashed, so cache-first with no revalidation is both safe and the fastest cold start —
+  this is what makes the app *open* with no network. `lib/serviceWorker.ts` registers it on
+  **production web only**; never in dev, where a stale worker intercepting Metro serves yesterday's
+  bundle and no amount of reloading fixes it.
+- **`/v1/index` → stale-while-revalidate.** Large, changes about daily: serve the cached copy
+  instantly, refresh behind it.
+- **Live ETA endpoints → network-first, 4 s timeout.** Never cache-first — a bus that left four
+  minutes ago is worse than no answer (ADR-008). The cached copy is the *fallback*, and it carries
+  its original `observedAt`, so the ETA helpers age it and the UI labels it stale.
+- **Tiles → cache-first, never prefetched.** A tile already seen redraws offline; nothing is fetched
+  speculatively (both LandsD's and the OSMF's policies prohibit exactly that).
+
+**The query cache is persisted too** — `providers/QueryProvider.tsx` is a
+`PersistQueryClientProvider` over an AsyncStorage persister (24 h, **successes only**, so a
+persisted error can't replay as "the app is broken"). A cold start paints the last known arrivals
+instead of a spinner. This is an exception to ADR-008's *presentation* rule, not to its principle: a
+replayed reading arrives with its own `observedAt` and is shown as the labelled old reading it is.
+
+### Location: snap the fix, remember the fix
+`lib/geoSnap.ts` grid-snaps every fix to a **25 m** cell before it leaves the device. One small pure
+function buys three things: privacy (we ask about a cell, not a doorstep), edge-cacheability (raw
+coordinates jitter metres between readings, so `/v1/nearby` was a fresh cache key nearly every
+request), and offline (the query key is stable enough for a persisted Nearby result to be replayed
+at all). 25 m is well inside urban-canyon GPS accuracy and small against the 500 m radius, so it
+changes nothing about which stops come back. `lib/useLocation.ts` remembers the last fix and returns
+`stale: true` when it falls back to it; Nearby then reads "Last known location" in place of the app
+name, rather than implying a live position.
 
 ## Maps
-- **MapLibre GL** (open-source, free tiles via a provider like MapTiler, or self-hosted) — works
-  RN (`@maplibre/maplibre-react-native`) + web (`maplibre-gl`). Avoids Google Maps fees.
-- Map view is **v1.5** — the v1 "nearby" can launch as a fast **list** first, map added shortly after.
+- The basemap is the **Hong Kong Lands Department's** keyless raster, proxied and cached by our own
+  Worker — see [ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay).
+  Components never name a tile host: they go through the **`TileSource`** seam
+  (`apps/mobile/lib/tileSource.ts`), so the source can be repointed without an app release and a
+  future iOS/Android client implements one interface instead of re-deriving Web Mercator plumbing.
+- Labels are a **separate per-locale overlay** (`en`/`tc`/`sc`), so switching language relabels the
+  map with no restyling. Dark mode is derived with a CSS invert filter (`invertForDark`) because the
+  raster service ships no dark cartography.
+- Today's map is the static `MiniMap` on Stop/Place detail. **MapLibre GL**
+  (`@maplibre/maplibre-react-native` + `maplibre-gl`) remains the route to a real interactive map in
+  Phase 2; it consumes the same `TileSource`, so the tile question is already settled.

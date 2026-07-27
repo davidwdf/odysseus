@@ -649,7 +649,12 @@ export async function fetchConsolidatedIndex(
       // globally-unique route_id (`gtfsId`) into the service-type slot to disambiguate, and it
       // doubles as the live ETA route_id (ADR-047). KMB/CTB keep their real service type.
       const gmbId = operator === 'GMB' ? (entry.gtfsId ?? undefined) : undefined
-      const serviceType = gmbId ?? entry.serviceType
+      // `String(...)`: the upstream JSON declares `serviceType` as a string but a minority of
+      // entries carry a **number**, which then blew up any downstream `.localeCompare` (found
+      // while precomputing every route for WP0-1 — the per-request path only ever touched the
+      // string-typed majority). Coercing here can't move an id: it was already stringified by
+      // `canonicalRouteId`'s template.
+      const serviceType = String(gmbId ?? entry.serviceType)
       const routeId = canonicalRouteId(operator, entry.route, bound, serviceType)
       if (gmbId) gmbCanonicalByLive.set(`${gmbId}:${bound}`, routeId)
 

@@ -8,7 +8,8 @@ The monorepo skeleton described in [`05`](./05-monorepo-and-tooling.md) now exis
 ```
 apps/
   mobile/          Expo app (iOS / Android / Web-PWA) — NativeWind + expo-router + reanimated
-  edge/            Cloudflare Worker — cached ETA proxy + daily-crawl cron stub
+  edge/            Cloudflare Worker — cached ETA proxy, LandsD tile proxy, precomputed dataset
+                   reader (KV/R2); the daily build runs in GitHub Actions, not in the Worker
 packages/
   core/            canonical types, DataSource interface, honest-ETA helpers
   data-normalize/  KMB + Citybus fetch adapters (zod-validated) → canonical Eta
@@ -48,13 +49,20 @@ pnpm dev:web                        # Expo straight to web/PWA
 Checks (one-shot, not part of "running"):
 ```bash
 pnpm typecheck                      # tsc --noEmit across every package (turbo)
+pnpm test                           # vitest in every package that has tests (turbo)
 pnpm lint                           # Biome
 pnpm format                         # Biome --write
 ```
+`pnpm --filter @nextbus/edge test` runs the Worker suite on its own. Those specs execute **inside
+workerd** (`@cloudflare/vitest-pool-workers`) against simulated KV/R2 bindings, so the dataset,
+coalescing and tile paths are exercised the way they actually run — not against a node stub.
 
-### Try the edge ETA endpoint
+### Try the edge endpoints
 With the worker running, hit a real KMB stop+route (live open data, no key):
 ```bash
+# /v1/health — is this isolate serving the precomputed dataset? (see below)
+curl "http://localhost:8787/v1/health"
+
 # /v1/eta/:operator/:stop/:route[/:serviceType]
 curl "http://localhost:8787/v1/eta/kmb/<16-char-stop-id>/1A/1"
 curl "http://localhost:8787/v1/eta/ctb/<stop-id>/720"
@@ -66,9 +74,20 @@ curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694&radius=500"
 curl "http://localhost:8787/v1/stop/KMB%3A<stopId>"            # → StopDetail (routes + next ETA)
 curl "http://localhost:8787/v1/route/KMB%3A6%3Aoutbound%3A1"   # → RouteDetail (ordered stops)
 curl "http://localhost:8787/v1/etas/KMB%3A<stopId>"            # → Eta[] (canonical; what getEtas calls)
+
+# /v1/index → SearchIndex (compact routes + stops for on-device search and the keypad)
+curl -s "http://localhost:8787/v1/index" | head -c 200
+
+# /v1/tiles/... → LandsD basemap + per-locale label overlay, proxied and made publicly cacheable
+curl -sI "http://localhost:8787/v1/tiles/basemap/16/53550/28598.png"
+curl -sI "http://localhost:8787/v1/tiles/label/tc/16/53550/28598.png"   # {lang} = en | tc | sc
 ```
-Responses are normalized and edge-cached (ETAs ~8s, nearby ~10s, route 1h) — so many users on one stop =
-one upstream call.
+Responses are normalized and edge-cached, so many users on one stop = one upstream call. TTLs
+([ADR-057](./08-decision-log.md)): **30 s for every live endpoint** (`/v1/eta`, `/v1/etas`,
+`/v1/nearby`, `/v1/stop`, `/v1/route` — they all carry live ETAs), 6 h for `/v1/index`, 12 h for
+tiles, and no caching at all for `/v1/health`. 30 s rather than the old 8 s because upstream only
+refreshes about once a minute: at 8 s the cache almost never hit, so it wasn't saving an upstream
+call — and staleness is still surfaced honestly from each reading's own `observedAt` (ADR-008).
 
 ### Point the app at the edge
 The **Nearby** screen is wired to live data: it requests location permission, geolocates, and calls
@@ -80,15 +99,84 @@ EXPO_PUBLIC_API_URL=http://localhost:8787 pnpm dev:mobile
 ```
 On web, the browser will prompt for location. `EXPO_PUBLIC_API_URL` defaults to `http://localhost:8787`.
 
+## The static dataset — build & publish ([ADR-055](./08-decision-log.md))
+Routes, stops, places, aliases and geo cells are **precomputed outside the Worker** by a node
+script, then read back as content-addressed shards from KV (+ the search index from R2). A request
+costs a handful of KV point reads instead of an 8.3 MB fetch and a full re-normalization in the
+isolate.
+
+```bash
+pnpm dataset:build              # fetch + normalize + cluster + shard → apps/edge/.dataset/<hash>/
+pnpm dataset:publish            # build, then write the shards and flip build:current (remote)
+pnpm dataset:publish --local    # …into the Miniflare state `wrangler dev` uses — the local KV path
+pnpm dataset:publish --force    # republish even when the upstream source hash is unchanged
+```
+A real build measured **10,118 places · 6,351 aliases · 3,653 routes · 486 cells** (14,072 stops)
+— ≈20.6k KV keys; about 2.6 s to build and ~70 s to publish locally. A remote publish needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment; without `--force` it skips
+the write entirely when the upstream source hash hasn't moved (KV writes are the metered side).
+
+Every key is namespaced by the build hash — `place:<hash>:<id>`, `alias:<hash>:<stopId>`,
+`route:<hash>:<id>`, `geo:<hash>:<cell>` — and R2 holds `builds/<hash>/search-index.json` plus
+`manifest.json`. The one mutable key, `build:current`, is flipped **last**, so a failed publish
+leaves an unreachable orphan rather than a half-served dataset, and a rollback is a single key
+write. In production the job is `.github/workflows/dataset.yml` (daily, 19:00 UTC = 03:00 HKT);
+the Worker has **no cron trigger and no `scheduled` handler**.
+
+**To exercise the KV path locally:** `pnpm dataset:publish --local`, then `pnpm dev:edge` — the
+same Miniflare state, so `/v1/health` should report `"dataset":"kv"`.
+
+### Read `/v1/health` after every deploy
+```bash
+curl "http://localhost:8787/v1/health"
+# {"ok":true,"dataset":"kv","buildHash":"…","datasetBuildsThisIsolate":0}
+```
+- **`dataset`** — `"kv"` means precomputed shards. `"inline"` means there are no bindings or no
+  current build, so the Worker builds the whole index **in-request**: fine for dev, never for
+  production.
+- **`datasetBuildsThisIsolate: 0` is the production invariant.** It counts how many times this
+  isolate built the index itself; anything above zero means the expensive path has crept back into
+  a request. The dataset workflow asserts both fields against the deployed Worker after every
+  publish (whenever the `EDGE_URL` repo variable is set), and the edge test suite asserts the
+  counter stays 0 across a full endpoint sweep.
+
+## Build the PWA ([ADR-058](./08-decision-log.md))
+```bash
+pnpm --filter @nextbus/mobile build:web       # → apps/mobile/dist/ (incl. dist/sw.js)
+```
+This is `expo export -p web` **plus** a Workbox `generateSW` pass over that output, in one command
+so the precache manifest can't drift from the bundle it describes. The Workbox runtime is inlined
+into `dist/sw.js`, so the offline service worker doesn't need a CDN on its first run. **A bare
+`expo export -p web` produces no service worker** — always go through `build:web`.
+
+Set `EXPO_PUBLIC_API_URL` to the deployed Worker when you build a real one: it is baked into the
+bundle *and* into the service worker's runtime-caching routes (app shell precached; `/v1/index`
+stale-while-revalidate; live endpoints network-first with an offline fallback; tiles cached only
+once actually seen).
+
+To check offline behaviour: serve `dist/` over any static server (e.g. `npx serve dist`), load the
+app once, then kill **both** that server and the Worker and reload. Verified this way — a cold load
+of `/search` still opens the app and searches from cache.
+
 ## Deploy (later)
-- **Edge:** `pnpm --filter @nextbus/edge deploy` (Wrangler; create the `DATASET` KV namespace and
-  uncomment it in `wrangler.toml` first).
-- **Web/PWA:** `pnpm --filter @nextbus/mobile exec expo export -p web` → deploy to Cloudflare Pages.
+- **Edge:** `pnpm --filter @nextbus/edge deploy` (Wrangler). First time, create the storage the
+  dataset lives in and wire it up:
+  ```bash
+  wrangler kv namespace create DATASET       # → replace REPLACE_WITH_KV_NAMESPACE_ID in wrangler.toml
+  wrangler r2 bucket create nextbus-builds
+  pnpm dataset:publish                       # so build:current exists before the first request
+  ```
+  Then confirm `/v1/health` reports `"dataset":"kv"` and `datasetBuildsThisIsolate: 0`. The
+  bindings are optional in `Env`, so a Worker deployed without them still runs — it just falls
+  back to the slow inline build and says so.
+- **Web/PWA:** `pnpm --filter @nextbus/mobile build:web` → deploy `apps/mobile/dist/` to
+  Cloudflare Pages (with `EXPO_PUBLIC_API_URL` pointing at the deployed Worker).
 - **Native:** EAS Build/Submit (Phase 3 — see [roadmap](./06-roadmap.md)).
 
 ## Status / next steps
 - **Slice 1 (Nearby) is live** — KMB only, computed **server-side** in the Worker (ADR-016).
   Verified end-to-end against real HK open data.
-- Next: **Citybus** nearby; the daily-crawl pipeline → KV/R2 + **on-device** nearby index (ADR-007,
-  also retires the `scheduled` stub); **Stop detail + Favorites** (Slice 2); then Routes search,
-  the map, and the livery/locale pickers.
+- The daily crawl → KV/R2 half now ships as the **dataset build** above (ADR-055), which is what
+  removed the Worker's `scheduled` stub.
+- Next: **Citybus** nearby; the **on-device** nearby index (ADR-007); **Stop detail + Favorites**
+  (Slice 2); then Routes search, the map, and the livery/locale pickers.

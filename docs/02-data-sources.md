@@ -71,13 +71,16 @@ are **not comparable** to each other and don't mean "older vs newer tech":
 
 > **Current static source ([ADR-021](./08-decision-log.md)).** The static layer for **KMB + CTB** is built
 > from the hk-bus-crawling **consolidated dataset** (`routeFareList.min.json`, one ~8 MB daily-updated fetch,
-> memoized at the edge — fetched from its canonical host `https://data.hkbus.app/`, since the older
-> `hkbus.github.io/hk-bus-crawling/` path now 301-redirects there) — because the **official CTB API has no
-> bulk stop/route-stop endpoint** (building a
-> CTB index from it is a ~6,800-call crawl). The dataset's stop ids in `routeList.stops` are the raw,
-> directly-ETA-callable operator ids; its `stopMap` over-clusters and is **not** used (it breaks ETA
+> made **once a day in CI, never per request** — from its canonical host `https://data.hkbus.app/`, since
+> the older `hkbus.github.io/hk-bus-crawling/` path now 301-redirects there) — because the **official CTB
+> API has no bulk stop/route-stop endpoint** (building a CTB index from it is a ~6,800-call crawl). The
+> dataset's stop ids in `routeList.stops` are the raw, directly-ETA-callable operator ids; its `stopMap` over-clusters and is **not** used (it breaks ETA
 > resolution). **Live ETAs still come direct from the official KMB/CTB APIs.** Same-kerb KMB↔CTB merge is
-> now done with **our own** clustering ([ADR-022](./08-decision-log.md)). Our own crawl + true Simplified
+> now done with **our own** clustering ([ADR-022](./08-decision-log.md)). The fetch, the normalization and
+> that clustering all run in the **daily dataset build** ([ADR-055](./08-decision-log.md)), which writes
+> content-addressed shards to KV/R2; the Worker reads a handful of keys per request and keeps the in-isolate
+> build only as a dev fallback (`/v1/health` says which it is served from — see
+> [`10`](./10-scaffold-and-running.md)). Our own crawl + true Simplified
 > static names remain [backlog](./07-backlog.md) items.
 >
 > **We now also read the dataset's `fares`/`faresHoliday`/`freq`/`jt`** ([ADR-036](./08-decision-log.md)) —
@@ -134,8 +137,11 @@ A merged place reuses the canonical `Stop` (its `sources[]` carries both operato
 self-describing (`P:<memberId>+<memberId>`) so the edge resolves members from the id alone. Future: looser
 token-overlap matching and a manual override table for tricky cases.
 
-This runs **offline in the daily crawl pipeline**, not at request time, so it never costs the
-user latency. (See [Architecture](./03-architecture.md) for where it runs.)
+This runs **offline in the daily dataset build**, not at request time, so it never costs the user
+latency — since [ADR-055](./08-decision-log.md) that build is a GitHub Action
+(`.github/workflows/dataset.yml`) writing precomputed shards to KV/R2, not a Worker cron. (See
+[Architecture](./03-architecture.md) for where it sits, and [`10`](./10-scaffold-and-running.md)
+for the `pnpm dataset:build` / `dataset:publish` commands.)
 
 ### Geospatial / "nearby"
 The full canonical stop list is only on the order of tens of thousands of points — small enough
@@ -149,7 +155,13 @@ Not bus data, but the same keyless-HK-gov shape, so it belongs here. The basemap
 **no API key, free, commercial use explicitly permitted, and cacheable by us**. Pin `v1.0.0`; the docs
 warn old versions are removed without notice.
 
-| Service | Endpoint | Notes |
+**Clients never call `mapapi.geodata.gov.hk` directly.** The endpoints below are *upstream*: the Worker
+proxies them at `/v1/tiles/basemap/{z}/{x}/{y}.png` and `/v1/tiles/label/{lang}/{z}/{x}/{y}.png`
+(`apps/edge/src/tiles.ts`), and the app builds only those URLs (`apps/mobile/lib/tileSource.ts`). That
+keeps the pinned version and the cache override in one place, and lets us repoint the basemap without an
+app release.
+
+| Service | Endpoint (upstream) | Notes |
 |---|---|---|
 | **Topographic** (basemap) | `https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png` | z10–20. Dense survey cartography — footbridges/subways/landmarks, which is *why* we chose it (ADR-049). |
 | **Map Label** (labels overlay) | `.../xyz/label/hk/{lang}/WGS84/{z}/{x}/{y}.png` | `{lang}` = `en`\|`tc`\|`sc` — **our three locales exactly**. Separate layer, so `useLocale()` swaps one URL. |
@@ -164,11 +176,15 @@ WGS84** — they need an HK80↔WGS84 conversion in `@nextbus/core`. **Avoid the
 they drag in Copernicus Sentinel-2 / Landsat third-party citation obligations that the plain topographic
 and vector basemaps do not.
 
-Caching is permitted by the CSDI grant, but note tiles arrive with `Cache-Control: private` (must be
-deliberately overridden in the Worker) and **no speculative territory-wide pre-warm** — the one stated
-limit is against "large amount of requests within a short period". Attribution is stricter than for the
-bus data: the **LandsD logo on the map face** plus a "Map from Lands Department" notice. Full research,
-costs, rejected alternatives and verbatim licence clauses:
+Caching is permitted by the CSDI grant, and tiles arrive with `cache-control: private,
+must-revalidate, max-age=43200` — `private` makes every shared cache a no-op, so the Worker
+**deliberately re-emits them as `public, max-age=43200, stale-while-revalidate=86400`**, adopting LandsD's
+own 12 h TTL. Still **no speculative territory-wide pre-warm**: we cache only tiles a rider actually
+looked at, since the one stated limit is against "large amount of requests within a short period".
+Attribution is stricter than for the bus data — the **LandsD logo on the map face** plus a "Map from
+Lands Department" notice — and is satisfied by `components/MiniMap.tsx`, which renders both **on the map
+face**: the self-hosted `assets/landsd-logo.png` beside a localized notice that is a real link to LandsD's
+disclaimer, not plain text. Full research, costs, rejected alternatives and verbatim licence clauses:
 [`proposals/02`](./proposals/02-basemap-and-street-imagery.md).
 
 ## Licensing / attribution

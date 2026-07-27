@@ -4,6 +4,7 @@ export { fetchGmbStopEta, type GmbEtaEntry } from './gmb'
 export { fetchKmbEta, fetchKmbRouteEta, fetchKmbStopEta, type RouteEtaEntry } from './kmb'
 export * from './kmb-static'
 export * from './normalize'
+export * from './shards'
 
 import type { Eta } from '@nextbus/core'
 import { fetchCitybusEta } from './citybus'

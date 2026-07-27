@@ -1,0 +1,68 @@
+name: dataset
+
+# The daily static-data build (WP0-1 / ADR-055).
+#
+# This runs **here, not in the Worker**, and that is the whole point: the job fetches 8.3 MB,
+# normalizes it, runs the ADR-042 clustering and writes ~20k content-addressed shards. In a
+# Worker that cost ~20 MB of heap and a few hundred ms on every cold isolate; in a 128 MB
+# Durable Object it would not fit at all (which is why WP5-3 has this as a hard prerequisite).
+#
+# `publish-dataset.mts` writes every shard first and flips the single mutable `build:current`
+# key last, so a failed run leaves an unreachable orphan rather than a half-served dataset.
+
+on:
+  schedule:
+    # 19:00 UTC = 03:00 HKT — after the operators' own overnight updates, well off peak.
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Republish even if the upstream data is unchanged'
+        type: boolean
+        default: false
+
+concurrency:
+  # Never two publishes at once: they would interleave shard writes and race the pointer flip.
+  group: dataset-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # The build is a couple of seconds; the ~20k KV writes are the long pole.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Fail before touching KV if the derivations are broken — the shard shapes are covered by
+      # apps/edge/test/dataset-kv.test.ts, including the "builds the dataset zero times" gate.
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Build and publish
+        run: pnpm dataset:publish ${{ inputs.force && '--force' || '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # The acceptance criterion, checked against the deployed Worker rather than a test double:
+      # if `datasetBuildsThisIsolate` is anything but 0, the dataset is back in the request path.
+      - name: Verify the Worker is serving from KV
+        if: env.EDGE_URL != ''
+        env:
+          EDGE_URL: ${{ vars.EDGE_URL }}
+        run: |
+          health=$(curl -fsS "$EDGE_URL/v1/health")
+          echo "$health"
+          echo "$health" | grep -q '"dataset":"kv"' \
+            || { echo "::error::Worker is not serving from KV"; exit 1; }
+          echo "$health" | grep -q '"datasetBuildsThisIsolate":0' \
+            || { echo "::error::Worker built the dataset in-request"; exit 1; }

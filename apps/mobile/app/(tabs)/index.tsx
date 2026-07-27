@@ -46,7 +46,10 @@ export default function Nearby() {
           {t(locale, 'nearbyTitle')}
         </Text>
         <Text variant="label" className="mt-1 text-muted">
-          {t(locale, 'appName')}
+          {/* Say so when the list is anchored on a remembered fix rather than a live one —
+              offline, or while the first GPS reading is still coming in (ADR-008 honesty
+              applies to the position, not just the arrival times). */}
+          {ready?.stale ? t(locale, 'lastKnownLocation') : t(locale, 'appName')}
         </Text>
       </View>
 

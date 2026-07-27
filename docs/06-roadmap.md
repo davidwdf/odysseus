@@ -8,7 +8,9 @@ omitted; the ordering and exit criteria are the commitment.
 - Monorepo scaffold (pnpm + Turborepo), shared TS/lint config, CI green.
 - `packages/core`: canonical types + `DataSource` interface.
 - `packages/data-normalize`: daily crawl of GTFS + KMB/CTB → normalized snapshot; stop-merging.
-- `apps/edge`: Cloudflare Worker skeleton + Cron crawl writing snapshot to R2/KV.
+- `apps/edge`: Cloudflare Worker skeleton reading a precomputed snapshot from KV/R2. **Done**
+  ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)): the daily build runs in **GitHub Actions**, not a Worker cron —
+  content-addressed shards, one mutable `build:current` pointer flipped last.
 - `packages/ui`: design tokens + theme (light/dark) + a few primitives (NativeWind).
 - Expo app boots on web with the design system and a static dataset fixture.
 
@@ -24,8 +26,11 @@ verified end-to-end. Citybus, on-device index, and the other screens are next.
 - **Stop detail:** all routes at a stop, soonest first.
 - **Favorites** (on-device), **EN/繁中**, **light/dark**.
 - ETA presentation per the honesty principle (no fake countdown; freshness chip; animate on change).
-- Core delight animations + skeletons; accessibility baseline; offline static data.
-- Deploy: Expo web → Cloudflare Pages as an **installable PWA**.
+- Core delight animations + skeletons; accessibility baseline; offline static data — **offline
+  done** ([ADR-058](./08-decision-log.md#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier)): a Workbox service worker precaches the app shell, and
+  the TanStack Query cache is persisted, so a cold offline start opens the app and searches.
+- Deploy: Expo web → Cloudflare Pages as an **installable PWA**. **Still outstanding** (WP0-5) —
+  it needs a real domain and a Cloudflare account; the pipeline has never run against remote KV/R2.
 
 **Exit:** a person can find their stop and trust the next-arrival times, fast, on a phone browser.
 
@@ -33,14 +38,20 @@ verified end-to-end. Citybus, on-device index, and the other screens are next.
 **Goal:** make it feel alive and bulletproof.
 - **Durable Objects + WebSockets** behind `DataSource.watch()` for **watched stops & favorites**.
 - Freshness/stale states wired to live pushes; graceful upstream-outage handling.
-- Performance pass (bundle, TTI, animation jank); offline hardening.
-- **Basemap migration off OSM's public tiles → HK Lands Department** ([ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)):
-  keyless gov raster, Worker-cached, with `en`/`tc`/`sc` labels as a per-locale overlay. **This is now a
-  prerequisite, not polish** — the OSMF tile policy (rev. 2026-07-22) prohibits our current usage and would
-  block a native build outright.
+- Performance pass (bundle, TTI, animation jank); offline hardening. **First pass shipped early**
+  (Wave 0): the dataset left the request path ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)) — cold `/v1/nearby`
+  3.97 s → 0.74 s — and live ETAs are coalesced per pole on a 30 s TTL
+  ([ADR-057](./08-decision-log.md#adr-057--live-eta-ttl-is-30-s-and-every-upstream-call-is-coalesced-per-pole)).
+- ~~**Basemap migration off OSM's public tiles → HK Lands Department**~~ — **DONE, shipped early**
+  ([ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)):
+  keyless gov raster proxied and cached by our own Worker (12 h TTL), with `en`/`tc`/`sc` labels as a
+  per-locale overlay. It was a **prerequisite, not polish** — the OSMF tile policy (rev. 2026-07-22)
+  prohibited our usage and would have blocked a native build outright.
 - **Street-level stop photos** ([ADR-050](./08-decision-log.md#adr-050--stop-imagery-google-street-view-deep-link-now-hk-streetscape-360-as-the-inline-target)):
   Google Street View deep link first (free, keyless, hours of work), then HK **Streetscape 360** inline.
-- Map view for Nearby (MapLibre) — on LandsD tiles per ADR-049; Protomaps/R2 is the recorded fallback.
+- Map view for Nearby (MapLibre) — the tiles are already there: it consumes the same `TileSource`
+  seam (`apps/mobile/lib/tileSource.ts`) that `MiniMap` uses, so it inherits LandsD basemap + label
+  overlay for free. Protomaps/R2 is the recorded fallback if we later need true dark mode or offline packs.
 
 **Exit:** watched stops update by push; the app holds up when upstream is flaky.
 

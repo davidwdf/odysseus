@@ -18,6 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { WebSwipeBack } from '../components/WebSwipeBack'
 import { useRootStackScreenOptions } from '../lib/navTransitions'
 import { usePreferences } from '../lib/preferences'
+import { registerServiceWorker } from '../lib/serviceWorker'
 import { useTheme } from '../lib/useTheme'
 import { LocaleProvider } from '../providers/LocaleProvider'
 import { QueryProvider } from '../providers/QueryProvider'
@@ -25,6 +26,10 @@ import { QueryProvider } from '../providers/QueryProvider'
 // Hold the splash until Inter is loaded so the first paint is in-brand, not a
 // system-font flash (docs/09 §3).
 void SplashScreen.preventAutoHideAsync()
+
+// PWA offline support (WP0-3). At module scope, not in an effect: this must run once per
+// document, not once per mount, and it no-ops off a production web build.
+registerServiceWorker()
 
 export default function RootLayout() {
   // The theme is just a set of semantic-token values injected as CSS vars; every

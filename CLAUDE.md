@@ -20,15 +20,22 @@ pnpm dev:edge           # just the Cloudflare Worker  → http://localhost:8787
 pnpm dev:mobile         # just Expo (press w = web/PWA, i = iOS, a = Android)
 pnpm dev:web            # Expo straight to web/PWA
 pnpm typecheck          # tsc --noEmit across all packages — MUST pass before commit
+pnpm test               # vitest: apps/edge (inside workerd, simulated KV/R2) + apps/mobile
 pnpm lint               # Biome
 pnpm format             # Biome --write
+
+pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
+pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
+pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
+pnpm --filter @nextbus/mobile build:web   # expo export + Workbox service worker → apps/mobile/dist
 ```
 Full guide incl. deploy: [`docs/10`](./docs/10-scaffold-and-running.md).
 
 ## Repo map
 ```
 apps/mobile          Expo app (iOS/Android/Web-PWA)
-apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, daily-crawl cron)
+apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health;
+                     reads precomputed dataset shards from KV/R2 — ADR-055)
 packages/core        canonical types · DataSource interface · ETA helpers
 packages/data-normalize  KMB + Citybus adapters (upstream → canonical)
 packages/api-client  EdgeClient (the v1 DataSource) + watch() polling shim
@@ -64,7 +71,9 @@ packages/tsconfig    shared TS configs
 6. **Pin SDK-aligned dependency versions — don't guess.** Expo packages are version-aligned to the
    SDK (e.g. `expo-router@56.x`). For RN-ecosystem libs, read the versions from
    `expo@<ver>/bundledNativeModules.json` (we did this for the scaffold). Tailwind stays on **3.4**
-   (NativeWind), TypeScript on **5.9** for shared packages.
+   (NativeWind), TypeScript on **5.9** for shared packages. `esbuild` is pinned repo-wide via
+   `pnpm.overrides` — `.npmrc` sets `node-linker=hoisted`, so two versions fight over the single
+   hoisted platform binary and `wrangler dev` dies with *"Host version does not match binary version"*.
 7. **Docs are the source of truth and must stay in sync.** A pre-commit hook
    (`scripts/precommit-docs-check.mjs` + the `check-docs` skill) **blocks** a commit that stages
    code without `docs/` changes. Either update the relevant doc (and add an ADR in `docs/08` for any
@@ -73,6 +82,7 @@ packages/tsconfig    shared TS configs
 
 ## Definition of done (for any change)
 - [ ] `pnpm typecheck` passes.
+- [ ] `pnpm test` passes.
 - [ ] `pnpm lint` clean (or justified).
 - [ ] If you changed behaviour, you ran it: worker via `curl`, app via `pnpm dev:web`.
 - [ ] Docs updated (or `[docs-ok]`); new decisions recorded as an ADR in `docs/08`.
@@ -80,15 +90,21 @@ packages/tsconfig    shared TS configs
 
 ## How to verify a change
 - **Edge:** `pnpm dev:edge`, then `curl "http://localhost:8787/v1/eta/kmb/<stopId>/<route>/1"` or
-  `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"`.
+  `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"`. `curl .../v1/health` tells you
+  which dataset tier you're on — **`"dataset":"kv"` with `datasetBuildsThisIsolate: 0`** is the
+  production invariant (ADR-055); `"inline"` means it's building the 8.3 MB dataset per isolate.
+- **Tests:** `pnpm --filter @nextbus/edge test` runs inside workerd with simulated KV/R2, so the
+  coalescer and the shard read path are exercised for real, not mocked.
 - **App:** `pnpm dev:web` and open `http://localhost:8081`.
 - **Types/bundle:** `pnpm typecheck`; `pnpm --filter @nextbus/edge exec wrangler deploy --dry-run`.
 
 ## Current status
 **The living status/handoff doc is [`docs/11`](./docs/11-status.md) — read it to resume.** Summary:
-Scaffold complete and verified. **Slice 1 — Nearby — is live and verified end-to-end**: the app
-geolocates → `DataSource.getNearby` → Worker `/v1/nearby` (memoized KMB index + bounded live ETAs)
-→ themed `StopCard`/`EtaBadge`. KMB only and **server-side** for now (ADR-016). Next: Citybus
-nearby, on-device index (ADR-007), Stop detail + Favorites (Slice 2). Roadmap/backlog: `docs/06`,
-`docs/07`. Cloudflare agent skills are installed — prefer the `cloudflare` / `wrangler` /
-`durable-objects` skills for edge work.
+Nearby, Stop detail, Route detail, Favourites and Search are live across KMB/CTB/GMB. The work plan
+is [`docs/proposals/03`](./docs/proposals/03-clean-separation-and-phase2-plan.md); **Wave 0 WP0-1…4
+are done** — the static dataset is precomputed daily into KV/R2 and the Worker only reads shards
+(ADR-055), the basemap is the Lands Department's behind a `TileSource` seam (ADR-049), the PWA has a
+service worker and a persisted query cache (ADR-058), and live ETAs are coalesced per pole at a 30 s
+TTL (ADR-057). **WP0-5 (deploy + CI + custom domain) is not done** and needs a real domain plus
+Cloudflare credentials. Roadmap/backlog: `docs/06`, `docs/07`. Cloudflare agent skills are installed
+— prefer the `cloudflare` / `wrangler` / `durable-objects` skills for edge work.

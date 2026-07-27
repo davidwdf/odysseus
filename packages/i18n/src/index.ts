@@ -32,6 +32,8 @@ export interface Messages {
   stale: string
   retry: string
   locating: string
+  /** Shown when the list is built from the last known position, not a live fix. */
+  lastKnownLocation: string
   locationDenied: string
   locationDeniedHelp: string
   openSettings: string
@@ -171,6 +173,7 @@ const en: Messages = {
   stale: 'stale',
   retry: 'Retry',
   locating: 'Finding stops near you…',
+  lastKnownLocation: 'Last known location',
   locationDenied: 'Location access is off',
   locationDeniedHelp: 'Turn on location access in your settings, then try again.',
   openSettings: 'Open settings',
@@ -289,6 +292,7 @@ const zhHant: Messages = {
   stale: '資料過時',
   retry: '重試',
   locating: '正在尋找附近車站…',
+  lastKnownLocation: '最後已知位置',
   locationDenied: '未開啟定位權限',
   locationDeniedHelp: '請在系統設定中開啟定位權限，然後再試一次。',
   openSettings: '前往設定',
@@ -405,6 +409,7 @@ const zhHans: Messages = {
   stale: '数据过时',
   retry: '重试',
   locating: '正在查找附近车站…',
+  lastKnownLocation: '最后已知位置',
   locationDenied: '未开启定位权限',
   locationDeniedHelp: '请在系统设置中开启定位权限，然后重试。',
   openSettings: '前往设置',

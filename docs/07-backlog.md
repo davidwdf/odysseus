@@ -15,11 +15,17 @@ the `DataSource` interface and the UI do not change.
 - [ ] **Ferries** (Star Ferry / franchised ferries) — if scope expands beyond buses.
 
 ## Static data & multi-operator (follow-ups to [ADR-021](./08-decision-log.md))
-- [ ] **Own static crawl → KV/R2** — replace the runtime dependency on the hkbus consolidated dataset with
-      our own crawl (KMB bulk endpoints already in `kmb-static.ts`; CTB via the per-route + per-stop crawl,
-      run as an external job / GitHub Action since it exceeds the Worker subrequest cap). Self-reliance.
-- [ ] **Cache the snapshot in KV/R2** — so a hkbus gh-pages outage means *stale*, not broken (interim before
-      the own-crawl). The `DATASET` binding is already stubbed in `wrangler.toml`.
+- [~] **Own static crawl → KV/R2** — the **KV/R2 half is done** ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path), WP0-1): a
+      daily GitHub Action normalizes the dataset, runs the ADR-042 clustering and writes content-addressed
+      shards to KV + R2, so the Worker never fetches or parses it. **What's left is the *source*:** the crawl
+      still reads the hkbus consolidated dataset rather than the operator APIs. Doing our own (KMB bulk
+      endpoints already in `kmb-static.ts`; CTB via the per-route + per-stop crawl) is now a change to
+      `scripts/build-dataset.mts` only — the Action already sits outside the Worker subrequest cap. Buys
+      self-reliance and true zh-Hans.
+- [x] **Cache the snapshot in KV/R2** — **DONE** ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path), WP0-1). A hkbus outage now
+      means *stale* rather than broken: the Worker serves whatever build `build:current` points at and never
+      touches upstream static data. The `DATASET` + `BUILDS` bindings are real (the KV namespace id in
+      `wrangler.toml` is still a placeholder — see WP0-5).
 - [x] **Same-kerb stop-merge (`Place`)** — DONE (ADR-022 → generalised by ADR-042 to direction-aware N-member
       clustering). Follow-up: looser name matching (token overlap) to also merge stops whose landmark strings differ
       (e.g. KMB stop-code-only names), ideally on the own-crawl's first-party coordinates.
@@ -90,7 +96,9 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 ### Live map & motion
 - [ ] **Build out the stop/place map from a static image into a real feature** — today `MiniMap`
       ([`apps/mobile/components/MiniMap.tsx`](../apps/mobile/components/MiniMap.tsx), ADR-041) is a
-      **static** OSM raster: it drops a pin per pole ([ADR-042](./08-decision-log.md)) and, on tap,
+      **static** raster — LandsD basemap + per-locale label overlay via the `TileSource` seam
+      ([ADR-049](./08-decision-log.md)) — that drops a pin per pole
+      ([ADR-042](./08-decision-log.md)) and, on tap,
       just hands the centroid off to the platform maps app. Make the map genuinely **useful and
       functional** rather than a thumbnail. Candidate improvements:
       - **Sticky map on scroll** — fix the map to the top of Place/Stop detail and let the
@@ -107,8 +115,8 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
         **scroll to this stop** in the list. Needs per-pin hit-testing.
       Implementation seam: either keep the keyless static-tile approach and add pin hit-testing +
       a sticky container, or graduate to **MapLibre** (the Phase 2 "Map view for Nearby" step in the
-      [roadmap](./06-roadmap.md)) for a real interactive map. Either way the tile source should move
-      off OSM's public tiles for production (the own-crawl → R2 step).
+      [roadmap](./06-roadmap.md)) for a real interactive map. The tile question is **settled** either
+      way — both consume `lib/tileSource.ts`, which already serves LandsD through our Worker.
 - [ ] **Uber-style moving bus icons** — animate buses along the route on the map. Franchised buses
       don't publish raw GPS to us, so **approximate** position by interpolating along the route
       polyline from successive-stop ETAs (+ schedule). **Clearly label as estimated**; degrade
@@ -134,15 +142,17 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       *and* bans showing Street View "on the same screen" as a non-Google map, which our Place-detail layout
       is. Caveats for any source: panos go stale (HK stops move for works), coverage is thin inside termini /
       BBIs — treat imagery as a hint, label its capture date, keep map + name authoritative.
-- [~] **Basemap migration off OSM → LandsD** — **DECIDED, [ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay).**
-      `MiniMap`'s `tile.openstreetmap.org` raster is dev-only: the OSMF policy (rewritten 2026-07-22) now
-      *prohibits* prefetching and says library-default User-Agents — i.e. RN's `<Image>` on native —
-      **"will be blocked"**. Moving to **LandsD raster** (keyless, $0, z10–20, official `en`/`tc`/`sc` labels
-      as a separate overlay, Worker-cacheable) with **Protomaps→R2** (measured 38 MB for all of HK z0–15) as
-      the documented fallback if we later need true dark mode or offline packs. Two fixes to make **now**,
-      before the migration: link the `© OpenStreetMap` credit to `openstreetmap.org/copyright`
-      (`MiniMap.tsx:211`, currently plain text — an ODbL requirement) and move the hard-coded `TILE_URL`
-      (`MiniMap.tsx:26`) into config so the source can be repointed without an app release.
+- [x] **Basemap migration off OSM → LandsD** — **DONE** (WP0-2, implementing
+      [ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)).
+      No component names a tile host any more: `MiniMap` goes through the `TileSource` seam
+      (`apps/mobile/lib/tileSource.ts`) to our own Worker routes `/v1/tiles/basemap/:z/:x/:y.png` and
+      `/v1/tiles/label/:lang/:z/:x/:y.png` (`apps/edge/src/tiles.ts`, 12 h TTL, overriding LandsD's
+      `cache-control: private`). Two stacked rasters — a language-free basemap plus the label overlay picked
+      by `useLocale()`. Attribution satisfied with a self-hosted LandsD logo on the map face and a *linked*
+      "Map from Lands Department" notice. The two pre-migration fixes this item asked for are **moot**: the
+      OSM credit is gone and there is no `TILE_URL`. Dark mode still derives from the CSS invert filter
+      (`TileSource.invertForDark`) — LandsD's raster service has no dark variant. **Protomaps→R2** (measured
+      38 MB for all of HK z0–15) stays the documented fallback for true dark mode or offline packs.
 - [ ] **Bonus HK-gov APIs that come with LandsD** (all keyless, see
       [proposals/02 §5](./proposals/02-basemap-and-street-imagery.md#5-bonus-features-that-come-along-for-free)):
       **3D Pedestrian Route Search** — the honest way to do "leave now" walking times in a city where a 50 m
