@@ -1857,6 +1857,61 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   and whether the format is renderable in React Native, decides this.** Ask when requesting the key. If the
   answer is no, decision (1) stands as the shipped feature and this becomes a watch item.
 
+## ADR-051 — Layered package boundaries; `packages/ports` is declaration-only and imports nothing
+- **Status:** **Ports half decided and implemented 2026-07-27** (WP1-3). The **enforcement half (WP1-4 —
+  `layers.json` → dependency-cruiser + Biome) is in progress** and will extend this ADR rather than take a new
+  number. Implementation: `packages/ports/`.
+- **Context:** One Expo codebase ships the PWA today and iOS/Android later. The expensive failure is not a
+  missing abstraction, it is a *wrong* one — over-abstracting the view layer, or under-declaring the handful of
+  genuinely platform-bound seams so a native developer has to rediscover them by reading React Native code. The
+  plan's claim is that **`ls packages/ports/src` should literally be the iOS/Android porting checklist**, which
+  makes this a documentation deliverable as much as a code one: the doc comments carry more weight than the
+  signatures.
+- **Decision:**
+  1. **Six ports, and no more:** `KeyValueStore`, `LocationProvider`, `LocaleProvider`, `LinkOpener`, `Clock`,
+     `TileSource`. Everything else stays native — view layer, navigation, motion, gestures, haptics, widgets.
+     Explicit non-goals are written into `packages/ports/src/index.ts` so the list can't quietly grow: no push,
+     no background refresh, no location `watch()`, no timers in `Clock`, no `Intl` surface in `LocaleProvider`.
+  2. **The package is declaration-only and imports nothing.** Enforced two ways, both demonstrated failing:
+     `"types": []` in its tsconfig (a stray `typeof process.env` reference then fails with `TS2591`), and
+     `packages/ports/scripts/check-type-only-contract.mjs`, wired as the package's `test`, which emits with tsc
+     and fails if any module emits runtime code — it also fails if *nothing* is emitted, so it cannot pass
+     vacuously.
+  3. **Ports take domain types as type parameters instead of importing them.** `TileSource<LocaleId, ImageAsset>`
+     is the precedent: importing `@nextbus/core` would break the zero-import rule, and re-declaring `Locale`
+     would create exactly the second source of truth this package exists to prevent. The app instantiates
+     `TileSource<Locale, ImageSourcePropType>`; iOS would use `TileSource<Locale, UIImage>`.
+  4. **`TileSource`'s canonical home is `packages/ports`**, superseding the "lives in the app for now" note in
+     [ADR-049](#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay).
+     The LandsD *implementation* stays in `apps/mobile` — it carries a `require()`d logo asset and an
+     `EXPO_PUBLIC_API_URL` read, which are platform concerns by definition.
+     **The duplicate was closed immediately rather than documented** (`apps/mobile/lib/tileSource.ts` is now
+     `export type TileSource = PortTileSource<Locale, ImageSourcePropType>`): the local copy was a faithful
+     duplicate *that day*, and a duplicate nobody diffs is a divergence with a start date. Binding it makes the
+     compiler check the equivalence — which is also how we know the port is faithful, since `landsdTileSource`
+     typechecks against it unchanged.
+  5. **The `Clock` port never enters `core`.** `packages/core` keeps taking an explicit `now: number` (as
+     `eta.ts` already does throughout); only the view layer holds a `Clock` and calls `now()` once per render.
+     The port exists to make the ban nameable, not because `() => number` needs an interface. WP1-4's
+     `noRestrictedGlobals` will enforce the other half.
+  6. **`LocaleProvider` returns the OS's raw ordered BCP-47 tags and nothing else.** Detection is platform;
+     *resolution* is a shared rule with HK judgement in it (bare `zh` → Traditional), and that stays in
+     `resolveLocale`. Splitting them is what stops three platforms inventing three answers for `zh-MO`.
+  7. **Storage keys are a persistence contract with the rider's device**, not an implementation detail:
+     versioned suffixes (`nextbus.*.vN`), and a scheme change needs a migration. This is the same lesson
+     WP2-5's favourite-id migration exists to teach.
+  8. **Nothing is wired to these interfaces yet** — deliberately. WP1-3 ships types and the checklist; adoption
+     is Wave 2/3, one adapter at a time.
+- **Findings recorded while writing them** (none fixed here; all are Wave 2/3 work):
+  - **No `LinkOpener` value exists.** `openExternal`/`openInMaps` match the shape method-for-method, but the
+    `Platform.OS` switch sits *inside* the functions rather than in an adapter. Introducing the value is what
+    deletes those branches.
+  - **`useLocation` conflates the port with the shared logic** — permission, fix, `snapFix` and the
+    `nextbus.lastFix.v1` read/write are one hook. Nothing is wrong today; splitting it is a refactor.
+  - **`openInMaps`/`openExternal` fail silently.** A blocked pop-up, or a device with no maps app, gives the
+    rider no feedback at all. Noted in `link-opener.ts` as a known rough edge.
+  - `getLocales()` + `resolveLocale` already match `LocaleProvider` exactly; that adapter is mechanical.
+
 ## ADR-052 — The wire contract: Zod is the single declaration, types erase, and the schema stays additive-safe
 - **Status:** **Decided and implemented 2026-07-27** (WP1-1 of
   [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). `packages/contract` holds every
