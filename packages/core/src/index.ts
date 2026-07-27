@@ -1,6 +1,7 @@
 export * from './datasource'
 export * from './eta'
 export * from './geo'
+export * from './ids'
 export * from './route-position'
 export * from './search'
 export * from './types'

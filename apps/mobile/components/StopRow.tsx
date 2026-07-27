@@ -1,5 +1,5 @@
 import type { Eta, Locale } from '@nextbus/core'
-import { formatBearing, formatDistance, formatWalk } from '@nextbus/core'
+import { formatBearing, formatDistance, formatWalk, parseRouteId } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { ChevronRight, MapPin } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
@@ -16,8 +16,10 @@ import { Text } from './Text'
 // tappable "+N more" that opens the Place page for the full, grouped list (ADR-042).
 const MAX_ROWS = 6
 
+/** The number on the chip. Falls back to the whole id, so an id we cannot read still shows the
+ *  rider *something* rather than an empty chip (the grammar lives in `@nextbus/core/ids`). */
 function routeNo(routeId: string): string {
-  return routeId.split(':')[1] ?? routeId
+  return parseRouteId(routeId)?.routeNo ?? routeId
 }
 
 /** One route's chip + "→ destination" + next-ETA badge — a row beneath a stop heading.

@@ -6,6 +6,7 @@ import {
   formatWalk,
   formatWalkRange,
   haversineMeters,
+  parseStopId,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
@@ -52,6 +53,18 @@ const OPERATOR_LABEL: Record<OperatorId, string> = {
   LWB: 'LWB',
   CTB: 'Citybus',
   GMB: 'GMB',
+}
+
+/**
+ * Brand name for the operator of a pole id, e.g. `CTB:002403` → "Citybus". Degrades twice over,
+ * both deliberately: an operator code the app has never heard of labels as the code itself (ADR-052
+ * treats operator as an open vocabulary), and an id we cannot read at all labels as nothing rather
+ * than as the letter `P` — which is what `id.split(':')[0]` produced for a merged place.
+ */
+function poleOperatorLabel(poleId: string): string {
+  const operator = parseStopId(poleId)?.operator
+  if (!operator) return ''
+  return OPERATOR_LABEL[operator] ?? operator
 }
 
 /** The map is a **full-width hero at rest that shrinks into a right-aligned floating PIP on scroll**
@@ -282,16 +295,25 @@ export default function StopDetail() {
                 lat={stop.location.lat}
                 lng={stop.location.lng}
                 height={MAP_HEIGHT}
-                operator={stop.id.split(':')[0] as OperatorId}
+                // A merged place has no single operator, and `parseStopId` says so by returning
+                // null for a `P:` id — where `stop.id.split(':')[0]` used to hand MiniMap the
+                // "operator" `P`, whose brand colour lookup silently missed. The multi-pole case
+                // colours each dot from its own member below, so undefined is the honest answer.
+                operator={parseStopId(stop.id)?.operator}
                 points={
                   multiPole
-                    ? members.map((m) => ({
-                        id: m.id,
-                        lat: m.location.lat,
-                        lng: m.location.lng,
-                        operator: m.id.split(':')[0] as OperatorId,
-                        label: splitStopCode(m.name[locale]).code ?? m.id.split(':')[1],
-                      }))
+                    ? members.map((m) => {
+                        const pole = parseStopId(m.id)
+                        return {
+                          id: m.id,
+                          lat: m.location.lat,
+                          lng: m.location.lng,
+                          operator: pole?.operator,
+                          // The stop code from the name if the operator published one, else the
+                          // raw operator stop id — short enough to label a dot.
+                          label: splitStopCode(m.name[locale]).code ?? pole?.rawId,
+                        }
+                      })
                     : undefined
                 }
                 activeId={activePole}
@@ -311,7 +333,6 @@ export default function StopDetail() {
                 .map((m, i, shown) => {
                   const rs = byPole.get(m.id) ?? []
                   const isLast = i === shown.length - 1
-                  const op = m.id.split(':')[0] as OperatorId
                   const code = splitStopCode(m.name[locale]).code
                   const d = poleDist.get(m.id)
                   return (
@@ -333,7 +354,7 @@ export default function StopDetail() {
                         className="flex-row items-end justify-between px-4 pt-4 pb-1 active:opacity-60"
                       >
                         <Text variant="label" className="text-subtle">
-                          {OPERATOR_LABEL[op] ?? op}
+                          {poleOperatorLabel(m.id)}
                           {code ? ` · ${code}` : ''}
                         </Text>
                         {d != null ? (
