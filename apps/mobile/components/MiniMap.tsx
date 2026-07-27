@@ -130,6 +130,7 @@ export function MiniMap({
   zoom,
   activeId,
   onPointPress,
+  deferAttribution,
   className,
 }: {
   lat: number
@@ -150,6 +151,10 @@ export function MiniMap({
   activeId?: string | null
   /** Tapping a pole's dot fires this with its id (the caller scrolls to its group). */
   onPointPress?: (id: string) => void
+  /** The parent renders `<MapAttribution />` itself. **Not** a licence opt-out: LandsD require the
+   *  credit on the map face (ADR-049). Set it only when the parent crops or transforms the map and
+   *  must anchor the credit to the visible window instead — as `StickyMap` in stop/[id].tsx does. */
+  deferAttribution?: boolean
   className?: string
 }) {
   const { isDark } = useTheme()
@@ -264,31 +269,48 @@ export function MiniMap({
           })
         : null}
 
-      {/* Attribution. LandsD's terms make BOTH parts mandatory and on the map face: the
-          department logo, and the copyright notice linked to their disclaimer. Their own
-          sample renders the logo at 28×28 bottom-right; no size or placement rules are
-          published. The notice is a real link (not plain text) — the mistake the old OSM
-          attribution made. Kept above the dark filter so the logo stays true-colour. */}
-      <View className="absolute bottom-0 right-0 flex-row items-center gap-1 rounded-tl-md bg-bg/85 pl-1.5 pr-2 py-1">
-        {tileSource.attribution.logo ? (
-          <Image
-            source={tileSource.attribution.logo}
-            accessibilityLabel="Lands Department"
-            style={{ width: 16, height: 16 }}
-            resizeMode="contain"
-          />
-        ) : null}
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={tileSource.attribution.a11yLabel[locale]}
-          onPress={() => openExternal(tileSource.attribution.href)}
-          hitSlop={8}
-        >
-          <Text variant="caption" className="text-[9px] leading-3 text-subtle">
-            {tileSource.attribution.notice[locale]}
-          </Text>
-        </Pressable>
-      </View>
+      {deferAttribution ? null : <MapAttribution />}
+    </View>
+  )
+}
+
+/**
+ * The mandatory LandsD credit: the department logo plus the copyright notice, linked to their
+ * disclaimer. Their terms make **both** parts required and **on the map face**, so this is a
+ * licence obligation, not decoration — see ADR-049. Their own sample renders the logo at 28×28
+ * bottom-right; no size or placement rules are published. The notice is a real link (not plain
+ * text) — the mistake the old OSM attribution made.
+ *
+ * It's a separate component because it must anchor to whatever the viewer actually *sees*. When
+ * the map is cropped rather than resized — as `StickyMap` in stop/[id].tsx does to shrink the hero
+ * into a PIP — an attribution pinned to the map canvas slides out of the visible window with the
+ * rest of the right-hand crop. The clipping container renders this itself instead, and passes
+ * `deferAttribution` to `MiniMap`. Position it with `className`; the default is bottom-right.
+ */
+export function MapAttribution({ className }: { className?: string }) {
+  const locale = useLocale()
+  return (
+    <View
+      className={`absolute bottom-0 right-0 flex-row items-center gap-1 rounded-tl-md bg-bg/85 py-1 pl-1.5 pr-2 ${className ?? ''}`}
+    >
+      {tileSource.attribution.logo ? (
+        <Image
+          source={tileSource.attribution.logo}
+          accessibilityLabel="Lands Department"
+          style={{ width: 16, height: 16 }}
+          resizeMode="contain"
+        />
+      ) : null}
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={tileSource.attribution.a11yLabel[locale]}
+        onPress={() => openExternal(tileSource.attribution.href)}
+        hitSlop={8}
+      >
+        <Text variant="caption" className="text-[9px] leading-3 text-subtle">
+          {tileSource.attribution.notice[locale]}
+        </Text>
+      </Pressable>
     </View>
   )
 }
