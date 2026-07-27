@@ -1,8 +1,10 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-27**. Branch: `hosting-cost-and-pwa-split`. Latest: **Wave 0 of the clean-separation plan —
-> WP0-1 … WP0-4 landed and verified** ([`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)).
+> Snapshot: **2026-07-27**. All of the below is **merged to `main`** (PRs #11, #12). Latest: **Wave 0 of the
+> clean-separation plan — WP0-1 … WP0-4 landed and verified**
+> ([`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). **Next: Wave 1 — the contract
+> foundation**; WP0-5/deploy is deferred on purpose (see *Next steps*).
 > Four things changed, all of them load-bearing for launch. **(1) The dataset left the request path**
 > ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)): a daily GitHub Action precomputes content-addressed shards into KV + R2 and the
 > Worker reads a handful of point keys — cold `/v1/nearby` went **3.97 s → 0.74 s**. `static-index.ts` and the Worker
@@ -96,9 +98,11 @@ of the operator APIs remains backlog); live ETAs come direct from the official A
 ([ADR-022](./08-decision-log.md) → [ADR-042](./08-decision-log.md)). The web build is an **installable PWA that
 opens offline** ([ADR-058](./08-decision-log.md#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier)) on a **LandsD basemap**
 ([ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)).
-Pick up at **WP0-5 — deploy + CI + a custom domain** (blocked on a domain + a Cloudflare account, see below);
-after that, **Wave 1/2 of `proposals/03`**, **map view**, or **Search polish** (walk it in-browser; Nearby filter
-chips; omnibox).
+Pick up at **Wave 1 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) — the contract
+foundation**. **WP0-5 (deploy + CI + custom domain) is deliberately deferred** — owner's call, 2026-07-27:
+we come back to it once most of the other waves have landed, so do **not** treat it as the next job even
+though it is the only thing between here and a live URL. After Wave 1: Wave 2, **map view**, or **Search
+polish** (walk it in-browser; Nearby filter chips; omnibox).
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
@@ -331,7 +335,8 @@ chips; omnibox).
 - **Not deployed** (WP0-5). There is **no CI, no Cloudflare Pages deploy and no domain**, so nothing is
   reachable outside a dev machine. It needs a real domain **and** a Cloudflare account, and **this environment
   has no Cloudflare auth at all** — hence the placeholder KV namespace id in `wrangler.toml` and the fact that
-  `dataset:publish` has only ever been exercised against Miniflare-local KV/R2. Next agent's first job.
+  `dataset:publish` has only ever been exercised against Miniflare-local KV/R2. **Deferred on purpose**
+  (owner's call, 2026-07-27): we launch after most of the other waves land, so this is *not* the next job.
 - **Live ETA / nearby data is server-side**; the **search index is on-device** (ADR-037 — first step of
   [ADR-007](./08-decision-log.md)), but it's still **server-computed** and fetched. The static data is now
   precomputed into KV/R2 (ADR-055), but it is still **derived from the hkbus consolidated dataset** — the own
@@ -392,22 +397,28 @@ chips; omnibox).
    orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
-1. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL). Create the real
+1. **Waves 1–2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here** —
+   `packages/contract` (Zod → OpenAPI), the id grammar, `packages/ports`, the `layers.json` enforcement engine,
+   then the parity-guarded domain extraction into `packages/core`. Note **WP2-6 (`snapFix`) already landed** in
+   `apps/mobile/lib/geoSnap.ts` and just needs moving; and **WP2-5 is a known-broken-scheme migration** — fix
+   the favourite id scheme before ADR-032 ships. **WP1-1 shape decided (2026-07-27, ADR-052):** the schemas are
+   the single declaration of every wire shape and `packages/core/src/types.ts` re-exports `z.infer` of them
+   through **`import type`** only, so zod stays out of the client's runtime graph entirely — proven by spike:
+   `types.js` emits `export {};` and schema drift surfaces as a *typecheck* failure in `apps/mobile`. Prefer
+   this over hand-written types plus an equivalence assertion: one declaration cannot fall out of sync with
+   itself, and an assertion file can silently under-cover a newly added type.
+2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
+   (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
+3. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL, and **deliberately
+   deferred until most other waves land** — owner's call, 2026-07-27). Create the real
    resources (`wrangler kv namespace create DATASET`, `wrangler r2 bucket create nextbus-builds`), replace the
    placeholder id in `apps/edge/wrangler.toml`, add the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`
    secrets and the `EDGE_URL` repo variable the dataset workflow already reads, run `pnpm dataset:publish`
    against **real** KV/R2 for the first time, then add a `ci.yml` (typecheck · lint · test ·
    `wrangler deploy` · `build:web` → Pages). Confirm `GET /v1/health` reports `"dataset":"kv"` and
-   `datasetBuildsThisIsolate: 0`. **Blocked here** on a domain + a Cloudflare account (no auth in this
+   `datasetBuildsThisIsolate: 0`. Also **blocked** on a domain + a Cloudflare account (no auth in this
    environment). *(**Own crawl → KV/R2** is now a separate, smaller job: the KV/R2 pipeline exists — only the
    source needs swapping, in `scripts/build-dataset.mts`. It buys self-reliance and true zh-Hans.)*
-2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
-   (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
-3. **Waves 1–2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** — `packages/contract`
-   (Zod → OpenAPI), the id grammar, `packages/ports`, the `layers.json` enforcement engine, then the
-   parity-guarded domain extraction into `packages/core`. Note **WP2-6 (`snapFix`) already landed** in
-   `apps/mobile/lib/geoSnap.ts` and just needs moving; and **WP2-5 is a known-broken-scheme migration** — fix
-   the favourite id scheme before ADR-032 ships.
 4. **Street-level stop photos** ([ADR-050](./08-decision-log.md#adr-050--stop-imagery-google-street-view-deep-link-now-hk-streetscape-360-as-the-inline-target)) —
    the Google Street View **deep link** is hours of work, keyless and free; do it with or before the map work.
    Then **Streetscape 360** inline, once we know whether a coordinate→panorama lookup works without their JS
