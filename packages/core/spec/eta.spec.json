@@ -1,0 +1,802 @@
+{
+  "module": "eta",
+  "source": "src/eta.ts",
+  "doc": "Arrival-time and service-fact formatting rules. These are DOMAIN RULES, not wire shapes: no schema can generate them, so every platform hand-ports them and this corpus is the only thing that keeps the ports equal. Read the file, iterate `groups`, run each case, compare to `expect`. Conventions used throughout this directory: (1) JSON `null` means the language's absent value (TS `undefined`, Swift `nil`, Kotlin `null`) both in arguments and in `expect`; (2) `nowIso` is the clock reading, passed in because every rule here is pure; (3) arrivals are ISO-8601 with a fixed +08:00 offset, so lexical order is chronological; (4) `knownDefect: true` marks a case that records what the code does today and is AGREED to be wrong — see `note`. A defect row is not permission to diverge: fix it in every platform at once, in the same commit that edits the row. ETAs are approximations (ADR-008) — no rule here fabricates sub-minute precision.",
+  "groups": {
+    "etaView": {
+      "doc": "Signed seconds/minutes to arrival plus the two honesty flags. `minutes` is FLOORED, so it reads as whole minutes still remaining (countdown-board convention): 119 s is '1 min', not '2 min'. `isDue` is a symmetric +/-60 s window around the arrival, so a feed whose clock is a little behind still says 'Due' instead of flipping to a departed dash. Anything earlier than -60 s has departed.",
+      "cases": [
+        {
+          "id": "minute-boundary-119s",
+          "note": "NAMED BOUNDARY ROW. One second under two minutes. Floor gives 1, so the label stays '1 min'. A port that rounds instead of floors shows '2 min' here and overstates the wait by a whole minute.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:01:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": 119, "minutes": 1, "isDue": false, "hasDeparted": false }
+        },
+        {
+          "id": "minute-boundary-120s",
+          "note": "NAMED BOUNDARY ROW. Exactly two minutes — the first second at which the label reads '2 min'.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:02:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": 120, "minutes": 2, "isDue": false, "hasDeparted": false }
+        },
+        {
+          "id": "minute-boundary-121s",
+          "note": "NAMED BOUNDARY ROW. One second past two minutes — still '2 min'. Together with the two rows above this pins the whole rounding rule with three cases.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:02:01+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": 121, "minutes": 2, "isDue": false, "hasDeparted": false }
+        },
+        {
+          "id": "due-window-upper-edge-59s",
+          "note": "Last second inside the 'Due' window.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": 59, "minutes": 0, "isDue": true, "hasDeparted": false }
+        },
+        {
+          "id": "first-numeric-second-60s",
+          "note": "The first second that shows a number rather than 'Due'.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:01:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": 60, "minutes": 1, "isDue": false, "hasDeparted": false }
+        },
+        {
+          "id": "exactly-now",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": 0, "minutes": 0, "isDue": true, "hasDeparted": false }
+        },
+        {
+          "id": "due-window-lower-edge-minus-60s",
+          "note": "60 s in the past is still 'Due', not departed — the tolerance band for feed clock skew. Note `minutes` is -1 because the floor of -1.0 is -1.",
+          "args": {
+            "arrivalIso": "2026-07-27T11:59:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": -60, "minutes": -1, "isDue": true, "hasDeparted": false }
+        },
+        {
+          "id": "first-departed-second-minus-61s",
+          "note": "One second past the tolerance band. `minutes` is -2, not -1: flooring a negative goes away from zero (floor(-61/60) = -2). A port using integer truncation gets -1 here and will disagree.",
+          "args": {
+            "arrivalIso": "2026-07-27T11:58:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": -61, "minutes": -2, "isDue": false, "hasDeparted": true }
+        },
+        {
+          "id": "long-wait",
+          "args": {
+            "arrivalIso": "2026-07-27T12:45:30+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": { "seconds": 2730, "minutes": 45, "isDue": false, "hasDeparted": false }
+        }
+      ]
+    },
+    "formatRelative": {
+      "doc": "The rider-facing relative label. Under a minute it is a word, never a number. A departed bus is an em dash, never a negative number. Between 60 s and 119 s it is '1 min' (the value is clamped to at least 1, so the numeric slot never shows 0).",
+      "cases": [
+        {
+          "id": "minute-boundary-119s-en",
+          "note": "NAMED BOUNDARY ROW, label side: 119 s reads '1 min'.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:01:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": "1 min"
+        },
+        {
+          "id": "minute-boundary-120s-en",
+          "args": {
+            "arrivalIso": "2026-07-27T12:02:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": "2 min"
+        },
+        {
+          "id": "minute-boundary-121s-en",
+          "args": {
+            "arrivalIso": "2026-07-27T12:02:01+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": "2 min"
+        },
+        {
+          "id": "due-under-a-minute-en",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:30+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": "Due"
+        },
+        {
+          "id": "due-under-a-minute-zh-hant",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:30+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "zh-Hant"
+          },
+          "expect": "即將"
+        },
+        {
+          "id": "due-under-a-minute-zh-hans",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:30+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "zh-Hans"
+          },
+          "expect": "即将"
+        },
+        {
+          "id": "minutes-zh-hant",
+          "args": {
+            "arrivalIso": "2026-07-27T12:07:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "zh-Hant"
+          },
+          "expect": "7 分鐘"
+        },
+        {
+          "id": "minutes-zh-hans",
+          "args": {
+            "arrivalIso": "2026-07-27T12:07:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "zh-Hans"
+          },
+          "expect": "7 分钟"
+        },
+        {
+          "id": "clamped-to-one-minute-at-60s",
+          "note": "60 s..119 s all read '1 min'. The clamp exists so the badge never renders a bare '0'.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:01:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": "1 min"
+        },
+        {
+          "id": "departed-is-an-em-dash-not-a-number",
+          "note": "U+2014 EM DASH. Never a negative minute count.",
+          "args": {
+            "arrivalIso": "2026-07-27T11:58:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": "—"
+        }
+      ]
+    },
+    "etaLabelParts": {
+      "doc": "The same rule as formatRelative, split so a caller can render the number large and the unit small and pinned — only the digits move as the value changes. Three variants; the discriminator is `kind`.",
+      "cases": [
+        {
+          "id": "mins-119s-en",
+          "args": {
+            "arrivalIso": "2026-07-27T12:01:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": { "kind": "mins", "value": 1, "unit": "min" }
+        },
+        {
+          "id": "mins-120s-en",
+          "args": {
+            "arrivalIso": "2026-07-27T12:02:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": { "kind": "mins", "value": 2, "unit": "min" }
+        },
+        {
+          "id": "mins-zh-hant",
+          "args": {
+            "arrivalIso": "2026-07-27T12:01:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "zh-Hant"
+          },
+          "expect": { "kind": "mins", "value": 1, "unit": "分鐘" }
+        },
+        {
+          "id": "due-en",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:10+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": { "kind": "due", "label": "Due" }
+        },
+        {
+          "id": "due-zh-hans",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:10+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "zh-Hans"
+          },
+          "expect": { "kind": "due", "label": "即将" }
+        },
+        {
+          "id": "departed-carries-no-label",
+          "note": "The departed variant has no text at all — the caller decides how to render an absence, so no platform invents a string here.",
+          "args": {
+            "arrivalIso": "2026-07-27T11:50:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": { "kind": "departed" }
+        }
+      ]
+    },
+    "isStale": {
+      "doc": "Whether a reading is old enough to be shown as stale. Strictly greater than 90 000 ms since the feed generated it — the threshold second itself is still fresh. This is a data-quality signal, not an error.",
+      "cases": [
+        {
+          "id": "fresh",
+          "args": {
+            "dataTimestamp": "2026-07-27T12:00:00+08:00",
+            "nowIso": "2026-07-27T12:00:05+08:00"
+          },
+          "expect": false
+        },
+        {
+          "id": "exactly-at-the-threshold-is-still-fresh",
+          "note": "90 000 ms exactly. The comparison is `>`, not `>=`.",
+          "args": {
+            "dataTimestamp": "2026-07-27T12:00:00+08:00",
+            "nowIso": "2026-07-27T12:01:30+08:00"
+          },
+          "expect": false
+        },
+        {
+          "id": "one-second-past-the-threshold-is-stale",
+          "args": {
+            "dataTimestamp": "2026-07-27T12:00:00+08:00",
+            "nowIso": "2026-07-27T12:01:31+08:00"
+          },
+          "expect": true
+        },
+        {
+          "id": "feed-timestamp-in-the-future-is-not-stale",
+          "note": "Upstream clocks run slightly ahead sometimes. A future timestamp yields a negative age, which is never stale.",
+          "args": {
+            "dataTimestamp": "2026-07-27T12:00:10+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": false
+        }
+      ]
+    },
+    "dedupeEtas": {
+      "doc": "Collapse rider-duplicate arrivals to one row per line, keeping the soonest. A rider thinks 'route number + direction', so the key is operator + route number + bound, parsed out of the canonical route id. `args.etas` carries only the three fields the rule reads (routeId, operator, arrivals); a port should fill the remaining required Eta fields with inert values. `expect` is the surviving routeIds, in output order (insertion order of first sighting).",
+      "cases": [
+        {
+          "id": "service-type-variants-collapse-keeping-the-sooner",
+          "note": "KMB indexes the same line under several service types. Two rows, one line; the 12:05 reading wins over the 12:09 one even though it arrived second in the list.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:1A:outbound:1",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:09:00+08:00"]
+              },
+              {
+                "routeId": "KMB:1A:outbound:2",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["KMB:1A:outbound:2"]
+        },
+        {
+          "id": "opposite-bounds-are-different-lines",
+          "note": "The KMB stop feed returns every direction of a route. Inbound and outbound must both survive — they are different journeys.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:1A:outbound:1",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              },
+              {
+                "routeId": "KMB:1A:inbound:1",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:07:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["KMB:1A:outbound:1", "KMB:1A:inbound:1"]
+        },
+        {
+          "id": "same-number-different-operator-is-two-lines",
+          "note": "Route '10' exists for both KMB and Citybus. The operator is part of the key.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:10:outbound:1",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              },
+              {
+                "routeId": "CTB:10:outbound:1",
+                "operator": "CTB",
+                "arrivals": ["2026-07-27T12:06:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["KMB:10:outbound:1", "CTB:10:outbound:1"]
+        },
+        {
+          "id": "gmb-regional-variants-of-one-number-collapse",
+          "note": "GMB route numbers repeat across regions, but a stop belongs to exactly one region, so two arrivals here sharing number+bound are always the same route (ADR-047). Collapsing them, keeping the sooner, is intended — not a bug.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "GMB:1:outbound:1001",
+                "operator": "GMB",
+                "arrivals": ["2026-07-27T12:11:00+08:00"]
+              },
+              {
+                "routeId": "GMB:1:outbound:2002",
+                "operator": "GMB",
+                "arrivals": ["2026-07-27T12:04:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["GMB:1:outbound:2002"]
+        },
+        {
+          "id": "a-row-with-no-arrivals-yields-to-one-that-has-them",
+          "note": "The first sighting is kept provisionally even with an empty arrivals list; a later row with an actual time replaces it.",
+          "args": {
+            "etas": [
+              { "routeId": "KMB:1A:outbound:1", "operator": "KMB", "arrivals": [] },
+              {
+                "routeId": "KMB:1A:outbound:2",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["KMB:1A:outbound:2"]
+        },
+        {
+          "id": "a-row-with-no-arrivals-does-not-displace-a-real-reading",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:1A:outbound:1",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              },
+              { "routeId": "KMB:1A:outbound:2", "operator": "KMB", "arrivals": [] }
+            ]
+          },
+          "expect": ["KMB:1A:outbound:1"]
+        },
+        {
+          "id": "literal-pipe-in-route-id-collides",
+          "note": "NAMED BOUNDARY ROW, and a REAL DEFECT (knownDefect). The dedupe key is built by joining three fields with '|' and nothing escapes a '|' inside a field. 'KMB:1|2:outbound:1' yields routeNo '1|2' + bound 'outbound'; 'KMB:1:2|outbound:1' yields routeNo '1' + bound '2|outbound'. Both flatten to the key 'KMB|1|2|outbound', so two distinct lines silently collapse and one arrival DISAPPEARS from the rider's list. The same unescaped-concatenation shape is what the favourites key `${memberStopId}|${routeId}` relies on (ADR-032, 'canonical ids carry colons, never a pipe'). Nothing validates that assumption today. `expect` records the broken behaviour so all platforms agree while it is broken; when the id parser enforces the grammar, `expect` becomes BOTH routeIds and every platform's suite goes red until it is ported.",
+          "knownDefect": true,
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:1|2:outbound:1",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              },
+              {
+                "routeId": "KMB:1:2|outbound:1",
+                "operator": "KMB",
+                "arrivals": ["2026-07-27T12:09:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["KMB:1|2:outbound:1"]
+        },
+        {
+          "id": "empty-input",
+          "args": { "etas": [] },
+          "expect": []
+        }
+      ]
+    },
+    "formatFare": {
+      "doc": "A single HK$ figure for display. The upstream string is passed through verbatim — no float parsing, no re-rounding, so '6.70' stays '6.70'. A port must not reformat the number.",
+      "cases": [
+        { "id": "one-decimal", "args": { "fare": "6.7" }, "expect": "$6.7" },
+        { "id": "whole-dollars", "args": { "fare": "6" }, "expect": "$6" },
+        { "id": "two-digit", "args": { "fare": "34.8" }, "expect": "$34.8" },
+        {
+          "id": "trailing-zero-is-preserved-verbatim",
+          "note": "Proves the pass-through: a port that parses to a number and reformats would print '$6.7'.",
+          "args": { "fare": "6.70" },
+          "expect": "$6.70"
+        },
+        {
+          "id": "blank-fare-yields-a-bare-dollar-sign",
+          "note": "Recorded so no port 'helpfully' returns an empty string instead. Callers are expected to guard: fareRange/fareStages both skip blanks, so this is unreachable through them.",
+          "args": { "fare": "" },
+          "expect": "$"
+        }
+      ]
+    },
+    "fareRange": {
+      "doc": "Cheapest/dearest across a set of boarding-stop fares. Compared NUMERICALLY but returned as the ORIGINAL upstream strings, so no float drift reaches the screen. Returns absent when nothing usable is present.",
+      "cases": [
+        {
+          "id": "sectional-descending",
+          "args": { "fares": ["6.7", "5.8", "4.2"] },
+          "expect": { "min": "4.2", "max": "6.7" }
+        },
+        {
+          "id": "flat-fare-route",
+          "args": { "fares": ["6.7", "6.7", "6.7"] },
+          "expect": { "min": "6.7", "max": "6.7" }
+        },
+        {
+          "id": "compared-numerically-not-lexically",
+          "note": "The row that catches a string-sorting port: lexically '10.0' < '9.5', numerically it is the maximum.",
+          "args": { "fares": ["10.0", "9.5"] },
+          "expect": { "min": "9.5", "max": "10.0" }
+        },
+        {
+          "id": "skips-blank-absent-and-non-numeric",
+          "note": "JSON null is the absent value. The terminus carries no boarding fare, and some rows are blank or junk.",
+          "args": { "fares": ["", "6.7", null, "not-a-fare", "5.8"] },
+          "expect": { "min": "5.8", "max": "6.7" }
+        },
+        {
+          "id": "nothing-usable",
+          "args": { "fares": ["", null, "not-a-fare"] },
+          "expect": null
+        },
+        { "id": "empty-input", "args": { "fares": [] }, "expect": null },
+        {
+          "id": "first-of-two-equal-values-wins-so-the-string-is-stable",
+          "note": "'6.70' and '6.7' are numerically equal; neither comparison is strict-greater/less, so the first-seen string is kept for both ends. This is what makes the flat-route collapse in formatFareRange predictable.",
+          "args": { "fares": ["6.70", "6.7"] },
+          "expect": { "min": "6.70", "max": "6.70" }
+        },
+        {
+          "id": "single-fare",
+          "args": { "fares": ["12.8"] },
+          "expect": { "min": "12.8", "max": "12.8" }
+        }
+      ]
+    },
+    "formatFareRange": {
+      "doc": "A sectional fare framed high-to-low, mirroring the route's own direction: dearest boarding at the origin, less from each later stage. The arrow is the same U+2192 used by the 'A -> B' route label, spaced on both sides. Collapses to one figure when the fare is flat.",
+      "cases": [
+        {
+          "id": "high-to-low",
+          "note": "The separator is space + U+2192 RIGHTWARDS ARROW + space. Copy the character, do not substitute '->'.",
+          "args": { "range": { "min": "5.8", "max": "6.7" } },
+          "expect": "$6.7 → $5.8"
+        },
+        {
+          "id": "flat-collapses-to-one-figure",
+          "note": "Never '$6.7 → $6.7'.",
+          "args": { "range": { "min": "6.7", "max": "6.7" } },
+          "expect": "$6.7"
+        },
+        {
+          "id": "flat-comparison-is-on-the-string-not-the-number",
+          "note": "Equality is string equality, so a range of '6.70'/'6.7' would NOT collapse. fareRange guarantees that cannot happen (see its first-of-two-equal-values row); this records the boundary in case something else builds the range.",
+          "args": { "range": { "min": "6.7", "max": "6.70" } },
+          "expect": "$6.70 → $6.7"
+        }
+      ]
+    },
+    "fareStages": {
+      "doc": "Collapse a route's per-stop sectional fares (array index = seq - 1) into contiguous fare stages. `fromSeq`/`toSeq` are 1-based and inclusive. Consecutive stops with an EQUAL fare merge; a blank, absent or non-numeric fare breaks the run and is itself skipped.",
+      "cases": [
+        {
+          "id": "two-runs-with-a-fareless-terminus",
+          "note": "The last stop has no boarding fare, so it produces no stage at all.",
+          "args": { "fares": ["6.7", "6.7", "5.8", "5.8", "5.8", null] },
+          "expect": [
+            { "fare": "6.7", "fromSeq": 1, "toSeq": 2 },
+            { "fare": "5.8", "fromSeq": 3, "toSeq": 5 }
+          ]
+        },
+        {
+          "id": "a-gap-breaks-an-otherwise-equal-run",
+          "note": "The row that catches a port merging on fare equality alone. Stops 1 and 3 share a fare but stop 2 is blank, so they are TWO stages, not one spanning 1-3. Contiguity is part of the rule.",
+          "args": { "fares": ["6.7", "", "6.7"] },
+          "expect": [
+            { "fare": "6.7", "fromSeq": 1, "toSeq": 1 },
+            { "fare": "6.7", "fromSeq": 3, "toSeq": 3 }
+          ]
+        },
+        {
+          "id": "non-numeric-also-breaks-a-run",
+          "args": { "fares": ["6.7", "not-a-fare", "6.7"] },
+          "expect": [
+            { "fare": "6.7", "fromSeq": 1, "toSeq": 1 },
+            { "fare": "6.7", "fromSeq": 3, "toSeq": 3 }
+          ]
+        },
+        {
+          "id": "equality-is-on-the-string",
+          "note": "'6.70' and '6.7' are numerically equal but do not merge. Deliberate: the upstream figure is the source of truth and a change of printed form is a change of fare stage.",
+          "args": { "fares": ["6.70", "6.7"] },
+          "expect": [
+            { "fare": "6.70", "fromSeq": 1, "toSeq": 1 },
+            { "fare": "6.7", "fromSeq": 2, "toSeq": 2 }
+          ]
+        },
+        {
+          "id": "single-stop",
+          "args": { "fares": ["6.7"] },
+          "expect": [{ "fare": "6.7", "fromSeq": 1, "toSeq": 1 }]
+        },
+        { "id": "no-usable-fares", "args": { "fares": ["", null] }, "expect": [] },
+        { "id": "empty-input", "args": { "fares": [] }, "expect": [] }
+      ]
+    },
+    "estimateChildFare": {
+      "doc": "A LABELLED ESTIMATE, not data: HK open data carries no fares by passenger type. Roughly half the adult fare, rounded to the nearest $0.1, always printed with one decimal. A bounded, deliberate exception to ADR-008 — the UI must always show it as an estimate. Rounding is half-away-from-zero on the tenths (not banker's rounding): a port using Kotlin's Math.rint or Python's round() will disagree on the .x5 cases.",
+      "cases": [
+        {
+          "id": "half-of-6-7-rounds-up",
+          "note": "3.35 -> '3.4'. Half-away-from-zero. This is the case that distinguishes rounding modes.",
+          "args": { "adultFare": "6.7" },
+          "expect": "3.4"
+        },
+        { "id": "half-of-5-8", "args": { "adultFare": "5.8" }, "expect": "2.9" },
+        { "id": "half-of-4-3-rounds-up", "args": { "adultFare": "4.3" }, "expect": "2.2" },
+        {
+          "id": "whole-dollars-still-get-one-decimal",
+          "note": "'17', not '17.0', would be wrong — the one-decimal form is part of the contract so a column of figures aligns.",
+          "args": { "adultFare": "34" },
+          "expect": "17.0"
+        },
+        {
+          "id": "non-numeric-has-no-estimate",
+          "args": { "adultFare": "not-a-fare" },
+          "expect": null
+        },
+        {
+          "id": "blank-fare-estimates-zero",
+          "note": "A blank string coerces to 0 and yields '0.0' rather than absent, so a caller that forgets to guard prints a $0.0 child fare. Recorded rather than silently differing per platform; the caller is responsible for not passing a blank. See the note on estimateElderlyFare's matching row.",
+          "knownDefect": true,
+          "args": { "adultFare": "" },
+          "expect": "0.0"
+        }
+      ]
+    },
+    "estimateElderlyFare": {
+      "doc": "A LABELLED ESTIMATE of the Government $2 Scheme fare for 65+/PwD riders, as amended 3 Apr 2026: $2 for adult fares up to $10, otherwise 20% of the adult fare — i.e. max($2, 20%), to one decimal. Requires an eligible/JoyYou Octopus, not cash. Changing the scheme means editing this group and re-porting.",
+      "cases": [
+        {
+          "id": "cheap-fare-pays-the-two-dollar-floor",
+          "args": { "adultFare": "6.7" },
+          "expect": "2.0"
+        },
+        {
+          "id": "policy-boundary-exactly-ten-dollars",
+          "note": "The scheme's hinge. 20% of $10 is exactly $2, so the floor and the percentage agree here and the result is $2.0 either way. A port that used a strict inequality on the wrong side still passes this row — the next two rows are what separate them.",
+          "args": { "adultFare": "10" },
+          "expect": "2.0"
+        },
+        {
+          "id": "just-over-the-boundary-pays-the-percentage",
+          "args": { "adultFare": "10.5" },
+          "expect": "2.1"
+        },
+        {
+          "id": "expensive-fare-pays-twenty-percent",
+          "args": { "adultFare": "34" },
+          "expect": "6.8"
+        },
+        {
+          "id": "percentage-rounds-to-one-decimal",
+          "args": { "adultFare": "23.5" },
+          "expect": "4.7"
+        },
+        {
+          "id": "non-numeric-has-no-estimate",
+          "args": { "adultFare": "not-a-fare" },
+          "expect": null
+        },
+        {
+          "id": "blank-fare-estimates-the-floor",
+          "note": "A blank coerces to 0, and max($2, 0) is $2, so a missing fare silently becomes a confident '$2.0'. Same unguarded-input shape as estimateChildFare's blank row.",
+          "knownDefect": true,
+          "args": { "adultFare": "" },
+          "expect": "2.0"
+        }
+      ]
+    },
+    "formatStopCount": {
+      "doc": "Route length as a stop count. The locale only selects the unit word; the figure is not localized.",
+      "cases": [
+        { "id": "en", "args": { "n": 24, "locale": "en" }, "expect": "24 stops" },
+        { "id": "zh-hant", "args": { "n": 24, "locale": "zh-Hant" }, "expect": "24 個站" },
+        { "id": "zh-hans", "args": { "n": 24, "locale": "zh-Hans" }, "expect": "24 个站" },
+        {
+          "id": "one-stop-is-not-pluralized-in-english",
+          "note": "Reads '1 stops'. English has no plural rule here, so it is wrong. Chinese is unaffected (个站/個站 does not inflect). Recorded as a defect so a port does not quietly add an English-only plural and diverge; the fix belongs in the i18n layer with a plural-aware key, not in a per-platform special case.",
+          "knownDefect": true,
+          "args": { "n": 1, "locale": "en" },
+          "expect": "1 stops"
+        },
+        { "id": "zero-stops", "args": { "n": 0, "locale": "en" }, "expect": "0 stops" }
+      ]
+    },
+    "formatJourney": {
+      "doc": "Whole-route journey time, always hedged. English prefixes a bare '~' with no space; Chinese uses 約/约 followed by a space. The asymmetry is deliberate typography, not an oversight.",
+      "cases": [
+        {
+          "id": "en-tilde-has-no-space",
+          "args": { "min": 45, "locale": "en" },
+          "expect": "~45 min"
+        },
+        {
+          "id": "zh-hant-has-a-space",
+          "args": { "min": 45, "locale": "zh-Hant" },
+          "expect": "約 45 分鐘"
+        },
+        {
+          "id": "zh-hans-has-a-space",
+          "args": { "min": 45, "locale": "zh-Hans" },
+          "expect": "约 45 分钟"
+        },
+        { "id": "short-journey", "args": { "min": 8, "locale": "en" }, "expect": "~8 min" }
+      ]
+    },
+    "formatHeadway": {
+      "doc": "Typical headway as a coarse range from the GTFS frequency bands — never a fabricated single figure. Collapses when min equals max. The separator is space + U+2013 EN DASH + space; the spacing is deliberate so the dash does not visually fuse with the digits.",
+      "cases": [
+        {
+          "id": "range-en",
+          "note": "Separator is ' – ' (U+2013 with a space each side), NOT a hyphen and NOT unspaced.",
+          "args": { "headway": { "min": 10, "max": 25 }, "locale": "en" },
+          "expect": "every 10 – 25 min"
+        },
+        {
+          "id": "range-zh-hant",
+          "args": { "headway": { "min": 10, "max": 25 }, "locale": "zh-Hant" },
+          "expect": "每 10 – 25 分鐘"
+        },
+        {
+          "id": "range-zh-hans",
+          "args": { "headway": { "min": 10, "max": 25 }, "locale": "zh-Hans" },
+          "expect": "每 10 – 25 分钟"
+        },
+        {
+          "id": "equal-bounds-collapse-en",
+          "note": "Never 'every 12 – 12 min'.",
+          "args": { "headway": { "min": 12, "max": 12 }, "locale": "en" },
+          "expect": "every 12 min"
+        },
+        {
+          "id": "equal-bounds-collapse-zh-hant",
+          "args": { "headway": { "min": 12, "max": 12 }, "locale": "zh-Hant" },
+          "expect": "每 12 分鐘"
+        }
+      ]
+    },
+    "formatServiceHours": {
+      "doc": "Daily service span on a 24h clock, locale-independent. Same spaced U+2013 EN DASH as formatHeadway. Note what this does NOT do: it performs no wrap normalization, so a past-midnight band value reaches the screen verbatim. Normalizing is the caller's job.",
+      "cases": [
+        {
+          "id": "ordinary-span",
+          "args": { "hours": { "start": "05:35", "end": "23:40" } },
+          "expect": "05:35 – 23:40"
+        },
+        {
+          "id": "past-midnight-end-is-not-normalized",
+          "note": "'25:35' means 01:35 the next day in the GTFS frequency table (see FreqBand). This formatter prints it as-is, so a caller passing a raw band value shows a rider '25:35'. Recorded to pin responsibility: the wrap must be resolved before formatting, and any platform that 'fixes' it here diverges from the others.",
+          "knownDefect": true,
+          "args": { "hours": { "start": "05:30", "end": "25:35" } },
+          "expect": "05:30 – 25:35"
+        },
+        {
+          "id": "round-the-clock",
+          "args": { "hours": { "start": "00:00", "end": "23:59" } },
+          "expect": "00:00 – 23:59"
+        }
+      ]
+    },
+    "classifyRemark": {
+      "doc": "A coarse class for an operator's free-text ETA remark, so the UI can style a timetable-derived arrival differently from a tracked one (ADR-008/036). The feeds carry prose, not codes, so this matches on text in both English and Chinese. English matching is case-insensitive. 'scheduled' is tested first and therefore WINS over 'lastBus' when a remark matches both. Anything unmatched is 'info' — never an error.",
+      "cases": [
+        {
+          "id": "english-scheduled",
+          "args": {
+            "remark": { "en": "Scheduled departure", "zh-Hant": "原定班次", "zh-Hans": "原定班次" }
+          },
+          "expect": "scheduled"
+        },
+        {
+          "id": "english-matching-is-case-insensitive",
+          "note": "Upstream shouts sometimes. The stem is 'schedul', so 'Scheduled'/'SCHEDULE'/'scheduling' all match.",
+          "args": { "remark": { "en": "SCHEDULED BUS", "zh-Hant": "", "zh-Hans": "" } },
+          "expect": "scheduled"
+        },
+        {
+          "id": "english-last-bus",
+          "args": {
+            "remark": {
+              "en": "Last bus of the day",
+              "zh-Hant": "當日尾班車",
+              "zh-Hans": "当日尾班车"
+            }
+          },
+          "expect": "lastBus"
+        },
+        {
+          "id": "english-final-bus",
+          "args": { "remark": { "en": "Final bus", "zh-Hant": "", "zh-Hans": "" } },
+          "expect": "lastBus"
+        },
+        {
+          "id": "blank-en-circular-route-last-bus",
+          "note": "NAMED BOUNDARY ROW (empty `en`, circular route). Upstream really ships a blank English remark on minor GMB circular services while the Chinese text is populated. The Chinese branch must carry the classification on its own; a port that reads only `en`, or that treats a blank `en` as a hard failure, gets 'info' here and styles a last-bus warning as ordinary information.",
+          "args": {
+            "remark": {
+              "en": "",
+              "zh-Hant": "大角咀(循環線) 尾班車已開出",
+              "zh-Hans": "大角咀(循环线) 尾班车已开出"
+            }
+          },
+          "expect": "lastBus"
+        },
+        {
+          "id": "blank-en-scheduled-from-chinese-only",
+          "note": "The same blank-`en` shape for the other class. 未開出 ('not yet departed') is one of the scheduled markers.",
+          "args": { "remark": { "en": "", "zh-Hant": "未開出", "zh-Hans": "未开出" } },
+          "expect": "scheduled"
+        },
+        {
+          "id": "scheduled-wins-when-a-remark-matches-both",
+          "note": "Order of evaluation is part of the contract: a scheduled last bus is classed 'scheduled', because 'this is a timetable guess' is the more important caveat.",
+          "args": {
+            "remark": {
+              "en": "Scheduled last bus",
+              "zh-Hant": "原定尾班車",
+              "zh-Hans": "原定尾班车"
+            }
+          },
+          "expect": "scheduled"
+        },
+        {
+          "id": "unrecognized-remark-is-information",
+          "args": {
+            "remark": {
+              "en": "Bus stop temporarily relocated",
+              "zh-Hant": "巴士站臨時遷移",
+              "zh-Hans": "巴士站临时迁移"
+            }
+          },
+          "expect": "info"
+        },
+        {
+          "id": "all-blank-is-information",
+          "args": { "remark": { "en": "", "zh-Hant": "", "zh-Hans": "" } },
+          "expect": "info"
+        }
+      ]
+    }
+  }
+}

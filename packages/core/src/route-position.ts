@@ -1,5 +1,12 @@
 import { etaView } from './eta'
 
+// `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
+// JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
+// one kind of change no schema can generate (ADR-052 context, kind 2), so they are hand-ported to
+// Swift and Kotlin and the corpus is the only thing keeping the ports equal. Change a rule and you
+// edit the corpus; every platform's suite then goes red until it has been ported.
+// `scripts/check-spec-coverage.mjs` fails a tagged export with no corpus **and** a corpus with no tag.
+
 /**
  * A bus inferred to be somewhere on the route (ADR-030).
  * `toIndex` is the stop it is heading to (its *next* stop, by array order).
@@ -24,6 +31,8 @@ export interface BusMarker {
  *
  * Pure: pass `now` in. `soonest[i]` is the ISO arrival at stop `i`, or null if none.
  * ISO strings carry a fixed +08:00 offset, so lexical `>` is chronological.
+ *
+ * @spec route-position#inferBusMarkers
  */
 export function inferBusMarkers(soonest: Array<string | null>, now: number): BusMarker[] {
   const markers: BusMarker[] = []

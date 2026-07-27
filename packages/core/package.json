@@ -10,13 +10,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check-type-only-contract.mjs",
-    "check:type-only-contract": "node scripts/check-type-only-contract.mjs"
+    "test": "node scripts/check-type-only-contract.mjs && node ../../scripts/check-spec-coverage.mjs --selftest && node ../../scripts/check-spec-coverage.mjs && vitest run --coverage",
+    "check:type-only-contract": "node scripts/check-type-only-contract.mjs",
+    "check:spec-coverage": "node ../../scripts/check-spec-coverage.mjs"
   },
   "devDependencies": {
     "@nextbus/contract": "workspace:*",
     "@nextbus/tsconfig": "workspace:*",
+    "@vitest/coverage-v8": "4.1.8",
     "typescript": "5.9.3",
+    "vitest": "^4.1.8",
     "zod": "4.4.3"
   }
 }

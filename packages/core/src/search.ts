@@ -10,6 +10,13 @@ import type { RouteLiteSchema, SearchIndexSchema, StopLiteSchema } from '@nextbu
 import type { z } from 'zod'
 import type { Locale, OperatorId } from './types'
 
+// `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
+// JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
+// one kind of change no schema can generate (ADR-052 context, kind 2), so they are hand-ported to
+// Swift and Kotlin and the corpus is the only thing keeping the ports equal. Change a rule and you
+// edit the corpus; every platform's suite then goes red until it has been ported.
+// `scripts/check-spec-coverage.mjs` fails a tagged export with no corpus **and** a corpus with no tag.
+
 /**
  * One searchable route, collapsed to a single record per (operator, route number,
  * direction) — riders search by number, not by the operator's service-type variants.
@@ -35,7 +42,11 @@ export type SearchIndex = z.infer<typeof SearchIndexSchema>
 
 export type RouteCategory = 'night' | 'airport' | 'express'
 
-/** Which categories a route number belongs to (possibly none). */
+/**
+ * Which categories a route number belongs to (possibly none).
+ *
+ * @spec search#routeCategories
+ */
 export function routeCategories(routeNo: string): RouteCategory[] {
   const n = routeNo.toUpperCase()
   const out: RouteCategory[] = []
@@ -56,6 +67,9 @@ export interface RouteFilter {
 
 export const EMPTY_FILTER: RouteFilter = { operators: [], categories: [] }
 
+/**
+ * @spec search#routeMatchesFilter
+ */
 export function routeMatchesFilter(r: RouteLite, f: RouteFilter): boolean {
   if (f.operators.length && !f.operators.includes(r.operator)) return false
   if (f.categories.length) {
@@ -66,7 +80,10 @@ export function routeMatchesFilter(r: RouteLite, f: RouteFilter): boolean {
 }
 
 /** Operator code prefix of a stop/place id (`KMB:123` → `KMB`, `P:KMB:1+CTB:2` →
- *  the operators present). Used to apply the operator filter to stop results. */
+ *  the operators present). Used to apply the operator filter to stop results.
+ *
+ * @spec search#stopMatchesOperators
+ */
 export function stopMatchesOperators(stopId: string, operators: OperatorId[]): boolean {
   if (!operators.length) return true
   return operators.some((op) => stopId.includes(`${op}:`) || stopId.startsWith(`${op}:`))
@@ -84,7 +101,11 @@ function newNode(): RouteTrieNode {
   return { children: new Map(), terminal: false }
 }
 
-/** Build a prefix trie from route numbers (upper-cased). Drives `nextValidChars`. */
+/**
+ * Build a prefix trie from route numbers (upper-cased). Drives `nextValidChars`.
+ *
+ * @spec search#buildRouteTrie
+ */
 export function buildRouteTrie(routeNos: Iterable<string>): RouteTrieNode {
   const root = newNode()
   for (const raw of routeNos) {
@@ -113,19 +134,30 @@ function descend(root: RouteTrieNode, prefix: string): RouteTrieNode | null {
   return node
 }
 
-/** The set of characters that, appended to `prefix`, still lead to a real route. */
+/**
+ * The set of characters that, appended to `prefix`, still lead to a real route.
+ *
+ * @spec search#nextValidChars
+ */
 export function nextValidChars(root: RouteTrieNode, prefix: string): Set<string> {
   const node = descend(root, prefix)
   return new Set(node ? node.children.keys() : [])
 }
 
-/** Whether `prefix` is itself a complete route number (so submit is meaningful). */
+/**
+ * Whether `prefix` is itself a complete route number (so submit is meaningful).
+ *
+ * @spec search#isCompleteRoute
+ */
 export function isCompleteRoute(root: RouteTrieNode, prefix: string): boolean {
   return descend(root, prefix)?.terminal ?? false
 }
 
 /** The digits and letters that appear anywhere in the route numbers, so the keypad
- *  can render a stable layout of only the keys this dataset ever uses. */
+ *  can render a stable layout of only the keys this dataset ever uses.
+ *
+ * @spec search#indexAlphabet
+ */
 export function indexAlphabet(routeNos: Iterable<string>): { digits: string[]; letters: string[] } {
   const digits = new Set<string>()
   const letters = new Set<string>()
@@ -143,12 +175,20 @@ export function indexAlphabet(routeNos: Iterable<string>): { digits: string[]; l
 
 // ── Search ──────────────────────────────────────────────────────────────────
 
-/** Natural comparison of route numbers so "2" < "10" < "10A" < "10B" < "N10". */
+/**
+ * Natural comparison of route numbers so "2" < "10" < "10A" < "10B" < "N10".
+ *
+ * @spec search#compareRouteNo
+ */
 export function compareRouteNo(a: string, b: string): number {
   return a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' })
 }
 
-/** Normalize a typed route query (keypad or text): trim + upper-case. */
+/**
+ * Normalize a typed route query (keypad or text): trim + upper-case.
+ *
+ * @spec search#normalizeRouteQuery
+ */
 export function normalizeRouteQuery(q: string): string {
   return q.trim().toUpperCase()
 }
@@ -157,6 +197,8 @@ export function normalizeRouteQuery(q: string): string {
  * Routes whose number begins with the (normalized) query and pass the filter,
  * naturally sorted by number then operator. The keypad guarantees the query is a
  * live prefix; the text path tolerates anything (empty → no results).
+ *
+ * @spec search#searchRoutes
  */
 export function searchRoutes(
   routes: readonly RouteLite[],
@@ -179,6 +221,8 @@ const fold = (s: string) => s.trim().toLowerCase()
  * Stops/places whose name contains the query in any locale (so English or Chinese
  * input both work). Prefix matches rank above mid-string matches; ties keep index
  * order. Operator filter (if any) applies via the id.
+ *
+ * @spec search#searchStops
  */
 export function searchStops(
   stops: readonly StopLite[],

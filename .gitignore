@@ -38,3 +38,6 @@ yarn-error.*
 
 # Precomputed dataset builds (pnpm dataset:build) — large, reproducible, never committed.
 apps/edge/.dataset/
+
+# Coverage output (pnpm test in packages/core enforces a branch threshold — WP1-5).
+coverage/

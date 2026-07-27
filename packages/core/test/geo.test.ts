@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest'
+import corpus from '../spec/geo.spec.json'
+import {
+  formatBearing,
+  formatDistance,
+  formatWalk,
+  formatWalkRange,
+  haversineMeters,
+  routeDistanceM,
+  walkMinutes,
+} from '../src/geo'
+import type { LatLng, Locale } from '../src/types'
+import { type Approx, specCases } from './corpus'
+
+// One `describe` per `@spec` group in ../spec/geo.spec.json.
+
+const cases = <A, E>(group: string) => specCases<A, E>(corpus, group)
+
+/** The corpus states a tolerance per row; see ./corpus.ts for why floats are compared this way. */
+function expectApprox(actual: number, e: Approx) {
+  expect(Math.abs(actual - e.meters)).toBeLessThanOrEqual(e.tolerance)
+}
+
+describe('geo#haversineMeters', () => {
+  for (const c of cases<{ a: LatLng; b: LatLng }, Approx>('haversineMeters')) {
+    it(c.id, () => {
+      expectApprox(haversineMeters(c.args.a, c.args.b), c.expect)
+    })
+  }
+
+  it('is symmetric — swapping the points cannot change the distance', () => {
+    // Not a corpus row: it is a property over every row rather than a value, so it belongs in the
+    // suite. A port that mixed up a sign would still satisfy the rows above for some inputs.
+    for (const c of cases<{ a: LatLng; b: LatLng }, Approx>('haversineMeters')) {
+      expect(haversineMeters(c.args.b, c.args.a)).toBeCloseTo(
+        haversineMeters(c.args.a, c.args.b),
+        9,
+      )
+    }
+  })
+})
+
+describe('geo#routeDistanceM', () => {
+  for (const c of cases<{ points: LatLng[] }, Approx>('routeDistanceM')) {
+    it(c.id, () => {
+      expectApprox(routeDistanceM(c.args.points), c.expect)
+    })
+  }
+})
+
+describe('geo#walkMinutes', () => {
+  for (const c of cases<{ distanceM: number }, number>('walkMinutes')) {
+    it(c.id, () => {
+      expect(walkMinutes(c.args.distanceM)).toBe(c.expect)
+    })
+  }
+})
+
+describe('geo#formatDistance', () => {
+  for (const c of cases<{ distanceM: number }, string>('formatDistance')) {
+    it(c.id, () => {
+      expect(formatDistance(c.args.distanceM)).toBe(c.expect)
+    })
+  }
+})
+
+describe('geo#formatWalk', () => {
+  for (const c of cases<{ distanceM: number; locale: Locale }, string>('formatWalk')) {
+    it(c.id, () => {
+      expect(formatWalk(c.args.distanceM, c.args.locale)).toBe(c.expect)
+    })
+  }
+})
+
+describe('geo#formatWalkRange', () => {
+  for (const c of cases<{ minDistanceM: number; maxDistanceM: number; locale: Locale }, string>(
+    'formatWalkRange',
+  )) {
+    it(c.id, () => {
+      expect(formatWalkRange(c.args.minDistanceM, c.args.maxDistanceM, c.args.locale)).toBe(
+        c.expect,
+      )
+    })
+  }
+})
+
+describe('geo#formatBearing', () => {
+  for (const c of cases<{ deg: number; locale: Locale }, string>('formatBearing')) {
+    it(c.id, () => {
+      expect(formatBearing(c.args.deg, c.args.locale)).toBe(c.expect)
+    })
+  }
+
+  it('never returns an empty label for any finite bearing', () => {
+    // A property, not a value: the octant lookup is `labels[octant] ?? ''`, so a modulo mistake
+    // degrades to a blank direction cue rather than a crash — the failure a per-row corpus would
+    // only catch at the exact degrees it happens to name. This sweeps the whole circle.
+    for (let deg = -720; deg <= 720; deg += 0.5) {
+      expect(formatBearing(deg, 'en')).not.toBe('')
+    }
+  })
+
+  // The two remaining branches in this function are its defensive fallbacks. Neither is expressible
+  // as a corpus row — one needs a value outside the `Locale` union, the other needs NaN, and JSON has
+  // no NaN — but both are reachable in production, so they are asserted here rather than waved
+  // through with a lowered coverage threshold.
+
+  it('falls back to the English labels for a locale outside the union', () => {
+    // Not hypothetical: ADR-052 marks `Locale` `x-unknown-tolerant`, precisely because the server may
+    // one day send a locale an installed client has never heard of, and `core` does no runtime
+    // validation (`types.js` emits `export {};`). So an unknown locale really can reach this lookup.
+    // Falling back to English beats returning nothing, and this pins that choice.
+    expect(formatBearing(45, 'de' as Locale)).toBe('Northeast-bound')
+  })
+
+  it('KNOWN DEFECT: a NaN bearing silently produces an empty label', () => {
+    // `Stop.bearingDeg` is optional and is a *mean* of the bearings through a place, so an empty or
+    // malformed set produces NaN, which flows through `% 360` and `Math.round` untouched and indexes
+    // the label table with NaN. The rider then sees a place with a blank direction cue instead of the
+    // NE-vs-SW hint that is the whole point of ADR-042's bearing. Asserted as-is so every platform
+    // behaves alike; the fix is to reject a non-finite bearing at the boundary and show no cue
+    // deliberately, and it would turn this test red.
+    expect(formatBearing(Number.NaN, 'en')).toBe('')
+  })
+})

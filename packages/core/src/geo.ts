@@ -4,11 +4,21 @@ import type { LatLng, Locale } from './types'
 // approximation, so we never show fake precision (ADR-008 honesty applied to
 // geography): metres are rounded to the nearest 10, and walk time to a whole minute.
 
+// `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
+// JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
+// one kind of change no schema can generate (ADR-052 context, kind 2), so they are hand-ported to
+// Swift and Kotlin and the corpus is the only thing keeping the ports equal. Change a rule and you
+// edit the corpus; every platform's suite then goes red until it has been ported.
+// `scripts/check-spec-coverage.mjs` fails a tagged export with no corpus **and** a corpus with no tag.
+
 /** Mean Earth radius, metres (WGS84 authalic). */
 const EARTH_R = 6_371_008.8
 
 /** Great-circle (haversine) distance between two WGS84 points, in metres. A
- *  straight-line approximation — never presented with fake precision (ADR-008). */
+ *  straight-line approximation — never presented with fake precision (ADR-008).
+ *
+ * @spec geo#haversineMeters
+ */
 export function haversineMeters(a: LatLng, b: LatLng): number {
   const toRad = Math.PI / 180
   const dLat = (b.lat - a.lat) * toRad
@@ -23,7 +33,10 @@ export function haversineMeters(a: LatLng, b: LatLng): number {
  *  between consecutive points. Used as an APPROXIMATE bus-route distance from its stop
  *  coordinates: HK open data carries no route polylines, so this under-counts the real road
  *  distance (a bus follows curving roads, not straight hops) and is only ever shown as an
- *  explicit estimate (ADR-008 / ADR-044). Returns 0 for fewer than two points. */
+ *  explicit estimate (ADR-008 / ADR-044). Returns 0 for fewer than two points.
+ *
+ * @spec geo#routeDistanceM
+ */
 export function routeDistanceM(points: LatLng[]): number {
   let total = 0
   let prev: LatLng | undefined
@@ -37,14 +50,21 @@ export function routeDistanceM(points: LatLng[]): number {
 /** Average pedestrian pace, metres per minute (~4.8 km/h). */
 const WALK_M_PER_MIN = 80
 
-/** Estimated walking minutes for a straight-line distance. Floor of 1 min. */
+/**
+ * Estimated walking minutes for a straight-line distance. Floor of 1 min.
+ *
+ * @spec geo#walkMinutes
+ */
 export function walkMinutes(distanceM: number): number {
   return Math.max(1, Math.round(distanceM / WALK_M_PER_MIN))
 }
 
 /** Human distance: rounded metres under 1 km, else one-decimal km. Unit symbols
  *  (`m` / `km`) are locale-neutral, so this needs no locale. No space before the unit
- *  ("200m", "1.2km") — reads tighter for a glanceable distance label. */
+ *  ("200m", "1.2km") — reads tighter for a glanceable distance label.
+ *
+ * @spec geo#formatDistance
+ */
 export function formatDistance(distanceM: number): string {
   if (distanceM < 1000) return `${Math.round(distanceM / 10) * 10}m`
   return `${(distanceM / 1000).toFixed(1)}km`
@@ -56,7 +76,11 @@ const WALK_LABEL: Record<Locale, string> = {
   'zh-Hans': '分钟路程',
 }
 
-/** Localized walk estimate, e.g. "2 min walk" / "2 分鐘路程". */
+/**
+ * Localized walk estimate, e.g. "2 min walk" / "2 分鐘路程".
+ *
+ * @spec geo#formatWalk
+ */
 export function formatWalk(distanceM: number, locale: Locale): string {
   return `${walkMinutes(distanceM)} ${WALK_LABEL[locale]}`
 }
@@ -79,7 +103,10 @@ const COMPASS_LABELS: Record<Locale, readonly string[]> = {
 }
 
 /** Localized 8-point compass direction for a travel bearing (deg, any range), e.g.
- *  "Northeast-bound" / "東北行". Snaps to the nearest octant. */
+ *  "Northeast-bound" / "東北行". Snaps to the nearest octant.
+ *
+ * @spec geo#formatBearing
+ */
 export function formatBearing(deg: number, locale: Locale): string {
   const octant = Math.round((((deg % 360) + 360) % 360) / 45) % 8
   const labels = COMPASS_LABELS[locale] ?? COMPASS_LABELS.en
@@ -88,7 +115,10 @@ export function formatBearing(deg: number, locale: Locale): string {
 
 /** Localized walk estimate across a *range* of distances (a multi-pole place — ADR-042):
  *  "4–6 min walk" when the poles differ in walking minutes, else a single "4 min walk"
- *  (never "4–4"). Order-independent. */
+ *  (never "4–4"). Order-independent.
+ *
+ * @spec geo#formatWalkRange
+ */
 export function formatWalkRange(
   minDistanceM: number,
   maxDistanceM: number,
