@@ -38,3 +38,7 @@ yarn-error.*
 
 # Precomputed dataset builds (pnpm dataset:build) — large, reproducible, never committed.
 apps/edge/.dataset/
+
+# Boundary self-test scratch: selftest.mjs writes a derived Biome config into a fixture, then
+# deletes it. Ignored so a killed run cannot leave the tree dirty.
+scripts/boundaries/fixtures/*/biome.json
