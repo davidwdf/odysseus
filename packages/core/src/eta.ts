@@ -1,3 +1,4 @@
+import { parseRouteId } from './ids'
 import type { Eta, I18nText, Locale } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
@@ -142,12 +143,19 @@ function localeTag(locale: Locale): string {
 export function dedupeEtas(etas: Eta[]): Eta[] {
   const byLine = new Map<string, Eta>()
   for (const eta of etas) {
-    const [, routeNo = '', bound = ''] = eta.routeId.split(':')
     // Keyed by operator + number + direction. Safe even for GMB, whose numbers repeat across
     // regions: a stop belongs to one region and route_code is unique within a region, so two
     // arrivals here sharing number+direction are always variants of the same route — collapsing
     // them (keeping the sooner) is exactly right (ADR-047).
-    const key = `${eta.operator}|${routeNo}|${bound}`
+    //
+    // An unparseable route id keys on the id itself, so it only ever dedupes against its own twin.
+    // The `split(':')` this replaced defaulted the fields to `''`, which collapsed *every*
+    // malformed reading from one operator into a single row and dropped the rest — the worst
+    // available answer for the case where we already know the data is odd.
+    const line = parseRouteId(eta.routeId)
+    const key = line
+      ? `${eta.operator}|${line.routeNo}|${line.bound}`
+      : `${eta.operator}|${eta.routeId}`
     const existing = byLine.get(key)
     if (!existing) {
       byLine.set(key, eta)

@@ -16,7 +16,8 @@
       "!**/.wrangler",
       "!**/.context",
       "!**/*.gen.ts",
-      "!packages/contract/openapi.json"
+      "!packages/contract/openapi.json",
+      "!scripts/boundaries/fixtures"
     ]
   },
   "formatter": {
@@ -44,5 +45,283 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/contract/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/core",
+                      "@nextbus/ui",
+                      "@nextbus/i18n",
+                      "@nextbus/api-client",
+                      "@nextbus/data-normalize",
+                      "@nextbus/edge",
+                      "@nextbus/mobile",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from contract — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/ports/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/contract",
+                      "@nextbus/core",
+                      "@nextbus/ui",
+                      "@nextbus/i18n",
+                      "@nextbus/api-client",
+                      "@nextbus/data-normalize",
+                      "@nextbus/edge",
+                      "@nextbus/mobile",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from ports — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/ui",
+                      "@nextbus/i18n",
+                      "@nextbus/api-client",
+                      "@nextbus/data-normalize",
+                      "@nextbus/edge",
+                      "@nextbus/mobile",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from kernel — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "fetch": "no fetch in kernel — boundary declared in layers.json (ADR-051)",
+                  "crypto": "no crypto in kernel — boundary declared in layers.json (ADR-051)",
+                  "Intl": "no Intl in kernel — boundary declared in layers.json (ADR-051)",
+                  "localStorage": "no localStorage in kernel — boundary declared in layers.json (ADR-051)",
+                  "sessionStorage": "no sessionStorage in kernel — boundary declared in layers.json (ADR-051)",
+                  "navigator": "no navigator in kernel — boundary declared in layers.json (ADR-051)",
+                  "window": "no window in kernel — boundary declared in layers.json (ADR-051)",
+                  "document": "no document in kernel — boundary declared in layers.json (ADR-051)",
+                  "process": "no process in kernel — boundary declared in layers.json (ADR-051)",
+                  "performance": "no performance in kernel — boundary declared in layers.json (ADR-051)",
+                  "setTimeout": "no setTimeout in kernel — boundary declared in layers.json (ADR-051)",
+                  "setInterval": "no setInterval in kernel — boundary declared in layers.json (ADR-051)",
+                  "XMLHttpRequest": "no XMLHttpRequest in kernel — boundary declared in layers.json (ADR-051)",
+                  "WebSocket": "no WebSocket in kernel — boundary declared in layers.json (ADR-051)"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/ui/src/**", "packages/i18n/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/api-client",
+                      "@nextbus/data-normalize",
+                      "@nextbus/edge",
+                      "@nextbus/mobile",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from tokens — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/api-client/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/ui",
+                      "@nextbus/i18n",
+                      "@nextbus/data-normalize",
+                      "@nextbus/edge",
+                      "@nextbus/mobile",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from client — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/data-normalize/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/ui",
+                      "@nextbus/i18n",
+                      "@nextbus/api-client",
+                      "@nextbus/edge",
+                      "@nextbus/mobile",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from adapters — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/edge/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/ui",
+                      "@nextbus/i18n",
+                      "@nextbus/api-client",
+                      "@nextbus/mobile",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from server — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/mobile/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nextbus/data-normalize", "@nextbus/edge"],
+                    "message": "not importable from view — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

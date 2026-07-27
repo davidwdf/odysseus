@@ -41,3 +41,7 @@ apps/edge/.dataset/
 
 # Coverage output (pnpm test in packages/core enforces a branch threshold — WP1-5).
 coverage/
+
+# Boundary self-test scratch: selftest.mjs writes a derived Biome config into a fixture, then
+# deletes it. Ignored so a killed run cannot leave the tree dirty.
+scripts/boundaries/fixtures/*/biome.json
