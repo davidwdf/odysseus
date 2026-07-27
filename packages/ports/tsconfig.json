@@ -1,0 +1,15 @@
+{
+  "extends": "@nextbus/tsconfig/base.json",
+  "include": ["src"],
+  "compilerOptions": {
+    // `types: []` is the structural half of this package's promise. Without it, whatever
+    // `@types/*` packages happen to be hoisted into the repo root (today: node, react,
+    // react-native via the mobile app) are in scope *ambiently* — so `process.env`, `Buffer`,
+    // a Node `setTimeout` overload or a DOM `Event` could be referenced in a port with nothing
+    // failing. An empty `types` array makes an accidental platform reference a compile error
+    // here, rather than a leak an iOS developer discovers six months from now.
+    // `lib` stays at the base's `ES2022` on purpose: `number`, `string` and `Promise` are
+    // language, not platform.
+    "types": []
+  }
+}
