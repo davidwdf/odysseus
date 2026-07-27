@@ -6,16 +6,22 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dataset:build": "node --import tsx scripts/build-dataset.mts",
+    "dataset:publish": "node --import tsx scripts/publish-dataset.mts"
   },
   "dependencies": {
     "@nextbus/core": "workspace:*",
     "@nextbus/data-normalize": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250906.0",
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/workers-types": "^5.20260727.1",
     "@nextbus/tsconfig": "workspace:*",
+    "tsx": "^4.23.1",
     "typescript": "5.9.3",
-    "wrangler": "^4.95.0"
+    "vitest": "^4.1.8",
+    "wrangler": "^4.114.0"
   }
 }

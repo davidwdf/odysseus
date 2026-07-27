@@ -2,8 +2,10 @@ import type { OperatorId } from '@nextbus/core'
 import { OPERATOR_ACCENT } from '@nextbus/ui'
 import { useState } from 'react'
 import { Image, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
-import { openInMaps } from '../lib/openExternal'
+import { openExternal, openInMaps } from '../lib/openExternal'
+import { tileSource } from '../lib/tileSource'
 import { useTheme } from '../lib/useTheme'
+import { useLocale } from '../providers/LocaleProvider'
 import { Text } from './Text'
 
 // A small, **static** map of one point — no map library, no API key, works on web + native.
@@ -11,21 +13,27 @@ import { Text } from './Text'
 // tiles down as plain <Image>s in a clipped viewport, with a pin at the centre. Tapping it
 // hands off to the platform maps app (openInMaps).
 //
-// Tiles are the standard **OpenStreetMap** raster set — keyless. We only ever fetch the light
-// tiles; **dark mode is derived from the same images with a CSS-style `filter`** (invert +
-// hue-rotate, see DARK_TILE_FILTER) rather than a second tile source — so the map keeps the OSM
-// look in both modes (ADR-041). Suits the PWA/dev build; OSM's tile policy discourages heavy
-// embedding, so a production/native build should repoint `TILE_URL` at our own tiles (the
-// own-crawl → R2 roadmap step) or a proper provider — this is the seam.
+// Tiles come from the **Hong Kong Lands Department**, proxied and cached by our own Worker
+// (ADR-049, WP0-2) — keyless, free for commercial use, cacheable by licence, and the surveyor's
+// own geometry. The component never names a tile host: everything goes through the `TileSource`
+// seam in lib/tileSource.ts, so the basemap can be repointed without an app release.
+//
+// Two raster layers stack here, which is the part that differs from the old OSM setup: a
+// language-free **basemap** plus a **label overlay chosen by `useLocale()`**. That is how the
+// map relabels itself in en / zh-Hant / zh-Hans with no restyling — the base tiles carry no
+// CJK at all.
+//
+// LandsD's raster service has no dark variant, so **dark mode is still derived with a CSS-style
+// `filter`** (invert + hue-rotate, see DARK_TILE_FILTER) applied to both raster layers — which
+// also flips the black label text to white. `TileSource.invertForDark` records that this is a
+// property of the source, not of the component; a vector basemap would turn it off (ADR-041).
 const TILE = 256
 const DEFAULT_ZOOM = 16
 // Vivid pin fill fallback (a stop with no known operator) that reads over the map in both modes.
 // A lone stop is brand-coloured by its `operator`, and a multi-pole place colours each dot by its
 // own operator (OPERATOR_ACCENT) — e.g. GMB green; this rose is only the last-resort default.
 const PIN_COLOR = '#E11D48'
-const TILE_URL = (z: number, x: number, y: number) =>
-  `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
-// Turn the light OSM tiles into a dark map: invert the luminance, then hue-rotate 180° so water
+// Turn the light tiles into a dark map: invert the luminance, then hue-rotate 180° so water
 // and parks land back near their real colour; trim brightness/contrast so it isn't harsh. Applied
 // to the tiles only — the pin and attribution sit outside it.
 //
@@ -54,14 +62,15 @@ const latToWorldY = (lat: number, scale: number) => {
 }
 
 /** Highest zoom at which all points fit within ~70% of the viewport (so pins aren't clipped).
- *  Single point → DEFAULT_ZOOM. The poles of a place sit ≤30 m apart, so this lands ~18–19. */
+ *  Single point → DEFAULT_ZOOM. The poles of a place sit ≤30 m apart, so this lands ~18–19,
+ *  inside LandsD's z10–20 raster range. */
 function fitZoom(pts: Array<{ lat: number; lng: number }>, w: number, h: number): number {
   if (pts.length < 2 || w <= 0) return DEFAULT_ZOOM
   const minLat = Math.min(...pts.map((p) => p.lat))
   const maxLat = Math.max(...pts.map((p) => p.lat))
   const minLng = Math.min(...pts.map((p) => p.lng))
   const maxLng = Math.max(...pts.map((p) => p.lng))
-  for (let z = 19; z > 11; z--) {
+  for (let z = Math.min(19, tileSource.maxZoom); z > 11; z--) {
     const scale = TILE * 2 ** z
     const spanX = Math.abs(lngToWorldX(maxLng, scale) - lngToWorldX(minLng, scale))
     const spanY = Math.abs(latToWorldY(maxLat, scale) - latToWorldY(minLat, scale))
@@ -71,7 +80,7 @@ function fitZoom(pts: Array<{ lat: number; lng: number }>, w: number, h: number)
 }
 
 /**
- * A static OSM mini-map that opens the platform maps app on tap. Centres on `{ lat, lng }`
+ * A static LandsD mini-map that opens the platform maps app on tap. Centres on `{ lat, lng }`
  * with a single pin; or pass `points` (a place's member poles, ADR-042) to drop a pin per
  * pole, auto-zoomed to fit them all. Full-bleed to its container width (measured on layout).
  *
@@ -112,6 +121,7 @@ export function MiniMap({
   className?: string
 }) {
   const { isDark } = useTheme()
+  const locale = useLocale()
   const [w, setW] = useState(0)
   const multi = !!points && points.length > 1
   const pts: MapPoint[] = multi
@@ -120,7 +130,11 @@ export function MiniMap({
   // Centre on the points' centroid (so all pins are framed); zoom to fit them.
   const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
   const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
-  const z = multi ? fitZoom(pts, w, height) : zoom
+  // Clamp into the source's supported range — outside it LandsD 404s and we'd render a hole.
+  const z = Math.min(
+    tileSource.maxZoom,
+    Math.max(tileSource.minZoom, multi ? fitZoom(pts, w, height) : zoom),
+  )
   const scale = TILE * 2 ** z
   const n = 2 ** z
   // Viewport top-left in world pixels, so the centroid lands dead-centre.
@@ -153,15 +167,30 @@ export function MiniMap({
       style={{ height }}
     >
       {/* Tiles live in their own layer so the dark `filter` recolours the map only — the pins
-          and attribution above stay true-colour. */}
-      <View style={[StyleSheet.absoluteFill, isDark ? { filter: DARK_TILE_FILTER } : null]}>
+          and attribution above stay true-colour. Two stacked rasters: the language-free
+          basemap, then the label overlay for the active locale (ADR-049). */}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          isDark && tileSource.invertForDark ? { filter: DARK_TILE_FILTER } : null,
+        ]}
+      >
         {tiles.map((t) => (
           <Image
-            key={`${t.tx}/${t.ty}`}
-            source={{ uri: TILE_URL(z, t.tx, t.ty) }}
+            key={`base-${t.tx}/${t.ty}`}
+            source={{ uri: tileSource.basemap(z, t.tx, t.ty) }}
             style={{ position: 'absolute', left: t.x, top: t.y, width: TILE, height: TILE }}
           />
         ))}
+        {tileSource.label
+          ? tiles.map((t) => (
+              <Image
+                key={`label-${t.tx}/${t.ty}`}
+                source={{ uri: tileSource.label?.(z, t.tx, t.ty, locale) }}
+                style={{ position: 'absolute', left: t.x, top: t.y, width: TILE, height: TILE }}
+              />
+            ))
+          : null}
       </View>
 
       {/* Background tap target — hands the whole map off to the platform maps app. Sits above the
@@ -202,14 +231,30 @@ export function MiniMap({
           })
         : null}
 
-      {/* Attribution — required by the OSM tile licence. */}
-      <View
-        pointerEvents="none"
-        className="absolute bottom-0 right-0 rounded-tl bg-bg/70 px-1 py-0.5"
-      >
-        <Text variant="caption" className="text-[9px] text-subtle">
-          © OpenStreetMap
-        </Text>
+      {/* Attribution. LandsD's terms make BOTH parts mandatory and on the map face: the
+          department logo, and the copyright notice linked to their disclaimer. Their own
+          sample renders the logo at 28×28 bottom-right; no size or placement rules are
+          published. The notice is a real link (not plain text) — the mistake the old OSM
+          attribution made. Kept above the dark filter so the logo stays true-colour. */}
+      <View className="absolute bottom-0 right-0 flex-row items-center gap-1 rounded-tl-md bg-bg/85 pl-1.5 pr-2 py-1">
+        {tileSource.attribution.logo ? (
+          <Image
+            source={tileSource.attribution.logo}
+            accessibilityLabel="Lands Department"
+            style={{ width: 16, height: 16 }}
+            resizeMode="contain"
+          />
+        ) : null}
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={tileSource.attribution.a11yLabel[locale]}
+          onPress={() => openExternal(tileSource.attribution.href)}
+          hitSlop={8}
+        >
+          <Text variant="caption" className="text-[9px] leading-3 text-subtle">
+            {tileSource.attribution.notice[locale]}
+          </Text>
+        </Pressable>
       </View>
     </View>
   )

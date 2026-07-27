@@ -35,3 +35,6 @@ yarn-error.*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Precomputed dataset builds (pnpm dataset:build) — large, reproducible, never committed.
+apps/edge/.dataset/

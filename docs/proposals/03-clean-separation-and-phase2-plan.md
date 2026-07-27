@@ -176,6 +176,14 @@ others in the same wave** — this matters because agents will be fanned across 
 
 ### Wave 0 — Launch (does **not** depend on any refactor; all parallel-safe)
 
+> **Status 2026-07-27: WP0-1 · WP0-2 · WP0-3 · WP0-4 are done and verified** on branch
+> `hosting-cost-and-pwa-split` (ADR-055, ADR-049, ADR-058, ADR-057 respectively; see
+> [`docs/11`](../11-status.md) for what was and wasn't verified). **WP0-5 is not started** — it needs a
+> real domain and Cloudflare credentials, neither of which exists yet. Two notes on what actually
+> happened versus what was written here: WP2-6 (`snapFix`) had to land early, because WP0-3's offline
+> acceptance is unreachable while the Nearby query key jitters with the raw GPS fix; and the ADR
+> numbering below skipped to 057/058 for the two work packages this plan hadn't reserved ADRs for.
+
 | ID | Title | Scope | Acceptance | Size |
 |---|---|---|---|---|
 | **WP0-1** | Precompute → KV/R2 | External GitHub Action does the 8.3 MB fetch + normalize + ADR-042 clustering. Content-addressed: R2 `builds/<hash>/`, KV `place:<hash>:<id>`, single mutable `build:current` flipped only after every key lands | `GET /v1/health` exposes `datasetBuildsThisIsolate`; CI asserts it stays **0** across a full endpoint sweep. Partial crawl can never be served; rollback is a one-key write | L |

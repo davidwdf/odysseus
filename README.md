@@ -18,7 +18,8 @@ today, iOS & Android from the same codebase tomorrow.
 ## Stack at a glance
 - **Client:** Expo (React Native + React Native for Web) → PWA first, native later. NativeWind
   (Tailwind) + react-native-reusables + Reanimated/Moti/Skia. TanStack Query + Zustand.
-- **Backend/edge:** Cloudflare Workers / Pages / KV / R2 / Durable Objects / D1 / Cron.
+- **Backend/edge:** Cloudflare Workers / Pages / KV / R2 / Durable Objects / D1. The daily static
+  dataset is precomputed **outside** the Worker by a GitHub Action into KV + R2 (no Worker cron).
 - **Data:** Open, keyless HK Transport Department / KMB / Citybus APIs, normalized into one model.
 - **Monorepo:** pnpm + Turborepo.
 

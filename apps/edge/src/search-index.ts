@@ -1,12 +1,14 @@
 import type { RouteLite, SearchIndex, StopLite } from '@nextbus/core'
 import { canonicalRouteId, type StaticIndex } from '@nextbus/data-normalize'
-import { getStaticIndex } from './static-index'
 
-// Build the compact on-device search index from the shared memoized static index
-// (ADR-037). Routes are collapsed to one record per (operator, number, direction) —
-// riders search by number, not service-type variant — and stops are pre-merged so a
-// same-kerb KMB+CTB place appears once. Memoized like the static index: one build per
-// isolate, then served from the edge cache.
+// Build the compact on-device search index (ADR-037). Routes are collapsed to one record per
+// (operator, number, direction) — riders search by number, not service-type variant — and stops
+// are pre-merged so a same-kerb KMB+CTB place appears once.
+//
+// Pure: a function of a `StaticIndex`, nothing more. Since WP0-1 the production copy is built
+// **once by the daily job** and stored as an R2 object (`builds/<hash>/search-index.json`); the
+// Worker streams that object rather than deriving it. This function is still what produces it,
+// and it's what the dev fallback calls, so there is one definition of the index either way.
 
 /** Prefer service type "1" as the representative variant, else the lowest. */
 function preferServiceType(a: string, b: string): string {
@@ -72,19 +74,4 @@ export function buildSearchIndex(index: StaticIndex): SearchIndex {
   // Good enough for cache-busting the client blob; a true content hash is a follow-up.
   const version = `${routes.length}.${stops.length}`
   return { version, routes, stops }
-}
-
-let searchIndexPromise: Promise<SearchIndex> | null = null
-
-/** Memoized compact search index for the isolate's lifetime (built off the static index). */
-export function getSearchIndex(): Promise<SearchIndex> {
-  if (!searchIndexPromise) {
-    searchIndexPromise = getStaticIndex()
-      .then(buildSearchIndex)
-      .catch((err) => {
-        searchIndexPromise = null
-        throw err
-      })
-  }
-  return searchIndexPromise
 }

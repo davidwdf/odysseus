@@ -1760,7 +1760,13 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   Install requires a secure origin, so it can't be checked on `localhost`.
 
 ## ADR-049 — The basemap is the HK Lands Department's, self-cached, with labels as a per-locale overlay
-- **Status:** **Decided 2026-07-26, not yet implemented.** Supersedes the interim OSM raster choice inside
+- **Status:** **Decided 2026-07-26, implemented 2026-07-27** (WP0-2). `apps/edge/src/tiles.ts` proxies and
+  re-caches LandsD; `apps/mobile/lib/tileSource.ts` is the `TileSource` seam; `MiniMap` stacks the basemap
+  and the per-locale label layer and carries the logo plus a linked notice. The two compliance fixes the
+  migration was gated on turned out to be moot rather than done: `MiniMap` no longer credits OSM at all, and
+  no longer hard-codes a tile URL. Dark mode still uses the CSS invert filter, now recorded as
+  `TileSource.invertForDark` — a property of the *source*, not of the component. Supersedes the interim OSM
+  raster choice inside
   [ADR-041](#adr-041--stop-detail-a-collapsing-header-shared-with-route-a-keyless-static-mini-map-and-an-enriched-summary) / [ADR-045](#adr-045--stop-detail-mini-map-pinned-with-brand-coloured-labelled-dots-and-a-scroll-linked-pole-highlight)
   (which never claimed to be production-ready). Full option comparison, costs and verbatim licence clauses:
   [`docs/proposals/02`](./proposals/02-basemap-and-street-imagery.md).
@@ -1842,3 +1848,153 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   bespoke `.pano`. **Whether a stop coordinate can be resolved to a panorama without running their JS SDK,
   and whether the format is renderable in React Native, decides this.** Ask when requesting the key. If the
   answer is no, decision (1) stands as the shipped feature and this becomes a watch item.
+
+## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
+- **Status:** **Decided and implemented 2026-07-27** (WP0-1 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Supersedes the "daily crawl
+  cron" sketch in [`docs/03`](./03-architecture.md) and the `scheduled` stub, both now removed.
+- **Context:** every cold isolate fetched the 8.3 MB consolidated dataset ([ADR-021](#adr-021--citybus-and-kmb-static-data-from-the-hkbus-consolidated-dataset)),
+  parsed it (~67 ms of `JSON.parse` alone, measured on an M-series Mac), ran the ADR-042 clustering and kept
+  ~20 MB of heap alive, then memoized it. Three separate problems, only one of which is speed:
+  1. **Latency.** A cold `/v1/nearby` measured **3.97 s**. Cloudflare recycles isolates constantly, so this
+     was not a rare first-request cost.
+  2. **Availability.** `data.hkbus.app` was a *runtime* dependency. Their outage became our outage as soon
+     as isolates recycled — an availability risk we took on every request for data that changes daily.
+  3. **It blocks Phase 2.** Durable Objects get 128 MB each. N instances each holding a 20 MB parsed
+     dataset is not survivable, which is why WP5-3 has this as a hard prerequisite, not a nice-to-have.
+- **Decisions:**
+  1. **The expensive half runs outside the Worker**, in a GitHub Action
+     (`.github/workflows/dataset.yml`, daily 19:00 UTC = 03:00 HKT, plus `workflow_dispatch`). It fetches,
+     normalizes, clusters and shards; the Worker only ever *reads*. Deliberately not a Cron Trigger: the
+     job's cost profile is a build machine's, not an edge isolate's.
+  2. **Shards are sliced by what a request needs, not by what the model looks like.** KV holds
+     `place:<hash>:<id>` (a place *or* a lone stop, with its members, its routes and the fare at each pole —
+     everything `/v1/stop` and `/v1/etas` need in **one** read), `alias:<hash>:<stopId>` (member pole → its
+     place, so a bare pole id from a route's stop list still lands on the whole place, ADR-042),
+     `route:<hash>:<id>`, and `geo:<hash>:<cell>`. R2 holds `builds/<hash>/search-index.json` and
+     `manifest.json`. Measured on the live dataset: 10,118 places · 6,351 aliases · 3,653 routes · 486
+     cells, ≈20.6k keys, 2.6 s to build.
+  3. **Geo cells carry ranking stubs only** — id, anchor, member coordinates — at 0.01° (~1.1 km). A 500 m
+     query reads about four cells, ranks by *nearest member pole* (the walk the rider actually makes), then
+     reads only the ≤6 winning place documents. Inlining whole places into cells would have made one cell
+     megabytes and pulled a slab of the territory to render six cards.
+  4. **Content addressing, and the pointer flips last.** Every key carries the build hash, so writing a new
+     build cannot disturb the one being served; `build:current` — the single mutable key — is written only
+     after every shard has landed. A crashed run therefore leaves an unreachable orphan, never a
+     half-served dataset, and a rollback is one key write. Readers resolve one hash for a whole request, so
+     nobody ever sees a mixed build. The hash digests the *shard payloads*, so it moves exactly when what
+     we would serve moves; a separate `sourceHash` digests the upstream body so an unchanged day skips
+     republishing entirely (KV writes are the metered side of this design).
+  5. **`GET /v1/health` exposes `datasetBuildsThisIsolate`, and it must be 0.** The in-request build still
+     exists as a fallback — it is what makes `pnpm dev:edge` work against no remote state, and what turns
+     an empty namespace into "slow" rather than "down" — so the only thing stopping it quietly becoming
+     production's behaviour again is a number we assert on.
+     `apps/edge/test/dataset-kv.test.ts` seeds a real build into Miniflare KV/R2, sweeps every endpoint and
+     asserts both the counter and that the dataset URL was never fetched.
+  6. **Both bindings are optional in the type** (`apps/edge/src/bindings.d.ts`), which is why we hand-write
+     `Cloudflare.Env` rather than generating it. Generated bindings are required, and required bindings
+     would delete the fallback.
+  7. **Response tiering:** `/v1/stop/:id` returns `Route.service` **without** `patterns`; `/v1/route/:id`
+     keeps the full per-day-type profiles. `patterns` is read on exactly one screen (the Route fact sheets)
+     and duplicating it into every place a route touches was **54 MB of an 82 MB build** — the largest
+     interchange document went from 188 kB to 51 kB. A native client should read frequency profiles from
+     the route endpoint.
+  8. **One id-resolution rule everywhere.** A bare member pole id now promotes to its place on
+     `/v1/etas` too, not just `/v1/stop` — previously `/v1/etas/<pole>` returned that pole alone. Safe to
+     change now (`watch()` is its only caller and has none of its own), and the alternative was two
+     resolution rules for the same id space. Relatedly, a **stale `P:` id** — a favourite saved before a
+     reclustering — resolves through its first member to the *current* place rather than 404ing. That is
+     a stopgap; the favourite id scheme itself is WP2-5's to fix.
+  9. **Two guards the review added, both worth stating because neither is obvious.** `/v1/nearby`'s
+     `radius` is now **clamped to 50–2,000 m**: post-sharding it decides how many *KV keys* a
+     request reads (one per cell, quadratic in the radius), so `radius=50000` would have fanned out
+     to ~8,000 concurrent reads and blown the subrequest limit — a remote amplification from one
+     query parameter. And the publisher distinguishes *"there is no current build"* from *"we could
+     not read it"*: collapsing those would make a transient wrangler failure look like a first-ever
+     publish, and the prune would then delete the build that was live seconds earlier.
+- **Measured result:** cold `/v1/nearby` **3.97 s → 0.74 s**; warm 6 ms; `datasetBuildsThisIsolate` 0 across
+  a full endpoint sweep. The upstream dependency moves from every request to once a day.
+- **Consequences / open:** the *source* is still the hkbus consolidated dataset — an own crawl of the
+  operator APIs remains a backlog item, and is now a change of one build script rather than of the Worker.
+  ≈20.6k KV writes per publish is ~600k/month if the data changes daily, inside the paid plan's 1M included
+  writes and reduced further by the `sourceHash` skip. The pipeline has been verified end to end against
+  Miniflare-local KV/R2 but **not** yet against real remote resources — the namespace id in `wrangler.toml`
+  is still a placeholder.
+
+## ADR-056 — *(reserved: Phase 2 live protocol — AsyncAPI frames, sharded `EtaHub`, adaptive alarm cadence)*
+- **Status:** Not yet written. Reserved by
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) so WP5-* can claim it; numbered
+  here only to stop a later decision taking the slot.
+
+## ADR-057 — Live ETA TTL is 30 s, and every upstream call is coalesced per pole
+- **Status:** **Decided and implemented 2026-07-27** (WP0-4). Revises the 8 s/10 s TTLs chosen in
+  [ADR-016](#adr-016--slice-1-server-side-v1nearby-on-device-index-deferred). Implementation:
+  `apps/edge/src/eta-cache.ts`.
+- **Context:** `/v1/nearby` fans out to every member pole of every nearby place — 70–100 upstream calls on a
+  cold request, throttled by a 6-simultaneous-connection ceiling, which made it comfortably the slowest
+  endpoint. Two separate leaks made that worse than it needed to be. **First, the TTL was too short to
+  bind:** upstream refreshes roughly once a minute ([ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown)
+  already concedes this), and at an 8 s TTL the hit rate is ~0% — misses per second cap at
+  `hot_keys ÷ TTL` and the cache never becomes the binding constraint. **Second, the edge cache only helps
+  after a response exists:** N concurrent requests for the same coordinate each opened their own upstream
+  connections, and a duplicate call is not free — it displaces a real one against that connection ceiling.
+- **Decisions:**
+  1. **One TTL, 30 s, shared by the coalescer and the `max-age`** (`ETA_TTL_SEC`). It halves the upstream
+     call rate without ever showing an arrival that upstream would itself have called fresh. This does not
+     weaken ADR-008: staleness is surfaced from each reading's own `observedAt`, so a cached value is
+     *labelled* old rather than presented as new.
+  2. **The unit of sharing is the in-flight upstream call, not the response.** `coalesce(key, produce)`
+     returns the running promise to every caller within the window, so the distinct call keys *are* the
+     calls the Worker can issue: `kmb-board|<pole>` (KMB and LWB read the same board), `gmb-board|<pole>`,
+     `CTB-eta|<pole>|<route>|<serviceType>` (CTB has no per-stop board, ADR-021), and
+     `kmb-route-eta|<route>|<serviceType>` for the bulk route feed — so opening two direction variants of
+     one route number costs one call.
+  3. **Cache the GMB *raw* board, not the mapped result.** Mapping raw `route_id`/`route_seq` to canonical
+     ids depends on the dataset build (ADR-047); caching the mapping would let a resolved value outlive the
+     build that resolved it.
+  4. **Never cache a failure.** A rejection evicts its entry and resolves to an empty list, so an upstream
+     blip degrades one card for one request instead of pinning it for 30 s.
+- **Acceptance, asserted in `apps/edge/test/eta-coalescing.test.ts`:** a counting fetch-mock shows
+  `/v1/nearby` at a 20-pole coordinate issues **exactly** distinct-served-pole-count upstream calls, no pole
+  twice, and nothing for the poles the response doesn't show; two concurrent requests (distinct edge-cache
+  keys, same poles) issue one set; and opening a place after Nearby adds none.
+
+## ADR-058 — Offline is a service worker, a persisted query cache and a remembered fix — not a new data tier
+- **Status:** **Decided and implemented 2026-07-27** (WP0-3). Closes the offline claim `docs/03` had been
+  making that `docs/11` recorded as untrue.
+- **Context:** the PWA had install metadata ([ADR-048](#adr-048--pwa-install-metadata-web-app-manifest--ios-apple-touch-icon-via-a-custom-html))
+  but no service worker, so an installed app opened to a browser error offline — the one failure mode that
+  makes an installed PWA feel fake. The search index was already cached on device
+  ([ADR-037](#adr-037--search-on-device-index-a-smart-route-keypad-and-extensible-filter-chips)); nothing else was.
+- **Decisions:**
+  1. **Three strategies, chosen per kind of thing** (`apps/mobile/workbox.config.mjs`). The hashed app shell
+     is precached — that is what makes the app *open* offline, and without it no other cache is reachable.
+     `/v1/index` is stale-while-revalidate. Live ETA endpoints are **network-first with a 4 s timeout** and
+     never cache-first: under ADR-008, a bus that left four minutes ago is worse than no answer, so the
+     cached copy is a fallback, not a shortcut. Tiles are cache-first and **never prefetched** — pre-emptive
+     tile fetching is precisely what both LandsD's "not a large amount of requests in a short period" and
+     the OSMF policy prohibit.
+  2. **`generateSW` with the runtime inlined**, not `injectManifest` over a CDN `importScripts` — an offline
+     service worker that needs the network on first run is not one. `pnpm --filter @nextbus/mobile
+     build:web` runs the export and the generation together, because a precache manifest generated against a
+     different build is worse than no service worker; the script then asserts on the emitted bundle.
+     Registration is production-web-only: a stale worker intercepting Metro's module requests in dev is a
+     genuinely nasty bug.
+  3. **The query cache is persisted** (`PersistQueryClientProvider` + AsyncStorage, 24 h, successes only).
+     Persisting errors would replay a stale failure on the next cold start, which reads as "the app is
+     broken" rather than "we're offline". A replayed reading carries its original `observedAt`, so the ETA
+     helpers age it and the UI marks it stale — restoring a *labelled old reading* is consistent with
+     ADR-008, restoring a fresh-looking one would not be.
+  4. **The GPS fix is grid-snapped to 25 m before it leaves the device** (`lib/geoSnap.ts`). This is
+     WP2-6 pulled forward, because none of the above works without it: raw coordinates jitter by metres
+     between readings, so the Nearby query key moved constantly and a persisted result could essentially
+     never be replayed. It is simultaneously a privacy control and the thing that makes `/v1/nearby`
+     edge-cacheable at all. Wave 2 still has to move it into `packages/core`.
+  5. **Say when the position is remembered.** `useLocation` persists the last fix and returns it with
+     `stale: true` while a live one is pending or unobtainable; Nearby shows `lastKnownLocation` instead of
+     the app name. ADR-008's honesty applies to the position, not only to the arrival times.
+- **Verified:** with both the static server and the edge Worker stopped, a cold load of `/search` opened the
+  app and searched from cache, and `/v1/nearby` was replayed from the service-worker cache with its original
+  `observedAt` intact. **Not verified:** the Nearby *screen* offline — Chrome's geolocation in the dev
+  environment resolves outside Hong Kong, so the data path was exercised directly instead. Worth checking on
+  a real phone alongside the other install checks ADR-048 left open.
