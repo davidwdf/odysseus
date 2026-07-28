@@ -395,8 +395,12 @@ chips; omnibox).
 1. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL). Create the real
    resources (`wrangler kv namespace create DATASET`, `wrangler r2 bucket create nextbus-builds`), replace the
    placeholder id in `apps/edge/wrangler.toml`, add the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`
-   secrets and the `EDGE_URL` repo variable the dataset workflow already reads, run `pnpm dataset:publish`
-   against **real** KV/R2 for the first time, then add a `ci.yml` (typecheck · lint · test ·
+   secrets and the `EDGE_URL` repo variable the dataset workflow already reads, **rehearse the publish against
+   a `--preview` namespace first** — two builds, so the ~20k-key prune runs for real once before it can touch
+   production ([ADR-061](./08-decision-log.md) decision 2) — then run `pnpm dataset:publish`
+   against **real** KV/R2 for the first time, **then set `DATASET_PUBLISH_ARMED=true`** to re-enable the
+   nightly cron (it is skipped until then — see `docs/10` "Configuration & secrets"; a
+   `workflow_dispatch` run is the way to test the credentials first), then add a `ci.yml` (typecheck · lint · test ·
    `wrangler deploy` · `build:web` → Pages). Confirm `GET /v1/health` reports `"dataset":"kv"` and
    `datasetBuildsThisIsolate: 0`. **Blocked here** on a domain + a Cloudflare account (no auth in this
    environment). *(**Own crawl → KV/R2** is now a separate, smaller job: the KV/R2 pipeline exists — only the
