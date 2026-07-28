@@ -209,7 +209,9 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   but not visible.
 - **Decision:** (1) **Load Inter** as discrete weight cuts via `@expo-google-fonts/inter` + `expo-font`,
   gating the splash on load (`expo-splash-screen`). (2) Add a **`<Text>` typography primitive** (in
-  `apps/mobile/components`) driven by a `TYPE_SCALE` token (`packages/ui/src/typography.ts`): `variant`
+  `apps/mobile/components`) driven by a `TYPE_SCALE` token (`packages/ui/src/typography.ts` — *since WP3-1
+  the values live in `packages/ui/tokens.json` and `TYPE_SCALE` is generated into
+  `src/tokens.generated.ts`; this file is deleted. Everything else here still stands*): `variant`
   carries size + line-height + the correct Inter cut, `tabular` gives fixed-width ETA digits; colour/layout
   stay semantic-token classNames. The scale is also exposed as `text-display/h1/h2/h3/body/label/caption`
   utilities in the preset. (3) Add **elevation tokens** (`ELEVATION` e0–e3, iOS shadow + Android elevation)
