@@ -11,6 +11,7 @@ import {
   type StopLite,
   searchRoutes,
   searchStops,
+  titleCaseName,
 } from '@nextbus/core'
 import { type Messages, t } from '@nextbus/i18n'
 import { useRouter } from 'expo-router'
@@ -42,7 +43,6 @@ import { StopName } from '../components/StopName'
 import { Text } from '../components/Text'
 import { usePreferences } from '../lib/preferences'
 import { useSearchIndex } from '../lib/searchIndex'
-import { titleCaseName } from '../lib/stopName'
 import { useTheme } from '../lib/useTheme'
 import { useLocale } from '../providers/LocaleProvider'
 

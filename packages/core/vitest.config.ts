@@ -26,6 +26,7 @@ export default defineConfig({
         'src/ids.ts',
         'src/route-position.ts',
         'src/search.ts',
+        'src/stop-name.ts',
       ],
       // A **branch** threshold is the load-bearing one. Line coverage is easy to satisfy with a
       // handful of happy-path cases; the bugs in rules like these live in the branch nobody thought

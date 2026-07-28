@@ -833,8 +833,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   ALL-CAPS source there's no safe way to auto-distinguish an initialism (`EKCC`) from a real word that can
   also appear parenthesised (`(CIRCULAR)`), so codes are added explicitly as they surface — e.g. `EKCC` in a
   route endpoint's `… (EKCC)`, which the header label title-cases without splitting the code. `titleCaseName` /
-  `splitStopCode` are covered by `apps/mobile/lib/stopName.test.ts` (Vitest — the repo's first first-party
-  test; `pnpm --filter @nextbus/mobile test`).
+  `splitStopCode` were the subject of the repo's first first-party test. Wave 2 (WP2-1) moved these rules
+  into `@nextbus/core` (`src/stop-name.ts`) and promoted that test into the language-neutral corpus at
+  `packages/core/spec/stop-name.spec.json`, so iOS and Android title-case identically instead of each
+  re-deriving the "On" rule from scratch.
 
 ## ADR-035 — Elevation is two channels: opaque (shadow↔lighten) and glass (defocus-led)
 - **Status:** **Implemented** (verified in-browser, both modes). Documents shipped behaviour (`ELEVATION` +
@@ -1603,7 +1605,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Status:** **Built & verified on web** (2026-07-04). Touches the `DataSource` seam (`@nextbus/core`), the edge
   (`apps/edge/src/stop-route.ts`), and the route screen + header (`apps/mobile/app/route/[id].tsx`,
   `components/RouteHeader.tsx`, `components/CollapsingHeader.tsx`, `components/DirectionSwapIcon.tsx`, `RouteMeta.tsx`,
-  `lib/stopName.ts`, `@nextbus/i18n`).
+  the stop-name display rules — `@nextbus/core`'s `src/stop-name.ts` since WP2-1 — and `@nextbus/i18n`).
 - **Context:** Route detail showed a **single direction** with no way to see the return trip; the only place a
   "direction" hint lived was the dropped route-chip sheet idea (ADR-044 fork). Riders want to flip to the opposite
   direction in place. Two data realities shaped it: (a) the opposite bound is a *separate* canonical route id
@@ -1641,7 +1643,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      honour reduce-motion. Reanimated **layout animations were avoided** (flaky on web, our current target) in favour
      of shared-value + `useAnimatedStyle`.
   5. **Circular routes get their own treatment (no reverse).** Detected by the loop marker HK bakes into the
-     destination name — `CIRCULAR` / `循環` / `循环` (`isCircular`/`stripCircular` in `lib/stopName.ts`). Because a
+     destination name — `CIRCULAR` / `循環` / `循环` (`isCircular`/`stripCircular`, in `@nextbus/core` since WP2-1). Because a
      loop's first == last stop, the card switches to the route's own labels: the **boarding terminus** over
      **"Circular via <turnaround>"** (`circularVia` i18n; turnaround = destination with the marker stripped), the
      connector arrow becomes a **loop glyph**, and there's no toggle. A meta-strip "Circular" chip was built then

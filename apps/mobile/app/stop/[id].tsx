@@ -7,6 +7,8 @@ import {
   formatWalkRange,
   haversineMeters,
   parseStopId,
+  splitStopCode,
+  titleCaseName,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
@@ -42,7 +44,6 @@ import { Skeleton } from '../../components/Skeleton'
 import { StopHeader } from '../../components/StopHeader'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
-import { splitStopCode, titleCaseName } from '../../lib/stopName'
 import { useLocation } from '../../lib/useLocation'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
