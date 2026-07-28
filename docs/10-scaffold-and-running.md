@@ -158,6 +158,79 @@ To check offline behaviour: serve `dist/` over any static server (e.g. `npx serv
 app once, then kill **both** that server and the Worker and reload. Verified this way — a cold load
 of `/search` still opens the app and searches from cache.
 
+## Configuration & secrets
+*The reasoning behind all of this — including why there is no staging tier — is
+[ADR-061](./08-decision-log.md#adr-061--environments-and-configuration-topology-local--production-ephemeral-previews-and-no-staging-tier).*
+
+**The headline fact: this project has two secrets, and neither is needed to run it.** Every
+upstream we depend on is keyless — the bus APIs (`docs/02`) and the LandsD basemap tiles
+([ADR-049](./08-decision-log.md)) alike — so a fresh clone runs end-to-end with nothing configured.
+The only credentials that exist are the ones that let CI *publish* the dataset.
+
+| Variable | Secret? | Who reads it | Where it lives |
+|---|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | **yes** | `dataset:publish`, in CI | GitHub Actions **secret** |
+| `CLOUDFLARE_ACCOUNT_ID` | it's an identifier, treat as one | as above | GitHub Actions **secret** |
+| `DATASET_PUBLISH_ARMED` | no | `.github/workflows/dataset.yml` | GitHub Actions **variable** — `true` once the KV namespace exists |
+| `EDGE_URL` | no | the workflow's `/v1/health` check | GitHub Actions **variable** (the step self-skips when unset) |
+| KV namespace id | no | the Worker | committed, in `apps/edge/wrangler.toml` |
+| `EXPO_PUBLIC_API_URL` | **no, and cannot be** | the app, at build time | `apps/mobile/.env.local` (see `.env.example`) or the build env |
+
+### Three homes, split by who consumes the value
+
+1. **CI credentials → GitHub Actions secrets.** The two Cloudflare values, and nothing else. Free,
+   encrypted, and already wired into `dataset.yml`.
+2. **Worker runtime secrets → `wrangler secret put`.** There are **none today**. When one appears
+   (an error-reporting DSN, a metered upstream), it goes here — encrypted at rest, never in
+   `wrangler.toml`, which is committed. `apps/edge/.dev.vars` is the local mirror and is gitignored;
+   Wrangler loads it automatically.
+3. **Your own machine → `wrangler login`.** OAuth, credentials in `~/.wrangler`. You only ever need
+   to *mint* an API token for CI to use — don't keep one lying around in a shell profile.
+
+**No `.env` file is loaded outside the Expo app.** Nothing in the repo depends on `dotenv`:
+`publish-dataset.mts` reads `process.env` directly, so `CLOUDFLARE_API_TOKEN` must come from the
+real environment (CI, or `export` in the shell for a one-off). Only Expo has built-in `.env`
+support, and only for its own directory.
+
+### Two traps
+
+- **`EXPO_PUBLIC_*` is public.** Expo inlines it into the bundle; it is readable in DevTools by
+  anyone using the app. Fine for the API URL, fatal for a key. There is no way to hide a secret in
+  a client bundle — anything needing one is proxied through the Worker instead. That is already why
+  the tile proxy exists.
+- **The KV namespace id is not a credential.** It's inert without an authenticated token, and it's
+  committed on purpose so the Worker's bindings resolve. Don't let it drag you towards a secrets
+  manager.
+
+### Minting the Cloudflare token
+
+Use the dashboard's **"Edit Cloudflare Workers"** template as the starting point and add
+**Workers KV Storage: Edit** and **Workers R2 Storage: Edit**; the publish job needs nothing more
+than those plus the Workers Scripts permission the template already grants. Scope it to the one
+account. **Don't use the Global API Key** — it can't be scoped and can't be revoked in isolation.
+Keep the master copy in whatever password manager you already use; GitHub can't show it back to
+you after it's set.
+
+A dedicated secrets service (Doppler, Infisical, Vault, SOPS) would be more machinery than two
+values justify. Revisit it if a second environment, a second person, or ~10 secrets appear.
+
+### Environments: local and production, and that's it
+There is **no staging tier**, on purpose ([ADR-061](./08-decision-log.md#adr-061--environments-and-configuration-topology-local--production-ephemeral-previews-and-no-staging-tier)).
+`pnpm dataset:publish --local` writes into the same Miniflare state `wrangler dev` reads and the edge
+suite runs inside workerd, so the local KV path is genuinely exercised — that is what staging would
+have been for. For per-change review, Cloudflare Pages gives preview URLs per branch and Workers
+gives them per version (`wrangler versions upload`): disposable, tied to a PR, nothing to keep in sync.
+
+**One exception, and it's about the prune rather than about environments.** Before the first
+production publish, make a *preview* namespace and rehearse there:
+```bash
+wrangler kv namespace create DATASET --preview    # → preview_id, alongside the real id
+# publish TWICE against it, then confirm the prune kept the allowlist and the rollback target
+```
+Step 4 of `publish-dataset.mts` deletes ~20k keys per superseded build and has only ever run against
+Miniflare. The failure mode is deleting the live build, so it earns a rehearsal against a real
+backend.
+
 ## Deploy (later)
 - **Edge:** `pnpm --filter @nextbus/edge deploy` (Wrangler). First time, create the storage the
   dataset lives in and wire it up:

@@ -1,15 +1,17 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-27**. All of the below is **merged to `main`** (PRs #11, #12). Latest: **Wave 0 of the
-> clean-separation plan — WP0-1 … WP0-4 landed and verified**
-> ([`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)), and **Wave 1's WP1-1 — the wire
-> contract — is done** ([ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)):
-> `packages/contract` is the single declaration of every wire shape, `packages/core`'s types are `z.infer` of
-> it through **`import type` only** (so zod never reaches the client's runtime graph), `openapi.json` is emitted
-> and committed, and **three gates** hold it together — each verified to fail on an injected violation.
-> `apps/mobile` has a **literally zero diff**. Next: **WP1-2 … WP1-5**; WP0-5/deploy is deferred on purpose
-> (see *Next steps*).
+> Snapshot: **2026-07-28**. Wave 0 (PRs #11–#13) is on `main`; **Wave 1 is complete and in review as PR #14**.
+> Latest: **Wave 1 — the contract foundation, WP1-1 … WP1-5**
+> ([ADR-051](./08-decision-log.md#adr-051--layered-package-boundaries-packagesports-is-declaration-only-and-imports-nothing) ·
+> [ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) ·
+> ADR-059 · ADR-060). `packages/contract` is the single declaration of every wire shape and `packages/core`'s
+> types are `z.infer` of it through **`import type` only**, so zod never reaches the client's runtime graph;
+> `packages/ports` is the porting checklist; the id grammar has one parser and an **empty** ad-hoc-parsing
+> allowlist; `layers.json` generates both boundary configs; and a **331-case corpus at 100% branch coverage**
+> pins the domain rules that no schema can generate. **Every gate was watched failing on an injected
+> violation.** Two shipped bugs fell out of it — a bus could vanish from the route view, and `formatClock` read
+> the device timezone. Next: **Wave 2**; WP0-5/deploy is deferred on purpose (see *Next steps*).
 > Four things changed, all of them load-bearing for launch. **(1) The dataset left the request path**
 > ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)): a daily GitHub Action precomputes content-addressed shards into KV + R2 and the
 > Worker reads a handful of point keys — cold `/v1/nearby` went **3.97 s → 0.74 s**. `static-index.ts` and the Worker
@@ -23,7 +25,9 @@
 > ⚠️ **WP0-5 — deploy + CI + custom domain — is NOT done.** It needs a real domain and a Cloudflare account, and
 > **there is no Cloudflare auth in this environment**: the KV namespace id in `wrangler.toml` is a placeholder and
 > the publish pipeline has **never run against real remote KV/R2** (only Miniflare-local, verified end-to-end).
-> That is the next job, and it is the only thing between here and a live URL.
+> It is the only thing between here and a live URL, but it is **deliberately not the next job** — owner's call,
+> 2026-07-27: we launch after most of the other waves land. The nightly publish is disarmed until then
+> ([ADR-061](./08-decision-log.md#adr-061--environments-and-configuration-topology-local--production-ephemeral-previews-and-no-staging-tier)).
 > Earlier: **Green Minibus (GMB) — third operator**
 > ([ADR-047](./08-decision-log.md#adr-047--green-minibus-gmb-a-third-operator-keyed-on-gtfsid-with-per-arrival-livescheduled-honesty)).
 > GMB is now a v1 operator. Static geometry/fares/frequency come free from the consolidated dataset (one line in
@@ -485,8 +489,12 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    deferred until most other waves land** — owner's call, 2026-07-27). Create the real
    resources (`wrangler kv namespace create DATASET`, `wrangler r2 bucket create nextbus-builds`), replace the
    placeholder id in `apps/edge/wrangler.toml`, add the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`
-   secrets and the `EDGE_URL` repo variable the dataset workflow already reads, run `pnpm dataset:publish`
-   against **real** KV/R2 for the first time, then add a `ci.yml` (typecheck · lint · test ·
+   secrets and the `EDGE_URL` repo variable the dataset workflow already reads, **rehearse the publish against
+   a `--preview` namespace first** — two builds, so the ~20k-key prune runs for real once before it can touch
+   production ([ADR-061](./08-decision-log.md) decision 2) — then run `pnpm dataset:publish`
+   against **real** KV/R2 for the first time, **then set `DATASET_PUBLISH_ARMED=true`** to re-enable the
+   nightly cron (it is skipped until then — see `docs/10` "Configuration & secrets"; a
+   `workflow_dispatch` run is the way to test the credentials first), then add a `ci.yml` (typecheck · lint · test ·
    `wrangler deploy` · `build:web` → Pages). Confirm `GET /v1/health` reports `"dataset":"kv"` and
    `datasetBuildsThisIsolate: 0`. Also **blocked** on a domain + a Cloudflare account (no auth in this
    environment). *(**Own crawl → KV/R2** is now a separate, smaller job: the KV/R2 pipeline exists — only the
