@@ -27,6 +27,7 @@ export default defineConfig({
         'src/mercator.ts',
         'src/route-position.ts',
         'src/search.ts',
+        'src/stop-detail.ts',
         'src/stop-name.ts',
       ],
       // A **branch** threshold is the load-bearing one. Line coverage is easy to satisfy with a

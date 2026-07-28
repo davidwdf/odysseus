@@ -1,11 +1,14 @@
-import type { Route as BusRoute, Eta, LatLng, Locale, OperatorId } from '@nextbus/core'
+import type { Locale, OperatorId, StopDetailPole, StopDetailRoute } from '@nextbus/core'
 import {
+  dedupeRoutes,
   formatBearing,
   formatDistance,
   formatHeadway,
   formatWalk,
   formatWalkRange,
   haversineMeters,
+  operatorsOf,
+  orderPoles,
   parseStopId,
   splitStopCode,
   titleCaseName,
@@ -81,39 +84,6 @@ const MAP_GUTTER = 16
 const SHRINK_FRAC = 0.6
 const PIP_MAX_WIDTH = 300
 
-/** A route serving the place, plus the member pole (`stopId`) it departs from (ADR-042). */
-type RouteEntry = { route: BusRoute; eta: Eta | null; fare?: string; stopId: string }
-
-/** The place's member poles, from the server (one for a single stop; several for a place). */
-type Pole = {
-  id: string
-  name: { en: string; 'zh-Hant': string; 'zh-Hans': string }
-  location: LatLng
-}
-
-/** Collapse rider-duplicate variants (same route number + direction, e.g. two KMB
- *  service types to the same destination, or GMB "Normal"/"Special" variants of one route),
- *  keeping the one with a live ETA. Keyed by operator too, so a merged same-kerb stop keeps
- *  KMB-6 and CTB-6 as distinct rows. Safe for GMB even though its numbers repeat across
- *  regions: a stop is in one region and route_code is unique within a region, so two rows
- *  here sharing number+direction are always variants of the same route (ADR-047). */
-function dedupeRoutes(routes: RouteEntry[]): RouteEntry[] {
-  const byKey = new Map<string, RouteEntry>()
-  for (const r of routes) {
-    const key = `${r.route.operator}|${r.route.routeNo}|${r.route.bound}`
-    const existing = byKey.get(key)
-    if (!existing || (!existing.eta && r.eta)) byKey.set(key, r)
-  }
-  return [...byKey.values()]
-}
-
-/** Unique operators serving this stop, in first-seen order. */
-function operatorsOf(routes: Array<{ route: BusRoute }>): OperatorId[] {
-  const seen: OperatorId[] = []
-  for (const r of routes) if (!seen.includes(r.route.operator)) seen.push(r.route.operator)
-  return seen
-}
-
 export default function StopDetail() {
   const { id: rawId, pole: rawPole } = useLocalSearchParams<{ id: string; pole?: string }>()
   const id = Array.isArray(rawId) ? rawId[0] : rawId
@@ -136,7 +106,7 @@ export default function StopDetail() {
 
   const stop = query.data?.stop
   const routes = query.data ? dedupeRoutes(query.data.routes) : []
-  const members: Pole[] = query.data?.members ?? []
+  const members: StopDetailPole[] = query.data?.members ?? []
   const multiPole = members.length > 1
   const now = Date.now()
 
@@ -149,18 +119,10 @@ export default function StopDetail() {
   const distanceM = here && stop ? haversineMeters(here, stop.location) : undefined
 
   // Routes grouped under the member pole they depart from (ADR-042); poles ordered with the
-  // arrived-from `pole` first, then nearest, then the server order.
-  const byPole = new Map<string, RouteEntry[]>()
+  // arrived-from `pole` first, then nearest, then the server order (`orderPoles`).
+  const byPole = new Map<string, StopDetailRoute[]>()
   for (const r of routes) byPole.set(r.stopId, [...(byPole.get(r.stopId) ?? []), r])
-  const orderedPoles = [...members].sort((a, b) => {
-    const ap = a.id === pole
-    const bp = b.id === pole
-    if (ap !== bp) return ap ? -1 : 1
-    const da = poleDist.get(a.id)
-    const db = poleDist.get(b.id)
-    if (da != null && db != null && da !== db) return da - db
-    return 0
-  })
+  const orderedPoles = orderPoles(members, pole, poleDist)
 
   // Collapsing header (ADR-033) — content scrolls beneath the floating chrome.
   const scrollY = useSharedValue(0)
@@ -489,7 +451,7 @@ function RouteRowItem({
   now,
   onPress,
 }: {
-  r: RouteEntry
+  r: StopDetailRoute
   locale: Locale
   now: number
   onPress: () => void
