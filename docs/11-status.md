@@ -517,9 +517,15 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
      current build, mostly GMB, while their map dots stay; (c) a lone stop frames **one zoom step wider**
      than the multi-pole place next door on any phone ≤394 px — the gap `b084c06` tried to close;
      (d) blank-`en` GMB circulars lose the *"Circular via …"* treatment.
-   - **`pnpm lint` is red on `main`** — 6 pre-existing errors: Biome does not know the `@tailwind` at-rule
-     (two `global.css` files) and one `useTemplate` in `scripts/precommit-docs-check.mjs`. A permanently-red
-     gate is a gate nobody reads; one Biome config line fixes the first six.
+   - ✅ **Fixed 2026-07-29 — `pnpm lint` is green.** It had been red on `main` with 6 errors: Biome did
+     not know the `@tailwind` at-rule (two `global.css` files) and one `useTemplate` in
+     `scripts/precommit-docs-check.mjs`. A permanently-red gate is a gate nobody reads, and Wave 3
+     generates Biome-formatted files in three of its four packages, so it had to go first. The at-rule is
+     now **taught, not silenced** — `noUnknownAtRules` keeps firing at `error`, with
+     `options.ignore: ["tailwind"]` in `biome.json`, so a genuinely unknown at-rule is still caught.
+     Note `biome.json` is **half generated**: `scripts/boundaries/generate.mjs` rewrites only its
+     `overrides` block from `layers.json`, so top-level `linter.rules` is safe to hand-edit —
+     `pnpm boundaries:check` confirms no drift.
    - **turbo replays a cached `@nextbus/mobile:typecheck` across a `packages/core` source change** — mobile
      can report green **without being rechecked**. Use `turbo run typecheck --force` until the cache key is
      fixed; every Wave 2 integration run used it.

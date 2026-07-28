@@ -77,7 +77,8 @@ if (codeChanged && !docsChanged) {
       '',
       'If docs are already current, add [docs-ok] to the commit message to proceed,',
       'or use `git commit --no-verify` to skip this check.',
-    ].join('\n') + '\n',
+      '', // trailing entry, so join() supplies the final newline without concatenation
+    ].join('\n'),
   )
   process.exit(2) // block
 }
