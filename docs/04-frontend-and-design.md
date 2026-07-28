@@ -185,8 +185,20 @@ name, rather than implying a live position.
   nothing to fit, and used to fall back to a flat `DEFAULT_ZOOM = 16` — eight times the ground per
   axis, so every single-pole stop (all of GMB, most of Citybus) looked conspicuously zoomed-out next
   to its multi-pole neighbour. It now asks for a **minimum ground span** (`SINGLE_PIN_MIN_SPAN_M`,
-  100 m) and takes the highest zoom that still shows it, which lands on the same z19 a place does and
-  keeps the two agreeing on a tablet, where a fixed zoom covers far more ground than on a phone.
+  100 m) and takes the highest zoom that still shows it, which keeps the two agreeing on a tablet,
+  where a fixed zoom covers far more ground than on a phone.
+- **The projection and that framing rule are `@nextbus/core/mercator`, not the component** (WP2-4).
+  `lngToWorldX`, `latToWorldY`, `worldScale`, `metresPerPixel`, `clampZoom` and `fitZoom` are pure
+  and platform-free, pinned by `packages/core/spec/mercator.spec.json` — so a MapKit or MapLibre
+  client frames a stop identically instead of re-deriving Web Mercator against its own SDK. The tile
+  source's zoom bounds are an argument (LandsD serves z10–20, ADR-049); `MiniMap` keeps only the
+  layout — which tiles cover the viewport, where each dot and label chip goes.
+- **Known, recorded in the corpus:** at the width the map is actually handed (the window minus two
+  16 px gutters) z19 covers 98.8 m, just under the 100 m minimum, so on a ≤394 px-wide phone a lone
+  stop still frames one step wider (z18) than the multi-pole place next door — the very difference
+  the rule was written to remove. The fix is a smaller span or measuring it against the hero width;
+  until then `mercator#fitZoom:lone-stop-on-a-390px-phone-frames-a-step-wider` holds every platform
+  to the same wrong answer rather than three different ones.
 - Today's map is the static `MiniMap` on Stop/Place detail. **MapLibre GL**
   (`@maplibre/maplibre-react-native` + `maplibre-gl`) remains the route to a real interactive map in
   Phase 2; it consumes the same `TileSource`, so the tile question is already settled.

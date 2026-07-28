@@ -1,0 +1,336 @@
+{
+  "module": "mercator",
+  "source": "src/mercator.ts",
+  "version": 1,
+  "doc": "Web Mercator (EPSG:3857) tile maths and the framing rule the mini-map applies to it: XYZ/slippy convention, 256 px tiles, y counted from the north (NOT TMS's flipped y). Three conventions specific to this file, all of which a port must mirror: (1) the float-returning groups compare with a `tolerance` in the same unit as the value — the unit is named in each group's `doc`, and the assertion is |actual - expected| <= tolerance, NEVER equality, because no two languages' trigonometry libraries agree to the last bit and `latToWorldY` runs a sine through a logarithm; (2) expected floats are quoted to 4 decimal places (6 for metres-per-pixel), which is far finer than the values are ever used for — a pin is placed on a whole pixel — so the tolerances below are three orders tighter than anything a rider could see, and a port failing one has a real formula difference, not a rounding difference; (3) `fitZoom` and `clampZoom` return an INTEGER zoom, so those rows are exact equality with no tolerance at all: a zoom is an index into a tile pyramid, and 18.9 is not a thing the source serves. Distances in metres are `geo.spec.json`'s subject, not this file's; the two round differently on purpose (see the header of src/mercator.ts).",
+  "groups": {
+    "worldScale": {
+      "doc": "Width of the whole world in pixels at a zoom: 256 * 2^zoom. Exact — these are powers of two and a port that produces a float here has used the wrong tile size. The unit is world pixels.",
+      "cases": [
+        {
+          "name": "z0-is-a-single-tile",
+          "why": "The definition. A port that seeded its pyramid at 512 px tiles (the vector-basemap convention) fails here and nowhere else until every pin is off by a factor of two.",
+          "args": { "zoom": 0 },
+          "expect": { "value": 256, "tolerance": 0 }
+        },
+        {
+          "name": "z16-street-level",
+          "why": "The zoom a mini-map actually sits near. Pinned so the scale a `lngToWorldX` row is quoted against is itself under test rather than assumed.",
+          "args": { "zoom": 16 },
+          "expect": { "value": 16777216, "tolerance": 0 }
+        },
+        {
+          "name": "z20-the-landsd-maximum",
+          "why": "The top of the source's range (ADR-049). 268 435 456 px still fits a double exactly; a port using a 32-bit int overflows one zoom above this, which is the reason to pin the ceiling rather than a middle value.",
+          "args": { "zoom": 20 },
+          "expect": { "value": 268435456, "tolerance": 0 }
+        }
+      ]
+    },
+    "lngToWorldX": {
+      "doc": "Longitude to x in world pixels at a given `scale` (the output of `worldScale`). Linear, so the only failures available are a sign, a swapped hemisphere or an off-by-half — which is exactly what the three identity rows catch. The unit is world pixels.",
+      "cases": [
+        {
+          "name": "prime-meridian-is-the-centre",
+          "why": "Tolerance 0: exact, not near. 0 degrees must land on scale/2. A port that mixed up the +180 offset lands on 0 or on the full width instead, and every Hong Kong figure below would still look plausible.",
+          "args": { "lng": 0, "scale": 256 },
+          "expect": { "value": 128, "tolerance": 0 }
+        },
+        {
+          "name": "antimeridian-west-edge-is-zero",
+          "why": "The left edge of the world. Exact, because tile index 0 is computed from it — a fractional x here would make `floor(x / 256)` produce tile -1 and the renderer would request a tile that does not exist.",
+          "args": { "lng": -180, "scale": 256 },
+          "expect": { "value": 0, "tolerance": 0 }
+        },
+        {
+          "name": "antimeridian-east-edge-is-the-full-width",
+          "why": "The other seam. Hong Kong is nowhere near it, so nothing in this app wraps — but a port that adds wrapping logic must still agree here, and this row is what tells it so.",
+          "args": { "lng": 180, "scale": 256 },
+          "expect": { "value": 256, "tolerance": 0 }
+        },
+        {
+          "name": "victoria-harbour-at-z16",
+          "why": "A real coordinate at a real zoom: Central ferry piers. The value a mini-map centred on the harbour actually computes.",
+          "args": { "lng": 114.1585, "scale": 16777216 },
+          "expect": { "value": 13708779.702, "tolerance": 0.001 }
+        },
+        {
+          "name": "hong-kong-west-edge-tai-o",
+          "why": "The westernmost inhabited coordinate we serve (Tai O, Lantau). With the east-edge row it fixes the territory at ~28 000 px across at z16 — comfortably inside one double and 65 degrees clear of the antimeridian, which is why no wraparound handling is needed anywhere in this file.",
+          "args": { "lng": 113.8352, "scale": 16777216 },
+          "expect": { "value": 13693712.83, "tolerance": 0.001 }
+        },
+        {
+          "name": "hong-kong-east-edge-tung-ping-chau",
+          "why": "The easternmost (Tung Ping Chau). Paired with the west edge above; a port that transposed lat and lng produces a wildly smaller x here and the pair makes that obvious.",
+          "args": { "lng": 114.4419, "scale": 16777216 },
+          "expect": { "value": 13721987.0993, "tolerance": 0.001 }
+        }
+      ]
+    },
+    "latToWorldY": {
+      "doc": "Latitude to y in world pixels at a given `scale`, y increasing SOUTHWARD from the north edge. The log term is the whole of Mercator and the half a hand-port gets subtly wrong; a plate-carree implementation passes the equator row and fails every Hong Kong one. The unit is world pixels.",
+      "cases": [
+        {
+          "name": "equator-is-the-centre",
+          "why": "Tolerance 0: exact. sin(0) makes the log term vanish, so this is the one row that isolates the 0.5 offset from the projection itself.",
+          "args": { "lat": 0, "scale": 256 },
+          "expect": { "value": 128, "tolerance": 0 }
+        },
+        {
+          "name": "victoria-harbour-at-z16",
+          "why": "Tsim Sha Tsui waterfront. With the Tai Po row below it also fixes the direction of the axis: Tai Po is further north and must therefore have the SMALLER y. A port that counted y from the south (TMS) passes neither.",
+          "args": { "lat": 22.2988, "scale": 16777216 },
+          "expect": { "value": 7322135.2459, "tolerance": 0.001 }
+        },
+        {
+          "name": "new-territories-tai-po-at-z16",
+          "why": "A New Territories stop 16 km north of the harbour row, and 7 333 px above it at z16. The pair catches an inverted y axis, which is invisible in a single value.",
+          "args": { "lat": 22.4443, "scale": 16777216 },
+          "expect": { "value": 7314802.5582, "tolerance": 0.001 }
+        },
+        {
+          "name": "southern-hemisphere-mirrors-the-north",
+          "why": "Hong Kong's latitude negated. Its y plus the y of +22.3193 must be exactly `scale` (7 321 102.5814 + 9 456 113.4186 = 16 777 216). Nothing in Hong Kong reaches the southern hemisphere, but a sign dropped inside the log term is invisible in the north and obvious here.",
+          "args": { "lat": -22.3193, "scale": 16777216 },
+          "expect": { "value": 9456113.4186, "tolerance": 0.001 }
+        },
+        {
+          "name": "mercator-top-edge-is-y-zero",
+          "why": "85.0511287798066 degrees is where Mercator is truncated to a square world; it must project to the top edge. The residual is ~1e-8 px, so the tolerance is what makes this row assertable at all — an equality test would fail on every platform for a different reason.",
+          "args": { "lat": 85.0511287798066, "scale": 16777216 },
+          "expect": { "value": 0, "tolerance": 0.001 }
+        }
+      ]
+    },
+    "metresPerPixel": {
+      "doc": "Ground metres covered by one screen pixel at a latitude and zoom, 256 px tiles. This is what turns a viewport width into a distance across, so it is the input to the lone-stop framing rule below. The unit is metres per pixel.",
+      "cases": [
+        {
+          "name": "equator-at-z0-is-the-defining-constant",
+          "why": "156 543.033 92 is the equatorial circumference divided by 256. A port that substituted its own earth radius drifts everywhere; this row is where the constant itself is fixed, before any latitude is involved.",
+          "args": { "lat": 0, "zoom": 0 },
+          "expect": { "value": 156543.03392, "tolerance": 0.000001 }
+        },
+        {
+          "name": "hong-kong-at-z19",
+          "why": "The zoom a stop is framed at, at Hong Kong's latitude. The cos(22.32 degrees) stretch takes 0.2985 down to 0.2762 m/px — 7.5 %, which is the difference between a lone stop framing at z19 and at z18 on a 390 px phone (see `fitZoom`). A port that dropped the cosine passes nothing below.",
+          "args": { "lat": 22.3193, "zoom": 19 },
+          "expect": { "value": 0.276213, "tolerance": 0.000001 }
+        },
+        {
+          "name": "hong-kong-at-z16",
+          "why": "Eight times the ground per axis of the row above, at the zoom the mini-map falls back to before layout has measured a width. Pins the halving-per-zoom relationship at a second point.",
+          "args": { "lat": 22.3193, "zoom": 16 },
+          "expect": { "value": 2.209703, "tolerance": 0.000001 }
+        },
+        {
+          "name": "hong-kong-at-the-landsd-minimum-zoom",
+          "why": "z10 is the bottom of the source's range (ADR-049); one pixel is 141 m of ground, i.e. the whole territory in a phone width. This is the scale the `fitZoom` floor row lands on, so it is pinned rather than inferred.",
+          "args": { "lat": 22.3193, "zoom": 10 },
+          "expect": { "value": 141.421015, "tolerance": 0.000001 }
+        }
+      ]
+    },
+    "clampZoom": {
+      "doc": "Hold a zoom inside the window the tile source serves. Outside it LandsD returns 404 and the map renders as a hole rather than as a coarser map, so both ends matter (ADR-049). Returns an integer zoom: exact equality, no tolerance. `zooms` is the source's range — LandsD's z10-20 in every row here.",
+      "cases": [
+        {
+          "name": "below-the-source-minimum-is-lifted",
+          "why": "A caller-supplied `zoom` prop is not validated anywhere. z8 is a plausible thing to type when framing a whole-territory view, and unclamped it is a blank map.",
+          "args": { "zoom": 8, "zooms": { "minZoom": 10, "maxZoom": 20 } },
+          "expect": 10
+        },
+        {
+          "name": "above-the-source-maximum-is-lowered",
+          "why": "The other end, which is the one people forget: z21 is a reasonable ask of a modern basemap and LandsD simply does not have it.",
+          "args": { "zoom": 21, "zooms": { "minZoom": 10, "maxZoom": 20 } },
+          "expect": 20
+        },
+        {
+          "name": "inside-the-range-passes-through-untouched",
+          "why": "The clamp must not nudge a legal value. A port implementing it as a round-then-clamp would still satisfy both edge rows.",
+          "args": { "zoom": 17, "zooms": { "minZoom": 10, "maxZoom": 20 } },
+          "expect": 17
+        },
+        {
+          "name": "exactly-at-the-minimum-is-legal",
+          "why": "Inclusive bounds. An off-by-one written as `>` instead of `>=` shows up only on the boundary itself, and z10 is the zoom `fitZoom` returns on its narrow-viewport floor.",
+          "args": { "zoom": 10, "zooms": { "minZoom": 10, "maxZoom": 20 } },
+          "expect": 10
+        },
+        {
+          "name": "exactly-at-the-maximum-is-legal",
+          "why": "The same off-by-one at the top end, where it would cost the source's sharpest tier for no reason.",
+          "args": { "zoom": 20, "zooms": { "minZoom": 10, "maxZoom": 20 } },
+          "expect": 20
+        }
+      ]
+    },
+    "fitZoom": {
+      "doc": "The framing rule: the highest zoom that shows every pin. One rule for a lone stop and for a place's poles (ADR-042/ADR-045) — a single point is framed to a minimum ground span of 100 m, several are framed so their bounding box fits inside 70 % of the viewport. Returns an integer zoom, so every row is exact equality with no tolerance. `widthPx`/`heightPx` are the mini-map's measured box: on stop detail the height is a constant 150 and the width is the window minus two 16 px gutters, so a 390 px phone hands it 358. `zooms` is the tile source's range (LandsD z10-20 unless a row says otherwise).",
+      "cases": [
+        {
+          "name": "unmeasured-viewport-falls-back-to-z16",
+          "why": "The first render, before onLayout reports a width. Nothing is drawn in that pass, so the value only has to be sane and stable — but it must not be a division by zero or a NaN zoom, which is what a port computing metres-across first would produce.",
+          "args": {
+            "points": [{ "lat": 22.3193, "lng": 114.1694 }],
+            "widthPx": 0,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 16
+        },
+        {
+          "name": "lone-stop-on-a-390px-phone-frames-a-step-wider",
+          "knownDefect": true,
+          "why": "WRONG, and shipped. A 390 px phone hands the map 358 px, where z19 covers 98.8 m of ground — 1.2 m under the 100 m minimum span — so a lone stop steps down to z18 while the multi-pole place next door frames at z19. That one-step difference is precisely what the lone-stop rule was introduced to remove, and because the flip sits at a window width of ~394 px the same build frames it at z18 on an iPhone 14 Pro (393) and z19 on an iPhone 16 Pro (402). The fix is to state the minimum span against the width the component is actually handed (or drop it to ~95 m); once it lands this row expects 19, and `lone-stop-on-a-402px-phone-frames-like-a-place` stops being a separate case.",
+          "args": {
+            "points": [{ "lat": 22.4443, "lng": 114.1706 }],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 18
+        },
+        {
+          "name": "lone-stop-on-a-402px-phone-frames-like-a-place",
+          "why": "Nine pixels wider than the row above and the framing changes tier: 370 px of z19 is 102.1 m, over the minimum. This is the behaviour the rule intends everywhere — a lone GMB stand read at the same scale as a multi-pole interchange.",
+          "args": {
+            "points": [{ "lat": 22.4443, "lng": 114.1706 }],
+            "widthPx": 370,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 19
+        },
+        {
+          "name": "lone-stop-on-a-tablet-does-not-over-zoom",
+          "why": "A 900 px viewport could show 100 m at a far higher zoom, and must not: LandsD's z20 is an upscale of the same survey, so it buys no detail and dresses a ~10 m GPS fix up as precision. Framing by metres is also what makes the tablet and the phone agree at all — a fixed zoom would cover more than twice the ground here.",
+          "args": {
+            "points": [{ "lat": 22.4443, "lng": 114.1706 }],
+            "widthPx": 900,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 19
+        },
+        {
+          "name": "lone-stop-on-a-source-that-stops-at-z16",
+          "why": "The search starts at the source's ceiling, not at the app's. A future offline or vector basemap with a shallower pyramid must frame at its own top rather than request a tile it does not have.",
+          "args": {
+            "points": [{ "lat": 22.4443, "lng": 114.1706 }],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 16 }
+          },
+          "expect": 16
+        },
+        {
+          "name": "lone-stop-on-a-viewport-too-narrow-for-any-zoom",
+          "why": "The floor of the single-pin search. It takes a viewport under ~1.5 px to reach, so this is not a real device — it is here so a port writes `for z > minZoom` and returns `minZoom`, instead of running the loop one step further and framing at a zoom the source answers with 404.",
+          "args": {
+            "points": [{ "lat": 22.4443, "lng": 114.1706 }],
+            "widthPx": 1,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 10
+        },
+        {
+          "name": "source-with-a-single-zoom-has-nothing-to-search",
+          "why": "min and max collapsed onto one tier, so the loop body never executes. A port that seeded its result from the first iteration rather than from `minZoom` returns garbage here and only here.",
+          "args": {
+            "points": [{ "lat": 22.4443, "lng": 114.1706 }],
+            "widthPx": 370,
+            "heightPx": 150,
+            "zooms": { "minZoom": 19, "maxZoom": 20 }
+          },
+          "expect": 19
+        },
+        {
+          "name": "no-points-falls-back-to-a-hong-kong-latitude",
+          "why": "An empty list still has to produce a zoom — the map has a centre to draw at even when it has nothing to pin — and the metres-per-pixel conversion needs a latitude it does not have. 22.3 is Hong Kong's; the alternative, latitude 0, would frame 7.5 % tighter for no reason. A port using its language's default-initialised zero silently gets a different zoom here.",
+          "args": {
+            "points": [],
+            "widthPx": 370,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 19
+        },
+        {
+          "name": "zero-extent-bounding-box",
+          "why": "Two poles reported at the identical coordinate — upstream really does this when an operator copies one pole's position to its pair. The bounding box has no extent, so every zoom fits and the search must return its ceiling rather than divide by the span. Note it takes the multi-pin path and lands at z19 where a genuinely single point at the same width lands at z18: the degenerate duplicate is framed tighter than the honest lone stop.",
+          "args": {
+            "points": [{ "lat": 22.3193, "lng": 114.1694 }, { "lat": 22.3193, "lng": 114.1694 }],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 19
+        },
+        {
+          "name": "two-poles-of-one-place",
+          "why": "The everyday multi-pole case: two kerbs ~30 m apart (ADR-042). 93 px across and 81 px tall at z19, inside 70 % of a 358x150 box, so the place frames at the source's practical ceiling.",
+          "args": {
+            "points": [{ "lat": 22.3193, "lng": 114.1694 }, { "lat": 22.3195, "lng": 114.16965 }],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 19
+        },
+        {
+          "name": "poles-stacked-along-one-kerb",
+          "why": "Two poles at the same longitude, 61 m apart along the road — the common along-the-kerb stack. The width fits at every zoom and the HEIGHT decides, which is the half of the fit test a landscape-only fixture never exercises: a port checking only the x span returns 19 and clips the far pole off the top.",
+          "args": {
+            "points": [{ "lat": 22.3193, "lng": 114.1694 }, { "lat": 22.31985, "lng": 114.1694 }],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 17
+        },
+        {
+          "name": "four-pole-interchange",
+          "why": "Clustering has been N-member since ADR-042, so a pair proves nothing about the reduction: the box must be the extremes of ALL four, not of the first two or of the last two. Swapping in min/max over a prefix returns 19 here.",
+          "args": {
+            "points": [
+              { "lat": 22.3193, "lng": 114.1694 },
+              { "lat": 22.3195, "lng": 114.16965 },
+              { "lat": 22.3191, "lng": 114.1692 },
+              { "lat": 22.31965, "lng": 114.1694 }
+            ],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 17
+        },
+        {
+          "name": "points-kilometres-apart-stop-at-the-multi-pin-floor",
+          "why": "Central to Tsuen Wan, ~10 km. The multi-pin search floors at z12 and returns it even though z12 was itself rejected, so the outermost pin is clipped — where the single-pin path would have stepped on down to the source's z10. Reaching this needs poles ~9 km apart and ADR-042 caps a place at tens of metres, so no rider can see it; it is pinned so a port copies the asymmetry instead of inventing a third floor, and so unifying the two floors later is a visible corpus edit rather than a silent one.",
+          "args": {
+            "points": [{ "lat": 22.2819, "lng": 114.1585 }, { "lat": 22.371, "lng": 114.114 }],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 20 }
+          },
+          "expect": 12
+        },
+        {
+          "name": "multi-pole-place-on-a-source-that-stops-at-z16",
+          "why": "The source ceiling caps the multi-pin path too, not just the lone-stop one. The two halves of the rule read the same `maxZoom`, and a port that hard-coded 19 in one of them passes every other row here.",
+          "args": {
+            "points": [{ "lat": 22.3193, "lng": 114.1694 }, { "lat": 22.3195, "lng": 114.16965 }],
+            "widthPx": 358,
+            "heightPx": 150,
+            "zooms": { "minZoom": 10, "maxZoom": 16 }
+          },
+          "expect": 16
+        }
+      ]
+    }
+  }
+}

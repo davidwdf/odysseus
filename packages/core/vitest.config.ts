@@ -15,7 +15,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
-      // Only the four modules that carry behaviour. `types.ts` and `datasource.ts` are declarations
+      // Only the modules that carry behaviour. `types.ts` and `datasource.ts` are declarations
       // that emit nothing (the ADR-052 gate proves it for `types.ts`), and `index.ts` is re-exports;
       // including them would dilute the ratio with unreachable-by-construction lines and let real
       // coverage rot while the number stayed green.
@@ -24,6 +24,7 @@ export default defineConfig({
         'src/geo.ts',
         'src/geo-snap.ts',
         'src/ids.ts',
+        'src/mercator.ts',
         'src/route-position.ts',
         'src/search.ts',
         'src/stop-name.ts',
