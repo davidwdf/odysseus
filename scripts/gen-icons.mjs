@@ -17,7 +17,7 @@
 // And docs/social-preview.png (1280x640) — the GitHub repo social card (upload manually at
 // repo Settings → Social preview; GitHub has no API for it).
 
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -26,8 +26,15 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ASSETS = join(ROOT, 'apps', 'mobile', 'assets')
 const PUBLIC = join(ROOT, 'apps', 'mobile', 'public')
 const DOCS = join(ROOT, 'docs')
-const INK = '#111827'
-const WHITE = '#ffffff'
+// The mark's field colour is the brand-ink *token*, read from the generated token set rather
+// than repeated here — the icon, the splash, the PWA `theme-color` and any brand chrome are one
+// family by construction (packages/ui/tokens.json). Nothing below is a colour choice: in the
+// masks that follow, white means "keep" and black means "knock out".
+const TOKENS = JSON.parse(
+  readFileSync(join(ROOT, 'packages', 'ui', 'generated', 'tokens.json'), 'utf8'),
+)
+const INK = TOKENS['color.brand.ink']
+const WHITE = TOKENS['palette.white']
 
 // Bus mask: white = keep, black = knock out (the two windows become transparent so the
 // mark composites on any background). Body + windows lean -9deg; tri-axle wheels stay round

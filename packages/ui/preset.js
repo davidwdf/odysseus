@@ -1,6 +1,11 @@
-// Tailwind / NativeWind preset: semantic tokens mapped to CSS variables.
-// Components only ever use these semantic classes (bg-bg, text-muted, text-accent…),
-// so swapping a theme (incl. a livery) re-skins everything with zero component changes.
+// Generated from packages/ui/tokens.json by its scripts/generate-tokens.mjs — do not edit.
+// Run `pnpm --filter @nextbus/ui tokens:emit`; `pnpm --filter @nextbus/ui test` fails on a stale
+// copy, so drifting from the declaration is a red build, not a silent surprise.
+//
+// Semantic tokens mapped to CSS variables. Components only ever use these semantic
+// classes (bg-bg, text-muted, text-accent…), so swapping the mode re-skins everything
+// with zero component changes. The mapping is generated too: declaring a semantic token
+// in tokens.json is all it takes for its utility class to exist.
 // Use alongside nativewind/preset:
 //   presets: [require('nativewind/preset'), require('@nextbus/ui/preset')]
 
@@ -22,14 +27,36 @@ module.exports = {
         positive: 'rgb(var(--positive) / <alpha-value>)',
         warning: 'rgb(var(--warning) / <alpha-value>)',
         danger: 'rgb(var(--danger) / <alpha-value>)',
-        // Brand ink (BRAND.ink #111827) — a fixed, theme-independent value (NOT a
-        // semantic token). Use sparingly, e.g. a dark glass tint (`bg-ink/55`).
+        // Fixed brand ink — NOT a semantic token, so it does not invert with the
+        // appearance. Use sparingly, e.g. a fixed dark glass tint (`bg-ink/55`).
         ink: 'rgb(17 24 39 / <alpha-value>)',
       },
-      borderRadius: { sm: '6px', md: '10px', lg: '14px', xl: '20px' },
-      // Named type scale (docs/09 §3) → `text-display`, `text-h1`, … as [size, lineHeight].
-      // The <Text> primitive is the canonical consumer; these classes keep the
-      // scale available to any className-driven markup too.
+      borderRadius: {
+        sm: '6px',
+        md: '10px',
+        lg: '14px',
+        xl: '20px',
+        full: '9999px',
+        pill: '24px',
+        sheet: '26px',
+      },
+      // In rem, so the web build keeps honouring the browser font size: the px scale in
+      // tokens.json over the 16px base, which is exactly Tailwind's own default scale —
+      // restated here only so tokens.json is its declaration for the native platforms.
+      spacing: {
+        1: '0.25rem',
+        2: '0.5rem',
+        3: '0.75rem',
+        4: '1rem',
+        5: '1.25rem',
+        6: '1.5rem',
+        8: '2rem',
+        10: '2.5rem',
+        12: '3rem',
+      },
+      // The named type scale → `text-display`, `text-h1`, … as [size, lineHeight]. The
+      // <Text> primitive is the canonical consumer; these keep the scale available to
+      // any className-driven markup too.
       fontSize: {
         display: ['40px', '44px'],
         h1: ['28px', '34px'],
@@ -39,9 +66,9 @@ module.exports = {
         label: ['14px', '20px'],
         caption: ['12px', '16px'],
       },
-      // Inter is loaded as discrete cuts (apps/mobile/app/_layout.tsx). On web these
-      // give a proper fallback stack incl. CJK; on native fontFamily is single-valued
-      // and the OS handles CJK glyph fallback. The <Text> primitive sets the cut directly.
+      // Every Inter cut plus the shared fallback tail. On web that gives a real stack
+      // incl. CJK; on native fontFamily is single-valued and the OS handles CJK glyph
+      // fallback, and the <Text> primitive sets the cut directly.
       fontFamily: {
         sans: [
           'Inter_400Regular',

@@ -52,6 +52,10 @@ pnpm typecheck                      # tsc --noEmit across every package (turbo)
 pnpm test                           # vitest in every package that has tests (turbo)
 pnpm lint                           # Biome
 pnpm format                         # Biome --write
+
+pnpm --filter @nextbus/ui tokens:emit   # regenerate the design-token artefacts from
+                                        # packages/ui/tokens.json (docs/09 §1.1). Committed and
+                                        # gated: `pnpm test` fails if any of them is stale.
 ```
 `pnpm --filter @nextbus/edge test` runs the Worker suite on its own. Those specs execute **inside
 workerd** (`@cloudflare/vitest-pool-workers`) against simulated KV/R2 bindings, so the dataset,

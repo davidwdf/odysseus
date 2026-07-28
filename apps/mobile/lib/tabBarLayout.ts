@@ -1,3 +1,4 @@
+import { RADIUS } from '@nextbus/ui'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 // Geometry for the floating tab bar, in one place so the bar (which is
@@ -11,8 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 export const TAB_BAR_HEIGHT = 54
 /** Side margins and the minimum gap below the bar / above scroll content. */
 export const TAB_BAR_GAP = 12
-/** Rounded-pill corner radius for the floating bar. */
-export const TAB_BAR_RADIUS = 24
+/** Rounded-pill corner radius for the floating bar. Re-exported from the token so the two
+ *  consumers that need it as a number keep importing it from here, next to the geometry. */
+export const TAB_BAR_RADIUS = RADIUS.pill
 
 export interface TabBarLayout {
   /** Side inset (left/right) of the floating bar. */

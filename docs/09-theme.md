@@ -4,6 +4,11 @@ Implemented with **NativeWind** (Tailwind) over a semantic token system ([ADR-00
 [ADR-015](./08-decision-log.md)). This doc is the concrete spec: palettes, type, scales, tokens, and the
 single **Ink** theme (light/dark) layered on them.
 
+> **Every value in this doc is declared once, in [`packages/ui/tokens.json`](../packages/ui/tokens.json),
+> and every file that carries it is generated from there** — see §1.1. If a number here disagrees with
+> the code, the token file is right and one of the two is a bug; the *prose*, though, is the reason a
+> value is what it is, so keep both in step.
+
 ## Philosophy
 Utility-first, calm, fast. The UI gets out of the way; **the next-arrival data is the hero.** Colour
 is mostly neutral so that **status** (how soon / how fresh) and **operator accents** carry meaning.
@@ -18,7 +23,8 @@ the last item still clears the chrome (see `useTabBarLayout().contentInset`,
 
 > **Implementation status** ([ADR-017](./08-decision-log.md#adr-017--design-system-realization-fonts-text-scale-elevation-themed-nav-chrome),
 > [ADR-018](./08-decision-log.md#adr-018--two-axis-theme-livery--appearance-with-persistence)).
-> *Realized:* the token system (`packages/ui`), **Inter loaded** as weight cuts + splash-gated, the
+> *Realized:* the token system (`packages/ui`, **generated from one DTCG declaration** — §1.1,
+> ADR-054), **Inter loaded** as weight cuts + splash-gated, the
 > **`<Text>` typography primitive** (the canonical consumer of the §3 scale), **elevation** tokens +
 > a `Card` primitive (§4), **themed nav chrome** (tab bar via `useTheme()`), the **single Ink theme**
 > (light/dark/auto via a **Settings appearance** control + persistence; the multi-livery axis was
@@ -48,40 +54,65 @@ Primitive tokens   →   Semantic tokens   →   Theme
 - A **theme** is just a different set of values for the semantic tokens → swapping `light`↔`dark`
   re-skins the whole app with **zero component changes** (and made re-adding liveries cheap, if ever).
 
+## 1.1 One declaration, generated consumers ([ADR-054](./08-decision-log.md))
+
+**`packages/ui/tokens.json` is the only file a human edits.** It is [DTCG](https://tr.designtokens.org/)
+format — groups are plain nesting, leaves carry `$value` / `$type` / `$description`, and
+`{dotted.path}` is an alias, which is how the three-layer architecture above is actually expressed:
+`palette.ink` is written down once and `color.semantic.{text,accent,focus}.light` plus
+`color.brand.ink` all alias it.
+
+`pnpm --filter @nextbus/ui tokens:emit` derives every consumer:
+
+| Generated | For | Carries |
+|---|---|---|
+| `packages/ui/src/tokens.generated.ts` | the app | `THEME_VARS`, `RADIUS`, `SPACING`, `MOTION`, `TYPE_SCALE`, `FONT_FAMILY`, `ELEVATION`, … |
+| `packages/ui/preset.js` | Tailwind / NativeWind | the semantic → `rgb(var(--x) / <alpha-value>)` map, radii, spacing, the type scale, the font stacks |
+| `apps/mobile/global.css` | the web build (NativeWind's input) | the `:root` / `.dark` variable defaults |
+| `packages/ui/generated/tokens.json` | tools with no TS toolchain | every token, aliases resolved, units flattened (`scripts/gen-icons.mjs` reads it) |
+| `packages/ui/generated/NextBusTokens.swift` | a future iOS client | SwiftUI `Color` / `CGFloat` constants — **never compiled here** (see below) |
+| `packages/ui/generated/NextBusTokens.kt` | a future Android client | Compose `Color` / `Dp` constants — **never compiled here** |
+
+The output is **committed**, so a reviewer sees the effect of a token change in the diff, and
+**gated**: `pnpm --filter @nextbus/ui test` regenerates in memory and fails if any committed artefact
+differs, if an alias does not resolve, if a semantic token is missing a mode or a `tailwind` name, or
+if a palette primitive is aliased by nothing. `turbo run test` runs it uncached (the gate reads
+`apps/mobile/global.css`, which is outside the package turbo hashes).
+
+Two escape hatches, both asserted rather than trusted:
+
+- **`apps/mobile/app.json`** (Expo's static config) and **`apps/mobile/public/manifest.webmanifest`**
+  hold the brand ink as a literal, because neither is in the JS bundle. The same gate pins all four
+  values against `color.brand.ink` and fails if they drift.
+- **`scripts/check-no-raw-colours.mjs`** (in `pnpm test`) bans hex / `rgb()` / `hsl()` literals in
+  `apps/mobile/{app,components,lib,providers}` and `packages/ui/src`. One allowlisted file:
+  `apps/mobile/lib/liquidGlass.ts`, whose hex values are SVG displacement-map *channel encodings*
+  (`#808080` = zero displacement), not colours.
+
+**Swift and Kotlin are unverified.** There is no Swift or Kotlin toolchain in this repo, so neither
+file has ever been compiled. They are emitted deliberately plain — nested namespaces of constants, no
+protocols, no generics — so the first native client can compile them as-is; a compile error there is a
+bug in the emitter, not something to patch in the output.
+
 ### How it's wired (NativeWind)
-Semantic colors in Tailwind reference CSS variables holding `R G B` triplets:
+Semantic colours in Tailwind reference CSS variables holding `R G B` triplets — triplets rather than
+hex specifically so Tailwind's alpha modifiers (`bg-surface/55`) keep working:
 
 ```js
-// tailwind.config.js  (in packages/ui preset)
+// packages/ui/preset.js — GENERATED from tokens.json
 theme: { extend: { colors: {
   bg:        'rgb(var(--bg) / <alpha-value>)',
-  surface:   'rgb(var(--surface) / <alpha-value>)',
   'surface-2':'rgb(var(--surface-2) / <alpha-value>)',
-  border:    'rgb(var(--border) / <alpha-value>)',
-  text:      'rgb(var(--text) / <alpha-value>)',
   muted:     'rgb(var(--text-muted) / <alpha-value>)',
-  subtle:    'rgb(var(--text-subtle) / <alpha-value>)',
-  accent:    'rgb(var(--accent) / <alpha-value>)',
-  'accent-contrast':'rgb(var(--accent-contrast) / <alpha-value>)',
-  positive:  'rgb(var(--positive) / <alpha-value>)',
-  warning:   'rgb(var(--warning) / <alpha-value>)',
-  danger:    'rgb(var(--danger) / <alpha-value>)',
+  // …one entry per semantic token, plus the fixed brand `ink`
 }}}
-```
-
-```ts
-// themes.ts — values are "R G B" triplets; one Ink theme, two modes (ADR-029)
-export const themes: Record<Mode, ThemeVars> = {
-  light: { '--bg':'255 255 255', '--text':'17 24 39', '--accent':'17 24 39', /* ink on paper */ },
-  dark:  { '--bg':'13 17 28',    '--text':'244 246 250','--accent':'226 232 240', /* paper on ink */ },
-}
 ```
 
 ```tsx
 // Native: inject vars at the root via NativeWind's vars()
 import { vars } from 'nativewind';
 <View style={vars(themes[mode])}>{/* app */}</View>   // mode = light | dark (ADR-029)
-// Web: the same triplets are the :root / .dark defaults in global.css
+// Web: the same triplets are the :root / .dark defaults in apps/mobile/global.css
 ```
 
 Components stay theme-agnostic: `className="bg-bg text-text"`, `className="text-accent"`, etc.
@@ -129,7 +160,9 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
 - `eta-stale` → desaturated `text-subtle` + a "stale" flag.
 
 ### Operator accents (used **sparingly** — a route-number chip, a thin route line; not backgrounds)
-`op-kmb` `#D7282F` · `op-ctb` `#F6C700` (dark text on it) · `op-lwb` `#E8A33D` · `op-nwfb-legacy` `#F58220`.
+`KMB` `#D7282F` · `CTB` `#F6C700` (dark text on it) · `LWB` `#E8A33D` · `GMB` `#00845C`. Each pairs with
+a contrast-safe text colour (`color.operatorText`): white, except CTB's yellow, which takes `#0F172A`.
+These do **not** invert with the appearance — operator identity is constant (§7).
 
 **Contrast rules:** body text ≥ 4.5:1, large/UI ≥ 3:1, in both modes. The yellow accent **always**
 pairs with dark text, never white. Verify every theme against [ADR-008](./08-decision-log.md) honesty +
@@ -143,7 +176,7 @@ WCAG-AA before shipping.
 > via `@expo-google-fonts/inter` + `expo-font` in `apps/mobile/app/_layout.tsx`, with the splash held
 > until they load. The **`<Text variant weight tabular>`** primitive (`apps/mobile/components/Text.tsx`)
 > is the only thing that sets a size/family — it maps a type role + weight to the right cut through
-> `TYPE_SCALE` / `FONT_FAMILY` in `packages/ui/src/typography.ts`. On native `fontFamily` is single-valued,
+> `TYPE_SCALE` / `FONT_FAMILY`, generated from tokens.json's `type` and `font.cut` groups (§1.1). On native `fontFamily` is single-valued,
 > so CJK renders in the **platform face** (PingFang HK / system Noto) — v1 bundles **no** CJK webfont by
 > decision ([ADR-019](./08-decision-log.md#adr-019--cjk-use-the-platform-font-do-not-bundle-noto-v1)).
 
@@ -180,16 +213,31 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 
 ## 4. Spacing, radius, elevation
 
-- **Spacing** (4px base — Tailwind default): `1`=4 `2`=8 `3`=12 `4`=16 `5`=20 `6`=24 `8`=32 `10`=40 `12`=48.
-  Touch targets **≥ 44×44px**; **≥ 8px** (`gap-2`) between adjacent tappables.
-- **Radius:** `sm`=6 `md`=10 `lg`=14 `xl`=20 `full`=9999. Cards `md`/`lg`; bottom-sheets `xl` (top
-  corners); chips/pills `full`.
+- **Spacing** (4px base): `1`=4 `2`=8 `3`=12 `4`=16 `5`=20 `6`=24 `8`=32 `10`=40 `12`=48. These are the
+  values Tailwind ships as its default scale, but they are now **declared** in tokens.json's `spacing`
+  group and emitted into the preset in `rem` (px ÷ the 16px base), so the web build still honours the
+  browser font size while iOS and Android — which have no Tailwind — read the same numbers.
+  Touch targets **≥ 44×44px**; **≥ 8px** (`gap-2`) between adjacent tappables. Those two are *rules*,
+  not tokens, and stay prose on purpose.
+- **Radius:** `sm`=6 `md`=10 `lg`=14 `xl`=20 `full`=9999, plus two off-scale component radii:
+  `pill`=24 (the floating tab bar, whose corner tracks its 54px height — `TAB_BAR_RADIUS` re-exports
+  it) and `sheet`=26 (a bottom sheet's top corners; 20 reads tight across the full width). Cards
+  `md`/`lg`; chips/pills `full`.
 - **Elevation:** `e0` none · `e1` cards · `e2` sticky headers · `e3` sheet/FAB / **floating tab bar**.
-  On **dark**, prefer `surface-2` lightening + `border` over shadows (shadows read poorly on dark). RN
-  needs both the iOS `shadow*` and Android `elevation` recipes per token. **Implemented** as `ELEVATION`
-  in `packages/ui/src/tokens.ts`, applied by the **`Card`** primitive (`apps/mobile/components/Card.tsx`)
-  and the **floating tab bar** ([ADR-027](./08-decision-log.md#adr-027--floating-tab-bar-content-scrolls-underneath)),
-  both of which shadow on light and switch to a defining `border` on dark automatically.
+  On **dark**, prefer `surface-2` lightening + `border` over shadows (shadows read poorly on dark).
+  - **The token is platform-neutral**: a shadow geometry (colour, alpha, offset, blur, spread) plus
+    Android's Material `dp` where the platform wants a step instead of a geometry. `blur` carries CSS
+    semantics — a 2σ radius, per the DTCG shadow type — and `elevationStyle(level, Platform.OS)`
+    (`packages/ui/src/elevation.ts`) is the one place that maps it to a platform: a `boxShadow` string
+    on web, `{ elevation: dp }` on Android, the `shadow*` quartet (with `shadowRadius` = blur ÷ 2,
+    since RN's radius is σ) everywhere else. `e0` collapses to an empty style on every target.
+    Two recipes sit off the e-scale for the same machinery: `pin` and `pinActive`, the map-pin lift.
+    They declare no `androidDp` deliberately — a pin is an overlay, not a Material surface, so Android
+    draws the geometry.
+  - **Applied by** the **`Card`** primitive (`apps/mobile/components/Card.tsx`), the **floating tab bar**
+    ([ADR-027](./08-decision-log.md#adr-027--floating-tab-bar-content-scrolls-underneath)) and
+    `MiniMap`'s pins — the first two shadow on light and switch to a defining `border` on dark
+    automatically.
   - **Why the dark branch ([ADR-035](./08-decision-log.md#adr-035--elevation-is-two-channels-opaque-shadowlighten-and-glass-defocus-led)):**
     elevation is a lighting metaphor with two cues — a surface *casts a shadow* and *catches more light*. On
     **light** the shadow has contrast to spend (bright field to darken) and added lightness has none
@@ -295,7 +343,10 @@ shadow does, which is exactly why glass survives dark mode gracefully. On **dark
 (dark-on-dark has little contrast to bend), so glass leans on its **tint floor** (`bg-surface/55–60` over a
 darker `bg` = the dark-mode "raise = lighten" cue, for free) and its **rim-light** — whose values already
 encode the per-channel budget (white top highlight `0.42`→`0.12` light→dark; dark bottom inset shadow
-`0.06`→`0.16`, *stronger* on dark because the tint lightened the body for it to work against).
+`0.06`→`0.16`, *stronger* on dark because the tint lightened the body for it to work against). Those four
+alphas are the `glassRim` tokens, and the two-stop cast shadow is `glassShadow` — kept as their own
+groups rather than `elevation` levels precisely because glass is a different channel; `GlassView`
+composes both through `webBoxShadow()`.
 
 ### Glass legibility (the rules for `GlassView`)
 Liquid glass is a **chrome material**, not a content surface — so legibility, not the effect, wins.
@@ -328,8 +379,9 @@ against the **effective** background — which, behind glass, is *variable*). Ou
 
 ## 9. App icon & brand mark
 The app icon is a **road-sign / transit pictogram**: a clean **side-profile double-decker** (HK's
-signature bus), rendered as a **white symbol on an ink field** (`BRAND.ink` = `#111827`, in
-`packages/ui/src/tokens.ts`). Construction (master: `apps/mobile/assets/icon.svg`):
+signature bus), rendered as a **white symbol on an ink field** (`color.brand.ink` = `#111827`, declared
+in `packages/ui/tokens.json`; `scripts/gen-icons.mjs` reads it from the generated token set, and
+`app.json` / `manifest.webmanifest` pin the same value under the §1.1 gate). Construction (master: `apps/mobile/assets/icon.svg`):
 - **Body** rounded rect (radius **64** — a crisp, purposeful corner that still reads friendly, and
   holds up down to the 28px favicon); **two glassy window bands** as field-colour cut-outs, the top
   one centred with an even 56px inset, both with a softly-rounded **radius 21** (kept legible rather
