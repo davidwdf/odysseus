@@ -2,6 +2,7 @@ import {
   type Bound,
   dedupeEtas,
   type Eta,
+  parseRouteId,
   type RouteDetail,
   type Stop,
   type StopDetail,
@@ -128,8 +129,10 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
  *  the key that still matches when a live reading's service-type variant isn't the one the static
  *  data lists at this pole. */
 const lineKey = (operator: string, routeId: string): string => {
-  const [, routeNo = '', bound = ''] = routeId.split(':')
-  return `${operator}|${routeNo}|${bound}`
+  // Must agree with `dedupeEtas` exactly — including on an id it cannot parse, where both fall
+  // back to keying on the whole id so an odd reading dedupes only against its own twin.
+  const line = parseRouteId(routeId)
+  return line ? `${operator}|${line.routeNo}|${line.bound}` : `${operator}|${routeId}`
 }
 
 /**

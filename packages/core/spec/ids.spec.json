@@ -1,0 +1,667 @@
+{
+  "module": "ids",
+  "source": "src/ids.ts",
+  "version": 1,
+  "doc": "The id grammar's fixture corpus — the language-neutral half of WP1-2. Grammar: packages/contract/src/ids/id-grammar.abnf. Reference implementation: packages/core/src/ids.ts.  WHY A JSON FILE RATHER THAN TESTS IN THE IMPLEMENTATION'S LANGUAGE: the parser is hand-written and a Swift/Kotlin port will be hand-written too, so nothing generates one from the other and nothing can prove they agree by construction. These rows are the mechanism instead — every platform's suite drives the same inputs and expectations, and a grammar change that a port has not picked up shows up as a red suite there rather than as a wrong pixel in production. That is the division ADR-052 decision (2) draws: generated wire shapes get equivalence for free, hand-ported rules get it from a shared corpus.  Adding a row is cheap and is the right reflex; every `expect: null` row below is a shape some call site used to accept silently. `why` explains rows whose expectation is not obvious — the point of the corpus is that the *reason* travels with the case to the next platform.  Consumed by packages/core/test/ids.test.ts, and gated by scripts/check-spec-coverage.mjs like every other corpus in this directory — which is why it lives here rather than beside the ABNF: the rot check only sees packages/core/spec/.",
+  "groups": {
+    "parseRouteId": {
+      "doc": "Parsing is total: an id that does not match the grammar returns `null`, never a throw and never a plausible-but-wrong result. Ids reach this function from persisted rider state and from URLs, so malformed input is ordinary, not exceptional.",
+      "cases": [
+        {
+          "name": "route-kmb-plain",
+          "why": "The canonical four-field form. `serviceType` is a numeric-LOOKING string and must stay a string: it is an opaque operator label, and any port that decodes it as an integer loses GMB's ids and mints '1' from '01'.",
+          "args": {
+            "id": "KMB:6:outbound:1"
+          },
+          "expect": {
+            "operator": "KMB",
+            "routeNo": "6",
+            "bound": "outbound",
+            "serviceType": "1"
+          }
+        },
+        {
+          "name": "route-kmb-lettered-number",
+          "args": {
+            "id": "KMB:680X:inbound:2"
+          },
+          "expect": {
+            "operator": "KMB",
+            "routeNo": "680X",
+            "bound": "inbound",
+            "serviceType": "2"
+          }
+        },
+        {
+          "name": "route-ctb",
+          "args": {
+            "id": "CTB:720:inbound:1"
+          },
+          "expect": {
+            "operator": "CTB",
+            "routeNo": "720",
+            "bound": "inbound",
+            "serviceType": "1"
+          }
+        },
+        {
+          "name": "route-lwb",
+          "args": {
+            "id": "LWB:E31:outbound:1"
+          },
+          "expect": {
+            "operator": "LWB",
+            "routeNo": "E31",
+            "bound": "outbound",
+            "serviceType": "1"
+          }
+        },
+        {
+          "name": "route-gmb-gtfs-id-as-service-type",
+          "why": "GMB route NUMBERS REPEAT across regions (there are several '1A's), so operator+number+bound is not unique for GMB. The globally unique GTFS route_id is folded into the service-type slot, where it doubles as the live-ETA route_id (ADR-047). A port that assumes the last field is small or enumerable breaks GMB.",
+          "args": {
+            "id": "GMB:19M:outbound:2003497"
+          },
+          "expect": {
+            "operator": "GMB",
+            "routeNo": "19M",
+            "bound": "outbound",
+            "serviceType": "2003497"
+          }
+        },
+        {
+          "name": "route-gmb-numeric-number",
+          "args": {
+            "id": "GMB:1:inbound:2001234"
+          },
+          "expect": {
+            "operator": "GMB",
+            "routeNo": "1",
+            "bound": "inbound",
+            "serviceType": "2001234"
+          }
+        },
+        {
+          "name": "route-unknown-operator",
+          "why": "Unknown-enum tolerance (ADR-052 decision 4). The grammar validates the SHAPE of an operator code, never a closed list — the day a fifth operator ships, an already-installed client must degrade, not blank out every one of that operator's routes.",
+          "args": {
+            "id": "MTR:TML:outbound:1"
+          },
+          "expect": {
+            "operator": "MTR",
+            "routeNo": "TML",
+            "bound": "outbound",
+            "serviceType": "1"
+          }
+        },
+        {
+          "name": "route-reject-unknown-bound",
+          "why": "`bound` IS closed, unlike the operator: we mint it ourselves from the upstream I/O, so no operator can spring a third value on us. Closing it is what lets the parser return a typed direction rather than a string that is hopefully one.",
+          "args": {
+            "id": "KMB:6:northbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "route-reject-three-fields",
+          "args": {
+            "id": "KMB:6:outbound"
+          },
+          "expect": null
+        },
+        {
+          "name": "route-reject-five-fields",
+          "why": "The old `[, routeNo, bound] = id.split(':')` accepted this and quietly ignored the tail.",
+          "args": {
+            "id": "KMB:6:outbound:1:2"
+          },
+          "expect": null
+        },
+        {
+          "name": "route-reject-empty-service-type",
+          "args": {
+            "id": "KMB:6:outbound:"
+          },
+          "expect": null
+        },
+        {
+          "name": "route-reject-empty-number",
+          "args": {
+            "id": "KMB::outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "route-reject-lowercase-operator",
+          "why": "Ids are minted upper-case everywhere. Accepting either case would mean two strings for one route — two cache keys, two favourites, two 'recent' entries.",
+          "args": {
+            "id": "kmb:6:outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "route-reject-empty-string",
+          "args": {
+            "id": ""
+          },
+          "expect": null
+        }
+      ]
+    },
+    "parseStopId": {
+      "doc": "Parsing is total: an id that does not match the grammar returns `null`, never a throw and never a plausible-but-wrong result. Ids reach this function from persisted rider state and from URLs, so malformed input is ordinary, not exceptional.",
+      "cases": [
+        {
+          "name": "stop-kmb-pole",
+          "args": {
+            "id": "KMB:18492910339E23AA"
+          },
+          "expect": {
+            "kind": "stop",
+            "id": "KMB:18492910339E23AA",
+            "operator": "KMB",
+            "rawId": "18492910339E23AA"
+          }
+        },
+        {
+          "name": "stop-ctb-leading-zeros",
+          "why": "The raw id keeps its leading zeros: it is the string the operator's ETA endpoint takes, never a number. A port that round-trips it through an integer requests the wrong pole.",
+          "args": {
+            "id": "CTB:002403"
+          },
+          "expect": {
+            "kind": "stop",
+            "id": "CTB:002403",
+            "operator": "CTB",
+            "rawId": "002403"
+          }
+        },
+        {
+          "name": "stop-gmb-pole",
+          "args": {
+            "id": "GMB:20001518"
+          },
+          "expect": {
+            "kind": "stop",
+            "id": "GMB:20001518",
+            "operator": "GMB",
+            "rawId": "20001518"
+          }
+        },
+        {
+          "name": "stop-unknown-operator",
+          "why": "Same unknown-operator tolerance as the route row.",
+          "args": {
+            "id": "MTR:LAK"
+          },
+          "expect": {
+            "kind": "stop",
+            "id": "MTR:LAK",
+            "operator": "MTR",
+            "rawId": "LAK"
+          }
+        },
+        {
+          "name": "stop-reject-route-id",
+          "why": "THE row that pays for the exactly-two-fields rule. `split(':')[0]`/`[1]` on a route id returns 'KMB' and '6' — a plausible pole that does not exist. Shape alone must tell the two id kinds apart.",
+          "args": {
+            "id": "KMB:6:outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-place-id",
+          "why": "`stop.id.split(':')[0] as OperatorId` on a place id used to yield the operator 'P', which then coloured a map pin from a lookup that missed. No error, no test failure, wrong pixel.",
+          "args": {
+            "id": "P:CTB:002403+KMB:18492910339E23AA"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-empty-raw-id",
+          "args": {
+            "id": "KMB:"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-missing-operator",
+          "args": {
+            "id": ":18492910339E23AA"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-single-letter-operator",
+          "why": "An operator code is at least two characters precisely so that the reserved one-character place prefix 'P' can never be read as one.",
+          "args": {
+            "id": "P:12345"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-literal-pipe-in-raw-id",
+          "why": "The literal-pipe row. '|' separates the halves of a favourite key, so allowing one inside a stop id would make every favourite key ambiguous. Structural characters are rejected inside fields, not escaped — nothing in the system escapes them today, and a grammar that pretended otherwise would be describing code that does not exist.",
+          "args": {
+            "id": "KMB:AB|CD"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-literal-plus-in-raw-id",
+          "why": "Same reasoning for '+', which separates place members. Note this one also survives a URL round trip badly: '+' decodes to a space in a query string, which is why place ids must be percent-encoded in a path.",
+          "args": {
+            "id": "KMB:AB+CD"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-space-in-raw-id",
+          "args": {
+            "id": "KMB:AB CD"
+          },
+          "expect": null
+        },
+        {
+          "name": "stop-reject-empty-string",
+          "args": {
+            "id": ""
+          },
+          "expect": null
+        }
+      ]
+    },
+    "parsePlaceId": {
+      "doc": "Parsing is total: an id that does not match the grammar returns `null`, never a throw and never a plausible-but-wrong result. Ids reach this function from persisted rider state and from URLs, so malformed input is ordinary, not exceptional.",
+      "cases": [
+        {
+          "name": "place-two-members",
+          "why": "The common merged kerb: a Citybus pole and a KMB pole at one stop (ADR-042).",
+          "args": {
+            "id": "P:CTB:002403+KMB:18492910339E23AA"
+          },
+          "expect": {
+            "kind": "place",
+            "id": "P:CTB:002403+KMB:18492910339E23AA",
+            "members": [
+              {
+                "kind": "stop",
+                "id": "CTB:002403",
+                "operator": "CTB",
+                "rawId": "002403"
+              },
+              {
+                "kind": "stop",
+                "id": "KMB:18492910339E23AA",
+                "operator": "KMB",
+                "rawId": "18492910339E23AA"
+              }
+            ]
+          }
+        },
+        {
+          "name": "place-four-members",
+          "why": "N members, not two — a real kerb holds four poles. Every hand-written parse of this form in the app assumed a pair; a fixed-arity port would silently drop members three and four, and a place minus a member IS A DIFFERENT PLACE.",
+          "args": {
+            "id": "P:CTB:002403+CTB:002404+KMB:18492910339E23AA+KMB:5BB4A5D9AAF9D5C1"
+          },
+          "expect": {
+            "kind": "place",
+            "id": "P:CTB:002403+CTB:002404+KMB:18492910339E23AA+KMB:5BB4A5D9AAF9D5C1",
+            "members": [
+              {
+                "kind": "stop",
+                "id": "CTB:002403",
+                "operator": "CTB",
+                "rawId": "002403"
+              },
+              {
+                "kind": "stop",
+                "id": "CTB:002404",
+                "operator": "CTB",
+                "rawId": "002404"
+              },
+              {
+                "kind": "stop",
+                "id": "KMB:18492910339E23AA",
+                "operator": "KMB",
+                "rawId": "18492910339E23AA"
+              },
+              {
+                "kind": "stop",
+                "id": "KMB:5BB4A5D9AAF9D5C1",
+                "operator": "KMB",
+                "rawId": "5BB4A5D9AAF9D5C1"
+              }
+            ]
+          }
+        },
+        {
+          "name": "place-single-member",
+          "why": "Accepted although the dataset never mints one (clustering requires two members). Rejecting it would be the grammar asserting something about the clustering rules, which are not its business — and a stale id whose siblings were retired upstream is exactly the shape a rider might have saved.",
+          "args": {
+            "id": "P:KMB:18492910339E23AA"
+          },
+          "expect": {
+            "kind": "place",
+            "id": "P:KMB:18492910339E23AA",
+            "members": [
+              {
+                "kind": "stop",
+                "id": "KMB:18492910339E23AA",
+                "operator": "KMB",
+                "rawId": "18492910339E23AA"
+              }
+            ]
+          }
+        },
+        {
+          "name": "place-reject-no-members",
+          "args": {
+            "id": "P:"
+          },
+          "expect": null
+        },
+        {
+          "name": "place-reject-trailing-separator",
+          "why": "`.slice(2).split('+').filter(Boolean)` — the shape this replaced — dropped the empty member and resolved the id as a place of one. Silently answering with a different place is worse than answering with nothing.",
+          "args": {
+            "id": "P:KMB:18492910339E23AA+"
+          },
+          "expect": null
+        },
+        {
+          "name": "place-reject-double-separator",
+          "args": {
+            "id": "P:KMB:18492910339E23AA++CTB:002403"
+          },
+          "expect": null
+        },
+        {
+          "name": "place-reject-member-with-route-shape",
+          "args": {
+            "id": "P:KMB:6:outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "place-reject-nested-place",
+          "why": "Places do not nest; a member is always a pole.",
+          "args": {
+            "id": "P:P:KMB:18492910339E23AA+CTB:002403"
+          },
+          "expect": null
+        },
+        {
+          "name": "place-reject-bare-stop-id",
+          "args": {
+            "id": "KMB:18492910339E23AA"
+          },
+          "expect": null
+        }
+      ]
+    },
+    "parseStopOrPlaceId": {
+      "doc": "Parsing is total: an id that does not match the grammar returns `null`, never a throw and never a plausible-but-wrong result. Ids reach this function from persisted rider state and from URLs, so malformed input is ordinary, not exceptional.",
+      "cases": [
+        {
+          "name": "stop-or-place-pole",
+          "why": "/v1/stop/:id takes either shape, so the discriminated parse is what a screen actually wants.",
+          "args": {
+            "id": "GMB:20001518"
+          },
+          "expect": {
+            "kind": "stop",
+            "id": "GMB:20001518",
+            "operator": "GMB",
+            "rawId": "20001518"
+          }
+        },
+        {
+          "name": "stop-or-place-place",
+          "args": {
+            "id": "P:CTB:002403+KMB:18492910339E23AA"
+          },
+          "expect": {
+            "kind": "place",
+            "id": "P:CTB:002403+KMB:18492910339E23AA",
+            "members": [
+              {
+                "kind": "stop",
+                "id": "CTB:002403",
+                "operator": "CTB",
+                "rawId": "002403"
+              },
+              {
+                "kind": "stop",
+                "id": "KMB:18492910339E23AA",
+                "operator": "KMB",
+                "rawId": "18492910339E23AA"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stop-or-place-reject-garbage",
+          "args": {
+            "id": "P:"
+          },
+          "expect": null
+        }
+      ]
+    },
+    "parseFavoriteRouteKey": {
+      "doc": "Parsing is total: an id that does not match the grammar returns `null`, never a throw and never a plausible-but-wrong result. Ids reach this function from persisted rider state and from URLs, so malformed input is ordinary, not exceptional.",
+      "cases": [
+        {
+          "name": "favourite-key-pole",
+          "why": "'The 6, from THIS pole' (ADR-032). Note that BOTH halves contain ':' and the key itself contains '|' — the one id form where a naive split is not merely untidy.",
+          "args": {
+            "id": "KMB:18492910339E23AA|KMB:6:outbound:1"
+          },
+          "expect": {
+            "stop": {
+              "kind": "stop",
+              "id": "KMB:18492910339E23AA",
+              "operator": "KMB",
+              "rawId": "18492910339E23AA"
+            },
+            "route": {
+              "operator": "KMB",
+              "routeNo": "6",
+              "bound": "outbound",
+              "serviceType": "1"
+            },
+            "stopId": "KMB:18492910339E23AA",
+            "routeId": "KMB:6:outbound:1"
+          }
+        },
+        {
+          "name": "favourite-key-legacy-place-side",
+          "why": "The superseded scheme: keys were once written with the place id on the left, and place ids churn whenever clustering does. Recognised rather than rejected because WP2-5's migration has to FIND these to rewrite them — a parser that refused them would leave the migration nothing to work from.",
+          "args": {
+            "id": "P:CTB:002403+KMB:18492910339E23AA|CTB:720:inbound:1"
+          },
+          "expect": {
+            "stop": {
+              "kind": "place",
+              "id": "P:CTB:002403+KMB:18492910339E23AA",
+              "members": [
+                {
+                  "kind": "stop",
+                  "id": "CTB:002403",
+                  "operator": "CTB",
+                  "rawId": "002403"
+                },
+                {
+                  "kind": "stop",
+                  "id": "KMB:18492910339E23AA",
+                  "operator": "KMB",
+                  "rawId": "18492910339E23AA"
+                }
+              ]
+            },
+            "route": {
+              "operator": "CTB",
+              "routeNo": "720",
+              "bound": "inbound",
+              "serviceType": "1"
+            },
+            "stopId": "P:CTB:002403+KMB:18492910339E23AA",
+            "routeId": "CTB:720:inbound:1"
+          }
+        },
+        {
+          "name": "favourite-key-reject-two-pipes",
+          "why": "The latent bug, stated as a row. `const [stopId, routeId] = key.split('|')` returns ('KMB:AB', 'CD') here — a plausible pair, silently dropping the real route id, so a corrupt entry reads as a valid favourite for a route the rider never saved. Neither half may contain a pipe, so exactly one is required.",
+          "args": {
+            "id": "KMB:AB|CD|KMB:6:outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "favourite-key-reject-no-pipe",
+          "args": {
+            "id": "KMB:18492910339E23AA"
+          },
+          "expect": null
+        },
+        {
+          "name": "favourite-key-reject-empty-stop-half",
+          "args": {
+            "id": "|KMB:6:outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "favourite-key-reject-empty-route-half",
+          "args": {
+            "id": "KMB:18492910339E23AA|"
+          },
+          "expect": null
+        },
+        {
+          "name": "favourite-key-reject-halves-swapped",
+          "why": "Order is part of the grammar, and each half is validated as its own kind — so a key written the wrong way round fails instead of resolving to a stop that is a route.",
+          "args": {
+            "id": "KMB:6:outbound:1|KMB:18492910339E23AA"
+          },
+          "expect": null
+        }
+      ]
+    },
+    "memberStopIds": {
+      "doc": "The member poles of a place id, order preserved. A non-place id yields itself.",
+      "cases": [
+        {
+          "name": "members-of-four-member-place",
+          "why": "The shape every 'which poles do I fetch/compare?' call site wanted. Order is preserved.",
+          "args": {
+            "id": "P:CTB:002403+CTB:002404+KMB:18492910339E23AA+KMB:5BB4A5D9AAF9D5C1"
+          },
+          "expect": ["CTB:002403", "CTB:002404", "KMB:18492910339E23AA", "KMB:5BB4A5D9AAF9D5C1"]
+        },
+        {
+          "name": "members-of-lone-pole",
+          "why": "A lone pole is a member set of one, so callers need no `startsWith('P:')` branch at all.",
+          "args": {
+            "id": "KMB:18492910339E23AA"
+          },
+          "expect": ["KMB:18492910339E23AA"]
+        },
+        {
+          "name": "members-of-malformed-place",
+          "why": "A 'P:'-prefixed string we cannot parse denotes no pole; looking it up as a literal key would be looking up a string we know is not an id.",
+          "args": {
+            "id": "P:"
+          },
+          "expect": []
+        },
+        {
+          "name": "members-of-unrecognised-id-passthrough",
+          "why": "Deliberately NOT validated: anything that is not a place id is passed through as one opaque pole id and the lookup decides. This preserves what the call sites did before the parser existed, so a grammar written today cannot invalidate an id a rider saved yesterday that the dataset still resolves.",
+          "args": {
+            "id": "definitely-not-an-id"
+          },
+          "expect": ["definitely-not-an-id"]
+        }
+      ]
+    },
+    "formatStopId": {
+      "doc": "Formatting is the inverse of parsing and must round-trip. `formatPlaceId` deliberately does not sort its members — see the note on the function.",
+      "cases": [
+        {
+          "name": "format-stop-id",
+          "args": {
+            "operator": "KMB",
+            "rawId": "18492910339E23AA"
+          },
+          "expect": "KMB:18492910339E23AA"
+        }
+      ]
+    },
+    "formatRouteId": {
+      "doc": "Formatting is the inverse of parsing and must round-trip. `formatPlaceId` deliberately does not sort its members — see the note on the function.",
+      "cases": [
+        {
+          "name": "format-route-id",
+          "args": {
+            "operator": "KMB",
+            "routeNo": "6",
+            "bound": "outbound",
+            "serviceType": "1"
+          },
+          "expect": "KMB:6:outbound:1"
+        },
+        {
+          "name": "format-route-id-gmb",
+          "args": {
+            "operator": "GMB",
+            "routeNo": "19M",
+            "bound": "outbound",
+            "serviceType": "2003497"
+          },
+          "expect": "GMB:19M:outbound:2003497"
+        }
+      ]
+    },
+    "formatPlaceId": {
+      "doc": "Formatting is the inverse of parsing and must round-trip. `formatPlaceId` deliberately does not sort its members — see the note on the function.",
+      "cases": [
+        {
+          "name": "format-place-id-four-members",
+          "args": {
+            "memberIds": [
+              "CTB:002403",
+              "CTB:002404",
+              "KMB:18492910339E23AA",
+              "KMB:5BB4A5D9AAF9D5C1"
+            ]
+          },
+          "expect": "P:CTB:002403+CTB:002404+KMB:18492910339E23AA+KMB:5BB4A5D9AAF9D5C1"
+        },
+        {
+          "name": "format-place-id-preserves-given-order",
+          "why": "The formatter does NOT sort. The dataset builder sorts members by localeCompare before minting, and that ordering is baked into every published dataset and every saved favourite — re-sorting here with a different comparator would mint a different string for the same place and orphan them. Changing the collation is a migration (WP2-5), not a formatting choice.",
+          "args": {
+            "memberIds": ["KMB:18492910339E23AA", "CTB:002403"]
+          },
+          "expect": "P:KMB:18492910339E23AA+CTB:002403"
+        }
+      ]
+    },
+    "formatFavoriteRouteKey": {
+      "doc": "Formatting is the inverse of parsing and must round-trip. `formatPlaceId` deliberately does not sort its members — see the note on the function.",
+      "cases": [
+        {
+          "name": "format-favourite-key",
+          "args": {
+            "stopId": "KMB:18492910339E23AA",
+            "routeId": "KMB:6:outbound:1"
+          },
+          "expect": "KMB:18492910339E23AA|KMB:6:outbound:1"
+        }
+      ]
+    }
+  }
+}

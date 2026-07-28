@@ -24,6 +24,8 @@ pnpm test               # vitest: apps/edge (inside workerd, simulated KV/R2) + 
 pnpm lint               # Biome
 pnpm format             # Biome --write
 
+pnpm --filter @nextbus/contract openapi:emit   # regenerate packages/contract/openapi.json (ADR-052)
+                        # …it's committed + gated: `pnpm test` fails if it's stale
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
@@ -36,7 +38,8 @@ Full guide incl. deploy: [`docs/10`](./docs/10-scaffold-and-running.md).
 apps/mobile          Expo app (iOS/Android/Web-PWA)
 apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health;
                      reads precomputed dataset shards from KV/R2 — ADR-055)
-packages/core        canonical types · DataSource interface · ETA helpers
+packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
+packages/core        canonical types (`z.infer` of contract, `import type` only) · DataSource · ETA helpers
 packages/data-normalize  KMB + Citybus adapters (upstream → canonical)
 packages/api-client  EdgeClient (the v1 DataSource) + watch() polling shim
 packages/i18n        en / zh-Hant / zh-Hans UI strings

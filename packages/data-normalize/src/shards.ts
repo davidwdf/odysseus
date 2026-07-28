@@ -1,4 +1,4 @@
-import type { I18nText, OperatorId, Route } from '@nextbus/core'
+import { type I18nText, memberStopIds, type OperatorId, type Route } from '@nextbus/core'
 import type { IndexPlace, IndexStop, StaticIndex } from './dataset'
 import { routeFareAtSeq } from './dataset'
 import { haversineM } from './kmb-static'
@@ -267,14 +267,15 @@ function routeCountOf(index: StaticIndex, members: MemberDoc[]): number {
 /**
  * The place a canonical id denotes: an explicit `P:` place, a member's place, or a lone stop.
  *
- * A `P:` id is self-describing (`P:<memberId>+<memberId>`), so it resolves through its members
+ * A `P:` id is self-describing (`P:<memberId>+<memberId>+…`), so it resolves through its members
  * rather than a scan of `index.places` — which matters because the dev fallback calls this per
  * request. It tries **every** member, so a *stale* place id still lands on the current place even
  * when the pole named first has since been retired upstream; only an id with no surviving member
- * at all resolves to nothing.
+ * at all resolves to nothing. `memberStopIds` (the id grammar, `@nextbus/core/ids`) yields the
+ * members of a place id and a lone pole as a set of one, so there is no prefix test here.
  */
 function placeFor(index: StaticIndex, id: string): { place?: IndexPlace; members: IndexStop[] } {
-  const seedIds = id.startsWith('P:') ? id.slice(2).split('+').filter(Boolean) : [id]
+  const seedIds = memberStopIds(id)
   for (const seedId of seedIds) {
     const stop = index.stopById.get(seedId)
     if (!stop) continue

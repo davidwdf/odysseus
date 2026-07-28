@@ -1,0 +1,210 @@
+{
+  "module": "route-position",
+  "source": "src/route-position.ts",
+  "version": 1,
+  "doc": "Inferring where the buses are along a route from nothing but each stop's soonest arrival (ADR-030). No vehicle ids exist in HK open data, so the rule is a discontinuity scan: going forward, one bus reaches successive stops at increasing times, therefore a stop whose soonest arrival is SOONER than its predecessor's (or whose predecessor shows nothing) is being approached by a DIFFERENT bus — the lead bus has already left the earlier stop, which now shows the one behind it. Each such discontinuity is one marker. `atStop` is true only when that arrival is imminent (< 1 min), in which case the marker is drawn ON the stop node; otherwise it is drawn at the midpoint of the segment leading into it. We never interpolate a position from a clock — the marker moves only when fresh ETA data arrives (ADR-008). `soonest[i]` is the ISO arrival at stop i or JSON null for none; ISO strings carry a fixed +08:00 offset, so lexical comparison is chronological and a port must NOT need to parse them to order them.",
+  "groups": {
+    "inferBusMarkers": {
+      "doc": "Ordered markers, one per inferred bus, ascending by `toIndex`. `toIndex` is the stop the bus is heading TO (its next stop, by array position).",
+      "cases": [
+        {
+          "name": "minute-boundary-119s-at-index-0",
+          "why": "NAMED BOUNDARY ROW. One second under two minutes, at the first stop. The marker is off the node (`atStop` false) and sits on the approach segment. The point of pinning all three of 119/120/121 here: the LABEL changes across this boundary ('1 min' -> '2 min') while the MARKER does not move at all. A port that derived `atStop` from the rendered minutes — or that recomputed the marker whenever the label changed — would either jitter the bus or park it on the node. `atStop` is a function of seconds, never of the displayed minute.",
+          "args": {
+            "soonest": ["2026-07-27T12:01:59+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "minute-boundary-120s-at-index-0",
+          "why": "NAMED BOUNDARY ROW. Exactly two minutes. Identical marker to the 119 s row.",
+          "args": {
+            "soonest": ["2026-07-27T12:02:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "minute-boundary-121s-at-index-0",
+          "why": "NAMED BOUNDARY ROW. One second past two minutes. Still identical.",
+          "args": {
+            "soonest": ["2026-07-27T12:02:01+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "under-a-minute-puts-the-marker-on-the-stop",
+          "why": "59 s. The only condition that sets `atStop`, and it is the same < 60 s window that makes the label read 'Due'.",
+          "args": {
+            "soonest": ["2026-07-27T12:00:59+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": true
+            }
+          ]
+        },
+        {
+          "name": "exactly-a-minute-is-not-at-the-stop",
+          "why": "60 s. The first second the marker leaves the node.",
+          "args": {
+            "soonest": ["2026-07-27T12:01:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "one-bus-on-a-monotonic-route",
+          "why": "Increasing times all the way along means a single bus, marked at the first stop only. Three arrivals, ONE marker — the row that catches a port drawing a bus per stop with an ETA.",
+          "args": {
+            "soonest": [
+              "2026-07-27T12:02:00+08:00",
+              "2026-07-27T12:05:00+08:00",
+              "2026-07-27T12:09:00+08:00"
+            ],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "a-drop-in-time-marks-a-second-bus",
+          "why": "12:02, 12:05, then 12:01 — the drop at index 2 cannot be the same bus, so a second one is heading there. Index 3's 12:09 is later than index 2's 12:01, so it is that same second bus and gets no marker of its own.",
+          "args": {
+            "soonest": [
+              "2026-07-27T12:02:00+08:00",
+              "2026-07-27T12:05:00+08:00",
+              "2026-07-27T12:01:00+08:00",
+              "2026-07-27T12:09:00+08:00"
+            ],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": false
+            },
+            {
+              "toIndex": 2,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "a-stop-with-no-reading-starts-a-new-bus-after-it",
+          "why": "Most stops on a long route have no live reading at all, so this is the common shape, not an edge case. A null predecessor means 'nothing known behind me', which the rule treats as a discontinuity.",
+          "args": {
+            "soonest": [null, "2026-07-27T12:02:00+08:00", null, "2026-07-27T12:01:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 1,
+              "atStop": false
+            },
+            {
+              "toIndex": 3,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "equal-times-at-adjacent-stops-are-one-bus",
+          "why": "The comparison is strictly `prev > a`, so equal readings do NOT count as a discontinuity. Two adjacent stops reporting the same second is a feed artefact, not two buses.",
+          "args": {
+            "soonest": ["2026-07-27T12:02:00+08:00", "2026-07-27T12:02:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "a-departed-arrival-draws-no-marker",
+          "why": "Beyond the -60 s tolerance the reading is stale rubbish, so no bus is drawn for it.",
+          "args": {
+            "soonest": ["2026-07-27T11:55:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "a-departed-lead-hides-the-bus-behind-it",
+          "why": "FIXED 2026-07-28, and the row worth reading twice. Stop 0 shows 12:00 minus 2 min (the bus has gone; its reading has not refreshed) and stop 1 shows 12:01. The old code dropped departed readings *inside* the discontinuity scan, so stop 0's stale value still acted as stop 1's predecessor: stop 1 was judged NOT a lead because that predecessor's time was earlier than its own, and was dropped too. No marker anywhere, and a bus genuinely one minute from stop 1 vanished from the route view. `inferBusMarkers` now nulls departed readings BEFORE the scan, so a departed predecessor counts as absent — which is what the drop-off rule always said. This row is why the corpus exists: the defect is invisible without a fixture that pins the interaction between the two tests.",
+          "args": {
+            "soonest": ["2026-07-27T11:58:00+08:00", "2026-07-27T12:01:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 1,
+              "atStop": false
+            }
+          ]
+        },
+        {
+          "name": "an-arrival-inside-the-tolerance-band-still-draws-a-marker",
+          "why": "30 s in the past is inside the +/-60 s window, so it is 'Due', not departed, and the marker sits ON the stop. The tolerance band exists for feed clock skew and this proves the marker honours it too.",
+          "args": {
+            "soonest": ["2026-07-27T11:59:30+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            {
+              "toIndex": 0,
+              "atStop": true
+            }
+          ]
+        },
+        {
+          "name": "no-stops",
+          "args": {
+            "soonest": [],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "no-live-readings-anywhere",
+          "why": "The normal state of a route late at night. Empty, not an error.",
+          "args": {
+            "soonest": [null, null, null],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        }
+      ]
+    }
+  }
+}

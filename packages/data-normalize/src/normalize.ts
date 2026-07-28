@@ -1,19 +1,19 @@
-import type { Bound, I18nText, OperatorId } from '@nextbus/core'
+import { type Bound, formatRouteId, type I18nText } from '@nextbus/core'
 
 /** Upstream uses "I"/"O" (and occasionally "inbound"/"outbound"). */
 export function toBound(dir: string): Bound {
   return dir.trim().toUpperCase().startsWith('I') ? 'inbound' : 'outbound'
 }
 
-/** Stable, app-internal route id, e.g. `KMB:6:outbound:1`. */
-export function canonicalRouteId(
-  operator: OperatorId,
-  routeNo: string,
-  bound: Bound,
-  serviceType: string,
-): string {
-  return `${operator}:${routeNo}:${bound}:${serviceType}`
-}
+/**
+ * Stable, app-internal route id, e.g. `KMB:6:outbound:1`.
+ *
+ * The template moved to the id grammar in `@nextbus/core` (WP1-2), where the *parser* lives too —
+ * a format and a parse that can drift apart is how a grammar stops being one. Kept under this name
+ * because two dozen call sites in the adapters read better as `canonicalRouteId`, and renaming them
+ * would bury the actual change in noise.
+ */
+export const canonicalRouteId = formatRouteId
 
 export function i18nText(en: string, tc: string, sc: string): I18nText {
   return { en, 'zh-Hant': tc, 'zh-Hans': sc }

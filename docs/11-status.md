@@ -1,8 +1,17 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-27**. Branch: `hosting-cost-and-pwa-split`. Latest: **Wave 0 of the clean-separation plan —
-> WP0-1 … WP0-4 landed and verified** ([`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)).
+> Snapshot: **2026-07-28**. Wave 0 (PRs #11–#13) is on `main`; **Wave 1 is complete and in review as PR #14**.
+> Latest: **Wave 1 — the contract foundation, WP1-1 … WP1-5**
+> ([ADR-051](./08-decision-log.md#adr-051--layered-package-boundaries-packagesports-is-declaration-only-and-imports-nothing) ·
+> [ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) ·
+> ADR-059 · ADR-060). `packages/contract` is the single declaration of every wire shape and `packages/core`'s
+> types are `z.infer` of it through **`import type` only**, so zod never reaches the client's runtime graph;
+> `packages/ports` is the porting checklist; the id grammar has one parser and an **empty** ad-hoc-parsing
+> allowlist; `layers.json` generates both boundary configs; and a **331-case corpus at 100% branch coverage**
+> pins the domain rules that no schema can generate. **Every gate was watched failing on an injected
+> violation.** Two shipped bugs fell out of it — a bus could vanish from the route view, and `formatClock` read
+> the device timezone. Next: **Wave 2**; WP0-5/deploy is deferred on purpose (see *Next steps*).
 > Four things changed, all of them load-bearing for launch. **(1) The dataset left the request path**
 > ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)): a daily GitHub Action precomputes content-addressed shards into KV + R2 and the
 > Worker reads a handful of point keys — cold `/v1/nearby` went **3.97 s → 0.74 s**. `static-index.ts` and the Worker
@@ -16,7 +25,9 @@
 > ⚠️ **WP0-5 — deploy + CI + custom domain — is NOT done.** It needs a real domain and a Cloudflare account, and
 > **there is no Cloudflare auth in this environment**: the KV namespace id in `wrangler.toml` is a placeholder and
 > the publish pipeline has **never run against real remote KV/R2** (only Miniflare-local, verified end-to-end).
-> That is the next job, and it is the only thing between here and a live URL.
+> It is the only thing between here and a live URL, but it is **deliberately not the next job** — owner's call,
+> 2026-07-27: we launch after most of the other waves land. The nightly publish is disarmed until then
+> ([ADR-061](./08-decision-log.md#adr-061--environments-and-configuration-topology-local--production-ephemeral-previews-and-no-staging-tier)).
 > Earlier: **Green Minibus (GMB) — third operator**
 > ([ADR-047](./08-decision-log.md#adr-047--green-minibus-gmb-a-third-operator-keyed-on-gtfsid-with-per-arrival-livescheduled-honesty)).
 > GMB is now a v1 operator. Static geometry/fares/frequency come free from the consolidated dataset (one line in
@@ -96,9 +107,11 @@ of the operator APIs remains backlog); live ETAs come direct from the official A
 ([ADR-022](./08-decision-log.md) → [ADR-042](./08-decision-log.md)). The web build is an **installable PWA that
 opens offline** ([ADR-058](./08-decision-log.md#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier)) on a **LandsD basemap**
 ([ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)).
-Pick up at **WP0-5 — deploy + CI + a custom domain** (blocked on a domain + a Cloudflare account, see below);
-after that, **Wave 1/2 of `proposals/03`**, **map view**, or **Search polish** (walk it in-browser; Nearby filter
-chips; omnibox).
+Pick up at **Wave 1 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) — the contract
+foundation**. **WP0-5 (deploy + CI + custom domain) is deliberately deferred** — owner's call, 2026-07-27:
+we come back to it once most of the other waves have landed, so do **not** treat it as the next job even
+though it is the only thing between here and a live URL. After Wave 1: Wave 2, **map view**, or **Search
+polish** (walk it in-browser; Nearby filter chips; omnibox).
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
@@ -323,6 +336,59 @@ chips; omnibox).
   as a string, but a minority of entries carry a **number**, which crashed `localeCompare`.
   `packages/data-normalize/src/dataset.ts` now coerces with `String(...)`. The old per-request path had only
   ever touched the string-typed majority — precomputing *everything* is what surfaced it.
+- **The wire contract — WP1-1** ([ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)):
+  new **`packages/contract`** holds the Zod schemas that are the **single declaration** of every shape crossing
+  the network (`src/wire/{primitives,stop,route,eta,detail,search,responses}.ts`), plus the OpenAPI 3.1
+  assembly (`src/openapi.ts` → committed **`openapi.json`**, 6 paths · 28 component schemas). No
+  `zod-to-openapi`: OpenAPI 3.1's Schema Object *is* JSON Schema 2020-12, which Zod 4 emits natively.
+  `packages/core/src/types.ts` + the three search shapes are now **`z.infer` re-exports imported with
+  `import type`**, so `types.js` emits `export {};` and **zod never enters the client bundle** — `core`'s
+  runtime dependency list stays empty, which is what keeps it hand-portable to Swift/Kotlin.
+  **The one decision that makes the schema adjustable** is `WIRE_JSON_SCHEMA_OPTIONS` in
+  `src/json-schema.ts`: it strips `additionalProperties: false` from the emit, so adding an optional field is
+  a deploy rather than a migration — otherwise a strict generated decoder on an already-installed phone would
+  reject any payload containing a field it didn't know. Closed enums carry `x-unknown-tolerant` so a fourth
+  operator can't brick deployed clients. **Three gates, each verified to fail on an injected violation:**
+  the type-only boundary check (`packages/core/scripts/check-type-only-contract.mjs`), the response-conformance
+  suite (`apps/edge/test/wire-conformance.test.ts` — asserts responses satisfy their schema **and carry no
+  undocumented field**), and the OpenAPI staleness check
+  (`packages/contract/scripts/check-openapi-current.mjs`). All three run under `pnpm test`.
+  **Verified:** typecheck 8/8 · **22 edge + 17 mobile tests + both script gates** · Biome clean (only the 7
+  pre-existing findings) · **`apps/mobile` diff vs `main` is empty**, the WP1-1 acceptance criterion.
+  **The conformance gate found a real bug on its first run:** `/v1/nearby` used
+  `Number(url.searchParams.get('lat'))`, and `Number(null)` is `0` — so a request with *missing* coordinates
+  was served as 0, 0 and returned an empty list with a **200** instead of a 400. Fixed.
+  **Known-wrong-but-faithful** (left alone deliberately; WP1-1 changes no shapes — see ADR-052): errors are
+  `{error}` not `{code, message, retryable}`, and `Route.service` is served at two fidelities under one type.
+- **Wave 1 complete — WP1-2 · WP1-3 · WP1-4 · WP1-5** (ADR-051 · ADR-059 · ADR-060), built by four agents in
+  parallel worktrees and integrated one at a time:
+  - **`packages/ports`** — the six platform seams (`KeyValueStore`, `LocationProvider`, `LocaleProvider`,
+    `LinkOpener`, `Clock`, `TileSource`) as **declaration-only** interfaces; `ls packages/ports/src` is the
+    iOS/Android porting checklist. Imports nothing, so ports take domain types as *type parameters* —
+    `TileSource<LocaleId, ImageAsset>`. `apps/mobile/lib/tileSource.ts` now **binds** the port rather than
+    re-declaring it, so the compiler checks the equivalence. **Nothing is wired to the other five yet** — that is
+    Wave 2/3, one adapter at a time.
+  - **The id grammar** — one parser in `packages/core/src/ids.ts` (not in `contract`, because `core/src/eta.ts`
+    needs it and ADR-052's type-only gate forbids that edge at runtime); ABNF + a 60-row corpus in
+    `packages/contract/src/ids/`. The plan listed **8** ad-hoc parse sites; a grep found **12**. All drained —
+    **the allowlist is empty** — and the gate is keyed on file + snippet, not line numbers, which had already
+    drifted.
+  - **The boundary engine** — `layers.json` is the single declaration, generating both the dependency-cruiser
+    ruleset and `biome.json`'s overrides, with drift gated. **13 injected violations, every gate fires**,
+    including the two transitive cases. Two tools because neither suffices: the cruiser sees paths, `import type`
+    and reach; Biome is textual and catches platform globals that need no import.
+  - **The fixture corpus** — `@spec <module>#<export>` + `scripts/check-spec-coverage.mjs`, **36 rules, 274
+    language-neutral JSON cases, 100% branch coverage gated**, both rot directions checked, 18 named boundary
+    rows asserted by name. This is the equivalence mechanism for the *hand-ported* half that no schema can cover.
+  - **Two real bugs fixed as a result.** `formatClock` used `toLocaleTimeString`, whose output depends on the
+    host ICU build *and the device timezone* — a rider abroad saw their own local time on a Hong Kong board; now
+    computed arithmetically from a fixed HK offset, and the kernel bans the `toLocale*` pattern. And
+    **`inferBusMarkers` could drop a bus entirely** — a stale departed reading acted as its successor's
+    predecessor, so a bus one minute away vanished from the route view; departed readings are now discarded
+    before the discontinuity scan. Six further defects are recorded as `knownDefect` corpus rows.
+  - **Verified:** typecheck 9/9 · 22 edge + 88 mobile + 282 core · 4 script gates · 13 boundary self-tests ·
+    100% `core` branch coverage · Biome at the 7 pre-existing findings. WP1-2 also drove the Worker by `curl`
+    and walked the PWA in a browser.
 - **Docs:** plan `01–10`, the full ADR set in [`docs/08`](./08-decision-log.md) (Wave 0 adds **055** ·
   **057** · **058** and implements **049**), research + proposals sets, `CLAUDE.md` / `AGENTS.md`,
   pre-commit docs-check skill + hook.
@@ -331,7 +397,8 @@ chips; omnibox).
 - **Not deployed** (WP0-5). There is **no CI, no Cloudflare Pages deploy and no domain**, so nothing is
   reachable outside a dev machine. It needs a real domain **and** a Cloudflare account, and **this environment
   has no Cloudflare auth at all** — hence the placeholder KV namespace id in `wrangler.toml` and the fact that
-  `dataset:publish` has only ever been exercised against Miniflare-local KV/R2. Next agent's first job.
+  `dataset:publish` has only ever been exercised against Miniflare-local KV/R2. **Deferred on purpose**
+  (owner's call, 2026-07-27): we launch after most of the other waves land, so this is *not* the next job.
 - **Live ETA / nearby data is server-side**; the **search index is on-device** (ADR-037 — first step of
   [ADR-007](./08-decision-log.md)), but it's still **server-computed** and fetched. The static data is now
   precomputed into KV/R2 (ADR-055), but it is still **derived from the hkbus consolidated dataset** — the own
@@ -392,7 +459,34 @@ chips; omnibox).
    orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
-1. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL). Create the real
+1. **Wave 2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
+   **Wave 1 is ✅ complete — WP1-1 … WP1-5 all landed and verified** (ADR-051, ADR-052, ADR-059, ADR-060); see
+   *Done & verified*. Wave 2 is the parity-guarded domain extraction, and it is now much safer than the plan
+   assumed, because the *"near-zero test coverage"* risk it was written against is closed: `packages/core` has a
+   274-case corpus at 100% branch coverage, so a "mechanical, zero-behaviour-change" move is now checkable
+   rather than asserted. **WP2-6 (`snapFix`) already landed** in `apps/mobile/lib/geoSnap.ts` and just needs
+   moving; **WP2-5 is a known-broken-scheme migration** — fix the favourite id scheme before ADR-032 ships, and
+   note WP1-2 left `apps/mobile/lib/preferences.ts`'s own `favoriteRouteKey` template in place precisely because
+   folding it into the shared formatter *is* that migration.
+   **Highest-value loose ends Wave 1 left, in priority order:**
+   - ✅ **Done 2026-07-28:** five of the six `knownDefect` rows are fixed (`formatDistance` 995–999 m,
+     `estimateChildFare('')`, `estimateElderlyFare('')`, `formatServiceHours`' past-midnight wrap,
+     `buildRouteTrie('')`), and the corpus format is converged. **One `knownDefect` remains on purpose:**
+     `formatStopCount(1, 'en')` → `"1 stops"` needs a plural-aware key and belongs to **WP3-2** (i18n → ICU),
+     not a per-platform patch.
+   - **WP2-8 — the error taxonomy** (newly added to the plan; nothing owned it before). `{error}` →
+     `{code, message, retryable}` *and* the status codes: a malformed id returns `502` where `400` is right, and
+     `502` reads as retryable, so a Widget holding a stale favourite retries forever. Ship additively per
+     ADR-052 §5.
+   - **WP2-9 — split `RouteServiceInfo` by fidelity** (also newly added). A native client currently cannot tell
+     "no frequency table" from "you asked the summary endpoint".
+   - **`layers.json` is 44% over its line budget** — per the plan's own risk row that is the signal to simplify
+     the generator when it next needs to change, not to grow it. Not worth touching working, self-testing code
+     for a line count alone.
+2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
+   (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
+3. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL, and **deliberately
+   deferred until most other waves land** — owner's call, 2026-07-27). Create the real
    resources (`wrangler kv namespace create DATASET`, `wrangler r2 bucket create nextbus-builds`), replace the
    placeholder id in `apps/edge/wrangler.toml`, add the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`
    secrets and the `EDGE_URL` repo variable the dataset workflow already reads, **rehearse the publish against
@@ -402,16 +496,9 @@ chips; omnibox).
    nightly cron (it is skipped until then — see `docs/10` "Configuration & secrets"; a
    `workflow_dispatch` run is the way to test the credentials first), then add a `ci.yml` (typecheck · lint · test ·
    `wrangler deploy` · `build:web` → Pages). Confirm `GET /v1/health` reports `"dataset":"kv"` and
-   `datasetBuildsThisIsolate: 0`. **Blocked here** on a domain + a Cloudflare account (no auth in this
+   `datasetBuildsThisIsolate: 0`. Also **blocked** on a domain + a Cloudflare account (no auth in this
    environment). *(**Own crawl → KV/R2** is now a separate, smaller job: the KV/R2 pipeline exists — only the
    source needs swapping, in `scripts/build-dataset.mts`. It buys self-reliance and true zh-Hans.)*
-2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
-   (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
-3. **Waves 1–2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** — `packages/contract`
-   (Zod → OpenAPI), the id grammar, `packages/ports`, the `layers.json` enforcement engine, then the
-   parity-guarded domain extraction into `packages/core`. Note **WP2-6 (`snapFix`) already landed** in
-   `apps/mobile/lib/geoSnap.ts` and just needs moving; and **WP2-5 is a known-broken-scheme migration** — fix
-   the favourite id scheme before ADR-032 ships.
 4. **Street-level stop photos** ([ADR-050](./08-decision-log.md#adr-050--stop-imagery-google-street-view-deep-link-now-hk-streetscape-360-as-the-inline-target)) —
    the Google Street View **deep link** is hours of work, keyless and free; do it with or before the map work.
    Then **Streetscape 360** inline, once we know whether a coordinate→panorama lookup works without their JS

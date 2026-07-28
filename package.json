@@ -15,14 +15,20 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "test": "turbo run test && pnpm run boundaries",
+    "boundaries": "pnpm run boundaries:check && pnpm run boundaries:selftest && pnpm run check:no-adhoc-id-parsing",
+    "boundaries:gen": "node scripts/boundaries/generate.mjs",
+    "boundaries:check": "node scripts/boundaries/check.mjs",
+    "boundaries:selftest": "node scripts/boundaries/selftest.mjs",
     "clean": "git clean -xdf node_modules dist .turbo .expo .wrangler",
     "dataset:build": "pnpm --filter @nextbus/edge dataset:build",
     "dataset:publish": "pnpm --filter @nextbus/edge dataset:publish",
-    "study:gmb-names": "pnpm --filter @nextbus/edge exec node --import tsx scripts/studies/gmb-name-matching.mts"
+    "study:gmb-names": "pnpm --filter @nextbus/edge exec node --import tsx scripts/studies/gmb-name-matching.mts",
+    "check:no-adhoc-id-parsing": "node scripts/check-no-adhoc-id-parsing.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
+    "dependency-cruiser": "18.1.0",
     "tsx": "^4.23.1",
     "turbo": "2.9.16",
     "typescript": "5.9.3"

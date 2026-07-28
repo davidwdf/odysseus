@@ -1,190 +1,114 @@
-// Canonical data model. See docs/02-data-sources.md. Operators use incompatible
-// IDs upstream; everything here is normalized so the apps see one shape.
+// Canonical data model. See docs/02-data-sources.md. Operators use incompatible IDs upstream;
+// everything here is normalized so the apps see one shape.
+//
+// **These types are no longer declared here.** They are `z.infer` of the Zod schemas in
+// `@nextbus/contract`, which are the single declaration of every shape that crosses the network
+// (ADR-052). Rename a field in a schema and the error lands *here*, in the consumers, at typecheck
+// time — there is no second copy to forget to update, and no generated file to re-run.
+//
+// Note that every import in this file is `import type`. That is not stylistic:
+//
+//   · `import type` is erased entirely, so this module compiles to `export {};` and **zod never
+//     enters a client's runtime graph**. `packages/core` is the layer we intend to hand-port to
+//     Swift and Kotlin, and it keeps a runtime dependency list of exactly nothing.
+//   · The flip side, stated so nobody is surprised by it: the app therefore performs **no runtime
+//     validation** of wire payloads. Unknown enum members reach a `switch` as ordinary strings.
+//     That is why unknown-enum tolerance is enforced at native codegen (WP3-3) and by the edge
+//     conformance test — nothing in the TS build can fail to remind us.
+//
+// `scripts/check-type-only-contract.mjs` gates both properties in CI. If you add a value import to
+// this file, that check will fail, and it is right.
+
+import type {
+  BoundSchema,
+  EtaSchema,
+  FreqBandSchema,
+  FreqPatternSchema,
+  I18nTextSchema,
+  LatLngSchema,
+  LocaleSchema,
+  NearbyStopSchema,
+  OperatorIdSchema,
+  OperatorSchema,
+  PlaceSchema,
+  RouteDetailSchema,
+  RouteRefSchema,
+  RouteSchema,
+  RouteServiceInfoSchema,
+  RouteStopSchema,
+  ServiceDayTypeSchema,
+  StopDetailSchema,
+  StopSchema,
+} from '@nextbus/contract'
+import type { z } from 'zod'
 
 /** Supported UI + data locales. Traditional Chinese is the primary HK form. */
-export type Locale = 'en' | 'zh-Hant' | 'zh-Hans'
+export type Locale = z.infer<typeof LocaleSchema>
 
 /** Localized text; every name from the operators carries these variants. */
-export type I18nText = Record<Locale, string>
+export type I18nText = z.infer<typeof I18nTextSchema>
 
 /** Operators in scope. v1 = KMB/LWB + Citybus + Green Minibus (GMB); rail/NLB/MTR-Bus
  *  tracked in the backlog. */
-export type OperatorId = 'KMB' | 'LWB' | 'CTB' | 'GMB'
+export type OperatorId = z.infer<typeof OperatorIdSchema>
 
 /** Direction of travel. */
-export type Bound = 'inbound' | 'outbound'
+export type Bound = z.infer<typeof BoundSchema>
 
 /** A geographic coordinate (WGS84). */
-export interface LatLng {
-  lat: number
-  lng: number
-}
+export type LatLng = z.infer<typeof LatLngSchema>
 
-export interface Operator {
-  id: OperatorId
-  name: I18nText
-}
+export type Operator = z.infer<typeof OperatorSchema>
 
 /** A canonical bus stop, with the per-operator source IDs it was merged from. */
-export interface Stop {
-  /** Canonical, app-stable stop id. */
-  id: string
-  name: I18nText
-  location: LatLng
-  /** The operator-native stop ids this canonical stop maps to. */
-  sources: Array<{ operator: OperatorId; operatorStopId: string }>
-  /** Mean direction buses travel through this place (deg, 0–360), for a compass/direction
-   *  cue that distinguishes two same-named places (e.g. the NE vs SW kerb). Only set for
-   *  merged places; absent for a lone stop. ADR-042. */
-  bearingDeg?: number
-}
+export type Stop = z.infer<typeof StopSchema>
 
 /** A physical-location grouping of stops (e.g. KMB + CTB stops at the same kerb). */
-export interface Place {
-  id: string
-  name: I18nText
-  location: LatLng
-  stopIds: string[]
-}
+export type Place = z.infer<typeof PlaceSchema>
 
 /**
- * Static service facts for a route direction, sourced from data we already fetch (the
- * consolidated route-fare dataset — see docs/02). All optional; this is the **Static**
- * honesty tier (never styled as live). Fares are HK$ kept as the upstream string to avoid
- * float drift. Fares are *sectional* — riders boarding later pay less — so `fareFull` is
- * the fare from the origin; the per-boarding-stop fare rides on the stop/ETA records.
+ * Static service facts for a route direction. All optional; this is the **Static** honesty tier
+ * (never styled as live). Fares are HK$ kept as the upstream string to avoid float drift, and are
+ * *sectional* — riders boarding later pay less — so `fareFull` is the fare from the origin; the
+ * per-boarding-stop fare rides on the stop/ETA records.
  */
-export interface RouteServiceInfo {
-  /** Full adult fare from the route origin (HK$, e.g. "6.7"). */
-  fareFull?: string
-  /** Holiday full fare, only when it differs from `fareFull`. */
-  fareFullHoliday?: string
-  /** Whole-route journey time, minutes. */
-  journeyMin?: number
-  /** Typical headway from the GTFS frequency bands, minutes (coarse range — no fake precision). */
-  headway?: { min: number; max: number }
-  /** Rough daily service span, local 24h "HH:mm" (earliest first departure → latest end). */
-  hours?: { start: string; end: string }
-  /** Per-day-type frequency profiles (weekday/Sat/Sun/…) — richer than the coarse `headway`,
-   *  drives the tap-to-expand frequency & service-hours sheets (ADR-044). Still the Static tier.
-   *  Absent when the dataset carries no frequency table for the route. */
-  patterns?: FreqPattern[]
-}
+export type RouteServiceInfo = z.infer<typeof RouteServiceInfoSchema>
 
 /** Which days a frequency pattern runs. `other` = an uncommon mix (e.g. Mon–Sat); the UI
- *  falls back to the exact `days` mask for those. Sourced from the dataset's service-day map. */
-export type ServiceDayType = 'weekday' | 'saturday' | 'sunday' | 'daily' | 'other'
+ *  falls back to the exact `days` mask for those. */
+export type ServiceDayType = z.infer<typeof ServiceDayTypeSchema>
 
 /** One frequency band within a day: buses roughly every `headwayMin` minutes between `start`
  *  and `end` (local 24h "HH:mm"; past-midnight bands wrap, e.g. "25:35" → "01:35"). */
-export interface FreqBand {
-  start: string
-  end: string
-  headwayMin: number
-}
+export type FreqBand = z.infer<typeof FreqBandSchema>
 
 /**
- * A day-type's frequency profile — the bands the badge's coarse min–max is derived from, plus
- * the first/last departure. From the GTFS frequency table joined to the dataset's service-day
- * map (ADR-044). The **Static** honesty tier — a coarse timetable summary, never live.
+ * A day-type's frequency profile — the bands the badge's coarse min–max is derived from, plus the
+ * first/last departure (ADR-044). The **Static** honesty tier — a coarse timetable summary.
  */
-export interface FreqPattern {
-  dayType: ServiceDayType
-  /** Days this pattern runs, Sunday-first `[Sun…Sat]`, so the UI can render an exact day row
-   *  when `dayType` is `other`. */
-  days: boolean[]
-  bands: FreqBand[]
-  /** Earliest first departure / latest last departure across the bands, "HH:mm". */
-  first: string
-  last: string
-}
+export type FreqPattern = z.infer<typeof FreqPatternSchema>
 
-export interface Route {
-  /** Canonical route id, e.g. `KMB:6:outbound:1`. */
-  id: string
-  operator: OperatorId
-  /** Public route number shown on the bus, e.g. "6", "720", "N691". */
-  routeNo: string
-  bound: Bound
-  /** Operator service-type discriminator (KMB has variants per route). */
-  serviceType: string
-  origin: I18nText
-  destination: I18nText
-  /** Static service facts (fare/journey-time/frequency/hours), where the dataset supplies them. */
-  service?: RouteServiceInfo
-}
+export type Route = z.infer<typeof RouteSchema>
 
 /** One stop in a route's ordered sequence. */
-export interface RouteStop {
-  routeId: string
-  /** 1-based position along the route. */
-  seq: number
-  stopId: string
-}
+export type RouteStop = z.infer<typeof RouteStopSchema>
 
 /** A normalized estimated-arrival reading. ETAs are approximations — see eta.ts. */
-export interface Eta {
-  routeId: string
-  stopId: string
-  operator: OperatorId
-  /** Up to ~3 upcoming arrivals, ISO-8601, soonest first. */
-  arrivals: string[]
-  /** Where this service is headed (the route's destination), for flat ETA lists that
-   *  show "→ dest" without the full Route object (e.g. Nearby). Server-populated from
-   *  the canonical route meta; optional because not every feed/path supplies it. */
-  destination?: I18nText
-  /** Adult fare (HK$) for boarding this route *at this stop*, server-stamped from the
-   *  consolidated dataset like `destination`. Sectional — see RouteServiceInfo. */
-  fare?: string
-  /** Free-text operator remark, if any (e.g. scheduled vs real-time). */
-  remark?: I18nText
-  /** When the upstream feed generated this reading (ISO-8601). */
-  dataTimestamp: string
-  /** When our layer fetched/observed it (ISO-8601). */
-  observedAt: string
-}
+export type Eta = z.infer<typeof EtaSchema>
 
 /** A lightweight pointer to another route direction — just enough to label a toggle and
  *  load it (`getRoute(id)`); the full detail comes from that call. ADR-046. */
-export interface RouteRef {
-  /** Canonical route id, e.g. `KMB:6:inbound:1`. */
-  id: string
-  origin: I18nText
-  destination: I18nText
-}
+export type RouteRef = z.infer<typeof RouteRefSchema>
 
-/** Route + its ordered stops — returned by DataSource.getRoute. Each stop carries the
- *  route's own next arrival *there* (`eta`), so a route view can show per-stop times and
- *  infer bus positions (ADR-030). `eta` is null where no live reading is available. */
-export interface RouteDetail {
-  route: Route
-  stops: Array<{ seq: number; stop: Stop; eta: Eta | null; fare?: string }>
-  /** The same route number in the opposite direction, when the dataset carries one — lets the
-   *  UI offer a direction toggle. Absent for circular / single-direction routes (ADR-046).
-   *  Server-resolved (correct service-type variant), so the client never guesses the id. */
-  reverse?: RouteRef
-}
+/** Route + its ordered stops — returned by DataSource.getRoute. Each stop carries the route's own
+ *  next arrival *there* (`eta`), so a route view can show per-stop times and infer bus positions
+ *  (ADR-030). `eta` is null where no live reading is available. */
+export type RouteDetail = z.infer<typeof RouteDetailSchema>
 
-/** A stop (or merged same-kerb place) + the routes that serve it, each with its current
- *  ETA. For a multi-pole place, `stopId` on each route is the canonical id of the *member
- *  pole* it departs from (so the UI can group routes under their pole — ADR-042), and
- *  `members` carries each pole's id/name/location for the multi-pin map + per-pole walk. */
-export interface StopDetail {
-  stop: Stop
-  routes: Array<{ route: Route; eta: Eta | null; fare?: string; stopId: string }>
-  /** The place's member poles (one entry for a single stop; several for a merged place). */
-  members: Array<{ id: string; name: I18nText; location: LatLng }>
-}
+/** A stop (or merged same-kerb place) + the routes that serve it, each with its current ETA. For a
+ *  multi-pole place, `stopId` on each route is the canonical id of the *member pole* it departs
+ *  from (ADR-042), and `members` carries each pole's id/name/location. */
+export type StopDetail = z.infer<typeof StopDetailSchema>
 
 /** A nearby stop (or merged place) with distance + its soonest arrivals. */
-export interface NearbyStop {
-  stop: Stop
-  /** Straight-line distance from the query point, metres. */
-  distanceM: number
-  /** Soonest arrivals (deduped to one per route+direction). May be fewer than `routeCount`
-   *  — routes without a live reading right now aren't listed here. */
-  etas: Eta[]
-  /** True number of distinct routes serving the place, from the static index (no live call).
-   *  Lets a compact card show "soonest few of N · +N more" honestly, never a silent filter. */
-  routeCount: number
-}
+export type NearbyStop = z.infer<typeof NearbyStopSchema>

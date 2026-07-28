@@ -1886,6 +1886,218 @@ rather than the docs. **The blocking open question above is unchanged** — this
 5. **Confirmed unaffected:** ADR-049's basemap tier is genuinely keyless. See the tier table in
    [`docs/02`](./02-data-sources.md#map-tiles--street-imagery--hk-lands-department-adr-049-adr-050) — the key
    requirement is a property of `data.map.gov.hk` and `api.hkmapservice.gov.hk`, not of LandsD as a whole.
+## ADR-051 — Layered package boundaries; `packages/ports` is declaration-only and imports nothing
+- **Status:** **Decided and implemented 2026-07-27/28** — ports (WP1-3) *and* the enforcement engine (WP1-4).
+  Implementation: `packages/ports/`, `layers.json`, `scripts/boundaries/`.
+- **Context:** One Expo codebase ships the PWA today and iOS/Android later. The expensive failure is not a
+  missing abstraction, it is a *wrong* one — over-abstracting the view layer, or under-declaring the handful of
+  genuinely platform-bound seams so a native developer has to rediscover them by reading React Native code. The
+  plan's claim is that **`ls packages/ports/src` should literally be the iOS/Android porting checklist**, which
+  makes this a documentation deliverable as much as a code one: the doc comments carry more weight than the
+  signatures.
+- **Decision:**
+  1. **Six ports, and no more:** `KeyValueStore`, `LocationProvider`, `LocaleProvider`, `LinkOpener`, `Clock`,
+     `TileSource`. Everything else stays native — view layer, navigation, motion, gestures, haptics, widgets.
+     Explicit non-goals are written into `packages/ports/src/index.ts` so the list can't quietly grow: no push,
+     no background refresh, no location `watch()`, no timers in `Clock`, no `Intl` surface in `LocaleProvider`.
+  2. **The package is declaration-only and imports nothing.** Enforced two ways, both demonstrated failing:
+     `"types": []` in its tsconfig (a stray `typeof process.env` reference then fails with `TS2591`), and
+     `packages/ports/scripts/check-type-only-contract.mjs`, wired as the package's `test`, which emits with tsc
+     and fails if any module emits runtime code — it also fails if *nothing* is emitted, so it cannot pass
+     vacuously.
+  3. **Ports take domain types as type parameters instead of importing them.** `TileSource<LocaleId, ImageAsset>`
+     is the precedent: importing `@nextbus/core` would break the zero-import rule, and re-declaring `Locale`
+     would create exactly the second source of truth this package exists to prevent. The app instantiates
+     `TileSource<Locale, ImageSourcePropType>`; iOS would use `TileSource<Locale, UIImage>`.
+  4. **`TileSource`'s canonical home is `packages/ports`**, superseding the "lives in the app for now" note in
+     [ADR-049](#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay).
+     The LandsD *implementation* stays in `apps/mobile` — it carries a `require()`d logo asset and an
+     `EXPO_PUBLIC_API_URL` read, which are platform concerns by definition.
+     **The duplicate was closed immediately rather than documented** (`apps/mobile/lib/tileSource.ts` is now
+     `export type TileSource = PortTileSource<Locale, ImageSourcePropType>`): the local copy was a faithful
+     duplicate *that day*, and a duplicate nobody diffs is a divergence with a start date. Binding it makes the
+     compiler check the equivalence — which is also how we know the port is faithful, since `landsdTileSource`
+     typechecks against it unchanged.
+  5. **The `Clock` port never enters `core`.** `packages/core` keeps taking an explicit `now: number` (as
+     `eta.ts` already does throughout); only the view layer holds a `Clock` and calls `now()` once per render.
+     The port exists to make the ban nameable, not because `() => number` needs an interface. WP1-4's
+     `noRestrictedGlobals` will enforce the other half.
+  6. **`LocaleProvider` returns the OS's raw ordered BCP-47 tags and nothing else.** Detection is platform;
+     *resolution* is a shared rule with HK judgement in it (bare `zh` → Traditional), and that stays in
+     `resolveLocale`. Splitting them is what stops three platforms inventing three answers for `zh-MO`.
+  7. **Storage keys are a persistence contract with the rider's device**, not an implementation detail:
+     versioned suffixes (`nextbus.*.vN`), and a scheme change needs a migration. This is the same lesson
+     WP2-5's favourite-id migration exists to teach.
+  8. **Nothing is wired to these interfaces yet** — deliberately. WP1-3 ships types and the checklist; adoption
+     is Wave 2/3, one adapter at a time.
+- **Findings recorded while writing them** (none fixed here; all are Wave 2/3 work):
+  - **No `LinkOpener` value exists.** `openExternal`/`openInMaps` match the shape method-for-method, but the
+    `Platform.OS` switch sits *inside* the functions rather than in an adapter. Introducing the value is what
+    deletes those branches.
+  - **`useLocation` conflates the port with the shared logic** — permission, fix, `snapFix` and the
+    `nextbus.lastFix.v1` read/write are one hook. Nothing is wrong today; splitting it is a refactor.
+  - **`openInMaps`/`openExternal` fail silently.** A blocked pop-up, or a device with no maps app, gives the
+    rider no feedback at all. Noted in `link-opener.ts` as a known rough edge.
+  - `getLocales()` + `resolveLocale` already match `LocaleProvider` exactly; that adapter is mechanical.
+- **The enforcement engine (WP1-4).** `layers.json` is the **single declaration** of the layer graph;
+  `pnpm boundaries:gen` regenerates both `.dependency-cruiser.json` and `biome.json`'s `overrides` block from
+  it, and `pnpm boundaries:check` fails if either drifted. Edit the declaration, never the outputs.
+  - **Eight layers, keyed by *policed directories* rather than by package** — so a package's own build scripts
+    are Node tooling outside its layer. Without that, `packages/core/scripts/check-type-only-contract.mjs`
+    importing `node:fs` would read as a kernel violation:
+    `contract` → (nothing, + `zod`) · `ports` → (nothing) · `kernel` (`packages/core/src`) → `contract`
+    **type-only** · `tokens` (`ui`, `i18n`) · `client` (`api-client`) · `adapters` (`data-normalize`) ·
+    `server` (`apps/edge`) · `view` (`apps/mobile`, the only layer that may render).
+  - **Two tools, because neither is sufficient.** dependency-cruiser resolves module paths, distinguishes
+    `import type` (`tsPreCompilationDeps`) and — critically — computes **transitive reach**. Biome is textual,
+    which is what catches platform globals that need no import at all, and it gives the in-editor signal.
+    Both are **pinned exactly** (Biome `2.4.16`, dependency-cruiser `18.1.0`) so an upgrade cannot silently
+    change pattern semantics. dependency-cruiser drags in no `esbuild`, so golden rule 6's hoisting trap and
+    `wrangler dev` are unaffected.
+  - **The type-only `core → contract` edge is covered by two checks that cover different halves, and deleting
+    either leaves a hole.** dependency-cruiser is *syntactic and general* — it sees `import type` across every
+    layer and module, but not what survives compilation. ADR-052's emit check is *semantic and narrow* — it
+    reads the emitted JavaScript, but only for `core`, and only for `zod`/`@nextbus/contract`. Note also that
+    `zod` sits in kernel's npm allowlist purely so the closed-world rule doesn't fire; the **type-only rule does
+    the real work**, and the allowlist entry alone would pass a runtime import.
+  - **Reach rules never target npm packages.** Reachability is type-blind, and `core` legitimately reaches
+    `zod` through a legal type-only hop — so a transitive "kernel must not reach zod" rule would be a false
+    positive by construction.
+  - **The acceptance criterion is falsifiability, not passing.** `pnpm boundaries:selftest` injects **13**
+    violations and every gate fires, including the two transitive cases that matter
+    (`view → client → adapters`, and `core →(type-only)→ contract → apps/mobile`). Anti-vacuity is defended
+    three ways: a **clean control** fixture (a rule that fired on everything would fail it), a guard that fails
+    any cruise fixture reading zero modules, and `boundaries:check` printing modules-per-layer and failing if a
+    layer whose directories exist contributes none.
+  - **tsconfig project references stay rejected.** `composite` requires declaration emit, which contradicts
+    golden rule 1 (source-only packages, no build step). `"types": []` on `contract`/`core`/`ports` gives the
+    platform-global isolation we wanted from them without it. A future agent must not "helpfully" add them.
+  - **A real hazard this surfaced, and fixed:** `formatClock` in the kernel used `toLocaleTimeString`, whose
+    output depends on the host's ICU version **and the device's timezone** — so three platforms could render
+    the same ISO string three different ways, and a rider abroad saw their own local time on a Hong Kong bus
+    board. It is unportable by construction and no fixture corpus could have pinned it. It now computes
+    `HH:mm` arithmetically from a fixed `HK_UTC_OFFSET_MS` (Hong Kong is UTC+8 year-round, no DST since 1979)
+    and reads the result back with `getUTC*`, the only accessors that ignore the host zone. It slipped past the
+    `Intl` denied-global because `toLocaleTimeString` is a *method*, not the global, so `layers.json` now also
+    bans the `toLocale*` **pattern** in the kernel — watched firing. **Fixed while the function had zero
+    callers**, which made it free; it is not dead code (`proposals/00` P5, the countdown⇄clock toggle, is built
+    on it), so after P5 shipped this would have been a visible change to every arrival row.
+  - **Known gaps, left visible rather than papered over:** a raw upstream URL *literal* in a screen
+    (`fetch('https://data.etabus.gov.hk…')`) is invisible to both tools — golden rule 2 is encoded only as
+    `view` ✗→ `adapters`; `packages/ui/preset.js` and `global.css` sit outside the policed `src` directories
+    and are unpoliced; and the full `Date`/`Intl` ban in the kernel still waits on Wave 2 moving time
+    *formatting* out to the view layer (`eta.ts` legitimately does `new Date(iso).getTime()`).
+  - **Budget: over, and recorded as over.** `layers.json` (70) + `generate.mjs` (146) = **216 lines against the
+    plan's ~150** (+44%), of which ~37 lines are the determinism *policy* data (14 denied globals, 4 banned
+    patterns) that Biome's JSON formatter expands one per line. It generates 759 lines of config, so the
+    leverage is real, but per the plan's own risk row this is the trigger to **revisit rather than grow**: if
+    it needs to expand again, collapse the generator instead.
+  - **Manifest tidy-up noted:** `@nextbus/i18n` and `@nextbus/api-client` declare `@nextbus/core` as a runtime
+    `dependency` but import only types from it. Harmless overstatement; worth correcting when their adapters land.
+
+## ADR-052 — The wire contract: Zod is the single declaration, types erase, and the schema stays additive-safe
+- **Status:** **Decided and implemented 2026-07-27** (WP1-1 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). `packages/contract` holds every
+  wire shape, `packages/core`'s types are `z.infer` of them, `openapi.json` is emitted and committed, and three
+  gates enforce the decisions below. **`apps/mobile` has a literally zero diff**, which was the acceptance
+  criterion. Amends the plan's WP1-1 sketch in one respect — see decision (2).
+- **Context:** The requirement driving this is **not** "add validation". It is: *a change we make to the system
+  must reach every supported platform equivalently, and the data structures must still be adjustable later.*
+  Those two pull against each other — the usual way to guarantee cross-platform agreement is to freeze the
+  shape. Today one Expo codebase ships the PWA and will ship iOS/Android, so "equivalently" currently costs
+  nothing; the moment a native repo exists, every shape is transcribed by a human in two more languages, and
+  hand-transcription is where platforms silently diverge.
+  There are three separable kinds of change, and only one of them is a schema problem:
+  1. **Wire shapes** — generated everywhere from one declaration, so equivalence is by construction.
+  2. **Domain rules** (`dedupeEtas`, honest-ETA thresholds, bearing labels) — cannot be generated; they get
+     hand-ported, so their equivalence mechanism is the language-neutral fixture corpus (WP1-5), not the
+     schema. A rule change edits the corpus and every platform's suite goes red until it is ported.
+  3. **Tunable policy** (`maxArrivals`, `dueUnderSec`, `staleAfterMs`) — strongest case: serve it at runtime
+     (ADR-053's `ClientPolicy`) and no platform holds the value, so a change is one edge deploy. Prefer this
+     for anything that is a number rather than a behaviour. It also settles the live three-way disagreement
+     between `app/route/[id].tsx` `.slice(0, 3)`, `favorites.tsx` `.slice(0, 4)` and `StopRow.tsx MAX_ROWS = 6`.
+- **Decision:**
+  1. **The Zod schemas in `packages/contract/src/wire/` are the single declaration of every wire shape.**
+     `packages/core`'s canonical types become `z.infer` of them. One declaration cannot fall out of sync with
+     itself, which is why this beat the alternative below.
+  2. **`core` imports the schemas with `import type` only, so zod never enters a client's runtime graph.**
+     This is the amendment to the plan: WP1-1 as written would have made zod a runtime dependency of the
+     package every screen imports. Verified by spike before committing to it — `types.js` emits `export {};`,
+     no emitted client file references zod, and renaming a schema field surfaces as a **typecheck error in
+     `apps/mobile`**, not at runtime. Consequence worth stating plainly: the web client performs **no runtime
+     validation at all**, so unknown-enum tolerance (4) is an obligation on *generated native decoders*, and
+     nothing in the TS build can fail to remind us of it. It must be enforced at codegen in WP3-3.
+     *Rejected alternative:* keep hand-written types in `core` and prove them equivalent to the schemas with a
+     type-level `Equal<>` assertion. It reads well and costs no dependency, but it needs **two** declarations
+     to agree, and its assertion file can silently under-cover a type added later — a gate with a hole in it
+     is worse than no gate, because it is trusted.
+  3. **Wire objects emit as *open* JSON Schema.** Zod reports `z.object()`'s key-stripping as
+     `additionalProperties: false`; correct for a validator, wrong for a published contract, because a strict
+     generated decoder then **rejects any payload containing a field it does not know**. Adding one optional
+     field would break every already-installed copy of the app — a failure on phones we cannot update, for a
+     change that is by construction backward-compatible. `WIRE_JSON_SCHEMA_OPTIONS` in
+     `packages/contract/src/json-schema.ts` strips it. **This hook, not the schemas, is what makes the schema
+     adjustable**, so it is documented there at length and must not be "tidied away". We keep `z.object()`
+     rather than `z.looseObject()` because loose objects infer an index signature, and since `core`'s types are
+     `z.infer` of these, every consumer would lose typo-checking on every wire shape. Strict where it buys type
+     safety (TS), open where it buys forward compatibility (the wire).
+  4. **Closed enums are marked `x-unknown-tolerant: true`** (`Locale`, `OperatorId`, `Bound`, and
+     `ServiceDayType` when it lands) so generators emit `case unknown(String)` / Kotlin fallbacks. Without it,
+     shipping a fourth operator bricks decoding on every deployed phone — a store release, at review speed,
+     for what should be a data change.
+  5. **Evolution policy.** Additive-optional is free (3) and ships without ceremony. Removal, rename and type
+     change are breaking: they need the `oasdiff` gate, an ADR, and a deprecation window in which both shapes
+     are served. `/v1` in the path leaves room for a `/v2` if that ever fails.
+  6. **No `zod-to-openapi`.** OpenAPI 3.1's Schema Object *is* JSON Schema draft 2020-12, and Zod 4's built-in
+     `z.toJSONSchema()` emits exactly that — one less generator to keep in step. Verified: `.meta({ id })`
+     hoists a named shape into `$defs` with a `$ref` (so it becomes a reusable component, not the same object
+     inlined nine times), custom `x-` keys survive the emit, and the `override` hook can open the objects.
+- **The three gates** (all run by `pnpm test`, and each one was verified to *fail* on an injected violation —
+  a gate nobody has watched fail is not known to work):
+  1. **`packages/core/scripts/check-type-only-contract.mjs`** — emits `core` with tsc and reads the output:
+     no emitted `.js` may reference zod or `@nextbus/contract`, and `types.js` must be an empty module. It
+     asserts the property (nothing survives into the JavaScript) rather than a proxy for it (the source says
+     `import type`), so a re-export chain or an accidental value import cannot slip past a grep. Note it needs
+     `--removeComments`: without it the check fails on its own documentation, which names both forbidden
+     strings in prose.
+  2. **`apps/edge/test/wire-conformance.test.ts`** — parses every endpoint's real response through its
+     published schema, inside workerd. Two assertions, and the second is the one that is easy to miss:
+     the response must satisfy the schema, **and must carry nothing the schema doesn't describe**. `z.object()`
+     *strips* unknown keys rather than rejecting them, so `parse()` alone would accept an undocumented field
+     and silently discard it — drift in the direction that hurts most, because the data exists, the web app
+     reads it, and no native client can see it. Endpoint ids are discovered from a live `/v1/nearby` response
+     rather than hard-coded, so the test cannot drift away from the fixture.
+  3. **`packages/contract/scripts/check-openapi-current.mjs`** — rebuilds the document and compares it to the
+     committed `openapi.json`, so forgetting to re-emit is a red build rather than a native client generated
+     from last month's contract. Compares parsed documents, not bytes, so formatting alone can't fail it.
+     `openapi.json` is excluded from Biome (`biome.json`) — a generated artefact formatted by two tools with
+     different opinions would be permanently dirty.
+- **A real bug the conformance gate found on its first run** (fixed in the same branch, `apps/edge/src/index.ts`):
+  `/v1/nearby` read its coordinates with `Number(url.searchParams.get('lat'))`, and **`Number(null)` is `0`, not
+  `NaN`**. A request with *missing* lat/lng was therefore served as the coordinates 0, 0 — the Gulf of Guinea —
+  returning an empty list with a **200** instead of the 400 the handler intended. Malformed values (`lat=abc`)
+  were rejected all along; only absent ones slipped through. A client with a broken location permission got a
+  confident "no stops near you" rather than an error it could report. This is the argument for the gate in
+  miniature: the bug was invisible from the inside and obvious the moment something asserted the contract.
+- **Consequences / notes for whoever touches this next:**
+  - **`zod@4.4.3` is pinned exactly**, matching `@nextbus/data-normalize`. There are already **two** zod majors
+    in the tree — v3.25.76 hoisted at the root by `@cloudflare/vitest-pool-workers` and `@expo/metro-runtime`,
+    v4.4.3 nested under `data-normalize`. Any package using v4 features **must declare zod itself**, or
+    `node_modules` resolution walks up to the root v3 and `.meta()` is not a function. Do **not** add a
+    `pnpm.overrides` entry to force v4 repo-wide: those two dependencies expect v3, and golden rule 6 is the
+    scar from exactly that fight over esbuild.
+  - **Two shapes transcribe faithfully but are wrong, and are deliberately left wrong here** (WP1-1 is
+    "no shape changes"; fixing them under cover of a refactor makes the refactor unreviewable). Both are the
+    first candidates for the evolution policy in (5):
+    (a) **Errors are `{error: string}`**, not the `{code, message, retryable}` taxonomy the plan specifies. An
+    iOS Widget holding a deleted favourite cannot currently tell "prune permanently" from "retry later", so it
+    retries forever. Fix additively: serve `code`/`retryable` alongside `error`, then retire `error`.
+    (b) **`Route.service` is served at two different fidelities under one type** — `/v1/stop/:id` omits
+    `patterns` (the summary tier; duplicating it was 54 MB of an 82 MB build, ADR-055) while `/v1/route/:id`
+    carries it. Both satisfy the same optional-`patterns` schema, so a native client cannot tell which tier it
+    received and will read "absent" as "this route has no frequency table". Needs either two named schemas or
+    an explicit tier discriminator.
+  - `StopLite` carries flat `lat`/`lng` while `Stop` nests `location: LatLng`. Harmless, faithful, noted.
 
 ## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
 - **Status:** **Decided and implemented 2026-07-27** (WP0-1 of
@@ -2037,6 +2249,138 @@ rather than the docs. **The blocking open question above is unchanged** — this
   environment resolves outside Hong Kong, so the data path was exercised directly instead. Worth checking on
   a real phone alongside the other install checks ADR-048 left open.
 
+## ADR-059 — The id grammar: one parser in `core`, the spec and corpus in `contract`
+- **Status:** **Decided and implemented 2026-07-28** (WP1-2). Implementation: `packages/core/src/ids.ts`;
+  ABNF `packages/contract/src/ids/id-grammar.abnf`; corpus `packages/core/spec/ids.spec.json`; gate
+  `scripts/check-no-adhoc-id-parsing.mjs`.
+- **Context:** ids were parsed inline wherever they were needed. The plan counted eight such sites; a grep found
+  **twelve** — the four the plan missed were in `apps/edge/src/{dataset,search-index,stop-route}.ts` and
+  `packages/data-normalize/src/shards.ts`. That undercount is itself the argument: a hand-maintained list of
+  parse sites drifts, which is why the allowlist is now derived by grep and gated.
+  The reason this matters more than tidiness: **`split()` cannot fail.** A malformed id doesn't throw, it yields
+  a plausible wrong answer — `"P"` cast to `OperatorId`, a place id silently resolving to a different place, or
+  every unparseable reading from one operator collapsing into a single ETA row. Ids also arrive from persisted
+  rider state (favourites saved months ago) and from URLs, so malformed input is *ordinary*, not exceptional.
+- **Decision:**
+  1. **The parser and formatter live in `packages/core/src/ids.ts`; the ABNF and the corpus live in
+     `packages/contract`.** This **amends the plan**, which put the whole thing in `contract`: `core/src/eta.ts`
+     needs the parser, and ADR-052's type-only gate forbids `core → contract` at runtime. The split is the
+     better shape anyway — the parser is pure kernel logic, while the ABNF and the language-neutral corpus are
+     the artefacts a Swift or Kotlin port consumes, and the TS tests drive that same corpus. That shared corpus
+     *is* the cross-platform equivalence mechanism for hand-ported logic.
+  2. **Total functions** returning `null` or a discriminated union — never throwing — because unparseable is
+     ordinary input, not a bug.
+  3. **Strict on the three delimiters (`:` `+` `|`), permissive inside a field.** Operators mint the field
+     values, so over-strictness would 404 a favourite a rider saved last year. `operator` is validated as a
+     *shape* rather than against a fixed vocabulary, so a fifth operator degrades gracefully (ADR-052 §4), with
+     **one documented `as OperatorId` cast** replacing five scattered ones. `bound` is closed and guarded by a
+     type-level exhaustiveness assert, because we mint it ourselves.
+  4. **A favourite key has exactly one `|`.** A place id on the left-hand side parses and is flagged *legacy* —
+     the migration is WP2-5's, and this is what will let it detect what needs migrating.
+  5. **`formatPlaceId` deliberately does not sort members.** The builder's `localeCompare` ordering is baked
+     into published datasets and into saved favourites, so changing the collation is a migration, not
+     formatting.
+  6. **The gate is keyed on file + matched snippet, not line number** (the plan's own line numbers had already
+     drifted — `:312` → `:314`), and it fails **both** on growth *and* on a stale entry, so a fixed site can't
+     leave a permanent exception behind. The allowlist reached **zero**.
+- **Consequences — two deliberate behaviour changes:**
+  - a malformed place id (`P:…+`, `P:a++b`) now resolves to **nothing** instead of silently resolving to a
+    different place;
+  - unparseable route ids in `dedupeEtas` now key on the whole id rather than collapsing every malformed
+    reading from one operator into one rider line.
+- **Follow-ups, recorded rather than done:**
+  - `stopMatchesOperators` (`packages/core/src/search.ts`) still introspects ids with
+    `` includes(`${op}:`) `` — the same class of bug (a KMB pole whose raw id begins `CTB…` would false-match
+    Citybus). Left because the grep that would catch it is too noisy to gate on; a four-line fix with
+    `parseStopOrPlaceId` when someone owns that file.
+  - `apps/mobile/lib/preferences.ts` keeps its own `favoriteRouteKey` template. Folding it into the formatter
+    needs the migration, which is WP2-5's by the plan.
+  - `lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`' key construction (both now go
+    through the shared parser, with a comment tying them). Exporting one line-key helper from `core` is WP2-2.
+  - **A malformed id returns `502`, which is wrong** — it is a permanent client error, so `400` is correct,
+    and `502` reads as *retryable*, so an iOS Widget holding a malformed favourite would retry forever. **Now
+    scheduled as WP2-8** together with ADR-052's `{code, message, retryable}` taxonomy, since it is the same
+    defect wearing a different hat. It was previously a note in an ADR that no work package owned, which is
+    how something specified from the start quietly never happens.
+
+## ADR-060 — The fixture corpus is the equivalence mechanism for domain rules
+- **Status:** **Decided and implemented 2026-07-28** (WP1-5). Implementation: `packages/core/spec/*.spec.json`,
+  `packages/core/test/`, `scripts/check-spec-coverage.mjs`. Completes Wave 1.
+- **Context:** [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+  separates three kinds of change and solves only one of them. Wire *shapes* are generated, so every platform
+  agrees by construction. **Domain rules cannot be generated** — `dedupeEtas`, the honest-ETA thresholds,
+  bearing labels, fare formatting — they get hand-written again in Swift and Kotlin. Nothing about a Zod schema
+  or an OpenAPI document constrains them, so without a shared, language-neutral specification three platforms
+  will quietly disagree about when a bus is "due". This is the mechanism for that half.
+- **Decision:**
+  1. **Corpora are pure JSON at `packages/core/spec/<module>.spec.json`** — one file per kernel module, beside
+     the `src` that implements it, so moving a package takes its spec along. `groups` keyed by export name;
+     cases are `{name, why?, knownDefect?, args, expect}`; `version: 1`. **No `undefined`, no functions, no
+     comments** — JSON `null` is the absent value and is translated at the boundary in `test/corpus.ts` — because
+     an XCTest or JUnit suite has to read these rows verbatim. **36 groups, 274 cases.**
+  2. **`@spec <module>#<export>`** in an export's JSDoc marks it corpus-specified. Both halves are checked
+     against the file stem and the symbol, so a tag cannot drift onto the wrong corpus or outlive a rename.
+  3. **`check-spec-coverage.mjs` enforces both directions** — a tagged export with an empty or missing corpus,
+     *and* an orphan corpus file or group that no tag references (rot in the other direction: rows that specify
+     nothing). It also asserts **18 named boundary rows** by name, so deleting one is a red build. `--selftest`
+     runs 8 synthetic scenarios proving each failure mode fires; same standard as ADR-052's gates — watched
+     failing before trusted.
+  4. **Branch coverage on `packages/core` is gated at 100%** (149/149), not line coverage: these defects live in
+     the branch nobody thought of. No unexplained slack, so a rule added without rows fails rather than diluting
+     an average. Two branches are covered by hand-written tests rather than rows, and argued in place: an unknown
+     `Locale` (genuinely reachable — ADR-052 marks the enum `x-unknown-tolerant` and the client does no runtime
+     validation) and a `NaN` bearing (JSON cannot express NaN).
+  5. **`knownDefect` is a first-class corpus state.** A row may assert behaviour we agree is *wrong*, so that
+     all platforms stay wrong *identically* and the fix becomes one coordinated change; the `why` must state what
+     `expect` becomes when fixed. The gate prints the count every run. **This lifecycle already ran for real:**
+     the literal-`|` row was written as a defect (`dedupeEtas` collapsed two distinct rider lines into one, so an
+     arrival disappeared), WP1-2's `parseRouteId` landed, the row went red, and it was updated to expect both
+     ids — which is exactly what will force every native suite to port the parser.
+  6. **A kernel rule may not consult the host locale, ICU version or time zone.** Generalised from `formatClock`
+     (see ADR-051): a corpus cannot pin a property of the machine. WP1-4's `toLocale*` ban is the mechanical half.
+- **Consequences — the defects this found in shipped code.** Eight, of which one is fixed and seven remain
+  recorded as `knownDefect` rows (each asserting today's behaviour, with the corrected expectation written in):
+  - **✅ FIXED: `inferBusMarkers` could drop a bus entirely.** Departed readings were discarded *inside* the
+    discontinuity scan, so a stale departed reading still acted as its successor's predecessor — the bus
+    genuinely approaching the next stop was then judged "not a lead" and dropped too. **No marker anywhere: a
+    bus one minute away vanished from the route view.** Since upstream only republishes about once a minute,
+    stale departed readings are common rather than exotic. Departed readings are now nulled *before* the scan,
+    which is what the drop-off rule always said; the change is strictly additive — it can restore a marker the
+    old ordering discarded but never invent one. This is the clearest argument for the whole harness: the defect
+    is invisible without a fixture that pins the interaction between two tests that each look correct alone.
+  - `formatDistance` prints `"1000m"` for 995–999 m instead of `"1.0km"` — compare the *rounded* metres.
+  - `estimateChildFare('')` → `"0.0"` and `estimateElderlyFare('')` → `"2.0"`: `Number('')` is 0, so a missing
+    fare becomes a confident concession estimate.
+  - `formatStopCount(1, 'en')` → `"1 stops"` — needs a plural-aware i18n key, not a per-platform patch.
+  - `formatServiceHours` passes a past-midnight wrap straight through, so a raw GTFS `"25:35"` reaches a rider.
+  - `buildRouteTrie('')` makes the *root* terminal, so `isCompleteRoute(root, '')` is true and submit-on-empty
+    looks meaningful. Unreachable today; armed by any bad dataset build.
+  - Doc inaccuracy, not a defect: `search.ts` offers `NA` as the night+airport example, but the family patterns
+    require a digit, so bare `NA` is night-only. Recorded as `bare-na-is-night-only` so nobody "corrects" the regex.
+- **Format converged, and it closed a real hole (2026-07-28).** WP1-2's id corpus and WP1-5's kernel corpora
+  were written in parallel and landed in different shapes and different directories. Converging them on
+  `groups` + `doc` moved `id-corpus.json` to **`packages/core/spec/ids.spec.json`**, gave `src/ids.ts` its ten
+  `@spec` tags, and moved the suite to `packages/core/test/ids.test.ts`. The ABNF stays in `packages/contract` —
+  that is a grammar specification, not test data.
+  This was not tidying. `src/ids.ts` was covered by **neither gate**: no `@spec` tag, so the rot check could not
+  see it, and absent from the coverage `include` list, so *"100% branches on `core`"* silently excluded the
+  module that parses persisted rider state. Bringing it in put its real figure at **84%**, and the branches it
+  exposed were `?? ''` fallbacks made unreachable by a length check one line above — dead code
+  `noUncheckedIndexedAccess` had demanded. Removed rather than suppressed, because this module is hand-ported
+  and a porter would faithfully reproduce a case that cannot happen. `core` is back to 100%, now over
+  **197 branches rather than 149**.
+  Two lessons worth keeping: a coverage `include` allowlist silently excludes modules that did not exist when it
+  was written, so it must be revisited whenever a module lands; and the migration was done under a script that
+  **aborted unless every recorded expectation was a checked projection of real output** — three projections
+  turned up (omitted keys, a member recorded as its id string, `stopKind` flattening `stop.kind`), and demanding
+  each be named is what kept a behaviour change from hiding inside a format migration.
+- **Superseded — the open format question, resolved above.** Left here because the reasoning still applies to
+  any third corpus: settle the shape before WP3-3 generates a native scaffold that would have to read two. WP1-5's corpus and WP1-2's
+  `id-corpus.json` agree on `name`/`why`/`version` but still differ two ways: `doc` (a string) versus
+  `$comment` (an array of lines), and cases nested under `groups` keyed by export versus flat sections.
+  **Settle on `groups` + `doc` before WP3-3 generates a native scaffold that would otherwise have to read both**
+  — `$comment` conventionally means "ignore me", and this prose is the deliverable, since the reason has to
+  travel to the next language and not just the value.
 ## ADR-061 — Environments and configuration topology: local + production, ephemeral previews, and no staging tier
 - **Status:** **Decided 2026-07-28.** The disarming half is implemented; the rest is guidance that WP0-5
   executes. Supersedes nothing; it writes down what was previously implicit.

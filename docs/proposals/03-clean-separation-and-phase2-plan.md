@@ -194,6 +194,22 @@ others in the same wave** — this matters because agents will be fanned across 
 
 ### Wave 1 — Contract foundation (WP1-1 first, then parallel)
 
+> **Status 2026-07-28: Wave 1 is COMPLETE — WP1-1 … WP1-5 all landed and verified** (ADR-051, ADR-052,
+> ADR-059, ADR-060). WP1-2…5 were built by four agents in parallel worktrees and integrated one at a
+> time. Four corrections to what is written below, recorded because the plan was wrong in ways worth
+> knowing:
+> **(1)** WP1-2's parser could **not** live in `packages/contract` — `packages/core/src/eta.ts` needs it,
+> and ADR-052's type-only gate forbids a runtime `core → contract` edge. Parser in `core`, ABNF + corpus
+> in `contract`. **(2)** There were **12** ad-hoc id-parsing sites, not 8; the four extras were in
+> `apps/edge/src/{dataset,search-index,stop-route}.ts` and `data-normalize/src/shards.ts`, and the line
+> numbers listed below had already drifted. The allowlist is now empty. **(3)** WP1-1 as sketched would
+> have made zod a *runtime* dependency of the package every screen imports; it is `import type` only, so
+> zod never enters the client bundle. **(4)** WP1-4 came in at **216 lines against the ~150 budget**,
+> which by the risk table below is the trigger to simplify rather than grow.
+> Two real bugs fell out of the work: `formatClock` consulted the device timezone and host ICU, and
+> `inferBusMarkers` could drop an approaching bus from the route view entirely. Both fixed; six further
+> defects are recorded as `knownDefect` corpus rows.
+
 | ID | Title | Scope | Acceptance | Depends |
 |---|---|---|---|---|
 | **WP1-1** | `packages/contract` | Transcribe today's types to Zod with **no shape changes**; `packages/core/src/types.ts` becomes `z.infer` re-exports | **Zero diff in `apps/mobile/**` and `apps/edge/**`.** OpenAPI 3.1 emits; drift-gated | — |
@@ -224,6 +240,8 @@ existing test coverage.
 | **WP2-5** | `favoriteRouteKey` + parser **+ a migration** tested against real captured preference blobs | `lib/preferences.ts:20` | M |
 | **WP2-6** | `snapFix` — grid-snap the GPS fix (25 m nearby / 50 m elsewhere) before it leaves the device | new; privacy control **and** the thing that makes `/v1/nearby` edge-cacheable | S |
 | **WP2-7** | Search index: content-hash version (replacing `${routes.length}.${stops.length}`), ETag/`If-None-Match`, precomputed zero-padded `sortKey` (`10A`→`0010A`), range scans replacing the trie | `apps/edge/src/search-index.ts`, `packages/core/src/search.ts`. **Rationale to preserve:** `localeCompare(numeric:true)` has no faithful Swift/Kotlin equivalent, so a client-side trie guarantees three divergent sort orders | L |
+| **WP2-8** | **Error taxonomy.** `{error}` → `{code, message, retryable}` with `code ∈ {not_found, bad_request, upstream_unavailable, upstream_timeout, internal}`, plus the status codes that go with it — a malformed id currently returns **502** where **400** is correct. **Added 2026-07-28:** this was specified in *The contracts* section from the start but no work package ever owned it, so it would not have happened. It is one job, not two: `502` reads as *retryable*, so an iOS Widget holding a deleted or malformed favourite retries forever — the status code and the taxonomy are the same defect. Ship it **additively** per ADR-052 §5 (serve `code`/`retryable` alongside `error`, let clients migrate, then retire `error`) | Conformance test asserts the taxonomy on every error path; a Widget can distinguish prune-permanently from retry-later | M |
+| **WP2-9** | **Split `RouteServiceInfo` by fidelity.** `/v1/route/:id` carries `patterns`; `/v1/stop/:id` omits it (the summary tier — duplicating it was 54 MB of an 82 MB build, ADR-055), but both satisfy the same optional-`patterns` schema, so a native client cannot tell *"this route has no frequency table"* from *"you asked the endpoint that doesn't send it"*. Two named schemas, or an explicit tier discriminator. **Added 2026-07-28** — recorded in ADR-052 as a known wrong-but-faithful transcription, owned by nobody until now | The two tiers are distinguishable from the OpenAPI document alone | S |
 
 ⚠️ **WP2-5 is a known-broken-scheme migration, not a move.** The favourite id scheme must be fixed
 before ADR-032 ships; shipping the `P:` → pole-id change without a migration loses users' favourites

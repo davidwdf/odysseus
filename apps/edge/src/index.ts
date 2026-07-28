@@ -148,8 +148,15 @@ export default {
 
     // GET /v1/nearby?lat=&lng=[&radius=]  → NearbyStop[]
     if (parts[0] === 'v1' && parts[1] === 'nearby') {
-      const lat = Number(url.searchParams.get('lat'))
-      const lng = Number(url.searchParams.get('lng'))
+      // `Number(null)` is **0**, not NaN, and `searchParams.get` returns null for an absent key —
+      // so reading these straight through `Number()` turned "no coordinates supplied" into "the
+      // coordinates are 0, 0" and served an empty list with a 200. A client with a broken location
+      // permission got a confident "no stops near you" instead of an error it could report.
+      // Malformed values (`lat=abc`) were rejected all along; only *missing* ones slipped through.
+      const latRaw = url.searchParams.get('lat')
+      const lngRaw = url.searchParams.get('lng')
+      const lat = latRaw === null ? Number.NaN : Number(latRaw)
+      const lng = lngRaw === null ? Number.NaN : Number(lngRaw)
       const radiusRaw = Number(url.searchParams.get('radius') ?? '500')
       // Clamped, because since WP0-1 the radius decides how many **KV keys** a request reads:
       // one per ~1.1 km geo cell, quadratic in the radius. Unclamped, `radius=50000` would fan

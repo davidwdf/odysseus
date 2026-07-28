@@ -1,0 +1,91 @@
+{
+  "comment": [
+    "The layer graph (ADR-051). This file is the single declaration: `pnpm boundaries:gen`",
+    "regenerates .dependency-cruiser.json and biome.json's `overrides` block from it, and",
+    "`pnpm boundaries:check` fails if either drifted. Edit here, never there.",
+    "`use` is the *direct* allowance; `useTypeOnly` permits `import type` only (ADR-052).",
+    "`npm`: an array is a closed-world allowlist, \"non-view\" is anything but `viewOnly`,",
+    "\"any\" is unrestricted and belongs to the one layer that may render.",
+    "`dirs` are the *policed* dirs — a package's own build scripts are Node tooling, not layer.",
+    "Each layer's allowance must stay transitively closed — the `-reach` rules assume it."
+  ],
+  "viewOnly": ["react*", "expo*", "@expo/*", "nativewind*", "zustand", "@tanstack/*", "lucide-*"],
+  "layers": {
+    "contract": {
+      "dirs": ["packages/contract/src"],
+      "use": [],
+      "npm": ["zod"]
+    },
+    "ports": {
+      "dirs": ["packages/ports/src"],
+      "use": [],
+      "npm": []
+    },
+    "kernel": {
+      "dirs": ["packages/core/src"],
+      "use": [],
+      "useTypeOnly": ["contract"],
+      "npm": [],
+      "npmTypeOnly": ["zod"],
+      "deniedGlobals": [
+        "fetch",
+        "crypto",
+        "Intl",
+        "localStorage",
+        "sessionStorage",
+        "navigator",
+        "window",
+        "document",
+        "process",
+        "performance",
+        "setTimeout",
+        "setInterval",
+        "XMLHttpRequest",
+        "WebSocket"
+      ],
+      "bannedSyntax": [
+        {
+          "pattern": "Date\\.now\\s*\\(",
+          "why": "take the clock as an explicit `now: number`"
+        },
+        {
+          "pattern": "new Date\\s*\\(\\s*\\)",
+          "why": "same — no implicit clock in the kernel"
+        },
+        {
+          "pattern": "Math\\.random\\s*\\(",
+          "why": "the kernel must be byte-reproducible"
+        },
+        {
+          "pattern": "toLocale[A-Za-z]*\\s*\\(",
+          "why": "host ICU + device timezone decide the output, so it cannot be hand-ported or pinned by a fixture"
+        }
+      ]
+    },
+    "tokens": {
+      "dirs": ["packages/ui/src", "packages/i18n/src"],
+      "use": ["contract", "kernel"],
+      "npm": []
+    },
+    "client": {
+      "dirs": ["packages/api-client/src"],
+      "use": ["contract", "kernel", "ports"],
+      "npm": []
+    },
+    "adapters": {
+      "dirs": ["packages/data-normalize/src"],
+      "use": ["contract", "kernel"],
+      "npm": ["zod"]
+    },
+    "server": {
+      "dirs": ["apps/edge"],
+      "use": ["contract", "kernel", "ports", "adapters"],
+      "npm": "non-view"
+    },
+    "view": {
+      "dirs": ["apps/mobile"],
+      "use": ["contract", "kernel", "ports", "tokens", "client"],
+      "npm": "any"
+    }
+  }
+}

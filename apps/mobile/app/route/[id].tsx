@@ -1,4 +1,11 @@
-import { etaView, fareRange, inferBusMarkers, type Locale, routeDistanceM } from '@nextbus/core'
+import {
+  etaView,
+  fareRange,
+  inferBusMarkers,
+  type Locale,
+  memberStopIds,
+  routeDistanceM,
+} from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -51,11 +58,12 @@ const TOKEN = 26
 const BADGE = 15
 
 /** Does a route-sequence stop id refer to the stop we opened this route from?
- *  Handles a merged same-kerb place id (`P:<a>+<b>`) matching either member. */
+ *  `memberStopIds` handles a merged same-kerb place id (`P:<a>+<b>+…`, any number of members) by
+ *  yielding its poles, and a lone pole id by yielding itself — so there is no place/pole branch
+ *  here at all. Grammar: `@nextbus/core/ids`. */
 function isOriginStop(routeStopId: string, origin?: string): boolean {
   if (!origin) return false
-  if (origin === routeStopId) return true
-  return origin.startsWith('P:') && origin.slice(2).split('+').includes(routeStopId)
+  return memberStopIds(origin).includes(routeStopId)
 }
 
 /** Upcoming (not-yet-departed) arrivals at a stop, soonest first, capped at 3. */

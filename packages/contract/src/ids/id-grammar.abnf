@@ -1,0 +1,104 @@
+; NextBus HK — the id grammar. ABNF per RFC 5234 (core rules ALPHA, DIGIT, VCHAR apply).
+;
+; WHY THIS FILE EXISTS, AND WHY IT IS NOT TYPESCRIPT
+; Every id in the system is a delimited string, and before WP1-2 twelve separate call sites each
+; re-derived the format with an inline `split(':')`. The grammar had no single statement anywhere,
+; so "what is a valid id?" was answerable only by reading all twelve. This file is that statement.
+; It lives in `@nextbus/contract`, next to the wire schemas, because it is one of the artefacts an
+; iOS/Android port consumes (WP3-3) — and a port cannot consume a `.ts` file.
+;
+; HOW THIS STAYS TRUE
+; The implementation (`packages/core/src/ids.ts`) is **hand-written**, and a Swift/Kotlin port will
+; be hand-written too. Nothing generates one from the other, so this file cannot be the thing that
+; proves they agree. `id-corpus.json` beside it is: every platform's test suite runs the same rows,
+; and a grammar change that a port has not picked up shows as a red suite there. That is ADR-052
+; decision (2)'s split — generated wire shapes get equivalence by construction, hand-ported rules
+; get it from a shared corpus.
+;
+; A NOTE ON STRICTNESS, WHICH IS A DECISION AND NOT AN OVERSIGHT
+; The three delimiters are validated absolutely; the *contents* of a field are barely validated at
+; all. Field values are minted by the operators (KMB stop ids, route numbers), not by us, so a
+; grammar that enumerated what we have seen would reject the first thing we have not — and the
+; failure mode of over-strictness is a rider's saved favourite going 404 because of a rule we
+; wrote after they saved it. Where we *do* mint the vocabulary ourselves (`bound`), it is closed.
+
+; ── Terminals ───────────────────────────────────────────────────────────────────────────────
+; Three characters are structural, and therefore may never appear inside any field:
+;   ":"  (%x3A) separates the fields of a stop id and of a route id
+;   "+"  (%x2B) separates the members of a place id
+;   "|"  (%x7C) separates the two halves of a favourite key
+
+UPPER        = %x41-5A                        ; A-Z
+
+idchar       = %x21-2A / %x2C-39 / %x3B-7B / %x7D-7E
+                                              ; printable ASCII minus SP, "+", ":" and "|".
+                                              ; Real values are far narrower — upper-case
+                                              ; alphanumerics: "18492910339E23AA", "002403",
+                                              ; "680X", "2003497". See the strictness note.
+
+; ── Operator ────────────────────────────────────────────────────────────────────────────────
+; Shape, not vocabulary. Today's members are KMB / LWB / CTB / GMB, declared once as a zod enum in
+; `wire/primitives.ts` and marked `x-unknown-tolerant`; ADR-052 decision (4) requires an already
+; installed client to degrade rather than break when a fifth operator ships, so the grammar must
+; parse an operator code it has never heard of. Two characters minimum is what keeps the reserved
+; one-character place prefix "P" unambiguous.
+
+operator     = UPPER 1*7(UPPER / DIGIT)
+
+; ── Stop (pole) id ──────────────────────────────────────────────────────────────────────────
+; e.g. "KMB:18492910339E23AA", "CTB:002403", "GMB:20001518".
+; `raw-stop-id` is the operator's own id — what the live ETA endpoints take.
+; EXACTLY two fields: that is what lets a stop id and a route id be told apart by shape alone.
+
+raw-stop-id  = 1*idchar
+stop-id      = operator ":" raw-stop-id
+
+; ── Route id ────────────────────────────────────────────────────────────────────────────────
+; e.g. "KMB:6:outbound:1", "CTB:720:inbound:1", "GMB:19M:outbound:2003497".
+;
+; `bound` is a CLOSED vocabulary, unlike `operator`: we mint it ourselves in `toBound()` from the
+; upstream "I"/"O", so no operator can spring a third value on us, and closing it is what lets the
+; parser return a typed direction instead of a string that is hopefully one.
+;
+; `service-type` carries two different things depending on operator, which is worth stating because
+; it looks like an inconsistency and is a deliberate one (ADR-047):
+;   KMB/CTB — the operator's service-type variant ("1", "2"). Numeric-looking, but an opaque label.
+;   GMB     — the globally unique GTFS route_id, because GMB route NUMBERS REPEAT across regions
+;             (three different "1A"s), so operator+number+bound is not unique for GMB alone.
+
+bound        = "inbound" / "outbound"
+route-no     = 1*idchar                       ; "6", "1A", "680X", "N269", "A11"
+service-type = 1*idchar
+route-id     = operator ":" route-no ":" bound ":" service-type
+
+; ── Place id (a merged same-kerb group, ADR-042) ────────────────────────────────────────────
+; e.g. "P:CTB:002403+KMB:18492910339E23AA" — and N members, not two: a kerb can hold four poles.
+; Self-describing on purpose, so a place resolves through its members without a table lookup.
+;
+; Member ORDER IS SIGNIFICANT syntax: the id is the string, and the dataset builder sorts members
+; by `localeCompare` before minting it. Re-sorting with another comparator produces a different
+; string for the same place and orphans every saved favourite, so the collation is a migration
+; concern (WP2-5), not a formatting one.
+;
+; A place of one member parses. The dataset never mints one (clustering requires two); rejecting it
+; would be the grammar making a claim about the clustering rules, which are not its business.
+
+place-prefix = "P"                            ; reserved; cannot collide with `operator` (1 char)
+place-id     = place-prefix ":" stop-id *( "+" stop-id )
+
+; ── Favourite key (ADR-032) ─────────────────────────────────────────────────────────────────
+; e.g. "KMB:18492910339E23AA|KMB:6:outbound:1" — the rider's "the 6, from THIS pole".
+;
+; This is the form that most repays having a real grammar. It contains a literal "|" AND both
+; halves contain ":", so the obvious `key.split('|')` destructured into a pair is wrong in a way
+; that does not announce itself: given two pipes it returns a plausible pair and drops the rest, so
+; a corrupt entry reads as a valid favourite for a route the rider never saved. Since neither half
+; may contain "|", EXACTLY ONE is required and anything else is rejected. (Which is also why
+; "split on the first |" — what `favoriteRouteKey`'s doc comment used to suggest — is not enough.)
+;
+; The `legacy-favourite-key` production is recorded, not endorsed: keys were once written with the
+; place id on the left, and place ids churn whenever clustering does. WP2-5 migrates them, so the
+; parser must still recognise them.
+
+favourite-key        = stop-id "|" route-id
+legacy-favourite-key = place-id "|" route-id
