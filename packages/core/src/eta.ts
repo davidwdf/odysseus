@@ -271,13 +271,28 @@ export function fareStages(fares: Array<string | undefined>): FareStage[] {
 // A deliberate, bounded exception to ADR-008: always shown as an explicit estimate, never as data.
 
 /**
+ * A fare figure as a number, or `undefined` when there isn't one.
+ *
+ * `Number('')` is **0**, not `NaN`, so a `Number.isFinite` guard alone let a *missing* fare through
+ * as zero — and both estimators below then produced a confident figure from nothing ("$0.0" for a
+ * child, "$2.0" for an elderly rider, because `max($2, 0)` is `$2`). Presenting an invented number
+ * as an estimate is precisely what ADR-008 forbids: absent must stay absent, so the caller renders
+ * nothing rather than a fare no rider will be charged.
+ */
+function parseFareOrUndefined(fare: string): number | undefined {
+  if (fare.trim() === '') return undefined
+  const n = Number(fare)
+  return Number.isFinite(n) ? n : undefined
+}
+
+/**
  * Approximate child (3–11) fare — roughly half the adult fare, rounded to $0.1. Estimate.
  *
  * @spec eta#estimateChildFare
  */
 export function estimateChildFare(adultFare: string): string | undefined {
-  const n = Number(adultFare)
-  if (!Number.isFinite(n)) return undefined
+  const n = parseFareOrUndefined(adultFare)
+  if (n === undefined) return undefined
   return (Math.round((n / 2) * 10) / 10).toFixed(1)
 }
 
@@ -288,8 +303,8 @@ export function estimateChildFare(adultFare: string): string | undefined {
  * @spec eta#estimateElderlyFare
  */
 export function estimateElderlyFare(adultFare: string): string | undefined {
-  const n = Number(adultFare)
-  if (!Number.isFinite(n)) return undefined
+  const n = parseFareOrUndefined(adultFare)
+  if (n === undefined) return undefined
   return (Math.round(Math.max(2, n * 0.2) * 10) / 10).toFixed(1)
 }
 
@@ -328,13 +343,33 @@ export function formatHeadway(headway: { min: number; max: number }, locale: Loc
     : `${EVERY_LABEL[locale]} ${span} ${MIN_LABEL[locale]}`
 }
 
+/**
+ * Normalize a GTFS-style `"HH:mm"` that may run past midnight into a real clock time.
+ *
+ * The frequency table expresses "01:35 the next day" as `"25:35"` (see `FreqBand` in the wire
+ * contract), which is correct for arithmetic and meaningless to a rider. Anything at or beyond
+ * 24:00 wraps; everything else, including values we can't parse, passes through untouched so a
+ * surprising upstream string is shown rather than mangled.
+ */
+function wrapPastMidnight(hhmm: string): string {
+  const m = /^(\d{1,3}):(\d{2})$/.exec(hhmm)
+  if (!m?.[1] || !m[2]) return hhmm
+  const h = Number(m[1])
+  if (h < 24) return hhmm
+  return `${String(h % 24).padStart(2, '0')}:${m[2]}`
+}
+
 /** Daily service span, "05:35 – 23:40" (24h clock; locale-independent). Spaced en dash for
  *  legibility — an unspaced dash visually fuses with the times on either side.
+ *
+ *  Past-midnight values are wrapped first: the dataset's `"25:35"` reaches a rider as `"01:35"`.
+ *  Doing it here rather than at every call site is deliberate — this is the display boundary, and
+ *  leaving it to callers is what let a raw `"25:35"` through in the first place.
  *
  * @spec eta#formatServiceHours
  */
 export function formatServiceHours(hours: { start: string; end: string }): string {
-  return `${hours.start} – ${hours.end}`
+  return `${wrapPastMidnight(hours.start)} – ${wrapPastMidnight(hours.end)}`
 }
 
 /** A coarse class for an operator ETA remark, for honest styling (ADR-008/036). `scheduled`

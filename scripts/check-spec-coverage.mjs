@@ -222,7 +222,7 @@ function analyse({ srcDir, specDir, required = [] }) {
     for (const [i, c] of g.cases.entries()) {
       const at = `${module}#${group}[${i}]`
       // `name` / `why` rather than `id` / `note`: WP1-2's id corpus
-      // (`packages/contract/src/ids/id-corpus.json`) already uses those names, and one corpus format
+      // (`packages/core/spec/ids.spec.json`) uses those names too, and one corpus format
       // across the repo is the difference between a native scaffold having one reader and two.
       if (typeof c.name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(c.name)) {
         fail(

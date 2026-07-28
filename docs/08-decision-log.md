@@ -2222,7 +2222,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 
 ## ADR-059 — The id grammar: one parser in `core`, the spec and corpus in `contract`
 - **Status:** **Decided and implemented 2026-07-28** (WP1-2). Implementation: `packages/core/src/ids.ts`;
-  spec + corpus `packages/contract/src/ids/{id-grammar.abnf,id-corpus.json}`; gate
+  ABNF `packages/contract/src/ids/id-grammar.abnf`; corpus `packages/core/spec/ids.spec.json`; gate
   `scripts/check-no-adhoc-id-parsing.mjs`.
 - **Context:** ids were parsed inline wherever they were needed. The plan counted eight such sites; a grep found
   **twelve** — the four the plan missed were in `apps/edge/src/{dataset,search-index,stop-route}.ts` and
@@ -2268,10 +2268,11 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     needs the migration, which is WP2-5's by the plan.
   - `lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`' key construction (both now go
     through the shared parser, with a comment tying them). Exporting one line-key helper from `core` is WP2-2.
-  - **A malformed id now returns `502`, which is wrong** — it is a permanent client error, so a `400` is
-    correct. It matters more than it looks: `502` reads as *retryable*, so an iOS Widget holding a malformed
-    favourite would retry forever. Fix it together with ADR-052's `{code, message, retryable}` error taxonomy,
-    since that is the same defect wearing a different hat.
+  - **A malformed id returns `502`, which is wrong** — it is a permanent client error, so `400` is correct,
+    and `502` reads as *retryable*, so an iOS Widget holding a malformed favourite would retry forever. **Now
+    scheduled as WP2-8** together with ADR-052's `{code, message, retryable}` taxonomy, since it is the same
+    defect wearing a different hat. It was previously a note in an ADR that no work package owned, which is
+    how something specified from the start quietly never happens.
 
 ## ADR-060 — The fixture corpus is the equivalence mechanism for domain rules
 - **Status:** **Decided and implemented 2026-07-28** (WP1-5). Implementation: `packages/core/spec/*.spec.json`,
@@ -2327,7 +2328,25 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     looks meaningful. Unreachable today; armed by any bad dataset build.
   - Doc inaccuracy, not a defect: `search.ts` offers `NA` as the night+airport example, but the family patterns
     require a digit, so bare `NA` is night-only. Recorded as `bare-na-is-night-only` so nobody "corrects" the regex.
-- **Open format question, deliberately left for whoever writes WP3-3.** WP1-5's corpus and WP1-2's
+- **Format converged, and it closed a real hole (2026-07-28).** WP1-2's id corpus and WP1-5's kernel corpora
+  were written in parallel and landed in different shapes and different directories. Converging them on
+  `groups` + `doc` moved `id-corpus.json` to **`packages/core/spec/ids.spec.json`**, gave `src/ids.ts` its ten
+  `@spec` tags, and moved the suite to `packages/core/test/ids.test.ts`. The ABNF stays in `packages/contract` —
+  that is a grammar specification, not test data.
+  This was not tidying. `src/ids.ts` was covered by **neither gate**: no `@spec` tag, so the rot check could not
+  see it, and absent from the coverage `include` list, so *"100% branches on `core`"* silently excluded the
+  module that parses persisted rider state. Bringing it in put its real figure at **84%**, and the branches it
+  exposed were `?? ''` fallbacks made unreachable by a length check one line above — dead code
+  `noUncheckedIndexedAccess` had demanded. Removed rather than suppressed, because this module is hand-ported
+  and a porter would faithfully reproduce a case that cannot happen. `core` is back to 100%, now over
+  **197 branches rather than 149**.
+  Two lessons worth keeping: a coverage `include` allowlist silently excludes modules that did not exist when it
+  was written, so it must be revisited whenever a module lands; and the migration was done under a script that
+  **aborted unless every recorded expectation was a checked projection of real output** — three projections
+  turned up (omitted keys, a member recorded as its id string, `stopKind` flattening `stop.kind`), and demanding
+  each be named is what kept a behaviour change from hiding inside a format migration.
+- **Superseded — the open format question, resolved above.** Left here because the reasoning still applies to
+  any third corpus: settle the shape before WP3-3 generates a native scaffold that would have to read two. WP1-5's corpus and WP1-2's
   `id-corpus.json` agree on `name`/`why`/`version` but still differ two ways: `doc` (a string) versus
   `$comment` (an array of lines), and cases nested under `groups` keyed by export versus flat sections.
   **Settle on `groups` + `doc` before WP3-3 generates a native scaffold that would otherwise have to read both**

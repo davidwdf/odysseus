@@ -945,12 +945,11 @@
         },
         {
           "name": "blank-fare-estimates-zero",
-          "why": "A blank string coerces to 0 and yields '0.0' rather than absent, so a caller that forgets to guard prints a $0.0 child fare. Recorded rather than silently differing per platform; the caller is responsible for not passing a blank. See the note on estimateElderlyFare's matching row.",
-          "knownDefect": true,
+          "why": "FIXED 2026-07-28. `Number('')` is 0, not NaN, so a `Number.isFinite` guard alone let a *missing* fare through as zero and printed a confident '$0.0' child fare. Absent must stay absent — inventing a figure and labelling it an estimate is what ADR-008 forbids. `parseFareOrUndefined` now rejects blank and whitespace input, so the caller renders nothing.",
           "args": {
             "adultFare": ""
           },
-          "expect": "0.0"
+          "expect": null
         }
       ]
     },
@@ -1002,12 +1001,11 @@
         },
         {
           "name": "blank-fare-estimates-the-floor",
-          "why": "A blank coerces to 0, and max($2, 0) is $2, so a missing fare silently becomes a confident '$2.0'. Same unguarded-input shape as estimateChildFare's blank row.",
-          "knownDefect": true,
+          "why": "FIXED 2026-07-28. The same blank-input defect, and worse here because `max($2, 0)` is `$2`: a missing fare became a plausible '$2.0' rather than an obvious zero. Now undefined.",
           "args": {
             "adultFare": ""
           },
-          "expect": "2.0"
+          "expect": null
         }
       ]
     },
@@ -1172,15 +1170,14 @@
         },
         {
           "name": "past-midnight-end-is-not-normalized",
-          "why": "'25:35' means 01:35 the next day in the GTFS frequency table (see FreqBand). This formatter prints it as-is, so a caller passing a raw band value shows a rider '25:35'. Recorded to pin responsibility: the wrap must be resolved before formatting, and any platform that 'fixes' it here diverges from the others.",
-          "knownDefect": true,
+          "why": "FIXED 2026-07-28. '25:35' means 01:35 the next day in the GTFS frequency table (see FreqBand). The formatter now wraps anything at or past 24:00, because this is the display boundary — leaving the wrap to callers is exactly what let a raw '25:35' reach a rider. Unparseable values still pass through untouched, so a surprising upstream string is shown rather than mangled.",
           "args": {
             "hours": {
               "start": "05:30",
               "end": "25:35"
             }
           },
-          "expect": "05:30 – 25:35"
+          "expect": "05:30 – 01:35"
         },
         {
           "name": "round-the-clock",
@@ -1191,6 +1188,17 @@
             }
           },
           "expect": "00:00 – 23:59"
+        },
+        {
+          "name": "unparseable-value-passes-through-untouched",
+          "why": "The wrap only fires on something that actually looks like HH:mm. Anything else is shown as-is rather than mangled or blanked, on the principle that a surprising upstream string should reach someone who can report it. Pinned because the alternative — silently emptying the field — would look like missing data rather than bad data.",
+          "args": {
+            "hours": {
+              "start": "dawn",
+              "end": "23:40"
+            }
+          },
+          "expect": "dawn – 23:40"
         }
       ]
     },

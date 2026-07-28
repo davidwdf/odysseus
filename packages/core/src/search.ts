@@ -110,6 +110,11 @@ export function buildRouteTrie(routeNos: Iterable<string>): RouteTrieNode {
   const root = newNode()
   for (const raw of routeNos) {
     const no = raw.toUpperCase()
+    // A blank route number walks no characters, so it would mark the ROOT terminal — which makes
+    // `isCompleteRoute(root, '')` true and tells the keypad that submitting an empty query is
+    // meaningful. The edge index emits no blank numbers today, but nothing rejects one either, so
+    // a single bad dataset build would arm it. Skipping is right regardless: a blank is not a route.
+    if (no === '') continue
     let node = root
     for (const ch of no) {
       let next = node.children.get(ch)

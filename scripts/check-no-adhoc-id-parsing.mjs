@@ -175,7 +175,7 @@ if (unexpected.length > 0 || stale.length > 0) {
     for (const a of stale) console.error(`  · ${a.file}  "${a.snippet}"`)
   }
   console.error(`\n  Grammar: packages/contract/src/ids/id-grammar.abnf`)
-  console.error(`  Corpus:  packages/contract/src/ids/id-corpus.json`)
+  console.error(`  Corpus:  packages/core/spec/ids.spec.json`)
   process.exit(1)
 }
 

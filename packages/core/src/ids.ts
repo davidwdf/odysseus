@@ -11,7 +11,7 @@
 // Where the pieces live, and why they are not all in one package:
 //   · The grammar itself is `packages/contract/src/ids/id-grammar.abnf` — ABNF, because the
 //     artefact an iOS/Android port reads must not be TypeScript.
-//   · The corpus is `packages/contract/src/ids/id-corpus.json` — language-neutral rows. This
+//   · The corpus is `packages/core/spec/ids.spec.json` — language-neutral rows. This
 //     parser is hand-written and a Swift port will be hand-written too, so the corpus (not the
 //     grammar file, and certainly not this file) is the mechanism that proves the two agree.
 //     That is exactly ADR-052 decision (2)'s division: generated shapes get equivalence by
@@ -156,12 +156,17 @@ export interface FavoriteRouteKeyParts {
  *
  * The **exactly two fields** rule is what makes stop ids and route ids tell each other apart by
  * shape alone, so `parseStopId('KMB:6:outbound:1')` is `null` rather than a stop at KMB pole `6`.
+ *
+ * @spec ids#parseStopId
  */
 export function parseStopId(id: string): StopIdParts | null {
   const fields = id.split(FIELD_SEP)
   if (fields.length !== 2) return null
-  const operator = fields[0] ?? ''
-  const rawId = fields[1] ?? ''
+  // The length check above makes both elements present; the assertion is what stops
+  // `noUncheckedIndexedAccess` demanding `?? ''` fallbacks that can never run. Dead branches matter
+  // here beyond coverage: this module is hand-ported, and a porter would faithfully reproduce a
+  // case that cannot happen.
+  const [operator, rawId] = fields as [string, string]
   if (!OPERATOR_RE.test(operator) || !ID_CHAR_RE.test(rawId)) return null
   return { kind: 'stop', id, operator: operator as OperatorId, rawId }
 }
@@ -175,6 +180,8 @@ export function parseStopId(id: string): StopIdParts | null {
  * saved id to somewhere they did not save. A place of one is accepted although the dataset never
  * mints one (`buildPlaces` requires two): it is unambiguous, and a grammar that rejected it would
  * be making a claim about the clustering rules, which are not this module's business.
+ *
+ * @spec ids#parsePlaceId
  */
 export function parsePlaceId(id: string): PlaceIdParts | null {
   if (!id.startsWith(PLACE_PREFIX)) return null
@@ -189,7 +196,9 @@ export function parsePlaceId(id: string): PlaceIdParts | null {
   return { kind: 'place', id, members }
 }
 
-/** Either id shape `/v1/stop/:id` accepts, discriminated by `kind`. */
+/** Either id shape `/v1/stop/:id` accepts, discriminated by `kind`.  *
+ * @spec ids#parseStopOrPlaceId
+ */
 export function parseStopOrPlaceId(id: string): StopOrPlaceIdParts | null {
   return parsePlaceId(id) ?? parseStopId(id)
 }
@@ -198,14 +207,14 @@ export function parseStopOrPlaceId(id: string): StopOrPlaceIdParts | null {
  * A canonical route id: `<operator>:<routeNo>:<bound>:<serviceType>`, e.g. `KMB:6:outbound:1` or
  * GMB's `GMB:19M:outbound:2003497`. Exactly four fields, and `bound` must be one of the two real
  * directions — a route id whose direction we cannot read is not usable for anything we do with it.
+ *
+ * @spec ids#parseRouteId
  */
 export function parseRouteId(id: string): RouteIdParts | null {
   const fields = id.split(FIELD_SEP)
   if (fields.length !== 4) return null
-  const operator = fields[0] ?? ''
-  const routeNo = fields[1] ?? ''
-  const bound = fields[2] ?? ''
-  const serviceType = fields[3] ?? ''
+  // See parseStopId: the length check makes the assertion sound and removes four dead branches.
+  const [operator, routeNo, bound, serviceType] = fields as [string, string, string, string]
   if (!OPERATOR_RE.test(operator)) return null
   if (!ID_CHAR_RE.test(routeNo) || !ID_CHAR_RE.test(serviceType)) return null
   if (!isBound(bound)) return null
@@ -221,12 +230,14 @@ export function parseRouteId(id: string): RouteIdParts | null {
  * as a *valid* favourite for a route the rider never saved. Neither half may contain a `|`, so
  * two pipes means corruption, and the honest answer is `null`. (The same reasoning rules out
  * "split on the first `|`", which is what `favoriteRouteKey`'s doc comment used to suggest.)
+ *
+ * @spec ids#parseFavoriteRouteKey
  */
 export function parseFavoriteRouteKey(key: string): FavoriteRouteKeyParts | null {
   const halves = key.split(FAVORITE_SEP)
   if (halves.length !== 2) return null
-  const stopId = halves[0] ?? ''
-  const routeId = halves[1] ?? ''
+  // See parseStopId.
+  const [stopId, routeId] = halves as [string, string]
   const stop = parseStopOrPlaceId(stopId)
   const route = parseRouteId(routeId)
   if (!stop || !route) return null
@@ -243,6 +254,8 @@ export function parseFavoriteRouteKey(key: string): FavoriteRouteKeyParts | null
  *   · Anything else is passed through as one opaque id, *without* being validated. The lookup that
  *     follows decides whether it exists. Rejecting it here would let a grammar written today
  *     invalidate an id a rider saved yesterday that the dataset still resolves.
+ *
+ * @spec ids#memberStopIds
  */
 export function memberStopIds(id: string): string[] {
   const place = parsePlaceId(id)
@@ -257,13 +270,17 @@ export function memberStopIds(id: string): string[] {
 // arguments (canonical fields from the dataset builder); the corpus round-trips them through the
 // parsers, which is what proves the two directions agree.
 
-/** `KMB` + `18492910339E23AA` → `KMB:18492910339E23AA`. */
+/** `KMB` + `18492910339E23AA` → `KMB:18492910339E23AA`.  *
+ * @spec ids#formatStopId
+ */
 export function formatStopId(operator: OperatorId, rawId: string): string {
   return `${operator}${FIELD_SEP}${rawId}`
 }
 
 /** `KMB`, `6`, `outbound`, `1` → `KMB:6:outbound:1`. Was `canonicalRouteId` in
- *  `@nextbus/data-normalize`, which now re-exports this so there is one template, not two. */
+ *  `@nextbus/data-normalize`, which now re-exports this so there is one template, not two.  *
+ * @spec ids#formatRouteId
+ */
 export function formatRouteId(
   operator: OperatorId,
   routeNo: string,
@@ -282,13 +299,17 @@ export function formatRouteId(
  * comparator here (a portable code-point sort, say) would mint a *different string* for the same
  * place and silently orphan those favourites. Changing the collation is therefore a migration,
  * not a formatting choice — noted for WP2-5, which already owns the id-scheme migration.
+ *
+ * @spec ids#formatPlaceId
  */
 export function formatPlaceId(memberIds: readonly string[]): string {
   return `${PLACE_PREFIX}${memberIds.join(MEMBER_SEP)}`
 }
 
 /** A route-at-stop favourite key (ADR-032). `stopId` should be the **member pole** id, never the
- *  churning `P:` place id — see `FavoriteRouteKeyParts.stop`. */
+ *  churning `P:` place id — see `FavoriteRouteKeyParts.stop`.  *
+ * @spec ids#formatFavoriteRouteKey
+ */
 export function formatFavoriteRouteKey(stopId: string, routeId: string): string {
   return `${stopId}${FAVORITE_SEP}${routeId}`
 }

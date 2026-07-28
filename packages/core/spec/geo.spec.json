@@ -284,21 +284,19 @@
         },
         {
           "name": "just-under-a-kilometre-prints-1000m",
-          "why": "DEFECT. 995 m is below the 1 000 m branch, so it takes the metres path, and rounding to the nearest 10 lands on 1000 — the label reads '1000m' where it should read '1.0km'. Affects 995-999 m, i.e. one metre in every 200 shown. Cosmetic but visibly inconsistent next to a neighbouring stop's '1.0km'. Recorded so all platforms agree while it stands; the fix is to compare the ROUNDED metres against 1000, and it must land everywhere at once.",
-          "knownDefect": true,
+          "why": "FIXED 2026-07-28. The unit was chosen from the RAW distance, so 995-999 m took the metres path and then rounded to '1000m'. Rounding now happens first and the unit is chosen from the rounded value. Affected roughly one reading in 200, shown beside a neighbouring stop's '1.0km'.",
           "args": {
             "distanceM": 995
           },
-          "expect": "1000m"
+          "expect": "1.0km"
         },
         {
           "name": "one-metre-under-a-kilometre-prints-1000m",
-          "why": "The far end of the same defect: 999 m also prints '1000m' rather than '1.0km'. Two rows because the range 995-999 is what the fix must cover, and a single row invites a port to special-case one value. Both become '1.0km' when the rounded metres are compared against 1000.",
-          "knownDefect": true,
+          "why": "The far end of the same range. Two rows because 995-999 is what the fix had to cover, and a single row invites a port to special-case one value.",
           "args": {
             "distanceM": 999
           },
-          "expect": "1000m"
+          "expect": "1.0km"
         },
         {
           "name": "exactly-one-kilometre-switches-unit",

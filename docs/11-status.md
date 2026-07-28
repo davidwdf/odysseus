@@ -465,17 +465,20 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    note WP1-2 left `apps/mobile/lib/preferences.ts`'s own `favoriteRouteKey` template in place precisely because
    folding it into the shared formatter *is* that migration.
    **Highest-value loose ends Wave 1 left, in priority order:**
-   - **Six recorded `knownDefect` rows in `packages/core/spec/`** (ADR-060) — real bugs in shipped code, each
-     with its corrected expectation already written. Cheapest correctness work available: `formatDistance`
-     printing `"1000m"` for 995–999 m; `estimateChildFare('')` → `"0.0"`; `formatStopCount(1)` → `"1 stops"`;
-     `formatServiceHours` leaking a raw `"25:35"`; `buildRouteTrie('')` making the trie root terminal.
-   - **The error taxonomy** (ADR-052 (a) + ADR-059's last follow-up) — `{error}` → `{code, message, retryable}`,
-     and a malformed id returning `502` where `400` is correct. One job, because a `502` reads as *retryable* and
-     an iOS Widget holding a stale favourite would retry forever.
-   - **Settle the corpus format** before WP3-3 (ADR-060's open question): `groups` + `doc` repo-wide, so a native
-     scaffold doesn't have to read two shapes.
+   - ✅ **Done 2026-07-28:** five of the six `knownDefect` rows are fixed (`formatDistance` 995–999 m,
+     `estimateChildFare('')`, `estimateElderlyFare('')`, `formatServiceHours`' past-midnight wrap,
+     `buildRouteTrie('')`), and the corpus format is converged. **One `knownDefect` remains on purpose:**
+     `formatStopCount(1, 'en')` → `"1 stops"` needs a plural-aware key and belongs to **WP3-2** (i18n → ICU),
+     not a per-platform patch.
+   - **WP2-8 — the error taxonomy** (newly added to the plan; nothing owned it before). `{error}` →
+     `{code, message, retryable}` *and* the status codes: a malformed id returns `502` where `400` is right, and
+     `502` reads as retryable, so a Widget holding a stale favourite retries forever. Ship additively per
+     ADR-052 §5.
+   - **WP2-9 — split `RouteServiceInfo` by fidelity** (also newly added). A native client currently cannot tell
+     "no frequency table" from "you asked the summary endpoint".
    - **`layers.json` is 44% over its line budget** — per the plan's own risk row that is the signal to simplify
-     the generator, not to grow it.
+     the generator when it next needs to change, not to grow it. Not worth touching working, self-testing code
+     for a line count alone.
 2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
    (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
 3. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL, and **deliberately

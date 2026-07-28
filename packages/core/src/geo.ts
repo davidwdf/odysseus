@@ -66,7 +66,15 @@ export function walkMinutes(distanceM: number): number {
  * @spec geo#formatDistance
  */
 export function formatDistance(distanceM: number): string {
-  if (distanceM < 1000) return `${Math.round(distanceM / 10) * 10}m`
+  // The unit is chosen from the ROUNDED metres, but the km figure is computed from the raw
+  // distance. Both halves matter and they are easy to conflate:
+  //  · choosing from the raw distance sent 995–999 m down the metres path, where rounding to the
+  //    nearest 10 then produced "1000m" — about one reading in 200, sitting next to a neighbouring
+  //    stop's "1.0km" and reading as a different kind of number;
+  //  · but formatting the km figure from the rounded value too would drag 1049 m up to "1.1km",
+  //    because 1049 rounds to 1050. The corpus pins both ends, which is how that was caught.
+  const rounded = Math.round(distanceM / 10) * 10
+  if (rounded < 1000) return `${rounded}m`
   return `${(distanceM / 1000).toFixed(1)}km`
 }
 

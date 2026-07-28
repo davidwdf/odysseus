@@ -501,13 +501,12 @@
         },
         {
           "name": "a-blank-route-number-makes-the-root-terminal",
-          "why": "DEFECT. An empty string walks no characters, so it marks the ROOT as terminal — which makes `isCompleteRoute(root, '')` true and tells the keypad that submitting an empty query is meaningful. Unreachable today (the edge index never emits a blank route number) but nothing rejects one, so a bad dataset build would arm it. Recorded rather than left to each platform to handle differently; the fix is to skip blanks on insertion.",
-          "knownDefect": true,
+          "why": "FIXED 2026-07-28. An empty string walked no characters and so marked the ROOT terminal, making `isCompleteRoute(root, '')` true and telling the keypad that submitting an empty query was meaningful. Blank numbers are now skipped. Unreachable today — the edge index emits none — but nothing rejected one, so a bad dataset build would have armed it.",
           "args": {
             "routeNos": [""]
           },
           "expect": {
-            "terminal": true,
+            "terminal": false,
             "children": {}
           }
         }

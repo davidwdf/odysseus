@@ -24,7 +24,7 @@
 /** One row of a corpus group. `args` is named arguments; `expect` is the whole expected result. */
 export interface SpecCase<Args, Expected> {
   /** Lower-kebab-case, unique within the group. `name` and `why` match the field names WP1-2's id
-   *  corpus already uses (`packages/contract/src/ids/id-corpus.json`), so one reader serves both. */
+   *  corpus uses (`spec/ids.spec.json`), so one reader serves every corpus in this package. */
   name: string
   /** Prose for a porter: what this row catches, and why it is not decorative. */
   why?: string
