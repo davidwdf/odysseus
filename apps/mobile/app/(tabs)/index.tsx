@@ -1,5 +1,5 @@
 import type { Locale, NearbyStop } from '@nextbus/core'
-import { t } from '@nextbus/i18n'
+import { type LocalizedString, t } from '@nextbus/i18n'
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { LocateFixed } from 'lucide-react-native'
@@ -148,7 +148,7 @@ function Denied({
   onAction,
 }: {
   locale: Locale
-  actionLabel: string
+  actionLabel: LocalizedString
   onAction: () => void
 }) {
   return (
@@ -164,7 +164,7 @@ function Denied({
   )
 }
 
-function LoadingList({ label }: { label: string }) {
+function LoadingList({ label }: { label: LocalizedString }) {
   return (
     <View>
       <Text variant="label" className="px-4 pb-1 text-muted">

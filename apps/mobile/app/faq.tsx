@@ -1,5 +1,5 @@
 import type { Locale } from '@nextbus/core'
-import { type Messages, t } from '@nextbus/i18n'
+import { type PlainMessageKey, t } from '@nextbus/i18n'
 import { useRouter } from 'expo-router'
 import { ChevronDown } from 'lucide-react-native'
 import { useState } from 'react'
@@ -11,8 +11,8 @@ import { Text } from '../components/Text'
 import { useLocale } from '../providers/LocaleProvider'
 
 // Each entry is a question/answer string pair in @nextbus/i18n. Add a pair here
-// (and its keys to Messages) to grow the FAQ — no layout change needed.
-const ITEMS: { q: keyof Messages; a: keyof Messages }[] = [
+// (and its keys to the catalogue) to grow the FAQ — no layout change needed.
+const ITEMS: { q: PlainMessageKey; a: PlainMessageKey }[] = [
   { q: 'faqFreshnessQ', a: 'faqFreshnessA' },
   { q: 'faqTimingsQ', a: 'faqTimingsA' },
   { q: 'faqCoverageQ', a: 'faqCoverageA' },
@@ -80,8 +80,8 @@ function FaqAccordion({
   open,
   onToggle,
 }: {
-  q: keyof Messages
-  a: keyof Messages
+  q: PlainMessageKey
+  a: PlainMessageKey
   locale: Locale
   open: boolean
   onToggle: () => void

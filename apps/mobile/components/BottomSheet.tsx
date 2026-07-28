@@ -1,3 +1,4 @@
+import type { LocalizedString } from '@nextbus/i18n'
 import type { LucideIcon } from 'lucide-react-native'
 import { type ReactNode, useCallback, useRef } from 'react'
 import { type LayoutChangeEvent, Pressable, useWindowDimensions, View } from 'react-native'
@@ -55,7 +56,7 @@ export function BottomSheet({
   /** Content above the actions (e.g. what's being favourited). */
   header?: ReactNode
   /** Accessible label for the scrim's tap-to-dismiss target. */
-  closeLabel?: string
+  closeLabel?: LocalizedString
   children: ReactNode | ((close: () => void) => ReactNode)
 }) {
   const insets = useSafeAreaInsets()
@@ -186,7 +187,7 @@ export function SheetAction({
   icon: LucideIcon
   /** Fill colour for the glyph (e.g. a filled star when already saved). */
   iconFill?: string
-  label: string
+  label: LocalizedString
   tone?: IconTone
   onPress: () => void
 }) {

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Generated from packages/i18n/src/catalogue.ts — do not edit. Re-run `pnpm --filter @nextbus/i18n strings:emit`. Locale: en. -->
+<plist version="1.0">
+<dict>
+	<key>stopCount</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d stop</string>
+			<key>other</key>
+			<string>%d stops</string>
+		</dict>
+	</dict>
+	<key>moreRoutes</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>+%d more route</string>
+			<key>other</key>
+			<string>+%d more routes</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

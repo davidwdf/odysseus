@@ -1,10 +1,11 @@
+import type { LocalizedString } from '@nextbus/i18n'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { Text } from './Text'
 
 export interface FilterChip {
   key: string
-  label: string
+  label: LocalizedString
   active: boolean
 }
 

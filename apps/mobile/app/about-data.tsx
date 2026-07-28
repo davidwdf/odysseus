@@ -1,5 +1,5 @@
 import type { Locale } from '@nextbus/core'
-import { type Messages, t } from '@nextbus/i18n'
+import { type LocalizedString, type PlainMessageKey, t } from '@nextbus/i18n'
 import Constants from 'expo-constants'
 import { useRouter } from 'expo-router'
 import { ExternalLink } from 'lucide-react-native'
@@ -74,7 +74,7 @@ export default function AboutData() {
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children }: { title: LocalizedString; children: ReactNode }) {
   return (
     <View className="pt-6">
       <Text variant="label" className="mb-1 px-4 text-subtle">
@@ -92,8 +92,8 @@ function LinkRow({
   url,
   locale,
 }: {
-  titleKey: keyof Messages
-  bodyKey: keyof Messages
+  titleKey: PlainMessageKey
+  bodyKey: PlainMessageKey
   url: string
   locale: Locale
 }) {

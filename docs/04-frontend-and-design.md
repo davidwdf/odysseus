@@ -128,9 +128,93 @@ A smart, real concern — and the reason it pushes you toward PWA is exactly the
 ### Localization
 - **EN / 繁體中文 / 简体中文** from day one (`packages/i18n`). Cheap to do early: the upstream APIs
   already return all three name variants (`name_en` / `name_tc` / `name_sc`) for every route, stop,
-  and destination, so localized **data** is free — only our own UI chrome strings need translating
-  (one extra locale file). All data names carry i18n variants from the canonical model. Locale
-  auto-detected, user-overridable. See [ADR-014](./08-decision-log.md).
+  and destination, so localized **data** is free — only our own UI chrome strings need translating.
+  All data names carry i18n variants from the canonical model. Locale auto-detected,
+  user-overridable. See [ADR-014](./08-decision-log.md) and ADR-054.
+
+**One declaration: `packages/i18n/src/catalogue.ts`.** Every UI string, in all three locales,
+authored in an ICU subset. It is **key-major** — the three renderings of a message sit together, so
+a translator compares them without scrolling and a gate can compare them at all. Everything else is
+derived from it: the `MessageKey` union, the argument types, and the native artefacts below.
+
+```
+pnpm --filter @nextbus/i18n strings:emit   # → packages/i18n/generated/
+pnpm --filter @nextbus/i18n test           # parity + ICU + drift gates, and their selftest
+```
+
+**The ICU subset** is `{name}` and `{n, plural, one{…} other{…}}` (`#` is the count) — no `select`,
+no skeletons, no ICU apostrophe quoting, so an apostrophe is always literal. The runtime is ~120
+hand-written lines in `src/icu.ts` over **`Intl.PluralRules`**, not `intl-messageformat`: the
+`tokens` layer's npm allowlist is closed (`layers.json`), and a PWA should not ship ~40 kB of parser
+to format three placeholders. `Intl` is banned in the **kernel** only, where a rule must be
+reproducible from a fixture; picking a plural category is precisely the job to leave to the host's
+CLDR data. `validateMessage` rejects anything outside the subset and the gate runs it over all
+351 strings, so the parser never meets input it cannot describe.
+
+**Arguments are typed from the message text itself.** `t()`'s third parameter is derived from the
+`en` literal by a template-literal type, so `t(locale, 'stopCount')` with no count, or with the wrong
+argument name, is a compile error. This is why the subset forbids a placeholder *nested inside* a
+plural branch: the type-level extractor cannot see one, so the gate bans it rather than silently
+missing it.
+
+**`LocalizedString` — the display boundary.** `t()` returns a branded `string`; nothing else
+constructs one. The brand is assignable **to** `string` but not **from** it, so every existing call
+site still compiles while a bare literal is rejected wherever localized copy is required. Applied
+to UI-chrome props (`Button.label`, `Section.title`, `Empty.label`, `SheetAction.label`,
+`accessibilityLabel` on our own components, `NumberField.placeholder`, …). Bus **data** props —
+stop names, route numbers, fares, formatted ETAs — stay `string`; they are localized upstream, and
+`@nextbus/core` cannot import the brand without breaking the layer graph.
+
+Three documented escape hatches, each named for what it is:
+`endonym(locale)` (language names must *not* follow the locale — a Chinese UI still shows
+"English"), `localeRecord(key)` (the `Record<Locale, …>` shape the `TileSource` port wants), and
+`dataText(i18nText, locale)` (takes the canonical record, never a bare string, so a literal cannot
+be laundered through it).
+
+**Two gates, because one cannot reach everywhere.** The type brand is primary. The second net is
+`bannedSyntax` on the `view` layer in `layers.json`, covering what the brand provably cannot: React
+Native's *own* props are typed `string`, so `accessibilityLabel="Back"` on a `Pressable` is legal
+TypeScript. It bans literal `accessibilityLabel`, literal `placeholder`, and `.replace('{…'`
+message interpolation. Both are watched failing — `pnpm boundaries:selftest` (fixture
+`view-hardcoded-copy`, which pairs each violation with the correct form so the rules must
+discriminate) and `check-i18n.mts --selftest`.
+
+Known gaps, stated rather than implied: `Text`'s **children** are not branded, because glue (`·`,
+`→`), numbers and core-formatted strings all legitimately render there and `@nextbus/core`'s
+formatters cannot return a branded type from the `kernel` layer. `app/workbench.tsx` (a dev-only
+design gallery) keeps its ~84 specimen literals — inventing catalogue keys for them would ship fake
+copy in three locales to describe a screen no user reaches — though it is still bound by the brand
+wherever it uses a real component.
+
+**`packages/core` owns the rule, `packages/i18n` owns the word.** `formatStopCount` was deleted from
+the kernel: a pure label with no rule, whose `en` output was `"1 stops"` — the corpus row's own
+`why` prescribed a plural-aware i18n key over a per-platform `n === 1` branch. The other six label
+tables (`DUE_LABEL`, `MIN_LABEL`, `EVERY_LABEL`, `ABOUT_LABEL`, `WALK_LABEL`, `COMPASS_LABELS`)
+stay: each is an uninflected unit word attached to a real rule that a port reproduces from the
+corpus. See ADR-054.
+
+#### `packages/i18n/generated/` — what a native developer needs to know
+Committed so a reviewer sees it in the diff and a consumer with no Node toolchain can read it, and
+drift-gated by `test`. **Nothing here is verified by a compiler in this repo** — there is no Xcode
+or Gradle on the build machine, so these files are checked for drift against the catalogue and for
+escaping, and nothing more. Expect to fix something the first time they are consumed.
+
+| | |
+|---|---|
+| iOS | `generated/ios/{en,zh-Hant,zh-Hans}.lproj/Localizable.strings` + `.stringsdict` for plurals |
+| Android | `generated/android/{values,values-b+zh+Hant,values-b+zh+Hans}/strings.xml`, plurals as `<plurals>` |
+
+- **Resource names are the catalogue keys verbatim** — `stopCount`, not `stop_count`. Android
+  convention is snake_case, but a name transformation is a second place for the two sides to
+  disagree, and `R.string.stopCount` is legal.
+- **Named ICU arguments become positional**, numbered by first appearance in the `en` message:
+  `{place}` → `%1$@` (iOS) / `%1$s` (Android). Every parameterised entry carries the mapping as a
+  comment, because a positional format string is unreadable without it.
+- **Simple arguments are string specifiers (`%@`/`%s`) — pass a count as a string.** Only a plural
+  rule variable is numeric (`%d`), because ICU `{n}` carries no type and this subset adds none.
+- Escaping is handled for `&`/`<`/`>` (XML entities) and `'`/`"` (backslash, Android) — but the
+  generator **throws** rather than guess on a literal `%` or a leading `@`/`?`. No message contains
+  one today; the first that does should be a decision, not a guess inside a generated file.
 
 ## State & data on the client
 - **TanStack Query (React Query)** — server-state caching, dedupe, background refresh; the v2

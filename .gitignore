@@ -16,6 +16,13 @@ web-build/
 ios/
 android/
 *.orig.*
+# …but `packages/i18n/generated/{ios,android}` are *committed* generated artefacts, not prebuild
+# output. Their drift gate compares them against a fresh generation, so excluding them would let the
+# gate pass on this machine while a clean checkout had nothing to compare against — a green gate over
+# missing files. Re-included explicitly, and as directories: git does not descend into a directory
+# excluded by an `ios/`-style pattern, so a `**` negation alone would never reach them.
+!packages/i18n/generated/ios/
+!packages/i18n/generated/android/
 
 # cloudflare workers
 .wrangler/

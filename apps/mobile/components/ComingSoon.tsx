@@ -1,10 +1,10 @@
-import { type Messages, t } from '@nextbus/i18n'
+import { type PlainMessageKey, t } from '@nextbus/i18n'
 import { View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocale } from '../providers/LocaleProvider'
 import { Text } from './Text'
 
-export function ComingSoon({ titleKey }: { titleKey: keyof Messages }) {
+export function ComingSoon({ titleKey }: { titleKey: PlainMessageKey }) {
   const locale = useLocale()
   const insets = useSafeAreaInsets()
   return (

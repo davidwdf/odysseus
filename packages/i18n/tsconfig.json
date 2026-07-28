@@ -1,4 +1,5 @@
 {
   "extends": "@nextbus/tsconfig/base.json",
-  "include": ["src"]
+  "compilerOptions": { "allowImportingTsExtensions": true },
+  "include": ["src", "scripts"]
 }

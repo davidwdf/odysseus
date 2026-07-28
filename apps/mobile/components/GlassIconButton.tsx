@@ -1,3 +1,4 @@
+import type { LocalizedString } from '@nextbus/i18n'
 import { ArrowLeft, type LucideIcon } from 'lucide-react-native'
 import { Pressable, type StyleProp, type ViewStyle } from 'react-native'
 import { GlassView } from './GlassView'
@@ -23,7 +24,7 @@ export function GlassIconButton({
 }: {
   icon: LucideIcon
   onPress: () => void
-  accessibilityLabel: string
+  accessibilityLabel: LocalizedString
   size?: number
   tone?: IconTone
   iconSize?: number
@@ -54,15 +55,21 @@ export function GlassIconButton({
   )
 }
 
-/** The standard back button: a glass lens with a left arrow. */
+/**
+ * The standard back button: a glass lens with a left arrow.
+ *
+ * `accessibilityLabel` is **required**. It used to default to the literal `'Back'`, so every caller
+ * that omitted it shipped English to a screen reader in a Chinese UI — and the default is precisely
+ * what made the omission legal and therefore invisible. Callers pass `t(locale, 'back')`.
+ */
 export function BackButton({
   onPress,
-  accessibilityLabel = 'Back',
+  accessibilityLabel,
   size,
   style,
 }: {
   onPress: () => void
-  accessibilityLabel?: string
+  accessibilityLabel: LocalizedString
   size?: number
   style?: StyleProp<ViewStyle>
 }) {

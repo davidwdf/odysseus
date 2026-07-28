@@ -19,7 +19,6 @@ import {
   formatJourney,
   formatRelative,
   formatServiceHours,
-  formatStopCount,
   isStale,
   type RemarkKind,
 } from '../src/eta'
@@ -138,14 +137,6 @@ describe('eta#estimateElderlyFare', () => {
   for (const c of cases<{ adultFare: string }, string | null>('estimateElderlyFare')) {
     it(c.name, () => {
       expect(estimateElderlyFare(c.args.adultFare)).toBe(c.expect ?? undefined)
-    })
-  }
-})
-
-describe('eta#formatStopCount', () => {
-  for (const c of cases<{ n: number; locale: Locale }, string>('formatStopCount')) {
-    it(c.name, () => {
-      expect(formatStopCount(c.args.n, c.args.locale)).toBe(c.expect)
     })
   }
 })

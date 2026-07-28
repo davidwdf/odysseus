@@ -1009,53 +1009,6 @@
         }
       ]
     },
-    "formatStopCount": {
-      "doc": "Route length as a stop count. The locale only selects the unit word; the figure is not localized.",
-      "cases": [
-        {
-          "name": "en",
-          "args": {
-            "n": 24,
-            "locale": "en"
-          },
-          "expect": "24 stops"
-        },
-        {
-          "name": "zh-hant",
-          "args": {
-            "n": 24,
-            "locale": "zh-Hant"
-          },
-          "expect": "24 個站"
-        },
-        {
-          "name": "zh-hans",
-          "args": {
-            "n": 24,
-            "locale": "zh-Hans"
-          },
-          "expect": "24 个站"
-        },
-        {
-          "name": "one-stop-is-not-pluralized-in-english",
-          "why": "Reads '1 stops'. English has no plural rule here, so it is wrong. Chinese is unaffected (个站/個站 does not inflect). Recorded as a defect so a port does not quietly add an English-only plural and diverge; the fix belongs in the i18n layer with a plural-aware key, not in a per-platform special case.",
-          "knownDefect": true,
-          "args": {
-            "n": 1,
-            "locale": "en"
-          },
-          "expect": "1 stops"
-        },
-        {
-          "name": "zero-stops",
-          "args": {
-            "n": 0,
-            "locale": "en"
-          },
-          "expect": "0 stops"
-        }
-      ]
-    },
     "formatJourney": {
       "doc": "Whole-route journey time, always hedged. English prefixes a bare '~' with no space; Chinese uses 約/约 followed by a space. The asymmetry is deliberate typography, not an oversight.",
       "cases": [

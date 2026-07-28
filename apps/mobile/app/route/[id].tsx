@@ -201,7 +201,7 @@ export default function RouteDetail() {
   const circular = ends.destination.kind === 'circular'
   const destName =
     ends.destination.kind === 'circular'
-      ? t(locale, 'circularVia').replace('{place}', ends.destination.via)
+      ? t(locale, 'circularVia', { place: ends.destination.via })
       : ends.destination.name
 
   return (

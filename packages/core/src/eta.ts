@@ -308,16 +308,19 @@ export function estimateElderlyFare(adultFare: string): string | undefined {
   return (Math.round(Math.max(2, n * 0.2) * 10) / 10).toFixed(1)
 }
 
-const STOPS_LABEL: Record<Locale, string> = { en: 'stops', 'zh-Hant': '個站', 'zh-Hans': '个站' }
-
-/** Stop-count label, e.g. "24 stops" / "24 個站". A Static fact (route length), locale only
- *  selects the unit word — same pattern as the fare/frequency formatters above.
- *
- * @spec eta#formatStopCount
- */
-export function formatStopCount(n: number, locale: Locale): string {
-  return `${n} ${STOPS_LABEL[locale]}`
-}
+// `formatStopCount` used to sit here; it is now `t(locale, 'stopCount', { n })` in `@nextbus/i18n`.
+// The boundary that move draws: **`core` owns the rule, `i18n` owns the word.** A stop count has no
+// rule — it was `${n} ${STOPS_LABEL[locale]}`, a pure label — and pretending otherwise cost us the
+// repo's last `knownDefect`: `formatStopCount(1, 'en')` returned `"1 stops"`, because English
+// pluralization is not something a `Record<Locale, string>` can express. That corpus row's own `why`
+// prescribed exactly this, rather than an English-only `n === 1` branch three ports would each have
+// to remember.
+//
+// The other six label tables in this package stay: `DUE_LABEL`, `MIN_LABEL`, `EVERY_LABEL`,
+// `ABOUT_LABEL` above, and `geo.ts`'s `WALK_LABEL` and `COMPASS_LABELS`. Each is an uninflected unit
+// word attached to a real rule — minute rounding, headway shape, compass bucketing — which a port
+// reproduces from the corpus. Moving them would churn ~100 corpus rows across seven formatters and
+// buy no cross-platform guarantee, so that is deferred deliberately, not forgotten.
 
 /**
  * Honest journey-time label, e.g. "~45 min" / "約 45 分鐘".

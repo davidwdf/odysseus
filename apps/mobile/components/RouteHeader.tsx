@@ -161,6 +161,7 @@ export function RouteHeader({
       badge={<RouteChip operator={operator} routeNo={routeNo} />}
       label={circular ? destination : `${origin} → ${destination}`}
       collapsedLabel={circular ? destination : `→ ${destination}`}
+      backAccessibilityLabel={t(locale, 'back')}
       expandedSlot={
         <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface py-2 pr-2 pl-3.5">
           {/* Loop glyph for circular routes; direction-of-travel arrow otherwise. */}
