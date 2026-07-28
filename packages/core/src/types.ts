@@ -35,7 +35,9 @@ import type {
   RouteRefSchema,
   RouteSchema,
   RouteServiceInfoSchema,
+  RouteServiceSummarySchema,
   RouteStopSchema,
+  RouteSummarySchema,
   ServiceDayTypeSchema,
   StopDetailSchema,
   StopSchema,
@@ -67,12 +69,17 @@ export type Stop = z.infer<typeof StopSchema>
 export type Place = z.infer<typeof PlaceSchema>
 
 /**
- * Static service facts for a route direction. All optional; this is the **Static** honesty tier
- * (never styled as live). Fares are HK$ kept as the upstream string to avoid float drift, and are
- * *sectional* — riders boarding later pay less — so `fareFull` is the fare from the origin; the
- * per-boarding-stop fare rides on the stop/ETA records.
+ * Static service facts for a route direction, **full** tier — includes `patterns`. All optional;
+ * this is the **Static** honesty tier (never styled as live). Fares are HK$ kept as the upstream
+ * string to avoid float drift, and are *sectional* — riders boarding later pay less — so
+ * `fareFull` is the fare from the origin; the per-boarding-stop fare rides on the stop/ETA records.
  */
 export type RouteServiceInfo = z.infer<typeof RouteServiceInfoSchema>
+
+/** Static service facts at the **summary** tier — no frequency profiles. What a stop response
+ *  carries (ADR-065): the field is absent from the type, so absence can't be misread as a fact
+ *  about the route. */
+export type RouteServiceSummary = z.infer<typeof RouteServiceSummarySchema>
 
 /** Which days a frequency pattern runs. `other` = an uncommon mix (e.g. Mon–Sat); the UI
  *  falls back to the exact `days` mask for those. */
@@ -88,7 +95,11 @@ export type FreqBand = z.infer<typeof FreqBandSchema>
  */
 export type FreqPattern = z.infer<typeof FreqPatternSchema>
 
+/** A route at full service fidelity — what `/v1/route/:id` returns. */
 export type Route = z.infer<typeof RouteSchema>
+
+/** A route as it appears in a stop response: same fields, summary service tier (ADR-065). */
+export type RouteSummary = z.infer<typeof RouteSummarySchema>
 
 /** One stop in a route's ordered sequence. */
 export type RouteStop = z.infer<typeof RouteStopSchema>

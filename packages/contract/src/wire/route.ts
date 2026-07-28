@@ -52,72 +52,129 @@ export const FreqPatternSchema = z
   })
   .meta({ id: 'FreqPattern' })
 
+// ── The two service-fidelity tiers (ADR-065) ─────────────────────────────────────────────────
+//
+// `Route` is served at two fidelities, and until ADR-065 both used one schema with an optional
+// `patterns`, so a decoder could not tell *"this route has no frequency table"* from *"you asked
+// the endpoint that doesn't send one"*. The tiers are now two named component schemas, so the
+// distinction is carried by the type a generator emits rather than by prose a human has to read.
+//
+// The reduced tier is not an oversight to be tidied away: duplicating `patterns` into every place
+// a route touches was **54 MB of an 82 MB build** (ADR-055 §7), and `patterns` is read on exactly
+// one screen. Keep it dropped.
+//
+// The shared fields are spread rather than composed with `.extend()`/`allOf` on purpose: each tier
+// emits as one **flat** JSON Schema object, which is what a Swift `Codable` struct and a kotlinx
+// `@Serializable` data class generate from without a hand-written decoder. An `allOf` chain is the
+// shape those generators handle worst.
+
+const routeServiceFields = {
+  fareFull: z
+    .string()
+    .optional()
+    .describe(
+      'Full adult fare from the route origin, HK$ as a decimal string, e.g. "6.7". Compare numerically, display verbatim, never parse to float.',
+    ),
+  fareFullHoliday: z
+    .string()
+    .optional()
+    .describe('Holiday full fare, HK$ decimal string. Present only when it differs from fareFull.'),
+  journeyMin: z.number().optional().describe('Whole-route journey time, minutes.'),
+  headway: z
+    .object({ min: z.number(), max: z.number() })
+    .optional()
+    .describe(
+      'Typical headway from the GTFS frequency bands, minutes. Coarse range — no fake precision.',
+    ),
+  hours: z
+    .object({ start: z.string(), end: z.string() })
+    .optional()
+    .describe(
+      'Rough daily service span, local 24h "HH:mm" (may exceed 24). Earliest first departure → latest end.',
+    ),
+}
+
 /**
- * Static service facts for a route direction, sourced from data we already fetch (the consolidated
- * route-fare dataset — see docs/02). All optional; this is the **Static** honesty tier (never
- * styled as live). Fares are *sectional* — riders boarding later pay less — so `fareFull` is the
- * fare from the origin; the per-boarding-stop fare rides on the stop/ETA records.
+ * Static service facts for a route direction at the **summary** tier — everything except the
+ * per-day-type frequency profiles. This is what `/v1/stop/:id` serves, and the schema has no
+ * `patterns` property at all, so a client reading a stop response cannot mistake its absence for a
+ * fact about the route (ADR-065). To show a frequency table, load `/v1/route/:id`.
  *
- * ⚠️ **Served at two fidelities under one schema** (ADR-052): `/v1/route/:id` carries `patterns`;
- * `/v1/stop/:id` deliberately omits it (the summary tier — duplicating it into every place a route
- * touches was 54 MB of an 82 MB build, ADR-055). So on a stop response, absent `patterns` means
- * "not served here", **not** "this route has no frequency table". Splitting this into two named
- * schemas is the first candidate for the additive evolution path.
+ * All fields optional; this is the **Static** honesty tier (never styled as live). Fares are
+ * *sectional* — riders boarding later pay less — so `fareFull` is the fare from the origin; the
+ * per-boarding-stop fare rides on the stop/ETA records.
+ */
+export const RouteServiceSummarySchema = z.object(routeServiceFields).meta({
+  id: 'RouteServiceSummary',
+  description:
+    'Static service facts at the **summary** tier — no frequency profiles. Served by /v1/stop/{id}. ' +
+    'There is deliberately no `patterns` property here: the profiles are large and are read on one ' +
+    'screen only, so duplicating them into every place a route touches is not worth 54 MB of the ' +
+    'build. Load /v1/route/{id} for them.',
+})
+
+/**
+ * Static service facts at the **full** tier: the summary fields plus `patterns`. Served by
+ * `/v1/route/:id` only. Here an absent `patterns` is a fact about the route — the dataset carries
+ * no frequency table for it — because the endpoint that returns this schema always sends one when
+ * there is one to send.
  */
 export const RouteServiceInfoSchema = z
   .object({
-    fareFull: z
-      .string()
-      .optional()
-      .describe(
-        'Full adult fare from the route origin, HK$ as a decimal string, e.g. "6.7". Compare numerically, display verbatim, never parse to float.',
-      ),
-    fareFullHoliday: z
-      .string()
-      .optional()
-      .describe(
-        'Holiday full fare, HK$ decimal string. Present only when it differs from fareFull.',
-      ),
-    journeyMin: z.number().optional().describe('Whole-route journey time, minutes.'),
-    headway: z
-      .object({ min: z.number(), max: z.number() })
-      .optional()
-      .describe(
-        'Typical headway from the GTFS frequency bands, minutes. Coarse range — no fake precision.',
-      ),
-    hours: z
-      .object({ start: z.string(), end: z.string() })
-      .optional()
-      .describe(
-        'Rough daily service span, local 24h "HH:mm" (may exceed 24). Earliest first departure → latest end.',
-      ),
+    ...routeServiceFields,
     patterns: z
       .array(FreqPatternSchema)
       .optional()
       .describe(
-        'Per-day-type frequency profiles (ADR-044). Absent on /v1/stop/:id by design — see the schema note.',
+        'Per-day-type frequency profiles (ADR-044). Absent here means the dataset has no frequency table for this route. A stop response cannot carry this field at all — it returns RouteServiceSummary.',
       ),
   })
-  .meta({ id: 'RouteServiceInfo' })
+  .meta({
+    id: 'RouteServiceInfo',
+    description:
+      'Static service facts at the **full** tier — the summary fields plus `patterns`. Served by ' +
+      '/v1/route/{id} only. An absent `patterns` here is a fact about the route (the dataset has no ' +
+      'frequency table for it), not an artefact of which endpoint was called.',
+  })
 
-export const RouteSchema = z
-  .object({
-    id: z
-      .string()
-      .describe('Canonical route id, e.g. "KMB:6:outbound:1". GMB is "GMB:{no}:{bound}:{gtfsId}".'),
-    operator: OperatorIdSchema,
-    routeNo: z.string().describe('Public route number shown on the bus, e.g. "6", "720", "N691".'),
-    bound: BoundSchema,
-    serviceType: z
-      .string()
-      .describe(
-        'Operator service-type discriminator (KMB has variants per route). A string — some upstream entries are numeric and are coerced.',
-      ),
-    origin: I18nTextSchema,
-    destination: I18nTextSchema,
-    service: RouteServiceInfoSchema.optional(),
+const routeFields = {
+  id: z
+    .string()
+    .describe('Canonical route id, e.g. "KMB:6:outbound:1". GMB is "GMB:{no}:{bound}:{gtfsId}".'),
+  operator: OperatorIdSchema,
+  routeNo: z.string().describe('Public route number shown on the bus, e.g. "6", "720", "N691".'),
+  bound: BoundSchema,
+  serviceType: z
+    .string()
+    .describe(
+      'Operator service-type discriminator (KMB has variants per route). A string — some upstream entries are numeric and are coerced.',
+    ),
+  origin: I18nTextSchema,
+  destination: I18nTextSchema,
+}
+
+/**
+ * A route as it appears **in a stop response** — identical to `Route` except that `service` is the
+ * summary tier (no frequency profiles). See `RouteServiceSummary` for why (ADR-065, ADR-055 §7).
+ */
+export const RouteSummarySchema = z
+  .object({ ...routeFields, service: RouteServiceSummarySchema.optional() })
+  .meta({
+    id: 'RouteSummary',
+    description:
+      'A route as it appears in a stop response: identical to `Route` except that `service` is the ' +
+      'summary tier (`RouteServiceSummary`) and therefore carries no frequency profiles.',
   })
-  .meta({ id: 'Route' })
+
+/** A route at full fidelity — what `/v1/route/:id` returns. */
+export const RouteSchema = z
+  .object({ ...routeFields, service: RouteServiceInfoSchema.optional() })
+  .meta({
+    id: 'Route',
+    description:
+      'A route at full service fidelity (`service` is `RouteServiceInfo`, including `patterns`). ' +
+      'Returned by /v1/route/{id}; stop responses return `RouteSummary` instead.',
+  })
 
 /** One stop in a route's ordered sequence. */
 export const RouteStopSchema = z

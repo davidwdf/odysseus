@@ -15,6 +15,7 @@ import {
   type GmbEtaEntry,
   type MemberDoc,
   type PlaceDoc,
+  toRouteSummary,
 } from '@nextbus/data-normalize'
 import type { DatasetSource } from './dataset'
 import { coalesce } from './eta-cache'
@@ -188,7 +189,12 @@ export async function stopArrivals(
 }
 
 /** GET /v1/stop/:id — a stop (or merged same-kerb place) and every route serving it,
- *  each with its next ETA. A `P:`-prefixed id spans both operators at one kerb. */
+ *  each with its next ETA. A `P:`-prefixed id spans both operators at one kerb.
+ *
+ *  Routes go out at the **summary** service tier (`RouteSummary`, no frequency profiles —
+ *  ADR-065). The shard build already drops `patterns` for size, but a KV document is untyped
+ *  JSON that may predate this code, so the endpoint enforces its own tier rather than
+ *  inheriting whatever is in the namespace. */
 export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDetail> {
   const place = await ds.place(id)
   if (!place) throw new Error(`unknown stop: ${id}`)
@@ -201,7 +207,7 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
     // `stopId` records which member pole each route departs from, so the Place screen can
     // group routes under their pole (ADR-042).
     routes: place.routes.map((r) => ({
-      route: r.route,
+      route: toRouteSummary(r.route),
       eta: etaByRouteId.get(r.route.id) ?? null,
       fare: r.fare,
       stopId: r.stopId,

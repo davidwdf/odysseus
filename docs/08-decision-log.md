@@ -2098,7 +2098,8 @@ rather than the docs. **The blocking open question above is unchanged** — this
     `patterns` (the summary tier; duplicating it was 54 MB of an 82 MB build, ADR-055) while `/v1/route/:id`
     carries it. Both satisfy the same optional-`patterns` schema, so a native client cannot tell which tier it
     received and will read "absent" as "this route has no frequency table". Needs either two named schemas or
-    an explicit tier discriminator.
+    an explicit tier discriminator. **Resolved by [ADR-065](#adr-065--routeservice-is-two-named-schemas-not-one-optional-field-the-fidelity-tier-is-in-the-type)** —
+    two named schemas, no change to the bytes.
   - `StopLite` carries flat `lat`/`lng` while `Stop` nests `location: LatLng`. Harmless, faithful, noted.
 
 ## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
@@ -2508,3 +2509,78 @@ rather than the docs. **The blocking open question above is unchanged** — this
     keys, so the rule stands — it is just no longer load-bearing for the rider's saved list.
   - Cross-device sync of favourites ([docs/07](./07-backlog.md)) inherits this: the migration runs where the
     blob is, so a server-side copy of the list would need the same numbered step rather than a second scheme.
+## ADR-065 — `Route.service` is two named schemas, not one optional field: the fidelity tier is in the type
+- **Status:** **Decided and implemented 2026-07-28** (WP2-9 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Closes the second of the two
+  "faithful but wrong" transcriptions [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) left open (the error taxonomy is the other, WP2-8).
+- **Context:** `/v1/route/:id` serves a route's `service` with `patterns` — the per-day-type frequency
+  profiles — and `/v1/stop/:id` serves it without. That omission is not an oversight and must not be undone:
+  duplicating `patterns` into every place a route touches was **54 MB of an 82 MB build**
+  ([ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path) §7), and it
+  is read on exactly one screen. The defect was that **both tiers satisfied one schema** whose `patterns` was
+  optional. A decoder that receives no `patterns` therefore learns nothing: it cannot tell *"this route has no
+  frequency table"* from *"you called the endpoint that never sends one"*. Today that is invisible, because
+  the only client is the TS app, which knows which screen it is on and performs no runtime validation at all
+  (ADR-052 §2). The moment WP3-3 generates Swift and Kotlin models, the ambiguity becomes a field on a struct
+  that two different people will interpret two different ways — and the wrong interpretation renders
+  "no timetable" for a route that has one.
+- **Decision: two named schemas.** `RouteServiceSummary` (no `patterns`) and `RouteServiceInfo` (summary
+  fields **plus** `patterns`), carried by `RouteSummary` and `Route` respectively. `StopDetail.routes[].route`
+  is a `RouteSummary`; `RouteDetail.route` stays a `Route`. Judged from the consumer's side, which is the only
+  side that matters here:
+  1. **The generated OpenAPI reads as the truth.** `StopDetail` `$ref`s `RouteSummary` → `RouteServiceSummary`,
+     whose property list simply ends at `hours`. A reader with nothing but `openapi.json` can see which tier
+     each endpoint serves without a sentence of prose — which was the acceptance criterion, and prose is what
+     the old schema already had and nobody could act on.
+  2. **A Swift `Codable` and a kotlinx `@Serializable` model handle it with no hand-written decoder**, because
+     each tier emits as one *flat* object. This is why the shared fields are spread into both schemas rather
+     than composed with `.extend()`/`allOf`: `allOf` is exactly the construct those two generators handle
+     worst, and a contract whose whole purpose is generated models must not hand them their weak case.
+  3. **Absence becomes unambiguous by construction, not by convention.** On the summary tier the field does
+     not exist, so it cannot be misread. On the full tier `patterns: nil` means the dataset has no frequency
+     table for that route — a real fact, and now the only thing it can mean.
+- **Additive-safe (ADR-052 §5), and worth being precise about why.** The **wire bytes do not change**: no
+  field is added, removed, renamed or retyped on any endpoint, and every payload that validated before
+  validates now. What is new is two *component names* in `openapi.json` — `RouteSummary` and
+  `RouteServiceSummary` — alongside `Route` and `RouteServiceInfo`, which keep their names and their exact
+  shapes. An already-generated client keeps decoding; a regenerated one gains a type. `CONTRACT_VERSION` stays
+  at 1.0.0, correctly.
+- **Rejected, in the order they were tempting:**
+  1. **An explicit tier discriminator** — a `fidelity: 'summary' | 'full'` field on `RouteServiceInfo`. It is
+     additive and it does resolve the ambiguity, but it resolves it *at runtime, in code the reader has to
+     remember to write*: `patterns` stays optional on one struct, so every call site needs a hand-written
+     `if fidelity == .full && patterns == nil` to reach the same conclusion the type could have stated. It
+     also puts a constant on the wire for every route in every place document, to describe something the URL
+     already determined. A tag that says which shape you got is strictly worse than getting a different shape.
+  2. **The same discriminator as a real `oneOf` + OpenAPI `discriminator`.** Type-safe on paper and the worst
+     of the three in practice: `oneOf` is precisely where Swift `Codable` needs the custom `init(from:)` this
+     whole contract exists to avoid, and kotlinx would want a sealed hierarchy for what is one object with one
+     optional field.
+  3. **Hoisting `patterns` out of `service` onto `RouteDetail`** as a sibling of `route`. Genuinely the
+     cleanest end state — one `Route`, one `RouteServiceInfo`, and the extra fidelity hanging off the only
+     envelope that can carry it — but it *removes* `RouteServiceInfo.patterns`, which is a breaking change
+     under ADR-052 §5. It would need `oasdiff`, a deprecation window serving the profiles in both places, and
+     a client migration, to buy a slightly tidier model. Noted here so the next person knows it was weighed
+     rather than missed.
+- **`toRouteSummary` is the one definition of what the tier drops**, exported from
+  `@nextbus/data-normalize/shards` and applied **twice, for two different reasons** — which is the part worth
+  reading twice before deleting one of them. The shard build applies it for **size** (the 54 MB above); the
+  Worker's `/v1/stop/:id` applies it again for the **contract**. The second is not belt-and-braces: a KV
+  document is untyped JSON that may have been written by a publisher older than the code reading it, so the
+  tier an endpoint serves has to be a property of the endpoint, not of whatever is in the namespace.
+- **Held by a gate, in both directions** (`apps/edge/test/wire-conformance.test.ts`, inside workerd against
+  simulated KV/R2). One direction is now automatic: `StopDetail` parses through `RouteSummary`, so ADR-052's
+  strict "nothing undocumented" check fails if a stop response ever grows a `patterns`. The other direction is
+  not, because `patterns` is optional at the full tier too — a route endpoint that quietly stopped sending
+  profiles would satisfy every schema in the document — so it is asserted explicitly. The edge fixtures gained
+  a GTFS frequency table for this: without one, "the stop endpoint omits `patterns`" would have passed
+  vacuously, which is the failure mode a gate is supposed to be immune to. Both assertions were watched to
+  fail on an injected violation, and the Worker-side guard was watched to hold the tier on its own with the
+  build-side one removed.
+- **Consequences / notes:** `apps/mobile` has a zero diff — `RouteSummary` and `Route` are mutually assignable
+  in TypeScript (structural typing, `patterns` optional on the full tier), so the split buys the TS client
+  nothing and is not meant to. The enforcement lives where the risk does: in the OpenAPI document, in the
+  decoders WP3-3 generates from it, and in the conformance gate. If a future change makes `patterns`
+  **required** at the full tier — emitting `[]` for a route with no table, which would give TS teeth too — note
+  that it forces a `service` object onto routes that today carry no static facts at all, so it is a wire
+  change with a UI consequence, not a rename.
