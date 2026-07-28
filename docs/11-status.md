@@ -1,9 +1,30 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-28**. Wave 0 (PRs #11–#13) and **Wave 1** (PR #14) are on `main`;
-> **Wave 2 is complete on `wave2-domain-extraction-v1`** — WP2-1 … WP2-9, all nine, built in parallel
-> (one agent and one git worktree each) and integrated one merge at a time.
+> Snapshot: **2026-07-29**. Wave 0 (PRs #11–#13), **Wave 1** (PR #14) and **Wave 2** (PR #15) are on `main`;
+> **Wave 3 is complete except WP3-3** on `wave3-native-enablement-v1` — WP3-1, WP3-2 and WP3-4 built in
+> parallel (one agent and one git worktree each) and integrated one merge at a time.
+> **What Wave 3 is:** the two categories ADR-052 and ADR-060 did not cover — design values and UI strings —
+> each got **one declaration generating committed artefacts**, and *the line* between server and client got
+> written down and mechanically gated. `packages/ui/tokens.json` (122 DTCG tokens) replaces values that were
+> hand-maintained in **four** places, and every one of the 26 CSS custom properties came out
+> **byte-identical to `main`**; `packages/i18n`'s ICU catalogue (117 keys × 3 locales) generates
+> `.strings`/`.stringsdict`/`strings.xml` and makes a hard-coded English literal a **compile error**
+> (`TS2322`), closing the last Wave 1 defect — `1 stop`, not `"1 stops"` — through a plural rule rather than
+> an English special case. A served **`ClientPolicy`** ([ADR-053](./08-decision-log.md)) collapses three
+> arrival caps and **four** poll cadences into one number the edge owns, and `remarkKind` moved to the edge
+> with the rule still declared once. Both codegen decisions are [ADR-054](./08-decision-log.md).
+> **The payoff was a bug nobody had reported:** Favourites pre-sliced its ETA list to 4 *before* `StopRow`
+> computed "+N more" as `total − shown`, so the sum was `4 − 4` and a place with nine saved routes showed
+> four and said nothing about the other five. Deleting the slice fixed the cap and the affordance at once.
+> **Three gates were found to be vacuous or nearly so**, each in a different way: `turbo` cached
+> `@nextbus/ui:test` while its gate read a file outside the package's hash; `.gitignore` would have excluded
+> the generated native artefacts, so the gate would have compared them only on the machine that made them;
+> and the new literal rules fired on a stale `dist/` bundle, i.e. on yesterday's source. All three are the
+> same failure — *a gate that passes because it is looking at nothing.* **Still open: WP3-3** (publish the
+> contract for a native repo), and the Swift/Kotlin artefacts are **generated but never compiled**.
+> Previously: **Wave 2 — domain extraction, WP2-1 … WP2-9**, all nine built in parallel and integrated one
+> merge at a time.
 > **What Wave 2 is:** the domain rules stopped living in screens. `dedupeRoutes`/`operatorsOf`/the pole
 > comparator, the 120 s origin-bus suppression, `upcoming`, terminus-and-circular naming, the stop-name
 > rules, Web-Mercator framing and `snapFix` are now `packages/core` modules pinned by corpus — **271
@@ -34,7 +55,7 @@
 > allowlist; `layers.json` generates both boundary configs; and a **331-case corpus at 100% branch coverage**
 > pins the domain rules that no schema can generate. **Every gate was watched failing on an injected
 > violation.** Two shipped bugs fell out of it — a bus could vanish from the route view, and `formatClock` read
-> the device timezone. Next: **Wave 3** (native enablement) or **Wave 4** (the `apps/web` proof);
+> the device timezone. Next: **Wave 4** (the `apps/web` proof), then **WP3-3**;
 > WP0-5/deploy is deferred on purpose (see *Next steps*).
 > Four things changed, all of them load-bearing for launch. **(1) The dataset left the request path**
 > ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)): a daily GitHub Action precomputes content-addressed shards into KV + R2 and the
@@ -485,16 +506,33 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
-1. **Wave 3 or Wave 4 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
-   **Waves 1 and 2 are ✅ complete** (ADR-051, ADR-052, ADR-059, ADR-060, ADR-062 … ADR-065); see
-   *Done & verified*. The choice is real, so make it deliberately: **Wave 4 (`apps/web`)** is one screen —
-   Nearby — rendered from the identical `core` functions by Vite + React DOM, with CI asserting its derived
-   output is byte-identical to the RN golden. The plan calls it *"the cheapest empirical test of the whole
-   thesis"*, and Wave 2 is precisely what made it testable: everything Nearby needs is now a corpus-pinned
-   kernel function rather than a line inside a `.tsx`. **Wave 3** is the larger, more speculative bet (token
-   codegen, ICU, a published contract) and every claim in it is about a Swift compiler nobody has run yet.
-   **Do Wave 4 first** unless a native repo has appeared.
-   **Loose ends the two waves left, in priority order:**
+1. **Wave 4 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md), then WP3-3** ← **start here.**
+   **Waves 1 and 2 are ✅ complete** (ADR-051, ADR-052, ADR-059, ADR-060, ADR-062 … ADR-065), and
+   **Wave 3 is ✅ complete except WP3-3** — WP3-1, WP3-2 and WP3-4 landed 2026-07-29 (ADR-053, ADR-054;
+   see *Done & verified*).
+   **Why Wave 3 went first, against this doc's own earlier advice:** it was framed here as "the larger, more
+   speculative bet … every claim is about a Swift compiler nobody has run". That was true of **one** of its
+   four packages. The other three closed drift that was live on `main`: design values written down four
+   times, an i18n package with zero tests and prose leaking out of it, and three arrival caps that disagreed.
+   Only WP3-3 (publish the contract for a native repo that does not exist) is speculative, which is why it is
+   the one still open. Worth remembering as a pattern: *"speculative" attached to a wave when it only applied
+   to a quarter of it.*
+   **Next, in order:**
+   - **Wave 4 (`apps/web`)** — one screen, Nearby, rendered from the identical `core` functions by Vite +
+     React DOM, asserting its derived output is byte-identical to the RN golden. The plan calls it *"the
+     cheapest empirical test of the whole thesis"*, and it is now materially cheaper than when it was
+     written: Wave 2 made every rule Nearby needs a corpus-pinned kernel function, and Wave 3 made the
+     tokens and strings it renders generated artefacts rather than RN-shaped source. A second renderer is
+     the first real consumer of both.
+   - **WP3-3** — publish `openapi.json` + a `contract/README.md` written as *"how an iOS or Android repo
+     consumes this"*, with the fixture-consuming XCTest/JUnit conformance file inside the scaffold. Its
+     one-time blocker is **already resolved**: ADR-060's format convergence settled the two-corpus question
+     precisely so WP3-3 would not have to read both. Three things it must not get wrong — ADR-060's own
+     figure of *"36 groups, 274 cases"* is stale (reality is **11 corpora, 66 groups, ~515 cases**); the
+     Swift and Kotlin token artefacts from WP3-1 have **never been compiled**, so compiling them is WP3-3's
+     job and not a claim it may inherit; and much of the README prose already exists in `openapi.json`'s
+     `info.description`, so it should be moved, not rewritten.
+   **Loose ends the waves left, in priority order:**
    - ✅ **Fixed 2026-07-28 — a dataset flip now invalidates the cached index**
      ([ADR-066](./08-decision-log.md)). Found while verifying WP2-7, and worth keeping in the record because
      of *how*: `cached()` keyed `caches.default` on the URL alone with a 6 h `max-age`, so for six hours after
@@ -535,6 +573,40 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    - **`layers.json` is 44% over its line budget** — per the plan's own risk row that is the signal to simplify
      the generator when it next needs to change, not to grow it. Not worth touching working, self-testing code
      for a line count alone.
+   - **Wave 3's own loose ends (2026-07-29), highest-consequence first:**
+     - 🔴 **A served `dueUnderSec` or `staleAfterMs` override would be honoured on native and silently
+       ignored on web.** Both are served and `etaView`/`isStale` accept them, but **no screen threads them
+       in** — their consumers sit inside `EtaTimes`, `EtaBadge` and `formatRelative`, so wiring them touches
+       every ETA render path. Harmless today (default and served value are the same number from the same
+       declaration) and a real trap the day anyone changes one on the edge. In ADR-053's consequences too.
+     - 🟠 **The Swift and Kotlin token artefacts have never been compiled** — no compiler exists in this
+       repo. They carry an `UNVERIFIED` banner and are constants-only so a fix is an emitter change.
+       Compiling them is **WP3-3's** first job; nothing may claim they work until it has.
+     - 🟠 **`displayName`/`code` and the derived fares did not move to the edge** (WP3-4 priorities 4–5,
+       deliberately not started rather than half-done). `displayName` must be `I18nText`, not a string, and
+       the edge must stamp at **four+** assembly points — `remarkKind`'s first pass stamped one of three ETA
+       paths and only a test caught it. Fares first need their two `''` defects fixed, or the move publishes
+       a known-wrong value to three platforms.
+     - 🟡 **The `LocalizedString` brand does not reach data-derived text.** `Text`'s `children` are not
+       branded, so an English word concatenated into a kernel-formatted value (e.g. a `RouteMeta` fact)
+       compiles. `packages/core` cannot import the brand without inverting the layer graph — this is the
+       residual of ADR-054 decision 6's deferral, not an oversight.
+     - 🟡 **`useClientPolicy` returns `source: 'served' | 'defaults'` and nothing displays it.** A policy that
+       fails to arrive looks *exactly* like a working app, because the defaults are a complete correct
+       policy — that is the design and the trap. A one-line readout on `app/workbench.tsx` is the cheapest
+       honest fix and is the highest-value ten minutes left in the wave.
+     - 🟡 **`app.json` and the web manifest still hold `#111827` literally** — pinned by WP3-1's gate rather
+       than generated, because templating them is an Expo build change unverifiable here. Drift closed,
+       duplication not.
+     - ⚪ **`QueryProvider`'s `staleTime: 15_000` and Nearby's `radius=500` are still literals.** Both were
+       argued and left: `staleTime` governs remount refetch (coherent against a 30 s cadence) and making it
+       policy-derived means threading a hook into the provider that builds the `QueryClient`. `radius` is
+       arguably the seventh policy knob if anyone wants one.
+     - ⚪ **The boundaries `walk()` now skips `dist` and the tool caches.** Recorded because of *how* it
+       surfaced: WP3-2's new literal rules fired three times at integration, all inside a stale
+       `apps/mobile/dist/**` bundle — i.e. on *yesterday's source*. It was green in the authoring worktree
+       (which had never run `build:web`), so the gate was red only for whoever had built recently. A gate
+       that reports build output is a gate people learn to ignore.
 2. **Search polish** (ADR-037 follow-ups) — the content-hash `version` landed with WP2-7; still open is an
    **omnibox** (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the
    landed route.

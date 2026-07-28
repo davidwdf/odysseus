@@ -2215,10 +2215,21 @@ rather than the docs. **The blocking open question above is unchanged** — this
   - **`warnUnderSec` has no consumer at all.** Served deliberately as a forward declaration: the document is
     what a native repo generates its models from, and omitting the imminence threshold invites each platform
     to pick its own — rebuilding the three-way disagreement one platform at a time.
-  - **Still client-side, and each is a known follow-up rather than a decision:** `remarkKind` (the schema
-    still says `remark` is "Classified client-side"), `displayName` and `code` (composed at ~9 render sites
-    as `titleCaseName(splitStopCode(name).label)`), and the derived fare rules (`fareRange`, `fareStages`,
-    `estimateChildFare`/`estimateElderlyFare` — the last two carry recorded defects on `''`).
+  - **`remarkKind` is served**, on the `sortKey` shape: `classifyRemark` stays the one declaration in
+    `packages/core`, the edge *calls* it and stamps the result on all three ETA paths (`/v1/etas/:id`,
+    `/v1/stop/:id`, `/v1/route/:id`), and the client falls back to the same function when the field is
+    absent. Absent — not `"info"` — when there is no remark, because "the operator said nothing" and "said
+    something uncategorized" are different facts. `RemarkTag`'s kind→Tailwind map **stays in the client**:
+    that is the client half of this very line. Verified live: a GMB `"Scheduled"` board returns
+    `remarkKind: "scheduled"`. *(An earlier draft of this bullet said `remarkKind` was still client-side —
+    it was written before the work landed and was wrong for a few hours. Corrected at integration; the
+    schema's own `describe()` is the authority.)*
+  - **Still client-side, and each is a known follow-up rather than a decision:** `displayName` and `code`
+    (composed at ~9 render sites as `titleCaseName(splitStopCode(name).label)`, plus four in
+    `route-detail.ts` — deliberately not started rather than half-done, since a served field with nine
+    sites still composing locally is worse than none), and the derived fare rules (`fareRange`,
+    `fareStages`, `estimateChildFare`/`estimateElderlyFare` — the last two carry recorded defects on `''`,
+    so serving them would publish a known-wrong value to three platforms).
   - **The policy can silently fail to arrive and nothing looks wrong**, because the defaults are a complete
     and correct policy. That is the design, and it is also the failure mode nobody would notice, so
     `useClientPolicy` returns a `source: 'served' | 'defaults'` discriminator for a debug readout. Verify
@@ -2226,6 +2237,101 @@ rather than the docs. **The blocking open question above is unchanged** — this
   - **A five-minute window in which an old client binary and a new deploy disagree** — before that client's
     first policy fetch. That is the price of working offline; it is bounded, and the served value always wins
     once it arrives.
+
+## ADR-054 — Design tokens and i18n as generated cross-platform artefacts
+- **Status:** **Decided and implemented 2026-07-29** (WP3-1 and WP3-2 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Like
+  [ADR-053](#adr-053--the-line-the-server-owns-content-order-counts-and-text-the-client-owns-layout-colour-and-motion)
+  this was a **gap in the sequence**, reserved by the plan and never written. Two work packages, one ADR,
+  because they are the same decision applied to two kinds of value.
+- **Context:** [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+  made wire *shapes* agree by construction and [ADR-060](#adr-060--the-fixture-corpus-is-the-equivalence-mechanism-for-domain-rules)
+  made domain *rules* agree by a shared corpus. Two categories were left over, and both were **already
+  drifting on `main` before any native client existed**:
+  - **Design values were written down four times.** The 13 semantic colours lived in
+    `packages/ui/src/themes.ts` *and* in two hand-copied `global.css` files; radii and the type scale were
+    restated in `preset.js`; `BRAND.ink` appeared as a literal in three further files, including
+    `scripts/gen-icons.mjs` and a `<meta name="theme-color">`. `packages/ui/global.css` had **no importer at
+    all** — a file kept in step by hand that nothing loaded.
+  - **UI strings had no enforcement and prose leaked out of the catalogue.** `packages/i18n` had **zero
+    tests and no `test` script**, so it was in no turbo target and nothing about it was ever checked; parity
+    was a TypeScript annotation, which catches a missing key but not an untranslated one. Meanwhile
+    `apps/mobile` carried an `OPERATOR_LABEL` map, a `HOLIDAY` locale table in `RouteMeta`, and a second
+    three-locale table in `lib/tileSource.ts`. Interpolation was hand-rolled `String.replace('{n}', …)`, and
+    `formatStopCount(1, 'en')` rendered **"1 stops"** — the last surviving Wave 1 `knownDefect`.
+- **Decision:**
+  1. **One declaration per category, everything else generated, committed and drift-gated.** Design values:
+     `packages/ui/tokens.json` — 122 tokens in DTCG form with a real primitive→alias layer, so `#111827` is
+     written once and aliased as brand ink, light text, light accent and focus ring. Strings:
+     `packages/i18n/src/catalogue.ts` — 117 keys × 3 locales in an ICU subset, restructured **key-major** so
+     the three renderings of one message sit together and a missing translation is visible rather than
+     inferred from a diff.
+  2. **Generated output is committed, not built on demand.** A reviewer sees it, and a consumer with no
+     toolchain — `scripts/gen-icons.mjs` reads the resolved token JSON — can just read it. Fifteen artefacts:
+     the TS token module, `preset.js`, `apps/mobile/global.css`, a resolved flat JSON, SwiftUI + Compose
+     constants; and for i18n, `.strings`, `.stringsdict` (plurals) and `strings.xml` (`<plurals>`) per locale.
+  3. **Zero new npm dependencies, and therefore no `layers.json` carve-out.** `packages/ui/src` and
+     `packages/i18n/src` are both in the `tokens` layer with a closed-world `"npm": []`. Style Dictionary was
+     rejected as over-engineering for 122 tokens; `intl-messageformat` was rejected because ICU *syntax* is
+     what the native artefacts need, not an ICU *runtime* — plural selection goes through the built-in
+     `Intl.PluralRules`, which the kernel is banned from but this layer is not. A carve-out here would have
+     been the first crack in the rule ADR-051 exists to keep simple.
+  4. **`ELEVATION` is platform-neutral at source, and web is a first-class platform.** Shadow geometry plus
+     an optional Material dp, with `elevationStyle(level, Platform.OS)` as the single mapping for iOS,
+     Android **and** web. The old shape was RN's `ios`/`android` split, and the same split had already been
+     re-hand-written for web in `MiniMap`'s `Platform.select` `boxShadow` — the duplication the neutral shape
+     removes. Its shadow colour had also been a fifth hex belonging to no token.
+  5. **`LocalizedString` is a branded type, enforced at the display boundary.** `t()` returns it and ~25 UI
+     chrome props require it, so reintroducing `OPERATOR_LABEL` is `TS2322`. ICU argument names are extracted
+     from the message literal **at the type level**, so a missing or misspelled placeholder is a compile
+     error, not a `{n}` shipped to a rider. The type is the primary mechanism; a `view` `bannedSyntax` rule
+     in `layers.json` is the second net, for the cases types cannot reach — React Native types its own
+     `accessibilityLabel` as `string`, so an English literal on a `Pressable` is legal TypeScript.
+  6. **The prose boundary: `core` owns the rule, `i18n` owns the word.** Applied to exactly one thing now.
+     `formatStopCount` was a pure label with no rule (`${n} ${STOPS_LABEL[locale]}`), so it is **deleted from
+     the kernel** with its 5 corpus rows and its `@spec` tag, and is an ICU plural key instead — which is
+     what that defect row's own `why` had prescribed. The **other six English label tables stay in
+     `packages/core`** (`DUE_LABEL`, `MIN_LABEL`, `EVERY_LABEL`, `ABOUT_LABEL`, `WALK_LABEL`,
+     `COMPASS_LABELS`): they are uninflected unit words with no plural rule, a port reproduces them from the
+     corpus, and moving them would churn ~100 corpus rows across seven formatters to buy no cross-platform
+     guarantee. That is a deferral, recorded here so it is owned rather than rediscovered.
+  7. **Language endonyms are a documented exception.** `English` / `繁體中文` / `简体中文` are correct
+     *because* they do not follow the active locale — a reader whose UI is Chinese must be able to find the
+     word "English". They go through an `endonym()` function rather than three literals, so the exception is
+     named in one place instead of tempting a translator to "fix" it.
+  8. **Neither gate runs in CI, because there is no CI.** `.github/workflows/` holds only `dataset.yml`;
+     authoring `ci.yml` is WP0-5 and WP0-5 is deferred. The plan's *"`git diff --exit-code` in CI"* wording
+     describes something that does not exist. Both gates are wired into their package's `test` script, so
+     `pnpm test` is the enforcement — stated plainly so nobody trusts a check that isn't running.
+- **Consequences:**
+  - **The visual result is provably unchanged:** all **26 CSS custom properties are byte-identical to
+    `origin/main`**, and `gen-icons.mjs` reading the token regenerated all nine PNGs byte-identically. 122
+    values moved with no repaint.
+  - **The last Wave 1 `knownDefect` is closed properly.** `1 stop` / `2 stops` / `0 stops` in English, and
+    uninflected `1 個站` in both Chinese locales — through a plural rule, not an English special case. **Four
+    `knownDefect` rows remain** (in `route-detail`, `mercator` and `stop-detail`), and the brief that started
+    this work wrongly called this "the last remaining" one; the agent checked rather than believed it.
+  - **Two caching holes were found and closed, both of which made a gate silently vacuous.** `turbo` was
+    caching `@nextbus/ui:test` while its gate reads `apps/mobile/global.css` — *outside* the package's hash —
+    so a hand-edit of the file the web build actually loads would have replayed a pass; fixed with
+    `cache: false` in `packages/ui/turbo.json`. And `.gitignore`'s `ios/`/`android/` rules would have
+    excluded the generated native artefacts entirely: the gate would have compared them successfully on the
+    machine that made them while a clean checkout had nothing to compare. Fixed with directory negations —
+    git does not descend into a directory excluded by an `ios/`-style pattern, so a `**` negation alone never
+    reaches them. Both are the same failure: *a gate that passes because it is looking at nothing.*
+  - **Swift and Kotlin output is UNVERIFIED.** There is no compiler in this repo and it has never been
+    compiled. Both files carry an `UNVERIFIED` banner and are deliberately dumb — constants only — so that a
+    fix is a change to the emitter rather than to hand-written code. Compiling them is the first job of the
+    first native repo (WP3-3), and until then this ADR claims generation, not correctness.
+  - **The brand does not reach data-derived text, and that residual is the deferral in decision 6.**
+    `Text`'s `children` are not branded, and an English word concatenated into a `RouteMeta` fact value
+    produces no error, because kernel-formatted values are plain `string` and `packages/core` cannot import
+    the brand without inverting the layer graph. So the gate covers UI chrome, not every glyph on screen.
+  - **`packages/i18n` is now in a turbo target for the first time**, and `packages/ui` gained a `test`
+    script it never had. Two packages that were structurally unable to fail now can.
+  - A follow-up neither package took: `app.json` and the web manifest still hold `#111827` literally, pinned
+    by the gate rather than generated, because templating them is an Expo build change that cannot be
+    verified here. The drift is closed; the duplication is not.
 
 ## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
 - **Status:** **Decided and implemented 2026-07-27** (WP0-1 of
