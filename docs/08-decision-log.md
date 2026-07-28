@@ -2509,6 +2509,7 @@ rather than the docs. **The blocking open question above is unchanged** — this
     keys, so the rule stands — it is just no longer load-bearing for the rider's saved list.
   - Cross-device sync of favourites ([docs/07](./07-backlog.md)) inherits this: the migration runs where the
     blob is, so a server-side copy of the list would need the same numbered step rather than a second scheme.
+
 ## ADR-065 — `Route.service` is two named schemas, not one optional field: the fidelity tier is in the type
 - **Status:** **Decided and implemented 2026-07-28** (WP2-9 of
   [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Closes the second of the two
