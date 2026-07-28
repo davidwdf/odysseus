@@ -2,7 +2,7 @@
   "module": "search",
   "source": "src/search.ts",
   "version": 1,
-  "doc": "On-device search: route classification for the filter chips, the smart keypad's prefix trie, and the two search functions (ADR-037). All pure and platform-free, which is what makes the index queryable offline. Conventions for this file: (1) `buildRouteTrie` cases express the trie as nested JSON — `{ terminal, children: { <char>: node } }` — because a Map is not JSON; compare structurally, ignoring key order. (2) `nextValidChars` returns a SET; cases express it as a SORTED array, so a port must sort before comparing rather than assume iteration order. (3) The two search functions take whole records but `expect` only the resulting ids, in result order. (4) `compareRouteNo` cases expect the SIGN of the comparison (-1, 0, 1), never a magnitude — magnitudes are collator-specific and no two platforms agree on them.",
+  "doc": "On-device search: route classification for the filter chips, the smart keypad's valid-next-key lookup, and the two search functions (ADR-037). All pure and platform-free, which is what makes the index queryable offline. **Nothing in this file may use a locale collator** — that is ADR-063's whole point: `localeCompare(numeric:true)` has no faithful Swift/Kotlin equivalent, so ordering is a byte comparison of a zero-padded `routeSortKey` and the keypad is a range scan over a byte-sorted array. A port that reaches for ICU here has reintroduced the defect even if every row below still passes. Conventions for this file: (1) `routeKeys`, `nextValidChars` and `isCompleteRoute` cases give `routeNos`; the latter two build the key array from them first. (2) `nextValidChars` returns a SET; cases express it as a SORTED array, so a port must sort before comparing rather than assume iteration order. (3) The two search functions take whole records but `expect` only the resulting ids, in result order. (4) `compareRouteNo` cases expect the SIGN of the comparison (-1, 0, 1). The implementation now returns exactly those three values, but a port may return any signed integer, so compare signs.",
   "groups": {
     "routeCategories": {
       "doc": "Which filter categories a route number belongs to, derived from the number alone — no lookup, no dataset. A route can belong to several. The returned order is fixed: night, then airport, then express. Matching is case-insensitive. Night = leading N. Airport/Lantau = the A/NA/E/S families, which require a DIGIT after the letters. Express = an X anywhere in the number.",
@@ -401,119 +401,74 @@
         }
       ]
     },
-    "buildRouteTrie": {
-      "doc": "A prefix trie over every route number, upper-cased on insertion. Drives the smart keypad. Expressed here as nested JSON: `{ terminal, children }`, where `children` maps a single character to a child node and `terminal` is true when the path to that node is itself a complete route number.",
+    "routeKeys": {
+      "doc": "Every route number the keypad can reach, upper-cased, de-duplicated and BYTE-sorted — the array that replaced the prefix trie in ADR-063. Byte order, not rider order: contiguity of a prefix is what makes the range scans below work, and only a plain code-unit sort gives it. Blank numbers are dropped. Route numbers are `[0-9A-Z]`, where a UTF-16 code-unit sort, Swift's `<` and Kotlin's `compareTo` all agree; a port must NOT substitute a locale-aware sort.",
       "cases": [
         {
-          "name": "empty-input-is-a-bare-root",
+          "name": "empty-input-is-an-empty-array",
           "args": {
             "routeNos": []
           },
-          "expect": {
-            "terminal": false,
-            "children": {}
-          }
+          "expect": []
         },
         {
           "name": "a-route-and-its-own-prefix",
-          "why": "'1' is both a route and a prefix of '1A', so its node is terminal AND has a child. A port modelling terminality as 'a leaf' gets this wrong and the keypad stops offering the submit action on '1'.",
+          "why": "'1' is both a real route and a prefix of '1A'. Both survive as separate entries, and the shorter sorts first — which is what lets `isCompleteRoute` say 'submit is meaningful' for '1' while `nextValidChars` still offers 'A'. The trie expressed this as a node that was terminal AND had children; a port modelling terminality as 'a leaf' got it wrong, and the array form cannot make that mistake.",
           "args": {
             "routeNos": ["1", "1A"]
           },
-          "expect": {
-            "terminal": false,
-            "children": {
-              "1": {
-                "terminal": true,
-                "children": {
-                  "A": {
-                    "terminal": true,
-                    "children": {}
-                  }
-                }
-              }
-            }
-          }
+          "expect": ["1", "1A"]
         },
         {
           "name": "input-is-upper-cased",
           "args": {
             "routeNos": ["1a"]
           },
-          "expect": {
-            "terminal": false,
-            "children": {
-              "1": {
-                "terminal": false,
-                "children": {
-                  "A": {
-                    "terminal": true,
-                    "children": {}
-                  }
-                }
-              }
-            }
-          }
+          "expect": ["1A"]
         },
         {
-          "name": "duplicates-are-idempotent",
+          "name": "duplicates-collapse",
+          "why": "Case-folding happens before de-duplication, so '1A' and '1a' are one key, not two. The edge collapses service-type variants but the same number can still arrive twice across operators.",
           "args": {
             "routeNos": ["1A", "1a", "1A"]
           },
-          "expect": {
-            "terminal": false,
-            "children": {
-              "1": {
-                "terminal": false,
-                "children": {
-                  "A": {
-                    "terminal": true,
-                    "children": {}
-                  }
-                }
-              }
-            }
-          }
+          "expect": ["1A"]
         },
         {
           "name": "branching-numbers-share-a-prefix",
+          "why": "'10' before '1A' because '0' (U+0030) precedes 'A' (U+0041). Digits sorting ahead of letters is not a convention this code chose — it is ASCII, and it is why the same array works in three languages.",
           "args": {
             "routeNos": ["10", "1A"]
           },
-          "expect": {
-            "terminal": false,
-            "children": {
-              "1": {
-                "terminal": false,
-                "children": {
-                  "0": {
-                    "terminal": true,
-                    "children": {}
-                  },
-                  "A": {
-                    "terminal": true,
-                    "children": {}
-                  }
-                }
-              }
-            }
-          }
+          "expect": ["10", "1A"]
         },
         {
-          "name": "a-blank-route-number-makes-the-root-terminal",
-          "why": "FIXED 2026-07-28. An empty string walked no characters and so marked the ROOT terminal, making `isCompleteRoute(root, '')` true and telling the keypad that submitting an empty query was meaningful. Blank numbers are now skipped. Unreachable today — the edge index emits none — but nothing rejected one, so a bad dataset build would have armed it.",
+          "name": "the-array-is-in-byte-order-not-rider-order",
+          "why": "'10' before '2', which is the OPPOSITE of what a rider should see in a results list. Deliberate, and the one row most likely to be 'fixed' by mistake: sorting this array by `routeSortKey` would put '0002' between '0001' and '0010' and break the contiguity every range scan depends on. Display order is `searchRoutes`'s job, and it is a different order.",
+          "args": {
+            "routeNos": ["2", "10", "1"]
+          },
+          "expect": ["1", "10", "2"]
+        },
+        {
+          "name": "unsorted-input-is-sorted",
+          "args": {
+            "routeNos": ["N121", "10", "1", "1A"]
+          },
+          "expect": ["1", "10", "1A", "N121"]
+        },
+        {
+          "name": "a-blank-route-number-is-dropped",
+          "why": "FIXED 2026-07-28 under the trie, preserved here. An empty string used to mark the trie's ROOT terminal, making `isCompleteRoute(root, '')` true and telling the keypad that submitting an empty query was meaningful. A blank is also a prefix of everything, so keeping it would make the whole index the answer to a query nobody typed. Unreachable today — the edge index emits none — but nothing rejects one, so a bad dataset build would arm it.",
           "args": {
             "routeNos": [""]
           },
-          "expect": {
-            "terminal": false,
-            "children": {}
-          }
+          "expect": []
         }
       ]
     },
     "nextValidChars": {
-      "doc": "The characters that, appended to `prefix`, still lead to a real route — the smart keypad's live key-enabling. Cases give `routeNos` (build the trie from these) and `prefix`; `expect` is the sorted set. Descent upper-cases the prefix. A prefix that leads nowhere yields the empty set, never an error.",
+      "doc": "The characters that, appended to `prefix`, still lead to a real route — the smart keypad's live key-enabling. Cases give `routeNos` (build the key array with `routeKeys` first) and `prefix`; `expect` is the sorted set. A range scan, not a trie walk (ADR-063): binary-search the first key ≥ prefix, then take the next character of each key until one no longer carries the prefix. The prefix is upper-cased. A prefix that leads nowhere yields the empty set, never an error.",
       "cases": [
         {
           "name": "root-offers-every-first-character",
@@ -568,7 +523,7 @@
       ]
     },
     "isCompleteRoute": {
-      "doc": "Whether the prefix is itself a complete route number, so submitting it is meaningful. A prefix of a real route is NOT complete.",
+      "doc": "Whether the prefix is itself a complete route number, so submitting it is meaningful. A prefix of a real route is NOT complete. One binary search for exact membership in the `routeKeys` array; the empty prefix answers false with no special case, because blanks never enter the array.",
       "cases": [
         {
           "name": "a-complete-route-that-is-also-a-prefix",
@@ -677,15 +632,144 @@
         }
       ]
     },
+    "routeSortKey": {
+      "doc": "A byte-comparable ordering key for a route number: every run of digits is zero-padded to FOUR, so `10A` → `0010A` and `9` < `10A` < `11` under plain byte comparison. This is ADR-063's core move — the order stops being a computation (`localeCompare(numeric:true)`, which Swift and Kotlin cannot reproduce faithfully) and becomes a property of the string, which every language compares identically. The edge precomputes it into `RouteLite.sortKey`; this function is both the definition and the client's fallback, so the two can never disagree. Input is upper-cased (replacing the old collator's `sensitivity: 'base'`), and leading zeros disappear into the padding. A digit run LONGER than four is prefixed with one `~` per extra digit rather than padded: `~` (U+007E) sorts after every digit and every upper-case letter, so a longer run always sorts after a shorter one and equal lengths compare lexically — which for equal lengths is numeric order. Hong Kong has no such route number today; the rule exists because the input is upstream data we do not control.",
+      "cases": [
+        {
+          "name": "a-bare-number-is-zero-padded-to-four",
+          "args": {
+            "routeNo": "9"
+          },
+          "expect": "0009"
+        },
+        {
+          "name": "the-canonical-example",
+          "why": "`10A` → `0010A` is the transformation docs/proposals/03 names for this work package. Everything else follows from it.",
+          "args": {
+            "routeNo": "10A"
+          },
+          "expect": "0010A"
+        },
+        {
+          "name": "three-digit-number",
+          "args": {
+            "routeNo": "901"
+          },
+          "expect": "0901"
+        },
+        {
+          "name": "night-prefix-keeps-its-letter-in-front",
+          "why": "The letter is not part of the numeric run, so `N260` keys as `N0260` and lands after every bare number — which is where riders expect night services.",
+          "args": {
+            "routeNo": "N260"
+          },
+          "expect": "N0260"
+        },
+        {
+          "name": "airport-family",
+          "args": {
+            "routeNo": "A11"
+          },
+          "expect": "A0011"
+        },
+        {
+          "name": "letters-on-both-sides-of-the-digits",
+          "why": "`E22A` has a leading letter, a numeric run and a trailing letter. A port that only pads a LEADING run of digits produces `E22A` unchanged and silently orders the whole E family wrong.",
+          "args": {
+            "routeNo": "E22A"
+          },
+          "expect": "E0022A"
+        },
+        {
+          "name": "express-suffix",
+          "args": {
+            "routeNo": "269X"
+          },
+          "expect": "0269X"
+        },
+        {
+          "name": "single-digit-after-a-letter",
+          "args": {
+            "routeNo": "X1"
+          },
+          "expect": "X0001"
+        },
+        {
+          "name": "lower-case-folds-up",
+          "why": "So `10a` and `10A` key identically and compare equal, which is what the old collator's `sensitivity: 'base'` bought and what `searchRoutes` relies on for its operator tiebreak to decide.",
+          "args": {
+            "routeNo": "10a"
+          },
+          "expect": "0010A"
+        },
+        {
+          "name": "leading-zeros-vanish-into-the-padding",
+          "why": "An upstream `007` must not become a second identity alongside `7`. Padding makes them the same key rather than requiring a separate normalization step nobody would port.",
+          "args": {
+            "routeNo": "007"
+          },
+          "expect": "0007"
+        },
+        {
+          "name": "an-empty-number-keys-to-empty",
+          "args": {
+            "routeNo": ""
+          },
+          "expect": ""
+        },
+        {
+          "name": "a-five-digit-run-overflows-the-width",
+          "why": "The width is four; a longer run gets one `~` per extra digit instead. `9999` < `~10000` because `9` (U+0039) precedes `~` (U+007E) — which is numerically right, where leaving the run unpadded would have put 12345 before 9999.",
+          "args": {
+            "routeNo": "10000"
+          },
+          "expect": "~10000"
+        },
+        {
+          "name": "a-six-digit-run-overflows-further",
+          "why": "The marker repeats, so `~99999` (five digits) still sorts before `~~100000` (six). One `~` per extra digit is what keeps overflow CORRECT rather than merely deterministic.",
+          "args": {
+            "routeNo": "100000"
+          },
+          "expect": "~~100000"
+        },
+        {
+          "name": "punctuation-passes-through",
+          "why": "A hyphen is neither a digit nor a letter and is simply copied, so a malformed number still yields a usable key rather than throwing. It sorts before every digit, which is as good a place as any for something that should not exist.",
+          "args": {
+            "routeNo": "1-A"
+          },
+          "expect": "0001-A"
+        }
+      ]
+    },
     "compareRouteNo": {
-      "doc": "Natural comparison of route numbers, so a rider sees 2 before 10 rather than 10 before 2. Numeric-aware and case-insensitive. `expect` is the SIGN only: a port must not assume a magnitude, because collators differ. Ports need an explicitly numeric, case-insensitive collation (Swift: `compare(options: [.numeric, .caseInsensitive])`; Kotlin: a natural-order comparator) — plain byte comparison fails the very first row.",
+      "doc": "Natural comparison of route numbers, so a rider sees 2 before 10 rather than 10 before 2. Since ADR-063 this is a BYTE comparison of two `routeSortKey` values, not a collator call — do not port it as `compare(options: .numeric)` or a hand-rolled natural comparator, because the point of the change is that those three implementations disagreed. Case-insensitive by way of the key's upper-casing. `expect` is the SIGN: the implementation returns exactly -1/0/1, but a port may return any signed integer.",
       "cases": [
         {
           "name": "numeric-not-lexical",
-          "why": "The whole reason this function exists. Byte comparison puts '10' before '2'.",
+          "why": "The whole reason this function exists. Comparing the raw strings puts '10' before '2'; comparing their keys ('0010' and '0002') does not.",
           "args": {
             "a": "2",
             "b": "10"
+          },
+          "expect": -1
+        },
+        {
+          "name": "a-lettered-variant-sorts-after-a-smaller-bare-number",
+          "why": "The ordering docs/proposals/03 states for this work package, half one: 9 < 10A. Keys '0009' and '0010A'.",
+          "args": {
+            "a": "9",
+            "b": "10A"
+          },
+          "expect": -1
+        },
+        {
+          "name": "a-lettered-variant-sorts-before-the-next-bare-number",
+          "why": "Half two: 10A < 11. Keys '0010A' and '0011'. Together with the row above this pins 9 < 10A < 11, which is the whole claim the sort key exists to make true on three platforms at once.",
+          "args": {
+            "a": "10A",
+            "b": "11"
           },
           "expect": -1
         },
@@ -784,7 +868,7 @@
       ]
     },
     "searchRoutes": {
-      "doc": "Routes whose number begins with the normalized query and pass the filter, sorted by number then operator. An EMPTY query returns NOTHING — deliberately, so an empty search box shows an empty state instead of the entire network. `expect` is the resulting ids in order.",
+      "doc": "Routes whose number begins with the normalized query and pass the filter, sorted by number then operator. An EMPTY query returns NOTHING — deliberately, so an empty search box shows an empty state instead of the entire network. `expect` is the resulting ids in order. Both sort axes are byte comparisons (ADR-063): the number by `sortKey` — the edge's precomputed value where there is one, else `routeSortKey` of the number — and the operator code directly. Ties must keep index order, so a port needs a STABLE sort (Swift's `sorted(by:)` is not stable — use an index tiebreak).",
       "cases": [
         {
           "name": "prefix-match-sorted-by-number-then-operator",
@@ -1096,6 +1180,152 @@
             "limit": 60
           },
           "expect": ["GMB:2:outbound:1023"]
+        },
+        {
+          "name": "the-edge-sort-key-decides-the-order",
+          "why": "The two `sortKey`s are deliberately the reverse of what the numbers imply, so this row can only pass if the client sorts by the field the edge sent rather than re-deriving one from `routeNo`. That is the property that makes the displayed order a dataset publish instead of three client releases (WP3-4), and it is invisible in any row where the two agree.",
+          "args": {
+            "routes": [
+              {
+                "id": "KMB:10:outbound:1",
+                "operator": "KMB",
+                "routeNo": "10",
+                "bound": "outbound",
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                },
+                "sortKey": "0012"
+              },
+              {
+                "id": "KMB:12:outbound:1",
+                "operator": "KMB",
+                "routeNo": "12",
+                "bound": "outbound",
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                },
+                "sortKey": "0010"
+              }
+            ],
+            "query": "1",
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
+            "limit": 60
+          },
+          "expect": ["KMB:12:outbound:1", "KMB:10:outbound:1"]
+        },
+        {
+          "name": "a-route-with-no-sort-key-derives-one",
+          "why": "`sortKey` is optional on the wire (ADR-052 §5), so an index cached before the field existed, or served by an older edge, must still sort. Route 10 carries an edge key of '0099'; route 12 carries none and derives '0012', which sorts first. Mixing the two sources in one comparison is the case a port is most likely to get wrong by deriving everything or trusting everything.",
+          "args": {
+            "routes": [
+              {
+                "id": "KMB:10:outbound:1",
+                "operator": "KMB",
+                "routeNo": "10",
+                "bound": "outbound",
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                },
+                "sortKey": "0099"
+              },
+              {
+                "id": "KMB:12:outbound:1",
+                "operator": "KMB",
+                "routeNo": "12",
+                "bound": "outbound",
+                "origin": {
+                  "en": "A",
+                  "zh-Hant": "甲",
+                  "zh-Hans": "甲"
+                },
+                "destination": {
+                  "en": "B",
+                  "zh-Hant": "乙",
+                  "zh-Hans": "乙"
+                }
+              }
+            ],
+            "query": "1",
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
+            "limit": 60
+          },
+          "expect": ["KMB:12:outbound:1", "KMB:10:outbound:1"]
+        },
+        {
+          "name": "same-number-same-operator-keeps-index-order",
+          "why": "GMB public numbers repeat across regions, so route 1 genuinely exists in both Hong Kong Island and the New Territories as two separate services (ADR-047). They tie on BOTH sort axes — same key, same operator code — so the only thing deciding their order is the sort's stability. Swift's is not stable, and an unstable port reshuffles these two between keystrokes for no visible reason.",
+          "args": {
+            "routes": [
+              {
+                "id": "GMB:1:outbound:1001",
+                "operator": "GMB",
+                "routeNo": "1",
+                "bound": "outbound",
+                "origin": {
+                  "en": "SHAU KEI WAN",
+                  "zh-Hant": "筲箕灣",
+                  "zh-Hans": "筲箕湾"
+                },
+                "destination": {
+                  "en": "CHAI WAN",
+                  "zh-Hant": "柴灣",
+                  "zh-Hans": "柴湾"
+                },
+                "sortKey": "0001"
+              },
+              {
+                "id": "GMB:1:outbound:2001",
+                "operator": "GMB",
+                "routeNo": "1",
+                "bound": "outbound",
+                "origin": {
+                  "en": "TSUEN WAN",
+                  "zh-Hant": "荃灣",
+                  "zh-Hans": "荃湾"
+                },
+                "destination": {
+                  "en": "SHEK WAI KOK",
+                  "zh-Hant": "石圍角",
+                  "zh-Hans": "石围角"
+                },
+                "sortKey": "0001"
+              }
+            ],
+            "query": "1",
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
+            "limit": 60
+          },
+          "expect": ["GMB:1:outbound:1001", "GMB:1:outbound:2001"]
         },
         {
           "name": "no-match-returns-nothing",
