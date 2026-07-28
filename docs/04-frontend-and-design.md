@@ -110,6 +110,14 @@ A smart, real concern — and the reason it pushes you toward PWA is exactly the
 - **"Arriving" / "Due"** for sub-minute, instead of a fake `0:59…`.
 - A small **"updated 12s ago"** chip; data older than a threshold is **greyed/flagged stale**.
 - Animate the **change**, not a clock.
+- **A bus parked at the terminus is not an arrival.** Every journey starts at stop 0, so the origin
+  always reports a next departure — drawn faithfully that is a token permanently parked on the first
+  node, which reads as a bus you could catch. The route rail only shows it once it is within
+  **120 s** of leaving (`ORIGIN_BUS_DEPARTS_WITHIN_SEC` / `visibleBusMarkers` in
+  `@nextbus/core/route-detail`, alongside `upcoming`, `isOriginStop` and the circular-route
+  header naming). The threshold is a judgement about honest presentation, not a property of the
+  feed, so it is named, pinned by `spec/route-detail.spec.json`, and hand-ported with the rest of
+  the kernel rather than re-invented per platform.
 
 ### Accessibility (non-negotiable)
 - Dynamic type / font scaling; screen-reader labels on every interactive element and ETA.

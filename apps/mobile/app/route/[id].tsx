@@ -1,10 +1,12 @@
 import {
-  etaView,
   fareRange,
   inferBusMarkers,
+  isOriginStop,
   type Locale,
-  memberStopIds,
   routeDistanceM,
+  routeTerminusNames,
+  upcoming,
+  visibleBusMarkers,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -43,7 +45,7 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { usePageRevealReady } from '../../lib/navTransitions'
 import { favoriteRouteKey, usePreferences } from '../../lib/preferences'
-import { isCircular, splitStopCode, stripCircular, titleCaseName } from '../../lib/stopName'
+import { splitStopCode, titleCaseName } from '../../lib/stopName'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
@@ -56,20 +58,6 @@ const TOKEN = 26
 // Saved-stop badge — a small accent star pinned to the node's corner (ADR-042). The node
 // itself is unchanged, so a saved stop still scans as an ordinary sequence node, just flagged.
 const BADGE = 15
-
-/** Does a route-sequence stop id refer to the stop we opened this route from?
- *  `memberStopIds` handles a merged same-kerb place id (`P:<a>+<b>+…`, any number of members) by
- *  yielding its poles, and a lone pole id by yielding itself — so there is no place/pole branch
- *  here at all. Grammar: `@nextbus/core/ids`. */
-function isOriginStop(routeStopId: string, origin?: string): boolean {
-  if (!origin) return false
-  return memberStopIds(origin).includes(routeStopId)
-}
-
-/** Upcoming (not-yet-departed) arrivals at a stop, soonest first, capped at 3. */
-function upcoming(arrivals: string[] | undefined, now: number): string[] {
-  return (arrivals ?? []).filter((a) => !etaView(a, now).hasDeparted).slice(0, 3)
-}
 
 export default function RouteDetail() {
   const params = useLocalSearchParams<{ id: string; stop?: string }>()
@@ -137,9 +125,10 @@ export default function RouteDetail() {
   // Once flipped, the boarding stop we arrived on no longer applies (the reverse serves the
   // opposite kerbs), so drop the here-anchor and its one-time auto-scroll.
   const hereIndex = flipped ? -1 : stops.findIndex((s) => isOriginStop(s.stop.id, stopId))
-  // Bus positions from each stop's soonest *upcoming* arrival (drop-off detection).
+  // Bus positions from each stop's soonest *upcoming* arrival (drop-off detection), minus the one
+  // parked at the origin until it is nearly leaving — both rules in `@nextbus/core/route-detail`.
   const soonest = stops.map((s) => upcoming(s.eta?.arrivals, now)[0] ?? null)
-  const markers = inferBusMarkers(soonest, now)
+  const markers = visibleBusMarkers(inferBusMarkers(soonest, now), soonest, now)
   // Sectional fare span across boarding stops (origin dearest → last stage) for the meta strip.
   const fares = fareRange(stops.map((s) => s.fare))
 
@@ -196,30 +185,21 @@ export default function RouteDetail() {
     requestAnimationFrame(() => scrollToY(y))
   }, [hereTop, lastTop, revealReady])
 
-  // Full terminus stop names for the header card (the first/last stops), cleaned of the trailing
-  // stop code — richer than the route's abbreviated origin/destination labels. Falls back to those
-  // labels until the stop list has loaded.
-  const cleanName = (s: (typeof stops)[number]) =>
-    titleCaseName(splitStopCode(s.stop.name[locale]).label)
-  // Circular routes loop back to their origin, so the first & last stops are identical — showing
-  // "A → A" is useless. Detect the loop (flagged in the route's destination name) and present the
-  // boarding terminus over a "Circular via <turnaround>" line instead (ADR-046).
-  const circular = !!route && isCircular(route.destination.en)
-  const originName = stops.length
-    ? cleanName(stops[0])
-    : route
-      ? titleCaseName(route.origin[locale])
-      : ''
-  const destName = circular
-    ? t(locale, 'circularVia').replace(
-        '{place}',
-        titleCaseName(stripCircular(route?.destination[locale] ?? '')),
-      )
-    : stops.length
-      ? cleanName(stops[stops.length - 1])
-      : route
-        ? titleCaseName(route.destination[locale])
-        : ''
+  // What the two ends of this route are called (`@nextbus/core/route-detail`): the full first/last
+  // stop names once the sequence has loaded, the route's abbreviated labels until then, and — on a
+  // circular service, which ends where it began — a turnaround place instead of a second terminus
+  // (ADR-046). The kernel picks the *place*; only the sentence around it is ours to write.
+  const ends = routeTerminusNames(
+    stops.map((s) => s.stop.name),
+    route,
+    locale,
+  )
+  const originName = ends.origin
+  const circular = ends.destination.kind === 'circular'
+  const destName =
+    ends.destination.kind === 'circular'
+      ? t(locale, 'circularVia').replace('{place}', ends.destination.via)
+      : ends.destination.name
 
   return (
     <View className="flex-1 bg-bg">
@@ -278,13 +258,7 @@ export default function RouteDetail() {
 
             {/* Bus tokens ride the rail at measured node positions; they tween on real data change. */}
             {markers.map((m, i) => {
-              // The origin always reads as a bus "arriving" the moment it starts the route —
-              // a token permanently parked there is noise. Only surface stop 0's bus when it
-              // is about to depart (≤2 min away).
-              if (m.toIndex === 0) {
-                const first = soonest[0]
-                if (!first || etaView(first, now).seconds > 120) return null
-              }
+              // Stop 0 has no segment leading into it, so an origin bus is always drawn on the node.
               const atNode = m.atStop || m.toIndex === 0
               const a = nodeY(m.toIndex)
               const b = atNode ? a : nodeY(m.toIndex - 1)

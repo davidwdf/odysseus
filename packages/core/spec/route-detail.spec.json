@@ -1,0 +1,566 @@
+{
+  "module": "route-detail",
+  "source": "src/route-detail.ts",
+  "version": 1,
+  "doc": "The rules the route-detail screen applies to a route payload before anything is drawn: which stop the rider boarded at (`isOriginStop`), which arrivals count as upcoming (`upcoming`), which inferred buses are worth a token on the rail (`visibleBusMarkers`), and what the two ends of the route are called (`routeTerminusNames`). Three of the four are honesty judgements rather than data transformations — a bus parked at the terminus is not an arrival, a departed reading is not an arrival, and a circular route has no second terminus to name — so they are exactly the kind of thing a hand-port to Swift or Kotlin gets subtly wrong while still looking right. ISO arrival strings carry a fixed +08:00 offset; `nowIso` is the clock reading, always passed in, never read.",
+  "groups": {
+    "isOriginStop": {
+      "doc": "Does a stop in the route sequence refer to the stop the rider opened this route from? The origin may be a merged same-kerb place id (`P:<a>+<b>+…`), in which case any of its poles counts.",
+      "cases": [
+        {
+          "name": "a-pole-of-the-origin-place-is-the-origin",
+          "why": "The common case on a merged kerb: the rider tapped a place, the route sequence names one pole of it. A port that compared the two ids directly would never find the boarding stop, so the here-anchor and its auto-scroll would silently stop working on exactly the busy stops where they matter most.",
+          "args": {
+            "routeStopId": "KMB:18492910339E23AA",
+            "origin": "P:CTB:002403+CTB:002404+KMB:18492910339E23AA+KMB:5BB4A5D9AAF9D5C1"
+          },
+          "expect": true
+        },
+        {
+          "name": "the-last-member-of-a-four-member-place-still-counts",
+          "why": "Clustering has been N-member since ADR-042, so a rule that only looked at the first two members would pass a pair fixture and fail here.",
+          "args": {
+            "routeStopId": "KMB:5BB4A5D9AAF9D5C1",
+            "origin": "P:CTB:002403+CTB:002404+KMB:18492910339E23AA+KMB:5BB4A5D9AAF9D5C1"
+          },
+          "expect": true
+        },
+        {
+          "name": "a-pole-across-the-road-is-not-the-origin",
+          "why": "The opposite kerb is a different place id and a different pole. Matching it would anchor the screen on the stop going the other way — the one mistake that makes the whole here-anchor untrustworthy.",
+          "args": {
+            "routeStopId": "KMB:AC7B0FE9E1D5A1B7",
+            "origin": "P:CTB:002403+CTB:002404+KMB:18492910339E23AA+KMB:5BB4A5D9AAF9D5C1"
+          },
+          "expect": false
+        },
+        {
+          "name": "a-lone-pole-matches-itself",
+          "why": "A stop that was never merged has no place id at all. `memberStopIds` yields it unchanged, so there is no place/pole branch in this rule — the row that stops a port from adding one.",
+          "args": {
+            "routeStopId": "KMB:18492910339E23AA",
+            "origin": "KMB:18492910339E23AA"
+          },
+          "expect": true
+        },
+        {
+          "name": "no-origin-anchors-nothing",
+          "why": "The route screen is reachable without a boarding stop — from search, from a saved route, from a deep link. Every row must then read as an ordinary stop rather than the first one being highlighted by accident.",
+          "args": {
+            "routeStopId": "KMB:18492910339E23AA",
+            "origin": null
+          },
+          "expect": false
+        },
+        {
+          "name": "a-blank-origin-anchors-nothing",
+          "why": "An empty string is what an absent query parameter degrades to on the way through a URL. It denotes no stop, so it must behave like no stop and not fall through to an id comparison against an empty string.",
+          "args": {
+            "routeStopId": "KMB:18492910339E23AA",
+            "origin": ""
+          },
+          "expect": false
+        },
+        {
+          "name": "a-malformed-place-id-denotes-no-pole",
+          "why": "`P:` with no members parses to nothing, and `memberStopIds` returns an empty list rather than the literal string. Nothing may match it — least of all a stop that happens to be called `P:`.",
+          "args": {
+            "routeStopId": "KMB:18492910339E23AA",
+            "origin": "P:"
+          },
+          "expect": false
+        },
+        {
+          "name": "an-unrecognised-origin-id-is-compared-as-itself",
+          "why": "An id we cannot parse is passed through opaquely rather than rejected: a grammar written today must not invalidate an id a rider saved yesterday that the dataset still resolves (ADR-052 durability).",
+          "args": {
+            "routeStopId": "definitely-not-an-id",
+            "origin": "definitely-not-an-id"
+          },
+          "expect": true
+        }
+      ]
+    },
+    "upcoming": {
+      "doc": "The arrivals a stop row shows: not-yet-departed only, feed order preserved, capped at three.",
+      "cases": [
+        {
+          "name": "three-upcoming-arrivals-pass-through",
+          "why": "The ordinary shape. Nothing is reformatted or re-sorted here — the row exists so a port keeps this a filter and does not turn it into a parse-and-rebuild.",
+          "args": {
+            "arrivals": [
+              "2026-07-27T12:03:00+08:00",
+              "2026-07-27T12:11:00+08:00",
+              "2026-07-27T12:24:00+08:00"
+            ],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            "2026-07-27T12:03:00+08:00",
+            "2026-07-27T12:11:00+08:00",
+            "2026-07-27T12:24:00+08:00"
+          ]
+        },
+        {
+          "name": "the-fourth-arrival-is-dropped",
+          "why": "KMB publishes up to five readings per stop. The cap is applied AFTER the departed filter, so a departed first reading must not eat one of the three visible slots — which is what capping first would do.",
+          "args": {
+            "arrivals": [
+              "2026-07-27T11:57:00+08:00",
+              "2026-07-27T12:03:00+08:00",
+              "2026-07-27T12:11:00+08:00",
+              "2026-07-27T12:24:00+08:00",
+              "2026-07-27T12:38:00+08:00"
+            ],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [
+            "2026-07-27T12:03:00+08:00",
+            "2026-07-27T12:11:00+08:00",
+            "2026-07-27T12:24:00+08:00"
+          ]
+        },
+        {
+          "name": "exactly-sixty-seconds-late-is-not-departed",
+          "why": "The tolerance band is inclusive at -60 s: the feed's clock and ours disagree by seconds, so a bus reported one minute ago is still 'Due', not gone. Matches `etaView.hasDeparted` exactly; a port that used `<=` here would blank a stop the rider is standing at.",
+          "args": {
+            "arrivals": ["2026-07-27T11:59:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": ["2026-07-27T11:59:00+08:00"]
+        },
+        {
+          "name": "one-second-past-the-tolerance-is-departed",
+          "why": "The first second a stale reading disappears. Pinned next to the row above because the pair is the whole boundary.",
+          "args": {
+            "arrivals": ["2026-07-27T11:58:59+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "an-out-of-order-feed-is-not-re-sorted",
+          "why": "Deliberate. The operators publish soonest-first and the rest of the app reads `arrivals[0]` as the next bus, so re-sorting here would hide a feed that had stopped doing that in the one place a rider would have noticed. If this ever needs to change it changes for `dedupeEtas` and the bus markers too, not just for the display.",
+          "args": {
+            "arrivals": ["2026-07-27T12:11:00+08:00", "2026-07-27T12:03:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": ["2026-07-27T12:11:00+08:00", "2026-07-27T12:03:00+08:00"]
+        },
+        {
+          "name": "no-eta-block-at-all",
+          "why": "Most stops on a long route carry no live reading, and the field is absent rather than empty. Absent must behave as empty and never as an error.",
+          "args": {
+            "arrivals": null,
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "an-empty-arrival-list",
+          "args": {
+            "arrivals": [],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "every-reading-has-departed",
+          "why": "Late at night the last readings sit in the past for a while. The row shows no times rather than a row of dashes.",
+          "args": {
+            "arrivals": ["2026-07-27T11:52:00+08:00", "2026-07-27T11:44:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        }
+      ]
+    },
+    "visibleBusMarkers": {
+      "doc": "Filters the markers `inferBusMarkers` produced: a bus still parked at the origin is furniture, not an arrival, and is only drawn once it is within `ORIGIN_BUS_DEPARTS_WITHIN_SEC` (120 s) of departing.",
+      "cases": [
+        {
+          "name": "origin-bus-119s-from-departing-is-drawn",
+          "why": "NAMED BOUNDARY ROW. One second inside the window. The three 119/120/121 rows are the whole rule: the threshold is a judgement about what counts as 'about to leave' (ADR-008), so it has to be pinned as a number rather than re-derived from whatever the label happens to say. A port that compared minutes instead of seconds would show this bus and the 121 s one identically, both reading '2 min'.",
+          "args": {
+            "markers": [{ "toIndex": 0, "atStop": false }],
+            "soonest": ["2026-07-27T12:01:59+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [{ "toIndex": 0, "atStop": false }]
+        },
+        {
+          "name": "origin-bus-exactly-120s-from-departing-is-drawn",
+          "why": "NAMED BOUNDARY ROW. The comparison is inclusive at the threshold. Off-by-one here costs one second of visibility and would never be noticed by eye, which is precisely why it is a fixture.",
+          "args": {
+            "markers": [{ "toIndex": 0, "atStop": false }],
+            "soonest": ["2026-07-27T12:02:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [{ "toIndex": 0, "atStop": false }]
+        },
+        {
+          "name": "origin-bus-121s-from-departing-is-suppressed",
+          "why": "NAMED BOUNDARY ROW. One second outside, and the token disappears. Every journey starts at stop 0, so without this the origin node carries a permanently parked bus that reads as one the rider could catch.",
+          "args": {
+            "markers": [{ "toIndex": 0, "atStop": false }],
+            "soonest": ["2026-07-27T12:02:01+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "an-origin-marker-with-no-arrival-is-suppressed",
+          "why": "Unreachable from `inferBusMarkers`, which only emits a marker where a live reading exists — but pinned because absent must mean absent. There is no departure time, so there is nothing to be within two minutes of, and drawing a token anyway would invent a bus from a missing field. A port that treated 'no reading' as 'not yet outside the window' would put a permanent bus on stop 0 of every route with no live data at all, which is most routes at night.",
+          "args": {
+            "markers": [{ "toIndex": 0, "atStop": false }],
+            "soonest": [null],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "an-origin-bus-due-now-is-drawn-on-the-node",
+          "why": "Inside the window and imminent, so `atStop` survives untouched. The suppression decides WHETHER a marker is drawn and never edits one — a port that recomputed `atStop` here would have two places deciding the same thing.",
+          "args": {
+            "markers": [{ "toIndex": 0, "atStop": true }],
+            "soonest": ["2026-07-27T12:00:30+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [{ "toIndex": 0, "atStop": true }]
+        },
+        {
+          "name": "buses-elsewhere-on-the-route-are-never-suppressed",
+          "why": "The rule is about stop 0 only. A bus twenty minutes from a mid-route stop is real information — that is the whole point of the rail — so nothing but the origin is judged against the window.",
+          "args": {
+            "markers": [{ "toIndex": 3, "atStop": false }],
+            "soonest": [null, null, null, "2026-07-27T12:20:00+08:00"],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [{ "toIndex": 3, "atStop": false }]
+        },
+        {
+          "name": "a-parked-origin-bus-goes-and-the-one-on-the-road-stays",
+          "why": "The realistic shape mid-afternoon: a bus sitting at the terminus twelve minutes before it leaves, and one already running. Only the second is drawn, and the surviving marker keeps its own index — a port that filtered by rebuilding the list from positions would renumber it onto the wrong segment.",
+          "args": {
+            "markers": [{ "toIndex": 0, "atStop": false }, { "toIndex": 5, "atStop": false }],
+            "soonest": [
+              "2026-07-27T12:12:00+08:00",
+              null,
+              null,
+              null,
+              null,
+              "2026-07-27T12:04:00+08:00"
+            ],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": [{ "toIndex": 5, "atStop": false }]
+        },
+        {
+          "name": "no-markers-at-all",
+          "why": "A route with no live buses. Empty in, empty out, no index arithmetic on an empty list.",
+          "args": {
+            "markers": [],
+            "soonest": [],
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": []
+        }
+      ]
+    },
+    "routeTerminusNames": {
+      "doc": "The two ends of a route as the header announces them: the stop list's first and last names when it has loaded, the route's own abbreviated labels until then, and a 'circular via' turnaround place instead of a second terminus when the route loops (ADR-046).",
+      "cases": [
+        {
+          "name": "stop-names-beat-the-route-labels",
+          "why": "The stop sequence has loaded, so the header uses the full stop names with their operator codes split off — richer than the LED-sign abbreviations the route carries. This is the ordinary case and it is also the one that proves the two sources are cleaned differently: a stop name loses its trailing code, a route label does not.",
+          "args": {
+            "stopNames": [
+              {
+                "en": "CITY ONE STATION (ST311)",
+                "zh-Hant": "第一城站",
+                "zh-Hans": "第一城站"
+              },
+              {
+                "en": "SHA TIN TOWN HALL (ST102)",
+                "zh-Hant": "沙田大會堂",
+                "zh-Hans": "沙田大会堂"
+              },
+              {
+                "en": "CHOI HUNG ESTATE (CH103)",
+                "zh-Hant": "彩虹邨",
+                "zh-Hans": "彩虹邨"
+              }
+            ],
+            "route": {
+              "origin": {
+                "en": "SHA TIN (CITY ONE)",
+                "zh-Hant": "沙田(第一城)",
+                "zh-Hans": "沙田(第一城)"
+              },
+              "destination": {
+                "en": "CHOI HUNG",
+                "zh-Hant": "彩虹",
+                "zh-Hans": "彩虹"
+              }
+            },
+            "locale": "en"
+          },
+          "expect": {
+            "origin": "City One Station",
+            "destination": { "kind": "terminus", "name": "Choi Hung Estate" }
+          }
+        },
+        {
+          "name": "the-display-locale-picks-the-name",
+          "why": "Every bus-data name is an `I18nText` and the locale is chosen here, once, rather than by each caller. The Chinese names carry no operator code and no Latin letters, so both the code split and the title-caser must leave them exactly as upstream wrote them.",
+          "args": {
+            "stopNames": [
+              {
+                "en": "CITY ONE STATION (ST311)",
+                "zh-Hant": "第一城站",
+                "zh-Hans": "第一城站"
+              },
+              {
+                "en": "CHOI HUNG ESTATE (CH103)",
+                "zh-Hant": "彩虹邨",
+                "zh-Hans": "彩虹邨"
+              }
+            ],
+            "route": {
+              "origin": {
+                "en": "SHA TIN (CITY ONE)",
+                "zh-Hant": "沙田(第一城)",
+                "zh-Hans": "沙田(第一城)"
+              },
+              "destination": {
+                "en": "CHOI HUNG",
+                "zh-Hant": "彩虹",
+                "zh-Hans": "彩虹"
+              }
+            },
+            "locale": "zh-Hans"
+          },
+          "expect": {
+            "origin": "第一城站",
+            "destination": { "kind": "terminus", "name": "彩虹邨" }
+          }
+        },
+        {
+          "name": "a-circular-route-whose-origin-is-also-its-destination",
+          "why": "NAMED BOUNDARY ROW, and the reason this rule exists. A circular service ends where it began, so the first and last stops are the same pole and a faithful header would read 'Fuk Tsun Street -> Fuk Tsun Street' — true, and useless. The loop is flagged in the destination name itself, HK-style, so the far end becomes the turnaround place for a 'Circular via …' line and the marker itself is stripped out of it. A port that only compared the first and last stop ids would miss the many circulars whose sequence starts and ends at adjacent poles.",
+          "args": {
+            "stopNames": [
+              {
+                "en": "FUK TSUN STREET (TKT01)",
+                "zh-Hant": "福全街",
+                "zh-Hans": "福全街"
+              },
+              {
+                "en": "OLYMPIC STATION (TKT08)",
+                "zh-Hant": "奧運站",
+                "zh-Hans": "奥运站"
+              },
+              {
+                "en": "FUK TSUN STREET (TKT01)",
+                "zh-Hant": "福全街",
+                "zh-Hans": "福全街"
+              }
+            ],
+            "route": {
+              "origin": {
+                "en": "TAI KOK TSUI (CIRCULAR)",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              },
+              "destination": {
+                "en": "TAI KOK TSUI (CIRCULAR)",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              }
+            },
+            "locale": "en"
+          },
+          "expect": {
+            "origin": "Fuk Tsun Street",
+            "destination": { "kind": "circular", "via": "Tai Kok Tsui" }
+          }
+        },
+        {
+          "name": "the-loop-marker-is-read-in-english-and-stripped-in-the-display-locale",
+          "why": "Two different fields in one rule: the '(CIRCULAR)' flag is looked for in `en` because that is the field the three feeds spell consistently, while the place shown to the rider comes from the display locale and loses its own '(循環線)' suffix. A port that detected and stripped in the same locale would either miss the loop on a Chinese UI or leave the marker in the rendered name.",
+          "args": {
+            "stopNames": [
+              {
+                "en": "FUK TSUN STREET (TKT01)",
+                "zh-Hant": "福全街",
+                "zh-Hans": "福全街"
+              },
+              {
+                "en": "FUK TSUN STREET (TKT01)",
+                "zh-Hant": "福全街",
+                "zh-Hans": "福全街"
+              }
+            ],
+            "route": {
+              "origin": {
+                "en": "TAI KOK TSUI (CIRCULAR)",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              },
+              "destination": {
+                "en": "TAI KOK TSUI (CIRCULAR)",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              }
+            },
+            "locale": "zh-Hant"
+          },
+          "expect": {
+            "origin": "福全街",
+            "destination": { "kind": "circular", "via": "大角咀" }
+          }
+        },
+        {
+          "name": "a-blank-english-destination-hides-the-loop",
+          "knownDefect": true,
+          "why": "WRONG, and recorded so all three platforms are wrong in the same way. Upstream really ships GMB circulars with a blank `en` while the Chinese reads '大角咀(循環線)' — the same blank the search corpus pins. The marker is looked for in `en`, so the loop goes undetected and the header falls back to the last stop, reading '福全街 -> 福全街': exactly the uselessness the circular rule exists to prevent, for the rider most likely to be on this route. Fixing it means detecting the marker in whichever name is present rather than in `en` alone, at which point `expect` becomes an origin of '福全街' and a destination of { kind: circular, via: '大角咀' }. Left as-is here because the fix belongs with the stop-name rules, not with the header.",
+          "args": {
+            "stopNames": [
+              {
+                "en": "",
+                "zh-Hant": "福全街",
+                "zh-Hans": "福全街"
+              },
+              {
+                "en": "",
+                "zh-Hant": "福全街",
+                "zh-Hans": "福全街"
+              }
+            ],
+            "route": {
+              "origin": {
+                "en": "",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              },
+              "destination": {
+                "en": "",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              }
+            },
+            "locale": "zh-Hant"
+          },
+          "expect": {
+            "origin": "福全街",
+            "destination": { "kind": "terminus", "name": "福全街" }
+          }
+        },
+        {
+          "name": "before-the-stops-load-the-route-labels-stand-in",
+          "why": "The header paints before the stop sequence arrives, and an empty header that then fills in is worse than an abbreviated one that sharpens. The fallback must NOT be run through the stop-code splitter: '(CITY ONE)' is part of the place, not an operator code, so a port that reused the stop-name cleaner here would silently amputate half the label.",
+          "args": {
+            "stopNames": [],
+            "route": {
+              "origin": {
+                "en": "SHA TIN (CITY ONE)",
+                "zh-Hant": "沙田(第一城)",
+                "zh-Hans": "沙田(第一城)"
+              },
+              "destination": {
+                "en": "CHOI HUNG",
+                "zh-Hant": "彩虹",
+                "zh-Hans": "彩虹"
+              }
+            },
+            "locale": "en"
+          },
+          "expect": {
+            "origin": "Sha Tin (City One)",
+            "destination": { "kind": "terminus", "name": "Choi Hung" }
+          }
+        },
+        {
+          "name": "a-circular-route-before-its-stops-load",
+          "why": "The loop is known from the route payload alone, so the 'Circular via …' treatment must appear on the first paint rather than after the sequence arrives — otherwise the header visibly changes shape under the rider's eyes.",
+          "args": {
+            "stopNames": [],
+            "route": {
+              "origin": {
+                "en": "TAI KOK TSUI (CIRCULAR)",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              },
+              "destination": {
+                "en": "TAI KOK TSUI (CIRCULAR)",
+                "zh-Hant": "大角咀(循環線)",
+                "zh-Hans": "大角咀(循环线)"
+              }
+            },
+            "locale": "en"
+          },
+          "expect": {
+            "origin": "Tai Kok Tsui (Circular)",
+            "destination": { "kind": "circular", "via": "Tai Kok Tsui" }
+          }
+        },
+        {
+          "name": "nothing-has-loaded-yet",
+          "why": "Both sources absent — the first frame after navigation, and the error state. Blank strings, so the header lays out at its normal height and nothing jumps when the data lands. Never the word 'undefined', which is what a naive template produces.",
+          "args": {
+            "stopNames": [],
+            "route": null,
+            "locale": "en"
+          },
+          "expect": {
+            "origin": "",
+            "destination": { "kind": "terminus", "name": "" }
+          }
+        },
+        {
+          "name": "stops-without-a-route-payload",
+          "why": "Possible while a direction flip swaps the payload underneath a kept-previous stop list. The names still come from the stops, and no loop is claimed — the marker lives on the route, so with no route there is nothing to read it from.",
+          "args": {
+            "stopNames": [
+              {
+                "en": "CITY ONE STATION (ST311)",
+                "zh-Hant": "第一城站",
+                "zh-Hans": "第一城站"
+              },
+              {
+                "en": "CHOI HUNG ESTATE (CH103)",
+                "zh-Hant": "彩虹邨",
+                "zh-Hans": "彩虹邨"
+              }
+            ],
+            "route": null,
+            "locale": "en"
+          },
+          "expect": {
+            "origin": "City One Station",
+            "destination": { "kind": "terminus", "name": "Choi Hung Estate" }
+          }
+        },
+        {
+          "name": "a-single-stop-route-is-its-own-terminus",
+          "why": "A one-row sequence, which happens on a truncated or special-departure pattern. First and last are the same element, and the rule must not index past the end to find a second one.",
+          "args": {
+            "stopNames": [
+              {
+                "en": "CHOI HUNG ESTATE (CH103)",
+                "zh-Hant": "彩虹邨",
+                "zh-Hans": "彩虹邨"
+              }
+            ],
+            "route": null,
+            "locale": "en"
+          },
+          "expect": {
+            "origin": "Choi Hung Estate",
+            "destination": { "kind": "terminus", "name": "Choi Hung Estate" }
+          }
+        }
+      ]
+    }
+  }
+}
