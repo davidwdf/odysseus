@@ -1,5 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import { ErrorResponseSchema, WIRE_ENDPOINTS } from '@nextbus/contract'
+import type { RouteDetail, StopDetail } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import worker from '../src/index'
@@ -139,6 +140,39 @@ describe('every published endpoint conforms to its schema', () => {
         `${ep.operationId} returned field(s) absent from ${ep.response.meta()?.id} — ` +
           'document them, or stop sending them',
       ).toEqual(canonical(body))
+    }
+  })
+})
+
+/**
+ * ADR-065: `Route.service` ships at two fidelities and they are now two schemas, so which tier an
+ * endpoint serves is a fact the contract states. A fact the contract states has to be a fact the
+ * Worker is *held* to — otherwise the OpenAPI document is a wish again, and the failure lands on a
+ * native client that reads a missing `patterns` as "this route runs on no timetable".
+ *
+ * Half of this is already automatic: `StopDetail` now parses through `RouteSummary`, which has no
+ * `patterns` key, so the strict check above would flag a stop response that carried one as an
+ * undocumented field. What that check *cannot* see is the other direction — a route endpoint that
+ * quietly stopped sending profiles would satisfy every schema in the document, because `patterns`
+ * is optional at the full tier too. So both directions are asserted, against a fixture whose routes
+ * all have a frequency table.
+ */
+describe('the two service-fidelity tiers are the ones each endpoint serves', () => {
+  it('/v1/route/:id serves the full tier — patterns present', async () => {
+    const paths = await resolvePaths()
+    const detail = (await (await get(paths.get('getRoute') as string)).json()) as RouteDetail
+    expect(detail.route.service?.patterns?.length, 'the route tier must carry the profiles').toBe(2)
+  })
+
+  it('/v1/stop/:id serves the summary tier — no route carries patterns', async () => {
+    const paths = await resolvePaths()
+    const detail = (await (await get(paths.get('getStop') as string)).json()) as StopDetail
+    expect(detail.routes.length).toBeGreaterThan(0)
+    for (const { route } of detail.routes) {
+      // Not `patterns === undefined`: the point is that the key is absent from the payload, and
+      // `service` still carries the summary facts — the tier is reduced, not emptied.
+      expect(Object.keys(route.service ?? {}), route.id).not.toContain('patterns')
+      expect(route.service?.headway, `${route.id} lost its summary facts too`).toBeDefined()
     }
   })
 })

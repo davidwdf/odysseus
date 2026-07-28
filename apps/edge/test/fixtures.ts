@@ -73,6 +73,23 @@ for (let s = 0; s < SINGLETONS; s++) push(`SOLO${s}`, 360 + 15 * s, `SOLO STOP $
  *  outside the nearby radius so it never appears as a result. */
 const TERMINUS = { rawId: 'TERMEAST', lat: ORIGIN.lat, lng: ORIGIN.lng + mLng(4000) }
 
+/**
+ * A GTFS frequency table for every fixture route, plus the service-day mask that resolves it.
+ *
+ * Present so the two **service fidelity tiers** are testable at all (ADR-065): without a frequency
+ * table no route would have `service.patterns`, and "the stop endpoint omits `patterns`" would pass
+ * vacuously. Two service ids on purpose — a weekday mask and a Sunday one — so the day-type
+ * classification produces more than one profile.
+ */
+const FREQ = {
+  WEEKDAY: { '0530': ['2330', '600'] as [string, string] },
+  SUNDAY: { '0600': ['2300', '900'] as [string, string] },
+}
+const SERVICE_DAY_MAP = {
+  WEEKDAY: ['0', '1', '1', '1', '1', '1', '0'],
+  SUNDAY: ['1', '0', '0', '0', '0', '0', '0'],
+}
+
 /** The consolidated dataset (`data.hkbus.app/routeFareList.min.json`) shape, ADR-021. */
 export function datasetJson(): unknown {
   const stopList: Record<string, unknown> = {
@@ -95,9 +112,10 @@ export function datasetJson(): unknown {
       dest: { en: 'EAST TERMINUS', zh: '東總站' },
       stops: { kmb: [s.rawId, TERMINUS.rawId] },
       fares: ['5.8', null],
+      freq: FREQ,
     }
   }
-  return { routeList, stopList, serviceDayMap: {} }
+  return { routeList, stopList, serviceDayMap: SERVICE_DAY_MAP }
 }
 
 /** A KMB `stop-eta` board for one pole: the routes at that pole, two arrivals each. */

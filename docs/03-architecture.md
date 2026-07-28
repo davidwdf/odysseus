@@ -156,6 +156,15 @@ deployed Worker. That counter, not code review, is what stops the slow path quie
 Place screen reads it. `/v1/route/:id` still carries the full profiles, which is where the Route
 fact sheets read them from (ADR-044).
 
+The two tiers are **two named schemas**, not one schema with an optional field (ADR-065): a stop
+response returns `RouteSummary` → `RouteServiceSummary`, which has no `patterns` property at all,
+and `/v1/route/:id` returns `Route` → `RouteServiceInfo`, which does. A generated decoder therefore
+cannot read a missing frequency table as a fact about the route when it is really a fact about the
+endpoint. The bytes on the wire are unchanged; only the names the OpenAPI document gives them are
+new. `toRouteSummary` (`@nextbus/data-normalize`) is the single definition of what the tier drops,
+applied by the shard build for **size** and again by the Worker's `/v1/stop/:id` for the
+**contract** — a KV document is untyped JSON that may have been written by an older publisher.
+
 ## Basemap tiles (Worker proxy, ADR-049)
 `GET /v1/tiles/basemap/:z/:x/:y.png` and `GET /v1/tiles/label/:lang/:z/:x/:y.png` proxy the Hong Kong
 Lands Department raster services (`apps/edge/src/tiles.ts`). Three reasons it's a proxy and not a
