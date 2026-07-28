@@ -85,7 +85,21 @@
     "view": {
       "dirs": ["apps/mobile"],
       "use": ["contract", "kernel", "ports", "tokens", "client"],
-      "npm": "any"
+      "npm": "any",
+      "bannedSyntax": [
+        {
+          "pattern": "accessibilityLabel\\s*[:=]\\s*['\"]",
+          "why": "a literal spoken label ships English to a screen reader in a Chinese UI — use `t(locale, key)`. The `LocalizedString` brand cannot catch this one: React Native's own `accessibilityLabel` is typed `string`, so a literal on a `View`/`Pressable`/`Image` is legal TypeScript"
+        },
+        {
+          "pattern": "placeholder\\s*=\\s*['\"]",
+          "why": "same gap — `TextInput.placeholder` is React Native's prop and typed `string`, so only a text rule sees a literal here"
+        },
+        {
+          "pattern": "\\.replace\\(\\s*['\"]\\{",
+          "why": "hand-rolled `{n}` interpolation. Messages are ICU now: pass `t(locale, key, { n })`. `.replace()` also returns a plain `string`, which silently launders the LocalizedString brand off the result"
+        }
+      ]
     }
   }
 }

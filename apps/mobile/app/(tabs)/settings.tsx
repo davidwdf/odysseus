@@ -1,6 +1,5 @@
 import type { Locale } from '@nextbus/core'
-import type { Messages } from '@nextbus/i18n'
-import { t } from '@nextbus/i18n'
+import { endonym, type LocalizedString, type PlainMessageKey, t } from '@nextbus/i18n'
 import type { Appearance } from '@nextbus/ui'
 import { useRouter } from 'expo-router'
 import { ChevronRight } from 'lucide-react-native'
@@ -13,19 +12,18 @@ import { usePreferences } from '../../lib/preferences'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useLocale, useLocaleOverride, useSetLocale } from '../../providers/LocaleProvider'
 
-const APPEARANCES: { value: Appearance; labelKey: keyof Messages }[] = [
+const APPEARANCES: { value: Appearance; labelKey: PlainMessageKey }[] = [
   { value: 'auto', labelKey: 'appearanceAuto' },
   { value: 'light', labelKey: 'appearanceLight' },
   { value: 'dark', labelKey: 'appearanceDark' },
 ]
 
-// Language endonyms are shown in their own script regardless of the active UI locale;
-// only "Automatic" (follow device) is localized.
-const LANGUAGES: { value: Locale | null; label: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'zh-Hant', label: '繁體中文' },
-  { value: 'zh-Hans', label: '简体中文' },
-]
+// Language endonyms are shown in their own script regardless of the active UI locale; only
+// "Automatic" (follow device) is localized. `endonym()` is the documented exception in
+// `@nextbus/i18n` rather than three literals here — a reader whose UI is Chinese and who wants
+// English must be able to find the word "English", so these are correct *because* they do not
+// follow the locale, and the catalogue would only tempt a translator to "fix" them.
+const LANGUAGES: readonly Locale[] = ['en', 'zh-Hant', 'zh-Hans']
 
 export default function Settings() {
   const locale = useLocale()
@@ -59,10 +57,10 @@ export default function Settings() {
           />
           {LANGUAGES.map((l) => (
             <OptionRow
-              key={l.value}
-              label={l.label}
-              selected={localeOverride === l.value}
-              onPress={() => setLocale(l.value)}
+              key={l}
+              label={endonym(l)}
+              selected={localeOverride === l}
+              onPress={() => setLocale(l)}
             />
           ))}
         </View>
@@ -113,7 +111,7 @@ function NavRow({
   onPress,
   first,
 }: {
-  label: string
+  label: LocalizedString
   onPress: () => void
   first?: boolean
 }) {
@@ -133,7 +131,7 @@ function NavRow({
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children }: { title: LocalizedString; children: ReactNode }) {
   return (
     <View className="px-4 pb-6">
       <Text variant="label" className="mb-2 text-subtle">
@@ -150,7 +148,7 @@ function OptionRow({
   first,
   onPress,
 }: {
-  label: string
+  label: LocalizedString
   selected: boolean
   first?: boolean
   onPress: () => void

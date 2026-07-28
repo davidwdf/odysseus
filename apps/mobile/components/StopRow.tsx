@@ -161,7 +161,7 @@ export function StopRow({
             className="flex-row items-center gap-1 py-1.5 active:opacity-50"
           >
             <Text variant="label" className="text-accent">
-              {t(locale, 'moreRoutes').replace('{n}', String(remaining))}
+              {t(locale, 'moreRoutes', { n: remaining })}
             </Text>
             <Icon icon={ChevronRight} tone="accent" size={15} />
           </Pressable>

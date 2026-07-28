@@ -13,7 +13,7 @@ import {
   searchStops,
   titleCaseName,
 } from '@nextbus/core'
-import { type Messages, t } from '@nextbus/i18n'
+import { type LocalizedString, type PlainMessageKey, t } from '@nextbus/i18n'
 import { useRouter } from 'expo-router'
 import {
   ChevronRight,
@@ -41,6 +41,7 @@ import { RouteKeypad } from '../components/RouteKeypad'
 import { Skeleton } from '../components/Skeleton'
 import { StopName } from '../components/StopName'
 import { Text } from '../components/Text'
+import { operatorName } from '../lib/operatorName'
 import { usePreferences } from '../lib/preferences'
 import { useSearchIndex } from '../lib/searchIndex'
 import { useTheme } from '../lib/useTheme'
@@ -48,7 +49,7 @@ import { useLocale } from '../providers/LocaleProvider'
 
 type Mode = 'routes' | 'stops'
 
-const CATEGORY_LABELS: Record<RouteCategory, keyof Messages> = {
+const CATEGORY_LABELS: Record<RouteCategory, PlainMessageKey> = {
   night: 'filterNight',
   airport: 'filterAirport',
   express: 'filterExpress',
@@ -155,7 +156,7 @@ export default function SearchScreen() {
   // apart wrongly, so the string stays opaque and the intent is visible.
   const opChips = operators.map((op) => ({
     key: `op:${op}`,
-    label: op,
+    label: operatorName(op, locale),
     active: filter.operators.includes(op),
     toggle: () => toggleOperator(op),
   }))
@@ -344,10 +345,18 @@ function Segment({
 }: {
   mode: Mode
   onChange: (m: Mode) => void
-  routesLabel: string
-  stopsLabel: string
+  routesLabel: LocalizedString
+  stopsLabel: LocalizedString
 }) {
-  const Item = ({ value, label, glyph }: { value: Mode; label: string; glyph: LucideIcon }) => {
+  const Item = ({
+    value,
+    label,
+    glyph,
+  }: {
+    value: Mode
+    label: LocalizedString
+    glyph: LucideIcon
+  }) => {
     const active = mode === value
     return (
       <Pressable
@@ -393,7 +402,7 @@ function NumberField({
   onClear,
 }: {
   value: string
-  placeholder: string
+  placeholder: LocalizedString
   padHidden: boolean
   onPress: () => void
   onClear: () => void
@@ -504,8 +513,8 @@ function RecentRoutes({
 }: {
   items: RouteLite[]
   locale: Locale
-  label: string
-  clearLabel: string
+  label: LocalizedString
+  clearLabel: LocalizedString
   onClear: () => void
   onOpen: (id: string) => void
 }) {
@@ -532,8 +541,8 @@ function RecentStops({
 }: {
   items: StopLite[]
   locale: Locale
-  label: string
-  clearLabel: string
+  label: LocalizedString
+  clearLabel: LocalizedString
   onClear: () => void
   onOpen: (id: string) => void
 }) {
@@ -558,8 +567,8 @@ function SectionLabel({
   clearLabel,
   onClear,
 }: {
-  label: string
-  clearLabel?: string
+  label: LocalizedString
+  clearLabel?: LocalizedString
   onClear?: () => void
 }) {
   return (
@@ -585,7 +594,7 @@ function SectionLabel({
   )
 }
 
-function Empty({ label }: { label: string }) {
+function Empty({ label }: { label: LocalizedString }) {
   return (
     <Text variant="body" className="px-4 pt-6 text-center text-muted">
       {label}

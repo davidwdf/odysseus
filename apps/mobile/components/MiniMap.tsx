@@ -7,6 +7,7 @@ import {
   TILE_SIZE,
   worldScale,
 } from '@nextbus/core'
+import { type LocalizedString, t } from '@nextbus/i18n'
 import { elevationStyle, MAP_COLOR, OPERATOR_ACCENT } from '@nextbus/ui'
 import { useState } from 'react'
 import { Image, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
@@ -96,7 +97,7 @@ export function MiniMap({
   /** Stop name — names the maps pin. */
   label?: string
   /** Accessible label for the tap target, e.g. "Open in Maps". */
-  actionLabel: string
+  actionLabel: LocalizedString
   height?: number
   /** Override the automatic framing. Omit it — `fitZoom` frames one pin and many consistently. */
   zoom?: number
@@ -263,7 +264,7 @@ export function MapAttribution({ className }: { className?: string }) {
       {tileSource.attribution.logo ? (
         <Image
           source={tileSource.attribution.logo}
-          accessibilityLabel="Lands Department"
+          accessibilityLabel={t(locale, 'mapAttribution')}
           style={{ width: 16, height: 16 }}
           resizeMode="contain"
         />

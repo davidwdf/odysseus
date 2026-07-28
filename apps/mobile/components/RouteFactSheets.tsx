@@ -8,11 +8,10 @@ import {
   formatHeadway,
   formatJourney,
   formatServiceHours,
-  formatStopCount,
   type Locale,
   type RouteServiceInfo,
 } from '@nextbus/core'
-import { t } from '@nextbus/i18n'
+import { type LocalizedString, t } from '@nextbus/i18n'
 import { Accessibility, Baby, Clock, type LucideIcon, MapPin, Ruler } from 'lucide-react-native'
 import { ScrollView, useWindowDimensions, View } from 'react-native'
 import { BottomSheet } from './BottomSheet'
@@ -144,7 +143,7 @@ function StatRow({
   note,
 }: {
   icon: LucideIcon
-  label: string
+  label: LocalizedString
   value: string
   note?: string
 }) {
@@ -225,7 +224,7 @@ function FareBody({ stops, locale }: { stops: FactStop[]; locale: Locale }) {
                     {nameForSeq(st.fromSeq)}
                   </Text>
                   <Text variant="caption" tabular className="shrink-0 text-subtle">
-                    {formatStopCount(st.toSeq - st.fromSeq + 1, locale)}
+                    {t(locale, 'stopCount', { n: st.toSeq - st.fromSeq + 1 })}
                   </Text>
                 </View>
               </View>
@@ -280,8 +279,8 @@ function ConcessionLegend({
   note,
 }: {
   icon: LucideIcon
-  label: string
-  note: string
+  label: LocalizedString
+  note: LocalizedString
 }) {
   return (
     <View className="flex-row items-center gap-3">
@@ -365,7 +364,7 @@ function HoursBody({ service, locale }: { service?: RouteServiceInfo; locale: Lo
 }
 
 /** A small stacked label + 24h time (e.g. "First / 05:35"). */
-function LabeledTime({ label, time }: { label: string; time: string }) {
+function LabeledTime({ label, time }: { label: LocalizedString; time: string }) {
   return (
     <View className="items-end">
       <Text variant="caption" className="text-subtle">

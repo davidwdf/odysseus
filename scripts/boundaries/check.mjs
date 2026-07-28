@@ -23,9 +23,17 @@ export const drift = (files = generate()) =>
 export const presentDirs = (baseDir) =>
   ids.flatMap(layerDirs).filter((d) => existsSync(path.join(baseDir, d)))
 
+/** Every source file under `dir`, vendored code excluded — a layer's rules police what we wrote.
+ *  This mattered the moment `bannedSyntax` grew a `view` entry: the kernel's dir is
+ *  `packages/core/src`, which has no `node_modules` beneath it, but `view`'s is all of `apps/mobile`,
+ *  which does. Without this the gate would report hits inside React Native's own `.d.ts` files. */
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)],
+    e.name === 'node_modules'
+      ? []
+      : e.isDirectory()
+        ? walk(path.join(dir, e.name))
+        : [path.join(dir, e.name)],
   )
 
 /** @returns {{file: string, line: number, pattern: string, why: string, layer: string}[]} */

@@ -1,4 +1,5 @@
 import type { Eta, OperatorId } from '@nextbus/core'
+import { t } from '@nextbus/i18n'
 import {
   type Appearance,
   FONT_FAMILY,
@@ -369,7 +370,7 @@ export default function Workbench() {
         </Section>
 
         <Section title="BUTTONS / SKELETON">
-          <Button label="Enable location" onPress={() => {}} />
+          <Button label={t(locale, 'enableLocation')} onPress={() => {}} />
           <Skeleton className="mt-1 h-12 w-full" />
         </Section>
 

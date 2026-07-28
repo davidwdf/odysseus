@@ -54,6 +54,14 @@ so the API can never drift from what the app expects.
   `datasetBuildsThisIsolate` stays 0) worth anything. `pnpm test` → `turbo run test`; the edge suite
   alone is `pnpm --filter @nextbus/edge test`. **Playwright** for web e2e; **Maestro** for native
   e2e (later).
+- **Not every `test` script is Vitest — some *are* the gate.** `packages/contract`'s `test` runs
+  `check-openapi-current.mjs`, and `packages/i18n`'s runs `check-i18n.mts` (locale parity, the ICU
+  subset, and drift of the generated `.strings`/`.stringsdict`/`strings.xml`, plus a `--selftest`
+  that watches each of them fail). Both are plain Node under `tsx`, adding no dependency. This is
+  deliberate: **there is no PR/push CI workflow in this repo** (`.github/workflows/` holds only
+  `dataset.yml`; authoring `ci.yml` is WP0-5), so `turbo run test` is the only thing that actually
+  runs, and a generator's drift gate belongs where it will be executed. Until Wave 3, `packages/i18n`
+  had no `test` script at all and was therefore in no turbo target.
 - **Zod** for runtime validation of upstream API responses → fail loudly when an operator
   changes their schema.
 

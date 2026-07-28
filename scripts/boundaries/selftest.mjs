@@ -90,6 +90,16 @@ const CASES = [
     why: 'the kernel takes `now` as a parameter and is byte-reproducible',
   },
   {
+    fixture: 'view-hardcoded-copy',
+    tool: 'syntax',
+    expect: [
+      'accessibilityLabel\\s*[:=]\\s*[\'"]',
+      'placeholder\\s*=\\s*[\'"]',
+      '\\.replace\\(\\s*[\'"]\\{',
+    ],
+    why: 'the display boundary the LocalizedString brand cannot reach: RN props typed `string`, and `.replace` laundering the brand off a message. The fixture pairs each violation with the correct form, so the rules must discriminate rather than match everything',
+  },
+  {
     fixture: 'kernel-biome',
     tool: 'biome',
     expect: ['lint/style/noRestrictedGlobals', 'lint/style/noRestrictedImports'],

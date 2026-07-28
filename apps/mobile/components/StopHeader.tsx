@@ -1,3 +1,4 @@
+import type { LocalizedString } from '@nextbus/i18n'
 import { MapPin } from 'lucide-react-native'
 import { View } from 'react-native'
 import type { SharedValue } from 'react-native-reanimated'
@@ -24,7 +25,7 @@ export function StopHeader({
   insetTop: number
   onBack: () => void
   onTitlePress?: () => void
-  backLabel?: string
+  backLabel: LocalizedString
 }) {
   return (
     <CollapsingHeader
