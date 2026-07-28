@@ -14,11 +14,36 @@ const CORS: Record<string, string> = {
   'access-control-allow-headers': 'content-type',
 }
 
-function json(data: unknown, maxAge = ETA_TTL_SEC): Response {
+function json(data: unknown, maxAge = ETA_TTL_SEC, etag?: string): Response {
   return new Response(JSON.stringify(data), {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': `public, max-age=${maxAge}`,
+      // `expose-headers` is for us, not for the cache: revalidation happens inside the browser's
+      // HTTP cache and needs no CORS permission, but a debugger reading `res.headers.get('etag')`
+      // cross-origin does.
+      ...(etag ? { etag, 'access-control-expose-headers': 'etag' } : {}),
+      ...CORS,
+    },
+  })
+}
+
+/**
+ * A 304 for a client whose copy is still current: same validators, **no body**.
+ *
+ * Only strong, single-value `If-None-Match` is honoured — the form a browser or a native HTTP
+ * client sends when it is revalidating one resource it already holds. A comma-list or a `W/` weak
+ * tag simply misses and gets the 200 it would have got anyway, which is the safe direction.
+ */
+function notModifiedIfMatched(request: Request, res: Response): Response {
+  const etag = res.headers.get('etag')
+  if (!etag || request.headers.get('if-none-match') !== etag) return res
+  return new Response(null, {
+    status: 304,
+    headers: {
+      etag,
+      'cache-control': res.headers.get('cache-control') as string,
+      'access-control-expose-headers': 'etag',
       ...CORS,
     },
   })
@@ -32,22 +57,28 @@ function fail(status: number, message: string): Response {
 }
 
 /** Edge-cache + coalesce a JSON producer: many users on the same key = one build per TTL. */
-async function cached(
+async function cached<T>(
   request: Request,
   url: URL,
   ctx: ExecutionContext,
   maxAge: number,
-  produce: () => Promise<unknown>,
+  produce: () => Promise<T>,
   errPrefix: string,
+  /** Strong validator for the produced value, when the value knows its own version. */
+  etagOf?: (value: T) => string,
 ): Promise<Response> {
   const cache = caches.default
-  const cacheKey = new Request(url.toString(), request)
+  // The cache key drops the client's headers on purpose. `new Request(url, request)` copies them,
+  // which would put `If-None-Match` in the key and split the colo cache into one entry per
+  // validator a client happens to hold — the conditional response is derived below, not stored.
+  const cacheKey = new Request(url.toString(), { method: 'GET' })
   const hit = await cache.match(cacheKey)
-  if (hit) return hit
+  if (hit) return notModifiedIfMatched(request, hit)
   try {
-    const res = json(await produce(), maxAge)
+    const value = await produce()
+    const res = json(value, maxAge, etagOf?.(value))
     ctx.waitUntil(cache.put(cacheKey, res.clone()))
-    return res
+    return notModifiedIfMatched(request, res)
   } catch (err) {
     return fail(502, `${errPrefix}: ${(err as Error).message}`)
   }
@@ -143,6 +174,11 @@ export default {
         21_600,
         async () => (await getDataset(env)).searchIndex(),
         'index error',
+        // The index's own content hash is its strong validator (ADR-063), so a returning client
+        // revalidates once the 6 h `max-age` lapses and pays a 304 instead of the whole blob.
+        // This is the only endpoint with one: everything else is either live (a validator that
+        // never matches is pure overhead) or small enough that the round trip is the cost.
+        (index) => `"${index.version}"`,
       )
     }
 

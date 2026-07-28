@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/search.spec.json'
 import {
-  buildRouteTrie,
   compareRouteNo,
   indexAlphabet,
   isCompleteRoute,
@@ -10,9 +9,10 @@ import {
   type RouteCategory,
   type RouteFilter,
   type RouteLite,
-  type RouteTrieNode,
   routeCategories,
+  routeKeys,
   routeMatchesFilter,
+  routeSortKey,
   type StopLite,
   searchRoutes,
   searchStops,
@@ -24,16 +24,6 @@ import { specCases } from './corpus'
 // One `describe` per `@spec` group in ../spec/search.spec.json.
 
 const cases = <A, E>(group: string) => specCases<A, E>(corpus, group)
-
-/** The corpus expresses a trie as nested JSON, because a Map is not JSON. */
-interface TrieShape {
-  terminal: boolean
-  children: Record<string, TrieShape>
-}
-const toShape = (node: RouteTrieNode): TrieShape => ({
-  terminal: node.terminal,
-  children: Object.fromEntries([...node.children].map(([ch, child]) => [ch, toShape(child)])),
-})
 
 describe('search#routeCategories', () => {
   for (const c of cases<{ routeNo: string }, RouteCategory[]>('routeCategories')) {
@@ -61,10 +51,10 @@ describe('search#stopMatchesOperators', () => {
   }
 })
 
-describe('search#buildRouteTrie', () => {
-  for (const c of cases<{ routeNos: string[] }, TrieShape>('buildRouteTrie')) {
+describe('search#routeKeys', () => {
+  for (const c of cases<{ routeNos: string[] }, string[]>('routeKeys')) {
     it(c.name, () => {
-      expect(toShape(buildRouteTrie(c.args.routeNos))).toEqual(c.expect)
+      expect(routeKeys(c.args.routeNos)).toEqual(c.expect)
     })
   }
 })
@@ -72,7 +62,7 @@ describe('search#buildRouteTrie', () => {
 describe('search#nextValidChars', () => {
   for (const c of cases<{ routeNos: string[]; prefix: string }, string[]>('nextValidChars')) {
     it(c.name, () => {
-      const got = [...nextValidChars(buildRouteTrie(c.args.routeNos), c.args.prefix)].sort()
+      const got = [...nextValidChars(routeKeys(c.args.routeNos), c.args.prefix)].sort()
       expect(got).toEqual(c.expect)
     })
   }
@@ -81,7 +71,15 @@ describe('search#nextValidChars', () => {
 describe('search#isCompleteRoute', () => {
   for (const c of cases<{ routeNos: string[]; prefix: string }, boolean>('isCompleteRoute')) {
     it(c.name, () => {
-      expect(isCompleteRoute(buildRouteTrie(c.args.routeNos), c.args.prefix)).toBe(c.expect)
+      expect(isCompleteRoute(routeKeys(c.args.routeNos), c.args.prefix)).toBe(c.expect)
+    })
+  }
+})
+
+describe('search#routeSortKey', () => {
+  for (const c of cases<{ routeNo: string }, string>('routeSortKey')) {
+    it(c.name, () => {
+      expect(routeSortKey(c.args.routeNo)).toBe(c.expect)
     })
   }
 })

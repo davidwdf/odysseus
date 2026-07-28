@@ -186,7 +186,7 @@ Four layers, each matched to what it's caching:
 | Layer | Strategy | Why |
 |---|---|---|
 | App shell | Precache | Expo's export is content-hashed, so cache-first is safe *and* the fastest cold start. This is what makes the app **open** offline. |
-| `/v1/index` (search index) | Stale-while-revalidate | Large, changes about daily. Search and the keypad work instantly and offline, then quietly catch up. `lib/searchIndex.ts` also keeps its own AsyncStorage copy, so search survives a cache eviction. |
+| `/v1/index` (search index) | Stale-while-revalidate | Large, changes about daily. Search and the keypad work instantly and offline, then quietly catch up. `lib/searchIndex.ts` also keeps its own AsyncStorage copy, so search survives a cache eviction. The revalidation is cheap: the response carries a strong **ETag** — the index's own content hash, which is also its `version` — so an unchanged index costs a 304 rather than the blob (ADR-063). |
 | `/v1/nearby` · `etas` · `stop` · `route` | Network-first, 4 s timeout | Never cache-first: a bus that left four minutes ago is worse than no answer (ADR-008). The cached copy is the offline fallback and carries its original `observedAt`, so it's aged and labelled stale. |
 | `/v1/tiles/*` | Cache-first, runtime only | A tile already seen redraws offline. Deliberately **not** precached — speculatively fetching tiles nobody looked at is what LandsD's rate limit prohibits. |
 

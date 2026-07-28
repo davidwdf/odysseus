@@ -2433,3 +2433,103 @@ rather than the docs. **The blocking open question above is unchanged** — this
   is written before any shard and `build:current` is flipped last, so ADR-055's write order held under a real
   failure rather than a simulated one. The preflight logic was exercised in all three states (nothing set,
   credentials present but namespace still a placeholder, all present).
+
+## ADR-063 — The search index's order is data: a precomputed `sortKey`, range scans, a content-hash version and an ETag
+- **Status:** **Decided and implemented 2026-07-28** (WP2-7 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Implementation:
+  `packages/core/src/search.ts`, `apps/edge/src/search-index.ts`, `apps/edge/src/index.ts`,
+  `packages/contract/src/wire/search.ts`; corpus `packages/core/spec/search.spec.json`; response assertions
+  `apps/edge/test/search-index.test.ts`. Amends
+  [ADR-037](#adr-037--search-on-device-index-a-smart-route-keypad-and-extensible-filter-chips), which specified
+  the trie and the size-pair version.
+- **Context: a rider sees `2` before `10` because of a call to ICU.** `compareRouteNo` was
+  `a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' })`, and the smart keypad's live key-enabling
+  was a prefix trie built on device. Both are the textbook answers and neither was wrong. Both are also
+  **unportable in the specific way this project cares about** ([ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) kind 2):
+  - Swift's nearest equivalent is `compare(options: [.numeric, .caseInsensitive])` and Kotlin's is a
+    hand-rolled natural-order comparator. The three disagree on mixed digit/letter runs — exactly the shape
+    of a Hong Kong route number (`10A`, `E22A`, `N260`) — so one index would render in **three different
+    orders on three platforms** and no test would catch it, because each platform would be self-consistent.
+  - A trie is a *structure*, not a rule. Three ports each build their own; the corpus can pin the shape of
+    ours, but a Swift `TrieNode` that a human transcribed is not the thing the corpus checked.
+  Separately, `version` was `` `${routes.length}.${stops.length}` `` — the file's own comment called it
+  "good enough". It is not: it **collides whenever one build adds a route and drops another**, which is the
+  ordinary shape of a daily dataset diff. The client compares two identical strings, keeps its cached index,
+  and holds a picture of the network that no longer exists — silently, until someone searches for a route
+  that was renumbered.
+- **Decisions:**
+  1. **The order is a string, not a computation.** `routeSortKey` zero-pads every run of digits to **four**,
+     so `10A` → `0010A` and `9` < `10A` < `11` under plain byte comparison — and byte comparison is the one
+     ordering JavaScript, Swift and Kotlin already agree on without being asked. `compareRouteNo` is now a
+     comparison of two keys; the operator tiebreak in `searchRoutes`, which was a second `localeCompare` in a
+     smaller font, went the same way.
+     *Rejected alternative:* "have every platform use ICU with the same options". It reads like the cheap fix
+     and it is the expensive one — it makes correctness depend on three vendors' collation tables staying in
+     step, forever, with the failure invisible on the platform you happen to be testing.
+     Four digits is ten times the widest run any HK route number carries. **Overflow is correct, not merely
+     tolerated:** a longer run is prefixed with one `~` per extra digit instead of padded, and since `~`
+     (U+007E) sorts after every digit and every upper-case letter, a longer run always lands after a shorter
+     one while equal lengths compare lexically — which for equal lengths *is* numeric order. The key stops
+     being human-readable at five digits; it does not stop being right, and the input is upstream data we do
+     not control.
+  2. **The edge precomputes it into `RouteLite.sortKey`, and the client may derive it.** The field is
+     **optional** per [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) §5, so a client holding an index cached before the field existed still
+     sorts; `searchRoutes` falls back to `routeSortKey(routeNo)`, which is the same function that produced
+     the field, so the two can never disagree. Precomputing it is the first slice of WP3-4 and it buys
+     something real: the displayed order becomes changeable by a dataset publish rather than by three client
+     releases. A corpus row proves the client honours the field rather than re-deriving it, by sending two
+     keys that deliberately contradict their own numbers.
+  3. **Range scans replace the trie.** `routeKeys` returns every route number upper-cased, de-duplicated and
+     **byte-sorted**; every number sharing a prefix is then contiguous, so `nextValidChars` is a binary
+     search for the first key ≥ the prefix followed by a walk to the first key that has lost it, and
+     `isCompleteRoute` is one binary search for exact membership. Same keys light up, no structure to port —
+     the sorted array *is* the data, and the corpus compares arrays rather than a shape a reader has to
+     reconstruct. Note the array is in **byte** order, not rider order: sorting it by `routeSortKey` would
+     put `0002` between `0001` and `0010` and destroy the contiguity the scan depends on. There is a corpus
+     row whose only job is to stop someone "fixing" that.
+     The blank-route-number guard ADR-060's corpus recorded survives the change, in one place instead of two:
+     blanks never enter the array, so the empty prefix answers "not a complete route" with no special case.
+  4. **`version` is a content hash of `routes` + `stops`** — SHA-256, first 16 hex, the *same digest recipe*
+     `scripts/build-dataset.mts` uses for the build hash, because a second hashing scheme is a thing to keep
+     in step for no benefit. It moves exactly when the bytes move, so the collision above cannot happen.
+     *Rejected alternative:* reuse the dataset build hash itself, which is sitting right there in the
+     manifest. It would have made the ETag answerable from the already-cached `build:current` pointer — but
+     that hash digests **every** shard, so a fare change on one route would re-download the whole index for
+     content byte-identical to what the client already holds. Note the build hash already digests the search
+     index's JSON, so it cannot be the value inside it without being circular.
+  5. **`/v1/index` serves that hash as a strong ETag and honours `If-None-Match`.** A returning client whose
+     6 h `max-age` has lapsed pays a header exchange instead of the blob. **What it costs:** a 304 is not
+     free — only the body is skipped, and the handler still resolves the response to know its validator, so
+     a cold colo still reads the R2 object to answer "nothing changed". We took that trade because the
+     expensive side is the rider's mobile data, not our egress. Two smaller costs, both paid in the code:
+     the colo cache key had to **stop copying the client's headers** (`If-None-Match` in the key would split
+     the cache into one entry per validator a client happens to hold, and the conditional response would
+     miss it entirely), and only strong single-value `If-None-Match` is honoured — a weak or comma-list tag
+     simply misses and gets the 200 it would have got anyway, which is the safe direction.
+     This composes with the two caching decisions either side of it:
+     [ADR-057](#adr-057--live-eta-ttl-is-30-s-and-every-upstream-call-is-coalesced-per-pole)'s `cached()`
+     still coalesces and still stores exactly one 200 per URL — the 304 is derived from that entry and never
+     stored — and [ADR-058](#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier)'s
+     stale-while-revalidate is unchanged and now revalidates cheaply, which is what it always wanted to do.
+     No other endpoint gets an ETag: the rest are live, where a validator that never matches is pure overhead.
+- **Verified** in `apps/edge/test/search-index.test.ts`, inside workerd against simulated KV/R2: the 200
+  carries `ETag: "<version>"` matching the body, a matching `If-None-Match` returns **304 with an empty body**
+  and the validators repeated, a stale validator gets the full index, and an unconditional request *after* a
+  304 still gets a complete 200 — the assertion that would fail if a bodiless response had been cached.
+  `version` is asserted to be 16 hex characters, and every route in the served index carries a padded
+  `sortKey`. The corpus grew from 274 to 352 rows and `packages/core` holds **100 % branch coverage** across
+  210 branches (was 151).
+- **Consequences / notes for whoever touches this next:**
+  - `buildSearchIndex` is now **async** (`crypto.subtle.digest`, because its two runtimes are node and
+    workerd and only one of them has `node:crypto`). Its three callers were updated; a fourth would fail to
+    typecheck rather than silently hash a promise.
+  - The `RouteKeypad` prop is `keys: readonly string[]`, not `trie`. `RouteTrieNode` and `buildRouteTrie`
+    are **deleted**, not deprecated — a duplicate implementation is the failure mode Wave 2 exists to prevent.
+  - `searchStops` still ranks by a substring match and is untouched here. Its ordering is stable-sort-dependent
+    rather than collator-dependent, so it has the same portability hazard in a different form; the corpus
+    row that pins it (`equal-rank-keeps-index-order`) is the only thing standing between us and a Swift port
+    that reshuffles the results list between keystrokes.
+  - The other endpoints' inline cache lookups in `apps/edge/src/index.ts` (`/v1/eta`, `/v1/nearby`,
+    `/v1/tiles`) still build their cache key with `new Request(url, request)`, so a client that sends
+    `If-None-Match` to them splits their colo cache. Harmless today — nothing sends one — and left alone
+    deliberately, because those lines were being rewritten by WP2-8 in the same wave.

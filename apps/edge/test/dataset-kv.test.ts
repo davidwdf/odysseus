@@ -72,7 +72,7 @@ beforeAll(async () => {
   for (const [cell, entries] of cells) {
     await kv.put(datasetKeys.cell(HASH, cell), JSON.stringify(entries))
   }
-  await r2.put(buildObjects.searchIndex(HASH), JSON.stringify(buildSearchIndex(index)))
+  await r2.put(buildObjects.searchIndex(HASH), JSON.stringify(await buildSearchIndex(index)))
 
   const manifest: BuildManifest = {
     hash: HASH,

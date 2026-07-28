@@ -1,5 +1,4 @@
 import {
-  buildRouteTrie,
   EMPTY_FILTER,
   indexAlphabet,
   type Locale,
@@ -7,6 +6,7 @@ import {
   type RouteCategory,
   type RouteFilter,
   type RouteLite,
+  routeKeys,
   routeMatchesFilter,
   type StopLite,
   searchRoutes,
@@ -102,7 +102,7 @@ export default function SearchScreen() {
       index ? index.routes.filter((r) => routeMatchesFilter(r, filter)).map((r) => r.routeNo) : [],
     [index, filter],
   )
-  const trie = useMemo(() => buildRouteTrie(filteredRouteNos), [filteredRouteNos])
+  const keys = useMemo(() => routeKeys(filteredRouteNos), [filteredRouteNos])
   const letters = useMemo(() => indexAlphabet(filteredRouteNos).letters, [filteredRouteNos])
 
   const routeResults = useMemo(
@@ -255,7 +255,7 @@ export default function SearchScreen() {
             >
               <RouteKeypad
                 value={routeQuery}
-                trie={trie}
+                keys={keys}
                 letters={letters}
                 onChange={setRouteQuery}
               />
