@@ -2293,8 +2293,9 @@ rather than the docs. **The blocking open question above is unchanged** — this
     `` includes(`${op}:`) `` — the same class of bug (a KMB pole whose raw id begins `CTB…` would false-match
     Citybus). Left because the grep that would catch it is too noisy to gate on; a four-line fix with
     `parseStopOrPlaceId` when someone owns that file.
-  - `apps/mobile/lib/preferences.ts` keeps its own `favoriteRouteKey` template. Folding it into the formatter
-    needs the migration, which is WP2-5's by the plan.
+  - ~~`apps/mobile/lib/preferences.ts` keeps its own `favoriteRouteKey` template. Folding it into the formatter
+    needs the migration, which is WP2-5's by the plan.~~ **Closed by [ADR-062](#adr-062--the-favourite-key-is-the-member-pole-and-the-scheme-is-versioned) (WP2-5):** the template is
+    gone, and the fold shipped with the versioned migration that made it safe.
   - `lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`' key construction (both now go
     through the shared parser, with a comment tying them). Exporting one line-key helper from `core` is WP2-2.
   - **A malformed id returns `502`, which is wrong** — it is a permanent client error, so `400` is correct,
@@ -2433,3 +2434,72 @@ rather than the docs. **The blocking open question above is unchanged** — this
   is written before any shard and `build:current` is flipped last, so ADR-055's write order held under a real
   failure rather than a simulated one. The preflight logic was exercised in all three states (nothing set,
   credentials present but namespace still a placeholder, all present).
+
+## ADR-062 — The favourite key is the member pole, and the scheme is versioned
+- **Status:** **Decided and implemented 2026-07-28** (WP2-5). Implementation: `apps/mobile/lib/preferences.ts`
+  (`PREFERENCES_VERSION`, `migratePreferences`), pinned by `apps/mobile/lib/preferences.migration.test.ts`.
+- **Context:** [ADR-032](#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes) made the favourite
+  primitive a route-at-stop pair keyed `"<stopId>|<routeId>"`;
+  [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)
+  then amended the stop half to the **member pole** id, because a place id embeds its member list and therefore
+  churns every time the clustering is re-tuned. Both statements sit in this log; neither was enforced anywhere
+  on disk. Two loose ends followed. (a) `apps/mobile/lib/preferences.ts` kept its own `${stopId}|${routeId}`
+  template even after WP1-2 gave `core` `formatFavoriteRouteKey`/`parseFavoriteRouteKey`
+  ([ADR-059](#adr-059--the-id-grammar-one-parser-in-core-the-spec-and-corpus-in-contract) records the deferral,
+  and the reason for it: folding the template in *is* the migration). (b) Any key already written under the
+  place-id scheme is stranded — it names a place id that stops existing at the next clustering change, and the
+  favourite then disappears with no error, no log line and no way back. `persist` had neither `version` nor
+  `migrate`, so there was no mechanism to rescue it, and every improvement to the save UI makes the stranded
+  set larger. Favourites are the one part of this app a rider builds by hand, so this is the only piece of
+  persisted state whose loss is not recoverable by re-fetching.
+- **Options:**
+  1. **Ship the pole-keyed scheme and accept the loss.** Free, and the app has few enough users today that the
+     blast radius is small. But the failure is silent and permanent, and "few users" is an argument that
+     expires while the code does not.
+  2. **Fix on read** — normalize each key wherever the Favourites tab reads it. No version bump, so nothing to
+     get wrong at hydration. But a read fix-up never finishes: it must stay correct in perpetuity, it has to be
+     repeated at every read site (there are now four), it leaves the wrong bytes on disk so the problem is
+     never actually over, and it erases the evidence that the scheme ever moved.
+  3. **A versioned `persist` migration** (chosen) — `version: 1` plus a `migrate` step that runs once at
+     hydration and re-stamps the blob.
+- **Decision:** (3), under four rules.
+  1. **One formatter, one parser.** `favoriteRouteKey` is deleted from `preferences.ts`; the store, `SaveStar`,
+     the route schematic's action sheet and the Favourites tab all mint and read keys through
+     `@nextbus/core` (ADR-059). The tab's own `indexOf('|')` splitter went with it — the ad-hoc-parsing gate
+     stays green with an empty allowlist.
+  2. **v0 → v1 expands a place key onto *every* member pole**, rather than picking one. A place-keyed
+     favourite simply does not record which kerb the rider meant. A wrong guess is an invisibly missing
+     favourite; an over-expansion is invisible in the harmless direction, because the tab intersects the saved
+     keys with the route-at-pole rows the place actually reports, so a key for a pole that does not serve that
+     route can never render. Expansions de-duplicate against keys already saved, in save order.
+  3. **Nothing is ever dropped.** A key the grammar cannot read is kept verbatim, in place — not deleted, and
+     not moved to a quarantine list, which would only be a second place to forget about. The grammar is
+     deliberately narrower today than it will be (ADR-059's `OPERATOR_RE` widens the day a fifth operator
+     ships), so a key that starts parsing again later simply starts working again.
+  4. **A blob from a future version passes through untouched and is re-stamped at ours** — a rider who
+     downgrades, or two browser tabs on different builds. Discarding it would be destructive; a scheme we
+     cannot read renders as nothing, which upgrading again undoes. The price is that **every step must be
+     idempotent**, because a step can meet data it has already been run against. That is asserted, not assumed.
+- **Why the test feeds whole blobs through the real store:** the migration function is the easy half.
+  Everything that can silently eat a rider's favourites lives in the wiring around it — and one piece of that
+  wiring is genuinely surprising: `persist` calls `migrate` only when the stored `version` is a **number** and
+  differs from ours, so a blob with **no** `version` field is loaded verbatim and never migrated at all. That
+  is harmless here only because every write this store has ever made stamped `version: 0` (`persist`'s
+  default), which is a fact about the past that a test now pins rather than a property anyone should
+  remember. So the suite writes the literal `{"state":…,"version":0}` strings into an in-memory storage,
+  rehydrates the **real** store with only that storage swapped, and asserts both the resulting state and the
+  bytes written back — a migration that is right in memory and wrong on disk is still broken.
+- **Consequences:**
+  - `preferences.ts` exports `PREFERENCES_VERSION` and `migratePreferences`; the next change to what a
+     persisted key *means* is a numbered step beside this one, not an edit to the current one.
+  - **One accepted loss, stated rather than hidden:** the pre-2026-06-10 `favorites` list (bare stop ids,
+    ADR-032's removed primitive) is not migrated. A bare stop cannot become a route-at-stop pair without
+    inventing a route, and no shipped UI ever created one; `partialize` drops the field at the next write.
+  - **One accepted cost:** an over-expanded key for a pole that does not serve the route stays on disk for
+    good, and the Favourites tab issues one `getStop` per distinct saved pole — so a two-member expansion is
+    one extra request, coalesced back into a single card because the grouping is by place.
+  - ADR-059 §5's hazard shrinks: because favourites no longer hold place ids after v1, changing the member
+    collation in `formatPlaceId` can no longer orphan a favourite. It still churns deep links and query-cache
+    keys, so the rule stands — it is just no longer load-bearing for the rider's saved list.
+  - Cross-device sync of favourites ([docs/07](./07-backlog.md)) inherits this: the migration runs where the
+    blob is, so a server-side copy of the list would need the same numbered step rather than a second scheme.

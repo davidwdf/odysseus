@@ -1,6 +1,7 @@
 import {
   etaView,
   fareRange,
+  formatFavoriteRouteKey,
   inferBusMarkers,
   type Locale,
   memberStopIds,
@@ -42,7 +43,7 @@ import { StopName } from '../../components/StopName'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { usePageRevealReady } from '../../lib/navTransitions'
-import { favoriteRouteKey, usePreferences } from '../../lib/preferences'
+import { usePreferences } from '../../lib/preferences'
 import { isCircular, splitStopCode, stripCircular, titleCaseName } from '../../lib/stopName'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useTheme } from '../../lib/useTheme'
@@ -132,7 +133,8 @@ export default function RouteDetail() {
   // stop id — ADR-042) → the rail node becomes a star at those stops.
   const favoriteRoutes = usePreferences((s) => s.favoriteRoutes)
   const favSet = new Set(favoriteRoutes)
-  const isSaved = (stopId: string) => !!routeId && favSet.has(favoriteRouteKey(stopId, routeId))
+  const isSaved = (stopId: string) =>
+    !!routeId && favSet.has(formatFavoriteRouteKey(stopId, routeId))
 
   // Once flipped, the boarding stop we arrived on no longer applies (the reverse serves the
   // opposite kerbs), so drop the here-anchor and its one-time auto-scroll.
@@ -408,7 +410,7 @@ function StopActionSheet({
   onViewStop: () => void
 }) {
   const { color } = useTheme()
-  const key = favoriteRouteKey(stop.id, routeId)
+  const key = formatFavoriteRouteKey(stop.id, routeId)
   const saved = usePreferences((s) => s.favoriteRoutes.includes(key))
   const toggle = usePreferences((s) => s.toggleFavoriteRoute)
   return (
