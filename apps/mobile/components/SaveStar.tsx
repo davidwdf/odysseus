@@ -1,7 +1,8 @@
+import { formatFavoriteRouteKey } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { Star } from 'lucide-react-native'
 import { Pressable, type StyleProp, type ViewStyle } from 'react-native'
-import { favoriteRouteKey, usePreferences } from '../lib/preferences'
+import { usePreferences } from '../lib/preferences'
 import { useTheme } from '../lib/useTheme'
 import { useLocale } from '../providers/LocaleProvider'
 import { Icon } from './Icon'
@@ -9,7 +10,7 @@ import { Icon } from './Icon'
 /**
  * The route-at-stop favourite indicator (ADR-032/042): a star reflecting whether this route —
  * at the **member pole** it departs from — is saved. The key is the operator-scoped member
- * stop id (`favoriteRouteKey(stopId, routeId)`), **never** the churning `P:` place id, so
+ * stop id (`formatFavoriteRouteKey(stopId, routeId)`), **never** the churning `P:` place id, so
  * re-tuning the clustering can't orphan a saved favourite.
  *
  * Used in Place detail as a per-row indicator. With `hideWhenEmpty` it renders nothing until
@@ -33,7 +34,7 @@ export function SaveStar({
 }) {
   const locale = useLocale()
   const { color } = useTheme()
-  const key = favoriteRouteKey(stopId, routeId)
+  const key = formatFavoriteRouteKey(stopId, routeId)
   const saved = usePreferences((s) => s.favoriteRoutes.includes(key))
   const toggle = usePreferences((s) => s.toggleFavoriteRoute)
 
