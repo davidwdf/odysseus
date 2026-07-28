@@ -1,5 +1,5 @@
 import { t } from '@nextbus/i18n'
-import { ELEVATION, FONT_FAMILY } from '@nextbus/ui'
+import { elevationStyle, FONT_FAMILY } from '@nextbus/ui'
 import { Tabs, useRouter } from 'expo-router'
 import { type LucideIcon, MapPin, Search, Settings, Star } from 'lucide-react-native'
 import { type ColorValue, Platform, StyleSheet, View } from 'react-native'
@@ -38,7 +38,7 @@ export default function TabsLayout() {
   // it also gets the e3 shadow to float.
   const layout = useTabBarLayout()
   const tabAnimation = useTabAnimation()
-  const shadow = isDark ? null : Platform.OS === 'android' ? ELEVATION.e3.android : ELEVATION.e3.ios
+  const shadow = isDark ? null : elevationStyle('e3', Platform.OS)
   return (
     // The wrapper paints the active theme bg so the cross-fade never reveals the navigator's
     // default *light* background between the two fading scenes — a pale flash in dark mode (ADR-043).

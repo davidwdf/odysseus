@@ -1,55 +1,22 @@
 // Theme = a set of values for the semantic tokens (docs/09-theme.md, ADR-015, ADR-029).
-// Values are "R G B" triplets so Tailwind's `rgb(var(--x) / <alpha-value>)` works.
+// The values themselves live in tokens.json and arrive here through `tokens.generated.ts`;
+// this module is only the *rules* — how a preference resolves to a mode, and how a token
+// resolves to a colour for the few surfaces that cannot take a className.
 //
 // One **Ink** identity, in light + dark (ADR-029 retired the multi-livery axis). It's a
-// monochrome "ink & paper" system: the accent is the *ink* on light (dark mark on a white
-// page) and inverts to *paper* on dark (light mark on an ink field). Operator colours
-// (RouteChip) and status colours stay separate, so data meaning is unaffected. Apply on
-// native with NativeWind's `vars(themes[mode])`.
+// monochrome "ink & paper" system: the accent is the *ink* on light (a dark mark on a white
+// page) and inverts to *paper* on dark. Operator colours (RouteChip) and status colours stay
+// separate, so data meaning is unaffected. Apply on native with NativeWind's `vars(themes[mode])`.
+
+import { THEME_VARS, type ThemeMode } from './tokens.generated'
 
 export type ThemeVars = Record<`--${string}`, string>
 
-export type Mode = 'light' | 'dark'
+export type Mode = ThemeMode
 /** User-facing appearance preference; `auto` follows the OS scheme. */
 export type Appearance = 'auto' | 'light' | 'dark'
 
-// Light — ink on paper. The accent IS the ink (#111827): a near-black mark on white.
-const light: ThemeVars = {
-  '--bg': '255 255 255',
-  '--surface': '248 250 252',
-  '--surface-2': '241 245 249',
-  '--border': '226 232 240',
-  '--text': '17 24 39',
-  '--text-muted': '71 85 105',
-  '--text-subtle': '100 116 139',
-  '--accent': '17 24 39',
-  '--accent-contrast': '255 255 255',
-  '--focus': '17 24 39',
-  '--positive': '22 163 74',
-  '--warning': '217 119 6',
-  '--danger': '220 38 38',
-}
-
-// Dark — paper on ink. The same idea inverted: deep ink surfaces, paper-white text, and
-// the accent becomes the *paper* (a soft off-white mark on the ink field) — monochrome,
-// no coloured accent. Status colours keep their dark variants.
-const dark: ThemeVars = {
-  '--bg': '13 17 28',
-  '--surface': '22 27 41',
-  '--surface-2': '32 38 54',
-  '--border': '44 51 67',
-  '--text': '244 246 250',
-  '--text-muted': '158 165 180',
-  '--text-subtle': '107 114 128',
-  '--accent': '226 232 240',
-  '--accent-contrast': '13 17 28',
-  '--focus': '226 232 240',
-  '--positive': '34 197 94',
-  '--warning': '245 158 11',
-  '--danger': '239 68 68',
-}
-
-export const themes: Record<Mode, ThemeVars> = { light, dark }
+export const themes: Record<Mode, ThemeVars> = THEME_VARS
 
 /** Resolve the appearance preference + OS scheme to a concrete mode. */
 export function resolveMode(appearance: Appearance, systemIsDark: boolean): Mode {

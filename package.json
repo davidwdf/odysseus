@@ -15,7 +15,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test && pnpm run boundaries",
+    "test": "turbo run test && pnpm run boundaries && pnpm run check:no-raw-colours",
     "boundaries": "pnpm run boundaries:check && pnpm run boundaries:selftest && pnpm run check:no-adhoc-id-parsing",
     "boundaries:gen": "node scripts/boundaries/generate.mjs",
     "boundaries:check": "node scripts/boundaries/check.mjs",
@@ -24,7 +24,8 @@
     "dataset:build": "pnpm --filter @nextbus/edge dataset:build",
     "dataset:publish": "pnpm --filter @nextbus/edge dataset:publish",
     "study:gmb-names": "pnpm --filter @nextbus/edge exec node --import tsx scripts/studies/gmb-name-matching.mts",
-    "check:no-adhoc-id-parsing": "node scripts/check-no-adhoc-id-parsing.mjs"
+    "check:no-adhoc-id-parsing": "node scripts/check-no-adhoc-id-parsing.mjs",
+    "check:no-raw-colours": "node scripts/check-no-raw-colours.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
