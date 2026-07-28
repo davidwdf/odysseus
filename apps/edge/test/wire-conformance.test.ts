@@ -1,6 +1,9 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
-import { ErrorResponseSchema, WIRE_ENDPOINTS } from '@nextbus/contract'
+import { ERROR_CODES, ErrorResponseSchema, WIRE_ENDPOINTS } from '@nextbus/contract'
+import type { ErrorCode } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetDatasetState } from '../src/dataset'
+import { fail } from '../src/errors'
 import { resetEtaCache } from '../src/eta-cache'
 import worker from '../src/index'
 import { datasetJson, kmbStopEtaJson, ORIGIN } from './fixtures'
@@ -143,17 +146,218 @@ describe('every published endpoint conforms to its schema', () => {
   })
 })
 
-describe('the error envelope', () => {
-  it('conforms on an unknown path', async () => {
-    const res = await get('/v1/nope')
-    expect(res.status).toBe(404)
-    expect(ErrorResponseSchema.safeParse(await res.json()).success).toBe(true)
+// ── The error taxonomy (WP2-8 acceptance, ADR-064) ────────────────────────────────────────────
+//
+// One row per error *exit* in `apps/edge/src`, driven through the real Worker. The table is the
+// point: the previous two examples asserted only that the envelope parsed, which is why a
+// malformed id could return `502` — a status nobody had written down as wrong — for as long as it
+// did. Here every row names the code it expects, and the status is looked up from the contract's
+// own table, so a row cannot quietly agree with a handler that picked the wrong one.
+//
+// Two completeness assertions stop the table rotting:
+//   · every member of `ERROR_CODES` is exercised, so adding a code without a path is red;
+//   · every published endpoint that takes a parameter has at least one row, because a parameter is
+//     the only way a client can get a request wrong. A new endpoint with an `{id}` and no error
+//     case shows up here rather than in a native client's crash log.
+
+interface ErrorCase {
+  name: string
+  code: ErrorCode
+  /** The published endpoint this row exercises, or `null` for a router- or tile-level exit. */
+  endpoint: string | null
+  /** A request path, or `direct` for a code no request can provoke. */
+  path?: string
+  /** `internal` means *we* have a bug, so by construction nothing a client sends can reach it. */
+  direct?: () => Response
+  /**
+   * Make every outbound fetch fail with this, for the two codes that need a broken upstream rather
+   * than a bad request. `/v1/index` on an unseeded KV falls back to the inline build, which is a
+   * real fetch of the consolidated dataset — so failing it exercises the catch every dataset-backed
+   * endpoint shares.
+   */
+  fault?: Error
+}
+
+/** A well-formed stop id the fixture cannot possibly contain. */
+const ABSENT_STOP = 'KMB:NOSUCHPOLE'
+/** A well-formed route id, likewise absent. */
+const ABSENT_ROUTE = 'KMB:ZZZZ:outbound:1'
+
+const ERROR_CASES: ErrorCase[] = [
+  { name: 'a path that is not an endpoint', code: 'not_found', endpoint: null, path: '/v1/nope' },
+  {
+    name: 'nearby with no coordinates at all',
+    code: 'bad_request',
+    endpoint: 'getNearby',
+    path: '/v1/nearby?radius=498',
+  },
+  {
+    name: 'nearby with an unreadable coordinate',
+    code: 'bad_request',
+    endpoint: 'getNearby',
+    path: '/v1/nearby?lat=abc&lng=114.17&radius=496',
+  },
+  {
+    // The defect WP2-8 exists for: this was a 502, i.e. "try again", forever.
+    name: 'a stop id that is not an id',
+    code: 'bad_request',
+    endpoint: 'getStop',
+    path: '/v1/stop/not-an-id',
+  },
+  {
+    // ADR-059's other half: a place id with an empty member denotes a *different* place, so it is
+    // rejected rather than resolved — and rejection has to be permanent, not retryable.
+    name: 'a place id with a missing member',
+    code: 'bad_request',
+    endpoint: 'getStop',
+    path: `/v1/stop/${encodeURIComponent('P:KMB:POLE00+')}`,
+  },
+  {
+    name: 'a path segment that is not valid percent-encoding',
+    code: 'bad_request',
+    endpoint: 'getStop',
+    path: '/v1/stop/%E0%A4%A',
+  },
+  {
+    name: 'a well-formed stop id nothing serves',
+    code: 'not_found',
+    endpoint: 'getStop',
+    path: `/v1/stop/${encodeURIComponent(ABSENT_STOP)}`,
+  },
+  {
+    name: 'a route id whose direction is not a direction',
+    code: 'bad_request',
+    endpoint: 'getRoute',
+    path: `/v1/route/${encodeURIComponent('KMB:6:sideways:1')}`,
+  },
+  {
+    name: 'a well-formed route id nothing serves',
+    code: 'not_found',
+    endpoint: 'getRoute',
+    path: `/v1/route/${encodeURIComponent(ABSENT_ROUTE)}`,
+  },
+  {
+    name: 'etas for an id that is not an id',
+    code: 'bad_request',
+    endpoint: 'getStopEtas',
+    path: '/v1/etas/nope',
+  },
+  {
+    name: 'etas for a well-formed id nothing serves',
+    code: 'not_found',
+    endpoint: 'getStopEtas',
+    path: `/v1/etas/${encodeURIComponent(ABSENT_STOP)}`,
+  },
+  {
+    name: 'the debug eta endpoint without its segments',
+    code: 'bad_request',
+    endpoint: null,
+    path: '/v1/eta/kmb',
+  },
+  {
+    name: 'the debug eta endpoint asked for GMB',
+    code: 'bad_request',
+    endpoint: null,
+    path: '/v1/eta/gmb/S1/19M/1',
+  },
+  {
+    name: 'a tile below the basemap zoom floor',
+    code: 'bad_request',
+    endpoint: null,
+    path: '/v1/tiles/basemap/3/1/1.png',
+  },
+  {
+    name: 'a label layer in a language LandsD does not publish',
+    code: 'bad_request',
+    endpoint: null,
+    path: '/v1/tiles/label/de/16/53550/28598.png',
+  },
+  {
+    name: 'a bug of ours',
+    code: 'internal',
+    endpoint: null,
+    // Unreachable by request on purpose: every handler that can fail already classifies itself, so
+    // `internal` is what the top-level catch in `index.ts` reports when one of them throws anyway.
+    // Asserting the envelope through the helper is the honest test of a branch a client cannot
+    // provoke — the alternative is a fault injected into production code to make a test go green.
+    direct: () => fail('internal', 'synthetic'),
+  },
+  {
+    name: 'upstream refusing the connection',
+    code: 'upstream_unavailable',
+    endpoint: 'getSearchIndex',
+    // A distinct query string per fault case: `caches.default` is not reset between tests, and a
+    // shared URL would be answered from the edge cache before any of this ran.
+    path: '/v1/index?bust=unavailable',
+    fault: new Error('connection refused'),
+  },
+  {
+    name: 'upstream timing out',
+    code: 'upstream_timeout',
+    endpoint: 'getSearchIndex',
+    path: '/v1/index?bust=timeout',
+    fault: Object.assign(new Error('the operation timed out'), { name: 'TimeoutError' }),
+  },
+]
+
+async function assertTaxonomy(res: Response, code: ErrorCode, label: string): Promise<void> {
+  const expected = ERROR_CODES[code]
+  expect(res.status, `${label}: status must be the one ERROR_CODES gives '${code}'`).toBe(
+    expected.status,
+  )
+  // An error a cache holds outlives the republish that would have fixed it.
+  expect(res.headers.get('cache-control'), label).toBe('no-store')
+
+  const body = await res.json()
+  const parsed = ErrorResponseSchema.safeParse(body)
+  if (!parsed.success) {
+    throw new Error(
+      `${label} is not an ErrorResponse:\n${JSON.stringify(parsed.error.issues, null, 2)}`,
+    )
+  }
+  expect(parsed.data.code, label).toBe(code)
+  expect(parsed.data.retryable, `${label}: retryable must follow the code, not the handler`).toBe(
+    expected.retryable,
+  )
+  // The deprecated field is still served (ADR-052 §5 — additive now, removal later) and still
+  // duplicates `message`, which is the whole reason retiring it is safe.
+  expect(parsed.data.error, label).toBe(parsed.data.message)
+  expect(
+    canonical(parsed.data),
+    `${label} carries a field ErrorResponse does not describe`,
+  ).toEqual(canonical(body))
+}
+
+describe('the error taxonomy', () => {
+  it('exercises every member of ERROR_CODES — a code with no path is a code nobody has seen', () => {
+    const covered = new Set(ERROR_CASES.map((c) => c.code))
+    expect([...Object.keys(ERROR_CODES)].filter((c) => !covered.has(c as ErrorCode))).toEqual([])
   })
 
-  it('conforms on a bad request', async () => {
-    // Missing lat/lng — the 400 branch of /v1/nearby.
-    const res = await get('/v1/nearby?radius=498')
-    expect(res.status).toBe(400)
-    expect(ErrorResponseSchema.safeParse(await res.json()).success).toBe(true)
+  it('covers every parameterised endpoint — a parameter is how a client gets a request wrong', () => {
+    const covered = new Set(ERROR_CASES.map((c) => c.endpoint).filter(Boolean))
+    const uncovered = WIRE_ENDPOINTS.filter(
+      (ep) => ep.params.length > 0 && !covered.has(ep.operationId),
+    ).map((ep) => ep.operationId)
+    expect(uncovered).toEqual([])
   })
+
+  for (const c of ERROR_CASES) {
+    it(`classifies ${c.name} as ${c.code}`, async () => {
+      if (c.fault) {
+        // The memoized inline index has to go both ways round: in, so the failing fetch is actually
+        // attempted; out, so the next test does not inherit a poisoned isolate.
+        resetDatasetState()
+        globalThis.fetch = (async () => {
+          throw c.fault
+        }) as typeof fetch
+      }
+      try {
+        const res = c.direct ? c.direct() : await get(c.path as string)
+        await assertTaxonomy(res, c.code, `${c.name} (${c.path ?? 'direct'})`)
+      } finally {
+        if (c.fault) resetDatasetState()
+      }
+    })
+  }
 })

@@ -12,13 +12,13 @@
     "dataset:publish": "node --import tsx scripts/publish-dataset.mts"
   },
   "dependencies": {
+    "@nextbus/contract": "workspace:*",
     "@nextbus/core": "workspace:*",
     "@nextbus/data-normalize": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^5.20260727.1",
-    "@nextbus/contract": "workspace:*",
     "@nextbus/tsconfig": "workspace:*",
     "tsx": "^4.23.1",
     "typescript": "5.9.3",

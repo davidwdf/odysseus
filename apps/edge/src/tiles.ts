@@ -18,6 +18,8 @@
 // Attribution obligations (logo on the map face + copyright notice) are the client's job and
 // live in `components/MiniMap.tsx`; this file only moves bytes.
 
+import { fail } from './errors'
+
 const LANDSD = 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz'
 /** Spatial reference: WGS84 matches the lat/lng we carry everywhere. */
 const SR = 'WGS84'
@@ -83,10 +85,17 @@ export async function fetchTile(upstream: string): Promise<Response> {
     cf: { cacheTtl: TILE_TTL_SEC, cacheEverything: true },
   } as RequestInit)
   if (!res.ok) {
-    return new Response(`tile upstream ${res.status}`, {
-      status: res.status === 404 ? 404 : 502,
-      headers: { 'cache-control': 'no-store' },
-    })
+    // A tile failure is an API failure and carries the same envelope as every other (ADR-064).
+    // It used to be a bare text body with a hand-picked status; a `<Image>` never read either, but
+    // a native client debugging a blank map did, and "502" told it to keep retrying a tile that
+    // does not exist. Upstream 404 is permanent at this coordinate; their 504 is their timeout.
+    const code =
+      res.status === 404
+        ? 'not_found'
+        : res.status === 504
+          ? 'upstream_timeout'
+          : 'upstream_unavailable'
+    return fail(code, `tile upstream ${res.status}`, { 'access-control-allow-origin': '*' })
   }
   return new Response(res.body, {
     headers: {

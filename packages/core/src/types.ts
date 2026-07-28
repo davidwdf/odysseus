@@ -21,6 +21,8 @@
 
 import type {
   BoundSchema,
+  ErrorCodeSchema,
+  ErrorResponseSchema,
   EtaSchema,
   FreqBandSchema,
   FreqPatternSchema,
@@ -112,3 +114,12 @@ export type StopDetail = z.infer<typeof StopDetailSchema>
 
 /** A nearby stop (or merged place) with distance + its soonest arrivals. */
 export type NearbyStop = z.infer<typeof NearbyStopSchema>
+
+/** Why a request failed, in the vocabulary every failure is classified into (ADR-064). Treat it as
+ *  open — the server may mint a member this build has never heard of, which is what `retryable`
+ *  on the envelope is for. */
+export type ErrorCode = z.infer<typeof ErrorCodeSchema>
+
+/** The envelope every non-2xx JSON response carries. `retryable` is the one field a background
+ *  client needs: `false` means prune the request, not retry it. */
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>

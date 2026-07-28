@@ -2433,3 +2433,105 @@ rather than the docs. **The blocking open question above is unchanged** — this
   is written before any shard and `build:current` is flipped last, so ADR-055's write order held under a real
   failure rather than a simulated one. The preflight logic was exercised in all three states (nothing set,
   credentials present but namespace still a placeholder, all present).
+
+## ADR-064 — The error taxonomy: the status code and the code are one decision
+- **Status:** **Decided and implemented 2026-07-28** (WP2-8 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Declaration:
+  `packages/contract/src/wire/responses.ts` (`ErrorCodeSchema`, `ERROR_CODES`, `ErrorResponseSchema`);
+  the only constructor: `apps/edge/src/errors.ts`; the gate: `apps/edge/test/wire-conformance.test.ts`.
+  Discharges the first of the two "faithful but wrong" transcriptions
+  [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+  recorded and the last bullet of
+  [ADR-059](#adr-059--the-id-grammar-one-parser-in-core-the-spec-and-corpus-in-contract)'s follow-ups.
+- **Context:** the plan specified `{code, message, retryable}` in *The contracts* from the first draft,
+  and separately noted that a malformed id returned **502** where **400** is correct. They were written
+  down as two items, tracked as two items, and owned by nobody — which is how something specified from
+  the start quietly never happens. They are **one defect**. `5xx` *is* the retryable signal: every HTTP
+  client, every CDN and every background scheduler in the path reads the status line, and most of them
+  read nothing else. An iOS Widget holding a favourite whose id no longer parses gets a 502, concludes
+  "transient", and retries on every refresh for as long as the rider keeps the tile — on their battery,
+  against our edge, forever. Adding a `code` field to the body would not have fixed that on its own,
+  because URLSession classifies the response before anything reads the JSON. So the taxonomy is only
+  worth anything if the status is derived from it rather than chosen next to it.
+  The second half of the context is who this is *for*. The PWA does no runtime validation at all
+  (ADR-052 decision 2) and its screens mostly just show "couldn't load". The consumer that needs this is
+  the one that cannot ask a human: a Widget, a complication, a background refresh — anything that has to
+  decide, unattended, between *prune this permanently* and *try again later*.
+- **Decision:**
+  1. **One table binds the code, the HTTP status and the retry advice.** `ERROR_CODES` in the contract
+     maps each of `bad_request → 400`, `not_found → 404`, `internal → 500`,
+     `upstream_unavailable → 502`, `upstream_timeout → 504` to its status **and** its `retryable`.
+     `apps/edge/src/errors.ts`'s `fail(code, message)` takes a code and reads the status off the table;
+     nothing in `apps/edge` can produce a failure response any other way. That is the whole mechanism:
+     the two halves of the defect cannot come apart again because there is no longer a place to write
+     them separately. `satisfies Record<z.infer<typeof ErrorCodeSchema>, …>` makes a code without a
+     status, or a status without a code, a typecheck error.
+  2. **`retryable` is "may the identical request succeed later?", and it is `false` only for
+     `bad_request` and `not_found`.** `internal` is retryable, which looks wrong for a second and is
+     not: a bug of ours is no evidence that the rider's saved stop has gone, and pruning somebody's
+     favourites because we shipped a bad deploy is the worse of the two failures. The rule the client
+     needs is "is this *my* request that is wrong?", not "whose fault is it?".
+  3. **`retryable` travels on the wire rather than being a table the client compiles in.** `ErrorCode`
+     is marked `x-unknown-tolerant` like the other closed enums (ADR-052 decision 4) — `rate_limited`
+     is the obvious next member — and an already-installed client that has never heard of a new code
+     must still know whether to retry it. A compiled-in mapping would make every new member a store
+     release. This is the same reasoning as ADR-053's served `ClientPolicy`, applied to failure.
+  4. **Malformed and absent are different, and neither is retryable.** An id that does not parse
+     (`parseStopOrPlaceId` / `parseRouteId` return `null`) is `bad_request`; an id that parses and
+     resolves to nothing is `not_found`. Both are permanent, so a Widget prunes either — but the split
+     is worth keeping because it is the difference between *our id scheme changed* (a migration bug,
+     WP2-5's territory) and *this pole left the dataset* (ordinary churn), and only one of those is
+     something we should be paged about. Parsing happens **before** the KV read, so a junk id costs no
+     lookups.
+  5. **Shipped additively per ADR-052 §5.** `code`, `message` and `retryable` are served *alongside*
+     `error`, which is unchanged and still duplicates `message`. Nothing that reads `error` today
+     breaks. **What retires `error`:** it is removed in the first release after a native client exists
+     and is generated from `openapi.json` (WP3-3) — the removal is breaking, so it needs the `oasdiff`
+     gate, its own ADR and a `CONTRACT_VERSION` major bump. Until then it is marked `deprecated: true`
+     in the emitted schema, which is the only signal a generated client will actually surface. The web
+     client never read it, so the deprecation window costs us one duplicated string per failure.
+- **The gate:** `apps/edge/test/wire-conformance.test.ts` is now table-driven — one row per error exit
+  in `apps/edge/src`, driven through the real Worker inside workerd, each asserting the status
+  `ERROR_CODES` gives its code, the code itself, `retryable`, `cache-control: no-store`, and that the
+  body carries nothing `ErrorResponseSchema` does not describe. Two completeness assertions keep the
+  table honest: **every member of `ERROR_CODES` must be exercised**, and **every published endpoint
+  that takes a parameter must have at least one row** — a parameter is the only way a client can get a
+  request wrong, so a new `{id}` endpoint with no error case is visible here rather than in a native
+  crash log. `internal` is the one row driven through the helper rather than a request, and
+  deliberately so: it is what the top-level catch reports when a handler that should have classified
+  itself throws anyway, so *nothing a client can send* reaches it. Injecting a fault into production
+  code to turn that row green would be testing the injection.
+- **Four defects this surfaced, all fixed here** (each was a real error exit that classified wrongly):
+  - **A malformed id was a 502** at `stopDetail`/`stopEtas`/`routeDetail` — the ADR-059 note. Now 400.
+  - **A well-formed id for a stop that does not exist was also a 502.** Now 404. This is the one with a
+    behaviour change downstream: `apps/edge/test/dataset-kv.test.ts`'s "build whose keys were never
+    written" case asserted 502 and now asserts 404, because the Worker genuinely cannot tell an absent
+    shard from an absent stop. It does not have to: `build:current` is flipped last, so a *current*
+    build always has its keys (ADR-055), and the synthetic state that test constructs is unreachable.
+  - **A malformed percent-escape in a path threw.** Every canonical id is percent-encoded (place ids
+    contain `+`), and `decodeURIComponent('%E0%A4%A')` raises `URIError` — which left the isolate as
+    workerd's bare `Error 1101`: no envelope at all, and a 500 that reads as retryable. Now a 400.
+  - **Tile failures answered in `text/plain` with a hand-picked status.** An `<Image>` reads neither,
+    but a native client debugging a blank map does, and "502" told it to keep retrying a tile that will
+    never exist. Now the same envelope, with upstream's 404 as `not_found` and their 504 as
+    `upstream_timeout`.
+- **`upstream_unavailable`, not `internal`, is the default for an unclassified throw** at the two
+  request-scoped catches. The producers there are dataset reads (KV, R2, `data.hkbus.app`) and live ETA
+  calls, so an unclassified throw is I/O far more often than a bug — and it preserves today's 502 for
+  every path that was not the id defect, which matters because those 502s may be load-bearing for a
+  client we cannot see. `internal` is reached only from the top-level catch, where a throw genuinely is
+  ours; it logs the stack.
+- **Consequences / notes:**
+  - `EdgeRequestError` in `@nextbus/api-client` replaces `new Error("… → HTTP 502")` and carries
+    `status`, `code` and `retryable`. It reads the envelope as data — `@nextbus/core`'s types erase, so
+    there is nothing to validate with — and falls back to `internal`/retryable when the body is not
+    ours. That fallback is for a response the Worker never sent (a Cloudflare error page, a captive
+    portal); treating an unreadable 404 from airport wifi as permanent would prune favourites.
+  - `@nextbus/contract` moved from a devDependency of `apps/edge` to a dependency. It costs no bundle:
+    zod is already in the Worker via `@nextbus/data-normalize`'s upstream parsers.
+  - The `500` and `504` responses were missing from every path in `openapi.json` — the emit built its
+    responses map by hand. It now derives it from `ERROR_CODES`, so the document cannot list a status
+    the taxonomy does not mint, or omit one it does.
+  - **Not done, and deliberately:** no `rate_limited`, because we do not rate-limit; no per-field
+    validation detail in the envelope, because the plan's batch-ETA POST (which needs "the offending
+    index") is a later work package and inventing the shape now would be guessing.

@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { WIRE_JSON_SCHEMA_OPTIONS } from './json-schema'
 // Importing the module (not just `WIRE_ENDPOINTS`) is what registers every shape it reaches —
 // including `ErrorResponseSchema`, which appears below only as a `$ref` string.
-import { WIRE_ENDPOINTS } from './wire/responses'
+import { ERROR_CODES, WIRE_ENDPOINTS } from './wire/responses'
 
 /**
  * Bumped only for a **breaking** change, alongside the `oasdiff` gate and an ADR (ADR-052 §5).
@@ -18,10 +18,20 @@ import { WIRE_ENDPOINTS } from './wire/responses'
  */
 export const CONTRACT_VERSION = '1.0.0'
 
-const ERROR_RESPONSE = {
-  description: 'Request could not be served.',
-  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
-}
+/**
+ * The documented failure statuses, derived from `ERROR_CODES` so the OpenAPI document cannot list
+ * a status the taxonomy doesn't mint — or omit one it does. The previous hand-written `400/404/502`
+ * map is exactly how `504` and `500` went undocumented (ADR-064).
+ */
+const ERROR_RESPONSES: Record<string, unknown> = Object.fromEntries(
+  Object.entries(ERROR_CODES).map(([code, { status, retryable }]) => [
+    String(status),
+    {
+      description: `\`code: "${code}"\` — ${retryable ? 'the identical request may succeed later.' : 'permanently wrong; a background client should prune the request, not retry it.'}`,
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+    },
+  ]),
+)
 
 /**
  * Emit every registered wire schema as OpenAPI components.
@@ -71,9 +81,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               'application/json': { schema: { $ref: `#/components/schemas/${responseId}` } },
             },
           },
-          '400': ERROR_RESPONSE,
-          '404': ERROR_RESPONSE,
-          '502': ERROR_RESPONSE,
+          ...ERROR_RESPONSES,
         },
       },
     }
@@ -100,6 +108,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         '  Generate a fallback case (`case unknown(String)`); do not throw on an unrecognized value.',
         '- **ETAs are approximations.** Do not run a per-second countdown; refresh the value only when',
         '  a new reading arrives, and use `observedAt` to show staleness.',
+        '- **Every failure returns `ErrorResponse`.** Branch on `code`, and let `retryable` decide',
+        '  whether a background client (Widget, complication) retries or prunes the request. The',
+        '  status code always agrees with `code`. `error` duplicates `message` and is deprecated.',
       ].join('\n'),
     },
     paths,
