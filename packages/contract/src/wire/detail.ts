@@ -3,7 +3,7 @@
 import { z } from 'zod'
 import { EtaSchema } from './eta'
 import { I18nTextSchema, LatLngSchema } from './primitives'
-import { RouteRefSchema, RouteSchema } from './route'
+import { RouteRefSchema, RouteSchema, RouteSummarySchema } from './route'
 import { StopSchema } from './stop'
 
 /**
@@ -16,6 +16,9 @@ import { StopSchema } from './stop'
  * right now" (Citybus, for instance, has no bulk route-eta feed at all), which is a legitimate
  * state to render as "no service info", whereas a missing key would mean the server never
  * populated the field.
+ *
+ * `route` is the **full** service tier (`Route` → `RouteServiceInfo`): this is the one endpoint
+ * that carries `patterns` (ADR-065).
  */
 export const RouteDetailSchema = z
   .object({
@@ -42,15 +45,17 @@ export const RouteDetailSchema = z
  * the place id. `members` carries each pole's id/name/location for the multi-pin map and the
  * per-pole walk estimate; a lone stop has exactly one member.
  *
- * ⚠️ The `Route.service` on this endpoint omits `patterns` by design — see the note on
- * `RouteServiceInfo`.
+ * Routes here are `RouteSummary`, not `Route`: this endpoint serves the summary service tier, with
+ * no frequency profiles (ADR-065, ADR-055 §7). That is a property of the *type*, so a generated
+ * decoder cannot read the absence as "this route has no frequency table" — the field does not
+ * exist on the summary schema. Load `/v1/route/:id` for the profiles.
  */
 export const StopDetailSchema = z
   .object({
     stop: StopSchema,
     routes: z.array(
       z.object({
-        route: RouteSchema,
+        route: RouteSummarySchema,
         eta: EtaSchema.nullable(),
         fare: z.string().optional().describe('Boarding fare here, HK$ decimal string.'),
         stopId: z.string().describe('Canonical id of the member pole this route departs from.'),

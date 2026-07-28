@@ -1,4 +1,10 @@
-import { parseRouteId, type RouteLite, type SearchIndex, type StopLite } from '@nextbus/core'
+import {
+  parseRouteId,
+  type RouteLite,
+  routeSortKey,
+  type SearchIndex,
+  type StopLite,
+} from '@nextbus/core'
 import { canonicalRouteId, type StaticIndex } from '@nextbus/data-normalize'
 
 // Build the compact on-device search index (ADR-037). Routes are collapsed to one record per
@@ -17,7 +23,22 @@ function preferServiceType(a: string, b: string): string {
   return a.localeCompare(b, 'en', { numeric: true }) <= 0 ? a : b
 }
 
-export function buildSearchIndex(index: StaticIndex): SearchIndex {
+/**
+ * SHA-256 of the payload, first 16 hex — the **same digest recipe** `scripts/build-dataset.mts`
+ * uses for the build hash. Deliberately not a cheaper non-cryptographic hash: a second hashing
+ * scheme in one system is a thing to keep in step for no benefit, and this runs once per build.
+ * `crypto.subtle` rather than `node:crypto` because this function has two runtimes — the node
+ * build script and the Worker's inline fallback — and only one of them has node's.
+ */
+async function contentHash(payload: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload))
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16)
+}
+
+export async function buildSearchIndex(index: StaticIndex): Promise<SearchIndex> {
   // Collapse directional/service-type variants to one route per (operator, no, bound).
   // GMB needs a different key: its public numbers repeat across regions (route "1" exists in
   // HKI *and* NT — genuinely different routes we must keep separate), yet within a region a
@@ -54,6 +75,10 @@ export function buildSearchIndex(index: StaticIndex): SearchIndex {
       bound: meta.bound,
       origin: meta.origin,
       destination: meta.destination,
+      // Precomputed here so the *display order* is data the client reads rather than a collator
+      // call it makes — the one thing three platforms could not be relied on to agree about
+      // (ADR-063). `routeSortKey` is the definition; the client can still derive it.
+      sortKey: routeSortKey(meta.route),
     })
   }
   const routes = [...byNumber.values()]
@@ -71,8 +96,16 @@ export function buildSearchIndex(index: StaticIndex): SearchIndex {
     stops.push({ id: s.id, name: s.name, lat: s.lat, lng: s.lng })
   }
 
-  // Coarse content tag: counts move whenever the dataset gains/loses routes or stops.
-  // Good enough for cache-busting the client blob; a true content hash is a follow-up.
-  const version = `${routes.length}.${stops.length}`
+  // The version is a **content hash of what we are about to ship**, not a pair of collection
+  // sizes. The size pair collided the moment a build added one route and dropped another — or one
+  // stop and one place — which is the ordinary shape of a daily dataset diff, and the collision
+  // is silent: the client compares two identical strings and keeps an index that no longer
+  // describes the network. It also moved for changes riders never see. This moves exactly when
+  // the bytes move, and doubles as the endpoint's ETag (ADR-063).
+  //
+  // Deliberately *not* the dataset build hash, which is available a few lines up the call stack:
+  // that hash digests every shard, so a fare change on one route would re-download the whole
+  // index for content identical to what the client already holds.
+  const version = await contentHash(JSON.stringify({ routes, stops }))
   return { version, routes, stops }
 }

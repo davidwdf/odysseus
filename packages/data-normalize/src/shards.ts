@@ -1,4 +1,10 @@
-import { type I18nText, memberStopIds, type OperatorId, type Route } from '@nextbus/core'
+import {
+  type I18nText,
+  memberStopIds,
+  type OperatorId,
+  type Route,
+  type RouteSummary,
+} from '@nextbus/core'
 import type { IndexPlace, IndexStop, StaticIndex } from './dataset'
 import { routeFareAtSeq } from './dataset'
 import { haversineM } from './kmb-static'
@@ -42,17 +48,17 @@ export interface MemberDoc {
 /**
  * A route serving one member pole, with the fare for boarding *there*.
  *
- * `route.service` here carries the **summary** tier only — `fareFull`, `journeyMin`, `headway`,
- * `hours` — and deliberately drops `patterns`, the per-day-type frequency profiles. Reason:
+ * `route` is a `RouteSummary`, not a `Route`: the summary service tier — `fareFull`, `journeyMin`,
+ * `headway`, `hours` — with `patterns`, the per-day-type frequency profiles, dropped. Reason:
  * `patterns` is read on exactly one screen (the Route fact sheets), and duplicating it into
  * every place a route touches accounted for **54 MB of an 82 MB build** — a big interchange's
  * document went from 188 kB to a fraction of that. `/v1/route/:id` still carries the full
- * profile, which is where the UI reads it from.
+ * profile, which is where the UI reads it from (ADR-065 names the tier so a decoder can see it).
  */
 export interface PlaceRouteDoc {
   /** Canonical id of the member pole this route departs from (ADR-042 grouping). */
   stopId: string
-  route: Route
+  route: RouteSummary
   fare?: string
 }
 
@@ -208,18 +214,32 @@ function toMember(s: IndexStop): MemberDoc {
 }
 
 /**
- * @param withPatterns keep `service.patterns` (the per-day-type frequency profiles). True for
- * `RouteDoc`, where the Route screen reads them; false for `PlaceDoc`, where nothing does — see
- * `PlaceRouteDoc` for the size arithmetic that makes this worth a parameter.
+ * Project a route onto the **summary service tier** — `service.patterns` dropped (ADR-065).
+ * Returns the argument untouched when there is nothing to drop, so re-summarizing a document a
+ * build already summarized costs no allocation.
+ *
+ * Exported because two callers need the *same* definition of what the tier is, for two different
+ * reasons: the shard build drops `patterns` for **size** (54 MB of an 82 MB build, ADR-055 §7),
+ * and the Worker's `/v1/stop/:id` drops it for the **contract** — a KV document is untyped JSON
+ * that may have been written by an older publisher, and the endpoint's tier must be a property of
+ * the endpoint, not of whatever happens to be in the namespace.
  */
-function routeOf(index: StaticIndex, routeId: string, withPatterns: boolean): Route | null {
+export function toRouteSummary(route: Route): RouteSummary {
+  if (!route.service?.patterns) return route
+  const { patterns: _dropped, ...summary } = route.service
+  // A route whose only static fact *was* the frequency table has no summary-tier facts left;
+  // emitting `service: {}` would claim otherwise.
+  if (Object.keys(summary).length === 0) {
+    const { service: _empty, ...rest } = route
+    return rest
+  }
+  return { ...route, service: summary }
+}
+
+function routeOf(index: StaticIndex, routeId: string): Route | null {
   const meta = index.routeMeta.get(routeId)
   if (!meta) return null
-  let service = meta.service
-  if (service && !withPatterns && service.patterns) {
-    const { patterns: _dropped, ...summary } = service
-    service = summary
-  }
+  const service = meta.service
   return {
     id: routeId,
     operator: meta.operator,
@@ -299,12 +319,12 @@ export function placeDocFor(index: StaticIndex, id: string): PlaceDoc | null {
   for (const m of raw) {
     for (const ref of index.stopToRoutes.get(m.id) ?? []) {
       const routeId = canonicalRouteId(ref.operator, ref.route, ref.bound, ref.serviceType)
-      const route = routeOf(index, routeId, false)
+      const route = routeOf(index, routeId)
       if (!route) continue
       const meta = index.routeMeta.get(routeId)
       const seq = seqOf(index, routeId, m.id)
       const fare = meta && seq ? routeFareAtSeq(meta, seq) : undefined
-      routes.push({ stopId: m.id, route, ...(fare ? { fare } : {}) })
+      routes.push({ stopId: m.id, route: toRouteSummary(route), ...(fare ? { fare } : {}) })
     }
   }
 
@@ -334,7 +354,7 @@ function preferServiceType(a: string, b: string): string {
 export function routeDocFor(index: StaticIndex, id: string): RouteDoc | null {
   const meta = index.routeMeta.get(id)
   const seqStops = index.routeToStops.get(id) ?? []
-  const route = routeOf(index, id, true)
+  const route = routeOf(index, id)
   if (!meta || !route || seqStops.length === 0) return null
 
   const stops: RouteDocStop[] = []

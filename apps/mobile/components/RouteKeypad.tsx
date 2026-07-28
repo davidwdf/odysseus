@@ -1,4 +1,4 @@
-import { nextValidChars, type RouteTrieNode } from '@nextbus/core'
+import { nextValidChars } from '@nextbus/core'
 import { Delete } from 'lucide-react-native'
 import { type ReactNode, useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
@@ -13,6 +13,8 @@ import { Text } from './Text'
 // are **filtered to only the valid next ones** as you type (fewer, changing options —
 // clearer than a wall of dimmed keys), both driven by a prefix-trie lookup. There is
 // no clear key: the number field's ✕ clears, and long-pressing backspace does too.
+// (The lookup was a prefix trie until ADR-063; it is now a range scan over the sorted
+// route-number array `routeKeys` produces. Same keys light up, one less structure to port.)
 // The letter row runs edge-to-edge: default left inset, items overflowing under the
 // right edge, with matching padding once scrolled.
 
@@ -60,17 +62,18 @@ function Key({
 
 export function RouteKeypad({
   value,
-  trie,
+  keys,
   letters,
   onChange,
 }: {
   value: string
-  trie: RouteTrieNode
+  /** Every reachable route number, upper-cased and byte-sorted (`routeKeys`). */
+  keys: readonly string[]
   /** Letters this dataset's route numbers ever use, in a stable order. */
   letters: string[]
   onChange: (next: string) => void
 }) {
-  const valid = useMemo(() => nextValidChars(trie, value), [trie, value])
+  const valid = useMemo(() => nextValidChars(keys, value), [keys, value])
   const validLetters = useMemo(() => letters.filter((ch) => valid.has(ch)), [letters, valid])
   const append = (ch: string) => onChange(value + ch)
   const backspace = () => onChange(value.slice(0, -1))

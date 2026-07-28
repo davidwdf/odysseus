@@ -26,7 +26,7 @@
  *
  * 1. **Grid-snapping.** Every coordinate is passed through `snapFix` (25 m cells) before it
  *    leaves the device — privacy, edge cacheability and offline replay all depend on it
- *    (`apps/mobile/lib/geoSnap.ts`, WP2-6; moves into `packages/core`). The port returns the
+ *    (`snapFix` in `@nextbus/core`, `src/geo-snap.ts` — WP2-6). The port returns the
  *    raw platform fix; **snapping is mandatory downstream, not optional.**
  * 2. **Remembering the last fix.** Persisted through {@link KeyValueStore} under
  *    `nextbus.lastFix.v1` and replayed as `stale: true`, which is what lets a cold *offline*

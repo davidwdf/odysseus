@@ -49,8 +49,10 @@
  *
  * - **XYZ / "slippy map", Web Mercator (EPSG:3857), 256 px tiles, `y` counted from the north** —
  *   the OSM and Google convention, *not* TMS's flipped `y`. The Mercator maths that goes with it
- *   (`lngToWorldX`, `latToWorldY`, `fitZoom`) lives in `components/MiniMap.tsx` today and moves
- *   into `packages/core` under WP2-4, so it is written once for all three platforms.
+ *   (`lngToWorldX`, `latToWorldY`, `fitZoom`) is `@nextbus/core/mercator` — written once for all
+ *   three platforms and pinned by `packages/core/spec/mercator.spec.json`. It reads the zoom
+ *   bounds below as a plain `ZoomRange`, which this interface satisfies structurally, because the
+ *   kernel may not import a port (ADR-051).
  * - **Tiles are fetched from our own Worker** (`/v1/tiles/...`), which caches the upstream and
  *   re-emits it as publicly cacheable. Do not call the Lands Department endpoints directly from
  *   a client: the caching that makes this affordable, and the compliance work that makes it

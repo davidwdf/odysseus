@@ -1,5 +1,5 @@
+import { splitStopCode, titleCaseName } from '@nextbus/core'
 import type { TypeVariant } from '@nextbus/ui'
-import { splitStopCode, titleCaseName } from '../lib/stopName'
 import { Text } from './Text'
 
 /**

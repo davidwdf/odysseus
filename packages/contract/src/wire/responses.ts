@@ -13,17 +13,69 @@ import { EtaSchema } from './eta'
 import { SearchIndexSchema } from './search'
 
 /**
- * The error envelope, **as it is served today**.
+ * The error taxonomy (ADR-064).
  *
- * ⚠️ This is not the taxonomy the plan specifies (`{code, message, retryable}`) and it is a known
- * gap, transcribed faithfully because WP1-1 changes no shapes (ADR-052). The cost is concrete: an
- * iOS Widget holding a favourite for a stop that no longer exists cannot distinguish "prune this
- * permanently" from "retry on the next refresh", so it retries forever. Fix additively — serve
- * `code` and `retryable` alongside `error`, let clients migrate, then retire `error`.
+ * **`x-unknown-tolerant` matters more here than anywhere else in the contract.** This vocabulary
+ * will grow — `rate_limited` is the obvious next member — and an error response is precisely the
+ * payload a client is least able to recover from by throwing. That is also why `retryable` rides
+ * on the wire as its own boolean instead of being a table a client compiles in: a client that has
+ * never heard of a code still knows what to do with it.
+ */
+export const ErrorCodeSchema = z
+  .enum(['bad_request', 'not_found', 'internal', 'upstream_unavailable', 'upstream_timeout'])
+  .meta({ id: 'ErrorCode', 'x-unknown-tolerant': true })
+
+/**
+ * The status code and the retry advice that belong to each member — **one table, not three**.
+ *
+ * The defect this replaces was not "the envelope lacks a code". It was that the status code and
+ * the meaning were chosen separately at each `fail()` call site, so a malformed id left the Worker
+ * as `502` — which reads as *retryable* to every HTTP client and cache in the path. An iOS Widget
+ * holding a favourite whose id no longer parses would retry it forever, and no amount of adding
+ * `code` to the body fixes that, because the Widget's URLSession sees the status line first.
+ * Binding the two together here is what makes them one decision: `apps/edge/src/errors.ts` takes a
+ * code and reads the status off this table, so a new error path physically cannot pick a status
+ * that disagrees with its meaning.
+ *
+ * `retryable` is "may the same request succeed later?", which is the question a Widget is actually
+ * asking — *prune this favourite permanently, or try again next refresh?* So `internal` is
+ * retryable: a fault on our side is not evidence that the rider's saved stop is gone, and pruning
+ * their favourites over our own bug is the worse failure.
+ *
+ * `satisfies Record<z.infer<typeof ErrorCodeSchema>, …>` is the drift gate — adding a member to
+ * the enum without a status is a typecheck error, and so is a table entry with no enum member.
+ */
+export const ERROR_CODES = {
+  bad_request: { status: 400, retryable: false },
+  not_found: { status: 404, retryable: false },
+  internal: { status: 500, retryable: true },
+  upstream_unavailable: { status: 502, retryable: true },
+  upstream_timeout: { status: 504, retryable: true },
+} as const satisfies Record<z.infer<typeof ErrorCodeSchema>, { status: number; retryable: boolean }>
+
+/**
+ * The error envelope every non-2xx JSON response carries.
+ *
+ * `error` is **deprecated and still served**: ADR-052 §5 makes additive free and removal breaking,
+ * so `code`/`message`/`retryable` land alongside it and it is retired in a later, gated change
+ * (ADR-064 says which one). It is a duplicate of `message` for as long as it exists — do not read
+ * both, and do not parse either. `code` is the field to branch on.
  */
 export const ErrorResponseSchema = z
   .object({
-    error: z.string(),
+    error: z.string().meta({
+      deprecated: true,
+      description: 'Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`.',
+    }),
+    code: ErrorCodeSchema,
+    message: z.string().meta({
+      description:
+        'Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it.',
+    }),
+    retryable: z.boolean().meta({
+      description:
+        'Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry.',
+    }),
   })
   .meta({ id: 'ErrorResponse' })
 

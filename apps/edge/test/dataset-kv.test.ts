@@ -72,7 +72,7 @@ beforeAll(async () => {
   for (const [cell, entries] of cells) {
     await kv.put(datasetKeys.cell(HASH, cell), JSON.stringify(entries))
   }
-  await r2.put(buildObjects.searchIndex(HASH), JSON.stringify(buildSearchIndex(index)))
+  await r2.put(buildObjects.searchIndex(HASH), JSON.stringify(await buildSearchIndex(index)))
 
   const manifest: BuildManifest = {
     hash: HASH,
@@ -235,7 +235,11 @@ describe('the mutable pointer', () => {
       expect(await nearbyRes.json()).toEqual([])
       // A stop id no earlier case requested: `caches.default` isn't reset between tests, so a
       // reused URL would be answered from the edge cache and prove nothing.
-      expect((await get(`/v1/stop/${encodeURIComponent('KMB:SOLO7')}`)).status).toBe(502)
+      // **404, not the 502 this asserted before WP2-8.** The id parses and resolves to nothing,
+      // which is what `not_found` means; the Worker genuinely cannot tell an absent shard from an
+      // absent stop, and the sentence above is why it does not have to — the pointer is written
+      // last, so a *current* build always has its keys.
+      expect((await get(`/v1/stop/${encodeURIComponent('KMB:SOLO7')}`)).status).toBe(404)
       // Still zero: a missing build is not a licence to rebuild the dataset in-request.
       expect((await health()).datasetBuildsThisIsolate).toBe(0)
       expect(upstreamDatasetFetches).toBe(0)

@@ -156,6 +156,15 @@ deployed Worker. That counter, not code review, is what stops the slow path quie
 Place screen reads it. `/v1/route/:id` still carries the full profiles, which is where the Route
 fact sheets read them from (ADR-044).
 
+The two tiers are **two named schemas**, not one schema with an optional field (ADR-065): a stop
+response returns `RouteSummary` → `RouteServiceSummary`, which has no `patterns` property at all,
+and `/v1/route/:id` returns `Route` → `RouteServiceInfo`, which does. A generated decoder therefore
+cannot read a missing frequency table as a fact about the route when it is really a fact about the
+endpoint. The bytes on the wire are unchanged; only the names the OpenAPI document gives them are
+new. `toRouteSummary` (`@nextbus/data-normalize`) is the single definition of what the tier drops,
+applied by the shard build for **size** and again by the Worker's `/v1/stop/:id` for the
+**contract** — a KV document is untyped JSON that may have been written by an older publisher.
+
 ## Basemap tiles (Worker proxy, ADR-049)
 `GET /v1/tiles/basemap/:z/:x/:y.png` and `GET /v1/tiles/label/:lang/:z/:x/:y.png` proxy the Hong Kong
 Lands Department raster services (`apps/edge/src/tiles.ts`). Three reasons it's a proxy and not a
@@ -186,7 +195,7 @@ Four layers, each matched to what it's caching:
 | Layer | Strategy | Why |
 |---|---|---|
 | App shell | Precache | Expo's export is content-hashed, so cache-first is safe *and* the fastest cold start. This is what makes the app **open** offline. |
-| `/v1/index` (search index) | Stale-while-revalidate | Large, changes about daily. Search and the keypad work instantly and offline, then quietly catch up. `lib/searchIndex.ts` also keeps its own AsyncStorage copy, so search survives a cache eviction. |
+| `/v1/index` (search index) | Stale-while-revalidate | Large, changes about daily. Search and the keypad work instantly and offline, then quietly catch up. `lib/searchIndex.ts` also keeps its own AsyncStorage copy, so search survives a cache eviction. The revalidation is cheap: the response carries a strong **ETag** — the index's own content hash, which is also its `version` — so an unchanged index costs a 304 rather than the blob (ADR-063). |
 | `/v1/nearby` · `etas` · `stop` · `route` | Network-first, 4 s timeout | Never cache-first: a bus that left four minutes ago is worse than no answer (ADR-008). The cached copy is the offline fallback and carries its original `observedAt`, so it's aged and labelled stale. |
 | `/v1/tiles/*` | Cache-first, runtime only | A tile already seen redraws offline. Deliberately **not** precached — speculatively fetching tiles nobody looked at is what LandsD's rate limit prohibits. |
 
@@ -195,7 +204,8 @@ Four layers, each matched to what it's caching:
   the last known arrivals instead of a spinner. Successes only: a persisted error would replay as
   "the app is broken" rather than "we're offline". This is not a breach of ADR-008 — what's restored
   is a *labelled old reading*, never a fresh-looking one.
-- The GPS fix is snapped to a **25 m grid** before it leaves the device (`lib/geoSnap.ts`). Privacy,
+- The GPS fix is snapped to a **25 m grid** before it leaves the device (`snapFix` in
+  `packages/core/src/geo-snap.ts`, corpus-pinned — WP2-6). Privacy,
   edge-cacheability (raw coordinates jitter by metres, so `/v1/nearby` was a fresh cache key on
   nearly every request) and offline replay (the query key is the fix) all fall out of one function.
 - Still to come: the full on-device static index (ADR-007). Today the device caches the search index
@@ -210,11 +220,19 @@ Four layers, each matched to what it's caching:
   (cached static + a single fast live call).
 
 ## Failure & resilience
+- **Every failure carries the same envelope** — `{code, message, retryable}` (plus a deprecated
+  `error`), with `code ∈ {bad_request, not_found, internal, upstream_unavailable, upstream_timeout}`
+  and the status code read off the contract's own table, never chosen at the call site (ADR-064).
+  `retryable: false` means *the request is permanently wrong*, which is what lets a background
+  client — a Favourites refresh, later an iOS Widget — prune a saved id instead of retrying it
+  forever. `packages/contract/src/wire/responses.ts` declares the table; `apps/edge/src/errors.ts`
+  is the only way to build a failure response.
 - Upstream down → serve last-known ETA from cache, clearly marked stale; never spin forever.
 - DO/poll error → exponential backoff; degrade `watch()` to polling shim.
 - Dataset build fails → `build:current` never flips, so the previous build keeps serving **in full**;
   the partial write is an unreachable orphan. Rollback is one key write.
 - Bindings missing or no `build:current` → the Worker builds the index in-request and says so:
   `/v1/health` reports `dataset: "inline"` and a non-zero `datasetBuildsThisIsolate`. Slower, not down.
-- Tile upstream fails → 404 passes through, anything else becomes a 502 marked `no-store`; the
-  service-worker tile cache still redraws what the rider has already seen.
+- Tile upstream fails → their 404 stays a `not_found` 404, their 504 a `upstream_timeout` 504,
+  anything else a `upstream_unavailable` 502 — all `no-store`, all carrying the JSON envelope above;
+  the service-worker tile cache still redraws what the rider has already seen.

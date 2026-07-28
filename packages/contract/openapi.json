@@ -4,7 +4,7 @@
   "info": {
     "title": "NextBus HK — wire API",
     "version": "1.0.0",
-    "description": "Hong Kong bus arrival times, normalized across KMB/LWB, Citybus and Green Minibus.\n\nConventions that are easy to get wrong, and are stated per-field in the schemas:\n\n- **Timestamps** are ISO-8601 with a `+08:00` offset.\n- **`\"HH:mm\"` may exceed 24** — `\"25:35\"` means 01:35 the next day.\n- **Fares are decimal strings.** Compare numerically, display verbatim, never parse to a float.\n- **Objects are open.** Additional properties are permitted by design, so a client generated\n  from an older revision of this document keeps decoding after a field is added. Do not\n  configure your generator to reject unknown keys.\n- **Enums marked `x-unknown-tolerant`** will gain members without a major version bump.\n  Generate a fallback case (`case unknown(String)`); do not throw on an unrecognized value.\n- **ETAs are approximations.** Do not run a per-second countdown; refresh the value only when\n  a new reading arrives, and use `observedAt` to show staleness."
+    "description": "Hong Kong bus arrival times, normalized across KMB/LWB, Citybus and Green Minibus.\n\nConventions that are easy to get wrong, and are stated per-field in the schemas:\n\n- **Timestamps** are ISO-8601 with a `+08:00` offset.\n- **`\"HH:mm\"` may exceed 24** — `\"25:35\"` means 01:35 the next day.\n- **Fares are decimal strings.** Compare numerically, display verbatim, never parse to a float.\n- **Objects are open.** Additional properties are permitted by design, so a client generated\n  from an older revision of this document keeps decoding after a field is added. Do not\n  configure your generator to reject unknown keys.\n- **A route is served at two service fidelities, and they are two schemas.** `/v1/route/{id}`\n  returns `Route` (`service`: `RouteServiceInfo`, with `patterns`); stop responses return\n  `RouteSummary` (`service`: `RouteServiceSummary`, which has no `patterns` property at all).\n  Decode each against its own type and the absence of a frequency table is never ambiguous.\n- **Enums marked `x-unknown-tolerant`** will gain members without a major version bump.\n  Generate a fallback case (`case unknown(String)`); do not throw on an unrecognized value.\n- **ETAs are approximations.** Do not run a per-second countdown; refresh the value only when\n  a new reading arrives, and use `observedAt` to show staleness.\n- **Every failure returns `ErrorResponse`.** Branch on `code`, and let `retryable` decide\n  whether a background client (Widget, complication) retries or prunes the request. The\n  status code always agrees with `code`. `error` duplicates `message` and is deprecated."
   },
   "paths": {
     "/v1/health": {
@@ -24,7 +24,7 @@
             }
           },
           "400": {
-            "description": "Request could not be served.",
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -34,7 +34,17 @@
             }
           },
           "404": {
-            "description": "Request could not be served.",
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -44,7 +54,17 @@
             }
           },
           "502": {
-            "description": "Request could not be served.",
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -101,7 +121,7 @@
             }
           },
           "400": {
-            "description": "Request could not be served.",
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -111,7 +131,17 @@
             }
           },
           "404": {
-            "description": "Request could not be served.",
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -121,7 +151,17 @@
             }
           },
           "502": {
-            "description": "Request could not be served.",
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -160,7 +200,7 @@
             }
           },
           "400": {
-            "description": "Request could not be served.",
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -170,7 +210,17 @@
             }
           },
           "404": {
-            "description": "Request could not be served.",
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -180,7 +230,17 @@
             }
           },
           "502": {
-            "description": "Request could not be served.",
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -219,7 +279,7 @@
             }
           },
           "400": {
-            "description": "Request could not be served.",
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -229,7 +289,17 @@
             }
           },
           "404": {
-            "description": "Request could not be served.",
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -239,7 +309,17 @@
             }
           },
           "502": {
-            "description": "Request could not be served.",
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -287,7 +367,7 @@
             }
           },
           "400": {
-            "description": "Request could not be served.",
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -297,7 +377,17 @@
             }
           },
           "404": {
-            "description": "Request could not be served.",
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -307,7 +397,17 @@
             }
           },
           "502": {
-            "description": "Request could not be served.",
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -336,7 +436,7 @@
             }
           },
           "400": {
-            "description": "Request could not be served.",
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -346,7 +446,17 @@
             }
           },
           "404": {
-            "description": "Request could not be served.",
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -356,7 +466,17 @@
             }
           },
           "502": {
-            "description": "Request could not be served.",
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -573,6 +693,57 @@
           "last"
         ]
       },
+      "RouteServiceSummary": {
+        "$id": "#/components/schemas/RouteServiceSummary",
+        "type": "object",
+        "properties": {
+          "fareFull": {
+            "description": "Full adult fare from the route origin, HK$ as a decimal string, e.g. \"6.7\". Compare numerically, display verbatim, never parse to float.",
+            "type": "string"
+          },
+          "fareFullHoliday": {
+            "description": "Holiday full fare, HK$ decimal string. Present only when it differs from fareFull.",
+            "type": "string"
+          },
+          "journeyMin": {
+            "description": "Whole-route journey time, minutes.",
+            "type": "number"
+          },
+          "headway": {
+            "description": "Typical headway from the GTFS frequency bands, minutes. Coarse range — no fake precision.",
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ]
+          },
+          "hours": {
+            "description": "Rough daily service span, local 24h \"HH:mm\" (may exceed 24). Earliest first departure → latest end.",
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "start",
+              "end"
+            ]
+          }
+        },
+        "description": "Static service facts at the **summary** tier — no frequency profiles. Served by /v1/stop/{id}. There is deliberately no `patterns` property here: the profiles are large and are read on one screen only, so duplicating them into every place a route touches is not worth 54 MB of the build. Load /v1/route/{id} for them."
+      },
       "RouteServiceInfo": {
         "$id": "#/components/schemas/RouteServiceInfo",
         "type": "object",
@@ -622,13 +793,57 @@
             ]
           },
           "patterns": {
-            "description": "Per-day-type frequency profiles (ADR-044). Absent on /v1/stop/:id by design — see the schema note.",
+            "description": "Per-day-type frequency profiles (ADR-044). Absent here means the dataset has no frequency table for this route. A stop response cannot carry this field at all — it returns RouteServiceSummary.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FreqPattern"
             }
           }
-        }
+        },
+        "description": "Static service facts at the **full** tier — the summary fields plus `patterns`. Served by /v1/route/{id} only. An absent `patterns` here is a fact about the route (the dataset has no frequency table for it), not an artefact of which endpoint was called."
+      },
+      "RouteSummary": {
+        "$id": "#/components/schemas/RouteSummary",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical route id, e.g. \"KMB:6:outbound:1\". GMB is \"GMB:{no}:{bound}:{gtfsId}\"."
+          },
+          "operator": {
+            "$ref": "#/components/schemas/OperatorId"
+          },
+          "routeNo": {
+            "type": "string",
+            "description": "Public route number shown on the bus, e.g. \"6\", \"720\", \"N691\"."
+          },
+          "bound": {
+            "$ref": "#/components/schemas/Bound"
+          },
+          "serviceType": {
+            "type": "string",
+            "description": "Operator service-type discriminator (KMB has variants per route). A string — some upstream entries are numeric and are coerced."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/I18nText"
+          },
+          "service": {
+            "$ref": "#/components/schemas/RouteServiceSummary"
+          }
+        },
+        "required": [
+          "id",
+          "operator",
+          "routeNo",
+          "bound",
+          "serviceType",
+          "origin",
+          "destination"
+        ],
+        "description": "A route as it appears in a stop response: identical to `Route` except that `service` is the summary tier (`RouteServiceSummary`) and therefore carries no frequency profiles."
       },
       "Route": {
         "$id": "#/components/schemas/Route",
@@ -670,7 +885,8 @@
           "serviceType",
           "origin",
           "destination"
-        ]
+        ],
+        "description": "A route at full service fidelity (`service` is `RouteServiceInfo`, including `patterns`). Returned by /v1/route/{id}; stop responses return `RouteSummary` instead."
       },
       "RouteStop": {
         "$id": "#/components/schemas/RouteStop",
@@ -846,7 +1062,7 @@
               "type": "object",
               "properties": {
                 "route": {
-                  "$ref": "#/components/schemas/Route"
+                  "$ref": "#/components/schemas/RouteSummary"
                 },
                 "eta": {
                   "anyOf": [
@@ -954,6 +1170,10 @@
           },
           "destination": {
             "$ref": "#/components/schemas/I18nText"
+          },
+          "sortKey": {
+            "description": "Byte-comparable ordering key for `routeNo`, zero-padded per numeric run: `10A` → `0010A`, so `9` < `10A` < `11`. Sort by this and every platform agrees; `localeCompare(numeric:true)` has no faithful Swift/Kotlin equivalent (ADR-063). Optional per ADR-052 §5: a client that receives none derives the identical value with `routeSortKey` in `@nextbus/core`.",
+            "type": "string"
           }
         },
         "required": [
@@ -995,7 +1215,7 @@
         "properties": {
           "version": {
             "type": "string",
-            "description": "Coarse content tag; the client redownloads when it changes. Currently derived from collection sizes — a content hash is WP2-7."
+            "description": "Content hash of `routes` + `stops` (SHA-256, first 16 hex). Moves exactly when the index moves, and is also served as the endpoint's strong ETag, so a returning client revalidates with `If-None-Match` and pays a 304 (ADR-063)."
           },
           "routes": {
             "type": "array",
@@ -1016,16 +1236,44 @@
           "stops"
         ]
       },
+      "ErrorCode": {
+        "$id": "#/components/schemas/ErrorCode",
+        "type": "string",
+        "enum": [
+          "bad_request",
+          "not_found",
+          "internal",
+          "upstream_unavailable",
+          "upstream_timeout"
+        ],
+        "x-unknown-tolerant": true
+      },
       "ErrorResponse": {
         "$id": "#/components/schemas/ErrorResponse",
         "type": "object",
         "properties": {
           "error": {
-            "type": "string"
+            "type": "string",
+            "deprecated": true,
+            "description": "Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`."
+          },
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
           }
         },
         "required": [
-          "error"
+          "error",
+          "code",
+          "message",
+          "retryable"
         ]
       },
       "DatasetOrigin": {

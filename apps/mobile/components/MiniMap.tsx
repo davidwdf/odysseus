@@ -1,4 +1,12 @@
-import type { OperatorId } from '@nextbus/core'
+import {
+  clampZoom,
+  fitZoom,
+  latToWorldY,
+  lngToWorldX,
+  type OperatorId,
+  TILE_SIZE,
+  worldScale,
+} from '@nextbus/core'
 import { OPERATOR_ACCENT } from '@nextbus/ui'
 import { useState } from 'react'
 import { Image, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
@@ -12,6 +20,11 @@ import { Text } from './Text'
 // We compute the Web-Mercator tile coordinates for the centre ourselves and lay the raster
 // tiles down as plain <Image>s in a clipped viewport, with a pin at the centre. Tapping it
 // hands off to the platform maps app (openInMaps).
+//
+// The projection and the **framing rule** are not here — they are `@nextbus/core/mercator`
+// (WP2-4), because deciding what ground a rider sees is the same decision on every platform,
+// while laying tiles out as `<Image>`s is this renderer's problem alone. What is left below is
+// layout: which tiles cover the viewport, where each dot goes, when a label chip flips above it.
 //
 // Tiles come from the **Hong Kong Lands Department**, proxied and cached by our own Worker
 // (ADR-049, WP0-2) — keyless, free for commercial use, cacheable by licence, and the surveyor's
@@ -27,8 +40,7 @@ import { Text } from './Text'
 // `filter`** (invert + hue-rotate, see DARK_TILE_FILTER) applied to both raster layers — which
 // also flips the black label text to white. `TileSource.invertForDark` records that this is a
 // property of the source, not of the component; a vector basemap would turn it off (ADR-041).
-const TILE = 256
-const DEFAULT_ZOOM = 16
+
 // Vivid pin fill fallback (a stop with no known operator) that reads over the map in both modes.
 // A lone stop is brand-coloured by its `operator`, and a multi-pole place colours each dot by its
 // own operator (OPERATOR_ACCENT) — e.g. GMB green; this rose is only the last-resort default.
@@ -53,61 +65,6 @@ export type MapPoint = {
   lng: number
   operator?: OperatorId
   label?: string
-}
-
-const lngToWorldX = (lng: number, scale: number) => ((lng + 180) / 360) * scale
-const latToWorldY = (lat: number, scale: number) => {
-  const s = Math.sin((lat * Math.PI) / 180)
-  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * scale
-}
-
-/** Ground metres per screen pixel at a zoom and latitude (Web Mercator, 256 px tiles). */
-const metresPerPixel = (lat: number, z: number) =>
-  (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** z
-
-/**
- * Highest zoom whose viewport still shows at least `metres` of ground across.
- *
- * This is how a **lone** stop gets framed. It used to take a flat `DEFAULT_ZOOM = 16` while a
- * multi-pole place went through `fitZoom` and landed at 18–19 — eight times the ground per axis,
- * so a single-pole stop (every GMB stand, most Citybus stops) rendered visibly more zoomed-out
- * than its multi-pole neighbour for no reason a rider could see. Framing by metres rather than by
- * a zoom constant also makes the two agree on a tablet, where a fixed zoom covers far more ground
- * than it does on a phone.
- */
-function zoomForSpan(metres: number, w: number, lat: number): number {
-  for (let z = Math.min(19, tileSource.maxZoom); z > tileSource.minZoom; z--) {
-    if (w * metresPerPixel(lat, z) >= metres) return z
-  }
-  return tileSource.minZoom
-}
-
-/**
- * **Minimum** ground a single-pin map must show across. 100 m is just under what z19 covers on a
- * ~390 px phone (108 m), so a lone stop lands on the same z19 a real place's poles do — the two
- * read at exactly one scale — and steps down only on a genuinely narrow viewport. Close enough to
- * see which side of the road the pin is on, which is why we took LandsD's dense cartography
- * (ADR-049).
- */
-const SINGLE_PIN_MIN_SPAN_M = 100
-
-/** Highest zoom at which all points fit within ~70% of the viewport (so pins aren't clipped).
- *  The poles of a place sit ≤30 m apart, so this lands ~18–19, inside LandsD's z10–20 range. */
-function fitZoom(pts: Array<{ lat: number; lng: number }>, w: number, h: number): number {
-  if (w <= 0) return DEFAULT_ZOOM
-  const lat = pts[0]?.lat ?? 22.3
-  if (pts.length < 2) return zoomForSpan(SINGLE_PIN_MIN_SPAN_M, w, lat)
-  const minLat = Math.min(...pts.map((p) => p.lat))
-  const maxLat = Math.max(...pts.map((p) => p.lat))
-  const minLng = Math.min(...pts.map((p) => p.lng))
-  const maxLng = Math.max(...pts.map((p) => p.lng))
-  for (let z = Math.min(19, tileSource.maxZoom); z > 11; z--) {
-    const scale = TILE * 2 ** z
-    const spanX = Math.abs(lngToWorldX(maxLng, scale) - lngToWorldX(minLng, scale))
-    const spanY = Math.abs(latToWorldY(maxLat, scale) - latToWorldY(minLat, scale))
-    if (spanX <= w * 0.7 && spanY <= h * 0.7) return z
-  }
-  return 12
 }
 
 /**
@@ -168,12 +125,10 @@ export function MiniMap({
   const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
   const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
   // One framing rule for one pin and for many (see `fitZoom`), clamped into the source's
-  // supported range — outside it LandsD 404s and we'd render a hole.
-  const z = Math.min(
-    tileSource.maxZoom,
-    Math.max(tileSource.minZoom, zoom ?? fitZoom(pts, w, height)),
-  )
-  const scale = TILE * 2 ** z
+  // supported range — outside it LandsD 404s and we'd render a hole. `tileSource` is passed
+  // whole: it satisfies the `ZoomRange` the kernel asks for, which may not name a port type.
+  const z = clampZoom(zoom ?? fitZoom(pts, w, height, tileSource), tileSource)
+  const scale = worldScale(z)
   const n = 2 ** z
   // Viewport top-left in world pixels, so the centroid lands dead-centre.
   const left = lngToWorldX(cLng, scale) - w / 2
@@ -181,10 +136,14 @@ export function MiniMap({
 
   const tiles: Array<{ tx: number; ty: number; x: number; y: number }> = []
   if (w > 0) {
-    for (let tx = Math.floor(left / TILE); tx <= Math.floor((left + w) / TILE); tx++) {
-      for (let ty = Math.floor(top / TILE); ty <= Math.floor((top + height) / TILE); ty++) {
+    for (let tx = Math.floor(left / TILE_SIZE); tx <= Math.floor((left + w) / TILE_SIZE); tx++) {
+      for (
+        let ty = Math.floor(top / TILE_SIZE);
+        ty <= Math.floor((top + height) / TILE_SIZE);
+        ty++
+      ) {
         if (tx < 0 || ty < 0 || tx >= n || ty >= n) continue
-        tiles.push({ tx, ty, x: tx * TILE - left, y: ty * TILE - top })
+        tiles.push({ tx, ty, x: tx * TILE_SIZE - left, y: ty * TILE_SIZE - top })
       }
     }
   }
@@ -217,7 +176,13 @@ export function MiniMap({
           <Image
             key={`base-${t.tx}/${t.ty}`}
             source={{ uri: tileSource.basemap(z, t.tx, t.ty) }}
-            style={{ position: 'absolute', left: t.x, top: t.y, width: TILE, height: TILE }}
+            style={{
+              position: 'absolute',
+              left: t.x,
+              top: t.y,
+              width: TILE_SIZE,
+              height: TILE_SIZE,
+            }}
           />
         ))}
         {tileSource.label
@@ -225,7 +190,13 @@ export function MiniMap({
               <Image
                 key={`label-${t.tx}/${t.ty}`}
                 source={{ uri: tileSource.label?.(z, t.tx, t.ty, locale) }}
-                style={{ position: 'absolute', left: t.x, top: t.y, width: TILE, height: TILE }}
+                style={{
+                  position: 'absolute',
+                  left: t.x,
+                  top: t.y,
+                  width: TILE_SIZE,
+                  height: TILE_SIZE,
+                }}
               />
             ))
           : null}

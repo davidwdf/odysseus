@@ -3,6 +3,7 @@ import {
   dedupeEtas,
   type Eta,
   parseRouteId,
+  parseStopOrPlaceId,
   type RouteDetail,
   type Stop,
   type StopDetail,
@@ -15,8 +16,10 @@ import {
   type GmbEtaEntry,
   type MemberDoc,
   type PlaceDoc,
+  toRouteSummary,
 } from '@nextbus/data-normalize'
 import type { DatasetSource } from './dataset'
+import { badRequest, notFound } from './errors'
 import { coalesce } from './eta-cache'
 
 // Per-place CTB fan-out budget (ADR-042). KMB poles cost ONE call each (`stop-eta` returns
@@ -187,11 +190,34 @@ export async function stopArrivals(
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
 }
 
-/** GET /v1/stop/:id — a stop (or merged same-kerb place) and every route serving it,
- *  each with its next ETA. A `P:`-prefixed id spans both operators at one kerb. */
-export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDetail> {
+/**
+ * The place an id denotes, or the reason there is no such thing — and *which* reason (ADR-064).
+ *
+ * Telling the two apart is where WP2-8 actually bites. An id that does not parse is a
+ * `bad_request`: the caller has to change it, and no amount of asking again will help. An id that
+ * parses and resolves to nothing is `not_found` — a pole that left the dataset — and is equally
+ * permanent. Both were `throw new Error(...)`, which the router converted into a retryable `502`,
+ * so a rider's stale favourite looked to a background client exactly like a Cloudflare hiccup.
+ *
+ * Parse before reading, so a junk id costs no KV lookups: `ds.place()` on `"<script>"` would
+ * otherwise walk the alias table looking for it.
+ */
+async function requirePlace(ds: DatasetSource, id: string): Promise<PlaceDoc> {
+  if (!parseStopOrPlaceId(id)) throw badRequest(`not a stop or place id: ${id}`)
   const place = await ds.place(id)
-  if (!place) throw new Error(`unknown stop: ${id}`)
+  if (!place) throw notFound(`unknown stop: ${id}`)
+  return place
+}
+
+/** GET /v1/stop/:id — a stop (or merged same-kerb place) and every route serving it,
+ *  each with its next ETA. A `P:`-prefixed id spans both operators at one kerb.
+ *
+ *  Routes go out at the **summary** service tier (`RouteSummary`, no frequency profiles —
+ *  ADR-065). The shard build already drops `patterns` for size, but a KV document is untyped
+ *  JSON that may predate this code, so the endpoint enforces its own tier rather than
+ *  inheriting whatever is in the namespace. */
+export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDetail> {
+  const place = await requirePlace(ds, id)
 
   const etaByRouteId = new Map<string, Eta>()
   for (const e of await memberEtaLists(place)) etaByRouteId.set(e.routeId, e)
@@ -201,7 +227,7 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
     // `stopId` records which member pole each route departs from, so the Place screen can
     // group routes under their pole (ADR-042).
     routes: place.routes.map((r) => ({
-      route: r.route,
+      route: toRouteSummary(r.route),
       eta: etaByRouteId.get(r.route.id) ?? null,
       fare: r.fare,
       stopId: r.stopId,
@@ -216,8 +242,7 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
 
 /** GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered). */
 export async function stopEtas(ds: DatasetSource, id: string, routeIds?: string[]): Promise<Eta[]> {
-  const place = await ds.place(id)
-  if (!place) throw new Error(`unknown stop: ${id}`)
+  const place = await requirePlace(ds, id)
 
   const all = await stopArrivals(place)
   if (!routeIds?.length) return all
@@ -229,8 +254,11 @@ export async function stopEtas(ds: DatasetSource, id: string, routeIds?: string[
  *  own next arrival there (ADR-030). KMB/LWB pull every stop's ETA in ONE upstream call
  *  (`route-eta`); CTB has no bulk route-eta endpoint (ADR-021) so it stays static-only. */
 export async function routeDetail(ds: DatasetSource, id: string): Promise<RouteDetail> {
+  // Same split as `requirePlace`: unparseable is the caller's fault, absent is nobody's, and
+  // neither is worth retrying. `KMB:6:sideways:1` is a 400; `KMB:999X:outbound:1` is a 404.
+  if (!parseRouteId(id)) throw badRequest(`not a route id: ${id}`)
   const doc = await ds.route(id)
-  if (!doc) throw new Error(`unknown route: ${id}`)
+  if (!doc) throw notFound(`unknown route: ${id}`)
   const { route } = doc
 
   // Live arrivals along the whole route, keyed by sequence (the route-eta feed identifies

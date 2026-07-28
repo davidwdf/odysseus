@@ -16,6 +16,12 @@ export const RouteLiteSchema = z
     bound: BoundSchema,
     origin: I18nTextSchema,
     destination: I18nTextSchema,
+    sortKey: z
+      .string()
+      .optional()
+      .describe(
+        'Byte-comparable ordering key for `routeNo`, zero-padded per numeric run: `10A` → `0010A`, so `9` < `10A` < `11`. Sort by this and every platform agrees; `localeCompare(numeric:true)` has no faithful Swift/Kotlin equivalent (ADR-063). Optional per ADR-052 §5: a client that receives none derives the identical value with `routeSortKey` in `@nextbus/core`.',
+      ),
   })
   .meta({ id: 'RouteLite' })
 
@@ -42,7 +48,7 @@ export const SearchIndexSchema = z
     version: z
       .string()
       .describe(
-        'Coarse content tag; the client redownloads when it changes. Currently derived from collection sizes — a content hash is WP2-7.',
+        "Content hash of `routes` + `stops` (SHA-256, first 16 hex). Moves exactly when the index moves, and is also served as the endpoint's strong ETag, so a returning client revalidates with `If-None-Match` and pays a 304 (ADR-063).",
       ),
     routes: z.array(RouteLiteSchema),
     stops: z.array(StopLiteSchema),

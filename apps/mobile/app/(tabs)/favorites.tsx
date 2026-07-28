@@ -1,4 +1,10 @@
-import { dedupeEtas, type Eta, type StopDetail } from '@nextbus/core'
+import {
+  dedupeEtas,
+  type Eta,
+  formatFavoriteRouteKey,
+  parseFavoriteRouteKey,
+  type StopDetail,
+} from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQueries } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -8,18 +14,18 @@ import { Skeleton } from '../../components/Skeleton'
 import { StopRow } from '../../components/StopRow'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
-import { favoriteRouteKey, usePreferences } from '../../lib/preferences'
+import { usePreferences } from '../../lib/preferences'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useLocale } from '../../providers/LocaleProvider'
 
-/** Parse `${memberStopId}|${routeId}` favourite keys, preserving save order. Split on the
- *  first `|` — canonical ids carry colons, never a pipe (ADR-032). */
+/** Saved `${memberPoleId}|${routeId}` keys as pairs, in save order. A key the grammar cannot read
+ *  is skipped rather than guessed at — the migration keeps it on disk in case a later grammar can
+ *  (ADR-059, ADR-062); what it must never do is resolve to a pole the rider did not save. */
 function parseFavorites(keys: string[]): Array<{ stopId: string; routeId: string }> {
   const out: Array<{ stopId: string; routeId: string }> = []
   for (const key of keys) {
-    const sep = key.indexOf('|')
-    if (sep === -1) continue
-    out.push({ stopId: key.slice(0, sep), routeId: key.slice(sep + 1) })
+    const parsed = parseFavoriteRouteKey(key)
+    if (parsed) out.push({ stopId: parsed.stopId, routeId: parsed.routeId })
   }
   return out
 }
@@ -135,7 +141,7 @@ function FavoritePlaceRow({
 }) {
   const etas: Eta[] = dedupeEtas(
     detail.routes
-      .filter((r) => favoriteSet.has(favoriteRouteKey(r.stopId, r.route.id)))
+      .filter((r) => favoriteSet.has(formatFavoriteRouteKey(r.stopId, r.route.id)))
       // `/v1/stop` ETAs don't carry a destination (only the canonical route does), so stamp
       // the route's destination on — otherwise StopRow's row falls back to the remark and
       // shows e.g. "→ Scheduled Bus" instead of the destination it shows everywhere else.

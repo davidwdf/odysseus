@@ -110,6 +110,14 @@ A smart, real concern — and the reason it pushes you toward PWA is exactly the
 - **"Arriving" / "Due"** for sub-minute, instead of a fake `0:59…`.
 - A small **"updated 12s ago"** chip; data older than a threshold is **greyed/flagged stale**.
 - Animate the **change**, not a clock.
+- **A bus parked at the terminus is not an arrival.** Every journey starts at stop 0, so the origin
+  always reports a next departure — drawn faithfully that is a token permanently parked on the first
+  node, which reads as a bus you could catch. The route rail only shows it once it is within
+  **120 s** of leaving (`ORIGIN_BUS_DEPARTS_WITHIN_SEC` / `visibleBusMarkers` in
+  `@nextbus/core/route-detail`, alongside `upcoming`, `isOriginStop` and the circular-route
+  header naming). The threshold is a judgement about honest presentation, not a property of the
+  feed, so it is named, pinned by `spec/route-detail.spec.json`, and hand-ported with the rest of
+  the kernel rather than re-invented per platform.
 
 ### Accessibility (non-negotiable)
 - Dynamic type / font scaling; screen-reader labels on every interactive element and ETA.
@@ -161,7 +169,8 @@ instead of a spinner. This is an exception to ADR-008's *presentation* rule, not
 replayed reading arrives with its own `observedAt` and is shown as the labelled old reading it is.
 
 ### Location: snap the fix, remember the fix
-`lib/geoSnap.ts` grid-snaps every fix to a **25 m** cell before it leaves the device. One small pure
+`snapFix` (`@nextbus/core`, `src/geo-snap.ts`) grid-snaps every fix to a **25 m** cell before it
+leaves the device. One small pure
 function buys three things: privacy (we ask about a cell, not a doorstep), edge-cacheability (raw
 coordinates jitter metres between readings, so `/v1/nearby` was a fresh cache key nearly every
 request), and offline (the query key is stable enough for a persisted Nearby result to be replayed
@@ -169,6 +178,31 @@ at all). 25 m is well inside urban-canyon GPS accuracy and small against the 500
 changes nothing about which stops come back. `lib/useLocation.ts` remembers the last fix and returns
 `stale: true` when it falls back to it; Nearby then reads "Last known location" in place of the app
 name, rather than implying a live position.
+
+### What a place screen shows, and in what order (`@nextbus/core`, `src/stop-detail.ts`)
+A place is N poles at one kerb ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant));
+a lone stop is a place with one. Three rules turn that payload into a screen, and all three are pure
+functions in the kernel rather than closures inside `app/stop/[id].tsx`, because Swift and Kotlin
+will hand-port them and a rule living inside a React tree cannot be asserted (ADR-060). The screen
+keeps the rendering and the hooks.
+- **`dedupeRoutes`** — one row per *rider line* (`operator|routeNo|bound`), keeping the one carrying
+  a live reading. Citybus lists 969 three times at one Tin Shui Wai pole; a rider does not choose a
+  service type. The operator is in the key so a merged kerb keeps KMB-104 and CTB-104 apart, and the
+  bound is in it so a loop route whose two directions share a destination (Citybus 26 at Statue
+  Square) does not collapse into one misleading row.
+- **`operatorsOf`** — the "served by" line, first-seen order, derived from the routes because a
+  merged `P:` id has no operator of its own.
+- **`orderPoles`** — pole groups (and their map dots) in three tiers: the pole the rider arrived
+  from (`?pole=` — they have already named their kerb, so it outranks a nearer one they cannot board
+  at), then nearest, then the server's own member order, which is arbitrary but *stable*, so the
+  list does not rearrange itself when the GPS fix lands.
+
+`packages/core/spec/stop-detail.spec.json` pins all three against the shipped dataset. **Two rows
+are `knownDefect`** and both come from the dedupe key deliberately not containing the pole: a later
+variant with a *sooner* bus loses to the first one that merely has a reading (so Nearby and Place
+detail can disagree about the next 269D), and two different minibus services sharing a number
+fuse into one row, taking a pole's whole group off the list while its map dot stays. Read those rows
+before touching the key.
 
 ## Maps
 - The basemap is the **Hong Kong Lands Department's** keyless raster, proxied and cached by our own
@@ -184,8 +218,20 @@ name, rather than implying a live position.
   nothing to fit, and used to fall back to a flat `DEFAULT_ZOOM = 16` — eight times the ground per
   axis, so every single-pole stop (all of GMB, most of Citybus) looked conspicuously zoomed-out next
   to its multi-pole neighbour. It now asks for a **minimum ground span** (`SINGLE_PIN_MIN_SPAN_M`,
-  100 m) and takes the highest zoom that still shows it, which lands on the same z19 a place does and
-  keeps the two agreeing on a tablet, where a fixed zoom covers far more ground than on a phone.
+  100 m) and takes the highest zoom that still shows it, which keeps the two agreeing on a tablet,
+  where a fixed zoom covers far more ground than on a phone.
+- **The projection and that framing rule are `@nextbus/core/mercator`, not the component** (WP2-4).
+  `lngToWorldX`, `latToWorldY`, `worldScale`, `metresPerPixel`, `clampZoom` and `fitZoom` are pure
+  and platform-free, pinned by `packages/core/spec/mercator.spec.json` — so a MapKit or MapLibre
+  client frames a stop identically instead of re-deriving Web Mercator against its own SDK. The tile
+  source's zoom bounds are an argument (LandsD serves z10–20, ADR-049); `MiniMap` keeps only the
+  layout — which tiles cover the viewport, where each dot and label chip goes.
+- **Known, recorded in the corpus:** at the width the map is actually handed (the window minus two
+  16 px gutters) z19 covers 98.8 m, just under the 100 m minimum, so on a ≤394 px-wide phone a lone
+  stop still frames one step wider (z18) than the multi-pole place next door — the very difference
+  the rule was written to remove. The fix is a smaller span or measuring it against the hero width;
+  until then `mercator#fitZoom:lone-stop-on-a-390px-phone-frames-a-step-wider` holds every platform
+  to the same wrong answer rather than three different ones.
 - Today's map is the static `MiniMap` on Stop/Place detail. **MapLibre GL**
   (`@maplibre/maplibre-react-native` + `maplibre-gl`) remains the route to a real interactive map in
   Phase 2; it consumes the same `TileSource`, so the tile question is already settled.

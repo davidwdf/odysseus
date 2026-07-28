@@ -833,8 +833,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   ALL-CAPS source there's no safe way to auto-distinguish an initialism (`EKCC`) from a real word that can
   also appear parenthesised (`(CIRCULAR)`), so codes are added explicitly as they surface — e.g. `EKCC` in a
   route endpoint's `… (EKCC)`, which the header label title-cases without splitting the code. `titleCaseName` /
-  `splitStopCode` are covered by `apps/mobile/lib/stopName.test.ts` (Vitest — the repo's first first-party
-  test; `pnpm --filter @nextbus/mobile test`).
+  `splitStopCode` were the subject of the repo's first first-party test. Wave 2 (WP2-1) moved these rules
+  into `@nextbus/core` (`src/stop-name.ts`) and promoted that test into the language-neutral corpus at
+  `packages/core/spec/stop-name.spec.json`, so iOS and Android title-case identically instead of each
+  re-deriving the "On" rule from scratch.
 
 ## ADR-035 — Elevation is two channels: opaque (shadow↔lighten) and glass (defocus-led)
 - **Status:** **Implemented** (verified in-browser, both modes). Documents shipped behaviour (`ELEVATION` +
@@ -1603,7 +1605,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Status:** **Built & verified on web** (2026-07-04). Touches the `DataSource` seam (`@nextbus/core`), the edge
   (`apps/edge/src/stop-route.ts`), and the route screen + header (`apps/mobile/app/route/[id].tsx`,
   `components/RouteHeader.tsx`, `components/CollapsingHeader.tsx`, `components/DirectionSwapIcon.tsx`, `RouteMeta.tsx`,
-  `lib/stopName.ts`, `@nextbus/i18n`).
+  the stop-name display rules — `@nextbus/core`'s `src/stop-name.ts` since WP2-1 — and `@nextbus/i18n`).
 - **Context:** Route detail showed a **single direction** with no way to see the return trip; the only place a
   "direction" hint lived was the dropped route-chip sheet idea (ADR-044 fork). Riders want to flip to the opposite
   direction in place. Two data realities shaped it: (a) the opposite bound is a *separate* canonical route id
@@ -1641,7 +1643,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
      honour reduce-motion. Reanimated **layout animations were avoided** (flaky on web, our current target) in favour
      of shared-value + `useAnimatedStyle`.
   5. **Circular routes get their own treatment (no reverse).** Detected by the loop marker HK bakes into the
-     destination name — `CIRCULAR` / `循環` / `循环` (`isCircular`/`stripCircular` in `lib/stopName.ts`). Because a
+     destination name — `CIRCULAR` / `循環` / `循环` (`isCircular`/`stripCircular`, in `@nextbus/core` since WP2-1). Because a
      loop's first == last stop, the card switches to the route's own labels: the **boarding terminus** over
      **"Circular via <turnaround>"** (`circularVia` i18n; turnaround = destination with the marker stripped), the
      connector arrow becomes a **loop glyph**, and there's no toggle. A meta-strip "Circular" chip was built then
@@ -2096,7 +2098,8 @@ rather than the docs. **The blocking open question above is unchanged** — this
     `patterns` (the summary tier; duplicating it was 54 MB of an 82 MB build, ADR-055) while `/v1/route/:id`
     carries it. Both satisfy the same optional-`patterns` schema, so a native client cannot tell which tier it
     received and will read "absent" as "this route has no frequency table". Needs either two named schemas or
-    an explicit tier discriminator.
+    an explicit tier discriminator. **Resolved by [ADR-065](#adr-065--routeservice-is-two-named-schemas-not-one-optional-field-the-fidelity-tier-is-in-the-type)** —
+    two named schemas, no change to the bytes.
   - `StopLite` carries flat `lat`/`lng` while `Stop` nests `location: LatLng`. Harmless, faithful, noted.
 
 ## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
@@ -2235,11 +2238,14 @@ rather than the docs. **The blocking open question above is unchanged** — this
      broken" rather than "we're offline". A replayed reading carries its original `observedAt`, so the ETA
      helpers age it and the UI marks it stale — restoring a *labelled old reading* is consistent with
      ADR-008, restoring a fresh-looking one would not be.
-  4. **The GPS fix is grid-snapped to 25 m before it leaves the device** (`lib/geoSnap.ts`). This is
-     WP2-6 pulled forward, because none of the above works without it: raw coordinates jitter by metres
-     between readings, so the Nearby query key moved constantly and a persisted result could essentially
-     never be replayed. It is simultaneously a privacy control and the thing that makes `/v1/nearby`
-     edge-cacheable at all. Wave 2 still has to move it into `packages/core`.
+  4. **The GPS fix is grid-snapped to 25 m before it leaves the device.** This is WP2-6 pulled forward,
+     because none of the above works without it: raw coordinates jitter by metres between readings, so
+     the Nearby query key moved constantly and a persisted result could essentially never be replayed.
+     It is simultaneously a privacy control and the thing that makes `/v1/nearby` edge-cacheable at all.
+     **Completed in Wave 2:** the rule now lives in `packages/core/src/geo-snap.ts` (`snapFix`), pinned
+     by `spec/geo-snap.spec.json`; the `apps/mobile/lib/geoSnap.ts` copy is gone. Only the 25 m tier
+     exists — WP2-6's plan row also names a 50 m tier for fixes away from Nearby, nothing implements
+     it, and `gridM` is a parameter no caller passes.
   5. **Say when the position is remembered.** `useLocation` persists the last fix and returns it with
      `stale: true` while a live one is pending or unobtainable; Nearby shows `lastKnownLocation` instead of
      the app name. ADR-008's honesty applies to the position, not only to the arrival times.
@@ -2293,8 +2299,9 @@ rather than the docs. **The blocking open question above is unchanged** — this
     `` includes(`${op}:`) `` — the same class of bug (a KMB pole whose raw id begins `CTB…` would false-match
     Citybus). Left because the grep that would catch it is too noisy to gate on; a four-line fix with
     `parseStopOrPlaceId` when someone owns that file.
-  - `apps/mobile/lib/preferences.ts` keeps its own `favoriteRouteKey` template. Folding it into the formatter
-    needs the migration, which is WP2-5's by the plan.
+  - ~~`apps/mobile/lib/preferences.ts` keeps its own `favoriteRouteKey` template. Folding it into the formatter
+    needs the migration, which is WP2-5's by the plan.~~ **Closed by [ADR-062](#adr-062--the-favourite-key-is-the-member-pole-and-the-scheme-is-versioned) (WP2-5):** the template is
+    gone, and the fold shipped with the versioned migration that made it safe.
   - `lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`' key construction (both now go
     through the shared parser, with a comment tying them). Exporting one line-key helper from `core` is WP2-2.
   - **A malformed id returns `502`, which is wrong** — it is a permanent client error, so `400` is correct,
@@ -2433,3 +2440,418 @@ rather than the docs. **The blocking open question above is unchanged** — this
   is written before any shard and `build:current` is flipped last, so ADR-055's write order held under a real
   failure rather than a simulated one. The preflight logic was exercised in all three states (nothing set,
   credentials present but namespace still a placeholder, all present).
+
+## ADR-062 — The favourite key is the member pole, and the scheme is versioned
+- **Status:** **Decided and implemented 2026-07-28** (WP2-5). Implementation: `apps/mobile/lib/preferences.ts`
+  (`PREFERENCES_VERSION`, `migratePreferences`), pinned by `apps/mobile/lib/preferences.migration.test.ts`.
+- **Context:** [ADR-032](#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes) made the favourite
+  primitive a route-at-stop pair keyed `"<stopId>|<routeId>"`;
+  [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)
+  then amended the stop half to the **member pole** id, because a place id embeds its member list and therefore
+  churns every time the clustering is re-tuned. Both statements sit in this log; neither was enforced anywhere
+  on disk. Two loose ends followed. (a) `apps/mobile/lib/preferences.ts` kept its own `${stopId}|${routeId}`
+  template even after WP1-2 gave `core` `formatFavoriteRouteKey`/`parseFavoriteRouteKey`
+  ([ADR-059](#adr-059--the-id-grammar-one-parser-in-core-the-spec-and-corpus-in-contract) records the deferral,
+  and the reason for it: folding the template in *is* the migration). (b) Any key already written under the
+  place-id scheme is stranded — it names a place id that stops existing at the next clustering change, and the
+  favourite then disappears with no error, no log line and no way back. `persist` had neither `version` nor
+  `migrate`, so there was no mechanism to rescue it, and every improvement to the save UI makes the stranded
+  set larger. Favourites are the one part of this app a rider builds by hand, so this is the only piece of
+  persisted state whose loss is not recoverable by re-fetching.
+- **Options:**
+  1. **Ship the pole-keyed scheme and accept the loss.** Free, and the app has few enough users today that the
+     blast radius is small. But the failure is silent and permanent, and "few users" is an argument that
+     expires while the code does not.
+  2. **Fix on read** — normalize each key wherever the Favourites tab reads it. No version bump, so nothing to
+     get wrong at hydration. But a read fix-up never finishes: it must stay correct in perpetuity, it has to be
+     repeated at every read site (there are now four), it leaves the wrong bytes on disk so the problem is
+     never actually over, and it erases the evidence that the scheme ever moved.
+  3. **A versioned `persist` migration** (chosen) — `version: 1` plus a `migrate` step that runs once at
+     hydration and re-stamps the blob.
+- **Decision:** (3), under four rules.
+  1. **One formatter, one parser.** `favoriteRouteKey` is deleted from `preferences.ts`; the store, `SaveStar`,
+     the route schematic's action sheet and the Favourites tab all mint and read keys through
+     `@nextbus/core` (ADR-059). The tab's own `indexOf('|')` splitter went with it — the ad-hoc-parsing gate
+     stays green with an empty allowlist.
+  2. **v0 → v1 expands a place key onto *every* member pole**, rather than picking one. A place-keyed
+     favourite simply does not record which kerb the rider meant. A wrong guess is an invisibly missing
+     favourite; an over-expansion is invisible in the harmless direction, because the tab intersects the saved
+     keys with the route-at-pole rows the place actually reports, so a key for a pole that does not serve that
+     route can never render. Expansions de-duplicate against keys already saved, in save order.
+  3. **Nothing is ever dropped.** A key the grammar cannot read is kept verbatim, in place — not deleted, and
+     not moved to a quarantine list, which would only be a second place to forget about. The grammar is
+     deliberately narrower today than it will be (ADR-059's `OPERATOR_RE` widens the day a fifth operator
+     ships), so a key that starts parsing again later simply starts working again.
+  4. **A blob from a future version passes through untouched and is re-stamped at ours** — a rider who
+     downgrades, or two browser tabs on different builds. Discarding it would be destructive; a scheme we
+     cannot read renders as nothing, which upgrading again undoes. The price is that **every step must be
+     idempotent**, because a step can meet data it has already been run against. That is asserted, not assumed.
+- **Why the test feeds whole blobs through the real store:** the migration function is the easy half.
+  Everything that can silently eat a rider's favourites lives in the wiring around it — and one piece of that
+  wiring is genuinely surprising: `persist` calls `migrate` only when the stored `version` is a **number** and
+  differs from ours, so a blob with **no** `version` field is loaded verbatim and never migrated at all. That
+  is harmless here only because every write this store has ever made stamped `version: 0` (`persist`'s
+  default), which is a fact about the past that a test now pins rather than a property anyone should
+  remember. So the suite writes the literal `{"state":…,"version":0}` strings into an in-memory storage,
+  rehydrates the **real** store with only that storage swapped, and asserts both the resulting state and the
+  bytes written back — a migration that is right in memory and wrong on disk is still broken.
+- **Consequences:**
+  - `preferences.ts` exports `PREFERENCES_VERSION` and `migratePreferences`; the next change to what a
+     persisted key *means* is a numbered step beside this one, not an edit to the current one.
+  - **One accepted loss, stated rather than hidden:** the pre-2026-06-10 `favorites` list (bare stop ids,
+    ADR-032's removed primitive) is not migrated. A bare stop cannot become a route-at-stop pair without
+    inventing a route, and no shipped UI ever created one; `partialize` drops the field at the next write.
+  - **One accepted cost:** an over-expanded key for a pole that does not serve the route stays on disk for
+    good, and the Favourites tab issues one `getStop` per distinct saved pole — so a two-member expansion is
+    one extra request, coalesced back into a single card because the grouping is by place.
+  - ADR-059 §5's hazard shrinks: because favourites no longer hold place ids after v1, changing the member
+    collation in `formatPlaceId` can no longer orphan a favourite. It still churns deep links and query-cache
+    keys, so the rule stands — it is just no longer load-bearing for the rider's saved list.
+  - Cross-device sync of favourites ([docs/07](./07-backlog.md)) inherits this: the migration runs where the
+    blob is, so a server-side copy of the list would need the same numbered step rather than a second scheme.
+
+## ADR-063 — The search index's order is data: a precomputed `sortKey`, range scans, a content-hash version and an ETag
+- **Status:** **Decided and implemented 2026-07-28** (WP2-7 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Implementation:
+  `packages/core/src/search.ts`, `apps/edge/src/search-index.ts`, `apps/edge/src/index.ts`,
+  `packages/contract/src/wire/search.ts`; corpus `packages/core/spec/search.spec.json`; response assertions
+  `apps/edge/test/search-index.test.ts`. Amends
+  [ADR-037](#adr-037--search-on-device-index-a-smart-route-keypad-and-extensible-filter-chips), which specified
+  the trie and the size-pair version.
+- **Context: a rider sees `2` before `10` because of a call to ICU.** `compareRouteNo` was
+  `a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' })`, and the smart keypad's live key-enabling
+  was a prefix trie built on device. Both are the textbook answers and neither was wrong. Both are also
+  **unportable in the specific way this project cares about** ([ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) kind 2):
+  - Swift's nearest equivalent is `compare(options: [.numeric, .caseInsensitive])` and Kotlin's is a
+    hand-rolled natural-order comparator. The three disagree on mixed digit/letter runs — exactly the shape
+    of a Hong Kong route number (`10A`, `E22A`, `N260`) — so one index would render in **three different
+    orders on three platforms** and no test would catch it, because each platform would be self-consistent.
+  - A trie is a *structure*, not a rule. Three ports each build their own; the corpus can pin the shape of
+    ours, but a Swift `TrieNode` that a human transcribed is not the thing the corpus checked.
+  Separately, `version` was `` `${routes.length}.${stops.length}` `` — the file's own comment called it
+  "good enough". It is not: it **collides whenever one build adds a route and drops another**, which is the
+  ordinary shape of a daily dataset diff. The client compares two identical strings, keeps its cached index,
+  and holds a picture of the network that no longer exists — silently, until someone searches for a route
+  that was renumbered.
+- **Decisions:**
+  1. **The order is a string, not a computation.** `routeSortKey` zero-pads every run of digits to **four**,
+     so `10A` → `0010A` and `9` < `10A` < `11` under plain byte comparison — and byte comparison is the one
+     ordering JavaScript, Swift and Kotlin already agree on without being asked. `compareRouteNo` is now a
+     comparison of two keys; the operator tiebreak in `searchRoutes`, which was a second `localeCompare` in a
+     smaller font, went the same way.
+     *Rejected alternative:* "have every platform use ICU with the same options". It reads like the cheap fix
+     and it is the expensive one — it makes correctness depend on three vendors' collation tables staying in
+     step, forever, with the failure invisible on the platform you happen to be testing.
+     Four digits is ten times the widest run any HK route number carries. **Overflow is correct, not merely
+     tolerated:** a longer run is prefixed with one `~` per extra digit instead of padded, and since `~`
+     (U+007E) sorts after every digit and every upper-case letter, a longer run always lands after a shorter
+     one while equal lengths compare lexically — which for equal lengths *is* numeric order. The key stops
+     being human-readable at five digits; it does not stop being right, and the input is upstream data we do
+     not control.
+  2. **The edge precomputes it into `RouteLite.sortKey`, and the client may derive it.** The field is
+     **optional** per [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) §5, so a client holding an index cached before the field existed still
+     sorts; `searchRoutes` falls back to `routeSortKey(routeNo)`, which is the same function that produced
+     the field, so the two can never disagree. Precomputing it is the first slice of WP3-4 and it buys
+     something real: the displayed order becomes changeable by a dataset publish rather than by three client
+     releases. A corpus row proves the client honours the field rather than re-deriving it, by sending two
+     keys that deliberately contradict their own numbers.
+  3. **Range scans replace the trie.** `routeKeys` returns every route number upper-cased, de-duplicated and
+     **byte-sorted**; every number sharing a prefix is then contiguous, so `nextValidChars` is a binary
+     search for the first key ≥ the prefix followed by a walk to the first key that has lost it, and
+     `isCompleteRoute` is one binary search for exact membership. Same keys light up, no structure to port —
+     the sorted array *is* the data, and the corpus compares arrays rather than a shape a reader has to
+     reconstruct. Note the array is in **byte** order, not rider order: sorting it by `routeSortKey` would
+     put `0002` between `0001` and `0010` and destroy the contiguity the scan depends on. There is a corpus
+     row whose only job is to stop someone "fixing" that.
+     The blank-route-number guard ADR-060's corpus recorded survives the change, in one place instead of two:
+     blanks never enter the array, so the empty prefix answers "not a complete route" with no special case.
+  4. **`version` is a content hash of `routes` + `stops`** — SHA-256, first 16 hex, the *same digest recipe*
+     `scripts/build-dataset.mts` uses for the build hash, because a second hashing scheme is a thing to keep
+     in step for no benefit. It moves exactly when the bytes move, so the collision above cannot happen.
+     *Rejected alternative:* reuse the dataset build hash itself, which is sitting right there in the
+     manifest. It would have made the ETag answerable from the already-cached `build:current` pointer — but
+     that hash digests **every** shard, so a fare change on one route would re-download the whole index for
+     content byte-identical to what the client already holds. Note the build hash already digests the search
+     index's JSON, so it cannot be the value inside it without being circular.
+  5. **`/v1/index` serves that hash as a strong ETag and honours `If-None-Match`.** A returning client whose
+     6 h `max-age` has lapsed pays a header exchange instead of the blob. **What it costs:** a 304 is not
+     free — only the body is skipped, and the handler still resolves the response to know its validator, so
+     a cold colo still reads the R2 object to answer "nothing changed". We took that trade because the
+     expensive side is the rider's mobile data, not our egress. Two smaller costs, both paid in the code:
+     the colo cache key had to **stop copying the client's headers** (`If-None-Match` in the key would split
+     the cache into one entry per validator a client happens to hold, and the conditional response would
+     miss it entirely), and only strong single-value `If-None-Match` is honoured — a weak or comma-list tag
+     simply misses and gets the 200 it would have got anyway, which is the safe direction.
+     This composes with the two caching decisions either side of it:
+     [ADR-057](#adr-057--live-eta-ttl-is-30-s-and-every-upstream-call-is-coalesced-per-pole)'s `cached()`
+     still coalesces and still stores exactly one 200 per URL — the 304 is derived from that entry and never
+     stored — and [ADR-058](#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier)'s
+     stale-while-revalidate is unchanged and now revalidates cheaply, which is what it always wanted to do.
+     No other endpoint gets an ETag: the rest are live, where a validator that never matches is pure overhead.
+- **Verified** in `apps/edge/test/search-index.test.ts`, inside workerd against simulated KV/R2: the 200
+  carries `ETag: "<version>"` matching the body, a matching `If-None-Match` returns **304 with an empty body**
+  and the validators repeated, a stale validator gets the full index, and an unconditional request *after* a
+  304 still gets a complete 200 — the assertion that would fail if a bodiless response had been cached.
+  `version` is asserted to be 16 hex characters, and every route in the served index carries a padded
+  `sortKey`. The corpus grew from 274 to 352 rows and `packages/core` holds **100 % branch coverage** across
+  210 branches (was 151).
+- **Consequences / notes for whoever touches this next:**
+  - `buildSearchIndex` is now **async** (`crypto.subtle.digest`, because its two runtimes are node and
+    workerd and only one of them has `node:crypto`). Its three callers were updated; a fourth would fail to
+    typecheck rather than silently hash a promise.
+  - The `RouteKeypad` prop is `keys: readonly string[]`, not `trie`. `RouteTrieNode` and `buildRouteTrie`
+    are **deleted**, not deprecated — a duplicate implementation is the failure mode Wave 2 exists to prevent.
+  - `searchStops` still ranks by a substring match and is untouched here. Its ordering is stable-sort-dependent
+    rather than collator-dependent, so it has the same portability hazard in a different form; the corpus
+    row that pins it (`equal-rank-keeps-index-order`) is the only thing standing between us and a Swift port
+    that reshuffles the results list between keystrokes.
+  - The other endpoints' inline cache lookups in `apps/edge/src/index.ts` (`/v1/eta`, `/v1/nearby`,
+    `/v1/tiles`) still build their cache key with `new Request(url, request)`, so a client that sends
+    `If-None-Match` to them splits their colo cache. Harmless today — nothing sends one — and left alone
+    deliberately, because those lines were being rewritten by WP2-8 in the same wave.
+
+## ADR-064 — The error taxonomy: the status code and the code are one decision
+- **Status:** **Decided and implemented 2026-07-28** (WP2-8 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Declaration:
+  `packages/contract/src/wire/responses.ts` (`ErrorCodeSchema`, `ERROR_CODES`, `ErrorResponseSchema`);
+  the only constructor: `apps/edge/src/errors.ts`; the gate: `apps/edge/test/wire-conformance.test.ts`.
+  Discharges the first of the two "faithful but wrong" transcriptions
+  [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+  recorded and the last bullet of
+  [ADR-059](#adr-059--the-id-grammar-one-parser-in-core-the-spec-and-corpus-in-contract)'s follow-ups.
+- **Context:** the plan specified `{code, message, retryable}` in *The contracts* from the first draft,
+  and separately noted that a malformed id returned **502** where **400** is correct. They were written
+  down as two items, tracked as two items, and owned by nobody — which is how something specified from
+  the start quietly never happens. They are **one defect**. `5xx` *is* the retryable signal: every HTTP
+  client, every CDN and every background scheduler in the path reads the status line, and most of them
+  read nothing else. An iOS Widget holding a favourite whose id no longer parses gets a 502, concludes
+  "transient", and retries on every refresh for as long as the rider keeps the tile — on their battery,
+  against our edge, forever. Adding a `code` field to the body would not have fixed that on its own,
+  because URLSession classifies the response before anything reads the JSON. So the taxonomy is only
+  worth anything if the status is derived from it rather than chosen next to it.
+  The second half of the context is who this is *for*. The PWA does no runtime validation at all
+  (ADR-052 decision 2) and its screens mostly just show "couldn't load". The consumer that needs this is
+  the one that cannot ask a human: a Widget, a complication, a background refresh — anything that has to
+  decide, unattended, between *prune this permanently* and *try again later*.
+- **Decision:**
+  1. **One table binds the code, the HTTP status and the retry advice.** `ERROR_CODES` in the contract
+     maps each of `bad_request → 400`, `not_found → 404`, `internal → 500`,
+     `upstream_unavailable → 502`, `upstream_timeout → 504` to its status **and** its `retryable`.
+     `apps/edge/src/errors.ts`'s `fail(code, message)` takes a code and reads the status off the table;
+     nothing in `apps/edge` can produce a failure response any other way. That is the whole mechanism:
+     the two halves of the defect cannot come apart again because there is no longer a place to write
+     them separately. `satisfies Record<z.infer<typeof ErrorCodeSchema>, …>` makes a code without a
+     status, or a status without a code, a typecheck error.
+  2. **`retryable` is "may the identical request succeed later?", and it is `false` only for
+     `bad_request` and `not_found`.** `internal` is retryable, which looks wrong for a second and is
+     not: a bug of ours is no evidence that the rider's saved stop has gone, and pruning somebody's
+     favourites because we shipped a bad deploy is the worse of the two failures. The rule the client
+     needs is "is this *my* request that is wrong?", not "whose fault is it?".
+  3. **`retryable` travels on the wire rather than being a table the client compiles in.** `ErrorCode`
+     is marked `x-unknown-tolerant` like the other closed enums (ADR-052 decision 4) — `rate_limited`
+     is the obvious next member — and an already-installed client that has never heard of a new code
+     must still know whether to retry it. A compiled-in mapping would make every new member a store
+     release. This is the same reasoning as ADR-053's served `ClientPolicy`, applied to failure.
+  4. **Malformed and absent are different, and neither is retryable.** An id that does not parse
+     (`parseStopOrPlaceId` / `parseRouteId` return `null`) is `bad_request`; an id that parses and
+     resolves to nothing is `not_found`. Both are permanent, so a Widget prunes either — but the split
+     is worth keeping because it is the difference between *our id scheme changed* (a migration bug,
+     WP2-5's territory) and *this pole left the dataset* (ordinary churn), and only one of those is
+     something we should be paged about. Parsing happens **before** the KV read, so a junk id costs no
+     lookups.
+  5. **Shipped additively per ADR-052 §5.** `code`, `message` and `retryable` are served *alongside*
+     `error`, which is unchanged and still duplicates `message`. Nothing that reads `error` today
+     breaks. **What retires `error`:** it is removed in the first release after a native client exists
+     and is generated from `openapi.json` (WP3-3) — the removal is breaking, so it needs the `oasdiff`
+     gate, its own ADR and a `CONTRACT_VERSION` major bump. Until then it is marked `deprecated: true`
+     in the emitted schema, which is the only signal a generated client will actually surface. The web
+     client never read it, so the deprecation window costs us one duplicated string per failure.
+- **The gate:** `apps/edge/test/wire-conformance.test.ts` is now table-driven — one row per error exit
+  in `apps/edge/src`, driven through the real Worker inside workerd, each asserting the status
+  `ERROR_CODES` gives its code, the code itself, `retryable`, `cache-control: no-store`, and that the
+  body carries nothing `ErrorResponseSchema` does not describe. Two completeness assertions keep the
+  table honest: **every member of `ERROR_CODES` must be exercised**, and **every published endpoint
+  that takes a parameter must have at least one row** — a parameter is the only way a client can get a
+  request wrong, so a new `{id}` endpoint with no error case is visible here rather than in a native
+  crash log. `internal` is the one row driven through the helper rather than a request, and
+  deliberately so: it is what the top-level catch reports when a handler that should have classified
+  itself throws anyway, so *nothing a client can send* reaches it. Injecting a fault into production
+  code to turn that row green would be testing the injection.
+- **Four defects this surfaced, all fixed here** (each was a real error exit that classified wrongly):
+  - **A malformed id was a 502** at `stopDetail`/`stopEtas`/`routeDetail` — the ADR-059 note. Now 400.
+  - **A well-formed id for a stop that does not exist was also a 502.** Now 404. This is the one with a
+    behaviour change downstream: `apps/edge/test/dataset-kv.test.ts`'s "build whose keys were never
+    written" case asserted 502 and now asserts 404, because the Worker genuinely cannot tell an absent
+    shard from an absent stop. It does not have to: `build:current` is flipped last, so a *current*
+    build always has its keys (ADR-055), and the synthetic state that test constructs is unreachable.
+  - **A malformed percent-escape in a path threw.** Every canonical id is percent-encoded (place ids
+    contain `+`), and `decodeURIComponent('%E0%A4%A')` raises `URIError` — which left the isolate as
+    workerd's bare `Error 1101`: no envelope at all, and a 500 that reads as retryable. Now a 400.
+  - **Tile failures answered in `text/plain` with a hand-picked status.** An `<Image>` reads neither,
+    but a native client debugging a blank map does, and "502" told it to keep retrying a tile that will
+    never exist. Now the same envelope, with upstream's 404 as `not_found` and their 504 as
+    `upstream_timeout`.
+- **`upstream_unavailable`, not `internal`, is the default for an unclassified throw** at the two
+  request-scoped catches. The producers there are dataset reads (KV, R2, `data.hkbus.app`) and live ETA
+  calls, so an unclassified throw is I/O far more often than a bug — and it preserves today's 502 for
+  every path that was not the id defect, which matters because those 502s may be load-bearing for a
+  client we cannot see. `internal` is reached only from the top-level catch, where a throw genuinely is
+  ours; it logs the stack.
+- **Consequences / notes:**
+  - `EdgeRequestError` in `@nextbus/api-client` replaces `new Error("… → HTTP 502")` and carries
+    `status`, `code` and `retryable`. It reads the envelope as data — `@nextbus/core`'s types erase, so
+    there is nothing to validate with — and falls back to `internal`/retryable when the body is not
+    ours. That fallback is for a response the Worker never sent (a Cloudflare error page, a captive
+    portal); treating an unreadable 404 from airport wifi as permanent would prune favourites.
+  - `@nextbus/contract` moved from a devDependency of `apps/edge` to a dependency. It costs no bundle:
+    zod is already in the Worker via `@nextbus/data-normalize`'s upstream parsers.
+  - The `500` and `504` responses were missing from every path in `openapi.json` — the emit built its
+    responses map by hand. It now derives it from `ERROR_CODES`, so the document cannot list a status
+    the taxonomy does not mint, or omit one it does.
+  - **Not done, and deliberately:** no `rate_limited`, because we do not rate-limit; no per-field
+    validation detail in the envelope, because the plan's batch-ETA POST (which needs "the offending
+    index") is a later work package and inventing the shape now would be guessing.
+
+## ADR-065 — `Route.service` is two named schemas, not one optional field: the fidelity tier is in the type
+- **Status:** **Decided and implemented 2026-07-28** (WP2-9 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Closes the second of the two
+  "faithful but wrong" transcriptions [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) left open (the error taxonomy is the other, WP2-8).
+- **Context:** `/v1/route/:id` serves a route's `service` with `patterns` — the per-day-type frequency
+  profiles — and `/v1/stop/:id` serves it without. That omission is not an oversight and must not be undone:
+  duplicating `patterns` into every place a route touches was **54 MB of an 82 MB build**
+  ([ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path) §7), and it
+  is read on exactly one screen. The defect was that **both tiers satisfied one schema** whose `patterns` was
+  optional. A decoder that receives no `patterns` therefore learns nothing: it cannot tell *"this route has no
+  frequency table"* from *"you called the endpoint that never sends one"*. Today that is invisible, because
+  the only client is the TS app, which knows which screen it is on and performs no runtime validation at all
+  (ADR-052 §2). The moment WP3-3 generates Swift and Kotlin models, the ambiguity becomes a field on a struct
+  that two different people will interpret two different ways — and the wrong interpretation renders
+  "no timetable" for a route that has one.
+- **Decision: two named schemas.** `RouteServiceSummary` (no `patterns`) and `RouteServiceInfo` (summary
+  fields **plus** `patterns`), carried by `RouteSummary` and `Route` respectively. `StopDetail.routes[].route`
+  is a `RouteSummary`; `RouteDetail.route` stays a `Route`. Judged from the consumer's side, which is the only
+  side that matters here:
+  1. **The generated OpenAPI reads as the truth.** `StopDetail` `$ref`s `RouteSummary` → `RouteServiceSummary`,
+     whose property list simply ends at `hours`. A reader with nothing but `openapi.json` can see which tier
+     each endpoint serves without a sentence of prose — which was the acceptance criterion, and prose is what
+     the old schema already had and nobody could act on.
+  2. **A Swift `Codable` and a kotlinx `@Serializable` model handle it with no hand-written decoder**, because
+     each tier emits as one *flat* object. This is why the shared fields are spread into both schemas rather
+     than composed with `.extend()`/`allOf`: `allOf` is exactly the construct those two generators handle
+     worst, and a contract whose whole purpose is generated models must not hand them their weak case.
+  3. **Absence becomes unambiguous by construction, not by convention.** On the summary tier the field does
+     not exist, so it cannot be misread. On the full tier `patterns: nil` means the dataset has no frequency
+     table for that route — a real fact, and now the only thing it can mean.
+- **Additive-safe (ADR-052 §5), and worth being precise about why.** The **wire bytes do not change**: no
+  field is added, removed, renamed or retyped on any endpoint, and every payload that validated before
+  validates now. What is new is two *component names* in `openapi.json` — `RouteSummary` and
+  `RouteServiceSummary` — alongside `Route` and `RouteServiceInfo`, which keep their names and their exact
+  shapes. An already-generated client keeps decoding; a regenerated one gains a type. `CONTRACT_VERSION` stays
+  at 1.0.0, correctly.
+- **Rejected, in the order they were tempting:**
+  1. **An explicit tier discriminator** — a `fidelity: 'summary' | 'full'` field on `RouteServiceInfo`. It is
+     additive and it does resolve the ambiguity, but it resolves it *at runtime, in code the reader has to
+     remember to write*: `patterns` stays optional on one struct, so every call site needs a hand-written
+     `if fidelity == .full && patterns == nil` to reach the same conclusion the type could have stated. It
+     also puts a constant on the wire for every route in every place document, to describe something the URL
+     already determined. A tag that says which shape you got is strictly worse than getting a different shape.
+  2. **The same discriminator as a real `oneOf` + OpenAPI `discriminator`.** Type-safe on paper and the worst
+     of the three in practice: `oneOf` is precisely where Swift `Codable` needs the custom `init(from:)` this
+     whole contract exists to avoid, and kotlinx would want a sealed hierarchy for what is one object with one
+     optional field.
+  3. **Hoisting `patterns` out of `service` onto `RouteDetail`** as a sibling of `route`. Genuinely the
+     cleanest end state — one `Route`, one `RouteServiceInfo`, and the extra fidelity hanging off the only
+     envelope that can carry it — but it *removes* `RouteServiceInfo.patterns`, which is a breaking change
+     under ADR-052 §5. It would need `oasdiff`, a deprecation window serving the profiles in both places, and
+     a client migration, to buy a slightly tidier model. Noted here so the next person knows it was weighed
+     rather than missed.
+- **`toRouteSummary` is the one definition of what the tier drops**, exported from
+  `@nextbus/data-normalize/shards` and applied **twice, for two different reasons** — which is the part worth
+  reading twice before deleting one of them. The shard build applies it for **size** (the 54 MB above); the
+  Worker's `/v1/stop/:id` applies it again for the **contract**. The second is not belt-and-braces: a KV
+  document is untyped JSON that may have been written by a publisher older than the code reading it, so the
+  tier an endpoint serves has to be a property of the endpoint, not of whatever is in the namespace.
+- **Held by a gate, in both directions** (`apps/edge/test/wire-conformance.test.ts`, inside workerd against
+  simulated KV/R2). One direction is now automatic: `StopDetail` parses through `RouteSummary`, so ADR-052's
+  strict "nothing undocumented" check fails if a stop response ever grows a `patterns`. The other direction is
+  not, because `patterns` is optional at the full tier too — a route endpoint that quietly stopped sending
+  profiles would satisfy every schema in the document — so it is asserted explicitly. The edge fixtures gained
+  a GTFS frequency table for this: without one, "the stop endpoint omits `patterns`" would have passed
+  vacuously, which is the failure mode a gate is supposed to be immune to. Both assertions were watched to
+  fail on an injected violation, and the Worker-side guard was watched to hold the tier on its own with the
+  build-side one removed.
+- **Consequences / notes:** `apps/mobile` has a zero diff — `RouteSummary` and `Route` are mutually assignable
+  in TypeScript (structural typing, `patterns` optional on the full tier), so the split buys the TS client
+  nothing and is not meant to. The enforcement lives where the risk does: in the OpenAPI document, in the
+  decoders WP3-3 generates from it, and in the conformance gate. If a future change makes `patterns`
+  **required** at the full tier — emitting `[]` for a route with no table, which would give TS teeth too — note
+  that it forces a `service` object onto routes that today carry no static facts at all, so it is a wire
+  change with a UI consequence, not a rename.
+
+## ADR-066 — The colo cache key carries the build hash, so a dataset flip invalidates by construction
+- **Status:** **Decided and implemented 2026-07-28**, closing the one defect Wave 2's verification pass found.
+  Implementation: `cached()` in `apps/edge/src/index.ts`; pinned by *"a dataset flip invalidates the cached
+  index"* in `apps/edge/test/search-index.test.ts`.
+- **Context:** [ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)
+  publishes a new dataset by writing content-addressed shards and then flipping `build:current`. Everything
+  downstream is keyed by that hash — **except the colo cache in front of the Worker**, whose key was the
+  request URL alone. `/v1/index` carries a **6 h** `max-age`, so for six hours after a publish the edge kept
+  serving the previous index while `/v1/health` cheerfully reported the new `buildHash`.
+  [ADR-063](#adr-063--the-search-indexs-order-is-data-a-precomputed-sortkey-range-scans-a-content-hash-version-and-an-etag)
+  then made it worse in a specific and instructive way: with an ETag on the endpoint, a client revalidating
+  inside that window got a **304 confirming the stale copy**. The index is versioned *precisely* so a client
+  can tell it moved; a cache in front of it that answers "unchanged" defeats the whole mechanism. Reproduced
+  by hand before it was fixed: after `pnpm dataset:publish --local`, `/v1/health` reported
+  `d598893de6add2e4` while `/v1/index` still served `version: 3091.10118`, and the same URL with a
+  cache-busting parameter returned the new `a8495d810abf620d`.
+- **Decision:** the cache key is `<url>?__build=<buildHash>` (`inline` when there is no KV build). `cached()`
+  resolves the dataset **before** the lookup and hands it to the producer, so the same memoized manifest read
+  serves both the key and the work. `searchParams.set` overwrites, so a client passing `__build` itself
+  splits nothing.
+- **Why this rather than purging on publish:** a purge step is a thing someone has to remember, in a pipeline
+  that already failed to remember it once — and it cannot run at all until WP0-5 gives us credentials, so the
+  gap would have stayed open for the entire pre-launch period. Scoping the key makes the property true by
+  construction: there is no sequence of publishes that serves a stale build, because a stale build's entries
+  are simply not addressable. It also costs nothing per request. Old entries are not deleted; they age out on
+  their own TTL, which is the same trade ADR-055 already makes for superseded shards.
+- **Rejected:** *shortening the TTL* — it trades a bounded wrong answer for a permanently higher origin load
+  and still serves a stale index for the length of the TTL. *Purging via the Cache API on flip* — `caches.default`
+  is per-colo, so a Worker cannot purge the other 300; that needs the zone-level purge API and therefore
+  credentials, an auth token in the publish script, and a failure mode where a half-purged flip is worse than
+  none. *Putting the hash in the path* (`/v1/index/<hash>`) — honest, but it makes the client resolve a build
+  before it can fetch anything, which is a round trip added to every cold start to fix a cache bug.
+- **The inline fallback is not cached at all.** Its body is whatever upstream returned to *this isolate*;
+  nothing addresses it, so there is no honest key for it. The first cut of this ADR gave it a constant
+  `__build=inline`, which quietly rebuilt the defect on the fallback path — a 6 h entry keyed on nothing that
+  moves, which no publish could ever displace. **Caught in review, not by the gates**, and now pinned by a
+  test that changes upstream between two inline requests and was watched failing against the constant key.
+  `readManifest` maps *any* KV failure to `null` and deliberately never memoizes one, so this path is reached
+  by a single unreadable `build:current`, not only by a KV-less deployment.
+- **Consequences:**
+  - Every `cached()` endpoint inherits this, not just `/v1/index`. `/v1/stop`, `/v1/route` and `/v1/etas` were
+    never really exposed (a 30 s TTL bounds their staleness), but they are now correct for the same reason
+    rather than by accident of being short-lived.
+  - **`/v1/nearby` is dataset-derived and is _not_ covered.** It caches inline rather than going through
+    `cached()`, and still keys on the URL, so a flip can leave it serving the previous build's places for up
+    to `ETA_TTL_SEC` (30 s) per colo. Bounded, so low-impact — recorded here rather than left to be
+    rediscovered, because the obvious reading of this ADR is that every dataset-derived endpoint is now safe,
+    and one is not.
+  - **The live ETA and tile paths are untouched** and still key on the URL: neither is derived from the
+    dataset, so a build hash in their key would fragment the cache for nothing.
+  - **During a KV outage an isolate now builds the inline index where it might previously have served a warm
+    colo entry**, so `datasetBuildsThisIsolate` can be non-zero while `build:current` is unreadable. That is
+    the counter doing its job rather than the WP0-1 invariant breaking: the invariant is *0 in healthy
+    production*, and an outage is precisely the degradation the number exists to surface. The alternative —
+    serving a possibly-hours-old index because the dataset layer is down — is the failure this ADR is about.
+    `inlineSource()` memoizes per isolate, so the cost is one build per isolate: ADR-055's own
+    degrade-to-slow promise, and no worse than a cache miss during the same outage would already have been.
+  - `getDataset` runs **inside** `cached`'s `try`. It is a KV read, so a throw from it is upstream I/O and
+    must be classified `upstream_unavailable` with the endpoint's context, not stamped `internal` by the
+    top-level handler — `internal` means *our* bug (ADR-064), and mislabelling KV I/O as one both misleads a
+    retrying client and pollutes the unhandled-error log used to find real defects. Also caught in review.
+  - The tests assert on the **served bytes** across a flip, not on the key's shape — a key-shape assertion
+    passes against any scheme that merely looks different, and what a rider is owed is the published build.
+    Both were watched failing against the code they pin.
+  - **Found by verification, not by review or CI.** Wave 2's ETag work was green on every gate; the defect
+    only appeared when a real dataset was rebuilt and published against a running Worker. Worth remembering
+    the next time an endpoint gains a validator: the test that matters is the one that spans two builds.

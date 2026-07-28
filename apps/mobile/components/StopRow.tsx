@@ -1,9 +1,14 @@
 import type { Eta, Locale } from '@nextbus/core'
-import { formatBearing, formatDistance, formatWalk, parseRouteId } from '@nextbus/core'
+import {
+  formatBearing,
+  formatDistance,
+  formatWalk,
+  parseRouteId,
+  titleCaseName,
+} from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { ChevronRight, MapPin } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
-import { titleCaseName } from '../lib/stopName'
 import { BearingArrow } from './BearingArrow'
 import { EtaBadge } from './EtaBadge'
 import { Icon } from './Icon'
