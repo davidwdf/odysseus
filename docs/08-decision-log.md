@@ -2235,11 +2235,14 @@ rather than the docs. **The blocking open question above is unchanged** — this
      broken" rather than "we're offline". A replayed reading carries its original `observedAt`, so the ETA
      helpers age it and the UI marks it stale — restoring a *labelled old reading* is consistent with
      ADR-008, restoring a fresh-looking one would not be.
-  4. **The GPS fix is grid-snapped to 25 m before it leaves the device** (`lib/geoSnap.ts`). This is
-     WP2-6 pulled forward, because none of the above works without it: raw coordinates jitter by metres
-     between readings, so the Nearby query key moved constantly and a persisted result could essentially
-     never be replayed. It is simultaneously a privacy control and the thing that makes `/v1/nearby`
-     edge-cacheable at all. Wave 2 still has to move it into `packages/core`.
+  4. **The GPS fix is grid-snapped to 25 m before it leaves the device.** This is WP2-6 pulled forward,
+     because none of the above works without it: raw coordinates jitter by metres between readings, so
+     the Nearby query key moved constantly and a persisted result could essentially never be replayed.
+     It is simultaneously a privacy control and the thing that makes `/v1/nearby` edge-cacheable at all.
+     **Completed in Wave 2:** the rule now lives in `packages/core/src/geo-snap.ts` (`snapFix`), pinned
+     by `spec/geo-snap.spec.json`; the `apps/mobile/lib/geoSnap.ts` copy is gone. Only the 25 m tier
+     exists — WP2-6's plan row also names a 50 m tier for fixes away from Nearby, nothing implements
+     it, and `gridM` is a parameter no caller passes.
   5. **Say when the position is remembered.** `useLocation` persists the last fix and returns it with
      `stale: true` while a live one is pending or unobtainable; Nearby shows `lastKnownLocation` instead of
      the app name. ADR-008's honesty applies to the position, not only to the arrival times.

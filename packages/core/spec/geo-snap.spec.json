@@ -1,0 +1,205 @@
+{
+  "module": "geo-snap",
+  "source": "src/geo-snap.ts",
+  "version": 1,
+  "doc": "Grid-snapping the GPS fix before it leaves the device (WP2-6, ADR-058). The rule is one privacy control and two cache keys at once: the Worker is asked about a 25 m cell rather than a doorstep, `/v1/nearby?lat=…&lng=…` stops being a fresh edge-cache key on every reading, and the persisted TanStack Query key is stable enough for an offline replay to hit. A port that snaps to a DIFFERENT cell than this one is not a cosmetic difference — iOS and Android would each mint their own cache keys and the edge hit rate would quietly collapse, with nothing on screen to show for it.  THREE CONSTANTS A PORT MUST COPY EXACTLY, because every figure below is derived from them: 111320 m per degree of latitude, a default cell edge of 25 m, and the 0.01 floor on cos(lat) that stops the longitude step exploding near the poles. The longitude step is computed from the SNAPPED latitude, not the raw one — otherwise two readings inside one latitude cell can still land on different longitudes, which defeats the whole point.  ROUNDING MODE: HALF-UP, i.e. TOWARDS POSITIVE INFINITY (JS `Math.round`, Kotlin `Math.round`, `floor(x + 0.5)`). It is NOT half-away-from-zero and NOT banker's rounding. Swift's `rounded()` defaults to `.toNearestOrAwayFromZero` and will disagree on a negative tie — a port must write `(x + 0.5).rounded(.down)` or `x.rounded(.toNearestOrAwayFromZero)` only where x >= 0. The `exact-half-cell-boundary-*` pair below is the row that separates them.  TOLERANCE: each row carries a `tolerance` in DEGREES and a port must assert |actual - expected| <= tolerance per component, never equality. Unlike `geo.spec.json`, where trigonometry genuinely differs in the last bits, the tolerance here is tight (1e-9) because the output is quantized to six decimals (~0.1 m) before it is returned — a port that lands more than 1e-9 away has landed a whole quantum away, which means a different cache key.  Every Hong Kong coordinate below is a real place; the two non-HK rows exist precisely BECAUSE Hong Kong is entirely north and east, so the whole territory exercises only the positive half of the rounding rule.",
+  "groups": {
+    "snapFix": {
+      "doc": "Snap a fix to its `gridM` cell. `gridM` is `null` on a row that omits it, meaning the caller takes the 25 m default — which is every caller in the app today. Deterministic and idempotent: snapping a snapped fix returns it unchanged, which is what makes the result usable as a cache key.",
+      "cases": [
+        {
+          "name": "mong-kok-reference-cell",
+          "why": "The reference row every jitter row below collapses onto. Nathan Road at Mong Kok, the coordinate the rest of this package's corpora use as 'somewhere in Hong Kong'.",
+          "args": {
+            "fix": {
+              "lat": 22.3193,
+              "lng": 114.1694
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 22.319215,
+            "lng": 114.169306,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "jitter-north-west-shares-the-cell",
+          "why": "A stationary phone drifts a few metres between readings. This one is ~2 m north and ~3 m west of the reference row and must produce the IDENTICAL output — if it does not, the edge cache key moves while the rider stands still and the 30 s cache never binds.",
+          "args": {
+            "fix": {
+              "lat": 22.31932,
+              "lng": 114.16937
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 22.319215,
+            "lng": 114.169306,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "jitter-south-east-shares-the-cell",
+          "why": "The same drift in the opposite direction. Two jitter rows rather than one because a port that snapped with `floor` instead of `round` would still pass a single one-sided row.",
+          "args": {
+            "fix": {
+              "lat": 22.31929,
+              "lng": 114.16942
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 22.319215,
+            "lng": 114.169306,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "already-snapped-is-a-no-op",
+          "why": "Idempotence stated as data. The output is fed back in as the input. A cache key that changed on the second snap would refetch every time the app re-derived it from a stored fix.",
+          "args": {
+            "fix": {
+              "lat": 22.319215,
+              "lng": 114.169306
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 22.319215,
+            "lng": 114.169306,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "the-other-kerb-of-one-interchange-is-a-different-cell",
+          "why": "The second pole of `geo.spec.json`'s 'two poles of one place', ~68 m away. Snapping must not be so coarse that a real move stops refetching — 68 m is nearly three cells, so these are different keys and Nearby re-sorts. This is the row that would go red if someone widened the grid to make the cache hit rate look better.",
+          "args": {
+            "fix": {
+              "lat": 22.31975,
+              "lng": 114.16985
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 22.319664,
+            "lng": 114.169916,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "central-ferry-piers",
+          "why": "A second real Hong Kong cell, a harbour away from the first. Guards against a port that happens to be right at one coordinate because it hard-coded a step somewhere.",
+          "args": {
+            "fix": {
+              "lat": 22.2819,
+              "lng": 114.1585
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 22.281935,
+            "lng": 114.158501,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "explicit-fifty-metre-grid",
+          "why": "The only row that passes `gridM`, and the only exercise of the non-default path. The plan's WP2-6 row reads '25 m nearby / 50 m elsewhere'; the second tier was never implemented, so 50 m exists solely as an argument no caller passes. Note the output is NOT the 25 m output re-snapped — a 50 m cell is a different grid, not a coarser view of the same one.",
+          "args": {
+            "fix": {
+              "lat": 22.3193,
+              "lng": 114.1694
+            },
+            "gridM": 50
+          },
+          "expect": {
+            "lat": 22.319439,
+            "lng": 114.169247,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "exact-half-cell-boundary-rounds-north",
+          "why": "THE ROUNDING-MODE ROW, positive half. This latitude sits exactly on a half-cell boundary (lat / latStep = 99383.5), so it is the tie every rounding mode answers differently. Half-up and half-away-from-zero agree here, which is why the mirrored row below has to exist. Note the longitude also differs from the reference cell's: the step is recomputed from the SNAPPED latitude.",
+          "args": {
+            "fix": {
+              "lat": 22.31932716492993,
+              "lng": 114.1694
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 22.319439,
+            "lng": 114.16949,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "exact-half-cell-boundary-in-the-south-also-rounds-north",
+          "why": "THE ROUNDING-MODE ROW, negative half — the reason this corpus contains a coordinate that is not in Hong Kong. The exact mirror of the row above (lat / latStep = -99383.5). Half-up gives cell -99383, i.e. -22.319215, snapping NORTH just as the positive tie does. Half-away-from-zero (Swift's default `rounded()`) gives -99384, i.e. -22.319439, and this row goes red — which is the point. Hong Kong is entirely north and east, so nothing in the territory can catch that port bug and every HK row above would stay green.",
+          "args": {
+            "fix": {
+              "lat": -22.31932716492993,
+              "lng": 114.1694
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": -22.319215,
+            "lng": 114.169306,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "negative-latitude-and-longitude",
+          "why": "Rio de Janeiro — both components negative, neither on a tie. Proves the snap is a plain grid in both quadrants rather than something that only makes sense for positive degrees, and that the cos(lat) step is symmetric about the equator. Unreachable from a Hong Kong fix, which is exactly why a corpus row is the only thing that will ever exercise it.",
+          "args": {
+            "fix": {
+              "lat": -22.9068,
+              "lng": -43.1729
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": -22.90671,
+            "lng": -43.172855,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "southern-hemisphere-eastern-longitude",
+          "why": "Sydney — negative latitude with a positive longitude, so the two signs are separated rather than always moving together. A port that applied a sign correction to the pair as a whole passes the Rio row and fails this one.",
+          "args": {
+            "fix": {
+              "lat": -33.8688,
+              "lng": 151.2093
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": -33.868802,
+            "lng": 151.2094,
+            "tolerance": 1e-9
+          }
+        },
+        {
+          "name": "at-the-pole-the-longitude-step-is-clamped",
+          "why": "cos(90 deg) is ~6e-17, so an unclamped longitude step is astronomical and every meridian collapses to one value. The 0.01 floor caps the step at 25 / (111320 * 0.01) ~= 0.0225 deg instead. Not reachable from a Hong Kong fix, but a port that drops the clamp divides by something near zero and returns a nonsense or infinite longitude, and the failure would only ever show up on someone else's map.",
+          "args": {
+            "fix": {
+              "lat": 90,
+              "lng": 114.1694
+            },
+            "gridM": null
+          },
+          "expect": {
+            "lat": 90,
+            "lng": 114.17535,
+            "tolerance": 1e-9
+          }
+        }
+      ]
+    }
+  }
+}

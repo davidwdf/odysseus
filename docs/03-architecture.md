@@ -195,7 +195,8 @@ Four layers, each matched to what it's caching:
   the last known arrivals instead of a spinner. Successes only: a persisted error would replay as
   "the app is broken" rather than "we're offline". This is not a breach of ADR-008 — what's restored
   is a *labelled old reading*, never a fresh-looking one.
-- The GPS fix is snapped to a **25 m grid** before it leaves the device (`lib/geoSnap.ts`). Privacy,
+- The GPS fix is snapped to a **25 m grid** before it leaves the device (`snapFix` in
+  `packages/core/src/geo-snap.ts`, corpus-pinned — WP2-6). Privacy,
   edge-cacheability (raw coordinates jitter by metres, so `/v1/nearby` was a fresh cache key on
   nearly every request) and offline replay (the query key is the fix) all fall out of one function.
 - Still to come: the full on-device static index (ADR-007). Today the device caches the search index
