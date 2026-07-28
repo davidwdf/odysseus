@@ -21,7 +21,10 @@
 > `N260`→`N0260`), the route tier carrying 3 frequency profiles where the stop tier has no `patterns` key
 > at all, and the app walked in a browser — the keypad narrowing `1` to A/M/P/S off range scans, a circular
 > GMB route reading *"Circular via MacDonnell Road"*, and a 5-pole place framed with every dot on-screen.
-> **One defect found doing it, not yet fixed** — see *A dataset flip does not invalidate `/v1/index`* below.
+> **One defect found doing it, and fixed** ([ADR-066](./08-decision-log.md)): a dataset flip did not
+> invalidate `/v1/index`'s colo cache, so a publish was invisible for six hours and a revalidating client
+> got a 304 confirming the stale copy. The cache key carries the build hash now. Every gate had been green —
+> only a real rebuild-and-publish against a running Worker found it.
 > Previously: **Wave 1 — the contract foundation, WP1-1 … WP1-5**
 > ([ADR-051](./08-decision-log.md#adr-051--layered-package-boundaries-packagesports-is-declaration-only-and-imports-nothing) ·
 > [ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) ·
@@ -492,16 +495,15 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    codegen, ICU, a published contract) and every claim in it is about a Swift compiler nobody has run yet.
    **Do Wave 4 first** unless a native repo has appeared.
    **Loose ends the two waves left, in priority order:**
-   - 🔴 **A dataset flip does not invalidate `/v1/index`'s colo cache.** Found while verifying WP2-7:
-     `cached()` keys `caches.default` on the URL with a 6 h `max-age`, and flipping `build:current` does not
-     purge it — so for up to six hours after a publish, `/v1/index` serves the **previous** index, and a
-     client revalidating with `If-None-Match` now gets a **304 that confirms the stale copy**. Reproduced
-     locally: after `dataset:publish --local`, `/v1/health` reported the new `buildHash` while `/v1/index`
-     still served `version: 3091.10118`; the same URL with a cache-busting query returned the new
-     `a8495d810abf620d` with its `sortKey`s. The index is versioned *precisely* so a client can tell it moved,
-     and the cache in front of it hides that. Cheapest honest fix: put the build hash in the cache key, so a
-     flip produces a new key by construction. **Nothing is in production yet (WP0-5), so this is owed to
-     whoever wires publish → purge.**
+   - ✅ **Fixed 2026-07-28 — a dataset flip now invalidates the cached index**
+     ([ADR-066](./08-decision-log.md)). Found while verifying WP2-7, and worth keeping in the record because
+     of *how*: `cached()` keyed `caches.default` on the URL alone with a 6 h `max-age`, so for six hours after
+     a publish `/v1/index` served the **previous** index while `/v1/health` reported the new `buildHash` — and
+     once WP2-7 gave the endpoint an ETag, a revalidating client got a **304 confirming the stale copy**. The
+     key now carries the build hash, so a flip is invalidating by construction rather than by anyone
+     remembering to purge. The test spans two builds and was **watched failing** against the pre-fix code.
+     Every gate had been green; only rebuilding and publishing a real dataset against a running Worker
+     exposed it.
    - ✅ **Done 2026-07-28:** five of the six `knownDefect` rows are fixed (`formatDistance` 995–999 m,
      `estimateChildFare('')`, `estimateElderlyFare('')`, `formatServiceHours`' past-midnight wrap,
      `buildRouteTrie('')`), and the corpus format is converged. **One `knownDefect` remains on purpose:**

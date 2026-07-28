@@ -2787,3 +2787,71 @@ rather than the docs. **The blocking open question above is unchanged** — this
   **required** at the full tier — emitting `[]` for a route with no table, which would give TS teeth too — note
   that it forces a `service` object onto routes that today carry no static facts at all, so it is a wire
   change with a UI consequence, not a rename.
+
+## ADR-066 — The colo cache key carries the build hash, so a dataset flip invalidates by construction
+- **Status:** **Decided and implemented 2026-07-28**, closing the one defect Wave 2's verification pass found.
+  Implementation: `cached()` in `apps/edge/src/index.ts`; pinned by *"a dataset flip invalidates the cached
+  index"* in `apps/edge/test/search-index.test.ts`.
+- **Context:** [ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)
+  publishes a new dataset by writing content-addressed shards and then flipping `build:current`. Everything
+  downstream is keyed by that hash — **except the colo cache in front of the Worker**, whose key was the
+  request URL alone. `/v1/index` carries a **6 h** `max-age`, so for six hours after a publish the edge kept
+  serving the previous index while `/v1/health` cheerfully reported the new `buildHash`.
+  [ADR-063](#adr-063--the-search-indexs-order-is-data-a-precomputed-sortkey-range-scans-a-content-hash-version-and-an-etag)
+  then made it worse in a specific and instructive way: with an ETag on the endpoint, a client revalidating
+  inside that window got a **304 confirming the stale copy**. The index is versioned *precisely* so a client
+  can tell it moved; a cache in front of it that answers "unchanged" defeats the whole mechanism. Reproduced
+  by hand before it was fixed: after `pnpm dataset:publish --local`, `/v1/health` reported
+  `d598893de6add2e4` while `/v1/index` still served `version: 3091.10118`, and the same URL with a
+  cache-busting parameter returned the new `a8495d810abf620d`.
+- **Decision:** the cache key is `<url>?__build=<buildHash>` (`inline` when there is no KV build). `cached()`
+  resolves the dataset **before** the lookup and hands it to the producer, so the same memoized manifest read
+  serves both the key and the work. `searchParams.set` overwrites, so a client passing `__build` itself
+  splits nothing.
+- **Why this rather than purging on publish:** a purge step is a thing someone has to remember, in a pipeline
+  that already failed to remember it once — and it cannot run at all until WP0-5 gives us credentials, so the
+  gap would have stayed open for the entire pre-launch period. Scoping the key makes the property true by
+  construction: there is no sequence of publishes that serves a stale build, because a stale build's entries
+  are simply not addressable. It also costs nothing per request. Old entries are not deleted; they age out on
+  their own TTL, which is the same trade ADR-055 already makes for superseded shards.
+- **Rejected:** *shortening the TTL* — it trades a bounded wrong answer for a permanently higher origin load
+  and still serves a stale index for the length of the TTL. *Purging via the Cache API on flip* — `caches.default`
+  is per-colo, so a Worker cannot purge the other 300; that needs the zone-level purge API and therefore
+  credentials, an auth token in the publish script, and a failure mode where a half-purged flip is worse than
+  none. *Putting the hash in the path* (`/v1/index/<hash>`) — honest, but it makes the client resolve a build
+  before it can fetch anything, which is a round trip added to every cold start to fix a cache bug.
+- **The inline fallback is not cached at all.** Its body is whatever upstream returned to *this isolate*;
+  nothing addresses it, so there is no honest key for it. The first cut of this ADR gave it a constant
+  `__build=inline`, which quietly rebuilt the defect on the fallback path — a 6 h entry keyed on nothing that
+  moves, which no publish could ever displace. **Caught in review, not by the gates**, and now pinned by a
+  test that changes upstream between two inline requests and was watched failing against the constant key.
+  `readManifest` maps *any* KV failure to `null` and deliberately never memoizes one, so this path is reached
+  by a single unreadable `build:current`, not only by a KV-less deployment.
+- **Consequences:**
+  - Every `cached()` endpoint inherits this, not just `/v1/index`. `/v1/stop`, `/v1/route` and `/v1/etas` were
+    never really exposed (a 30 s TTL bounds their staleness), but they are now correct for the same reason
+    rather than by accident of being short-lived.
+  - **`/v1/nearby` is dataset-derived and is _not_ covered.** It caches inline rather than going through
+    `cached()`, and still keys on the URL, so a flip can leave it serving the previous build's places for up
+    to `ETA_TTL_SEC` (30 s) per colo. Bounded, so low-impact — recorded here rather than left to be
+    rediscovered, because the obvious reading of this ADR is that every dataset-derived endpoint is now safe,
+    and one is not.
+  - **The live ETA and tile paths are untouched** and still key on the URL: neither is derived from the
+    dataset, so a build hash in their key would fragment the cache for nothing.
+  - **During a KV outage an isolate now builds the inline index where it might previously have served a warm
+    colo entry**, so `datasetBuildsThisIsolate` can be non-zero while `build:current` is unreadable. That is
+    the counter doing its job rather than the WP0-1 invariant breaking: the invariant is *0 in healthy
+    production*, and an outage is precisely the degradation the number exists to surface. The alternative —
+    serving a possibly-hours-old index because the dataset layer is down — is the failure this ADR is about.
+    `inlineSource()` memoizes per isolate, so the cost is one build per isolate: ADR-055's own
+    degrade-to-slow promise, and no worse than a cache miss during the same outage would already have been.
+  - `getDataset` runs **inside** `cached`'s `try`. It is a KV read, so a throw from it is upstream I/O and
+    must be classified `upstream_unavailable` with the endpoint's context, not stamped `internal` by the
+    top-level handler — `internal` means *our* bug (ADR-064), and mislabelling KV I/O as one both misleads a
+    retrying client and pollutes the unhandled-error log used to find real defects. Also caught in review.
+  - The tests assert on the **served bytes** across a flip, not on the key's shape — a key-shape assertion
+    passes against any scheme that merely looks different, and what a rider is owed is the published build.
+    Both were watched failing against the code they pin.
+  - **Found by verification, not by review or CI.** Wave 2's ETag work was green on every gate; the defect
+    only appeared when a real dataset was rebuilt and published against a running Worker. Worth remembering
+    the next time an endpoint gains a validator: the test that matters is the one that spans two builds.

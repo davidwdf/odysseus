@@ -1,6 +1,6 @@
 import type { ErrorCode } from '@nextbus/core'
 import { fetchEta } from '@nextbus/data-normalize'
-import { datasetBuildCount, getDataset } from './dataset'
+import { type DatasetSource, datasetBuildCount, getDataset } from './dataset'
 import type { Env } from './env'
 import { errorResponse, fail as failWith } from './errors'
 import { ETA_TTL_SEC } from './eta-cache'
@@ -62,23 +62,47 @@ async function cached<T>(
   request: Request,
   url: URL,
   ctx: ExecutionContext,
+  env: Env,
   maxAge: number,
-  produce: () => Promise<T>,
+  produce: (dataset: DatasetSource) => Promise<T>,
   errPrefix: string,
   /** Strong validator for the produced value, when the value knows its own version. */
   etagOf?: (value: T) => string,
 ): Promise<Response> {
   const cache = caches.default
-  // The cache key drops the client's headers on purpose. `new Request(url, request)` copies them,
-  // which would put `If-None-Match` in the key and split the colo cache into one entry per
-  // validator a client happens to hold — the conditional response is derived below, not stored.
-  const cacheKey = new Request(url.toString(), { method: 'GET' })
-  const hit = await cache.match(cacheKey)
-  if (hit) return notModifiedIfMatched(request, hit)
+  // `getDataset` is **inside** the try: it is a KV read, so a throw from it is upstream I/O and
+  // must reach the rider as `upstream_unavailable` with this endpoint's context, not as the
+  // `internal` the top-level handler would stamp on it (ADR-064 — `internal` means *our* bug).
   try {
-    const value = await produce()
+    // Resolved before the cache lookup because the build hash is *part of the key* (below), and
+    // handed to `produce` so one memoized manifest read serves both.
+    const dataset = await getDataset(env)
+    // The cache key drops the client's headers on purpose. `new Request(url, request)` copies them,
+    // which would put `If-None-Match` in the key and split the colo cache into one entry per
+    // validator a client happens to hold — the conditional response is derived below, not stored.
+    //
+    // It gains the build hash for the opposite reason: without it the key is just the path, and
+    // `build:current` flipping to a new dataset leaves every entry in place. `/v1/index` carries a
+    // 6 h TTL, so a publish stayed invisible for six hours — and once ADR-063 gave the index an
+    // ETag, a client revalidating in that window got a **304 confirming the stale copy**, which is
+    // worse than the plain staleness it replaced: the index is versioned precisely so a client can
+    // tell it moved. Scoping the key by build means a flip produces new keys by construction, so
+    // correctness stops depending on anyone remembering to purge (ADR-066). `searchParams.set`
+    // overwrites rather than appends, so a client passing `__build` cannot add a second entry for
+    // the same build under the same parameter name.
+    //
+    // **The inline fallback is deliberately uncached.** Its content is not addressed by anything —
+    // it is whatever upstream returned to this isolate — so there is no honest key for it. Sharing
+    // one `__build=inline` key across every inline response would rebuild the original defect on
+    // the fallback path and hold a 6 h entry that no publish can ever displace, which is strictly
+    // worse than the slow answer it was trying to avoid. `inlineSource()` memoizes per isolate, so
+    // the cost of skipping the cache here is bounded by ADR-055's own degrade-to-slow promise.
+    const cacheKey = dataset.buildHash === null ? null : buildScopedKey(url, dataset.buildHash)
+    const hit = cacheKey && (await cache.match(cacheKey))
+    if (hit) return notModifiedIfMatched(request, hit)
+    const value = await produce(dataset)
     const res = json(value, maxAge, etagOf?.(value))
-    ctx.waitUntil(cache.put(cacheKey, res.clone()))
+    if (cacheKey) ctx.waitUntil(cache.put(cacheKey, res.clone()))
     return notModifiedIfMatched(request, res)
   } catch (err) {
     // A handler that knows why it failed threw a `WireError` and keeps its own code — that is how
@@ -86,6 +110,13 @@ async function cached<T>(
     // Everything else here is dataset or upstream I/O, so it stays `upstream_unavailable`.
     return errorResponse(err, CORS, { context: errPrefix })
   }
+}
+
+/** The colo cache key for `url` under a specific dataset build. See `cached` for why. */
+function buildScopedKey(url: URL, buildHash: string): Request {
+  const keyUrl = new URL(url.toString())
+  keyUrl.searchParams.set('__build', buildHash)
+  return new Request(keyUrl.toString(), { method: 'GET' })
 }
 
 /**
@@ -212,8 +243,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       request,
       url,
       ctx,
+      env,
       21_600,
-      async () => (await getDataset(env)).searchIndex(),
+      (dataset) => dataset.searchIndex(),
       'index error',
       // The index's own content hash is its strong validator (ADR-063), so a returning client
       // revalidates once the 6 h `max-age` lapses and pays a 304 instead of the whole blob.
@@ -267,8 +299,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       request,
       url,
       ctx,
+      env,
       ETA_TTL_SEC,
-      async () => stopDetail(await getDataset(env), id),
+      (dataset) => stopDetail(dataset, id),
       'stop error',
     )
   }
@@ -283,8 +316,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       request,
       url,
       ctx,
+      env,
       ETA_TTL_SEC,
-      async () => routeDetail(await getDataset(env), id),
+      (dataset) => routeDetail(dataset, id),
       'route error',
     )
   }
@@ -300,8 +334,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       request,
       url,
       ctx,
+      env,
       ETA_TTL_SEC,
-      async () => stopEtas(await getDataset(env), id, routeIds),
+      (dataset) => stopEtas(dataset, id, routeIds),
       'etas error',
     )
   }

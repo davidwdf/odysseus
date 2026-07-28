@@ -147,3 +147,102 @@ describe('/v1/index conditional requests', () => {
     expect(((await after.json()) as SearchIndex).routes.length).toBeGreaterThan(0)
   })
 })
+
+/**
+ * ADR-066. This is the test that was missing when the ETag landed, and the defect it now pins was
+ * found by hand against a running Worker rather than by the suite: `/v1/index` has a **6 h** TTL and
+ * the colo cache key was the URL alone, so flipping `build:current` left every entry in place. The
+ * publish was invisible for six hours — and with an ETag in play a revalidating client got a *304
+ * confirming the stale copy*, so the index's whole point (a version a client can compare) was
+ * defeated by the cache in front of it.
+ *
+ * Asserting on the **served bytes** rather than on the cache key: a key-shape assertion would pass
+ * against any scheme that merely looks different, and the property that matters to a rider is that
+ * a published build is the one they get.
+ */
+describe('a dataset flip invalidates the cached index', () => {
+  it('serves the new build immediately after build:current moves', async () => {
+    const before = (await (await get('/v1/index')).json()) as SearchIndex
+    const beforeEtag = `"${before.version}"`
+
+    // A second build: same shape, one route removed, so the content hash *must* move. (The old
+    // `${routes.length}.${stops.length}` version would also have moved here — the bug under test is
+    // not the version scheme but the cache in front of it, which is why this seeds a real flip.)
+    const NEXT = 'etagbuild02'
+    const nextIndex: SearchIndex = { ...before, routes: before.routes.slice(0, -1) }
+    nextIndex.version = 'ffffffffffffffff'
+    await (env.BUILDS as R2Bucket).put(buildObjects.searchIndex(NEXT), JSON.stringify(nextIndex))
+    const manifest: BuildManifest = {
+      hash: NEXT,
+      sourceHash: 'seed-2',
+      builtAt: '2026-07-29T00:00:00.000Z',
+      counts: { places: 0, aliases: 0, routes: 0, cells: 0, stops: 0 },
+    }
+    await (env.DATASET as KVNamespace).put(datasetKeys.current, JSON.stringify(manifest))
+    // The manifest is memoized per isolate for its own TTL; a real flip is seen when that lapses.
+    // Dropping the isolate state is how this test reaches the next request, not part of the fix.
+    resetDatasetState()
+
+    const after = await get('/v1/index')
+    const served = (await after.clone().json()) as SearchIndex
+    expect(served.version, 'the flip must reach the rider, not sit behind a 6 h colo entry').toBe(
+      'ffffffffffffffff',
+    )
+    expect(after.headers.get('etag')).toBe('"ffffffffffffffff"')
+    expect(served.routes.length).toBe(before.routes.length - 1)
+
+    // …and the client that was holding the previous build is told so, rather than being handed a
+    // 304 that confirms an index which no longer exists.
+    const revalidated = await get('/v1/index', { 'if-none-match': beforeEtag })
+    expect(revalidated.status).toBe(200)
+    expect(((await revalidated.json()) as SearchIndex).version).toBe('ffffffffffffffff')
+  })
+
+  /**
+   * The fallback path has no build hash, so there is no honest key for it — and the first cut of
+   * ADR-066 gave it a constant one (`__build=inline`), which rebuilt the very defect it was fixing:
+   * a 6 h entry, keyed on nothing that moves, that no publish could displace. Caught in review.
+   *
+   * `readManifest` maps *any* KV failure to `null` and deliberately never memoizes it, so this is
+   * not a hypothetical state: one unreadable `build:current` reaches it.
+   */
+  it('does not cache the inline fallback, whose body no key can address', async () => {
+    const kv = env.DATASET as KVNamespace
+    const manifest = await kv.get(datasetKeys.current)
+    await kv.delete(datasetKeys.current)
+
+    /** Serve the upstream dataset, optionally with one route withdrawn, so its content moves. */
+    const serveUpstream = (withdrawOne: boolean) => {
+      const body = datasetJson() as { routeList: Record<string, unknown> }
+      if (withdrawOne) delete body.routeList[Object.keys(body.routeList)[0] as string]
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+        if (u === DATASET_URL) return jsonResponse(body)
+        throw new Error(`unexpected fetch: ${u}`)
+      }) as typeof fetch
+    }
+
+    try {
+      serveUpstream(false)
+      resetDatasetState()
+      const first = (await (await get('/v1/index')).json()) as SearchIndex
+
+      // Upstream genuinely changes while `build:current` is still unreadable. A constant
+      // `__build=inline` key would serve `first` for six hours; there is no publish that can
+      // displace it, because the key does not mention anything a publish moves.
+      serveUpstream(true)
+      resetDatasetState()
+      const second = (await (await get('/v1/index')).json()) as SearchIndex
+
+      expect(
+        second.version,
+        'an inline response must not be served from a stale colo entry',
+      ).not.toBe(first.version)
+      expect(second.routes.length).toBeLessThan(first.routes.length)
+    } finally {
+      globalThis.fetch = realFetch
+      await kv.put(datasetKeys.current, manifest as string)
+      resetDatasetState()
+    }
+  })
+})
