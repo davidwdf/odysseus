@@ -166,7 +166,21 @@ app release.
 | **Topographic** (basemap) | `https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png` | z10–20. Dense survey cartography — footbridges/subways/landmarks, which is *why* we chose it (ADR-049). |
 | **Map Label** (labels overlay) | `.../xyz/label/hk/{lang}/WGS84/{z}/{x}/{y}.png` | `{lang}` = `en`\|`tc`\|`sc` — **our three locales exactly**. Separate layer, so `useLocale()` swaps one URL. |
 | **Vector** (later) | `.../vt/basemap/WGS84/tile/{z}/{y}/{x}.pbf` | ⚠️ axis order is **`{z}/{y}/{x}`** (ESRI). Style is Mapbox GL spec v8, 813 layers. Docs say z9–15. |
-| **Streetscape 360** | `https://data.map.gov.hk/api/3d-mms-data/{panorama}?key={key}` | Gov 360° street panoramas, territory-wide since Mar 2025. Free key: `3dmap@landsd.gov.hk`. |
+| **Streetscape 360** | `https://data.map.gov.hk/api/3d-mms-data/{panorama}?key={key}` | Gov 360° street panoramas, territory-wide since Mar 2025. **Different host, and this one needs a key** — free, by emailing `3dmap@landsd.gov.hk` (no form, no vetting). See ADR-050. |
+
+**Keyless is a property of the tier, not of LandsD.** Verified by live request 2026-07-28, because ADR-049
+rests on it:
+
+| Host | Key? |
+|---|---|
+| `mapapi.geodata.gov.hk` — the tiles above, i.e. everything we actually use | **keyless** (200 with no credential) |
+| `data.map.gov.hk` — 3D + Streetscape 360 | key required (401 without) |
+| `api.hkmapservice.gov.hk` — LandsD Map API (ArcGIS REST) | key required; its portal is branded for government departments. **We don't need it** — the public equivalents are on `mapapi.geodata.gov.hk`. |
+
+The one thing we borrow from `api.hkmapservice.gov.hk` is the mandatory LandsD logo
+(`/mapapi/landsdlogo.jpg`), which is undocumented and unkeyed — and which we **self-host** anyway
+(ADR-049), so nothing in the request path depends on a keyed host.
+
 
 **Also available, keyless, and useful later** ([backlog](./07-backlog.md)): **3D Pedestrian Route Search**
 (footbridge-aware walking times — the honest way to do "leave now"), **Location Search** (text → HK

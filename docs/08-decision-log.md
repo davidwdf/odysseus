@@ -1857,6 +1857,36 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   and whether the format is renderable in React Native, decides this.** Ask when requesting the key. If the
   answer is no, decision (1) stands as the shipped feature and this becomes a watch item.
 
+### Addendum 2026-07-28 — how the Streetscape key actually works (investigated, still blocked)
+
+Prompted by "if I get permission, does that give me another token?". Investigated against the live service
+rather than the docs. **The blocking open question above is unchanged** — this only settles the access model.
+
+1. **Yes, it's a token — and no, it isn't a secret.** `?key=<uuid>`, or the same value as an
+   `Ocp-Apim-Subscription-Key` header (Azure API Management sits underneath; a bare request returns APIM's
+   stock `401 … missing subscription key`). But **LandsD publishes a live working key in its own public
+   sample URL** on the Streetscape 360 API page — fetched with it and got `200` and 590 kB of JPEG — and the
+   key is **not domain- or referer-restricted**: it returns `200` from plain server-side curl and from a
+   spoofed `Origin`. A second working key is search-engine-indexed. Invalid keys *are* rejected, so it is
+   enforced as an identifier; it is simply bound to nothing.
+2. **Therefore: treat it as a public token, but still proxy it.** It goes in `wrangler secret put` and the
+   panorama is fetched through the Worker — not into `EXPO_PUBLIC_*`. Not for confidentiality, which it
+   doesn't have, but because (a) the tile seam already exists, (b) the CSDI grant permits caching, so the
+   proxy buys a real cache, and (c) the key can't be scoped and rotation means emailing LandsD again, so
+   keeping it out of a shipped bundle is cheap insurance. This would be the **first runtime secret the Worker
+   has ever needed** — see [ADR-061](#adr-061--environments-and-configuration-topology-local--production-ephemeral-previews-and-no-staging-tier).
+3. **There is no application process to fail.** No form, no vetting, no approval SLA, no terms to sign — the
+   CSDI docs say only *"you can contact the organisation to get the API keys for free"*. So "getting
+   permission" is not a gate on this ADR; the renderability question is.
+4. **Licence is the ADR-049 grant, and it is generous.** The CSDI T&C define "Spatial Data" to include the
+   API, grant commercial reproduction and redistribution free of charge, and contain **no anti-caching
+   clause** — the opposite of Street View. Attribution to the Government + CSDI Portal is required. *Not
+   confirmed:* whether the map-face logo requirement formally extends to panoramas (it's stated on the
+   Topographic/Imagery pages, not restated on Streetscape). Assume it does.
+5. **Confirmed unaffected:** ADR-049's basemap tier is genuinely keyless. See the tier table in
+   [`docs/02`](./02-data-sources.md#map-tiles--street-imagery--hk-lands-department-adr-049-adr-050) — the key
+   requirement is a property of `data.map.gov.hk` and `api.hkmapservice.gov.hk`, not of LandsD as a whole.
+
 ## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
 - **Status:** **Decided and implemented 2026-07-27** (WP0-1 of
   [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Supersedes the "daily crawl
@@ -2006,3 +2036,56 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   `observedAt` intact. **Not verified:** the Nearby *screen* offline — Chrome's geolocation in the dev
   environment resolves outside Hong Kong, so the data path was exercised directly instead. Worth checking on
   a real phone alongside the other install checks ADR-048 left open.
+
+## ADR-061 — Environments and configuration topology: local + production, ephemeral previews, and no staging tier
+- **Status:** **Decided 2026-07-28.** The disarming half is implemented; the rest is guidance that WP0-5
+  executes. Supersedes nothing; it writes down what was previously implicit.
+- **Context:** the first-ever scheduled `dataset.yml` run failed
+  ([run 30302525962](https://github.com/davidwdf/odysseus/actions/runs/30302525962)) on its first remote KV
+  write, because the namespace id in `wrangler.toml` is still `REPLACE_WITH_KV_NAMESPACE_ID` and no Cloudflare
+  credentials exist. That prompted three questions worth answering once, properly: where does configuration
+  live, do we need a secrets service, and do we need a staging tier.
+- **Decisions:**
+  1. **Two environments — local and production — plus ephemeral per-change previews. No standing staging
+     tier.** Four reasons, in order of weight:
+     - **Drift is the project's stated top priority.** A third environment is a *drift source*: another
+       config set, another dataset that can silently go stale, another place `EXPO_PUBLIC_API_URL` points
+       somewhere different. Adding one to guard against drift would be self-defeating.
+     - **Local fidelity is already unusually high.** `pnpm dataset:publish --local` writes into the same
+       Miniflare state `wrangler dev` reads, so the KV path is genuinely exercised, and the edge suite runs
+       *inside workerd* against simulated KV/R2 ([ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)). That is what a staging tier would
+       have been for.
+     - **Previews are free and disposable.** Cloudflare Pages gives per-branch preview URLs automatically;
+       Workers gives per-version preview URLs (`wrangler versions upload`). Tied to a PR's lifetime, so
+       nothing to maintain and nothing to drift.
+     - **There is no production yet.** Building staging before production is backwards.
+  2. **One exception, and it is about the prune, not about environments: create a *preview* KV namespace
+     before the first production publish.** `publish-dataset.mts` step 4 **deletes ~20k keys** per superseded
+     build, and that path has only ever run against Miniflare. Miniflare cannot tell us how the real bulk-delete
+     API behaves at that size, and the failure mode is deleting the live build. Wrangler supports this natively
+     via `preview_id` on the binding, so the cost is one namespace. Run a **full two-build publish + prune
+     cycle** against it, assert the allowlist and the rollback target survive, and only then publish to
+     production. This is a test fixture with a real backend — deliberately *not* a second environment to keep
+     in sync.
+  3. **No secrets manager. Three homes, split by consumer.** The whole secret surface is **two values, and
+     neither is needed to run the project** — every upstream is keyless ([`docs/02`](./02-data-sources.md),
+     [ADR-049](#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)), so a fresh clone works with nothing configured.
+     **CI credentials → GitHub Actions secrets** · **Worker runtime secrets → `wrangler secret put`** (none
+     today; [ADR-050](#adr-050--stop-imagery-google-street-view-deep-link-now-hk-streetscape-360-as-the-inline-target)'s Streetscape key would be the first) · **local → `wrangler login`**, OAuth, so no
+     token file. Doppler/Infisical/Vault would be more machinery than two values with one consumer justify.
+     Revisit at a second environment, a second person, or ~10 secrets. Inventory:
+     [`docs/10`](./10-scaffold-and-running.md#configuration--secrets).
+  4. **Two things that look like secrets and are not.** `EXPO_PUBLIC_*` is **inlined into the bundle** by
+     Expo and readable in DevTools — it can never hold a credential, which is *why* the tile proxy exists;
+     anything needing a key is proxied through the Worker. And the **KV namespace id is an identifier**,
+     inert without an authenticated token, committed on purpose so the Worker's bindings resolve.
+  5. **The nightly publish is armed by a repo variable, not by merging the workflow.**
+     `DATASET_PUBLISH_ARMED=true` gates the *scheduled* run; `workflow_dispatch` always runs, so a manual
+     dispatch is how the credentials get proven before the cron is trusted. A cron that fails every night is
+     a cron everyone learns to ignore — and this one is *expected* to fail for as long as WP0-5 is open. A
+     preflight step names the missing secret or the placeholder namespace id rather than letting it surface
+     mid-publish as a wrangler exec error.
+- **Verified:** the failed run reached `pnpm test` and died before writing a single data key — `build:history`
+  is written before any shard and `build:current` is flipped last, so ADR-055's write order held under a real
+  failure rather than a simulated one. The preflight logic was exercised in all three states (nothing set,
+  credentials present but namespace still a placeholder, all present).

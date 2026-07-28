@@ -159,6 +159,8 @@ app once, then kill **both** that server and the Worker and reload. Verified thi
 of `/search` still opens the app and searches from cache.
 
 ## Configuration & secrets
+*The reasoning behind all of this — including why there is no staging tier — is
+[ADR-061](./08-decision-log.md#adr-061--environments-and-configuration-topology-local--production-ephemeral-previews-and-no-staging-tier).*
 
 **The headline fact: this project has two secrets, and neither is needed to run it.** Every
 upstream we depend on is keyless — the bus APIs (`docs/02`) and the LandsD basemap tiles
@@ -211,6 +213,23 @@ you after it's set.
 
 A dedicated secrets service (Doppler, Infisical, Vault, SOPS) would be more machinery than two
 values justify. Revisit it if a second environment, a second person, or ~10 secrets appear.
+
+### Environments: local and production, and that's it
+There is **no staging tier**, on purpose ([ADR-061](./08-decision-log.md#adr-061--environments-and-configuration-topology-local--production-ephemeral-previews-and-no-staging-tier)).
+`pnpm dataset:publish --local` writes into the same Miniflare state `wrangler dev` reads and the edge
+suite runs inside workerd, so the local KV path is genuinely exercised — that is what staging would
+have been for. For per-change review, Cloudflare Pages gives preview URLs per branch and Workers
+gives them per version (`wrangler versions upload`): disposable, tied to a PR, nothing to keep in sync.
+
+**One exception, and it's about the prune rather than about environments.** Before the first
+production publish, make a *preview* namespace and rehearse there:
+```bash
+wrangler kv namespace create DATASET --preview    # → preview_id, alongside the real id
+# publish TWICE against it, then confirm the prune kept the allowlist and the rollback target
+```
+Step 4 of `publish-dataset.mts` deletes ~20k keys per superseded build and has only ever run against
+Miniflare. The failure mode is deleting the live build, so it earns a rehearsal against a real
+backend.
 
 ## Deploy (later)
 - **Edge:** `pnpm --filter @nextbus/edge deploy` (Wrangler). First time, create the storage the
