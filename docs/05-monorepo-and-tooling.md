@@ -71,7 +71,11 @@ don't work around it per package.
   repo variable is set — it curls the deployed Worker's `/v1/health` and fails the run unless it
   reports `"dataset":"kv"` and `"datasetBuildsThisIsolate":0`. Concurrency group `dataset-publish`,
   never cancelled in progress: two publishes at once would interleave shard writes and race the
-  pointer flip. Needs the `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets.
+  pointer flip. Needs the `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets. **The scheduled
+  run is skipped unless the `DATASET_PUBLISH_ARMED` repo variable is `true`** — WP0-5 hasn't created
+  the KV namespace yet, and a cron that fails every night is a cron everyone learns to ignore. A
+  manual `workflow_dispatch` always runs, and a preflight step names whatever is missing rather than
+  letting it surface as a wrangler error mid-publish. Full inventory: `docs/10`.
 - **PR checks (still to build — WP0-5):** `turbo run typecheck lint test build` (cached, only
   affected packages).
 - **Web/PWA deploy (still to build):** `pnpm --filter @nextbus/mobile build:web` → deploy `dist/` to

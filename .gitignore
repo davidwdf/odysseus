@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 web-build/
+coverage/
 *.tsbuildinfo
 
 # turbo

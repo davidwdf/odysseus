@@ -29,6 +29,15 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Armed by a repo variable, not by merging this file. WP0-5 hasn't happened yet — there is no KV
+    # namespace and no API token — so an unguarded schedule fails every night and trains everyone to
+    # ignore a red cron. Set `DATASET_PUBLISH_ARMED=true` (Settings → Secrets and variables →
+    # Actions → Variables) once `wrangler kv namespace create DATASET` has run and the secrets
+    # exist; see docs/10 "Configuration & secrets".
+    #
+    # A manual `workflow_dispatch` always runs: asking for it by hand is the opt-in, and it's how
+    # you'd test the credentials before arming the schedule.
+    if: github.event_name == 'workflow_dispatch' || vars.DATASET_PUBLISH_ARMED == 'true'
     # The build is a couple of seconds; the ~20k KV writes are the long pole.
     timeout-minutes: 30
     steps:
@@ -46,6 +55,28 @@ jobs:
       # apps/edge/test/dataset-kv.test.ts, including the "builds the dataset zero times" gate.
       - run: pnpm typecheck
       - run: pnpm test
+
+      # Say what's missing, in one line, instead of letting it surface 40 s later as a wrangler
+      # exec error mid-publish. The first run without this reported only
+      # `Command failed: npx wrangler kv key put build:history` with the placeholder id echoed
+      # inside a stack trace.
+      - name: Preflight — credentials and bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          fail=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set. See docs/10 'Configuration & secrets'."
+              fail=1
+            fi
+          done
+          if grep -q REPLACE_WITH_KV_NAMESPACE_ID apps/edge/wrangler.toml; then
+            echo "::error::apps/edge/wrangler.toml still has the placeholder KV namespace id. Run 'wrangler kv namespace create DATASET' and commit the real id."
+            fail=1
+          fi
+          exit $fail
 
       - name: Build and publish
         run: pnpm dataset:publish ${{ inputs.force && '--force' || '' }}
