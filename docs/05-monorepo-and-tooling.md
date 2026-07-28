@@ -15,7 +15,9 @@
 │  └─ web-landing/      # (backlog) optional static marketing page (Next.js/Astro)
 │
 ├─ packages/
-│  ├─ core/             # canonical types + DataSource interface + ETA/units logic (pure TS)
+│  ├─ core/             # canonical types + DataSource interface + the domain rules (pure TS):
+│  │                    #   ETA/units, geo, ids, route position, search, stop-name display.
+│  │                    #   Each module is pinned by a language-neutral spec/<module>.spec.json
 │  ├─ api-client/       # typed client for the edge API + the watch()/socket client
 │  ├─ data-normalize/   # crawl + GTFS + KMB/CTB normalization + stop-merging + the dataset
 │  │                    #   shard derivations (used by the daily build *and* the Worker)

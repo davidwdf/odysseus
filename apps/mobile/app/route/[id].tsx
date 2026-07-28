@@ -2,9 +2,13 @@ import {
   etaView,
   fareRange,
   inferBusMarkers,
+  isCircular,
   type Locale,
   memberStopIds,
   routeDistanceM,
+  splitStopCode,
+  stripCircular,
+  titleCaseName,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -43,7 +47,6 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { usePageRevealReady } from '../../lib/navTransitions'
 import { favoriteRouteKey, usePreferences } from '../../lib/preferences'
-import { isCircular, splitStopCode, stripCircular, titleCaseName } from '../../lib/stopName'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
