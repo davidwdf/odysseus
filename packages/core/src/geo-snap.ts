@@ -12,8 +12,11 @@
  * 25 m is well inside the accuracy of a phone fix in an urban canyon like Hong Kong, and small
  * relative to the 500 m nearby radius, so it does not change which stops come back.
  *
- * This is WP2-6, landed early because WP0-3's offline acceptance needs it. It is pure and
- * clock-free by design; Wave 2 moves it into `packages/core` unchanged.
+ * This is WP2-6. It landed early in `apps/mobile/lib/geoSnap.ts` because WP0-3's offline
+ * acceptance is unreachable while the Nearby query key jitters; Wave 2 moved it here **unchanged**,
+ * which is why one tier exists and not two. The plan's row reads "25 m nearby / 50 m elsewhere" —
+ * the second tier was never written, and `gridM` being a parameter is the whole of it: no caller
+ * passes anything but the default. Pinned by `../spec/geo-snap.spec.json`.
  */
 
 /** Metres per degree of latitude (WGS84 mean). Longitude scales by cos(lat). */
@@ -27,7 +30,10 @@ export interface Fix {
   lng: number
 }
 
-/** Snap a fix to the centre of its `gridM` cell. Deterministic: same cell → same output. */
+/** Snap a fix to the centre of its `gridM` cell. Deterministic: same cell → same output.
+ *
+ * @spec geo-snap#snapFix
+ */
 export function snapFix({ lat, lng }: Fix, gridM: number = SNAP_GRID_M): Fix {
   const latStep = gridM / M_PER_DEG_LAT
   // Longitude degrees shrink towards the poles; use the *snapped* latitude so the cell width is

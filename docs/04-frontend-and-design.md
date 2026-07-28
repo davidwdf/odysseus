@@ -161,7 +161,8 @@ instead of a spinner. This is an exception to ADR-008's *presentation* rule, not
 replayed reading arrives with its own `observedAt` and is shown as the labelled old reading it is.
 
 ### Location: snap the fix, remember the fix
-`lib/geoSnap.ts` grid-snaps every fix to a **25 m** cell before it leaves the device. One small pure
+`snapFix` (`@nextbus/core`, `src/geo-snap.ts`) grid-snaps every fix to a **25 m** cell before it
+leaves the device. One small pure
 function buys three things: privacy (we ask about a cell, not a doorstep), edge-cacheability (raw
 coordinates jitter metres between readings, so `/v1/nearby` was a fresh cache key nearly every
 request), and offline (the query key is stable enough for a persisted Nearby result to be replayed

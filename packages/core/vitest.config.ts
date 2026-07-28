@@ -19,7 +19,14 @@ export default defineConfig({
       // that emit nothing (the ADR-052 gate proves it for `types.ts`), and `index.ts` is re-exports;
       // including them would dilute the ratio with unreachable-by-construction lines and let real
       // coverage rot while the number stayed green.
-      include: ['src/eta.ts', 'src/geo.ts', 'src/ids.ts', 'src/route-position.ts', 'src/search.ts'],
+      include: [
+        'src/eta.ts',
+        'src/geo.ts',
+        'src/geo-snap.ts',
+        'src/ids.ts',
+        'src/route-position.ts',
+        'src/search.ts',
+      ],
       // A **branch** threshold is the load-bearing one. Line coverage is easy to satisfy with a
       // handful of happy-path cases; the bugs in rules like these live in the branch nobody thought
       // about — the blank `en`, the departed predecessor, the missing fare. 100 is set because the

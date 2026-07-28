@@ -1,7 +1,7 @@
+import { type Fix, snapFix } from '@nextbus/core'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
 import { useCallback, useEffect, useState } from 'react'
-import { type Fix, snapFix } from './geoSnap'
 
 export type LocationState =
   | { status: 'undetermined' } // permission not yet requested — show the priming UI
@@ -43,8 +43,8 @@ async function readLastFix(): Promise<Fix | null> {
  * prompting: already-granted → fetch a fix; otherwise → 'undetermined' so the screen
  * can show contextual priming. The OS prompt only fires when `request()` is called.
  *
- * Every coordinate leaving this hook is **grid-snapped** (`snapFix`) — see lib/geoSnap.ts for
- * why that matters for privacy, edge caching and offline replay.
+ * Every coordinate leaving this hook is **grid-snapped** (`snapFix` from `@nextbus/core`) — see
+ * `packages/core/src/geo-snap.ts` for why that matters for privacy, edge caching and offline replay.
  */
 export function useLocation(): UseLocation {
   const [state, setState] = useState<LocationState>({ status: 'loading' })
