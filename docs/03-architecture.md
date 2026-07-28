@@ -220,11 +220,19 @@ Four layers, each matched to what it's caching:
   (cached static + a single fast live call).
 
 ## Failure & resilience
+- **Every failure carries the same envelope** — `{code, message, retryable}` (plus a deprecated
+  `error`), with `code ∈ {bad_request, not_found, internal, upstream_unavailable, upstream_timeout}`
+  and the status code read off the contract's own table, never chosen at the call site (ADR-064).
+  `retryable: false` means *the request is permanently wrong*, which is what lets a background
+  client — a Favourites refresh, later an iOS Widget — prune a saved id instead of retrying it
+  forever. `packages/contract/src/wire/responses.ts` declares the table; `apps/edge/src/errors.ts`
+  is the only way to build a failure response.
 - Upstream down → serve last-known ETA from cache, clearly marked stale; never spin forever.
 - DO/poll error → exponential backoff; degrade `watch()` to polling shim.
 - Dataset build fails → `build:current` never flips, so the previous build keeps serving **in full**;
   the partial write is an unreachable orphan. Rollback is one key write.
 - Bindings missing or no `build:current` → the Worker builds the index in-request and says so:
   `/v1/health` reports `dataset: "inline"` and a non-zero `datasetBuildsThisIsolate`. Slower, not down.
-- Tile upstream fails → 404 passes through, anything else becomes a 502 marked `no-store`; the
-  service-worker tile cache still redraws what the rider has already seen.
+- Tile upstream fails → their 404 stays a `not_found` 404, their 504 a `upstream_timeout` 504,
+  anything else a `upstream_unavailable` 502 — all `no-store`, all carrying the JSON envelope above;
+  the service-worker tile cache still redraws what the rider has already seen.
