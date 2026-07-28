@@ -170,6 +170,31 @@ changes nothing about which stops come back. `lib/useLocation.ts` remembers the 
 `stale: true` when it falls back to it; Nearby then reads "Last known location" in place of the app
 name, rather than implying a live position.
 
+### What a place screen shows, and in what order (`@nextbus/core`, `src/stop-detail.ts`)
+A place is N poles at one kerb ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant));
+a lone stop is a place with one. Three rules turn that payload into a screen, and all three are pure
+functions in the kernel rather than closures inside `app/stop/[id].tsx`, because Swift and Kotlin
+will hand-port them and a rule living inside a React tree cannot be asserted (ADR-060). The screen
+keeps the rendering and the hooks.
+- **`dedupeRoutes`** — one row per *rider line* (`operator|routeNo|bound`), keeping the one carrying
+  a live reading. Citybus lists 969 three times at one Tin Shui Wai pole; a rider does not choose a
+  service type. The operator is in the key so a merged kerb keeps KMB-104 and CTB-104 apart, and the
+  bound is in it so a loop route whose two directions share a destination (Citybus 26 at Statue
+  Square) does not collapse into one misleading row.
+- **`operatorsOf`** — the "served by" line, first-seen order, derived from the routes because a
+  merged `P:` id has no operator of its own.
+- **`orderPoles`** — pole groups (and their map dots) in three tiers: the pole the rider arrived
+  from (`?pole=` — they have already named their kerb, so it outranks a nearer one they cannot board
+  at), then nearest, then the server's own member order, which is arbitrary but *stable*, so the
+  list does not rearrange itself when the GPS fix lands.
+
+`packages/core/spec/stop-detail.spec.json` pins all three against the shipped dataset. **Two rows
+are `knownDefect`** and both come from the dedupe key deliberately not containing the pole: a later
+variant with a *sooner* bus loses to the first one that merely has a reading (so Nearby and Place
+detail can disagree about the next 269D), and two different minibus services sharing a number
+fuse into one row, taking a pole's whole group off the list while its map dot stays. Read those rows
+before touching the key.
+
 ## Maps
 - The basemap is the **Hong Kong Lands Department's** keyless raster, proxied and cached by our own
   Worker — see [ADR-049](./08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay).
