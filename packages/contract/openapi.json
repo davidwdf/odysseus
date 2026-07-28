@@ -487,6 +487,75 @@
           }
         }
       }
+    },
+    "/v1/policy": {
+      "get": {
+        "operationId": "getClientPolicy",
+        "summary": "Tunable counts, cadences and honesty thresholds the server owns (ADR-053).",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Tunable counts, cadences and honesty thresholds the server owns (ADR-053).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -573,6 +642,16 @@
           "name"
         ]
       },
+      "RemarkKind": {
+        "$id": "#/components/schemas/RemarkKind",
+        "type": "string",
+        "enum": [
+          "scheduled",
+          "lastBus",
+          "info"
+        ],
+        "x-unknown-tolerant": true
+      },
       "Eta": {
         "$id": "#/components/schemas/Eta",
         "type": "object",
@@ -602,8 +681,12 @@
             "type": "string"
           },
           "remark": {
-            "description": "Free-text operator remark, if any (e.g. scheduled vs real-time). Classified client-side; a \"Scheduled\" remark is a lower-confidence reading, not a live one.",
+            "description": "Free-text operator remark, if any (e.g. scheduled vs real-time). A \"Scheduled\" remark is a lower-confidence reading, not a live one — `remarkKind` is the classification to branch on; this is the wording to show.",
             "$ref": "#/components/schemas/I18nText"
+          },
+          "remarkKind": {
+            "description": "The coarse class of `remark`, classified server-side (ADR-053: the server owns content, the client owns the tone it renders in). Absent when there is no remark — and, for a client older than this field, derivable from `remark` with `classifyRemark` in `@nextbus/core`, which is the same function the server calls.",
+            "$ref": "#/components/schemas/RemarkKind"
           },
           "dataTimestamp": {
             "type": "string",
@@ -1148,6 +1231,36 @@
           "etas",
           "routeCount"
         ]
+      },
+      "ClientPolicy": {
+        "$id": "#/components/schemas/ClientPolicy",
+        "type": "object",
+        "properties": {
+          "dueUnderSec": {
+            "description": "Under this many seconds to arrival, show \"Due\"/\"Arriving\" rather than a number (ADR-008 — never fabricate sub-minute precision). Also the symmetric tolerance band for treating a just-passed reading as still present rather than departed.",
+            "type": "number"
+          },
+          "warnUnderSec": {
+            "description": "Under this many seconds, the arrival is imminent enough to deserve emphasis. The threshold is the server's; **how** it is emphasised is the client's — a tone, a weight, a haptic. See ADR-053.",
+            "type": "number"
+          },
+          "staleAfterMs": {
+            "description": "A reading whose `dataTimestamp` is older than this is presented as stale. Data quality, not an error: the value is still shown, labelled.",
+            "type": "number"
+          },
+          "refreshAfterMs": {
+            "description": "How often a client should refetch live arrivals. Matched to the edge's own coalescing TTL (ADR-057) — polling faster returns a byte-identical cached response and buys nothing but battery.",
+            "type": "number"
+          },
+          "maxArrivals": {
+            "description": "How many upcoming arrivals one route row shows.",
+            "type": "number"
+          },
+          "maxRows": {
+            "description": "How many route rows a compact stop card shows before it collapses to \"+N more\".",
+            "type": "number"
+          }
+        }
       },
       "RouteLite": {
         "$id": "#/components/schemas/RouteLite",

@@ -21,9 +21,8 @@ import {
   formatServiceHours,
   formatStopCount,
   isStale,
-  type RemarkKind,
 } from '../src/eta'
-import type { Eta, I18nText, Locale } from '../src/types'
+import type { Eta, I18nText, Locale, RemarkKind } from '../src/types'
 import { at, nullToUndefined, specCases } from './corpus'
 
 // Every `describe` below is one `@spec` group in ../spec/eta.spec.json, driven by the corpus rather
@@ -46,9 +45,13 @@ const toEta = (row: EtaRow): Eta => ({
 })
 
 describe('eta#etaView', () => {
-  for (const c of cases<{ arrivalIso: string; nowIso: string }, EtaView>('etaView')) {
+  // `dueUnderSec` is optional in the corpus: absent means "the shipped default", which is what every
+  // row but the last two states. It is served policy now (ADR-053), so it rides in `args`.
+  for (const c of cases<{ arrivalIso: string; nowIso: string; dueUnderSec?: number }, EtaView>(
+    'etaView',
+  )) {
     it(c.name, () => {
-      expect(etaView(c.args.arrivalIso, at(c.args.nowIso))).toEqual(c.expect)
+      expect(etaView(c.args.arrivalIso, at(c.args.nowIso), c.args.dueUnderSec)).toEqual(c.expect)
     })
   }
 })
@@ -74,12 +77,18 @@ describe('eta#etaLabelParts', () => {
 })
 
 describe('eta#isStale', () => {
-  for (const c of cases<{ dataTimestamp: string; nowIso: string }, boolean>('isStale')) {
+  for (const c of cases<{ dataTimestamp: string; nowIso: string; staleAfterMs?: number }, boolean>(
+    'isStale',
+  )) {
     it(c.name, () => {
       const eta = toEta({ routeId: 'KMB:1:outbound:1', operator: 'KMB', arrivals: [] })
-      expect(isStale({ ...eta, dataTimestamp: c.args.dataTimestamp }, at(c.args.nowIso))).toBe(
-        c.expect,
-      )
+      expect(
+        isStale(
+          { ...eta, dataTimestamp: c.args.dataTimestamp },
+          at(c.args.nowIso),
+          c.args.staleAfterMs,
+        ),
+      ).toBe(c.expect)
     })
   }
 })

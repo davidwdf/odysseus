@@ -47,6 +47,7 @@ import { Skeleton } from '../../components/Skeleton'
 import { StopHeader } from '../../components/StopHeader'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
+import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLocation } from '../../lib/useLocation'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
@@ -95,13 +96,16 @@ export default function StopDetail() {
   const { height: windowH, width: windowW } = useWindowDimensions()
   // Silent location read (never prompts here) → show distance/walk only if we already have a fix.
   const { state: loc } = useLocation()
+  const { policy } = useClientPolicy()
 
   const query = useQuery({
     queryKey: ['stop', id],
     enabled: !!id,
     queryFn: () => dataSource.getStop(id as string),
-    // ETAs are live — refresh on an interval; honest display only updates on new data.
-    refetchInterval: 20_000,
+    // ETAs are live — refresh on an interval; honest display only updates on new data. The cadence is
+    // served (ADR-053) and matches the edge's coalescing TTL, so a poll can actually return a new
+    // reading; the hard-coded 20 s this replaces could not.
+    refetchInterval: policy.refreshAfterMs,
   })
 
   const stop = query.data?.stop
@@ -474,7 +478,9 @@ function RouteRowItem({
               <Text className="text-subtle">→ </Text>
               {titleCaseName(r.route.destination[locale])}
             </Text>
-            {r.eta?.remark ? <RemarkTag remark={r.eta.remark} locale={locale} /> : null}
+            {r.eta?.remark ? (
+              <RemarkTag remark={r.eta.remark} locale={locale} kind={r.eta.remarkKind} />
+            ) : null}
           </View>
         </View>
         {r.eta ? (

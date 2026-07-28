@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/route-detail.spec.json'
+import { CLIENT_POLICY_DEFAULTS } from '../src/policy'
 import {
   isOriginStop,
   type RouteEnds,
@@ -28,27 +29,32 @@ describe('route-detail#isOriginStop', () => {
   }
 })
 
+/** The rows of `upcoming`, whose cap is now a served policy value and so an optional argument. */
+type UpcomingArgs = { arrivals: string[] | null; nowIso: string; maxArrivals?: number }
+
 describe('route-detail#upcoming', () => {
-  for (const c of specCases<{ arrivals: string[] | null; nowIso: string }, string[]>(
-    corpus,
-    'upcoming',
-  )) {
+  for (const c of specCases<UpcomingArgs, string[]>(corpus, 'upcoming')) {
     it(c.name, () => {
-      expect(upcoming(c.args.arrivals ?? undefined, at(c.args.nowIso))).toEqual(c.expect)
+      expect(upcoming(c.args.arrivals ?? undefined, at(c.args.nowIso), c.args.maxArrivals)).toEqual(
+        c.expect,
+      )
     })
   }
 
-  it('never shows more than the cap, whatever the corpus grows into', () => {
+  it('never shows more than the cap in force, whatever the corpus grows into', () => {
     // A property over every row rather than a value. The cap is the one part of this rule the
     // layout depends on — a fourth time wraps the column — so it is asserted across the whole
     // group instead of trusting that no future row quietly exceeds it.
-    for (const c of specCases<{ arrivals: string[] | null; nowIso: string }, string[]>(
-      corpus,
-      'upcoming',
-    )) {
-      expect(upcoming(c.args.arrivals ?? undefined, at(c.args.nowIso)).length).toBeLessThanOrEqual(
-        3,
-      )
+    //
+    // The bound is now each row's *own* cap rather than a literal 3, because the number is served
+    // policy (ADR-053). That is a weaker-looking assertion that is actually the stronger one: pinned
+    // at 3 it would have started failing the moment a row exercised an override, and the obvious fix
+    // — deleting the property — is how a cap regression gets in.
+    for (const c of specCases<UpcomingArgs, string[]>(corpus, 'upcoming')) {
+      const cap = c.args.maxArrivals ?? CLIENT_POLICY_DEFAULTS.maxArrivals
+      expect(
+        upcoming(c.args.arrivals ?? undefined, at(c.args.nowIso), c.args.maxArrivals).length,
+      ).toBeLessThanOrEqual(cap)
     }
   })
 })

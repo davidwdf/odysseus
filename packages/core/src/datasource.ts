@@ -1,5 +1,5 @@
 import type { SearchIndex } from './search'
-import type { Eta, LatLng, NearbyStop, RouteDetail, StopDetail } from './types'
+import type { ClientPolicy, Eta, LatLng, NearbyStop, RouteDetail, StopDetail } from './types'
 
 /** A live subscription to ETA updates. Call `unsubscribe` to release it. */
 export interface Subscription {
@@ -40,4 +40,12 @@ export interface DataSource {
    * `version` changes. v1 fetches it from the edge; v2 may bundle or push it.
    */
   getSearchIndex(): Promise<SearchIndex>
+  /**
+   * The tunable numbers the server owns — counts, cadences, honesty thresholds (ADR-053).
+   *
+   * Returns the document **as served**, with every field optional, because that is what it is: a
+   * partial policy is legal and a failed fetch is ordinary. Pass it through `resolveClientPolicy`
+   * before reading a field; no caller should be branching on whether a knob arrived.
+   */
+  getClientPolicy(): Promise<ClientPolicy>
 }

@@ -42,11 +42,60 @@ interface DataSource {
   getStop(stopId): Promise<StopDetail>                    // static + ETAs
   getEtas(stopId, routeIds?): Promise<Eta[]>              // live
   watch(targets): Subscription                            // v1: polling shim; v2: WebSocket
+  getClientPolicy(): Promise<ClientPolicy>                // the numbers the server owns (ADR-053)
 }
 ```
 
 `watch()` is the key abstraction: in **v1** it's a polling shim over `getEtas`; in **v2** it
 becomes a real WebSocket subscription. The UI calls `watch()` either way.
+
+### The line between the server and the client (ADR-053)
+
+> **The server owns content, order, grouping, counts and text. The client owns layout, colour,
+> motion and interaction.**
+
+The `DataSource` seam says *how* the apps reach data. This says *which decisions* are made once for
+every platform and which each platform makes for itself — the question that matters the moment an
+iOS or Android client exists, because anything the client decides gets decided three times.
+
+A threshold is content; the tone it's rendered in is not. "This remark is a scheduled one" is
+content; `text-subtle` is not. So `components/RemarkTag.tsx` mapping a `RemarkKind` to a Tailwind
+class is exactly right, and the same table living in a served payload would be exactly wrong.
+Accents cross the wire as **semantic tokens** (`accent: AccentToken`), never hex, so each platform
+maps to its own colour system — which is also how a served value stays compatible with Dark Mode,
+Increase Contrast and Dynamic Type, none of which a hex or a `px` can respect.
+
+`scripts/check-vm-no-styling.mjs` enforces it mechanically over the emitted `openapi.json`: no wire
+field name, schema name or literal may match `/#[0-9a-f]{3,8}|px$|fontSize|fontWeight|margin/`. It
+runs in `pnpm test` (the root `boundaries` script), and `--selftest` watches each rule fail.
+
+**Tunable numbers are served, not compiled in.** `GET /v1/policy` returns a `ClientPolicy` —
+`dueUnderSec`, `warnUnderSec`, `staleAfterMs`, `refreshAfterMs`, `maxArrivals`, `maxRows` — every
+field optional, `max-age=300`. It settles what used to be three different answers to "how many
+arrivals?" and a client poll cadence that disagreed with the edge's own cache TTL. ADR-008's honesty
+thresholds are now one edge deploy rather than three store releases.
+
+**Moving a rule to the edge must not create a second implementation**, and this is the part worth
+copying for every future field:
+
+- the rule stays declared **once** in `packages/core`;
+- `apps/edge` is the `server` layer and may import the kernel (ADR-051), so the Worker *calls* that
+  function and serves the precomputed value;
+- the wire field is `.optional()` (ADR-052 §5);
+- the client uses the served value when present and calls **the same core function** when it is
+  absent — which is what keeps offline working (ADR-058), since a client that can't answer these
+  questions on its own is broken in a tunnel.
+
+`sortKey` (ADR-063) was the first field in this shape; `ClientPolicy` follows it.
+`CLIENT_POLICY_DEFAULTS` lives in `packages/core` — not in `packages/contract`, which `core` may
+only `import type` from — and the Worker serves those very bytes, so there is one declaration rather
+than a client copy and a server copy. `apps/edge/src/eta-cache.ts` derives `ETA_TTL_SEC` from
+`refreshAfterMs` for the same reason.
+
+Client-side, `lib/useClientPolicy.ts` resolves the served document against the defaults and always
+returns six usable numbers, so no screen ever has to invent one. It also reports
+`source: 'served' | 'defaults'` — because a policy that silently never arrives leaves the app
+working perfectly on defaults, which is the design *and* the failure nobody would otherwise notice.
 
 ### Phase 1 — Edge proxy + cache (ship this first)
 ```
@@ -198,6 +247,7 @@ Four layers, each matched to what it's caching:
 | `/v1/index` (search index) | Stale-while-revalidate | Large, changes about daily. Search and the keypad work instantly and offline, then quietly catch up. `lib/searchIndex.ts` also keeps its own AsyncStorage copy, so search survives a cache eviction. The revalidation is cheap: the response carries a strong **ETag** — the index's own content hash, which is also its `version` — so an unchanged index costs a 304 rather than the blob (ADR-063). |
 | `/v1/nearby` · `etas` · `stop` · `route` | Network-first, 4 s timeout | Never cache-first: a bus that left four minutes ago is worse than no answer (ADR-008). The cached copy is the offline fallback and carries its original `observedAt`, so it's aged and labelled stale. |
 | `/v1/tiles/*` | Cache-first, runtime only | A tile already seen redraws offline. Deliberately **not** precached — speculatively fetching tiles nobody looked at is what LandsD's rate limit prohibits. |
+| `/v1/policy` | Persisted query cache | Six numbers (ADR-053). No service-worker rule of its own: the persisted TanStack cache already replays the last policy this device was served, and a first-ever cold start has none — which `resolveClientPolicy` turns into the shipped defaults. Never a spinner and never a hole. |
 
 - The TanStack Query cache is **persisted** (`PersistQueryClientProvider` + an AsyncStorage
   persister — localStorage on web, the native store on iOS/Android), so a cold *offline* start paints

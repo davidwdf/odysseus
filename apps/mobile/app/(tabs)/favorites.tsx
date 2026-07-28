@@ -16,6 +16,7 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { usePreferences } from '../../lib/preferences'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
+import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLocale } from '../../providers/LocaleProvider'
 
 /** Saved `${memberPoleId}|${routeId}` keys as pairs, in save order. A key the grammar cannot read
@@ -44,6 +45,7 @@ export default function Favorites() {
   const parsed = parseFavorites(favoriteRoutes)
   const poleIds = [...new Set(parsed.map((p) => p.stopId))]
   const now = Date.now()
+  const { policy } = useClientPolicy()
 
   // One query per distinct saved pole; every query returns the whole place (all poles'
   // routes), so we only need one resolved detail per place.
@@ -51,7 +53,9 @@ export default function Favorites() {
     queries: poleIds.map((stopId) => ({
       queryKey: ['stop', stopId],
       queryFn: () => dataSource.getStop(stopId),
-      refetchInterval: 20_000,
+      // Served cadence (ADR-053). This screen fans out one query per saved pole, so it is the one
+      // that most wanted a cadence matched to the edge's TTL rather than a faster guess.
+      refetchInterval: policy.refreshAfterMs,
     })),
   })
 
@@ -150,8 +154,11 @@ function FavoritePlaceRow({
       )
       .filter((e): e is Eta => e !== null),
   )
+    // Sorted but **not capped**: `StopRow` applies the served `maxRows` (ADR-053). The `.slice(0, 4)`
+    // that used to be here was the third answer to a question the app now answers once, and it was
+    // also a bug — the row count it passed was already truncated, so `StopRow`'s "+N more" computed
+    // `4 - 4` and a place with nine saved routes showed four of them and said nothing about the rest.
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
-    .slice(0, 4)
 
   return (
     <StopRow

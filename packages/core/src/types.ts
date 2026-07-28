@@ -21,6 +21,7 @@
 
 import type {
   BoundSchema,
+  ClientPolicySchema,
   ErrorCodeSchema,
   ErrorResponseSchema,
   EtaSchema,
@@ -33,6 +34,7 @@ import type {
   OperatorIdSchema,
   OperatorSchema,
   PlaceSchema,
+  RemarkKindSchema,
   RouteDetailSchema,
   RouteRefSchema,
   RouteSchema,
@@ -109,6 +111,10 @@ export type RouteStop = z.infer<typeof RouteStopSchema>
 /** A normalized estimated-arrival reading. ETAs are approximations — see eta.ts. */
 export type Eta = z.infer<typeof EtaSchema>
 
+/** The coarse class of an operator ETA remark. Served as `Eta.remarkKind` (ADR-053) and still
+ *  derivable offline with `classifyRemark`. Treat it as open — the vocabulary will grow. */
+export type RemarkKind = z.infer<typeof RemarkKindSchema>
+
 /** A lightweight pointer to another route direction — just enough to label a toggle and
  *  load it (`getRoute(id)`); the full detail comes from that call. ADR-046. */
 export type RouteRef = z.infer<typeof RouteRefSchema>
@@ -134,3 +140,17 @@ export type ErrorCode = z.infer<typeof ErrorCodeSchema>
 /** The envelope every non-2xx JSON response carries. `retryable` is the one field a background
  *  client needs: `false` means prune the request, not retry it. */
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>
+
+/** A policy document **as it arrives**: every field optional, because a partial policy is a legal
+ *  policy (ADR-053) and a cold start has none at all. Resolve it with `resolveClientPolicy` before
+ *  reading a field — this type is the wire, not something a screen should branch on. */
+export type ClientPolicy = z.infer<typeof ClientPolicySchema>
+
+/**
+ * A policy with every field present — what `resolveClientPolicy` returns and what UI reads.
+ *
+ * `Required<ClientPolicy>` rather than a second hand-written interface, so adding a knob to the
+ * schema cannot leave a resolved type that silently lacks it: `resolveClientPolicy` stops
+ * typechecking until it fills the new field, which is the reminder we want at exactly that moment.
+ */
+export type ResolvedClientPolicy = Required<ClientPolicy>

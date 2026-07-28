@@ -82,7 +82,7 @@
       ]
     },
     "upcoming": {
-      "doc": "The arrivals a stop row shows: not-yet-departed only, feed order preserved, capped at three.",
+      "doc": "The arrivals a stop row shows: not-yet-departed only, feed order preserved, capped at `maxArrivals`. The cap is served policy (ADR-053), not a constant: a row with no `maxArrivals` argument is stating the shipped default of three, and the last row states an override. These rows were pinned at a literal three until Wave 3, when the number moved to `ClientPolicy` so that the same question could stop being answered three different ways across the app — so they now pin the *rule* (filter first, then cap) and only incidentally the count.",
       "cases": [
         {
           "name": "three-upcoming-arrivals-pass-through",
@@ -172,6 +172,22 @@
             "nowIso": "2026-07-27T12:00:00+08:00"
           },
           "expect": []
+        },
+        {
+          "name": "a-served-cap-overrides-the-default",
+          "why": "The row that makes the cap policy rather than a constant (ADR-053). Same feed as `the-fourth-arrival-is-dropped`, a served cap of two, two arrivals out — and the departed first reading is still filtered before the cap applies, so overriding the number must not reorder the two steps. A port that read its own constant instead of the argument passes every other row in this group and fails only this one.",
+          "args": {
+            "arrivals": [
+              "2026-07-27T11:57:00+08:00",
+              "2026-07-27T12:03:00+08:00",
+              "2026-07-27T12:11:00+08:00",
+              "2026-07-27T12:24:00+08:00",
+              "2026-07-27T12:38:00+08:00"
+            ],
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "maxArrivals": 2
+          },
+          "expect": ["2026-07-27T12:03:00+08:00", "2026-07-27T12:11:00+08:00"]
         }
       ]
     },

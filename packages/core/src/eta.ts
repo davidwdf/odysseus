@@ -1,5 +1,6 @@
 import { parseRouteId } from './ids'
-import type { Eta, I18nText, Locale } from './types'
+import { CLIENT_POLICY_DEFAULTS } from './policy'
+import type { Eta, I18nText, Locale, RemarkKind } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
 // JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
@@ -8,17 +9,18 @@ import type { Eta, I18nText, Locale } from './types'
 // edit the corpus; every platform's suite then goes red until it has been ported.
 // `scripts/check-spec-coverage.mjs` fails a tagged export with no corpus **and** a corpus with no tag.
 
-/** Readings older than this are shown as stale (data quality, not a hard error). */
-export const ETA_STALE_AFTER_MS = 90_000
-/** Under a minute → "Arriving"/"Due" rather than a fabricated "0:59…". */
-export const ETA_DUE_UNDER_SEC = 60
+// The two honesty thresholds these functions used to declare — 90 s stale, 60 s "Due" — are now
+// fields of `CLIENT_POLICY_DEFAULTS` (ADR-053), because they are numbers rather than behaviours and
+// the server can therefore own them. Nothing about the rules changed; the values moved to where they
+// can be served, and each function takes an explicit override so a client that has been told a
+// different number can honour it without a second implementation.
 
 export interface EtaView {
   /** Whole minutes until arrival, floored. Negative means departed. */
   minutes: number
   /** Signed seconds until arrival. */
   seconds: number
-  /** Arrival is imminent (< ETA_DUE_UNDER_SEC away). */
+  /** Arrival is imminent (< `dueUnderSec` away). */
   isDue: boolean
   /** Arrival time is in the past. */
   hasDeparted: boolean
@@ -31,25 +33,42 @@ export interface EtaView {
  * countdown. We recompute when fresh data arrives and never tick a fake decrement
  * (see ADR-008). `now` is passed in so this stays a pure function.
  *
+ * `dueUnderSec` is the served `ClientPolicy` threshold, defaulting to the shipped one. It is one
+ * number doing two jobs, and deliberately so: the band in which we refuse to show a figure and the
+ * band in which a just-passed reading is still shown are the same judgement seen from either side, so
+ * splitting them would let a rider be told "Due" for a bus the next screen calls departed.
+ *
  * @spec eta#etaView
  */
-export function etaView(arrivalIso: string, now: number): EtaView {
+export function etaView(
+  arrivalIso: string,
+  now: number,
+  dueUnderSec: number = CLIENT_POLICY_DEFAULTS.dueUnderSec,
+): EtaView {
   const seconds = Math.round((new Date(arrivalIso).getTime() - now) / 1000)
   return {
     seconds,
     minutes: Math.floor(seconds / 60),
-    isDue: seconds < ETA_DUE_UNDER_SEC && seconds >= -ETA_DUE_UNDER_SEC,
-    hasDeparted: seconds < -ETA_DUE_UNDER_SEC,
+    isDue: seconds < dueUnderSec && seconds >= -dueUnderSec,
+    hasDeparted: seconds < -dueUnderSec,
   }
 }
 
 /**
  * Whether an ETA reading should be treated as stale.
  *
+ * Reads `dataTimestamp` — when the *operator* generated the reading — not `observedAt`, so a reading
+ * replayed from the offline cache ages by the operator's clock rather than looking fresh because we
+ * fetched it recently (ADR-058).
+ *
  * @spec eta#isStale
  */
-export function isStale(eta: Eta, now: number): boolean {
-  return now - new Date(eta.dataTimestamp).getTime() > ETA_STALE_AFTER_MS
+export function isStale(
+  eta: Eta,
+  now: number,
+  staleAfterMs: number = CLIENT_POLICY_DEFAULTS.staleAfterMs,
+): boolean {
+  return now - new Date(eta.dataTimestamp).getTime() > staleAfterMs
 }
 
 // Short "imminent" label — under a minute we don't fake a number (ADR-008). "Due" is the
@@ -372,10 +391,10 @@ export function formatServiceHours(hours: { start: string; end: string }): strin
   return `${wrapPastMidnight(hours.start)} – ${wrapPastMidnight(hours.end)}`
 }
 
-/** A coarse class for an operator ETA remark, for honest styling (ADR-008/036). `scheduled`
- *  = timetable-based (not a tracked bus); `lastBus` = final departure. Matched on the en + zh
- *  free text since the feeds carry prose, not codes. */
-export type RemarkKind = 'scheduled' | 'lastBus' | 'info'
+// `RemarkKind` used to be declared here as a union literal. It is now `z.infer` of
+// `RemarkKindSchema` in `@nextbus/contract` (re-exported from `./types`), because the classification
+// crosses the wire as `Eta.remarkKind` since ADR-053 — and a wire shape declared in two places is
+// the thing ADR-052 exists to prevent.
 /**
  * @spec eta#classifyRemark
  */

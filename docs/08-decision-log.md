@@ -2102,6 +2102,129 @@ rather than the docs. **The blocking open question above is unchanged** — this
     two named schemas, no change to the bytes.
   - `StopLite` carries flat `lat`/`lng` while `Stop` nests `location: LatLng`. Harmless, faithful, noted.
 
+## ADR-053 — The line: the server owns content, order, counts and text; the client owns layout, colour and motion
+- **Status:** **Decided and partially implemented 2026-07-29** (WP3-4 of
+  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). The line is stated and gated,
+  `ClientPolicy` is served at `GET /v1/policy` and honoured by the app, and the three-way arrival-cap
+  disagreement is resolved. The per-field moves the same work package scoped (`remarkKind`, `displayName`,
+  `code`, derived fares) are **not all done** — see *Consequences*, which names each one and its state. This
+  ADR was a **gap in the sequence**: it was forward-referenced from ADR-052 and ADR-064 before it existed.
+- **Context:** The plan's WP3-* wave is native enablement, and the question underneath it is: *when an iOS
+  and an Android client exist, which decisions do they each make, and which are made once for all three?*
+  Get it wrong in one direction and every platform re-derives the same rule and drifts. Get it wrong in the
+  other and the server dictates pixels to a platform whose conventions it does not know.
+  The concrete evidence that the line was undrawn, all of it live on `main`:
+  - **Arrival caps disagreed three ways.** `packages/core/src/route-detail.ts` capped a route row at 3,
+    `app/(tabs)/favorites.tsx` sliced a favourite card to 4, `components/StopRow.tsx` capped a stop card at
+    6. Wave 2 had already improved this — the `3` was hoisted out of the screen into the kernel with an
+    8-row corpus group — which is exactly why it is a good example: hoisting a number into shared code does
+    not settle *who decides it*. It only made the number harder to change, since a kernel constant reaches a
+    rider through a store release.
+  - **The favourites cap was also a bug.** It pre-sliced the list to 4 before handing it to `StopRow`, which
+    computes its "+N more" affordance as `total − shown`. With the list already truncated, that arithmetic
+    was `4 − 4`, so a place with nine saved routes showed four and said nothing about the other five.
+  - **Cadence disagreed with the edge.** Three screens polled every 20 s (a fourth, `EdgeClient.watch()`'s
+    shim, also 20 s) against the 30 s coalescing TTL of ADR-057. One poll in three could only ever return
+    the byte-identical cached response: a request, a parse and a re-render to learn nothing.
+- **Options:** (A) Leave presentation numbers in the client and hand-port them to Swift and Kotlin, pinned by
+  the ADR-060 corpus like any other domain rule. (B) Serve resolved *view models* — the server sends the
+  finished row, including its colours and sizes. (C) Draw a line by *kind of decision* and serve only the
+  content side of it.
+- **Decision:**
+  1. **The line, and it is quotable on purpose:** *the server owns content, order, grouping, counts and text;
+     the client owns layout, colour, motion and interaction.* A threshold is content; the tone it is rendered
+     in is not. "This remark is a scheduled one" is content; `text-subtle` is not. Counts and cadences are
+     content, because they are judgements about what a rider is told rather than about how it looks.
+     *Rejected (B):* a served view model is the standard answer and it is wrong for this app specifically. A
+     hex colour on the wire renders outside iOS's own colour system, so it ignores Dark Mode and Increase
+     Contrast; a served font size ignores Dynamic Type. Worse, both are invisible from this side of the
+     network — nothing in a TS build or a workerd test can fail on them, so the defect ships and is found by
+     a rider with large type turned on.
+     *Rejected (A):* it is the status quo, and the status quo produced three different answers to one
+     question. A number that must be hand-ported is a number that will be ported differently.
+  2. **Tunable policy is served, as one small document: `GET /v1/policy` → `ClientPolicy`.** Six fields
+     (`dueUnderSec`, `warnUnderSec`, `staleAfterMs`, `refreshAfterMs`, `maxArrivals`, `maxRows`), every one
+     **optional**, `max-age=300`.
+     *Rejected — embedding it in every response:* six numbers duplicated across every payload, and worse, N
+     places a stale copy can come from. Two screens holding two policies at once is the disagreement this
+     endpoint exists to end, moved onto the wire.
+     *Rejected — putting it on `/v1/health`:* `/v1/health` is ADR-055's operational truth about one isolate,
+     is `max-age=0` by design, and a native client should not parse ops telemetry to lay out a list.
+     Its own endpoint is also the only option a client can cache and replay offline *as a policy* rather
+     than as a fragment of a stop response. It deliberately **never reads the dataset**, so it answers while
+     KV is unavailable — which matters because it carries the refresh cadence, and an outage that took the
+     policy with it would leave every client polling its own default at the moment the edge could least
+     afford the traffic.
+  3. **Every new field is `.optional()` per ADR-052 §5, and here that is the mechanism rather than a
+     formality.** A partial policy must be a legal policy: the edge may move one threshold and say nothing
+     about the other five, and a client three versions old must read that document and fill the rest itself.
+     `resolveClientPolicy` in `@nextbus/core` is the single place that filling happens.
+  4. **The load-bearing part — moving a rule to the edge must not create a second implementation.** For every
+     field, the rule stays declared **once** in `packages/core`; `apps/edge` is the `server` layer and may
+     import the kernel (ADR-051), so the Worker *calls* the kernel function and serves the precomputed value;
+     the wire field is optional; and the client uses the served value when present and calls **the same core
+     function** when it is absent. This is the shape ADR-063 already set for `sortKey`, and it is what keeps
+     offline working — ADR-058 ships offline, and a client that cannot answer these questions on its own is
+     broken in a tunnel. The alternative, deleting the client-side derivation once the server sends the
+     value, trades one duplicate for a feature.
+  5. **`CLIENT_POLICY_DEFAULTS` lives in `packages/core` and the Worker serves those very bytes.** Not in
+     `packages/contract`: `core` imports the contract with `import type` only (ADR-052 decision 2) and so
+     cannot read a runtime constant from it. The constraint produces the right shape anyway — the contract
+     declares the *shape*, the kernel declares the *values*, and there is one declaration of "three
+     arrivals" rather than a client copy and a server copy. **Serving a compiled-in constant is not a
+     no-op:** the value a client compiles in is reachable only by a store release, while the value the Worker
+     serves is reachable by a deploy. `apps/edge/src/eta-cache.ts` now *derives* `ETA_TTL_SEC` from
+     `refreshAfterMs` rather than restating 30, so the cache window and the poll cadence cannot drift apart
+     again.
+  6. **A served value that is not a positive finite number is rejected in favour of the default, not
+     obeyed and not clamped.** `maxRows: 0` empties every stop card and `refreshAfterMs: 0` is a request
+     loop; both are misconfigurations, and both are silent. A clamp was rejected because it invents a policy
+     nobody wrote and hides the mistake it prevents. A bad field also does not poison its neighbours — one
+     deployed typo must not discard five correct values.
+  7. **The line is gated mechanically: `scripts/check-vm-no-styling.mjs`.** No wire field name, schema name
+     or literal may match `/#[0-9a-f]{3,8}|px$|fontSize|fontWeight|margin/`. Accents cross as **semantic
+     tokens** (`accent: AccentToken`), never hex, so each platform maps to its own colour system. It reads
+     the emitted `openapi.json` — the surface a native generator actually consumes — rather than the Zod
+     source, because the document is structured enough to tell a *field name* from a *documentation string*.
+     `description`/`summary`/`title` are exempt: a field's prose must be free to say "the client owns the
+     margin", and a gate that flagged its own documentation would be deleted within a week. Wired into
+     `pnpm test` via the root `boundaries` script, **not** into CI — there is no PR/push CI workflow in this
+     repo (`.github/workflows/` holds only `dataset.yml`; authoring `ci.yml` is WP0-5's job and WP0-5 is
+     deferred). Nobody should believe in enforcement that is not there.
+- **Why this is worth the endpoint:** ADR-008's honesty thresholds become **one edge deploy instead of three
+  store releases**, and they stop being three different numbers. The counter-argument — that this is
+  configuration for its own sake, since nobody has asked to change these values — is fair about the *values*
+  and misses the *disagreement*: the reason to serve them is that a single served document is the only shape
+  in which "how many rows does a stop card show?" has exactly one answer across web, iOS and Android.
+- **Consequences / notes for whoever touches this next:**
+  - **A rider on Favourites now sees up to 6 route rows, not 4, and gets the "+N more" affordance that
+    screen never showed.** This is the visible behaviour change in the wave; it is intended.
+  - **`UPCOMING_ARRIVALS` is gone** from `packages/core/src/route-detail.ts`, and `ETA_STALE_AFTER_MS` /
+    `ETA_DUE_UNDER_SEC` are gone from `eta.ts`. All three are now `CLIENT_POLICY_DEFAULTS` fields.
+    `upcoming`, `etaView` and `isStale` take the value as a trailing optional parameter, so the corpus pins
+    both the default and an override — `route-detail#upcoming`'s 8 rows became 9, and `eta#etaView` and
+    `eta#isStale` each gained an override row.
+  - **The gap that is not yet closed, stated plainly.** `dueUnderSec` and `staleAfterMs` are served and the
+    kernel accepts them, but **no screen threads them in yet**: their consumers sit deep inside components
+    (`EtaTimes`, `EtaBadge`, `formatRelative`), and wiring them means touching every ETA render path.
+    Today this is harmless — the default and the served value are the same number from the same declaration,
+    so they cannot disagree. The day someone overrides one on the edge, the web client will silently ignore
+    it while a native client honours it. That is a real trap and it is recorded here rather than discovered.
+  - **`warnUnderSec` has no consumer at all.** Served deliberately as a forward declaration: the document is
+    what a native repo generates its models from, and omitting the imminence threshold invites each platform
+    to pick its own — rebuilding the three-way disagreement one platform at a time.
+  - **Still client-side, and each is a known follow-up rather than a decision:** `remarkKind` (the schema
+    still says `remark` is "Classified client-side"), `displayName` and `code` (composed at ~9 render sites
+    as `titleCaseName(splitStopCode(name).label)`), and the derived fare rules (`fareRange`, `fareStages`,
+    `estimateChildFare`/`estimateElderlyFare` — the last two carry recorded defects on `''`).
+  - **The policy can silently fail to arrive and nothing looks wrong**, because the defaults are a complete
+    and correct policy. That is the design, and it is also the failure mode nobody would notice, so
+    `useClientPolicy` returns a `source: 'served' | 'defaults'` discriminator for a debug readout. Verify
+    with `curl -s localhost:8787/v1/policy` — six numbers and a `max-age=300`.
+  - **A five-minute window in which an old client binary and a new deploy disagree** — before that client's
+    first policy fetch. That is the price of working offline; it is bounded, and the served value always wins
+    once it arrives.
+
 ## ADR-055 — Content-addressed precompute to KV/R2: the dataset leaves the request path
 - **Status:** **Decided and implemented 2026-07-27** (WP0-1 of
   [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)). Supersedes the "daily crawl

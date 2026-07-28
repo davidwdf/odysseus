@@ -48,6 +48,7 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { usePageRevealReady } from '../../lib/navTransitions'
 import { usePreferences } from '../../lib/preferences'
+import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
@@ -80,11 +81,13 @@ export default function RouteDetail() {
   // Each stop carries the route's live arrival there (ADR-030) → live query. `keepPreviousData`
   // holds the current direction on screen while a flip's data loads, so a not-yet-cached reverse
   // never flashes the skeleton — it just swaps in when ready (ADR-046).
+  const { policy } = useClientPolicy()
   const query = useQuery({
     queryKey: ['route', routeId],
     enabled: !!routeId,
     queryFn: () => dataSource.getRoute(routeId as string),
-    refetchInterval: 20_000,
+    // Served cadence (ADR-053), matched to the edge's coalescing TTL — see `useClientPolicy`.
+    refetchInterval: policy.refreshAfterMs,
     placeholderData: keepPreviousData,
   })
 
@@ -130,7 +133,7 @@ export default function RouteDetail() {
   const hereIndex = flipped ? -1 : stops.findIndex((s) => isOriginStop(s.stop.id, stopId))
   // Bus positions from each stop's soonest *upcoming* arrival (drop-off detection), minus the one
   // parked at the origin until it is nearly leaving — both rules in `@nextbus/core/route-detail`.
-  const soonest = stops.map((s) => upcoming(s.eta?.arrivals, now)[0] ?? null)
+  const soonest = stops.map((s) => upcoming(s.eta?.arrivals, now, policy.maxArrivals)[0] ?? null)
   const markers = visibleBusMarkers(inferBusMarkers(soonest, now), soonest, now)
   // Sectional fare span across boarding stops (origin dearest → last stage) for the meta strip.
   const fares = fareRange(stops.map((s) => s.fare))
@@ -240,7 +243,7 @@ export default function RouteDetail() {
                 key={`${s.seq}-${s.stop.id}`}
                 seq={s.seq}
                 name={s.stop.name[locale]}
-                arrivals={upcoming(s.eta?.arrivals, now)}
+                arrivals={upcoming(s.eta?.arrivals, now, policy.maxArrivals)}
                 fare={s.fare}
                 now={now}
                 locale={locale}

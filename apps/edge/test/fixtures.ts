@@ -136,9 +136,14 @@ export function kmbStopEtaJson(rawId: string): unknown {
       dest_sc: '东总站',
       eta_seq: n,
       eta: at(n * 4),
-      rmk_en: '',
-      rmk_tc: '',
-      rmk_sc: '',
+      // A real remark, not the empty strings this fixture used to carry. `remarkKind` is served since
+      // ADR-053 and is derived *from* the remark, so with no remark anywhere in the fixture the field
+      // was absent from every response and the conformance suite could not see it — a served field
+      // nothing exercises is the hole this suite exists to close. "Scheduled" is also the remark that
+      // matters most: it means the reading is timetable-based rather than a tracked bus.
+      rmk_en: 'Scheduled Bus',
+      rmk_tc: '預定班次',
+      rmk_sc: '预定班次',
       data_timestamp: now.toISOString(),
     })),
   }

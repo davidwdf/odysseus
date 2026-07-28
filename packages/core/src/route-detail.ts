@@ -1,5 +1,6 @@
 import { etaView } from './eta'
 import { memberStopIds } from './ids'
+import { CLIENT_POLICY_DEFAULTS } from './policy'
 import type { BusMarker } from './route-position'
 import { isCircular, splitStopCode, stripCircular, titleCaseName } from './stop-name'
 import type { I18nText, Locale } from './types'
@@ -16,15 +17,6 @@ import type { I18nText, Locale } from './types'
 // `scripts/check-spec-coverage.mjs` fails a tagged export with no corpus **and** a corpus with no tag.
 
 /**
- * How many arrivals a stop row on the schematic shows.
- *
- * Three, because a stop row is a *glance* — the rider is deciding whether to stay on this screen,
- * not reading a timetable. The fourth reading is where the column starts to wrap and where the
- * feed's confidence has run out anyway.
- */
-export const UPCOMING_ARRIVALS = 3
-
-/**
  * Does a route-sequence stop id refer to the stop we opened this route from?
  *
  * `memberStopIds` handles a merged same-kerb place id (`P:<a>+<b>+…`, any number of members) by
@@ -39,17 +31,26 @@ export function isOriginStop(routeStopId: string, origin?: string): boolean {
 }
 
 /**
- * Upcoming (not-yet-departed) arrivals at a stop, capped at `UPCOMING_ARRIVALS`.
+ * Upcoming (not-yet-departed) arrivals at a stop, capped at `maxArrivals`.
  *
  * Order is the feed's, not ours: the operators publish soonest-first and the rest of the app
  * (`dedupeEtas`, the soonest-arrival scan behind the bus tokens) already reads `arrivals[0]` as the
  * next bus. Sorting here would hide a feed that had stopped doing that from the one place a rider
  * would notice it.
  *
+ * The cap is the served `ClientPolicy.maxArrivals` (ADR-053), defaulting to the shipped value. It was
+ * a module constant here until Wave 3, which was already one improvement on the `.slice(0, 3)` that
+ * lived in the screen — but it still meant the number could only change in a store release, while two
+ * other screens answered the same question differently.
+ *
  * @spec route-detail#upcoming
  */
-export function upcoming(arrivals: string[] | undefined, now: number): string[] {
-  return (arrivals ?? []).filter((a) => !etaView(a, now).hasDeparted).slice(0, UPCOMING_ARRIVALS)
+export function upcoming(
+  arrivals: string[] | undefined,
+  now: number,
+  maxArrivals: number = CLIENT_POLICY_DEFAULTS.maxArrivals,
+): string[] {
+  return (arrivals ?? []).filter((a) => !etaView(a, now).hasDeparted).slice(0, maxArrivals)
 }
 
 /**

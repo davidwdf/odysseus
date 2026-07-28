@@ -1,4 +1,5 @@
 import type {
+  ClientPolicy,
   DataSource,
   ErrorCode,
   ErrorResponse,
@@ -12,6 +13,7 @@ import type {
   Subscription,
   WatchTarget,
 } from '@nextbus/core'
+import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
 
 /**
  * A failed edge request, carrying the server's own classification (ADR-064).
@@ -77,7 +79,10 @@ export class EdgeClient implements DataSource {
 
   constructor(opts: EdgeClientOptions) {
     this.base = opts.baseUrl.replace(/\/$/, '')
-    this.pollMs = opts.pollMs ?? 20_000
+    // The **fourth** hard-coded 20 s the plan's three-way disagreement did not count: `watch()`'s
+    // shim polled on its own cadence, so the one seam that exists to be swapped for a socket engine
+    // disagreed with all three screens. Defaults to the policy value, which is the edge's own TTL.
+    this.pollMs = opts.pollMs ?? CLIENT_POLICY_DEFAULTS.refreshAfterMs
     // Bind to the global: browsers throw "Illegal invocation" if native fetch is
     // called with a receiver other than window (e.g. as this.fetchImpl(...)).
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis)
@@ -110,6 +115,16 @@ export class EdgeClient implements DataSource {
 
   getSearchIndex(): Promise<SearchIndex> {
     return this.getJson<SearchIndex>('/v1/index')
+  }
+
+  /**
+   * The served policy document (ADR-053). Deliberately **not** resolved here: this class is the
+   * transport, and a caller that received a resolved policy could no longer tell an arrived value
+   * from a default — which is the one distinction worth being able to see when a threshold looks
+   * wrong. `resolveClientPolicy` in `@nextbus/core` does the filling, once, at the point of use.
+   */
+  getClientPolicy(): Promise<ClientPolicy> {
+    return this.getJson<ClientPolicy>('/v1/policy')
   }
 
   watch(targets: WatchTarget[], onUpdate: EtaListener): Subscription {
