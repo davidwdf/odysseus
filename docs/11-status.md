@@ -1,8 +1,28 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-28**. Wave 0 (PRs #11–#13) is on `main`; **Wave 1 is complete and in review as PR #14**.
-> Latest: **Wave 1 — the contract foundation, WP1-1 … WP1-5**
+> Snapshot: **2026-07-28**. Wave 0 (PRs #11–#13) and **Wave 1** (PR #14) are on `main`;
+> **Wave 2 is complete on `wave2-domain-extraction-v1`** — WP2-1 … WP2-9, all nine, built in parallel
+> (one agent and one git worktree each) and integrated one merge at a time.
+> **What Wave 2 is:** the domain rules stopped living in screens. `dedupeRoutes`/`operatorsOf`/the pole
+> comparator, the 120 s origin-bus suppression, `upcoming`, terminus-and-circular naming, the stop-name
+> rules, Web-Mercator framing and `snapFix` are now `packages/core` modules pinned by corpus — **271
+> branches at 100%, from 151** — so a Swift or Kotlin port has data to test against rather than a screen to
+> read. Three of the nine were not moves: the favourite key scheme got a **versioned migration** that cannot
+> silently lose a star ([ADR-062](./08-decision-log.md)), the search index's **order became data** — a
+> precomputed `sortKey`, range scans instead of a trie, a content-hash `version` and an ETag
+> ([ADR-063](./08-decision-log.md)) — and every edge error path got a **taxonomy bound to its status code**
+> ([ADR-064](./08-decision-log.md)), which fixed a malformed id answering `502` where `400` is right.
+> `RouteServiceInfo` is now **two named schemas** so a native client can tell "no timetable" from "wrong
+> endpoint" ([ADR-065](./08-decision-log.md)).
+> **Verified end-to-end, not just green:** `/v1/stop/NOTANID` → `400 bad_request retryable:false`,
+> an absent-but-well-formed id → `404 not_found`, `/v1/index` → `ETag` then a **304 with an empty body**,
+> a rebuilt dataset carrying `version: a8495d81…` and byte-sortable keys (`1`→`0001`, `10`→`0010`,
+> `N260`→`N0260`), the route tier carrying 3 frequency profiles where the stop tier has no `patterns` key
+> at all, and the app walked in a browser — the keypad narrowing `1` to A/M/P/S off range scans, a circular
+> GMB route reading *"Circular via MacDonnell Road"*, and a 5-pole place framed with every dot on-screen.
+> **One defect found doing it, not yet fixed** — see *A dataset flip does not invalidate `/v1/index`* below.
+> Previously: **Wave 1 — the contract foundation, WP1-1 … WP1-5**
 > ([ADR-051](./08-decision-log.md#adr-051--layered-package-boundaries-packagesports-is-declaration-only-and-imports-nothing) ·
 > [ADR-052](./08-decision-log.md#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe) ·
 > ADR-059 · ADR-060). `packages/contract` is the single declaration of every wire shape and `packages/core`'s
@@ -11,7 +31,8 @@
 > allowlist; `layers.json` generates both boundary configs; and a **331-case corpus at 100% branch coverage**
 > pins the domain rules that no schema can generate. **Every gate was watched failing on an injected
 > violation.** Two shipped bugs fell out of it — a bus could vanish from the route view, and `formatClock` read
-> the device timezone. Next: **Wave 2**; WP0-5/deploy is deferred on purpose (see *Next steps*).
+> the device timezone. Next: **Wave 3** (native enablement) or **Wave 4** (the `apps/web` proof);
+> WP0-5/deploy is deferred on purpose (see *Next steps*).
 > Four things changed, all of them load-bearing for launch. **(1) The dataset left the request path**
 > ([ADR-055](./08-decision-log.md#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)): a daily GitHub Action precomputes content-addressed shards into KV + R2 and the
 > Worker reads a handful of point keys — cold `/v1/nearby` went **3.97 s → 0.74 s**. `static-index.ts` and the Worker
@@ -306,9 +327,9 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
   ~10.6 MB**); **`/v1/index`** stale-while-revalidate; **live ETA endpoints network-first with a 4 s timeout**
   (never cache-first — a bus that left four minutes ago is worse than no answer, ADR-008); **tiles**
   cache-first and **never prefetched**. `providers/QueryProvider.tsx` is now a **`PersistQueryClientProvider`**
-  over an AsyncStorage persister (24 h, **successes only**). New **`lib/geoSnap.ts`** (`snapFix`, **25 m**
-  grid) — this is **WP2-6 landed early**, because the offline acceptance needs a stable query key; Wave 2 still
-  has to move it into `packages/core`. `lib/useLocation.ts` remembers the last fix and returns `stale: true`
+  over an AsyncStorage persister (24 h, **successes only**). `snapFix` (**25 m** grid) — **WP2-6, landed
+  early** because the offline acceptance needs a stable query key, and moved into
+  **`packages/core/src/geo-snap.ts`** by Wave 2. `lib/useLocation.ts` remembers the last fix and returns `stale: true`
   when it uses it; Nearby then shows the new `lastKnownLocation` string instead of the app name.
   **Verified:** with **both** the static server and the edge Worker killed, a cold load of `/search` opened
   the app and searched from cache, and `/v1/nearby` was replayed from the SW cache **with its original
@@ -325,8 +346,10 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
   **`apps/edge/test/eta-coalescing.test.ts`** proves `/v1/nearby` at a 20-pole coordinate issues *exactly*
   distinct-pole-count upstream calls, and that two concurrent requests issue one set.
 - **Tests: there is a suite now.** `apps/edge` runs **`@cloudflare/vitest-pool-workers`** — real workerd with
-  simulated KV/R2 — **18 tests** across `dataset-kv` · `eta-cache` · `eta-coalescing` · `tiles`;
-  `apps/mobile` has **17** (`stopName`, `geoSnap`). Root **`pnpm test`** runs both, and
+  simulated KV/R2. As of Wave 2 that is **48 tests** across `dataset-kv` · `eta-cache` · `eta-coalescing` ·
+  `tiles` · `search-index` · `wire-conformance`; `packages/core` has **525** (the corpus) and `apps/mobile`
+  **12** (the preferences migration — its `stopName` and `geoSnap` suites became corpus rows when those
+  modules moved to `core`). Root **`pnpm test`** runs all three, and
   `.github/workflows/dataset.yml` runs typecheck + tests *before* it is allowed to touch KV.
   **Gotcha worth remembering:** root `package.json` now pins `pnpm.overrides.esbuild = "0.27.3"`. `.npmrc`
   sets `node-linker=hoisted`, so wrangler's exact-pinned esbuild and vitest's newer one fought over the single
@@ -459,32 +482,54 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
-1. **Wave 2 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
-   **Wave 1 is ✅ complete — WP1-1 … WP1-5 all landed and verified** (ADR-051, ADR-052, ADR-059, ADR-060); see
-   *Done & verified*. Wave 2 is the parity-guarded domain extraction, and it is now much safer than the plan
-   assumed, because the *"near-zero test coverage"* risk it was written against is closed: `packages/core` has a
-   274-case corpus at 100% branch coverage, so a "mechanical, zero-behaviour-change" move is now checkable
-   rather than asserted. **WP2-6 (`snapFix`) already landed** in `apps/mobile/lib/geoSnap.ts` and just needs
-   moving; **WP2-5 is a known-broken-scheme migration** — fix the favourite id scheme before ADR-032 ships, and
-   note WP1-2 left `apps/mobile/lib/preferences.ts`'s own `favoriteRouteKey` template in place precisely because
-   folding it into the shared formatter *is* that migration.
-   **Highest-value loose ends Wave 1 left, in priority order:**
+1. **Wave 3 or Wave 4 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
+   **Waves 1 and 2 are ✅ complete** (ADR-051, ADR-052, ADR-059, ADR-060, ADR-062 … ADR-065); see
+   *Done & verified*. The choice is real, so make it deliberately: **Wave 4 (`apps/web`)** is one screen —
+   Nearby — rendered from the identical `core` functions by Vite + React DOM, with CI asserting its derived
+   output is byte-identical to the RN golden. The plan calls it *"the cheapest empirical test of the whole
+   thesis"*, and Wave 2 is precisely what made it testable: everything Nearby needs is now a corpus-pinned
+   kernel function rather than a line inside a `.tsx`. **Wave 3** is the larger, more speculative bet (token
+   codegen, ICU, a published contract) and every claim in it is about a Swift compiler nobody has run yet.
+   **Do Wave 4 first** unless a native repo has appeared.
+   **Loose ends the two waves left, in priority order:**
+   - 🔴 **A dataset flip does not invalidate `/v1/index`'s colo cache.** Found while verifying WP2-7:
+     `cached()` keys `caches.default` on the URL with a 6 h `max-age`, and flipping `build:current` does not
+     purge it — so for up to six hours after a publish, `/v1/index` serves the **previous** index, and a
+     client revalidating with `If-None-Match` now gets a **304 that confirms the stale copy**. Reproduced
+     locally: after `dataset:publish --local`, `/v1/health` reported the new `buildHash` while `/v1/index`
+     still served `version: 3091.10118`; the same URL with a cache-busting query returned the new
+     `a8495d810abf620d` with its `sortKey`s. The index is versioned *precisely* so a client can tell it moved,
+     and the cache in front of it hides that. Cheapest honest fix: put the build hash in the cache key, so a
+     flip produces a new key by construction. **Nothing is in production yet (WP0-5), so this is owed to
+     whoever wires publish → purge.**
    - ✅ **Done 2026-07-28:** five of the six `knownDefect` rows are fixed (`formatDistance` 995–999 m,
      `estimateChildFare('')`, `estimateElderlyFare('')`, `formatServiceHours`' past-midnight wrap,
      `buildRouteTrie('')`), and the corpus format is converged. **One `knownDefect` remains on purpose:**
      `formatStopCount(1, 'en')` → `"1 stops"` needs a plural-aware key and belongs to **WP3-2** (i18n → ICU),
      not a per-platform patch.
-   - **WP2-8 — the error taxonomy** (newly added to the plan; nothing owned it before). `{error}` →
-     `{code, message, retryable}` *and* the status codes: a malformed id returns `502` where `400` is right, and
-     `502` reads as retryable, so a Widget holding a stale favourite retries forever. Ship additively per
-     ADR-052 §5.
-   - **WP2-9 — split `RouteServiceInfo` by fidelity** (also newly added). A native client currently cannot tell
-     "no frequency table" from "you asked the summary endpoint".
+   - **Four new `knownDefect` rows Wave 2 pinned rather than fixed** — each is now wrong *identically* on
+     every platform, which is the point, and each has a `why` saying what `expect` becomes when it is fixed:
+     (a) where one line has two variants both carrying a reading, the **first** wins rather than the
+     **sooner**, so Nearby and Place detail can contradict each other (KMB 269D at Tin Shui Wai);
+     (b) one route number covering two services at two poles erases the second — **21 poles emptied** in the
+     current build, mostly GMB, while their map dots stay; (c) a lone stop frames **one zoom step wider**
+     than the multi-pole place next door on any phone ≤394 px — the gap `b084c06` tried to close;
+     (d) blank-`en` GMB circulars lose the *"Circular via …"* treatment.
+   - **`pnpm lint` is red on `main`** — 6 pre-existing errors: Biome does not know the `@tailwind` at-rule
+     (two `global.css` files) and one `useTemplate` in `scripts/precommit-docs-check.mjs`. A permanently-red
+     gate is a gate nobody reads; one Biome config line fixes the first six.
+   - **turbo replays a cached `@nextbus/mobile:typecheck` across a `packages/core` source change** — mobile
+     can report green **without being rechecked**. Use `turbo run typecheck --force` until the cache key is
+     fixed; every Wave 2 integration run used it.
+   - **The plan's 50 m snap tier does not exist.** WP2-6's row says *"25 m nearby / 50 m elsewhere"*; only
+     `SNAP_GRID_M = 25` was ever implemented, and `gridM` is a parameter no caller passes. Not invented
+     during a move — the row should lose the clause or gain a follow-up.
    - **`layers.json` is 44% over its line budget** — per the plan's own risk row that is the signal to simplify
      the generator when it next needs to change, not to grow it. Not worth touching working, self-testing code
      for a line count alone.
-2. **Search polish** (ADR-037 follow-ups) — walk it in-browser; a content-hash `version`; an **omnibox**
-   (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the landed route.
+2. **Search polish** (ADR-037 follow-ups) — the content-hash `version` landed with WP2-7; still open is an
+   **omnibox** (route + stop in one box); "routes to <place>" reverse search; direction toggle (P11) on the
+   landed route.
 3. **WP0-5 — deploy + CI + custom domain** (the one thing between here and a live URL, and **deliberately
    deferred until most other waves land** — owner's call, 2026-07-27). Create the real
    resources (`wrangler kv namespace create DATASET`, `wrangler r2 bucket create nextbus-builds`), replace the
@@ -545,11 +590,16 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
   `apps/edge/wrangler.toml` + `src/{env.ts,bindings.d.ts}`. Health check → `GET /v1/health`
 - **ETA coalescing (ADR-057)** → `apps/edge/src/eta-cache.ts` (`coalesce`, `ETA_TTL_SEC`)
 - **Tiles (ADR-049)** → Worker proxy `apps/edge/src/tiles.ts`; client seam `apps/mobile/lib/tileSource.ts`;
-  consumer `apps/mobile/components/MiniMap.tsx`
+  consumer `apps/mobile/components/MiniMap.tsx`; projection maths `packages/core/src/mercator.ts`
 - **PWA / offline (ADR-058)** → `apps/mobile/workbox.config.mjs` · `apps/mobile/scripts/build-web.mjs`
   (`pnpm --filter @nextbus/mobile build:web`) · `apps/mobile/lib/serviceWorker.ts` ·
-  `apps/mobile/providers/QueryProvider.tsx` · fix snapping `apps/mobile/lib/geoSnap.ts`
-- Tests → `apps/edge/test/*.test.ts` (workerd + simulated KV/R2) · `apps/mobile/lib/*.test.ts`; `pnpm test`
+  `apps/mobile/providers/QueryProvider.tsx` · fix snapping `packages/core/src/geo-snap.ts`
+- **The domain kernel (Wave 2)** → `packages/core/src/{stop-name,stop-detail,route-detail,mercator,geo-snap}.ts`,
+  each pinned by `packages/core/spec/<module>.spec.json` and consumed by `test/<module>.test.ts`
+- **Error taxonomy (ADR-064)** → table `packages/contract/src/wire/responses.ts` (`ERROR_CODES`); the only
+  way to build a failure `apps/edge/src/errors.ts`; client `EdgeRequestError` in `packages/api-client`
+- Tests → `apps/edge/test/*.test.ts` (workerd + simulated KV/R2) · `packages/core/test/*.test.ts` (the
+  corpus) · `apps/mobile/lib/*.test.ts`; `pnpm test`
 - Screens → `apps/mobile/app/(tabs)/index.tsx` (Nearby), `app/stop/[id].tsx`, `app/route/[id].tsx`,
   `app/(tabs)/favorites.tsx`; tab shell + floating bar → `app/(tabs)/_layout.tsx` (geometry in
   `apps/mobile/lib/tabBarLayout.ts`); location → `apps/mobile/lib/useLocation.ts`

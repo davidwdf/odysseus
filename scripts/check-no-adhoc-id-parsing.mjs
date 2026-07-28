@@ -69,11 +69,13 @@ const PATTERNS = [
 const GRAMMAR_FILES = new Set([
   'packages/core/src/ids.ts', // the parser and formatter
   'scripts/check-no-adhoc-id-parsing.mjs', // this file — the patterns are literals in it
-  // The grammar's own suite, which demonstrates the bug it prevents: one test performs the naive
-  // `key.split('|')` on a corrupt favourite key to show it returns a plausible wrong pair where the
-  // parser returns null. A gate whose test may not write the thing being banned cannot prove why it
-  // is banned. (Moves to `packages/core/src/ids.test.ts` when WP1-5 gives `core` a test runner.)
-  'apps/mobile/test/id-grammar.test.ts',
+  // `apps/mobile/test/id-grammar.test.ts` was listed here for the same reason — its suite performed
+  // the naive `key.split('|')` on a corrupt favourite key to show the parser returns null where the
+  // split returns a plausible wrong pair, and a gate whose test may not write the thing being banned
+  // cannot prove why it is banned. WP1-5 moved that suite into `packages/core`, where the corpus
+  // states the same case as data rather than as code, so the entry had nothing left to exempt.
+  // Removed in Wave 2 rather than left pointing at a deleted path: this set is the check's own
+  // definition, and a definition that names files which do not exist stops being read.
 ])
 
 /**

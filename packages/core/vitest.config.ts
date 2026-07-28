@@ -34,8 +34,9 @@ export default defineConfig({
       // A **branch** threshold is the load-bearing one. Line coverage is easy to satisfy with a
       // handful of happy-path cases; the bugs in rules like these live in the branch nobody thought
       // about — the blank `en`, the departed predecessor, the missing fare. 100 is set because the
-      // corpus reaches it (151/151 branches), so there is no unexplained slack: add a rule without
-      // corpus rows and the build fails rather than the average quietly sliding.
+      // corpus reaches it (271/271 branches after Wave 2's extraction, from 151 when the threshold
+      // was set), so there is no unexplained slack: add a rule without corpus rows and the build
+      // fails rather than the average quietly sliding.
       //
       // Two branches needed a test rather than a corpus row, and both are in `formatBearing`: an
       // unknown `Locale` (real per ADR-052's `x-unknown-tolerant`, since `core` does no runtime
