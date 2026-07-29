@@ -2555,7 +2555,10 @@ rather than the docs. **The blocking open question above is unchanged** — this
      the `src` that implements it, so moving a package takes its spec along. `groups` keyed by export name;
      cases are `{name, why?, knownDefect?, args, expect}`; `version: 1`. **No `undefined`, no functions, no
      comments** — JSON `null` is the absent value and is translated at the boundary in `test/corpus.ts` — because
-     an XCTest or JUnit suite has to read these rows verbatim. **36 groups, 274 cases.**
+     an XCTest or JUnit suite has to read these rows verbatim. **11 corpora, 65 groups, 510 cases, 4
+     `knownDefect` rows.** (WP1-5 shipped 36 groups / 274 cases; Waves 2 and 3 grew it. This line was
+     stale for two waves, so WP3-3 stopped restating the figure by hand: `packages/contract/README.md`
+     now *generates* it, and `packages/contract/scripts/check-native-guide.mjs` fails when it drifts.)
   2. **`@spec <module>#<export>`** in an export's JSDoc marks it corpus-specified. Both halves are checked
      against the file stem and the symbol, so a tag cannot drift onto the wrong corpus or outlive a rename.
   3. **`check-spec-coverage.mjs` enforces both directions** — a tagged export with an empty or missing corpus,
@@ -3086,3 +3089,77 @@ rather than the docs. **The blocking open question above is unchanged** — this
   - **Found by verification, not by review or CI.** Wave 2's ETag work was green on every gate; the defect
     only appeared when a real dataset was rebuilt and published against a running Worker. Worth remembering
     the next time an endpoint gains a validator: the test that matters is the one that spans two builds.
+
+## ADR-067 — The contract is published for native consumers, and every part we cannot verify says so
+- **Status:** **Decided and implemented 2026-07-29** (WP3-3). Implementation: `packages/contract/README.md`,
+  `packages/contract/native/`, `packages/contract/scripts/{native-guide,emit-native-guide,check-native-guide}.mjs`,
+  `apps/edge/test/unknown-enum-tolerance.test.ts`. Completes Wave 3.
+- **Context:** [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+  makes wire *shapes* generated, and [ADR-060](#adr-060--the-fixture-corpus-is-the-equivalence-mechanism-for-domain-rules)
+  makes domain *rules* corpus-pinned. Both are mechanisms; neither is a document a person can start from.
+  A porter arriving at this repo would have found no README anywhere under `packages/`, an OpenAPI
+  document whose `info.description` held most of the prose they needed, a corpus whose reader contract
+  existed only as TypeScript, and — after Wave 3 — two Swift/Kotlin token files nobody had compiled. The
+  work package's own framing is that a native repo starting life with the corpus already wired in is the
+  only real mitigation for corpus rot. The hazard is that the mitigation is itself scaffolding, and the
+  plan's risk table names it: *"codegen becomes stale scaffolding"*.
+- **Decision:**
+  1. **`packages/contract/README.md` is written for a reader starting an iOS or Android repo tomorrow**,
+     not as an inventory of this monorepo. It answers five questions in order: what to consume, how to
+     generate from it, what you will get wrong if you guess, how to wire the corpus into XCTest/JUnit,
+     and what is not guaranteed. The last section is the one that earns the rest its credibility.
+  2. **`info.description` in `openapi.json` stays canonical for wire conventions; the README transcludes
+     it.** The document is canonical because a consumer may only ever receive *the document* — through a
+     generator pipeline, a vendored copy, an artefact store — so a rule that lives only in a README is a
+     rule half the audience never sees. Restating it in prose was rejected: two copies of the same list,
+     one of them hand-maintained, is precisely the drift this wave exists to remove. Three conventions
+     Wave 3 created (`sortKey` ordering, `remarkKind`'s absence, `/v1/policy` as advice) were added to the
+     **document**, and reached the README by regeneration.
+  3. **Every figure the README quotes is generated from the artefact it describes** — endpoint and schema
+     counts, per-corpus group/case/`knownDefect` totals, token and string counts — and a gate fails on a
+     stale region. **The gate also fails when the README cites a repo path that no longer exists**, which
+     is the failure mode nothing else in the repo can see: WP3-1 deleted `packages/ui/src/tokens.ts`, and
+     a document pointing at it would read as authoritative forever.
+  4. **The XCTest and JUnit conformance files ship as templates, with a banner stating they have never
+     been compiled and never been run.** Three options were weighed. *Ship nothing* leaves the corpus
+     reader contract as TypeScript only, so the first porter reimplements six subtle rules from scratch
+     and gets rule 2 or rule 6 wrong — those are the two that yield a green suite proving nothing.
+     *Compile them on a macOS runner* was already descoped by the plan and needs a toolchain, a target
+     and models that do not exist. *Ship them labelled* keeps the value (the six rules, resource loading,
+     the vendoring warning, the unknown-enum test, a worked `Approx` example) and makes the one thing we
+     cannot claim explicit. Deciding this in an ADR matters because the banner is the kind of thing a
+     later tidy-up removes on the grounds that it looks unfinished.
+  5. **Each template carries a `coveredGroups` set and a test that fails while any corpus group is
+     unported.** Red on day one is intended: it is the port's to-do list expressed as a build failure,
+     and it goes green exactly when the native client agrees with the web client about every rule. The
+     module list it iterates is generated, so a corpus added here cannot be invisible to both suites.
+  6. **The unknown-enum obligation is gated as far as TypeScript honestly can, and the limit is
+     stated.** `x-unknown-tolerant` binds *generated native decoders*; the PWA is unaffected because its
+     schemas erase (`import type`) and it does no runtime validation, and the Zod schemas themselves are
+     strict, as the edge requires. So `apps/edge/test/unknown-enum-tolerance.test.ts` asserts the three
+     things that are real here — every published enum carries the flag (with an empty, reasoned
+     `CLOSED_ON_PURPOSE` allowlist); a reference decoder honouring the document preserves an unknown
+     member *and still rejects one for a closed enum*; and Zod rejects it, which is **why** the
+     obligation sits on codegen rather than on any gate in this repo.
+- **Consequences, including what we are accepting:**
+  - **Two artefacts in this repo now carry `UNVERIFIED` banners** — WP3-1's token files and WP3-3's
+    templates — and the honest reading is that Wave 3 shipped more unverified native surface than
+    verified. That was the trade the owner chose when picking Wave 3 over Wave 4; recording it here means
+    the first native repo inherits a known list rather than a discovery.
+  - **The templates will rot, and the gate only slows it.** The module list and the cited paths are
+    checked; the Swift and Kotlin *bodies* are not, and cannot be. Their value decays from the day they
+    are written, which is the argument for the first port happening sooner rather than later, and for it
+    sending fixes back.
+  - **`packages/contract/test` is now two gates chained with `&&`**, so a stale `openapi.json` masks a
+    stale README until the first is fixed. Accepted: the alternative is running a generator check against
+    a document that is known stale, whose output nobody should trust.
+  - **ADR-060's corpus figure was wrong for two waves** ("36 groups, 274 cases" against a real 65 and
+    510) and is corrected in this commit. The correction is a one-liner; the durable fix is decision 3,
+    which is why that decision exists at all. **ADR-059's title is also stale** — it says the id corpus
+    lives in `contract`, which ADR-060's convergence changed — and is deliberately left alone here rather
+    than renaming a shipped ADR's heading; the ABNF's own header now states where the corpus really is,
+    and the README says so too.
+  - **No CI enforces any of this.** There is still no PR/push workflow (`.github/workflows/` holds only
+    `dataset.yml`; `ci.yml` is WP0-5, deferred), so every gate named above runs from a package `test`
+    script via `turbo run test` and the pre-commit hook. The README says so in its own "not guaranteed"
+    section, because a porter reading "gated" would otherwise assume a server enforces it.
