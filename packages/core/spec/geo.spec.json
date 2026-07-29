@@ -615,6 +615,73 @@
           "expect": "西北行"
         }
       ]
+    },
+    "bearingOctant": {
+      "doc": "Which of the 8 compass points a bearing snaps to, 0–7 clockwise from North. One rule with two consumers that must agree: formatBearing turns it into a word, and every renderer`s compass needle turns it into a rotation. apps/mobile had a second, subtly different copy inside BearingArrow.tsx (no range normalisation); porting the screen to a second renderer would have made a third.",
+      "cases": [
+        {
+          "name": "due-north-is-zero",
+          "args": {
+            "deg": 0
+          },
+          "expect": 0
+        },
+        {
+          "name": "northeast-is-one",
+          "args": {
+            "deg": 45
+          },
+          "expect": 1
+        },
+        {
+          "name": "belair-northeast-kerb-snaps-to-northeast",
+          "why": "Real: the northeast Belair place carries bearingDeg 54, which is why its label reads \"Northeast-bound\".",
+          "args": {
+            "deg": 54
+          },
+          "expect": 1
+        },
+        {
+          "name": "belair-southwest-kerb-snaps-to-southwest",
+          "why": "The opposite kerb of the same landmark, bearingDeg 225 — the pair ADR-042 exists to keep apart.",
+          "args": {
+            "deg": 225
+          },
+          "expect": 5
+        },
+        {
+          "name": "halfway-rounds-up",
+          "why": "Math.round rounds .5 away from zero, so 22.5 goes to Northeast rather than North. Pinned because a port using banker`s rounding would differ here and nowhere else.",
+          "args": {
+            "deg": 22.5
+          },
+          "expect": 1
+        },
+        {
+          "name": "three-hundred-and-thirty-eight-wraps-to-north",
+          "why": "THE WRAP ROW. 337.5–360 rounds up to octant 8, which does not exist; the % 8 brings it back to North. A port that omitted it would index past the end of its label array.",
+          "args": {
+            "deg": 338
+          },
+          "expect": 0
+        },
+        {
+          "name": "a-negative-bearing-normalises",
+          "why": "THE ROW THE OLD COMPONENT COPY WOULD HAVE FAILED. Its Math.round(deg / 45) * 45 has no range normalisation, so -100 gave it -90 — a needle pointing east while the label said west.",
+          "args": {
+            "deg": -100
+          },
+          "expect": 6
+        },
+        {
+          "name": "a-bearing-past-a-full-turn-normalises",
+          "why": "The same gap from the other side: 415 is 55.",
+          "args": {
+            "deg": 415
+          },
+          "expect": 1
+        }
+      ]
     }
   }
 }

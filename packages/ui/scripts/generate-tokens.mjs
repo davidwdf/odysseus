@@ -470,6 +470,44 @@ function globalCss() {
 }
 
 // ---------------------------------------------------------------------------
+// apps/web/src/tokens.css — the same variables for the second renderer (WP4-1)
+// ---------------------------------------------------------------------------
+
+/**
+ * The identical `:root` / `.dark` variable blocks as `globalCss`, and **deliberately without the
+ * `@tailwind` directives**.
+ *
+ * Two renderers, one declaration — that is the whole point of Wave 4, and the reason this is a second
+ * *emit target* rather than a copy of `apps/mobile/global.css`: `check-tokens-current.mjs` iterates
+ * whatever `generate()` returns, so adding a target here gates it against `tokens.json` by
+ * construction. A hand-copied file would have been correct on the day it was written and drifted the
+ * first time a colour moved — which is the failure this package exists to prevent.
+ *
+ * The directives are omitted because Vite composes CSS differently from Metro: `apps/web/src/index.css`
+ * is hand-written and holds the three `@tailwind` lines, and `main.tsx` imports both files. Splitting
+ * them means the generated file contains **only** generated content, so a human has somewhere to put a
+ * web-only rule without editing an artefact. `apps/mobile/global.css` keeps its directives because
+ * NativeWind takes exactly one CSS input.
+ */
+function webTokensCss() {
+  const L = ['/*']
+  L.push(...banner(' '), '')
+  L.push('  The semantic token values for `apps/web` — byte-for-byte the same numbers as')
+  L.push('  apps/mobile/global.css, from the same declaration. Vars only: the `@tailwind`')
+  L.push('  directives live in the hand-written src/index.css, which is also where a web-only')
+  L.push('  rule belongs. Imported by src/main.tsx.')
+  L.push('*/')
+  L.push(':root {')
+  for (const s of semantic) L.push(`  ${s.cssVar}: ${triplet(s.light)};`)
+  L.push('}')
+  L.push('')
+  L.push('.dark {')
+  for (const s of semantic) L.push(`  ${s.cssVar}: ${triplet(s.dark)};`)
+  L.push('}')
+  return `${L.join('\n')}\n`
+}
+
+// ---------------------------------------------------------------------------
 // packages/ui/generated/tokens.json — every token resolved, for tools with no TS toolchain
 // ---------------------------------------------------------------------------
 
@@ -755,6 +793,7 @@ export function generate() {
     { file: 'packages/ui/src/tokens.generated.ts', text: tsModule() },
     { file: 'packages/ui/preset.js', text: preset() },
     { file: 'apps/mobile/global.css', text: globalCss() },
+    { file: 'apps/web/src/tokens.css', text: webTokensCss() },
     { file: 'packages/ui/generated/tokens.json', text: resolvedJson() },
     { file: 'packages/ui/generated/NextBusTokens.swift', text: swift() },
     { file: 'packages/ui/generated/NextBusTokens.kt', text: kotlin() },

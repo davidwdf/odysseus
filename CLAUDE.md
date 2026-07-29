@@ -19,6 +19,7 @@ pnpm dev                # EVERYTHING: edge worker + Expo, concurrently (the IDE 
 pnpm dev:edge           # just the Cloudflare Worker  → http://localhost:8787
 pnpm dev:mobile         # just Expo (press w = web/PWA, i = iOS, a = Android)
 pnpm dev:web            # Expo straight to web/PWA
+pnpm dev:dom            # apps/web — the Vite + React DOM renderer (WP4-1)  → http://localhost:8082
 pnpm typecheck          # tsc --noEmit across all packages — MUST pass before commit
 pnpm test               # vitest: apps/edge (inside workerd, simulated KV/R2) + apps/mobile
 pnpm lint               # Biome
@@ -36,6 +37,9 @@ Full guide incl. deploy: [`docs/10`](./docs/10-scaffold-and-running.md).
 ## Repo map
 ```
 apps/mobile          Expo app (iOS/Android/Web-PWA)
+apps/web             Vite + React DOM — ONE screen (Nearby), rendered from the identical
+                     `packages/core` functions. The proof that the kernel is renderer-agnostic
+                     (ADR-068/069); it derives nothing, and a gate enforces that
 apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health;
                      reads precomputed dataset shards from KV/R2 — ADR-055)
 packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
@@ -57,7 +61,8 @@ packages/tsconfig    shared TS configs
 3. **ETAs are approximations — never fake precision** (ADR-008). No client-side per-second
    countdown. Update the value only when fresh data arrives; use tabular figures; show
    "Arriving/Due" under a minute; indicate staleness. Use the helpers in `@nextbus/core/eta`.
-4. **Styling = NativeWind + semantic tokens only.** Use `bg-bg`, `text-text`, `text-muted`,
+4. **Styling = semantic tokens only** — NativeWind in `apps/mobile`, plain Tailwind 3.4 in
+   `apps/web`; **both consume the same generated `@nextbus/ui/preset`**, so a token exists once. Use `bg-bg`, `text-text`, `text-muted`,
    `text-accent`, `bg-positive`, etc. — never raw hex in components. Themes (incl. liveries) are
    value-swaps in `@nextbus/ui` (`docs/09`, ADR-015). **Radix/shadcn are web-only — do NOT use
    them.** For RN primitives use **react-native-reusables** (copy-in, NativeWind-based).

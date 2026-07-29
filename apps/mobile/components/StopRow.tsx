@@ -109,17 +109,29 @@ export function StopRow({
             <RouteRow key={row.routeId} row={row} />
           ),
         )}
-        {view.remaining > 0 && onPress ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={onPress}
-            className="flex-row items-center gap-1 py-1.5 active:opacity-50"
-          >
-            <Text variant="label" className="text-accent">
+        {/* **The count is shown whether or not it can be tapped.** The condition here used to be
+            `remaining > 0 && onPress`, which silently showed 6 of 26 routes to any caller with nowhere
+            to navigate — hiding an honest total because the affordance is unavailable is the silent
+            filter ADR-008 forbids. No caller in this app hits that path today (both pass `onPress`),
+            which is why nobody noticed; `apps/web`'s single screen does hit it, and that is how it was
+            found. The tap is optional, the truth is not. */}
+        {view.remaining > 0 ? (
+          onPress ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onPress}
+              className="flex-row items-center gap-1 py-1.5 active:opacity-50"
+            >
+              <Text variant="label" className="text-accent">
+                {t(locale, 'moreRoutes', { n: view.remaining })}
+              </Text>
+              <Icon icon={ChevronRight} tone="accent" size={15} />
+            </Pressable>
+          ) : (
+            <Text variant="label" className="py-1.5 text-muted">
               {t(locale, 'moreRoutes', { n: view.remaining })}
             </Text>
-            <Icon icon={ChevronRight} tone="accent" size={15} />
-          </Pressable>
+          )
         ) : null}
       </View>
     </View>

@@ -539,24 +539,42 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
      cannot be born ungated. **The one user-visible change:** the imminence band is the served
      `warnUnderSec` (180 s) instead of `EtaBadge`'s literal `value <= 5` (360 s) — see the ADR; an arrival
      3–6 minutes out is no longer coloured as "run".
-   - **Wave 4 / WP4-1 (`apps/web`)** ← **start here.** One screen, Nearby, rendered from the identical
-     `core` functions by Vite + React DOM. The plan calls it *"the cheapest empirical test of the whole
-     thesis"*, and it is now materially cheaper than when it was written: Wave 2 made every rule Nearby
-     needs a corpus-pinned kernel function, Wave 3 made the tokens and strings generated artefacts, and
-     WP4-0 made the screen's own derivation one function call. Three things to carry in:
-     **(a) pin `vite@8.0.16` exactly** — it is already hoisted as vitest 4's peer, and golden rule 6 is the
-     scar from two versions of one package fighting under `node-linker=hoisted`;
-     **(b) add a second CSS emit target** to `packages/ui/scripts/generate-tokens.mjs` (deliberately
-     deferred from WP4-0 — it cannot be emitted into an app that does not exist, and
-     `check-tokens-current.mjs` iterates the emitter's own output, so adding the target gates it
-     automatically). Also verify rather than assume that the generated NativeWind-flavoured `preset.js`
-     applies under plain Tailwind 3.4;
-     **(c) `packages/ports` is declared but unadopted, and this is its first real consumer.** Only
-     `TileSource` is bound, type-only. `LocationProvider`, `LocaleProvider`, `KeyValueStore`, `LinkOpener`
-     and `Clock` have **no implementation anywhere**, and `apps/mobile/lib/useLocation.ts` keeps the
-     permission state machine, the last-fix cache and the `snapFix` call inside an RN hook (ADR-051 records
-     it as *"conflates the port with shared logic"*). Decide up front whether that state machine moves
-     behind the port or gets duplicated — duplicating it is the drift this wave exists to disprove.
+   - ✅ **WP4-1 done 2026-07-29 — Wave 4 is complete** ([ADR-069](./08-decision-log.md)).
+     `apps/web` is a Vite 8 + React DOM + plain-Tailwind app rendering **one** screen (Nearby) from the
+     identical `packages/core` functions: `pnpm dev:dom` → http://localhost:8082. It derives nothing, and
+     `apps/web/scripts/check-no-derivation.mjs` enforces that by policing *shapes* — ordering, capping,
+     selecting, string-joining, arithmetic, thresholds — with 8 selftest scenarios. The equivalence
+     assertion (`apps/web/test/nearby-projection.test.tsx`) renders **every `stopCardView` corpus case**
+     and compares its visible text against a projection of the same view, so the golden is the corpus a
+     Swift or Kotlin suite would read.
+     **Three things landed along the way, each because two renderers forced the question:**
+     the `useLocation` state machine moved to `packages/api-client` (the only layer that may compose
+     `kernel` + `ports`) and **`apps/mobile` consumes it too** — each app is now a three-method adapter
+     plus the same ten-line hook; `bearingOctant` is shared, because the compass needle and
+     `formatBearing`'s word are one rule and `BearingArrow` had its own copy without range
+     normalisation; and `packages/ui` gained a **second CSS emit target** whose variables are
+     byte-identical to `apps/mobile/global.css` (7 artefacts gated now, was 6). The generated
+     NativeWind-flavoured `preset.js` was **verified** to work under plain Tailwind 3.4, not assumed.
+     **What the second renderer caught in the first — the point of the wave, concretely:**
+     (a) **HTML collapses the caption's deliberate double separator**, so the web card read
+     "Southwest-bound · 170m · 2 min walk" where RN read "Southwest-bound  ·  170m · 2 min walk" — the
+     same string, rendered differently. Fixed with `whitespace-pre-wrap`. My first test could not see it
+     because it normalised whitespace before comparing.
+     (b) **The "+N more" count was hidden whenever it could not be tapped** (`remaining > 0 && onPress`),
+     so a caller with nowhere to navigate showed 6 of 26 routes and said nothing — the silent filter
+     ADR-008 forbids. Every `apps/mobile` caller passes `onPress`, which is why it had never fired.
+     Fixed in **both** renderers; regression test watched failing against the old guard.
+     🟠 **The honest limit:** *byte-identical* is measured on one side only. The content cannot differ
+     (one kernel declaration, one corpus, a gate against re-derivation) and the web renderer is proven a
+     faithful projection — but there is **no symmetric projection test on the RN side**, because
+     `apps/mobile` has vitest and no React renderer. Adding one needs `react-test-renderer` plus a
+     jsdom-free setup for Reanimated, NativeWind and `react-native-svg`. Until then an RN-only
+     *presentation* mistake is caught by review, not CI.
+     🟡 **`check-no-derivation` polices `apps/web` only** — `apps/mobile`'s route, search and workbench
+     screens still hold rules WP4-0 did not hoist, so the same rules would fire on legitimate code.
+     Closes when Place and Route detail get their own WP4-0.
+     🟡 **Nothing deploys `apps/web`** (`vite build` → `dist/`, 260 kB JS / 84 kB gzipped) and there is
+     still no CI. Both are WP0-5.
    - **When a native repo actually appears**, its first jobs are already written down: compile
      `packages/ui/generated/NextBusTokens.{swift,kt}` and `packages/contract/native/{ios,android}/` (all
      four generated, none ever compiled), and solve **corpus vendoring** — see the loose end below. Start

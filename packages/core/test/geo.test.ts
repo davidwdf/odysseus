@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/geo.spec.json'
 import {
+  bearingOctant,
+  bearingOctantDeg,
   formatBearing,
   formatDistance,
   formatWalk,
@@ -70,6 +72,21 @@ describe('geo#formatWalk', () => {
       expect(formatWalk(c.args.distanceM, c.args.locale)).toBe(c.expect)
     })
   }
+})
+
+describe('geo#bearingOctant', () => {
+  for (const c of cases<{ deg: number }, number>('bearingOctant')) {
+    it(c.name, () => {
+      expect(bearingOctant(c.args.deg)).toBe(c.expect)
+    })
+  }
+
+  it('bearingOctantDeg is the octant expressed as a rotation', () => {
+    // Not a corpus row: it is a restatement of the row above, and the property worth asserting is
+    // that the two cannot part company — which is a relationship, not a value.
+    for (const c of cases<{ deg: number }, number>('bearingOctant'))
+      expect(bearingOctantDeg(c.args.deg)).toBe(c.expect * 45)
+  })
 })
 
 describe('geo#formatWalkRange', () => {

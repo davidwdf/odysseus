@@ -1,3 +1,4 @@
+import { bearingOctantDeg } from '@nextbus/core'
 import { Navigation2 } from 'lucide-react-native'
 import { Platform, View, type ViewStyle } from 'react-native'
 import { Icon, type IconTone } from './Icon'
@@ -42,8 +43,10 @@ export function BearingArrow({
   circle?: boolean
   inline?: boolean
 }) {
-  const snapped = Math.round(bearingDeg / 45) * 45 // nearest of the 8 compass points
-  const rotate = snapped + GLYPH_NORTH_OFFSET
+  // `bearingOctantDeg` rather than a local `Math.round(deg / 45) * 45`: the needle and
+  // `formatBearing`'s word are one rule now (WP4-1), so they cannot point and say different things.
+  // The local copy omitted the range normalisation, which only shows up on a negative bearing.
+  const rotate = bearingOctantDeg(bearingDeg) + GLYPH_NORTH_OFFSET
   // When inline, flow with the surrounding text (web: an inline-block box that rides the text
   // baseline, so wrapped lines run underneath rather than indenting past a flex sibling). `middle`
   // centres on the *line box*, which sits above the text's optical (x-height) centre — so a centred

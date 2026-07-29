@@ -158,3 +158,12 @@ export class EdgeClient implements DataSource {
 export function createEdgeClient(opts: EdgeClientOptions): DataSource {
   return new EdgeClient(opts)
 }
+
+// The location state machine — permission, a fix, and the remembered cell underneath. Shared rather
+// than per-renderer (WP4-1): see `./location.ts` for why the `client` layer is its only possible home.
+export {
+  createLocationController,
+  LAST_FIX_KEY,
+  type LocationController,
+  type LocationControllerDeps,
+} from './location'
