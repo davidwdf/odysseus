@@ -249,9 +249,10 @@ silently.
 
 ### Wave 3 — Native enablement
 
-> **Status 2026-07-29: WP3-1, WP3-2 and WP3-4 are COMPLETE and verified** (ADR-053, ADR-054); **WP3-3 is not
-> started** and is the only speculative package in the wave. Built by three agents in parallel worktrees and
-> integrated one at a time. Nine corrections to what is written below, recorded because the plan was wrong in
+> **Status 2026-07-29: Wave 3 is COMPLETE — WP3-1 … WP3-4 all landed and verified** (ADR-053, ADR-054,
+> ADR-067). WP3-1/3-2/3-4 were built by three agents in parallel worktrees and integrated one at a time;
+> **WP3-3 ran last on purpose**, so it published a contract that already contained the other three's changes
+> (`/v1/policy`, `remarkKind`, and the generated token and string artefacts). Ten corrections to what is written below, recorded because the plan was wrong in
 > ways worth knowing:
 > **(1)** WP3-4's acceptance cell says *"ADR-051 line stated"* — it means **ADR-053**; ADR-051 is layered
 > package boundaries. **(2) ADR-053 and ADR-054 were unwritten gaps** in the decision log, *already
@@ -277,6 +278,12 @@ silently.
 > excluded the artefacts a drift gate compares, and new literal rules firing on a stale `dist/` bundle.
 > Also worth knowing: WP3-1's **Swift and Kotlin output has never been compiled** — no compiler exists here,
 > so compiling it is WP3-3's first job, not an inherited claim.
+> **(10) Every hand-written count of the corpus in this repo was wrong.** The brief said 10 files / 66 groups
+> / ~515 cases, this plan implied another figure, and ADR-060 recorded *"36 groups, 274 cases"* — three
+> different wrong numbers for one artefact, in a wave whose entire subject is generated output drifting from
+> its declaration. The real figure is **11 corpora / 65 groups / 510 cases / 4 `knownDefect`**. The durable
+> fix is not the correction: it is that **no document states the figure by hand any more** — WP3-3's gate
+> regenerates it, and also rejects a cited path that is missing *or* gitignored.
 
 | ID | Title | Acceptance | Depends |
 |---|---|---|---|

@@ -2,8 +2,9 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 > Snapshot: **2026-07-29**. Wave 0 (PRs #11–#13), **Wave 1** (PR #14) and **Wave 2** (PR #15) are on `main`;
-> **Wave 3 is complete except WP3-3** on `wave3-native-enablement-v1` — WP3-1, WP3-2 and WP3-4 built in
-> parallel (one agent and one git worktree each) and integrated one merge at a time.
+> **Wave 3 is complete** on `wave3-native-enablement-v1` — WP3-1, WP3-2 and WP3-4 built in
+> parallel (one agent and one git worktree each) and integrated one merge at a time, then WP3-3 last,
+> deliberately, so it published a contract that already included the other three.
 > **What Wave 3 is:** the two categories ADR-052 and ADR-060 did not cover — design values and UI strings —
 > each got **one declaration generating committed artefacts**, and *the line* between server and client got
 > written down and mechanically gated. `packages/ui/tokens.json` (122 DTCG tokens) replaces values that were
@@ -21,8 +22,14 @@
 > `@nextbus/ui:test` while its gate read a file outside the package's hash; `.gitignore` would have excluded
 > the generated native artefacts, so the gate would have compared them only on the machine that made them;
 > and the new literal rules fired on a stale `dist/` bundle, i.e. on yesterday's source. All three are the
-> same failure — *a gate that passes because it is looking at nothing.* **Still open: WP3-3** (publish the
-> contract for a native repo), and the Swift/Kotlin artefacts are **generated but never compiled**.
+> same failure — *a gate that passes because it is looking at nothing.* **WP3-3** then published the contract
+> for a native repo ([ADR-067](./08-decision-log.md)): `packages/contract/README.md` written for someone
+> starting an iOS or Android repo tomorrow, XCTest and JUnit conformance templates with the corpus wired in,
+> a 7-test unknown-enum decode suite, and a gate that regenerates the README's figures and **rejects a cited
+> path that is missing *or* gitignored** — which is how it caught its own near-miss, `packages/contract/native/`
+> being silently excluded by the Expo `ios/`/`android/` patterns while present on disk. **Everything we cannot
+> verify says so:** the Swift/Kotlin token artefacts and both test templates are **generated but never
+> compiled**, and compiling them is the first native repo's job, not an inherited claim.
 > Previously: **Wave 2 — domain extraction, WP2-1 … WP2-9**, all nine built in parallel and integrated one
 > merge at a time.
 > **What Wave 2 is:** the domain rules stopped living in screens. `dedupeRoutes`/`operatorsOf`/the pole
@@ -506,10 +513,9 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    orphan favourites). The **Favourites tab groups by place**: each saved pole resolves via `getStop` (the
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
-1. **Wave 4 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md), then WP3-3** ← **start here.**
-   **Waves 1 and 2 are ✅ complete** (ADR-051, ADR-052, ADR-059, ADR-060, ADR-062 … ADR-065), and
-   **Wave 3 is ✅ complete except WP3-3** — WP3-1, WP3-2 and WP3-4 landed 2026-07-29 (ADR-053, ADR-054;
-   see *Done & verified*).
+1. **Wave 4 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md)** ← **start here.**
+   **Waves 1, 2 and 3 are all ✅ complete** (ADR-051 … ADR-054, ADR-059, ADR-060, ADR-062 … ADR-067).
+   Wave 3 landed 2026-07-29; see *Done & verified*.
    **Why Wave 3 went first, against this doc's own earlier advice:** it was framed here as "the larger, more
    speculative bet … every claim is about a Swift compiler nobody has run". That was true of **one** of its
    four packages. The other three closed drift that was live on `main`: design values written down four
@@ -524,14 +530,10 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
      written: Wave 2 made every rule Nearby needs a corpus-pinned kernel function, and Wave 3 made the
      tokens and strings it renders generated artefacts rather than RN-shaped source. A second renderer is
      the first real consumer of both.
-   - **WP3-3** — publish `openapi.json` + a `contract/README.md` written as *"how an iOS or Android repo
-     consumes this"*, with the fixture-consuming XCTest/JUnit conformance file inside the scaffold. Its
-     one-time blocker is **already resolved**: ADR-060's format convergence settled the two-corpus question
-     precisely so WP3-3 would not have to read both. Three things it must not get wrong — ADR-060's own
-     figure of *"36 groups, 274 cases"* is stale (reality is **11 corpora, 66 groups, ~515 cases**); the
-     Swift and Kotlin token artefacts from WP3-1 have **never been compiled**, so compiling them is WP3-3's
-     job and not a claim it may inherit; and much of the README prose already exists in `openapi.json`'s
-     `info.description`, so it should be moved, not rewritten.
+   - **When a native repo actually appears**, its first jobs are already written down: compile
+     `packages/ui/generated/NextBusTokens.{swift,kt}` and `packages/contract/native/{ios,android}/` (all
+     four generated, none ever compiled), and solve **corpus vendoring** — see the loose end below. Start
+     from `packages/contract/README.md`, which is written for exactly that reader.
    **Loose ends the waves left, in priority order:**
    - ✅ **Fixed 2026-07-28 — a dataset flip now invalidates the cached index**
      ([ADR-066](./08-decision-log.md)). Found while verifying WP2-7, and worth keeping in the record because
@@ -574,6 +576,13 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
      the generator when it next needs to change, not to grow it. Not worth touching working, self-testing code
      for a line count alone.
    - **Wave 3's own loose ends (2026-07-29), highest-consequence first:**
+     - 🔴 **Corpus vendoring is unsolved, and it is the one hole in the corpus-rot story.** Both native
+       templates tell a porter to copy `packages/core/spec/*.spec.json` in with a script and check
+       freshness, but **nothing in this repo can enforce that a native repo's copy is current** — and a
+       stale copy produces a *green* suite pinning a rule that has since moved, which is worse than no
+       suite at all. Options when a native repo exists: publish the corpus as a versioned package the
+       native build fetches; or have the templates assert a content hash committed here. Unowned by any WP
+       — the same shape as the WP2-8/WP2-9 gap that only got fixed because someone noticed.
      - 🔴 **A served `dueUnderSec` or `staleAfterMs` override would be honoured on native and silently
        ignored on web.** Both are served and `etaView`/`isStale` accept them, but **no screen threads them
        in** — their consumers sit inside `EtaTimes`, `EtaBadge` and `formatRelative`, so wiring them touches
