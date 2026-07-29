@@ -564,12 +564,27 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
      so a caller with nowhere to navigate showed 6 of 26 routes and said nothing — the silent filter
      ADR-008 forbids. Every `apps/mobile` caller passes `onPress`, which is why it had never fired.
      Fixed in **both** renderers; regression test watched failing against the old guard.
-     🟠 **The honest limit:** *byte-identical* is measured on one side only. The content cannot differ
-     (one kernel declaration, one corpus, a gate against re-derivation) and the web renderer is proven a
-     faithful projection — but there is **no symmetric projection test on the RN side**, because
-     `apps/mobile` has vitest and no React renderer. Adding one needs `react-test-renderer` plus a
-     jsdom-free setup for Reanimated, NativeWind and `react-native-svg`. Until then an RN-only
-     *presentation* mistake is caught by review, not CI.
+     ✅ **Both sides are measured now** (closed the same day; ADR-069 addendum). This had been recorded
+     as 🟠 *"byte-identical is measured on one side only"*, and the gap was real: deleting the inline
+     `<Text>{view.caption}</Text>` from the RN card — so every card silently loses its compass direction
+     and distance — passed typecheck, lint **and all 686 tests**. (A narrower correction to the original
+     note: a field rendered through a *dedicated imported component* IS caught incidentally by Biome's
+     `noUnusedImports`; it is the **inline** fields that nothing guarded.) It is now
+     `apps/mobile/test/stoprow-projection.test.tsx` — `react-native` aliased to **`react-native-web`**
+     in a new `apps/mobile/vitest.config.ts`, the RN card rendered in jsdom, read back through the *same*
+     projection `apps/web`'s suite uses. That is a ship target, not a stand-in: it is how Expo renders the
+     PWA. **A cheaper gate was built first and deleted because it did not work** — asserting each field is
+     *referenced* in the render path passed the deletion, because the surviving guard
+     `{view.caption ? (…)}` still mentions `caption`. "Referenced" is not "rendered", and no textual rule
+     separates them: a discriminant is only ever compared, a boolean only ever a condition. Shipping it
+     would have added a gate that passes on the exact failure it was built for.
+     🟡 **Still not covered: iOS/Android *native* rendering** — `react-test-renderer` would not have
+     covered it either. What is covered on all three platforms is a component dropping, duplicating or
+     reordering a field, because the tree under test is the source Metro bundles.
+     ⚪ **`apps/mobile` resolves TypeScript 6.0.3 while every other package is on 5.9.3** (golden rule 6
+     says 5.9 for shared packages). Found incidentally: 6.0 rejected a cast 5.9 had accepted in the web
+     suite, where the corpus's JSON `null` was being asserted into `string | undefined`. Both suites now
+     convert rather than cast. The version divergence is pre-existing and unaddressed.
      🟡 **`check-no-derivation` polices `apps/web` only** — `apps/mobile`'s route, search and workbench
      screens still hold rules WP4-0 did not hoist, so the same rules would fire on legitimate code.
      Closes when Place and Route detail get their own WP4-0.

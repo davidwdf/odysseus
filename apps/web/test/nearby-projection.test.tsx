@@ -25,7 +25,20 @@ import { StopCard } from '../src/components/StopCard'
 // invented for this test means the golden cannot drift from what the kernel actually produces, and a
 // rule change lands in one place and goes red in every suite at once.
 
-const cases = corpus.groups.stopCardView.cases as Array<{ name: string; expect: StopCardView }>
+const cases: Array<{ name: string; expect: StopCardView }> = corpus.groups.stopCardView.cases.map(
+  (c) => ({ name: c.name, expect: fromCorpus(c.expect) }),
+)
+
+/**
+ * The corpus states an absent optional as JSON `null` (the convention in
+ * `packages/core/test/corpus.ts`); TypeScript's absent value is `undefined`. This is the inverse of the
+ * `nulled` projection the corpus was written with, and it is a **conversion rather than a cast** on
+ * purpose: casting compiled under TypeScript 5.9 and was rejected by 6.0, which is what surfaced the
+ * looseness. A reviver returning `undefined` deletes the key, which is exactly what an optional wants.
+ */
+function fromCorpus(view: unknown): StopCardView {
+  return JSON.parse(JSON.stringify(view), (_k, v) => (v === null ? undefined : v)) as StopCardView
+}
 
 /**
  * Every string the card is expected to show, in reading order.

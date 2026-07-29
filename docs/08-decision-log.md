@@ -3317,13 +3317,10 @@ rather than the docs. **The blocking open question above is unchanged** — this
   Neither was reachable by reading the code, and neither is a bug in `apps/web`. That is the argument for
   Wave 4 existing, made concretely rather than in the abstract.
 - **Consequences, including what we are accepting:**
-  - **"Byte-identical to the RN golden" is measured on one side, not two.** The content cannot differ —
-    one kernel declaration, one corpus, and a gate stopping either renderer deriving its own — and the
-    web renderer is proven a faithful projection of it. **The symmetric projection test on the RN side
-    does not exist:** `apps/mobile` has vitest but no React renderer, and adding one means
-    `react-test-renderer` plus a jsdom-free setup for Reanimated, NativeWind and `react-native-svg`.
-    Until then an RN-only *presentation* mistake is caught by review and by eye, not by CI. That is
-    narrower than it sounds and it is still the gap between the row's word "asserts" and what runs.
+  - ✅ **Closed the same day — "byte-identical" is now measured on both sides.** This consequence was
+    originally recorded as an open gap: the web renderer was proven a faithful projection of the view and
+    the RN renderer was not. It is now `apps/mobile/test/stoprow-projection.test.tsx`, and the addendum
+    below records how it was closed, including the attempt that failed.
   - **`check-no-derivation` polices `apps/web` only.** `apps/mobile`'s route, search and workbench
     screens still hold rules WP4-0 did not hoist, so the same rules would fire on legitimate un-migrated
     code and the gate would be switched off within a week. The asymmetry is deliberate, recorded in the
@@ -3340,3 +3337,52 @@ rather than the docs. **The blocking open question above is unchanged** — this
     import a config the RN app requires directly.
   - **No `apps/web` deploy, and no CI.** `vite build` produces `dist/` (260 kB JS, 84 kB gzipped) and
     nothing publishes it; `.github/workflows/` still holds only `dataset.yml`. Both belong to WP0-5.
+
+
+### Addendum (2026-07-29) — closing the one-sided measurement, and the cheap gate that did not work
+
+**The gap was measured before it was fixed.** Deleting the inline `<Text>{view.caption}</Text>` from
+`apps/mobile/components/StopRow.tsx` — so every card silently loses its compass direction and distance —
+passed `turbo run typecheck`, `pnpm lint` **and all 686 tests**. A narrower correction to the original
+wording: deleting a field rendered through a *dedicated imported component*
+(`{row.remark ? <RemarkTag …/> : null}`) *is* caught, incidentally, by Biome's `noUnusedImports`. It is
+the **inline** fields — the caption, the headline, the code, the minutes unit — that nothing guarded.
+
+**A cheaper gate was designed, built, tested against that failure, and deleted, because it did not
+work.** The idea was to assert that every field of `StopCardView` is *referenced* somewhere in each
+renderer's render path, with the field list parsed out of `packages/core/src/{stop-card,eta}.ts` so it
+could not go stale. It passed the deletion. The reason is worth recording because it generalises:
+**"referenced" is not "rendered"** — the surviving guard `{view.caption ? (…)}` still mentions `caption`,
+and no textual rule separates a guard from a render. Sharpening it to "appears in value position" fails
+too, because a discriminant is only ever compared (`label.kind === 'mins'`) and a boolean is only ever a
+condition (`stale ? 'opacity-45' : ''`). Shipping it would have added a gate that passes on the exact
+failure it was built for — this repo's own recurring bug, and worse than having no gate at all.
+
+**What worked was rendering the tree.** `react-native` is aliased to **`react-native-web`** in a new
+`apps/mobile/vitest.config.ts`, and the RN card is rendered in jsdom and read back through the *same*
+projection `apps/web`'s suite uses. Three things make this honest rather than convenient:
+
+  1. **`react-native-web` is a ship target, not a stand-in.** It is how Expo renders the PWA, so one of
+     the three platforms is now covered directly. `react-test-renderer` was the alternative and would
+     have needed `@react-native/babel-preset` to strip Flow types out of the `react-native` source while
+     still not exercising a real layout.
+  2. **The projection function is duplicated in the two suites on purpose, not shared.** It is the
+     *specification* each renderer is measured against; a shared helper would let one edit silently relax
+     both. If the copies ever disagree, that is the signal.
+  3. **The one shortcut is asserted rather than assumed.** `lucide-react-native` cannot load outside
+     Metro (its `.mjs` entry imports names its own `context.mjs` does not export, and inlining it drags in
+     `react-native-svg`'s Flow source), so it is aliased to `lucide-react`. That is only legitimate if
+     icons contribute no text — so a test renders a card whose only content is a caption and asserts
+     exactly two text nodes alongside a non-zero `<svg>` count. If either package ever ships a label, it
+     fails.
+
+**What is still not covered, and now precisely:** iOS and Android *native* rendering. `react-test-renderer`
+would not have covered it either. What is covered on all three platforms is the thing that actually goes
+wrong — a component dropping, duplicating or reordering a field — because the component tree under test is
+the same source Metro bundles.
+
+**One incidental finding.** `apps/mobile` resolves TypeScript **6.0.3** while every other package is on
+5.9.3 (CLAUDE.md golden rule 6 says 5.9 for shared packages), and 6.0 rejected a cast that 5.9 had
+accepted in the *web* suite: the corpus states absent optionals as JSON `null`, and both suites were
+asserting them into `string | undefined`. Both now convert rather than cast. The version divergence is
+pre-existing and unaddressed; it earned its keep here.
