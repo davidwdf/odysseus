@@ -3,16 +3,14 @@ import {
   formatFareRange,
   formatHeadway,
   formatServiceHours,
-  formatStopCount,
   type Locale,
   type RouteServiceInfo,
 } from '@nextbus/core'
+import { t } from '@nextbus/i18n'
 import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
 import { Icon } from './Icon'
 import { Text } from './Text'
-
-const HOLIDAY: Record<Locale, string> = { en: 'hol', 'zh-Hant': '假日', 'zh-Hans': '假日' }
 
 /** Which badge was tapped. `fare`/`freq`/`hours` open a detail sheet; `stops` is a navigation
  *  affordance (scroll the list), never a sheet (ADR-044). */
@@ -60,7 +58,7 @@ export function RouteMeta({
       ? formatFare(service.fareFull)
       : undefined
   const fareNote = service.fareFullHoliday
-    ? `${formatFare(service.fareFullHoliday)} ${HOLIDAY[locale]}`
+    ? `${formatFare(service.fareFullHoliday)} ${t(locale, 'holiday')}`
     : undefined
 
   const facts: Fact[] = []
@@ -70,7 +68,7 @@ export function RouteMeta({
   if (service.hours)
     facts.push({ key: 'hours', icon: ClockFading, value: formatServiceHours(service.hours) })
   if (stopCount)
-    facts.push({ key: 'stops', icon: MapPin, value: formatStopCount(stopCount, locale) })
+    facts.push({ key: 'stops', icon: MapPin, value: t(locale, 'stopCount', { n: stopCount }) })
   if (facts.length === 0) return null
 
   return (

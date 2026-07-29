@@ -1,0 +1,12 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // The token drift gate checks an artefact OUTSIDE this package — apps/mobile/global.css, which
+    // is NativeWind's input (metro.config.js). turbo hashes only a package's own files, so a
+    // hand-edit of that CSS would replay a cached pass and the gate would quietly stop guarding
+    // the one file the web build actually loads. It is a text comparison of six files: cheaper to
+    // always run than to cache wrongly.
+    "test": { "cache": false }
+  }
+}

@@ -54,6 +54,15 @@ so the API can never drift from what the app expects.
   `datasetBuildsThisIsolate` stays 0) worth anything. `pnpm test` → `turbo run test`; the edge suite
   alone is `pnpm --filter @nextbus/edge test`. **Playwright** for web e2e; **Maestro** for native
   e2e (later).
+- **Not every `test` script is Vitest — some *are* the gate.** `packages/contract`'s `test` runs
+  `check-openapi-current.mjs` **and `check-native-guide.mjs`** (see *Publishing for a native repo*
+  below), and `packages/i18n`'s runs `check-i18n.mts` (locale parity, the ICU
+  subset, and drift of the generated `.strings`/`.stringsdict`/`strings.xml`, plus a `--selftest`
+  that watches each of them fail). Both are plain Node under `tsx`, adding no dependency. This is
+  deliberate: **there is no PR/push CI workflow in this repo** (`.github/workflows/` holds only
+  `dataset.yml`; authoring `ci.yml` is WP0-5), so `turbo run test` is the only thing that actually
+  runs, and a generator's drift gate belongs where it will be executed. Until Wave 3, `packages/i18n`
+  had no `test` script at all and was therefore in no turbo target.
 - **Zod** for runtime validation of upstream API responses → fail loudly when an operator
   changes their schema.
 
@@ -88,6 +97,29 @@ don't work around it per package.
 - **Native builds:** **EAS Build** + **EAS Submit** (Phase 3); **EAS Update** for OTA.
 - **Env/secrets:** Cloudflare + EAS secrets via GitHub OIDC; no keys needed for the *public*
   HK data APIs, which keeps secrets minimal.
+
+## Publishing for a native repo (WP3-3, ADR-067)
+`packages/contract/README.md` is the entry point for someone starting an iOS or Android repo: which
+artefacts to consume, how to generate models, what they will get wrong if they guess, how to wire the
+fixture corpus into XCTest/JUnit, and what is **not** guaranteed. Read it before answering a porter's
+question — it is written for them, not as an inventory of this repo.
+
+Three things about how it is maintained, because they are unusual:
+
+- **`openapi.json`'s `info.description` is canonical for wire conventions**, and the README
+  *transcludes* it into a generated region rather than restating it. Edit
+  `packages/contract/src/openapi.ts` and re-emit; editing the README's copy is a red build. The
+  document is canonical because a native repo may only ever receive the document — through a
+  generator pipeline or an artefact store — and must still be told the rules.
+- **Every figure the README quotes is counted, not written** (endpoint and schema counts, corpus
+  totals, token and string counts). `pnpm --filter @nextbus/contract native:emit` refills the
+  generated regions; `check-native-guide.mjs` fails on a stale one, **and on any repo path the README
+  cites that no longer exists**. That second check exists because ADR-060 carried a wrong corpus
+  figure for two waves and nothing could see it.
+- **The two conformance templates in `packages/contract/native/` have never been compiled**, and say
+  so in a banner, as do WP3-1's `packages/ui/generated/NextBusTokens.swift` and `.kt`. There is no
+  Swift or Kotlin toolchain here and no gate that could add one. Do not remove those banners without
+  a toolchain that makes them false.
 
 ## Versioning & conventions
 - **Changesets** for package versioning (internal, mostly).

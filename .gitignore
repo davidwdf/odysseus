@@ -16,6 +16,19 @@ web-build/
 ios/
 android/
 *.orig.*
+# …but `packages/i18n/generated/{ios,android}` are *committed* generated artefacts, not prebuild
+# output. Their drift gate compares them against a fresh generation, so excluding them would let the
+# gate pass on this machine while a clean checkout had nothing to compare against — a green gate over
+# missing files. Re-included explicitly, and as directories: git does not descend into a directory
+# excluded by an `ios/`-style pattern, so a `**` negation alone would never reach them.
+!packages/i18n/generated/ios/
+!packages/i18n/generated/android/
+# Same trap, same fix: `packages/contract/native/{ios,android}` holds the XCTest and JUnit conformance
+# templates a native repo copies in on day one. Losing them to a pattern meant for Expo prebuild output
+# would leave the README pointing at two files nobody outside this worktree can see — and the gate that
+# checks the README's cited paths would still pass here, because they exist on *this* disk.
+!packages/contract/native/ios/
+!packages/contract/native/android/
 
 # cloudflare workers
 .wrangler/
@@ -45,3 +58,8 @@ coverage/
 # Boundary self-test scratch: selftest.mjs writes a derived Biome config into a fixture, then
 # deletes it. Ignored so a killed run cannot leave the tree dirty.
 scripts/boundaries/fixtures/*/biome.json
+
+# Wave scouting notes and per-work-package agent reports. Working material addressed to whoever is
+# running the wave — not documentation of the outcome, which belongs in `docs/`. Ignored so an agent
+# writing its report into its own worktree cannot leave the tree dirty or commit it by accident.
+.context/

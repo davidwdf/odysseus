@@ -10,6 +10,7 @@
 import { z } from 'zod'
 import { NearbyStopSchema, RouteDetailSchema, StopDetailSchema } from './detail'
 import { EtaSchema } from './eta'
+import { ClientPolicySchema } from './policy'
 import { SearchIndexSchema } from './search'
 
 /**
@@ -221,6 +222,13 @@ export const WIRE_ENDPOINTS = [
     path: '/v1/index',
     summary: 'The compact route + stop index for on-device search.',
     response: SearchIndexSchema,
+    params: [],
+  },
+  {
+    operationId: 'getClientPolicy',
+    path: '/v1/policy',
+    summary: 'Tunable counts, cadences and honesty thresholds the server owns (ADR-053).',
+    response: ClientPolicySchema,
     params: [],
   },
 ] as const satisfies ReadonlyArray<{

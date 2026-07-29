@@ -1,4 +1,5 @@
 import type { ErrorCode } from '@nextbus/core'
+import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
 import { fetchEta } from '@nextbus/data-normalize'
 import { type DatasetSource, datasetBuildCount, getDataset } from './dataset'
 import type { Env } from './env'
@@ -9,6 +10,13 @@ import { routeDetail, stopDetail, stopEtas } from './stop-route'
 import { fetchTile, parseTilePath } from './tiles'
 
 export type { Env }
+
+/**
+ * How long a client may hold the policy document. Five minutes: long enough that the fetch is free
+ * next to the live traffic it governs, short enough that "one edge deploy" is a true description of
+ * how a threshold changes.
+ */
+const POLICY_TTL_SEC = 300
 
 const CORS: Record<string, string> = {
   'access-control-allow-origin': '*',
@@ -173,6 +181,28 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       },
       0,
     )
+  }
+
+  // GET /v1/policy — the numbers the server owns (ADR-053).
+  //
+  // **Its own endpoint, and deliberately not any of the three alternatives.** Embedded in every
+  // response it would be six numbers duplicated across every payload and, worse, N places a stale
+  // copy could come from — two screens holding two policies at once is the disagreement this
+  // endpoint exists to end, moved onto the wire. On `/v1/health` it would make a native client parse
+  // ops telemetry to lay out a list, and `/v1/health` is `max-age=0` by design because it reports on
+  // one isolate. A separate document is also the only one of the three that a rider's client can
+  // cache and replay offline as a *policy* rather than as a fragment of a stop response.
+  //
+  // **Never touches the dataset.** These bytes are compiled into the Worker, so this answers while
+  // KV is unavailable — which matters more than it looks: the policy carries the refresh cadence, so
+  // an outage that took the policy down with it would leave every client polling its own default at
+  // the exact moment the edge could least afford the traffic.
+  //
+  // The 5-minute `max-age` is the whole point of the exercise: a threshold change is a deploy plus at
+  // most five minutes, instead of three store releases. Longer would be cheaper and would make the
+  // "one edge deploy" claim quietly untrue for hours.
+  if (parts[0] === 'v1' && parts[1] === 'policy') {
+    return json(CLIENT_POLICY_DEFAULTS, POLICY_TTL_SEC)
   }
 
   // GET /v1/eta/:co/:stop/:route[/:serviceType]

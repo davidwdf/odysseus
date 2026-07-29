@@ -1,3 +1,4 @@
+import type { LocalizedString } from '@nextbus/i18n'
 import { FONT_FAMILY } from '@nextbus/ui'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Pressable, Text, useWindowDimensions, View } from 'react-native'
@@ -91,7 +92,10 @@ export function CollapsingHeader({
   onBack: () => void
   /** Tap the header (anywhere but the back button) → scroll the list to the top. */
   onTitlePress?: () => void
-  backAccessibilityLabel?: string
+  /** The back lens's spoken name. Required, because `RouteHeader` passed nothing here: the route
+   *  screen's only back affordance was unlabelled to a screen reader, and `BackButton`'s old
+   *  `'Back'` default is exactly what kept that invisible. */
+  backAccessibilityLabel: LocalizedString
   /** Expanded header height, excl. status-bar inset. */
   expH?: number
   /** Expanded badge centre, below the status-bar inset. */

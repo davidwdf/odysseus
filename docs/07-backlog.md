@@ -97,6 +97,36 @@ the `DataSource` interface and the UI do not change.
 - [ ] Crowding / occupancy data (if/when published).
 - [ ] Historical ETA accuracy tracking → show confidence ("usually on time here").
 
+## Favourites & saving UX (design questions to settle)
+Recorded so they're not forgotten — each needs **thinking through / designing** before any code. Today
+([ADR-032](./08-decision-log.md)/[ADR-042](./08-decision-log.md)) a favourite is a *route at a member pole*
+(`formatFavoriteRouteKey(stopId, routeId)`); `SaveStar` renders at the **trailing edge** of each route row in
+Place/Stop detail with `hideWhenEmpty`, and the only way to *add* one is the route-schematic action sheet.
+
+- [ ] **Move the favourite indicator onto the route badge itself** — on the single-line bus row in Stop/Place
+      detail ([`app/stop/[id].tsx`](../apps/mobile/app/stop/[id].tsx) `RouteRow` → `RouteChip` +
+      [`SaveStar`](../apps/mobile/components/SaveStar.tsx)), the star currently sits at the far right of the row,
+      away from the thing it describes and competing with the `EtaBadge` for the eye. Design it **on the
+      `RouteChip`** instead — a corner pip / badge-on-badge — so "saved" reads as a property of *that route*, and
+      the row's right edge belongs to the ETA alone. Open questions: does it survive the operator liveries and
+      dark mode at chip size; does it stay tappable (44 pt / `hitSlop`) without overlapping the route number;
+      what does it do on the route-detail schematic and on the Favourites rows, which share these components.
+- [ ] **A better way to favourite from the stop screen (long-press?)** — from Stop/Place detail there is
+      currently **no way to save a route at all**; you must open route detail and use the action sheet. Since the
+      row's tap is already spoken for (navigate to route), the candidate is a **long-press on the row (or on the
+      route badge) → save/unsave**, with haptics + a toast, and possibly a long-press action sheet ("Save this
+      route here", "View route", "Open in Maps") rather than a bare toggle. Think through discoverability (a
+      long-press nobody knows about is not a feature — needs a first-run hint or a visible affordance), web
+      parity (`onLongPress` on react-native-web), and whether swipe-to-save is the better idiom.
+- [ ] **Where should "+X more routes" go from the Favourites page?** — `StopRow`'s overflow link
+      ([`components/StopRow.tsx`](../apps/mobile/components/StopRow.tsx)) hands off to `onPress`, which on
+      Favourites ([`app/(tabs)/favorites.tsx`](../apps/mobile/app/%28tabs%29/favorites.tsx) `FavoritePlaceRow`) opens the
+      **full, unfiltered** Place detail — so tapping "+3 more routes" under a favourites card dumps you into a
+      list of 20 routes and you have to re-find your three. Candidate: the same Place detail **filtered to the
+      favourited routes at that place** (a filter chip / segmented "Saved · All" on Stop detail, deep-linked from
+      here), which also gives the Favourites card an honest "see the rest of what I saved here" destination.
+      Decide the wording too — from Favourites, "+X more routes" arguably means "+X more *saved* routes".
+
 ## Platform & engagement
 - [ ] **Push notifications:** "your bus is N stops / N minutes away" (needs native — Phase 3).
 - [ ] **Background location** geofenced alerts.

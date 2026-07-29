@@ -9,6 +9,7 @@ import {
 import { t } from '@nextbus/i18n'
 import { ChevronRight, MapPin } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
+import { useClientPolicy } from '../lib/useClientPolicy'
 import { BearingArrow } from './BearingArrow'
 import { EtaBadge } from './EtaBadge'
 import { Icon } from './Icon'
@@ -17,9 +18,12 @@ import { RouteChip } from './RouteChip'
 import { StopName } from './StopName'
 import { Text } from './Text'
 
-// A merged place can serve many routes; the compact card shows the soonest few and a
-// tappable "+N more" that opens the Place page for the full, grouped list (ADR-042).
-const MAX_ROWS = 6
+// A merged place can serve many routes; the compact card shows the soonest few and a tappable
+// "+N more" that opens the Place page for the full, grouped list (ADR-042). **How many** is served
+// policy (`ClientPolicy.maxRows`, ADR-053) rather than a constant here, and the cap is applied in this
+// one component rather than by each caller — which is what makes the count and the "+N more" agree.
+// Favourites used to pre-slice its list to four before handing it over, so the remainder computed to
+// zero and the affordance never appeared there.
 
 /** The number on the chip. Falls back to the whole id, so an id we cannot read still shows the
  *  rider *something* rather than an empty chip (the grammar lives in `@nextbus/core/ids`). */
@@ -45,7 +49,9 @@ function RouteRow({ eta, locale, now }: { eta: Eta; locale: Locale; now: number 
               {headed}
             </Text>
           ) : null}
-          {dest && eta.remark ? <RemarkTag remark={eta.remark} locale={locale} /> : null}
+          {dest && eta.remark ? (
+            <RemarkTag remark={eta.remark} locale={locale} kind={eta.remarkKind} />
+          ) : null}
         </View>
       </View>
       <EtaBadge eta={eta} locale={locale} now={now} />
@@ -88,7 +94,8 @@ export function StopRow({
   /** Tap a single route row — navigates to that route (with this stop's context). */
   onRoutePress?: (routeId: string) => void
 }) {
-  const shown = etas.slice(0, MAX_ROWS)
+  const { policy } = useClientPolicy()
+  const shown = etas.slice(0, policy.maxRows)
   // Routes beyond what we show: the honest total minus the rows shown (falls back to the
   // fetched-ETA count when no total is supplied, e.g. on the Favourites screen).
   const remaining = Math.max(0, (routeCount ?? etas.length) - shown.length)
@@ -154,7 +161,7 @@ export function StopRow({
             className="flex-row items-center gap-1 py-1.5 active:opacity-50"
           >
             <Text variant="label" className="text-accent">
-              {t(locale, 'moreRoutes').replace('{n}', String(remaining))}
+              {t(locale, 'moreRoutes', { n: remaining })}
             </Text>
             <Icon icon={ChevronRight} tone="accent" size={15} />
           </Pressable>

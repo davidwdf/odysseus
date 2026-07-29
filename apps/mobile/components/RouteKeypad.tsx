@@ -1,7 +1,9 @@
 import { nextValidChars } from '@nextbus/core'
+import { type LocalizedString, t } from '@nextbus/i18n'
 import { Delete } from 'lucide-react-native'
 import { type ReactNode, useMemo } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { useLocale } from '../providers/LocaleProvider'
 import { Icon } from './Icon'
 import { Text } from './Text'
 
@@ -25,13 +27,22 @@ const DIGIT_ROWS: string[][] = [
 
 function Key({
   label,
+  accessibilityLabel,
   enabled,
   onPress,
   onLongPress,
   tall,
   children,
 }: {
+  /** The glyph on the key — a digit or a route letter. Not UI copy: `'7'` is `'7'` in every locale. */
   label?: string
+  /**
+   * Spoken name, when the glyph is not one. The backspace key renders an icon and used to pass
+   * `label="Backspace"`, which put an English word into a Chinese screen reader *and* would have
+   * rendered as visible text had the icon ever failed to load. Separating the two makes the copy
+   * translatable and the glyph honest about being locale-neutral.
+   */
+  accessibilityLabel?: LocalizedString
   enabled: boolean
   onPress: () => void
   onLongPress?: () => void
@@ -43,7 +54,7 @@ function Key({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: !enabled }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       disabled={!enabled}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -73,6 +84,7 @@ export function RouteKeypad({
   letters: string[]
   onChange: (next: string) => void
 }) {
+  const locale = useLocale()
   const valid = useMemo(() => nextValidChars(keys, value), [keys, value])
   const validLetters = useMemo(() => letters.filter((ch) => valid.has(ch)), [letters, valid])
   const append = (ch: string) => onChange(value + ch)
@@ -119,7 +131,7 @@ export function RouteKeypad({
           ))}
         </View>
         <Key
-          label="Backspace"
+          accessibilityLabel={t(locale, 'keypadBackspace')}
           tall
           enabled={value.length > 0}
           onPress={backspace}

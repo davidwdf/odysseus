@@ -249,6 +249,42 @@ silently.
 
 ### Wave 3 — Native enablement
 
+> **Status 2026-07-29: Wave 3 is COMPLETE — WP3-1 … WP3-4 all landed and verified** (ADR-053, ADR-054,
+> ADR-067). WP3-1/3-2/3-4 were built by three agents in parallel worktrees and integrated one at a time;
+> **WP3-3 ran last on purpose**, so it published a contract that already contained the other three's changes
+> (`/v1/policy`, `remarkKind`, and the generated token and string artefacts). Ten corrections to what is written below, recorded because the plan was wrong in
+> ways worth knowing:
+> **(1)** WP3-4's acceptance cell says *"ADR-051 line stated"* — it means **ADR-053**; ADR-051 is layered
+> package boundaries. **(2) ADR-053 and ADR-054 were unwritten gaps** in the decision log, *already
+> forward-referenced from ADR-052 and ADR-064 as though they existed* — two dangling links on `main`. They
+> are filled rather than renumbered. **(3)** `packages/ui/tokens.json`, named here as the source of truth,
+> **did not exist** — WP3-1 was greenfield, and the values were hand-maintained in **four** places.
+> **(4) A generator cannot live in `packages/ui/src` or `packages/i18n/src`** — both are in the `tokens`
+> layer with a closed-world `"npm": []`. Both packages were done with **zero new dependencies** (plain Node
+> emitters; `Intl.PluralRules` instead of an ICU runtime), so no carve-out was needed. **(5) The line numbers
+> here had drifted again** — `OPERATOR_LABEL` is at `app/stop/[id].tsx:55` not `:50`, `favorites.tsx:154` not
+> `:148`, `StopRow.tsx:22` not `:17`. Derive site lists by grep. **(6) The three-way cap disagreement changed
+> shape:** Wave 2 hoisted `route/[id].tsx`'s `.slice(0, 3)` into `core` as a corpus-pinned constant, so
+> `maxArrivals` had to replace *a kernel constant plus two literals* and reparameterise 8 corpus rows.
+> **(7) WP3-3's blocking open question is already closed** — ADR-060's format convergence settled it, and the
+> id corpus moved to `packages/core/spec/ids.spec.json` (the ABNF stays in `contract`). **(8) ADR-060's
+> figure of "36 groups, 274 cases" is stale** — reality is 11 corpora / 66 groups / ~515 cases; fix it if
+> WP3-3 quotes it. **(9) There is no PR/push CI workflow at all**, so the *"`git diff --exit-code` in CI"*
+> acceptance wording describes something that does not exist — every gate is wired into a package `test`
+> script instead, and that is stated in ADR-054 so nobody trusts absent enforcement.
+> Two real bugs fell out of the work: **Favourites never rendered its "+N more" affordance** (it pre-sliced
+> to 4, so `total − shown` was `4 − 4`), and **three separate gates were vacuous or nearly so** — a turbo
+> cache replaying a check whose input lay outside the package hash, a `.gitignore` rule that would have
+> excluded the artefacts a drift gate compares, and new literal rules firing on a stale `dist/` bundle.
+> Also worth knowing: WP3-1's **Swift and Kotlin output has never been compiled** — no compiler exists here,
+> so compiling it is WP3-3's first job, not an inherited claim.
+> **(10) Every hand-written count of the corpus in this repo was wrong.** The brief said 10 files / 66 groups
+> / ~515 cases, this plan implied another figure, and ADR-060 recorded *"36 groups, 274 cases"* — three
+> different wrong numbers for one artefact, in a wave whose entire subject is generated output drifting from
+> its declaration. The real figure is **11 corpora / 65 groups / 510 cases / 4 `knownDefect`**. The durable
+> fix is not the correction: it is that **no document states the figure by hand any more** — WP3-3's gate
+> regenerates it, and also rejects a cited path that is missing *or* gitignored.
+
 | ID | Title | Acceptance | Depends |
 |---|---|---|---|
 | **WP3-1** | Token codegen: `tokens.json` (DTCG) → CSS vars + Swift + Kotlin. Restructure `ELEVATION`'s RN-shaped `.ios`/`.android` to be platform-neutral at source | Generated output committed; `git diff --exit-code` in CI | — |

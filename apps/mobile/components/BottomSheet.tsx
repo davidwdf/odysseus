@@ -1,3 +1,5 @@
+import type { LocalizedString } from '@nextbus/i18n'
+import { RADIUS } from '@nextbus/ui'
 import type { LucideIcon } from 'lucide-react-native'
 import { type ReactNode, useCallback, useRef } from 'react'
 import { type LayoutChangeEvent, Pressable, useWindowDimensions, View } from 'react-native'
@@ -26,7 +28,6 @@ const DISMISS_VELOCITY = 850
 // Extra glass painted below the screen edge so an upward rubber-band stretch reveals more
 // sheet, never the scrim behind it.
 const UNDERLAP = 320
-const RADIUS = 26
 // Entrance overshoot, in **pixels** — the panel eases a fixed 7px past rest, then settles. This is
 // deliberately a constant, NOT `Easing.back` (whose overshoot is a *fraction of the travel*, so a
 // tall sheet — which starts further down and travels further — visibly bounced more than a short one).
@@ -55,7 +56,7 @@ export function BottomSheet({
   /** Content above the actions (e.g. what's being favourited). */
   header?: ReactNode
   /** Accessible label for the scrim's tap-to-dismiss target. */
-  closeLabel?: string
+  closeLabel?: LocalizedString
   children: ReactNode | ((close: () => void) => ReactNode)
 }) {
   const insets = useSafeAreaInsets()
@@ -131,11 +132,8 @@ export function BottomSheet({
         accessibilityRole="button"
         accessibilityLabel={closeLabel}
         onPress={close}
-        style={[
-          { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-          { backgroundColor: 'rgba(0,0,0,0.45)' },
-          scrimStyle,
-        ]}
+        className="bg-black/45"
+        style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, scrimStyle]}
       />
       {/* Solid surface panel — a top hairline + rounded top corners; `overflow:hidden` clips the
           corners. UNDERLAP extends it below the edge so an upward stretch never bares the scrim. */}
@@ -146,8 +144,8 @@ export function BottomSheet({
             left: 0,
             right: 0,
             bottom: -UNDERLAP,
-            borderTopLeftRadius: RADIUS,
-            borderTopRightRadius: RADIUS,
+            borderTopLeftRadius: RADIUS.sheet,
+            borderTopRightRadius: RADIUS.sheet,
             overflow: 'hidden',
             backgroundColor: color('--surface'),
             borderTopWidth: 1,
@@ -186,7 +184,7 @@ export function SheetAction({
   icon: LucideIcon
   /** Fill colour for the glyph (e.g. a filled star when already saved). */
   iconFill?: string
-  label: string
+  label: LocalizedString
   tone?: IconTone
   onPress: () => void
 }) {

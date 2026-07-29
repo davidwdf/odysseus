@@ -8,10 +8,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./preset": "./preset.js",
-    "./global.css": "./global.css"
+    "./tokens.json": "./tokens.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "tokens:emit": "node scripts/generate-tokens.mjs",
+    "test": "node scripts/check-tokens-current.mjs"
   },
   "devDependencies": {
     "@nextbus/tsconfig": "workspace:*",

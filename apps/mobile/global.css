@@ -1,13 +1,17 @@
+/*
+  Generated from packages/ui/tokens.json by its scripts/generate-tokens.mjs — do not edit.
+  Run `pnpm --filter @nextbus/ui tokens:emit`; `pnpm --filter @nextbus/ui test` fails on a stale
+  copy, so drifting from the declaration is a red build, not a silent surprise.
+
+  The web defaults for the semantic tokens — the single Ink theme (ADR-029): ink-on-paper
+  light, paper-on-ink dark. Runtime theme switching, and native, inject the same values
+  via NativeWind's `vars()` from @nextbus/ui `themes`, applied at the app root in
+  app/_layout.tsx. Wired into the bundle as the NativeWind input by metro.config.js.
+*/
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
-  Web defaults for the semantic tokens — the single Ink theme (ADR-029): ink-on-paper
-  light, paper-on-ink dark. Mirrors packages/ui/global.css. Runtime theme switching (and
-  native) injects these via NativeWind `vars()` from @nextbus/ui themes — applied at the
-  app root in app/_layout.tsx.
-*/
 :root {
   --bg: 255 255 255;
   --surface: 248 250 252;

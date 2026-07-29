@@ -1,4 +1,5 @@
 import type { Locale } from '@nextbus/core'
+import { localeRecord } from '@nextbus/i18n'
 import type { TileSource as PortTileSource } from '@nextbus/ports'
 import type { ImageSourcePropType } from 'react-native'
 
@@ -43,19 +44,15 @@ export const landsdTileSource: TileSource = {
   minZoom: 10,
   maxZoom: 20,
   invertForDark: true,
+  // The credit copy lives in `@nextbus/i18n`, not here. It used to be two inline
+  // `Record<Locale, string>` tables — six strings outside the catalogue, so no parity gate compared
+  // them and no translator ever saw them. `localeRecord` rebuilds the shape the port wants from the
+  // one declaration.
   attribution: {
     logo: require('../assets/landsd-logo.png'),
-    notice: {
-      en: 'Map from Lands Department',
-      'zh-Hant': '地圖由地政總署提供',
-      'zh-Hans': '地图由地政总署提供',
-    },
+    notice: localeRecord('mapAttribution'),
     href: 'https://api.portal.hkmapservice.gov.hk/disclaimer',
-    a11yLabel: {
-      en: 'Map from Lands Department — open the copyright notice and disclaimer',
-      'zh-Hant': '地圖由地政總署提供 — 開啟版權公告及免責聲明',
-      'zh-Hans': '地图由地政总署提供 — 打开版权公告及免责声明',
-    },
+    a11yLabel: localeRecord('mapAttributionAction'),
   },
 }
 

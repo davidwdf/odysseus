@@ -1,0 +1,113 @@
+{
+  "module": "policy",
+  "source": "src/policy.ts",
+  "version": 1,
+  "doc": "Resolving a served `ClientPolicy` (ADR-053) against the shipped defaults. This is the one rule in the kernel whose input comes from the network rather than from a feed, which is what the rows below are mostly about: every field is optional because a partial policy is legal, the document may be missing entirely (a cold start, or offline), and a value that is not a positive finite number is a misconfiguration rather than an aggressive setting — each of those blanks something a rider needs, so it falls back to a number we know works. A port that spread the served object over the defaults instead of filling field by field would pass the first two rows and fail every row after them.",
+  "groups": {
+    "resolveClientPolicy": {
+      "doc": "A served policy document filled out to six usable numbers. `served: null` is the absent document; an absent *field* is an unstated knob. The defaults are pinned here as literal expectations on purpose — they are the shipped values, and a port that transcribed one wrong would otherwise show a rider a different app until its first policy fetch landed.",
+      "cases": [
+        {
+          "name": "no-policy-at-all",
+          "why": "The ordinary state of a cold start, and of every offline launch before one has ever been fetched. Must produce the full shipped default set, never a partial object with holes in it — a caller reads six numbers or the screen has no cap.",
+          "args": { "served": null },
+          "expect": {
+            "dueUnderSec": 60,
+            "warnUnderSec": 180,
+            "staleAfterMs": 90000,
+            "refreshAfterMs": 30000,
+            "maxArrivals": 3,
+            "maxRows": 6
+          }
+        },
+        {
+          "name": "an-empty-document-is-a-valid-policy",
+          "why": "Distinct from the row above and worth its own row: the fetch SUCCEEDED and the server chose to state nothing. Identical result, different cause, and a port that treated `{}` as an error would break the deploy where we deliberately stop overriding a knob.",
+          "args": { "served": {} },
+          "expect": {
+            "dueUnderSec": 60,
+            "warnUnderSec": 180,
+            "staleAfterMs": 90000,
+            "refreshAfterMs": 30000,
+            "maxArrivals": 3,
+            "maxRows": 6
+          }
+        },
+        {
+          "name": "every-knob-overridden",
+          "why": "The whole point of the endpoint: six deployed numbers, none of them the default, all of them honoured. If this row passes and the two above pass, the fill is field-by-field rather than positional.",
+          "args": {
+            "served": {
+              "dueUnderSec": 45,
+              "warnUnderSec": 120,
+              "staleAfterMs": 120000,
+              "refreshAfterMs": 45000,
+              "maxArrivals": 2,
+              "maxRows": 4
+            }
+          },
+          "expect": {
+            "dueUnderSec": 45,
+            "warnUnderSec": 120,
+            "staleAfterMs": 120000,
+            "refreshAfterMs": 45000,
+            "maxArrivals": 2,
+            "maxRows": 4
+          }
+        },
+        {
+          "name": "one-knob-overridden-the-rest-default",
+          "why": "The shape a real deploy takes — move one threshold, say nothing about the other five. This is why the fill cannot be `served ?? defaults` at the document level: that would discard five values to change one.",
+          "args": { "served": { "maxRows": 8 } },
+          "expect": {
+            "dueUnderSec": 60,
+            "warnUnderSec": 180,
+            "staleAfterMs": 90000,
+            "refreshAfterMs": 30000,
+            "maxArrivals": 3,
+            "maxRows": 8
+          }
+        },
+        {
+          "name": "zero-is-a-misconfiguration-not-a-setting",
+          "why": "`maxRows: 0` empties every stop card and `refreshAfterMs: 0` is a request loop. Neither is a policy anybody would deploy on purpose, and both are silent — the app simply looks broken. So a non-positive value is rejected in favour of the default rather than obeyed. Note this is a REJECTION, not a clamp: we do not invent a policy nobody wrote.",
+          "args": { "served": { "maxRows": 0, "refreshAfterMs": 0 } },
+          "expect": {
+            "dueUnderSec": 60,
+            "warnUnderSec": 180,
+            "staleAfterMs": 90000,
+            "refreshAfterMs": 30000,
+            "maxArrivals": 3,
+            "maxRows": 6
+          }
+        },
+        {
+          "name": "a-negative-duration-is-rejected",
+          "why": "The sign error a units mistake produces. Pinned next to the zero row because the pair is the whole guard, and because a port that wrote `value < 0` instead of `value <= 0` passes this row and fails the one above it.",
+          "args": { "served": { "staleAfterMs": -1000, "maxArrivals": -3 } },
+          "expect": {
+            "dueUnderSec": 60,
+            "warnUnderSec": 180,
+            "staleAfterMs": 90000,
+            "refreshAfterMs": 30000,
+            "maxArrivals": 3,
+            "maxRows": 6
+          }
+        },
+        {
+          "name": "a-valid-override-survives-alongside-a-rejected-one",
+          "why": "A bad knob must not poison the document. One deployed typo would otherwise discard five correct values, turning a small mistake into a total reset — and because the result still looks plausible, nobody would find it.",
+          "args": { "served": { "maxRows": 9, "maxArrivals": 0 } },
+          "expect": {
+            "dueUnderSec": 60,
+            "warnUnderSec": 180,
+            "staleAfterMs": 90000,
+            "refreshAfterMs": 30000,
+            "maxArrivals": 3,
+            "maxRows": 9
+          }
+        }
+      ]
+    }
+  }
+}

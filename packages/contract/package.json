@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "openapi:emit": "node --import tsx scripts/emit-openapi.mts",
-    "test": "node scripts/check-openapi-current.mjs"
+    "native:emit": "node scripts/emit-native-guide.mjs",
+    "test": "node scripts/check-openapi-current.mjs && node scripts/check-native-guide.mjs"
   },
   "dependencies": {
     "zod": "4.4.3"

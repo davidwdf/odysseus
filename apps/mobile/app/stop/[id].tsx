@@ -13,7 +13,7 @@ import {
   splitStopCode,
   titleCaseName,
 } from '@nextbus/core'
-import { t } from '@nextbus/i18n'
+import { type LocalizedString, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { type ReactNode, useRef, useState } from 'react'
@@ -47,28 +47,20 @@ import { Skeleton } from '../../components/Skeleton'
 import { StopHeader } from '../../components/StopHeader'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
+import { operatorName } from '../../lib/operatorName'
+import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLocation } from '../../lib/useLocation'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
 
-/** Operator display names for the "served by" line — brand names, locale-neutral. */
-const OPERATOR_LABEL: Record<OperatorId, string> = {
-  KMB: 'KMB',
-  LWB: 'LWB',
-  CTB: 'Citybus',
-  GMB: 'GMB',
-}
-
 /**
- * Brand name for the operator of a pole id, e.g. `CTB:002403` → "Citybus". Degrades twice over,
- * both deliberately: an operator code the app has never heard of labels as the code itself (ADR-052
- * treats operator as an open vocabulary), and an id we cannot read at all labels as nothing rather
- * than as the letter `P` — which is what `id.split(':')[0]` produced for a merged place.
+ * Name for the operator of a pole id, e.g. `CTB:002403` → "Citybus" / "城巴". An id we cannot read
+ * at all labels as nothing rather than as the letter `P` — which is what `id.split(':')[0]` produced
+ * for a merged place. The unknown-*operator* case is handled by `operatorName`.
  */
-function poleOperatorLabel(poleId: string): string {
+function poleOperatorLabel(poleId: string, locale: Locale): LocalizedString {
   const operator = parseStopId(poleId)?.operator
-  if (!operator) return ''
-  return OPERATOR_LABEL[operator] ?? operator
+  return operator ? operatorName(operator, locale) : ('' as LocalizedString)
 }
 
 /** The map is a **full-width hero at rest that shrinks into a right-aligned floating PIP on scroll**
@@ -95,13 +87,16 @@ export default function StopDetail() {
   const { height: windowH, width: windowW } = useWindowDimensions()
   // Silent location read (never prompts here) → show distance/walk only if we already have a fix.
   const { state: loc } = useLocation()
+  const { policy } = useClientPolicy()
 
   const query = useQuery({
     queryKey: ['stop', id],
     enabled: !!id,
     queryFn: () => dataSource.getStop(id as string),
-    // ETAs are live — refresh on an interval; honest display only updates on new data.
-    refetchInterval: 20_000,
+    // ETAs are live — refresh on an interval; honest display only updates on new data. The cadence is
+    // served (ADR-053) and matches the edge's coalescing TTL, so a poll can actually return a new
+    // reading; the hard-coded 20 s this replaces could not.
+    refetchInterval: policy.refreshAfterMs,
   })
 
   const stop = query.data?.stop
@@ -317,7 +312,7 @@ export default function StopDetail() {
                         className="flex-row items-end justify-between px-4 pt-4 pb-1 active:opacity-60"
                       >
                         <Text variant="label" className="text-subtle">
-                          {poleOperatorLabel(m.id)}
+                          {poleOperatorLabel(m.id, locale)}
                           {code ? ` · ${code}` : ''}
                         </Text>
                         {d != null ? (
@@ -474,7 +469,9 @@ function RouteRowItem({
               <Text className="text-subtle">→ </Text>
               {titleCaseName(r.route.destination[locale])}
             </Text>
-            {r.eta?.remark ? <RemarkTag remark={r.eta.remark} locale={locale} /> : null}
+            {r.eta?.remark ? (
+              <RemarkTag remark={r.eta.remark} locale={locale} kind={r.eta.remarkKind} />
+            ) : null}
           </View>
         </View>
         {r.eta ? (
@@ -515,7 +512,9 @@ function StopMeta({
   const parts: string[] = []
   if (bearingDeg != null) parts.push(formatBearing(bearingDeg, locale))
   if (operators.length > 0) {
-    parts.push(`${t(locale, 'servedBy')} ${operators.map((o) => OPERATOR_LABEL[o]).join(', ')}`)
+    parts.push(
+      `${t(locale, 'servedBy')} ${operators.map((o) => operatorName(o, locale)).join(', ')}`,
+    )
   }
   parts.push(`${routeCount} ${t(locale, 'routesLabel')}`)
   if (distanceM != null && walk) parts.push(`${formatDistance(distanceM)} · ${walk}`)

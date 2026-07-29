@@ -1,5 +1,6 @@
 import {
   type Bound,
+  classifyRemark,
   dedupeEtas,
   type Eta,
   parseRouteId,
@@ -164,6 +165,25 @@ function stampTables(place: PlaceDoc) {
 }
 
 /**
+ * Stamp a reading with its remark's class (ADR-053).
+ *
+ * The rule is **not reimplemented here** — this calls `classifyRemark`, the same corpus-pinned kernel
+ * function the client used to call on its own (`@nextbus/core`, `@spec eta#classifyRemark`). That is
+ * the whole shape of "move it to the edge": the edge is the `server` layer and may import the kernel
+ * (ADR-051), so the rule stays declared once, the wire field is optional, and a client that does not
+ * receive it — an old build, or one replaying an offline cache — derives the same answer from the same
+ * code. Serving it means iOS and Android never hand-port the match, which is the point; deleting the
+ * client's fallback would trade one duplicate for offline support (ADR-058).
+ *
+ * No remark means no class: the field is absent rather than `info`, because "the operator said
+ * nothing" and "the operator said something uncategorized" are different facts.
+ */
+function withRemarkKind(eta: Eta): Eta {
+  if (!eta.remark) return eta
+  return { ...eta, remarkKind: classifyRemark(eta.remark) }
+}
+
+/**
  * THE canonical live arrivals for a stop or merged place: upstream calls deduped by
  * (route, serviceType), then collapsed to **one rider line per route+direction**
  * (`dedupeEtas`), soonest first. The single source every `Eta[]`-returning endpoint
@@ -184,8 +204,9 @@ export async function stopArrivals(
       const destination =
         destinationByRoute.get(e.routeId) ?? destinationByLine.get(lineKey(e.operator, e.routeId))
       const fare = fareByRouteAndRawStop.get(`${e.routeId}|${e.stopId}`)
-      if (!destination && !fare) return e
-      return { ...e, ...(destination ? { destination } : {}), ...(fare ? { fare } : {}) }
+      const stamped = withRemarkKind(e)
+      if (!destination && !fare) return stamped
+      return { ...stamped, ...(destination ? { destination } : {}), ...(fare ? { fare } : {}) }
     })
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
 }
@@ -220,7 +241,7 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
   const place = await requirePlace(ds, id)
 
   const etaByRouteId = new Map<string, Eta>()
-  for (const e of await memberEtaLists(place)) etaByRouteId.set(e.routeId, e)
+  for (const e of await memberEtaLists(place)) etaByRouteId.set(e.routeId, withRemarkKind(e))
 
   return {
     stop: toMergedStop(place),
@@ -294,7 +315,7 @@ export async function routeDetail(ds: DatasetSource, id: string): Promise<RouteD
         },
         // route-eta carries no stop id, so stamp the operator stop id we already know
         // (matching the raw-id convention the other ETA endpoints use).
-        eta: eta ? { ...eta, stopId: s.stopId } : null,
+        eta: eta ? withRemarkKind({ ...eta, stopId: s.stopId }) : null,
         fare: s.fare,
       }
     }),

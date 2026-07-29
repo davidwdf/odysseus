@@ -1,4 +1,5 @@
 import type { Eta, OperatorId } from '@nextbus/core'
+import { t } from '@nextbus/i18n'
 import {
   type Appearance,
   FONT_FAMILY,
@@ -280,7 +281,7 @@ export default function Workbench() {
                 <Text variant="label" weight="semibold" className="text-white">
                   Ink tint
                 </Text>
-                <Text variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                <Text variant="caption" className="text-white/70">
                   dark glass
                 </Text>
               </GlassView>
@@ -369,7 +370,7 @@ export default function Workbench() {
         </Section>
 
         <Section title="BUTTONS / SKELETON">
-          <Button label="Enable location" onPress={() => {}} />
+          <Button label={t(locale, 'enableLocation')} onPress={() => {}} />
           <Skeleton className="mt-1 h-12 w-full" />
         </Section>
 

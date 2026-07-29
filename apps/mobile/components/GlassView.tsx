@@ -1,3 +1,4 @@
+import { GLASS_RIM, GLASS_SHADOW, type ShadowToken, webBoxShadow } from '@nextbus/ui'
 import { BlurView } from 'expo-blur'
 import { cssInterop } from 'nativewind'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
@@ -79,7 +80,7 @@ export function GlassView({
   children,
   ...rest
 }: GlassViewProps) {
-  const { isDark } = useTheme()
+  const { isDark, mode } = useTheme()
   const ref = useRef<RNView>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
 
@@ -92,22 +93,19 @@ export function GlassView({
     if (Platform.OS !== 'web') return
     const node = ref.current as unknown as HTMLElement | null
     if (!node) return
-    // Rim light: a thin, top-weighted inner highlight (glass is lit from above, so the
-    // bright edge belongs at the top — not a uniform all-around ring, which reads as a
-    // heavy border, especially on dark). A whisper of bottom shadow adds depth. Fainter
-    // on dark, where a white edge is high-contrast against the surface.
-    // On dark, keep the highlight faint so it reads as muted as the app's other
-    // borders (a pure-white edge pops far more than the slate `--border`).
-    const top = isDark ? 0.12 : 0.42
-    const bottom = isDark ? 0.16 : 0.06
-    const rim = `inset 0 1px 0.5px rgba(255,255,255,${top}), inset 0 -1px 1px rgba(0,0,0,${bottom})`
+    // Rim light: a thin, top-weighted inner highlight (glass is lit from above, so the bright
+    // edge belongs at the top — not a uniform all-around ring, which reads as a heavy border,
+    // especially on dark). A whisper of bottom shadow adds depth. Both stops are per-mode
+    // tokens (`glassRim`) rather than literals here, because their alphas *are* the ADR-035
+    // contrast budget — faint white on dark, stronger dark inset on dark — and that belongs
+    // written down next to the palette it is budgeted against.
     // Light-only cast shadow (ADR-035): floating glass lifts off the content scrolling under
     // it. A two-stop shadow (tight contact + soft ambient) in the slate-900 ink reads as lift
     // without muddiness. On dark it's omitted — a drop shadow there is haze, not depth, so the
     // rim + border define the pane instead. (overflow:hidden clips children, not the outer shadow.)
-    const cast =
-      elevated && !isDark ? ', 0 1px 3px rgba(15,23,42,0.10), 0 8px 22px rgba(15,23,42,0.13)' : ''
-    node.style.boxShadow = rim + cast
+    const stops: ShadowToken[] = [GLASS_RIM.top[mode], GLASS_RIM.bottom[mode]]
+    if (elevated && !isDark) stops.push(GLASS_SHADOW.contact, GLASS_SHADOW.ambient)
+    node.style.boxShadow = webBoxShadow(stops)
     if (size.w < 4 || size.h < 4) return
     const r = Math.min(radius, size.w / 2, size.h / 2)
     if (supportsBackdropFilterUrl()) {
@@ -127,7 +125,7 @@ export function GlassView({
       // @ts-expect-error vendor-prefixed property
       node.style.WebkitBackdropFilter = `blur(${px}px) saturate(1.8)`
     }
-  }, [size.w, size.h, radius, cfgDepth, cfgStrength, cfgChroma, cfgBlur, isDark, elevated])
+  }, [size.w, size.h, radius, cfgDepth, cfgStrength, cfgChroma, cfgBlur, isDark, elevated, mode])
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout

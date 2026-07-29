@@ -7,7 +7,8 @@ import {
   TILE_SIZE,
   worldScale,
 } from '@nextbus/core'
-import { OPERATOR_ACCENT } from '@nextbus/ui'
+import { type LocalizedString, t } from '@nextbus/i18n'
+import { elevationStyle, MAP_COLOR, OPERATOR_ACCENT } from '@nextbus/ui'
 import { useState } from 'react'
 import { Image, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import { openExternal, openInMaps } from '../lib/openExternal'
@@ -41,10 +42,6 @@ import { Text } from './Text'
 // also flips the black label text to white. `TileSource.invertForDark` records that this is a
 // property of the source, not of the component; a vector basemap would turn it off (ADR-041).
 
-// Vivid pin fill fallback (a stop with no known operator) that reads over the map in both modes.
-// A lone stop is brand-coloured by its `operator`, and a multi-pole place colours each dot by its
-// own operator (OPERATOR_ACCENT) — e.g. GMB green; this rose is only the last-resort default.
-const PIN_COLOR = '#E11D48'
 // Turn the light tiles into a dark map: invert the luminance, then hue-rotate 180° so water
 // and parks land back near their real colour; trim brightness/contrast so it isn't harsh. Applied
 // to the tiles only — the pin and attribution sit outside it.
@@ -100,7 +97,7 @@ export function MiniMap({
   /** Stop name — names the maps pin. */
   label?: string
   /** Accessible label for the tap target, e.g. "Open in Maps". */
-  actionLabel: string
+  actionLabel: LocalizedString
   height?: number
   /** Override the automatic framing. Omit it — `fitZoom` frames one pin and many consistently. */
   zoom?: number
@@ -228,7 +225,7 @@ export function MiniMap({
                 cx={cx}
                 cy={cy}
                 size={multi ? 14 : 18}
-                color={(p.operator && OPERATOR_ACCENT[p.operator]) || PIN_COLOR}
+                color={(p.operator && OPERATOR_ACCENT[p.operator]) || MAP_COLOR.pin}
                 active={isActive}
                 dim={hasActive && !isActive}
                 label={multi ? p.label : undefined}
@@ -267,7 +264,7 @@ export function MapAttribution({ className }: { className?: string }) {
       {tileSource.attribution.logo ? (
         <Image
           source={tileSource.attribution.logo}
-          accessibilityLabel="Lands Department"
+          accessibilityLabel={t(locale, 'mapAttribution')}
           style={{ width: 16, height: 16 }}
           resizeMode="contain"
         />
@@ -297,7 +294,7 @@ function Pin({
   cx,
   cy,
   size = 18,
-  color = PIN_COLOR,
+  color = MAP_COLOR.pin,
   active = false,
   dim = false,
   label,
@@ -321,15 +318,9 @@ function Pin({
   // The visible dot stays small; the touch target is a comfortable fixed box (RN-web ignores
   // hitSlop, so the box itself must be big enough to hit without catching the map behind it).
   const tap = Math.max(d, 32)
-  const shadow = Platform.select({
-    web: { boxShadow: active ? '0 2px 6px rgba(0,0,0,0.45)' : '0 1px 4px rgba(0,0,0,0.35)' },
-    default: {
-      shadowColor: '#000000',
-      shadowOpacity: active ? 0.45 : 0.35,
-      shadowRadius: active ? 3 : 2,
-      shadowOffset: { width: 0, height: 1 },
-    },
-  })
+  // A pin's lift is an elevation token like any other; the platform split (a CSS boxShadow on
+  // web, the shadow* quartet elsewhere) lives once, in `elevationStyle`, instead of here.
+  const shadow = elevationStyle(active ? 'pinActive' : 'pin', Platform.OS)
   return (
     <>
       {/* Tap target — a sibling under the (pointer-events-none) dot, so taps land here without
@@ -361,7 +352,7 @@ function Pin({
           borderRadius: d / 2,
           backgroundColor: color,
           borderWidth: ring,
-          borderColor: '#ffffff',
+          borderColor: MAP_COLOR.pinBorder,
           opacity: dim ? 0.5 : 1,
           zIndex: active ? 3 : 2,
           ...shadow,

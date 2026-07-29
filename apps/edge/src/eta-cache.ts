@@ -15,8 +15,19 @@
 // surfaced to the rider from the reading's own `observedAt` (ADR-008), so a cached value is
 // labelled honestly rather than presented as new.
 
-/** Shared TTL for live ETA data — the coalescer window *and* the edge `max-age`. */
-export const ETA_TTL_SEC = 30
+import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
+
+/**
+ * Shared TTL for live ETA data — the coalescer window, the edge `max-age`, **and** the cadence the
+ * client is told to poll at.
+ *
+ * Derived from `ClientPolicy.refreshAfterMs` rather than restating 30, because the two numbers were
+ * never independent and writing them down separately is how they came to disagree: the app polled
+ * every 20 s against this 30 s window, so one request in three could only ever return the
+ * byte-identical cached response. Deriving it means the coupling is visible at the definition, and
+ * changing the cadence cannot silently leave the cache behind (ADR-053, ADR-057).
+ */
+export const ETA_TTL_SEC = CLIENT_POLICY_DEFAULTS.refreshAfterMs / 1000
 const TTL_MS = ETA_TTL_SEC * 1000
 
 // Bound the map so a long-lived isolate can't accumulate every pole in Hong Kong. Entries are

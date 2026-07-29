@@ -1,6 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import { ERROR_CODES, ErrorResponseSchema, WIRE_ENDPOINTS } from '@nextbus/contract'
-import type { ErrorCode, RouteDetail, StopDetail } from '@nextbus/core'
+import type { ErrorCode, Eta, I18nText, RouteDetail, StopDetail } from '@nextbus/core'
+import { classifyRemark } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetDatasetState } from '../src/dataset'
 import { fail } from '../src/errors'
@@ -105,6 +106,7 @@ async function resolvePaths(): Promise<Map<string, string>> {
     ['getRoute', `/v1/route/${encodeURIComponent(routeId)}`],
     ['getStopEtas', `/v1/etas/${encodeURIComponent(placeId)}`],
     ['getSearchIndex', '/v1/index'],
+    ['getClientPolicy', '/v1/policy'],
   ])
 }
 
@@ -175,6 +177,60 @@ describe('the two service-fidelity tiers are the ones each endpoint serves', () 
       // `service` still carries the summary facts — the tier is reduced, not emptied.
       expect(Object.keys(route.service ?? {}), route.id).not.toContain('patterns')
       expect(route.service?.headway, `${route.id} lost its summary facts too`).toBeDefined()
+    }
+  })
+})
+
+/**
+ * ADR-053: a field the server now owns has to actually arrive, and has to agree with the kernel rule
+ * it was moved from.
+ *
+ * The strict check above cannot see this. `remarkKind` is `.optional()` — it must be, so a client
+ * older than the field still decodes — so an edge that quietly stopped classifying would satisfy
+ * every schema in the document and the only symptom would be a native client rendering remarks with
+ * no honesty cue. Same asymmetry ADR-065's tier test covers, same fix: assert the direction the
+ * schema cannot.
+ *
+ * Asserting it **equals `classifyRemark`** rather than equals `'scheduled'` is the load-bearing part.
+ * The claim of ADR-053 is that the rule stays declared once and the edge calls it; a hard-coded
+ * expectation here would still pass if someone reimplemented the match in the Worker, which is the
+ * precise failure this design exists to prevent.
+ */
+describe('served fields the schema cannot make mandatory', () => {
+  it('/v1/etas/:id classifies its remarks with the kernel rule, not a copy of it', async () => {
+    const paths = await resolvePaths()
+    const etas = (await (await get(paths.get('getStopEtas') as string)).json()) as Eta[]
+    const withRemark = etas.filter((e) => e.remark)
+    expect(
+      withRemark.length,
+      'the fixture must carry a remark or this asserts nothing',
+    ).toBeGreaterThan(0)
+    for (const eta of withRemark) {
+      expect(eta.remarkKind, `${eta.routeId} carries a remark but no class`).toBe(
+        classifyRemark(eta.remark as I18nText),
+      )
+    }
+  })
+
+  it('/v1/stop/:id and /v1/route/:id classify too — all three ETA paths, not just the flat one', async () => {
+    // Three separate assembly points in `stop-route.ts` produce an `Eta` that reaches the wire, and
+    // the first version of this change stamped only one of them. A rider would have seen the cue on
+    // Nearby and not on the stop page.
+    const paths = await resolvePaths()
+    const stop = (await (await get(paths.get('getStop') as string)).json()) as StopDetail
+    const stopEtas = stop.routes.map((r) => r.eta).filter((e): e is Eta => !!e && !!e.remark)
+    expect(
+      stopEtas.length,
+      'no remark on the stop payload — this would assert nothing',
+    ).toBeGreaterThan(0)
+    for (const eta of stopEtas) {
+      expect(eta.remarkKind).toBe(classifyRemark(eta.remark as I18nText))
+    }
+
+    const route = (await (await get(paths.get('getRoute') as string)).json()) as RouteDetail
+    const routeEtas = route.stops.map((s) => s.eta).filter((e): e is Eta => !!e && !!e.remark)
+    for (const eta of routeEtas) {
+      expect(eta.remarkKind).toBe(classifyRemark(eta.remark as I18nText))
     }
   })
 })

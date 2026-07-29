@@ -10,10 +10,15 @@
 ; HOW THIS STAYS TRUE
 ; The implementation (`packages/core/src/ids.ts`) is **hand-written**, and a Swift/Kotlin port will
 ; be hand-written too. Nothing generates one from the other, so this file cannot be the thing that
-; proves they agree. `id-corpus.json` beside it is: every platform's test suite runs the same rows,
-; and a grammar change that a port has not picked up shows as a red suite there. That is ADR-052
-; decision (2)'s split — generated wire shapes get equivalence by construction, hand-ported rules
-; get it from a shared corpus.
+; proves they agree. The corpus at `packages/core/spec/ids.spec.json` is: every platform's test suite
+; runs the same rows, and a grammar change that a port has not picked up shows as a red suite there.
+; That is ADR-052 decision (2)'s split — generated wire shapes get equivalence by construction,
+; hand-ported rules get it from a shared corpus.
+;
+; The corpus deliberately does **not** sit beside this file, though it used to: ADR-060's format
+; convergence moved it to `packages/core/spec/` so that one rot check covers every corpus in the repo.
+; The grammar stays here because a specification is not test data. (ADR-059's *title* still says the
+; corpus lives in `contract`; the title is stale, this is not.)
 ;
 ; A NOTE ON STRICTNESS, WHICH IS A DECISION AND NOT AN OVERSIGHT
 ; The three delimiters are validated absolutely; the *contents* of a field are barely validated at

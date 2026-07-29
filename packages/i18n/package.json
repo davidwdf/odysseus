@@ -9,7 +9,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "strings:emit": "node --import tsx scripts/emit-native.mts",
+    "test": "node --import tsx scripts/check-i18n.mts"
   },
   "dependencies": {
     "@nextbus/core": "workspace:*"

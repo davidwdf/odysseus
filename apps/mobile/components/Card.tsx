@@ -1,4 +1,4 @@
-import { ELEVATION, type ElevationLevel } from '@nextbus/ui'
+import { type ElevationLevel, elevationStyle } from '@nextbus/ui'
 import { Platform, View, type ViewProps } from 'react-native'
 import { useTheme } from '../lib/useTheme'
 
@@ -16,11 +16,7 @@ type CardProps = ViewProps & {
 export function Card({ level = 'e1', className = '', style, children, ...rest }: CardProps) {
   const { isDark } = useTheme()
   const surface = isDark ? 'bg-surface-2 border border-border' : 'bg-surface'
-  const shadow = isDark
-    ? null
-    : Platform.OS === 'android'
-      ? ELEVATION[level].android
-      : ELEVATION[level].ios
+  const shadow = isDark ? null : elevationStyle(level, Platform.OS)
   return (
     <View {...rest} className={`rounded-lg ${surface} ${className}`} style={[shadow, style]}>
       {children}

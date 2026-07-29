@@ -1,3 +1,4 @@
+import type { LocalizedString } from '@nextbus/i18n'
 import type { LucideIcon } from 'lucide-react-native'
 import { Pressable } from 'react-native'
 import { useTheme } from '../lib/useTheme'
@@ -11,7 +12,7 @@ export function Button({
   onPress,
   icon,
 }: {
-  label: string
+  label: LocalizedString
   onPress: () => void
   icon?: LucideIcon
 }) {
