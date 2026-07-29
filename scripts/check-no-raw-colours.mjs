@@ -27,12 +27,28 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** The directories where a colour must arrive as a token. */
+/**
+ * The directories where a colour must arrive as a token.
+ *
+ * **`apps/web/` is listed before it exists** (WP4-1), and the ordering is deliberate. This list is
+ * spelled out by hand rather than derived from `layers.json`'s `view` layer, because the layer's dirs
+ * are whole apps while these are the *source* subdirectories — an app also holds config, build scripts
+ * and generated CSS, none of which this rule should read. The cost of hand-spelling is that a new
+ * renderer is silently unpoliced until someone remembers this file: `apps/web` would have been free to
+ * write `#111827` into every component and the gate would still have reported "✓ no raw colour
+ * literals", because it was looking at four directories that contained no such file. That is the same
+ * failure as `packages/ui`'s turbo cache reading a file outside its hash (WP3-1) and the `.gitignore`
+ * that hid the native artefacts (WP3-3): a gate that passes because it is looking at nothing.
+ *
+ * So: **add a renderer's source dirs here in the same commit that creates them.** The count printed on
+ * every successful run ("N files in M policed dirs") is the cheap check that this happened.
+ */
 const POLICED = [
   'apps/mobile/app/',
   'apps/mobile/components/',
   'apps/mobile/lib/',
   'apps/mobile/providers/',
+  'apps/web/src/',
   'packages/ui/src/',
 ]
 

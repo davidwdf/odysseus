@@ -110,15 +110,39 @@ const COMPASS_LABELS: Record<Locale, readonly string[]> = {
   'zh-Hans': ['北行', '东北行', '东行', '东南行', '南行', '西南行', '西行', '西北行'],
 }
 
+/**
+ * Which of the 8 compass points a travel bearing snaps to, `0`–`7` clockwise from North.
+ *
+ * One rule, two consumers, and they *must* agree: `formatBearing` turns it into a word and every
+ * renderer's compass needle turns it into a rotation. `apps/mobile/components/BearingArrow.tsx` had
+ * its own `Math.round(bearingDeg / 45) * 45`, which happens to land on the same octant for every real
+ * bearing — but it omits the range normalisation, so the two would part company the day the dataset
+ * produced a negative or >360° value, and a needle pointing somewhere the label does not name is worse
+ * than either being wrong alone (ADR-042: the direction is the cue that tells two same-named places
+ * apart). Porting the screen to a second renderer would have made it a third copy.
+ *
+ * @spec geo#bearingOctant
+ */
+export function bearingOctant(deg: number): number {
+  // `% 8` after rounding, because 337.5°–360° rounds up to 8 and wraps to North.
+  return Math.round((((deg % 360) + 360) % 360) / 45) % 8
+}
+
+/** The rotation, in degrees clockwise from North, for a compass needle at this bearing — the octant
+ *  above expressed the way a renderer applies it. Derived rather than restated so the needle and the
+ *  label cannot disagree. */
+export function bearingOctantDeg(deg: number): number {
+  return bearingOctant(deg) * 45
+}
+
 /** Localized 8-point compass direction for a travel bearing (deg, any range), e.g.
  *  "Northeast-bound" / "東北行". Snaps to the nearest octant.
  *
  * @spec geo#formatBearing
  */
 export function formatBearing(deg: number, locale: Locale): string {
-  const octant = Math.round((((deg % 360) + 360) % 360) / 45) % 8
   const labels = COMPASS_LABELS[locale] ?? COMPASS_LABELS.en
-  return labels[octant] ?? ''
+  return labels[bearingOctant(deg)] ?? ''
 }
 
 /** Localized walk estimate across a *range* of distances (a multi-pole place — ADR-042):

@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nextbus/core": "workspace:*"
+    "@nextbus/core": "workspace:*",
+    "@nextbus/ports": "workspace:*"
   },
   "devDependencies": {
     "@nextbus/tsconfig": "workspace:*",

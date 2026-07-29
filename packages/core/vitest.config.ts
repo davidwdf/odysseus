@@ -29,6 +29,7 @@ export default defineConfig({
         'src/route-detail.ts',
         'src/route-position.ts',
         'src/search.ts',
+        'src/stop-card.ts',
         'src/stop-detail.ts',
         'src/stop-name.ts',
       ],

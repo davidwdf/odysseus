@@ -1,11 +1,14 @@
 import {
+  displayName,
   fareRange,
   formatFavoriteRouteKey,
   inferBusMarkers,
   isOriginStop,
   type Locale,
+  type ResolvedClientPolicy,
   routeDistanceM,
   routeTerminusNames,
+  type StopCardName,
   splitStopCode,
   titleCaseName,
   upcoming,
@@ -242,8 +245,9 @@ export default function RouteDetail() {
               <RouteStopRow
                 key={`${s.seq}-${s.stop.id}`}
                 seq={s.seq}
-                name={s.stop.name[locale]}
+                name={displayName(s.stop.name[locale])}
                 arrivals={upcoming(s.eta?.arrivals, now, policy.maxArrivals)}
+                policy={policy}
                 fare={s.fare}
                 now={now}
                 locale={locale}
@@ -473,6 +477,7 @@ function RouteStopRow({
   seq,
   name,
   arrivals,
+  policy,
   fare,
   now,
   locale,
@@ -485,8 +490,9 @@ function RouteStopRow({
   onPress,
 }: {
   seq: number
-  name: string
+  name: StopCardName
   arrivals: string[]
+  policy: ResolvedClientPolicy
   fare?: string
   now: number
   locale: Locale
@@ -582,7 +588,9 @@ function RouteStopRow({
               </Text>
             ) : null}
           </View>
-          {arrivals.length > 0 ? <EtaTimes arrivals={arrivals} now={now} locale={locale} /> : null}
+          {arrivals.length > 0 ? (
+            <EtaTimes arrivals={arrivals} now={now} locale={locale} policy={policy} />
+          ) : null}
         </View>
       </Pressable>
     </Animated.View>

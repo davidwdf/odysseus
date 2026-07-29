@@ -1,4 +1,4 @@
-import type { Eta, OperatorId } from '@nextbus/core'
+import { type Eta, etaReadout, type OperatorId, stopCardView } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import {
   type Appearance,
@@ -36,6 +36,7 @@ import { StopRow } from '../components/StopRow'
 import { Text } from '../components/Text'
 import { usePreferences } from '../lib/preferences'
 import { TAB_BAR_HEIGHT, TAB_BAR_RADIUS } from '../lib/tabBarLayout'
+import { useClientPolicy } from '../lib/useClientPolicy'
 import { useLocale } from '../providers/LocaleProvider'
 
 // Design Workbench — a live gallery of every foundation + component in each state,
@@ -62,6 +63,12 @@ function mockEta(
     dataTimestamp: new Date(now - (opts.stale ? 120_000 : 4_000)).toISOString(),
     observedAt: new Date(now).toISOString(),
   }
+}
+
+/** A gallery stop. `stopCardView` needs a whole `I18nText`, so the one English string the gallery
+ *  cares about is repeated across the locales rather than the type being loosened for a dev screen. */
+function mockStop(name: string) {
+  return { id: `WB:${name}`, name: { en: name, 'zh-Hant': name, 'zh-Hans': name } }
 }
 
 // Literal class strings so Tailwind's scanner generates them (no dynamic `bg-${x}`).
@@ -112,6 +119,9 @@ export default function Workbench() {
   const insets = useSafeAreaInsets()
   const locale = useLocale()
   const now = Date.now()
+  // The gallery renders through the real policy for the same reason it renders through the real theme
+  // store: a swatch derived from different numbers than the app uses is a swatch that lies.
+  const { policy } = useClientPolicy()
 
   const appearance = usePreferences((s) => s.appearance)
   const setAppearance = usePreferences((s) => s.setAppearance)
@@ -353,7 +363,10 @@ export default function Workbench() {
             {(
               [
                 ['due', mockEta('KMB:6:outbound:1', 'KMB', [0.2])],
-                ['soon (≤5)', mockEta('KMB:6:outbound:1', 'KMB', [3])],
+                // "≤5" was this gallery's copy of `EtaBadge`'s old literal. The band is the served
+                // `warnUnderSec` now (ADR-053), so the swatch names the policy rather than a number
+                // it would have to remember to change.
+                ['soon (< warnUnderSec)', mockEta('KMB:6:outbound:1', 'KMB', [2])],
                 ['normal', mockEta('KMB:6:outbound:1', 'KMB', [13])],
                 ['stale', mockEta('KMB:6:outbound:1', 'KMB', [8], { stale: true })],
                 ['none', mockEta('KMB:6:outbound:1', 'KMB', [])],
@@ -363,7 +376,7 @@ export default function Workbench() {
                 <Text variant="body" className="text-muted">
                   {label}
                 </Text>
-                <EtaBadge eta={eta} locale={locale} now={now} />
+                <EtaBadge {...etaReadout(eta, locale, now, policy)} />
               </View>
             ))}
           </View>
@@ -379,21 +392,25 @@ export default function Workbench() {
               distance/walk heading, hairline dividers between stops. */}
           <View className="border-border border-y">
             <StopRow
-              name="Mong Kok Road, Nathan Road"
-              distanceM={90}
-              etas={single}
+              view={stopCardView(
+                { stop: mockStop('Mong Kok Road, Nathan Road'), distanceM: 90, etas: single },
+                { locale, now, policy },
+              )}
               locale={locale}
-              now={now}
               onPress={() => {}}
               onRoutePress={() => {}}
             />
             <View className="border-border border-t">
               <StopRow
-                name="Jardine House, Connaught Road Central"
-                distanceM={340}
-                etas={merged}
+                view={stopCardView(
+                  {
+                    stop: mockStop('Jardine House, Connaught Road Central'),
+                    distanceM: 340,
+                    etas: merged,
+                  },
+                  { locale, now, policy },
+                )}
                 locale={locale}
-                now={now}
                 onPress={() => {}}
                 onRoutePress={() => {}}
               />

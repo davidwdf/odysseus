@@ -4,10 +4,14 @@ import {
   classifyRemark,
   dedupeEtas,
   type EtaLabelParts,
+  type EtaReadout,
+  type EtaUrgency,
   type EtaView,
   estimateChildFare,
   estimateElderlyFare,
   etaLabelParts,
+  etaReadout,
+  etaUrgency,
   etaView,
   type FareStage,
   fareRange,
@@ -20,6 +24,8 @@ import {
   formatRelative,
   formatServiceHours,
   isStale,
+  type RemarkView,
+  remarkView,
 } from '../src/eta'
 import type { Eta, I18nText, Locale, RemarkKind } from '../src/types'
 import { at, nullToUndefined, specCases } from './corpus'
@@ -66,11 +72,69 @@ describe('eta#formatRelative', () => {
 })
 
 describe('eta#etaLabelParts', () => {
-  for (const c of cases<{ arrivalIso: string; nowIso: string; locale: Locale }, EtaLabelParts>(
-    'etaLabelParts',
-  )) {
+  for (const c of cases<
+    { arrivalIso: string; nowIso: string; locale: Locale; dueUnderSec?: number },
+    EtaLabelParts
+  >('etaLabelParts')) {
     it(c.name, () => {
-      expect(etaLabelParts(c.args.arrivalIso, at(c.args.nowIso), c.args.locale)).toEqual(c.expect)
+      expect(
+        etaLabelParts(c.args.arrivalIso, at(c.args.nowIso), c.args.locale, c.args.dueUnderSec),
+      ).toEqual(c.expect)
+    })
+  }
+})
+
+describe('eta#etaUrgency', () => {
+  for (const c of cases<
+    {
+      arrivalIso: string | null
+      nowIso: string
+      policy?: { dueUnderSec: number; warnUnderSec: number }
+    },
+    EtaUrgency
+  >('etaUrgency')) {
+    it(c.name, () => {
+      // `null` is the corpus's absent value (see ./corpus.ts) — a route listed with no reading at
+      // all, which is a different thing from a departed one.
+      expect(etaUrgency(c.args.arrivalIso ?? undefined, at(c.args.nowIso), c.args.policy)).toBe(
+        c.expect,
+      )
+    })
+  }
+})
+
+describe('eta#etaReadout', () => {
+  for (const c of cases<
+    {
+      eta: Eta
+      locale: Locale
+      nowIso: string
+      policy?: { dueUnderSec: number; warnUnderSec: number; staleAfterMs: number }
+    },
+    EtaReadout
+  >('etaReadout')) {
+    it(c.name, () => {
+      expect(etaReadout(c.args.eta, c.args.locale, at(c.args.nowIso), c.args.policy)).toEqual(
+        c.expect,
+      )
+    })
+  }
+})
+
+describe('eta#remarkView', () => {
+  for (const c of cases<
+    { remark: I18nText | null; locale: Locale; servedKind: RemarkKind | null },
+    RemarkView | null
+  >('remarkView')) {
+    it(c.name, () => {
+      // Both `null`s are the corpus's absent value (see ./corpus.ts): no remark at all on the way in,
+      // and nothing to render on the way out.
+      const got = remarkView(
+        c.args.remark ?? undefined,
+        c.args.locale,
+        c.args.servedKind ?? undefined,
+      )
+      expect(got ?? null).toEqual(c.expect)
     })
   }
 })

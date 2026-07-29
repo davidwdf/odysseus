@@ -54,6 +54,11 @@
       }
     }
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "overrides": [
     {
       "includes": ["packages/contract/src/**"],
@@ -74,6 +79,7 @@
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
                       "@nextbus/mobile",
+                      "@nextbus/web",
                       "react*",
                       "expo*",
                       "@expo/*",
@@ -110,6 +116,7 @@
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
                       "@nextbus/mobile",
+                      "@nextbus/web",
                       "react*",
                       "expo*",
                       "@expo/*",
@@ -145,6 +152,7 @@
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
                       "@nextbus/mobile",
+                      "@nextbus/web",
                       "react*",
                       "expo*",
                       "@expo/*",
@@ -199,6 +207,7 @@
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
                       "@nextbus/mobile",
+                      "@nextbus/web",
                       "react*",
                       "expo*",
                       "@expo/*",
@@ -232,6 +241,7 @@
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
                       "@nextbus/mobile",
+                      "@nextbus/web",
                       "react*",
                       "expo*",
                       "@expo/*",
@@ -266,6 +276,7 @@
                       "@nextbus/api-client",
                       "@nextbus/edge",
                       "@nextbus/mobile",
+                      "@nextbus/web",
                       "react*",
                       "expo*",
                       "@expo/*",
@@ -298,6 +309,7 @@
                       "@nextbus/i18n",
                       "@nextbus/api-client",
                       "@nextbus/mobile",
+                      "@nextbus/web",
                       "react*",
                       "expo*",
                       "@expo/*",
@@ -316,7 +328,7 @@
       }
     },
     {
-      "includes": ["apps/mobile/**"],
+      "includes": ["apps/mobile/**", "apps/web/**"],
       "linter": {
         "rules": {
           "style": {

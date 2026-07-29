@@ -1,0 +1,25 @@
+/*
+  Hand-written, and the only CSS file here that is. The semantic token *values* are generated into
+  ./tokens.css from packages/ui/tokens.json (WP4-1) — a web-only rule belongs here, never there.
+*/
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* The same system stack the RN app resolves to on web, so a glyph difference is not mistaken for
+       a rendering difference while the two are being compared. */
+    font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang HK",
+      "Noto Sans CJK HK", "Microsoft JhengHei", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    /* `bg-bg` / `text-text` as the document background rather than only on the app root, so an
+       over-scroll does not reveal white in dark mode. */
+    @apply bg-bg text-text;
+  }
+}

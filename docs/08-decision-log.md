@@ -3163,3 +3163,226 @@ rather than the docs. **The blocking open question above is unchanged** — this
     `dataset.yml`; `ci.yml` is WP0-5, deferred), so every gate named above runs from a package `test`
     script via `turbo run test` and the pre-commit hook. The README says so in its own "not guaranteed"
     section, because a porter reading "gated" would otherwise assume a server enforces it.
+
+## ADR-068 — The client's derived view is kernel logic, so a second renderer calls it rather than reading the JSX
+- **Status:** **Decided and implemented 2026-07-29** (WP4-0, the prerequisite Wave 4's plan row did not
+  have). Implementation: `packages/core/src/stop-card.ts`, additions to `packages/core/src/eta.ts`
+  (`etaUrgency`, `etaReadout`, `remarkView`, and a `dueUnderSec` parameter on `etaLabelParts`),
+  `packages/core/spec/stop-card.spec.json`, and the repointed components in `apps/mobile`.
+- **Context:** [`docs/proposals/03`](../proposals/03-clean-separation-and-phase2-plan.md) WP4-1 asks for
+  `apps/web` — a Vite + React DOM renderer of one screen — with the acceptance *"CI asserts its derived
+  output is **byte-identical** to the RN golden; lines of new logic outside `.tsx` and adapters: **zero**"*.
+  Both halves presupposed an artefact that did not exist. There was no *derived output*: no view-model
+  layer on the client (`check-vm-no-styling` polices the wire), and the plan itself lists a served `/v2`
+  view-model tier as the **rejected** alternative. So the derivation had to be client-side — and six of
+  them were sitting inside `apps/mobile`'s components, reachable only by rendering a React tree: the
+  list's order, the `maxRows` cap and its "+N more" count, the caption's parts and its two different
+  separators, destination-else-remark as the headline, the route number and its fallback, and the stop
+  name split into label + code. A second renderer's only options were to re-implement each or to read the
+  JSX and guess. **A re-implementation would have passed a byte-identity check on the day it was written
+  while proving the opposite of the thesis**, which is why this is an ADR and not a refactor.
+- **Decision:**
+  1. **The derived view is kernel logic and lives in `packages/core`**, under Wave 2's method: copy,
+     pin with a language-neutral corpus, delete the original. The module is `stop-card`, not `nearby`,
+     because Favourites renders the same card through the same component — naming it after one of its two
+     callers would have been wrong inside a week. `nearbyView` (the ordering) is the part that really is
+     Nearby's own.
+  2. **The line inside the client is the same line ADR-053 draws across the network: content and
+     meaning versus layout and colour.** So `etaUrgency` returns `'due' | 'soon' | 'normal' | 'none'` — a
+     **name**, never a token and certainly never a colour — and `EtaBadge`'s `soon → text-warning` table
+     stays in the view, where it is correct. What could not stay there was the *threshold*.
+  3. **`core` owns the rule; `i18n` owns the word** ([ADR-054](#adr-054)). `remaining` is a number and
+     `t(locale, 'moreRoutes', { n })` stays in the renderer, because a plural is an ICU rule. The caption
+     is the deliberate exception: its parts are already kernel functions (`formatBearing`,
+     `formatDistance`, `formatWalk`) and what a second renderer would otherwise have to re-guess is their
+     order and the fact that `' · '` binds a distance to its walk time while a wider `'  ·  '` separates
+     that pair from the compass direction.
+  4. **The expectations in the corpus were derived from the implementation, and that is only honest
+     because a parity harness proved the implementation first.** A temporary harness transcribed the old
+     `.tsx` derivations verbatim and diffed both over real `/v1/nearby` snapshots: **30 cards / 120 rows
+     across 3 locales, with every difference declared in advance.** The harness was watched failing on an
+     injected cap change (exit 1, measured directly rather than through a pipe) and then **deleted** — a
+     shipped parity harness would be a second declaration of the very rules being consolidated.
+  5. **`etaReadout` and `remarkView` are extracted too, because the Place screen was the second copy.**
+     `app/stop/[id].tsx` derived label, urgency, staleness and the remark's locale/classification by hand,
+     in parallel with the Nearby card. Leaving that copy behind while Nearby moved is precisely how the
+     imminence threshold came to disagree with the policy in the first place; the two screens now call one
+     function. The three fields travel together because they must **agree** — the label's "Due" band and
+     the urgency's `due` band are the same `dueUnderSec`, so a caller computing one with a served policy
+     and the other with the default renders the word "Due" in the ordinary colour.
+  6. **`apps/web` was added to `layers.json` and to `check-no-raw-colours.mjs` before it holds a single
+     file.** Every dependency-cruiser rule the generator emits is keyed `from` a layer dir, and the only
+     rule with a non-layer `from` is `no-circular` — so a directory absent from that list is the `from` of
+     **no rule at all**. A new app would have been free to import `data-normalize` or to call an upstream
+     HK API directly with golden rule 2 silent. All three nets were watched firing on an injected probe.
+- **The bug this found before any second renderer existed:** `EtaBadge` decided imminence with a literal
+  `parts.value <= 5` — **360 s**, since `value` is floored minutes — while `CLIENT_POLICY_DEFAULTS`
+  served **`warnUnderSec: 180`** and the comment on that field read *"Nothing reads this yet"*. Both were
+  true: the field had no reader, and the screen had its own number. That is
+  [ADR-053](#adr-053)'s three-way arrival-cap disagreement one field over, and the **seventh** instance in
+  this repo of one judgement written down twice. In a live sample it mis-coloured **7 of 40 rows**. The
+  band is now the served one, which is the single user-visible change in this work package: an arrival
+  between 3 and 6 minutes away is no longer coloured as "run".
+- **Consequences, including what we are accepting:**
+  - **The visible change is a narrowing, and it is deliberate.** Riders who learned that amber meant
+    "within about five minutes" now see amber only under three. The alternative — moving `warnUnderSec` to
+    300 to preserve the appearance — would have kept a number nobody had chosen and thrown away the reason
+    the field exists.
+  - **`etaLabelParts` gained a fourth parameter**, closing the Wave 3 loose end from the other side: it
+    was the one place a served `dueUnderSec` was silently dropped, and it happens to be the widest-reached
+    ETA renderer in the app. `staleAfterMs` is threaded too. Neither changes anything today, because the
+    served values equal the defaults — the trap was that the day one of them changed, only some callers
+    would have moved.
+  - **`remarkView` accepts `null` as well as `undefined`, and the type is wider than `Eta.remark`'s.**
+    The app does no runtime validation ([ADR-052](#adr-052) decision 2), so an explicit `"remark": null`
+    reaches the kernel however the schema types it. The component this replaced read the field through
+    optional chaining and survived; the first cut of the extraction guarded `=== undefined` and threw.
+    **No live sample would have caught that** — real feeds do not currently send it. A corpus row did.
+  - **Two of the four gate scopes for `apps/web` are armed but unexercised until the package is real.**
+    A bare `@nextbus/data-normalize` specifier is unresolvable before `apps/web` has a `package.json`, so
+    dependency-cruiser cruises nothing and reports clean; Biome's textual rule fires regardless. That the
+    two-net design of [ADR-051](#adr-051) covers the gap is the reason it has two nets, and it is worth
+    knowing rather than discovering.
+  - **The second CSS emit target for `apps/web` is deliberately deferred to WP4-1**, not forgotten: it
+    cannot be emitted into an app that does not exist, `check-tokens-current.mjs` iterates the emitter's
+    own output so the target is drift-gated the moment it is added, and nothing in `apps/web` can render
+    without the custom properties. That is the one deferral here that cannot rot unnoticed.
+  - **"CI asserts" remains unenforced.** `.github/workflows/` still holds only `dataset.yml`, so the
+    corpus runs from `packages/core`'s `test` script via `turbo run test` and the pre-commit hook — the
+    same position ADR-067 records. WP4-1's byte-identity assertion inherits it.
+  - **`pnpm install --frozen-lockfile` had been failing on `main`** since Wave 1 wrote the lockfile and
+    `apps/edge` later gained `@nextbus/contract`. Nothing noticed because every local install was
+    non-frozen; CI defaults it to true, so the workflow WP4-1's acceptance assumes would have died at
+    install before a single gate ran. Fixed here because adding a workspace package forces it anyway.
+
+## ADR-069 — A second renderer, and what it caught in the first
+- **Status:** **Decided and implemented 2026-07-29** (WP4-1, completing Wave 4). Implementation:
+  `apps/web/**` (Vite 8 + React DOM + plain Tailwind 3.4), `packages/api-client/src/location.ts`,
+  `bearingOctant`/`bearingOctantDeg` in `packages/core/src/geo.ts`, `apps/web/scripts/check-no-derivation.mjs`,
+  `apps/web/test/nearby-projection.test.tsx`, and a second CSS emit target in `packages/ui`.
+- **Context:** The plan calls WP4-1 *"the cheapest empirical test of the whole thesis"* — everything else
+  in it makes unfalsifiable claims about what Swift will need; this one is testable today.
+  [ADR-068](#adr-068) had to come first, because the acceptance presupposed a derived view that did not
+  exist. With `stopCardView`/`nearbyView` in the kernel, a second renderer becomes a fair test: if the
+  thesis holds, `apps/web` is elements and classes and nothing else.
+- **Decision:**
+  1. **One screen, no navigation, no persisted cache, no locale override.** Each is real work and none
+     of it tests the thesis; every line added is a line a reviewer must read before believing the claim.
+     The consequence is stated in the file: `Nearby` takes no router, and that is its *only* structural
+     difference from `apps/mobile/app/(tabs)/index.tsx`.
+  2. **`vite` is pinned to `8.0.16` exactly**, the version already hoisted as vitest 4's peer. Golden
+     rule 6 is the scar from two majors of one package fighting over a single hoisted binary under
+     `node-linker=hoisted`, and vite carries esbuild. `@vitejs/plugin-react` had to go to `6.0.4`, the
+     first line that declares vite 8 — the install told us, which is the value of a peer range.
+  3. **The token pipeline gained an emit target rather than a copy.** `check-tokens-current.mjs`
+     iterates whatever `generate()` returns, so `apps/web/src/tokens.css` is drift-gated by
+     construction; a hand-copied file would have been correct the day it was written. The variables are
+     **byte-identical to `apps/mobile/global.css`**, and the generated NativeWind-flavoured `preset.js`
+     was **verified**, not assumed, to work under plain Tailwind 3.4: every semantic utility, the whole
+     type scale, the radii and the `.dark` block appear in the built CSS.
+  4. **The `useLocation` state machine moved to `packages/api-client`, and `apps/mobile` now consumes
+     it too.** `LocationProvider`'s own doc names the three things that sit on top of it — the mandatory
+     `snapFix`, the remembered fix, and deliberately no `watch()` — and all three were inside an RN hook
+     (ADR-051: *"conflates the port with shared logic"*). Duplicating them would have meant two answers
+     to "what does a rider see while the GPS warms up". `client` is the only layer that may compose
+     `kernel` and `ports`, so that is where it went; the package's name is narrower than its contents
+     now, which is an honest mismatch and cheaper than a package per shared concern. Each app is left
+     with a three-method adapter and a ten-line hook, and **they are the same ten lines.**
+  5. **`bearingOctant` is shared, because the needle and the word are one rule.** `BearingArrow` had its
+     own `Math.round(deg / 45) * 45`, which agrees with `formatBearing` for every real bearing but omits
+     the range normalisation — so a negative value would have pointed the needle somewhere the label does
+     not name. Porting the screen would have made a third copy.
+  6. **A gate, `check-no-derivation.mjs`, polices the renderer for *shapes* rather than names:**
+     ordering, capping, selecting, string-joining, arithmetic, and comparison against a numeric literal.
+     Calling a kernel function is correct and must never be flagged; computing an answer is the
+     violation. `src/adapters/` and `src/hooks/` are exempt *by the acceptance criterion itself*. It has
+     eight selftest scenarios including two controls, and it fails when it matches no files.
+  7. **The equivalence assertion uses the corpus as its golden**, not a fixture invented for it. Every
+     `stopCardView` case is rendered and its visible text compared against a projection of the same
+     view — so the renderer is proven to add no string and drop none, over real dataset rows, in the same
+     file a Swift or Kotlin suite reads.
+- **What the second renderer caught in the first — the return on the whole wave:**
+  1. **HTML collapses the caption's deliberate double separator.** `stopCardCaption` uses `' · '` to bind
+     a distance to its walk time and a wider `'  ·  '` to separate that pair from the compass direction.
+     The DOM collapses consecutive whitespace, so the web card read *"Southwest-bound · 170m · 2 min
+     walk"* against React Native's *"Southwest-bound  ·  170m · 2 min walk"* — the same string,
+     rendered differently. Fixed with `whitespace-pre-wrap` and pinned. **My first version of the test
+     could not see it**, because it normalised whitespace before comparing: a test that launders the
+     property it checks is worse than none.
+  2. **The "+N more" count was hidden whenever it could not be tapped.** Both components guarded it with
+     `remaining > 0 && onPress`, so a caller with nowhere to navigate showed six of twenty-six routes and
+     said nothing — the silent filter ADR-008 forbids. Every caller in `apps/mobile` passes `onPress`,
+     which is why it had never fired; this app's single screen does not. Fixed in **both** renderers: the
+     tap is optional, the truth is not. The regression test was watched failing against the old guard.
+  Neither was reachable by reading the code, and neither is a bug in `apps/web`. That is the argument for
+  Wave 4 existing, made concretely rather than in the abstract.
+- **Consequences, including what we are accepting:**
+  - ✅ **Closed the same day — "byte-identical" is now measured on both sides.** This consequence was
+    originally recorded as an open gap: the web renderer was proven a faithful projection of the view and
+    the RN renderer was not. It is now `apps/mobile/test/stoprow-projection.test.tsx`, and the addendum
+    below records how it was closed, including the attempt that failed.
+  - **`check-no-derivation` polices `apps/web` only.** `apps/mobile`'s route, search and workbench
+    screens still hold rules WP4-0 did not hoist, so the same rules would fire on legitimate un-migrated
+    code and the gate would be switched off within a week. The asymmetry is deliberate, recorded in the
+    script, and closes when Place and Route detail get their own WP4-0.
+  - **`biome.json` gained `css.parser.tailwindDirectives`** so `@apply` parses — taught, not silenced,
+    the same choice Wave 3 made for the `@tailwind` at-rule. Its `overrides` block is still generated
+    from `layers.json`; only the top level is hand-edited.
+  - **`packages/core` now exports `./spec/*`.** The corpus is a consumable artefact — `apps/web` asserts
+    against it and the native templates tell a porter to vendor it — so it has a stable specifier
+    instead of a relative path that breaks when the layout moves. A small step toward the unsolved
+    corpus-vendoring problem, not a solution to it.
+  - **Two configs are `.cjs`.** `apps/web` is `"type": "module"` and both Tailwind's and PostCSS's config
+    formats are CommonJS, as is the generated `preset.js`. Renaming beat adding a `createRequire` shim to
+    import a config the RN app requires directly.
+  - **No `apps/web` deploy, and no CI.** `vite build` produces `dist/` (260 kB JS, 84 kB gzipped) and
+    nothing publishes it; `.github/workflows/` still holds only `dataset.yml`. Both belong to WP0-5.
+
+
+### Addendum (2026-07-29) — closing the one-sided measurement, and the cheap gate that did not work
+
+**The gap was measured before it was fixed.** Deleting the inline `<Text>{view.caption}</Text>` from
+`apps/mobile/components/StopRow.tsx` — so every card silently loses its compass direction and distance —
+passed `turbo run typecheck`, `pnpm lint` **and all 686 tests**. A narrower correction to the original
+wording: deleting a field rendered through a *dedicated imported component*
+(`{row.remark ? <RemarkTag …/> : null}`) *is* caught, incidentally, by Biome's `noUnusedImports`. It is
+the **inline** fields — the caption, the headline, the code, the minutes unit — that nothing guarded.
+
+**A cheaper gate was designed, built, tested against that failure, and deleted, because it did not
+work.** The idea was to assert that every field of `StopCardView` is *referenced* somewhere in each
+renderer's render path, with the field list parsed out of `packages/core/src/{stop-card,eta}.ts` so it
+could not go stale. It passed the deletion. The reason is worth recording because it generalises:
+**"referenced" is not "rendered"** — the surviving guard `{view.caption ? (…)}` still mentions `caption`,
+and no textual rule separates a guard from a render. Sharpening it to "appears in value position" fails
+too, because a discriminant is only ever compared (`label.kind === 'mins'`) and a boolean is only ever a
+condition (`stale ? 'opacity-45' : ''`). Shipping it would have added a gate that passes on the exact
+failure it was built for — this repo's own recurring bug, and worse than having no gate at all.
+
+**What worked was rendering the tree.** `react-native` is aliased to **`react-native-web`** in a new
+`apps/mobile/vitest.config.ts`, and the RN card is rendered in jsdom and read back through the *same*
+projection `apps/web`'s suite uses. Three things make this honest rather than convenient:
+
+  1. **`react-native-web` is a ship target, not a stand-in.** It is how Expo renders the PWA, so one of
+     the three platforms is now covered directly. `react-test-renderer` was the alternative and would
+     have needed `@react-native/babel-preset` to strip Flow types out of the `react-native` source while
+     still not exercising a real layout.
+  2. **The projection function is duplicated in the two suites on purpose, not shared.** It is the
+     *specification* each renderer is measured against; a shared helper would let one edit silently relax
+     both. If the copies ever disagree, that is the signal.
+  3. **The one shortcut is asserted rather than assumed.** `lucide-react-native` cannot load outside
+     Metro (its `.mjs` entry imports names its own `context.mjs` does not export, and inlining it drags in
+     `react-native-svg`'s Flow source), so it is aliased to `lucide-react`. That is only legitimate if
+     icons contribute no text — so a test renders a card whose only content is a caption and asserts
+     exactly two text nodes alongside a non-zero `<svg>` count. If either package ever ships a label, it
+     fails.
+
+**What is still not covered, and now precisely:** iOS and Android *native* rendering. `react-test-renderer`
+would not have covered it either. What is covered on all three platforms is the thing that actually goes
+wrong — a component dropping, duplicating or reordering a field — because the component tree under test is
+the same source Metro bundles.
+
+**One incidental finding.** `apps/mobile` resolves TypeScript **6.0.3** while every other package is on
+5.9.3 (CLAUDE.md golden rule 6 says 5.9 for shared packages), and 6.0 rejected a cast that 5.9 had
+accepted in the *web* suite: the corpus states absent optionals as JSON `null`, and both suites were
+asserting them into `string | undefined`. Both now convert rather than cast. The version divergence is
+pre-existing and unaddressed; it earned its keep here.

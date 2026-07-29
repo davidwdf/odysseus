@@ -524,12 +524,72 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
    the one still open. Worth remembering as a pattern: *"speculative" attached to a wave when it only applied
    to a quarter of it.*
    **Next, in order:**
-   - **Wave 4 (`apps/web`)** — one screen, Nearby, rendered from the identical `core` functions by Vite +
-     React DOM, asserting its derived output is byte-identical to the RN golden. The plan calls it *"the
-     cheapest empirical test of the whole thesis"*, and it is now materially cheaper than when it was
-     written: Wave 2 made every rule Nearby needs a corpus-pinned kernel function, and Wave 3 made the
-     tokens and strings it renders generated artefacts rather than RN-shaped source. A second renderer is
-     the first real consumer of both.
+   - ✅ **WP4-0 done 2026-07-29 — the derived view is kernel logic now, so WP4-1's acceptance is
+     measurable** ([ADR-068](./08-decision-log.md)). **This work package is not in the plan**; WP4-1's row
+     needed it and did not say so. Its acceptance is *"lines of new logic outside `.tsx` and adapters:
+     zero"*, and six derivations were living inside `apps/mobile`'s components, reachable only by rendering
+     a React tree — the list's order, the `maxRows` cap and its "+N more" count, the caption's parts and
+     its two different separators, destination-else-remark as the headline, the route number fallback, and
+     the stop-name split. A second renderer could only have re-implemented them, and **a
+     re-implementation would have passed a byte-identity check while proving the opposite of the thesis.**
+     They are `packages/core/src/stop-card.ts` now (`displayName`, `stopCardCaption`, `stopCardView`,
+     `nearbyView`) plus `etaUrgency` / `etaReadout` / `remarkView` in `eta.ts`, pinned by a 30-case corpus
+     built from the real dataset build `d598893de6add2e4`. `core` is at **100% branches, 315/315** (from
+     279), threshold unchanged. `apps/web` is already in `layers.json` and `check-no-raw-colours`, so it
+     cannot be born ungated. **The one user-visible change:** the imminence band is the served
+     `warnUnderSec` (180 s) instead of `EtaBadge`'s literal `value <= 5` (360 s) — see the ADR; an arrival
+     3–6 minutes out is no longer coloured as "run".
+   - ✅ **WP4-1 done 2026-07-29 — Wave 4 is complete** ([ADR-069](./08-decision-log.md)).
+     `apps/web` is a Vite 8 + React DOM + plain-Tailwind app rendering **one** screen (Nearby) from the
+     identical `packages/core` functions: `pnpm dev:dom` → http://localhost:8082. It derives nothing, and
+     `apps/web/scripts/check-no-derivation.mjs` enforces that by policing *shapes* — ordering, capping,
+     selecting, string-joining, arithmetic, thresholds — with 8 selftest scenarios. The equivalence
+     assertion (`apps/web/test/nearby-projection.test.tsx`) renders **every `stopCardView` corpus case**
+     and compares its visible text against a projection of the same view, so the golden is the corpus a
+     Swift or Kotlin suite would read.
+     **Three things landed along the way, each because two renderers forced the question:**
+     the `useLocation` state machine moved to `packages/api-client` (the only layer that may compose
+     `kernel` + `ports`) and **`apps/mobile` consumes it too** — each app is now a three-method adapter
+     plus the same ten-line hook; `bearingOctant` is shared, because the compass needle and
+     `formatBearing`'s word are one rule and `BearingArrow` had its own copy without range
+     normalisation; and `packages/ui` gained a **second CSS emit target** whose variables are
+     byte-identical to `apps/mobile/global.css` (7 artefacts gated now, was 6). The generated
+     NativeWind-flavoured `preset.js` was **verified** to work under plain Tailwind 3.4, not assumed.
+     **What the second renderer caught in the first — the point of the wave, concretely:**
+     (a) **HTML collapses the caption's deliberate double separator**, so the web card read
+     "Southwest-bound · 170m · 2 min walk" where RN read "Southwest-bound  ·  170m · 2 min walk" — the
+     same string, rendered differently. Fixed with `whitespace-pre-wrap`. My first test could not see it
+     because it normalised whitespace before comparing.
+     (b) **The "+N more" count was hidden whenever it could not be tapped** (`remaining > 0 && onPress`),
+     so a caller with nowhere to navigate showed 6 of 26 routes and said nothing — the silent filter
+     ADR-008 forbids. Every `apps/mobile` caller passes `onPress`, which is why it had never fired.
+     Fixed in **both** renderers; regression test watched failing against the old guard.
+     ✅ **Both sides are measured now** (closed the same day; ADR-069 addendum). This had been recorded
+     as 🟠 *"byte-identical is measured on one side only"*, and the gap was real: deleting the inline
+     `<Text>{view.caption}</Text>` from the RN card — so every card silently loses its compass direction
+     and distance — passed typecheck, lint **and all 686 tests**. (A narrower correction to the original
+     note: a field rendered through a *dedicated imported component* IS caught incidentally by Biome's
+     `noUnusedImports`; it is the **inline** fields that nothing guarded.) It is now
+     `apps/mobile/test/stoprow-projection.test.tsx` — `react-native` aliased to **`react-native-web`**
+     in a new `apps/mobile/vitest.config.ts`, the RN card rendered in jsdom, read back through the *same*
+     projection `apps/web`'s suite uses. That is a ship target, not a stand-in: it is how Expo renders the
+     PWA. **A cheaper gate was built first and deleted because it did not work** — asserting each field is
+     *referenced* in the render path passed the deletion, because the surviving guard
+     `{view.caption ? (…)}` still mentions `caption`. "Referenced" is not "rendered", and no textual rule
+     separates them: a discriminant is only ever compared, a boolean only ever a condition. Shipping it
+     would have added a gate that passes on the exact failure it was built for.
+     🟡 **Still not covered: iOS/Android *native* rendering** — `react-test-renderer` would not have
+     covered it either. What is covered on all three platforms is a component dropping, duplicating or
+     reordering a field, because the tree under test is the source Metro bundles.
+     ⚪ **`apps/mobile` resolves TypeScript 6.0.3 while every other package is on 5.9.3** (golden rule 6
+     says 5.9 for shared packages). Found incidentally: 6.0 rejected a cast 5.9 had accepted in the web
+     suite, where the corpus's JSON `null` was being asserted into `string | undefined`. Both suites now
+     convert rather than cast. The version divergence is pre-existing and unaddressed.
+     🟡 **`check-no-derivation` polices `apps/web` only** — `apps/mobile`'s route, search and workbench
+     screens still hold rules WP4-0 did not hoist, so the same rules would fire on legitimate code.
+     Closes when Place and Route detail get their own WP4-0.
+     🟡 **Nothing deploys `apps/web`** (`vite build` → `dist/`, 260 kB JS / 84 kB gzipped) and there is
+     still no CI. Both are WP0-5.
    - **When a native repo actually appears**, its first jobs are already written down: compile
      `packages/ui/generated/NextBusTokens.{swift,kt}` and `packages/contract/native/{ios,android}/` (all
      four generated, none ever compiled), and solve **corpus vendoring** — see the loose end below. Start
@@ -583,11 +643,16 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
        suite at all. Options when a native repo exists: publish the corpus as a versioned package the
        native build fetches; or have the templates assert a content hash committed here. Unowned by any WP
        — the same shape as the WP2-8/WP2-9 gap that only got fixed because someone noticed.
-     - 🔴 **A served `dueUnderSec` or `staleAfterMs` override would be honoured on native and silently
-       ignored on web.** Both are served and `etaView`/`isStale` accept them, but **no screen threads them
-       in** — their consumers sit inside `EtaTimes`, `EtaBadge` and `formatRelative`, so wiring them touches
-       every ETA render path. Harmless today (default and served value are the same number from the same
-       declaration) and a real trap the day anyone changes one on the edge. In ADR-053's consequences too.
+     - ✅ **Closed 2026-07-29 by WP4-0 — a served `dueUnderSec` / `staleAfterMs` override now reaches
+       every ETA render path** ([ADR-068](./08-decision-log.md)). It had been served while **no screen
+       threaded it in**, and closing it turned up worse than a gap: `etaLabelParts` took no `dueUnderSec`
+       parameter at all, and the imminence band was written down **four** times — `EtaBadge`'s
+       `parts.value <= 5` and `EtaTimes`' identical literal (both 360 s), the workbench swatch labelled
+       "soon (≤5)", against a served `warnUnderSec` of **180**. `etaUrgency` owns the thresholds now and
+       each renderer keeps only its colour table. `formatRelative` still defaults, and that is fine — it
+       has no callers outside `core`. **This is the one user-visible change in the work package:** an
+       arrival 3–6 minutes out is no longer coloured as "run". Verified in the browser on Nearby,
+       Favourites, Place detail and the route schematic, in both locales and both appearances.
      - 🟠 **The Swift and Kotlin token artefacts have never been compiled** — no compiler exists in this
        repo. They carry an `UNVERIFIED` banner and are constants-only so a fix is an emitter change.
        Compiling them is **WP3-3's** first job; nothing may claim they work until it has.
@@ -685,6 +750,12 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
   `apps/mobile/providers/QueryProvider.tsx` · fix snapping `packages/core/src/geo-snap.ts`
 - **The domain kernel (Wave 2)** → `packages/core/src/{stop-name,stop-detail,route-detail,mercator,geo-snap}.ts`,
   each pinned by `packages/core/spec/<module>.spec.json` and consumed by `test/<module>.test.ts`
+- **The derived client view (WP4-0, ADR-068)** → `packages/core/src/stop-card.ts`: `displayName`,
+  `stopCardCaption`, `stopCardView` (one card) and `nearbyView` (the ordered list), plus `etaUrgency`,
+  `etaReadout` and `remarkView` in `src/eta.ts`. **`apps/mobile` derives nothing** — `StopRow` takes a
+  whole `StopCardView`, `EtaBadge` takes `{label, urgency, stale}`, `RemarkTag` takes a `RemarkView`,
+  `StopName` takes a `StopCardName`. Adding a rule to a screen is now the smell: it belongs here, or
+  `apps/web` will not see it
 - **Error taxonomy (ADR-064)** → table `packages/contract/src/wire/responses.ts` (`ERROR_CODES`); the only
   way to build a failure `apps/edge/src/errors.ts`; client `EdgeRequestError` in `packages/api-client`
 - Tests → `apps/edge/test/*.test.ts` (workerd + simulated KV/R2) · `packages/core/test/*.test.ts` (the

@@ -1,4 +1,10 @@
-import { etaLabelParts, type Locale } from '@nextbus/core'
+import {
+  type EtaUrgency,
+  etaLabelParts,
+  etaUrgency,
+  type Locale,
+  type ResolvedClientPolicy,
+} from '@nextbus/core'
 import { FONT_FAMILY } from '@nextbus/ui'
 import { useEffect, useState } from 'react'
 import { Text as RNText, StyleSheet, View } from 'react-native'
@@ -27,10 +33,15 @@ export function EtaTimes({
   arrivals,
   now,
   locale,
+  policy,
 }: {
   arrivals: string[]
   now: number
   locale: Locale
+  /** The served thresholds (ADR-053). Required rather than defaulted: this component had been the
+   *  **fourth** place the imminence band was written down, and a default here would let the next caller
+   *  silently reintroduce a fifth. */
+  policy: Pick<ResolvedClientPolicy, 'dueUnderSec' | 'warnUnderSec'>
 }) {
   return (
     <View
@@ -43,36 +54,44 @@ export function EtaTimes({
           layout={LinearTransition.duration(DUR)}
           exiting={FadeOut.duration(160)}
         >
-          <TimeSlot iso={iso} now={now} locale={locale} first={i === 0} withUnit />
+          <TimeSlot iso={iso} now={now} locale={locale} policy={policy} first={i === 0} withUnit />
         </Animated.View>
       ))}
     </View>
   )
 }
 
+/** Urgency → theme variable, the same mapping `EtaBadge` makes in Tailwind classes. Two tables for one
+ *  decision is a duplication worth naming: this component colours through `useTheme().color(var)`
+ *  because it animates a raw `RNText`, so it cannot use a class. The *thresholds* are shared — which is
+ *  the half that was actually drifting. */
+const TONE: Record<EtaUrgency, `--${string}`> = {
+  due: '--positive',
+  soon: '--warning',
+  normal: '--text',
+  none: '--text',
+}
+
 function TimeSlot({
   iso,
   now,
   locale,
+  policy,
   first,
   withUnit,
 }: {
   iso: string
   now: number
   locale: Locale
+  policy: Pick<ResolvedClientPolicy, 'dueUnderSec' | 'warnUnderSec'>
   first: boolean
   /** Append the "min" unit. Every slot sets this, so the row reads "12 min  27 min  42 min".
    *  A "Due" slot never takes it. */
   withUnit: boolean
 }) {
   const { color } = useTheme()
-  const parts = etaLabelParts(iso, now, locale)
-  const tone =
-    parts.kind === 'due'
-      ? '--positive'
-      : parts.kind === 'mins' && parts.value <= 5
-        ? '--warning'
-        : '--text'
+  const parts = etaLabelParts(iso, now, locale, policy.dueUnderSec)
+  const tone = TONE[etaUrgency(iso, now, policy)] ?? TONE.none
   const value =
     parts.kind === 'due'
       ? parts.label

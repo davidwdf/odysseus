@@ -12,6 +12,7 @@
     "dev:edge": "pnpm --filter @nextbus/edge dev",
     "dev:mobile": "pnpm --filter @nextbus/mobile dev",
     "dev:web": "pnpm --filter @nextbus/mobile exec expo start --web",
+    "dev:dom": "pnpm --filter @nextbus/web dev",
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",

@@ -301,7 +301,30 @@ one piece of astronautics in the bake-off.
 
 | ID | Title | Acceptance |
 |---|---|---|
-| **WP4-1** | `apps/web` — Vite + React DOM rendering **one** screen (Nearby) from the identical extracted `core` functions | CI asserts its derived output is **byte-identical** to the RN golden; *lines of new logic outside `.tsx` and adapters: zero* |
+| **WP4-0** | *(added 2026-07-29, ✅ done)* Hoist Nearby's six client-side derivations into `packages/core` so "derived output" is a thing that exists | `stop-card` corpus green; parity with the old `.tsx` proven over real `/v1/nearby` rows; `apps/web` present in `layers.json` + `check-no-raw-colours` before it has a file |
+| **WP4-1** | *(✅ done 2026-07-29 — ADR-069)* `apps/web` — Vite + React DOM rendering **one** screen (Nearby) from the identical extracted `core` functions | CI asserts its derived output is **byte-identical** to the RN golden; *lines of new logic outside `.tsx` and adapters: zero* |
+
+**Correction, 2026-07-29 — WP4-1 as written could not be satisfied, and WP4-0 is why** (ADR-068). Both
+halves of its acceptance presupposed an artefact that did not exist: there was no *derived output*, because
+no client view-model layer existed and this plan deliberately **rejects** a served `/v2` view-model tier
+(see the table at the top). Six derivations were living inside `apps/mobile`'s components, reachable only by
+rendering — the list's order, the `maxRows` cap and its "+N more" count, the caption's parts and its two
+separators, destination-else-remark as the headline, the route-number fallback, and the stop-name split. So
+"*lines of new logic outside `.tsx` and adapters: zero*" was unachievable: a second renderer had to
+re-implement each one, and **a re-implementation would have passed a byte-identity check on the day it was
+written while proving the opposite of this plan's thesis.** Three further notes for whoever does WP4-1:
+`vite` is already hoisted at **8.0.16** as vitest's peer, so pin that exact version (golden rule 6);
+`packages/ui`'s token emitter writes only one web CSS target and needs a second; and `packages/ports` is
+declared but unadopted, so this is its first real consumer — decide whether `useLocation`'s permission
+state machine moves behind `LocationProvider` or gets duplicated.
+
+**All three were answered in WP4-1** (ADR-069): vite is pinned at `8.0.16` and `@vitejs/plugin-react`
+went to `6.0.4`, the first line declaring vite 8; the emitter gained a second target rather than a copy,
+so `check-tokens-current` gates it by construction; and the state machine **moved** — it is
+`createLocationController` in `packages/api-client`, which `apps/mobile` now consumes too, leaving each
+app a three-method adapter and the same ten-line hook. Wave 4's payoff was not the port but what it
+found in the *existing* app: a caption whose deliberate double separator the DOM silently collapsed, and
+a "+N more" count hidden whenever it could not be tapped. Neither was reachable by reading the code.
 
 This is the cheapest empirical test of the whole thesis, and it is simultaneously the dress rehearsal
 for both the DOM rewrite and the native ports. Everything else in this plan makes unfalsifiable

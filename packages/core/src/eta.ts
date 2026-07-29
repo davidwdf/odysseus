@@ -112,13 +112,154 @@ export type EtaLabelParts =
  * The `EtaLabelParts` above, for one arrival — same rule as `formatRelative`, split so the
  * number and the unit can be styled separately.
  *
+ * `dueUnderSec` is threaded through to `etaView` rather than left at the shipped default. It had been
+ * omitted, which made this function the one place a served `ClientPolicy` override was silently
+ * dropped: `EtaBadge` — the only caller, and the widest-reached ETA renderer in the app — asked for a
+ * label and got the compiled-in 60 s band, so an edge that moved `dueUnderSec` would have been
+ * honoured by `etaView`'s other callers and ignored here. Recorded as a Wave 3 loose end
+ * (`docs/11`, ADR-053 consequences) and closed here because a second renderer would have inherited
+ * the same gap in a different language, which is exactly the divergence Wave 4 exists to detect.
+ *
  * @spec eta#etaLabelParts
  */
-export function etaLabelParts(arrivalIso: string, now: number, locale: Locale): EtaLabelParts {
-  const { isDue, minutes, hasDeparted } = etaView(arrivalIso, now)
+export function etaLabelParts(
+  arrivalIso: string,
+  now: number,
+  locale: Locale,
+  dueUnderSec: number = CLIENT_POLICY_DEFAULTS.dueUnderSec,
+): EtaLabelParts {
+  const { isDue, minutes, hasDeparted } = etaView(arrivalIso, now, dueUnderSec)
   if (hasDeparted) return { kind: 'departed' }
   if (isDue) return { kind: 'due', label: DUE_LABEL[locale] }
   return { kind: 'mins', value: Math.max(minutes, 1), unit: MIN_LABEL[locale] }
+}
+
+/**
+ * How much attention one arrival is owed — the *meaning* a renderer turns into a colour.
+ *
+ * This exists because the alternative had already drifted. `apps/mobile/components/EtaBadge.tsx`
+ * decided imminence with a literal `parts.value <= 5` — 360 s, since `value` is floored minutes —
+ * while `CLIENT_POLICY_DEFAULTS.warnUnderSec` served **180**, and the comment on that field said
+ * *"Nothing reads this yet"*. Both were true: the field had no reader, and the screen had its own
+ * number. That is the WP3-4 arrival-cap disagreement one field over, and it is the seventh instance
+ * in this repo of one judgement written down twice.
+ *
+ * The return is a **name, not a token and certainly not a colour** — the ADR-053 line, applied on
+ * the client side of the network this time. `EtaBadge`'s `urgency → text-warning` table is the
+ * correct client half and stays in the view; what could not stay there is the *threshold*, because a
+ * second renderer would have had to re-guess it. So: the kernel says an arrival is `soon`; each
+ * platform decides what `soon` looks like in its own colour system.
+ *
+ * `undefined` means the route had no reading at all, which is distinct from `departed` — the row
+ * still exists and still names its route, it just has nothing to count down.
+ *
+ * @spec eta#etaUrgency
+ */
+export function etaUrgency(
+  arrivalIso: string | undefined,
+  now: number,
+  policy: Pick<
+    typeof CLIENT_POLICY_DEFAULTS,
+    'dueUnderSec' | 'warnUnderSec'
+  > = CLIENT_POLICY_DEFAULTS,
+): EtaUrgency {
+  if (arrivalIso === undefined) return 'none'
+  const { isDue, hasDeparted, seconds } = etaView(arrivalIso, now, policy.dueUnderSec)
+  if (hasDeparted) return 'none'
+  if (isDue) return 'due'
+  return seconds < policy.warnUnderSec ? 'soon' : 'normal'
+}
+
+/**
+ * The attention an arrival is owed. Ordered by urgency descending, which is the order a renderer's
+ * own table will want to read in.
+ *
+ *  · `due` — inside `dueUnderSec`; no figure is shown at all (ADR-008)
+ *  · `soon` — inside `warnUnderSec`; the point at which "there is a bus coming" becomes "run"
+ *  · `normal` — a figure the rider can plan around
+ *  · `none` — departed, or no reading; there is nothing to be urgent about
+ */
+export type EtaUrgency = 'due' | 'soon' | 'normal' | 'none'
+
+/** Everything an honest arrival readout needs, and nothing a renderer could disagree about. */
+export interface EtaReadout {
+  /** The figure and its unit, or the status word — never a fabricated sub-minute number (ADR-008). */
+  label: EtaLabelParts
+  /** What it means. A renderer maps this to its own colour system; it is never a colour. */
+  urgency: EtaUrgency
+  /** Old enough to say so. Dimming is the renderer's choice; the judgement is not. */
+  stale: boolean
+}
+
+/**
+ * The three things every arrival readout in the product is made of, derived together.
+ *
+ * They travel together because they are read together and because they must agree: the label's "Due"
+ * band and the urgency's `due` band are the *same* `dueUnderSec`, so a caller that computed one with a
+ * served policy and the other with the default could render the word "Due" in the ordinary colour.
+ * Two screens were doing exactly that by hand before WP4-0 — the Nearby card and the Place detail row
+ * — and a third renderer would have made three.
+ *
+ * @spec eta#etaReadout
+ */
+export function etaReadout(
+  eta: Eta,
+  locale: Locale,
+  now: number,
+  policy: Pick<
+    typeof CLIENT_POLICY_DEFAULTS,
+    'dueUnderSec' | 'warnUnderSec' | 'staleAfterMs'
+  > = CLIENT_POLICY_DEFAULTS,
+): EtaReadout {
+  const next = eta.arrivals[0]
+  return {
+    label:
+      next === undefined
+        ? { kind: 'departed' }
+        : etaLabelParts(next, now, locale, policy.dueUnderSec),
+    urgency: etaUrgency(next, now, policy),
+    stale: isStale(eta, now, policy.staleAfterMs),
+  }
+}
+
+/** An operator remark reduced to one locale and classified — what a renderer actually shows. */
+export interface RemarkView {
+  text: string
+  /** The server's class where it sent one, else `classifyRemark`'s. Never absent, so a renderer's
+   *  kind→tone table needs no fallback for a missing kind (only for an unknown one). */
+  kind: RemarkKind
+}
+
+/**
+ * An operator remark as a renderer needs it, or `undefined` when there is nothing to show.
+ *
+ * Three rules in one place, each of which had been sitting inside a React component:
+ *
+ *  1. **Absent in this locale counts as absent.** The feeds really do send an empty `en`, and the
+ *     component tested truthiness, so a blank rendered nothing. Returning it as text would put an
+ *     empty tag into the layout.
+ *  2. **The served class wins.** `Eta.remarkKind` is the edge's classification (ADR-053).
+ *  3. **Falling back is not degrading.** With no served kind, `classifyRemark` — *the same kernel
+ *     function the edge calls* — produces the identical answer, which is what makes an offline replay
+ *     (ADR-058) or an older edge indistinguishable from a current one.
+ *
+ * @spec eta#remarkView
+ */
+export function remarkView(
+  // `null` as well as `undefined`, and the type is deliberately wider than `Eta.remark`'s. The app does
+  // **no runtime validation** (ADR-052 decision 2), so an explicit `"remark": null` on the wire arrives
+  // here as `null` however the schema types it. The code this replaced reached the field through
+  // `eta.remark?.[locale]`, where optional chaining absorbed that for free; writing the guard as
+  // `=== undefined` reintroduced a crash on a payload the old component survived, and a corpus row
+  // caught it. Widening the parameter is the honest fix — narrowing at the call site would just move
+  // the same assumption somewhere less visible.
+  remark: I18nText | null | undefined,
+  locale: Locale,
+  servedKind?: RemarkKind,
+): RemarkView | undefined {
+  const text = remark?.[locale]
+  if (!text || remark === null || remark === undefined) return undefined
+  return { text, kind: servedKind ?? classifyRemark(remark) }
 }
 
 /** Hong Kong is UTC+8 all year — no DST since 1979 — so the offset is a constant, not a lookup. */

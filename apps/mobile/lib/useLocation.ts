@@ -1,14 +1,10 @@
-import { type Fix, snapFix } from '@nextbus/core'
+import { createLocationController } from '@nextbus/api-client'
+import type { GeoFix, KeyValueStore, LocationProvider, LocationState } from '@nextbus/ports'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type LocationState =
-  | { status: 'undetermined' } // permission not yet requested — show the priming UI
-  | { status: 'loading' } // requesting / fetching a fix
-  | { status: 'denied'; canAskAgain: boolean }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; lat: number; lng: number; stale?: boolean }
+export type { LocationState }
 
 export interface UseLocation {
   state: LocationState
@@ -16,95 +12,72 @@ export interface UseLocation {
   request: () => void
 }
 
-// Last known fix, already snapped. Two jobs (WP0-3):
-//  - **Instant Nearby.** A cold launch shows the last cell's cached arrivals while the GPS
-//    warms up, instead of a spinner for a second or two.
-//  - **Offline.** `getCurrentPositionAsync` fails outright with no network on a device
-//    without GPS (any desktop PWA), which would leave Nearby stuck on an error even though
-//    a perfectly good cached result is sitting in the query cache. Falling back to the last
-//    fix is what makes a cold offline load render something.
-// Marked `stale: true` so the screen can say so rather than implying it's a live position.
-const LAST_FIX_KEY = 'nextbus.lastFix.v1'
+/**
+ * The Expo half of `LocationProvider` — three methods, no rules.
+ *
+ * Everything that used to make this file interesting now lives in `createLocationController`
+ * (`@nextbus/api-client`, WP4-1): the silent permission check, the remembered-fix fallback, the
+ * mandatory `snapFix`, and the batching subtlety about when *not* to emit `loading`. Those are
+ * decisions about what a rider sees, so a second renderer has to share them rather than re-derive
+ * them — and this file is the part that genuinely differs, which is the platform SDK call.
+ */
+const expoLocationProvider: LocationProvider = {
+  async permission() {
+    const { status, canAskAgain } = await Location.getForegroundPermissionsAsync()
+    if (status === 'granted') return { status: 'granted' }
+    if (status === 'denied') return { status: 'denied', canAskAgain }
+    return { status: 'undetermined' }
+  },
+  async requestPermission() {
+    const { granted, canAskAgain } = await Location.requestForegroundPermissionsAsync()
+    return granted ? { status: 'granted' } : { status: 'denied', canAskAgain }
+  },
+  async currentFix(): Promise<GeoFix> {
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
+  },
+}
 
-async function readLastFix(): Promise<Fix | null> {
-  try {
-    const raw = await AsyncStorage.getItem(LAST_FIX_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<Fix>
-    if (typeof parsed.lat !== 'number' || typeof parsed.lng !== 'number') return null
-    return { lat: parsed.lat, lng: parsed.lng }
-  } catch {
-    return null
-  }
+/** AsyncStorage as `KeyValueStore`. Its API is already the port's, which is why the port looks
+ *  like this — it was lifted from what the app was doing rather than designed against nothing. */
+const asyncStorageStore: KeyValueStore = {
+  get: (key) => AsyncStorage.getItem(key),
+  set: (key, value) => AsyncStorage.setItem(key, value),
+  remove: (key) => AsyncStorage.removeItem(key),
 }
 
 /**
- * Permission-aware location. On mount it checks the *existing* permission WITHOUT
- * prompting: already-granted → fetch a fix; otherwise → 'undetermined' so the screen
- * can show contextual priming. The OS prompt only fires when `request()` is called.
+ * Permission-aware location. On mount it checks the *existing* permission WITHOUT prompting:
+ * already-granted → fetch a fix; otherwise → 'undetermined' so the screen can show contextual
+ * priming. The OS prompt only fires when `request()` is called.
  *
- * Every coordinate leaving this hook is **grid-snapped** (`snapFix` from `@nextbus/core`) — see
- * `packages/core/src/geo-snap.ts` for why that matters for privacy, edge caching and offline replay.
+ * Ten lines of React over a shared controller. `apps/web/src/hooks/useLocation.ts` is the same ten
+ * lines over the same controller with a different provider, and that symmetry is the point.
  */
 export function useLocation(): UseLocation {
   const [state, setState] = useState<LocationState>({ status: 'loading' })
+  const alive = useRef(true)
 
-  /**
-   * @param showLoading set `false` when the caller has already painted a remembered fix. React 19
-   * batches state updates within one continuation, so a `loading` set here would be coalesced with
-   * that paint and the rider would see the spinner anyway — which defeats the whole point of
-   * keeping the last fix.
-   */
-  const fetchFix = useCallback(async (showLoading = true) => {
-    if (showLoading) setState({ status: 'loading' })
-    try {
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      const fix = snapFix({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-      setState({ status: 'ready', ...fix })
-      void AsyncStorage.setItem(LAST_FIX_KEY, JSON.stringify(fix)).catch(() => {})
-    } catch (err) {
-      const last = await readLastFix()
-      if (last) setState({ status: 'ready', ...last, stale: true })
-      else setState({ status: 'error', message: (err as Error).message })
-    }
-  }, [])
+  const controller = useRef(
+    createLocationController({
+      provider: expoLocationProvider,
+      store: asyncStorageStore,
+      emit: setState,
+      alive: () => alive.current,
+    }),
+  ).current
 
   const request = useCallback(() => {
-    void (async () => {
-      setState({ status: 'loading' })
-      try {
-        const { granted, canAskAgain } = await Location.requestForegroundPermissionsAsync()
-        if (granted) await fetchFix()
-        else setState({ status: 'denied', canAskAgain })
-      } catch (err) {
-        setState({ status: 'error', message: (err as Error).message })
-      }
-    })()
-  }, [fetchFix])
+    void controller.request()
+  }, [controller])
 
-  // Silent check on mount — never prompts.
   useEffect(() => {
-    let active = true
-    void (async () => {
-      try {
-        const { status, canAskAgain } = await Location.getForegroundPermissionsAsync()
-        if (!active) return
-        if (status === 'granted') {
-          // Show the last cell immediately so Nearby can paint from cache, then replace it
-          // with the live fix. If they're the same cell the query key doesn't move at all.
-          const last = await readLastFix()
-          if (active && last) setState({ status: 'ready', ...last, stale: true })
-          if (active) await fetchFix(!last)
-        } else if (status === 'denied') setState({ status: 'denied', canAskAgain })
-        else setState({ status: 'undetermined' })
-      } catch (err) {
-        if (active) setState({ status: 'error', message: (err as Error).message })
-      }
-    })()
+    alive.current = true
+    void controller.start()
     return () => {
-      active = false
+      alive.current = false
     }
-  }, [fetchFix])
+  }, [controller])
 
   return { state, request }
 }

@@ -3,7 +3,9 @@ import {
   type Eta,
   formatFavoriteRouteKey,
   parseFavoriteRouteKey,
+  type ResolvedClientPolicy,
   type StopDetail,
+  stopCardView,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQueries } from '@tanstack/react-query'
@@ -108,6 +110,7 @@ export default function Favorites() {
                     favoriteSet={favoriteSet}
                     locale={locale}
                     now={now}
+                    policy={policy}
                     onPress={() => router.push(`/stop/${encodeURIComponent(placeId)}`)}
                     onRoutePress={(routeId) =>
                       router.push(
@@ -133,6 +136,7 @@ function FavoritePlaceRow({
   favoriteSet,
   locale,
   now,
+  policy,
   onPress,
   onRoutePress,
 }: {
@@ -140,6 +144,7 @@ function FavoritePlaceRow({
   favoriteSet: Set<string>
   locale: ReturnType<typeof useLocale>
   now: number
+  policy: ResolvedClientPolicy
   onPress: () => void
   onRoutePress: (routeId: string) => void
 }) {
@@ -160,12 +165,13 @@ function FavoritePlaceRow({
     // `4 - 4` and a place with nine saved routes showed four of them and said nothing about the rest.
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
 
+  // No `routeCount` and no `distanceM`: Favourites knows what the rider saved, not what serves the
+  // place, and distance is irrelevant on this screen. `stopCardView` handles both absences — the
+  // readings become the total, and the caption loses its distance half (WP4-0).
   return (
     <StopRow
-      name={detail.stop.name[locale]}
-      etas={etas}
+      view={stopCardView({ stop: detail.stop, etas }, { locale, now, policy })}
       locale={locale}
-      now={now}
       onPress={onPress}
       onRoutePress={onRoutePress}
     />
