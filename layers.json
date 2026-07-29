@@ -83,7 +83,16 @@
       "npm": "non-view"
     },
     "view": {
-      "dirs": ["apps/mobile"],
+      "comment": [
+        "TWO renderers, one layer (WP4-1). `apps/web` is listed here before it holds a single file,",
+        "and that ordering is the point: every rule this generator emits is keyed `from` a layer dir",
+        "and the only rule with a non-layer `from` is no-circular — so a directory absent from this",
+        "list is the `from` of NO rule at all. A new app would have been free to import",
+        "`data-normalize`, or to call an upstream HK API directly, and golden rule 2 would not have",
+        "fired. That is a gate passing because it is looking at nothing, which this repo has now hit",
+        "five times; the cheapest moment to close it is before the first file exists."
+      ],
+      "dirs": ["apps/mobile", "apps/web"],
       "use": ["contract", "kernel", "ports", "tokens", "client"],
       "npm": "any",
       "bannedSyntax": [

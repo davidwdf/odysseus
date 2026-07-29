@@ -262,7 +262,7 @@
       ]
     },
     "etaLabelParts": {
-      "doc": "The same rule as formatRelative, split so a caller can render the number large and the unit small and pinned — only the digits move as the value changes. Three variants; the discriminator is `kind`.",
+      "doc": "The same rule as formatRelative, split so a caller can render the number large and the unit small and pinned — only the digits move as the value changes. Three variants; the discriminator is `kind`. The last two rows carry an explicit `dueUnderSec`: the parameter had been missing, so `EtaBadge` — the only caller — silently ignored a served ClientPolicy while every other caller of `etaView` honoured it (ADR-053; closed in WP4-0).",
       "cases": [
         {
           "name": "mins-119s-en",
@@ -334,6 +334,34 @@
             "arrivalIso": "2026-07-27T11:50:00+08:00",
             "nowIso": "2026-07-27T12:00:00+08:00",
             "locale": "en"
+          },
+          "expect": {
+            "kind": "departed"
+          }
+        },
+        {
+          "name": "served-due-band-narrows-what-counts-as-due",
+          "why": "A served `dueUnderSec` of 30 makes a 45 s arrival a figure rather than \"Due\". Under the shipped 60 s default the same reading is \"Due\", so this row fails against any implementation that drops the parameter — which is exactly what the code did before WP4-0.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:45+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en",
+            "dueUnderSec": 30
+          },
+          "expect": {
+            "kind": "mins",
+            "value": 1,
+            "unit": "min"
+          }
+        },
+        {
+          "name": "served-due-band-also-moves-the-departed-edge",
+          "why": "The band is symmetric — one number for \"no figure yet\" and \"still worth showing\" (see etaView). With `dueUnderSec: 30`, a bus 45 s in the PAST is departed, where the 60 s default still shows it as Due. Pins that a port threads the override into both halves, not just the forward one.",
+          "args": {
+            "arrivalIso": "2026-07-27T11:59:15+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en",
+            "dueUnderSec": 30
           },
           "expect": {
             "kind": "departed"
@@ -1300,6 +1328,294 @@
             }
           },
           "expect": "info"
+        }
+      ]
+    },
+    "etaUrgency": {
+      "doc": "How much attention one arrival is owed, as a NAME a renderer turns into a colour — never a colour (ADR-053, applied on the client side of the network this time). It exists because the alternative had already drifted: `apps/mobile/components/EtaBadge.tsx` decided imminence with a literal `parts.value <= 5` — 360 s, since `value` is floored minutes — while the served `warnUnderSec` was 180 and its own comment read \"Nothing reads this yet\". Both were true, which is how one judgement came to be written down twice. In a live sample of 40 rows, 7 were coloured imminent against the policy. Every row below is stated against the shipped defaults (`dueUnderSec` 60, `warnUnderSec` 180); the last row varies the policy to prove the thresholds are read rather than baked.",
+      "cases": [
+        {
+          "name": "no-reading-is-none",
+          "why": "A route with no reading at all. Distinct from departed: the row still exists and still names its route, there is just nothing to count down. A port that treated absent as departed would dim a row that is merely quiet.",
+          "args": {
+            "arrivalIso": null,
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "none"
+        },
+        {
+          "name": "minus-61s-is-none",
+          "why": "Past the symmetric due band, so genuinely gone.",
+          "args": {
+            "arrivalIso": "2026-07-27T11:58:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "none"
+        },
+        {
+          "name": "minus-60s-is-due",
+          "why": "THE LOWER EDGE, and it is inclusive: `seconds >= -dueUnderSec`. A reading a minute in the past is still shown, because the feed clock and ours disagree by seconds and blanking a stop the rider is standing at is the worse error (see etaView).",
+          "args": {
+            "arrivalIso": "2026-07-27T11:59:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "due"
+        },
+        {
+          "name": "59s-is-due",
+          "why": "Inside the band on the forward side: no figure is shown at all (ADR-008).",
+          "args": {
+            "arrivalIso": "2026-07-27T12:00:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "due"
+        },
+        {
+          "name": "60s-is-soon",
+          "why": "The first second a figure appears, and it is already urgent.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:01:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "soon"
+        },
+        {
+          "name": "179s-is-soon",
+          "why": "THE UPPER EDGE of imminence, one second inside the served `warnUnderSec`.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:02:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "soon"
+        },
+        {
+          "name": "180s-is-normal",
+          "why": "THE WITNESS ROW. `warnUnderSec` is exclusive, so 180 s is ordinary — and the old literal called this imminent, because floor(180/60) = 3 and 3 <= 5.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:03:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "normal"
+        },
+        {
+          "name": "359s-is-normal",
+          "why": "THE SECOND WITNESS, and the widest divergence: floor(359/60) = 5, so `value <= 5` made this imminent too. Nearly six minutes away, coloured as \"run\".",
+          "args": {
+            "arrivalIso": "2026-07-27T12:05:59+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "normal"
+        },
+        {
+          "name": "a-served-policy-moves-both-thresholds",
+          "why": "The point of serving the numbers (ADR-053): the same 200 s reading is `normal` under the shipped 180 s band and `soon` under a served 300 s one. A port that hard-coded either number passes every row above and fails this one.",
+          "args": {
+            "arrivalIso": "2026-07-27T12:03:20+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "policy": {
+              "dueUnderSec": 60,
+              "warnUnderSec": 300
+            }
+          },
+          "expect": "soon"
+        }
+      ]
+    },
+    "etaReadout": {
+      "doc": "The three things every arrival readout is made of — label, urgency, staleness — derived together. They travel together because they must AGREE: the label's \"Due\" band and the urgency's `due` band are the same `dueUnderSec`, so a caller computing one with a served policy and the other with the default renders the word \"Due\" in the ordinary colour. Two screens were deriving these by hand before WP4-0 (the Nearby card and the Place detail row); a third renderer would have made three.",
+      "cases": [
+        {
+          "name": "a-fresh-reading-three-minutes-out",
+          "why": "The ordinary case: a figure, no urgency, not stale. All three fields at once, which is the point of the function.",
+          "args": {
+            "eta": {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-29T11:53:50+08:00"],
+              "dataTimestamp": "2026-07-29T11:50:19+08:00",
+              "observedAt": "2026-07-29T03:50:19.000Z"
+            },
+            "locale": "en",
+            "nowIso": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "label": {
+              "kind": "mins",
+              "value": 3,
+              "unit": "min"
+            },
+            "urgency": "normal",
+            "stale": false
+          }
+        },
+        {
+          "name": "label-and-urgency-agree-on-the-due-band",
+          "why": "THE ROW THAT JUSTIFIES THE FUNCTION. A served `dueUnderSec` of 30 must move BOTH halves: the label stops saying \"Due\" and the urgency stops saying `due` — becoming `soon`, because 45 s is still inside `warnUnderSec`. Before WP4-0 `etaLabelParts` took no such parameter, so this row would have produced label `due` alongside urgency `soon`: the word \"Due\" rendered in the imminent colour rather than the due one. Worth noting how this row was written: the expectation was hand-typed as `normal` and the suite rejected it, which is the corpus doing its job on the one kind of row a generator cannot check.",
+          "args": {
+            "eta": {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-29T11:51:15+08:00"],
+              "dataTimestamp": "2026-07-29T11:50:19+08:00",
+              "observedAt": "2026-07-29T03:50:19.000Z"
+            },
+            "locale": "en",
+            "nowIso": "2026-07-29T11:50:30+08:00",
+            "policy": {
+              "dueUnderSec": 30,
+              "warnUnderSec": 180,
+              "staleAfterMs": 90000
+            }
+          },
+          "expect": {
+            "label": {
+              "kind": "mins",
+              "value": 1,
+              "unit": "min"
+            },
+            "urgency": "soon",
+            "stale": false
+          }
+        },
+        {
+          "name": "an-empty-arrivals-array-is-departed-and-not-urgent",
+          "why": "An `Eta` can arrive carrying no arrivals at all. The readout must be complete anyway — a port that indexed `arrivals[0]` unchecked crashes here.",
+          "args": {
+            "eta": {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": [],
+              "dataTimestamp": "2026-07-29T11:50:19+08:00",
+              "observedAt": "2026-07-29T03:50:19.000Z"
+            },
+            "locale": "en",
+            "nowIso": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "label": {
+              "kind": "departed"
+            },
+            "urgency": "none",
+            "stale": false
+          }
+        },
+        {
+          "name": "staleness-is-measured-from-the-operators-clock",
+          "why": "Aged by `dataTimestamp` — when the operator generated the reading — not `observedAt`, so a payload replayed from the offline cache ages honestly instead of looking fresh because we fetched it recently (ADR-058). 91 s against the 90 s default, with a perfectly good arrival still in the future.",
+          "args": {
+            "eta": {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-29T11:54:30+08:00"],
+              "dataTimestamp": "2026-07-29T11:48:59+08:00",
+              "observedAt": "2026-07-29T03:50:19.000Z"
+            },
+            "locale": "en",
+            "nowIso": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "label": {
+              "kind": "mins",
+              "value": 4,
+              "unit": "min"
+            },
+            "urgency": "normal",
+            "stale": true
+          }
+        }
+      ]
+    },
+    "remarkView": {
+      "doc": "An operator remark reduced to one locale and classified, or absent when there is nothing to show. Three rules that had been sitting inside `components/RemarkTag.tsx`, reachable only by rendering it: blank-in-this-locale counts as absent; the served `remarkKind` wins; and with no served kind the fallback is `classifyRemark` — THE SAME kernel function the edge calls — which is what makes an offline replay or an older edge indistinguishable from a current one.",
+      "cases": [
+        {
+          "name": "a-served-kind-is-used-as-given",
+          "why": "The ordinary path since WP3-4 moved classification to the edge (ADR-053).",
+          "args": {
+            "remark": {
+              "en": "Scheduled",
+              "zh-Hant": "未開出",
+              "zh-Hans": "未开出"
+            },
+            "locale": "en",
+            "servedKind": "scheduled"
+          },
+          "expect": {
+            "text": "Scheduled",
+            "kind": "scheduled"
+          }
+        },
+        {
+          "name": "no-served-kind-falls-back-to-the-same-function-the-edge-calls",
+          "why": "A payload from the offline cache (ADR-058) or an edge older than the field. The classification must be IDENTICAL, not merely reasonable — one rule, two callers, never two implementations.",
+          "args": {
+            "remark": {
+              "en": "Last Bus",
+              "zh-Hant": "尾班車",
+              "zh-Hans": "尾班车"
+            },
+            "locale": "en",
+            "servedKind": null
+          },
+          "expect": {
+            "text": "Last Bus",
+            "kind": "lastBus"
+          }
+        },
+        {
+          "name": "blank-in-this-locale-is-absent",
+          "why": "Upstream really sends an empty `en`. Returning it as text puts an empty tag into the layout at a different size, which is a visible gap rather than nothing.",
+          "args": {
+            "remark": {
+              "en": "",
+              "zh-Hant": "尾班車",
+              "zh-Hans": "尾班车"
+            },
+            "locale": "en",
+            "servedKind": "lastBus"
+          },
+          "expect": null
+        },
+        {
+          "name": "the-same-blank-remark-shows-in-chinese",
+          "why": "The pair to the row above, and the reason blankness is per-locale rather than per-remark: the very same payload has text to show in zh-Hant. A port that checked \"is the remark empty\" once, for all locales, would drop it in both.",
+          "args": {
+            "remark": {
+              "en": "",
+              "zh-Hant": "尾班車",
+              "zh-Hans": "尾班车"
+            },
+            "locale": "zh-Hant",
+            "servedKind": "lastBus"
+          },
+          "expect": {
+            "text": "尾班車",
+            "kind": "lastBus"
+          }
+        },
+        {
+          "name": "no-remark-at-all-is-absent",
+          "why": "Most readings carry none. Distinct from a blank one only in provenance, identical in effect — which is why both collapse to one absent value rather than two states a renderer would have to tell apart.",
+          "args": {
+            "remark": null,
+            "locale": "en",
+            "servedKind": null
+          },
+          "expect": null
+        },
+        {
+          "name": "an-explicit-null-on-the-wire-is-absent",
+          "why": "THE REGRESSION ROW. The app does no runtime validation (ADR-052 decision 2), so a payload carrying `\"remark\": null` reaches the kernel as `null` whatever the schema says. The component this replaced read the field as `eta.remark?.[locale]`, where optional chaining absorbed it; the first cut of this function guarded `=== undefined` and threw. Real feeds do not currently send it, so no live sample would have caught this — only a row that states the case.",
+          "args": {
+            "remark": null,
+            "locale": "en",
+            "servedKind": "info"
+          },
+          "expect": null
         }
       ]
     }

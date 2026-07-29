@@ -1,0 +1,4513 @@
+{
+  "module": "stop-card",
+  "source": "src/stop-card.ts",
+  "version": 1,
+  "doc": "The compact stop card — the unit Nearby and Favourites are both lists of — as rules over the canonical model. These six derivations lived inside `apps/mobile`'s components until WP4-0 and were reachable only by rendering a React tree, so nothing could assert them and a second renderer would have had to re-implement each one by reading JSX. That is the drift Wave 4 exists to disprove, and a re-implementation would have PASSED a byte-identity check on the day it was written while proving the opposite. Every `args` below is verbatim from the dataset build `d598893de6add2e4` of 2026-07-29 — real place ids, real member poles, real ALL-CAPS names with operator codes, real GMB \"Scheduled\" remarks in all three locales — because the shapes that break these rules (a place with no live readings, a reading with no destination, a blank `en`) are ones nobody invents. Arrival timestamps are the one synthetic part, stated against a fixed `nowIso` of 2026-07-29T11:50:30+08:00: a fixture that read a clock would be worthless to a second platform and flaky on the first. Absent optional values are JSON `null` on both sides, per `test/corpus.ts` — stated rather than omitted, so a Swift or Kotlin port comparing structs has nothing to guess. The expectations were derived from the implementation only AFTER a parity harness proved it equal to the shipped components over 120 real rows in 3 locales, with exactly one declared difference: the imminence band moves 360 s → 180 s, because `EtaBadge` carried a literal `value <= 5` while the served `warnUnderSec` said 180. That row is `the-urgency-bands-at-every-boundary`.",
+  "groups": {
+    "displayName": {
+      "doc": "How a bus-stop name is rendered anywhere in the product (ADR-034): title-cased, with the operator's own pole code split off so a renderer can set it smaller. Two operations in a fixed order — the code comes off first, so it is never cased.",
+      "cases": [
+        {
+          "name": "an-all-caps-kmb-name-with-a-pole-code",
+          "why": "The everyday KMB shape, verbatim from the build. Both halves at once, and the ORDER matters: the code is split off before title-casing, so \"ST935\" survives intact. Title-casing first yields \"St935\", which reads as a typo rather than a code.",
+          "args": {
+            "name": "SHA TIN STATION BUS TERMINUS (ST935)"
+          },
+          "expect": {
+            "label": "Sha Tin Station Bus Terminus",
+            "code": "ST935"
+          }
+        },
+        {
+          "name": "a-mixed-case-name-is-left-alone",
+          "why": "Citybus and GMB already write names for humans, so `titleCaseName` must not touch them — \"outside\" must not become \"Outside\".",
+          "args": {
+            "name": "Tai Chung Kiu Road, outside Belair Gardens"
+          },
+          "expect": {
+            "label": "Tai Chung Kiu Road, outside Belair Gardens",
+            "code": null
+          }
+        },
+        {
+          "name": "a-cjk-name-has-no-latin-to-case",
+          "why": "The same place in Traditional Chinese. Pins that a port does not apply a Latin casing rule to CJK, and that the comma is not mistaken for a code delimiter.",
+          "args": {
+            "name": "大涌橋路, 富豪花園外"
+          },
+          "expect": {
+            "label": "大涌橋路, 富豪花園外",
+            "code": null
+          }
+        },
+        {
+          "name": "a-name-with-no-code-yields-no-code",
+          "why": "Absent, not empty string — a renderer draws the code slot only when there is one, and `''` would put an empty span at a different size into every row.",
+          "args": {
+            "name": "Shatin Station"
+          },
+          "expect": {
+            "label": "Shatin Station",
+            "code": null
+          }
+        },
+        {
+          "name": "a-circular-marker-is-not-a-pole-code",
+          "why": "Real and a genuine trap: \"(Circular)\" sits exactly where a pole code sits, so `splitStopCode` takes it as one. Recorded as the behaviour that ships — `stripCircular` is the separate rule for route names, and conflating them would strip a real code like \"(ST311)\" from a stop.",
+          "args": {
+            "name": "TAI KOK TSUI (CIRCULAR)"
+          },
+          "expect": {
+            "label": "Tai Kok Tsui",
+            "code": "CIRCULAR"
+          }
+        }
+      ]
+    },
+    "stopCardCaption": {
+      "doc": "The caption under a stop name: a compass direction for a merged place, then distance · walk. Two separators that are not interchangeable, and either part may be absent — Favourites shows no distance, a lone stop has no bearing. Both absent yields the empty string, which is the signal to draw no caption line at all.",
+      "cases": [
+        {
+          "name": "merged-place-shows-direction-then-distance-and-walk",
+          "why": "Both parts, and the reason the separators are not interchangeable: `' · '` binds the distance to its own walk time, `'  ·  '` (wider) separates that pair from the compass direction, because they are different kinds of fact. A second renderer re-deriving this gets a plausible caption with the wrong rhythm and nothing fails.",
+          "args": {
+            "distanceM": 26,
+            "bearingDeg": 54,
+            "locale": "en"
+          },
+          "expect": "Northeast-bound  ·  30m · 1 min walk"
+        },
+        {
+          "name": "the-same-caption-in-traditional-chinese",
+          "why": "The words are localised and the punctuation is not. Pins that a port does not \"translate\" the separators, and that the order does not flip.",
+          "args": {
+            "distanceM": 26,
+            "bearingDeg": 54,
+            "locale": "zh-Hant"
+          },
+          "expect": "東北行  ·  30m · 1 分鐘路程"
+        },
+        {
+          "name": "a-lone-stop-has-no-mean-bearing",
+          "why": "Only merged places carry a travel bearing (ADR-042), so a GMB pole shows distance alone — and crucially with NO leading separator, which a naive join produces.",
+          "args": {
+            "distanceM": 44,
+            "bearingDeg": null,
+            "locale": "en"
+          },
+          "expect": "40m · 1 min walk"
+        },
+        {
+          "name": "favourites-passes-no-distance",
+          "why": "The Favourites list shows the same card without a distance, so the direction must stand alone with no TRAILING separator. This is the half a renderer forgets, because Nearby never exercises it.",
+          "args": {
+            "distanceM": null,
+            "bearingDeg": 54,
+            "locale": "en"
+          },
+          "expect": "Northeast-bound"
+        },
+        {
+          "name": "neither-part-means-no-caption-at-all",
+          "why": "Empty string, not \" · \" or a stray space: it is the signal to draw no caption line, so anything non-empty puts an empty row on screen.",
+          "args": {
+            "distanceM": null,
+            "bearingDeg": null,
+            "locale": "en"
+          },
+          "expect": ""
+        },
+        {
+          "name": "standing-at-the-stop-reads-zero-metres",
+          "why": "Real: the query point was the place centroid, so `distanceM` was 1 and `formatDistance` rounds to the nearest 10 m — \"0m\". Recorded rather than fixed, because it is `geo#formatDistance`'s pinned behaviour and \"0m · 1 min walk\" is at least not wrong. A port must reproduce it or the two disagree at the one distance every rider sees when they arrive.",
+          "args": {
+            "distanceM": 1,
+            "bearingDeg": 225,
+            "locale": "en"
+          },
+          "expect": "Southwest-bound  ·  0m · 1 min walk"
+        }
+      ]
+    },
+    "stopCardView": {
+      "doc": "One whole card: the name split for display, the caption, the route rows under the served `maxRows` cap, and the \"+N more\" count — computed together with the cap, because they are one rule and a caller that pre-sliced its list made the count zero. Each row carries where the service is headed, its soonest arrival split into figure and unit, whether that reading is stale, and how much attention it is owed as a NAME rather than a colour (ADR-053).",
+      "cases": [
+        {
+          "name": "merged-place-caps-thirteen-readings-at-six-and-offers-twenty-more",
+          "why": "The everyday case, verbatim from the build of 2026-07-29: Belair Garden southwest kerb, 5 member poles, 26 routes, 13 of them with a live reading. Six rows and \"+20 more\" — the cap and the count are one rule, and a caller that pre-sliced its list computed 4−4=0 and lost the affordance entirely (the shipped Favourites bug WP3-4 found).",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:31+08:00",
+                    "2026-07-29T12:00:22+08:00",
+                    "2026-07-29T12:16:17+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:49X:outbound:1",
+                  "stopId": "66BF94751BD28BAD",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:52+08:00",
+                    "2026-07-29T11:59:22+08:00",
+                    "2026-07-29T12:09:10+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.601Z",
+                  "destination": {
+                    "en": "TSING YI FERRY",
+                    "zh-Hant": "青衣碼頭",
+                    "zh-Hans": "青衣碼頭"
+                  },
+                  "fare": "10.4"
+                },
+                {
+                  "routeId": "KMB:86C:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:52:57+08:00", "2026-07-29T12:26:03+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "CHEUNG SHA WAN",
+                    "zh-Hant": "長沙灣",
+                    "zh-Hans": "長沙灣"
+                  },
+                  "fare": "9"
+                },
+                {
+                  "routeId": "KMB:299X:inbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:53:20+08:00",
+                    "2026-07-29T12:12:29+08:00",
+                    "2026-07-29T12:32:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN CENTRAL",
+                    "zh-Hant": "沙田巿中心",
+                    "zh-Hans": "沙田巿中心"
+                  },
+                  "fare": "4.6"
+                },
+                {
+                  "routeId": "KMB:284:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:53:43+08:00",
+                    "2026-07-29T12:13:49+08:00",
+                    "2026-07-29T12:39:54+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "RAVANA GARDEN (CIRCULAR)",
+                    "zh-Hant": "濱景花園(循環線)",
+                    "zh-Hans": "濱景花園(循環線)"
+                  },
+                  "fare": "4.6"
+                },
+                {
+                  "routeId": "KMB:83K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:55:15+08:00",
+                    "2026-07-29T12:11:08+08:00",
+                    "2026-07-29T12:26:18+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHA TIN CENTRAL (CIRCULAR)",
+                    "zh-Hant": "沙田市中心(循環線)",
+                    "zh-Hans": "沙田市中心(循環線)"
+                  },
+                  "fare": "5.2"
+                },
+                {
+                  "routeId": "CTB:B8:inbound:1",
+                  "stopId": "001965",
+                  "operator": "CTB",
+                  "arrivals": [
+                    "2026-07-29T11:56:27+08:00",
+                    "2026-07-29T12:17:09+08:00",
+                    "2026-07-29T12:38:43+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:12+08:00",
+                  "observedAt": "2026-07-29T03:50:29.500Z",
+                  "destination": {
+                    "en": "Tai Wai Station (via Tai Po)",
+                    "zh-Hant": "大圍站 (經大埔)",
+                    "zh-Hans": "大圍站 (經大埔)"
+                  },
+                  "fare": "7.6"
+                },
+                {
+                  "routeId": "KMB:81C:outbound:1",
+                  "stopId": "A401ECF82924D465",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:56:47+08:00",
+                    "2026-07-29T12:10:46+08:00",
+                    "2026-07-29T12:26:29+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.609Z",
+                  "destination": {
+                    "en": "TSIM SHA TSUI EAST (MODY ROAD)",
+                    "zh-Hant": "尖沙咀東(麼地道)",
+                    "zh-Hans": "尖沙咀東(麼地道)"
+                  },
+                  "fare": "9"
+                },
+                {
+                  "routeId": "KMB:89X:inbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:57:38+08:00",
+                    "2026-07-29T12:11:19+08:00",
+                    "2026-07-29T12:31:36+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "6.3"
+                },
+                {
+                  "routeId": "KMB:A41:outbound:1",
+                  "stopId": "4039C75BB85BF238",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:09:22+08:00", "2026-07-29T12:38:54+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:50:29.578Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                    "zh-Hant": "機場(地面運輸中心)",
+                    "zh-Hans": "機場(地面運輸中心)"
+                  },
+                  "fare": "23.4"
+                },
+                {
+                  "routeId": "KMB:182:outbound:1",
+                  "stopId": "66BF94751BD28BAD",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:09:38+08:00", "2026-07-29T12:34:38+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                  "observedAt": "2026-07-29T03:50:29.601Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "CENTRAL (MACAO FERRY)",
+                    "zh-Hant": "中環(港澳碼頭)",
+                    "zh-Hans": "中環(港澳碼頭)"
+                  },
+                  "fare": "20.8"
+                },
+                {
+                  "routeId": "KMB:85A:outbound:1",
+                  "stopId": "66BF94751BD28BAD",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:12:04+08:00", "2026-07-29T12:43:37+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.601Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "KOWLOON CITY FERRY",
+                    "zh-Hant": "九龍城碼頭",
+                    "zh-Hans": "九龍城碼頭"
+                  },
+                  "fare": "7.8"
+                },
+                {
+                  "routeId": "KMB:74A:outbound:1",
+                  "stopId": "A401ECF82924D465",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:39:55+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.609Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "KAI YIP",
+                    "zh-Hant": "啟業",
+                    "zh-Hans": "啟業"
+                  },
+                  "fare": "7.8"
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "49X",
+                "headline": "Tsing Yi Ferry",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:86C:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86C",
+                "headline": "Cheung Sha Wan",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 2,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:299X:inbound:1",
+                "operator": "KMB",
+                "routeNo": "299X",
+                "headline": "Shatin Central",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 2,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:284:outbound:1",
+                "operator": "KMB",
+                "routeNo": "284",
+                "headline": "Ravana Garden (Circular)",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:83K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "83K",
+                "headline": "Sha Tin Central (Circular)",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 4,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 20
+          }
+        },
+        {
+          "name": "an-all-caps-name-with-an-operator-code-splits-and-title-cases",
+          "why": "KMB names arrive shouted and with their own pole code parenthesised. The split is what lets a renderer set the code smaller (ADR-034) — two fields, because the size difference is layout and therefore the renderer's, while WHERE the name ends is the model's.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "KMB:99B9CAA698C36C5E",
+                "name": {
+                  "en": "SHA TIN STATION BUS TERMINUS (ST935)",
+                  "zh-Hant": "沙田站巴士總站 (ST935)",
+                  "zh-Hans": "沙田站巴士總站 (ST935)"
+                },
+                "location": {
+                  "lat": 22.3831,
+                  "lng": 114.18802
+                },
+                "sources": [
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "99B9CAA698C36C5E"
+                  }
+                ]
+              },
+              "distanceM": 11,
+              "etas": [
+                {
+                  "routeId": "KMB:85K:outbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:48:45+08:00",
+                    "2026-07-29T12:12:16+08:00",
+                    "2026-07-29T12:37:09+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "5.8"
+                },
+                {
+                  "routeId": "KMB:89X:inbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:51:56+08:00",
+                    "2026-07-29T12:03:26+08:00",
+                    "2026-07-29T12:17:05+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "6.3"
+                },
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:55:04+08:00",
+                    "2026-07-29T12:05:43+08:00",
+                    "2026-07-29T12:21:42+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:88X:inbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:00:12+08:00", "2026-07-29T12:25:53+08:00"],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SUI WO COURT",
+                    "zh-Hant": "穗禾苑",
+                    "zh-Hans": "穗禾苑"
+                  },
+                  "fare": "6.3"
+                },
+                {
+                  "routeId": "KMB:170:inbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:10:46+08:00", "2026-07-29T12:42:31+08:00"],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.7"
+                }
+              ],
+              "routeCount": 8
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "KMB:99B9CAA698C36C5E",
+            "name": {
+              "label": "Sha Tin Station Bus Terminus",
+              "code": "ST935"
+            },
+            "caption": "10m · 1 min walk",
+            "bearingDeg": null,
+            "rows": [
+              {
+                "routeId": "KMB:85K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "85K",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "departed"
+                },
+                "urgency": "none",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:89X:inbound:1",
+                "operator": "KMB",
+                "routeNo": "89X",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 1,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 4,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:88X:inbound:1",
+                "operator": "KMB",
+                "routeNo": "88X",
+                "headline": "Sui Wo Court",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 9,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:170:inbound:1",
+                "operator": "KMB",
+                "routeNo": "170",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 20,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 3
+          }
+        },
+        {
+          "name": "a-cjk-name-is-not-title-cased",
+          "why": "The same place in Traditional Chinese: `titleCaseName` must pass CJK through untouched, and the code splits off exactly as it does in English.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "KMB:99B9CAA698C36C5E",
+                "name": {
+                  "en": "SHA TIN STATION BUS TERMINUS (ST935)",
+                  "zh-Hant": "沙田站巴士總站 (ST935)",
+                  "zh-Hans": "沙田站巴士總站 (ST935)"
+                },
+                "location": {
+                  "lat": 22.3831,
+                  "lng": 114.18802
+                },
+                "sources": [
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "99B9CAA698C36C5E"
+                  }
+                ]
+              },
+              "distanceM": 11,
+              "etas": [
+                {
+                  "routeId": "KMB:85K:outbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:48:45+08:00",
+                    "2026-07-29T12:12:16+08:00",
+                    "2026-07-29T12:37:09+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "5.8"
+                },
+                {
+                  "routeId": "KMB:89X:inbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:51:56+08:00",
+                    "2026-07-29T12:03:26+08:00",
+                    "2026-07-29T12:17:05+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "6.3"
+                },
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:55:04+08:00",
+                    "2026-07-29T12:05:43+08:00",
+                    "2026-07-29T12:21:42+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:88X:inbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:00:12+08:00", "2026-07-29T12:25:53+08:00"],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SUI WO COURT",
+                    "zh-Hant": "穗禾苑",
+                    "zh-Hans": "穗禾苑"
+                  },
+                  "fare": "6.3"
+                },
+                {
+                  "routeId": "KMB:170:inbound:1",
+                  "stopId": "99B9CAA698C36C5E",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:10:46+08:00", "2026-07-29T12:42:31+08:00"],
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:49:53.785Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.7"
+                }
+              ],
+              "routeCount": 8
+            },
+            "locale": "zh-Hant",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "KMB:99B9CAA698C36C5E",
+            "name": {
+              "label": "沙田站巴士總站",
+              "code": "ST935"
+            },
+            "caption": "10m · 1 分鐘路程",
+            "bearingDeg": null,
+            "rows": [
+              {
+                "routeId": "KMB:85K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "85K",
+                "headline": "沙田站",
+                "remark": null,
+                "label": {
+                  "kind": "departed"
+                },
+                "urgency": "none",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:89X:inbound:1",
+                "operator": "KMB",
+                "routeNo": "89X",
+                "headline": "沙田站",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 1,
+                  "unit": "分鐘"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "沙田站",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 4,
+                  "unit": "分鐘"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:88X:inbound:1",
+                "operator": "KMB",
+                "routeNo": "88X",
+                "headline": "穗禾苑",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 9,
+                  "unit": "分鐘"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:170:inbound:1",
+                "operator": "KMB",
+                "routeNo": "170",
+                "headline": "沙田站",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 20,
+                  "unit": "分鐘"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 3
+          }
+        },
+        {
+          "name": "a-place-with-no-live-readings-still-says-how-many-routes-it-has",
+          "why": "Real and common at quiet hours: zero readings, two routes. No rows and \"+2 more\" — the honest answer. A renderer that derived the count from the rows would show an empty card that claims nothing serves the stop, which is the failure `routeCount` exists to prevent.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "KMB:11E5EB00D58B8B4C",
+                "name": {
+                  "en": "SHA TIN STATION BUS TERMINUS (ST942)",
+                  "zh-Hant": "沙田站巴士總站 (ST942)",
+                  "zh-Hans": "沙田站巴士總站 (ST942)"
+                },
+                "location": {
+                  "lat": 22.38344,
+                  "lng": 114.18812
+                },
+                "sources": [
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "11E5EB00D58B8B4C"
+                  }
+                ]
+              },
+              "distanceM": 50,
+              "etas": [],
+              "routeCount": 2
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "KMB:11E5EB00D58B8B4C",
+            "name": {
+              "label": "Sha Tin Station Bus Terminus",
+              "code": "ST942"
+            },
+            "caption": "50m · 1 min walk",
+            "bearingDeg": null,
+            "rows": [],
+            "remaining": 2
+          }
+        },
+        {
+          "name": "a-remark-beside-a-destination-becomes-its-own-line",
+          "why": "GMB sends \"Scheduled\" alongside a destination, so the row shows both: destination as the headline, remark underneath. Pins that the remark carries a CLASSIFIED kind — the server's `remarkKind` where it sent one — so a renderer needs no fallback of its own.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "GMB:20001553",
+                "name": {
+                  "en": "Tai Chung Kiu Road, outside Belair Gardens",
+                  "zh-Hant": "大涌橋路, 富豪花園外",
+                  "zh-Hans": "大涌橋路, 富豪花園外"
+                },
+                "location": {
+                  "lat": 22.38497,
+                  "lng": 114.19844
+                },
+                "sources": [
+                  {
+                    "operator": "GMB",
+                    "operatorStopId": "20001553"
+                  }
+                ]
+              },
+              "distanceM": 44,
+              "etas": [
+                {
+                  "routeId": "GMB:804:outbound:2010275",
+                  "stopId": "20001553",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T11:51:52.634+08:00",
+                    "2026-07-29T12:01:33.746+08:00",
+                    "2026-07-29T12:07:29.708+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                  "observedAt": "2026-07-29T03:50:29.479Z",
+                  "destination": {
+                    "en": "Hin Keng",
+                    "zh-Hant": "顯徑",
+                    "zh-Hans": "顯徑"
+                  }
+                },
+                {
+                  "routeId": "GMB:65A:outbound:2009082",
+                  "stopId": "20001553",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T11:51:53.269+08:00",
+                    "2026-07-29T11:56:49.501+08:00",
+                    "2026-07-29T12:02:11.973+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                  "observedAt": "2026-07-29T03:50:29.479Z",
+                  "destination": {
+                    "en": "Sha Tin Central",
+                    "zh-Hant": "沙田市中心",
+                    "zh-Hans": "沙田市中心"
+                  }
+                },
+                {
+                  "routeId": "GMB:67A:outbound:2009119",
+                  "stopId": "20001553",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T11:53:02.788+08:00",
+                    "2026-07-29T11:59:16.455+08:00",
+                    "2026-07-29T12:11:16.455+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                  "observedAt": "2026-07-29T03:50:29.479Z",
+                  "destination": {
+                    "en": "Sha Tin Station",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  }
+                }
+              ],
+              "routeCount": 6
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "GMB:20001553",
+            "name": {
+              "label": "Tai Chung Kiu Road, outside Belair Gardens",
+              "code": null
+            },
+            "caption": "40m · 1 min walk",
+            "bearingDeg": null,
+            "rows": [
+              {
+                "routeId": "GMB:804:outbound:2010275",
+                "operator": "GMB",
+                "routeNo": "804",
+                "headline": "Hin Keng",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 1,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "GMB:65A:outbound:2009082",
+                "operator": "GMB",
+                "routeNo": "65A",
+                "headline": "Sha Tin Central",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 1,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "GMB:67A:outbound:2009119",
+                "operator": "GMB",
+                "routeNo": "67A",
+                "headline": "Sha Tin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 2,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              }
+            ],
+            "remaining": 3
+          }
+        },
+        {
+          "name": "a-remark-with-no-served-kind-is-classified-locally",
+          "why": "ADR-053 moved the classification to the edge, but the field is optional for two reasons that both still happen: a payload replayed from the offline cache may predate it (ADR-058), and so may a response from an older edge. The fallback calls `classifyRemark` — the SAME kernel function the edge calls — so the two can never disagree. Without this row the fallback branch is unreached, which is how it would rot: live data always carries the field now, so nothing in normal operation exercises the path that offline depends on.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:31+08:00",
+                    "2026-07-29T12:00:22+08:00",
+                    "2026-07-29T12:16:17+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1",
+                  "remark": {
+                    "en": "Last Bus",
+                    "zh-Hant": "尾班車",
+                    "zh-Hans": "尾班车"
+                  },
+                  "remarkKind": null
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Shatin Station",
+                "remark": {
+                  "text": "Last Bus",
+                  "kind": "lastBus"
+                },
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              }
+            ],
+            "remaining": 25
+          }
+        },
+        {
+          "name": "a-remark-with-no-destination-stands-in-as-the-headline",
+          "why": "Assembled, and the assembly is the point: a real KMB row with its `destination` removed, which the feeds do produce (a Citybus 702 reading in this same build carried neither). The remark is promoted to the headline AND must not also appear as its own line — otherwise the same words print twice in one row. Note it is NOT title-cased there: a remark is prose the operator wrote, whereas a destination is a shouted name `titleCaseName` exists to repair.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:31+08:00",
+                    "2026-07-29T12:00:22+08:00",
+                    "2026-07-29T12:16:17+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": null,
+                  "fare": "7.1",
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "預定班次",
+                    "zh-Hans": "预定班次"
+                  },
+                  "remarkKind": "scheduled"
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Scheduled Bus",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              }
+            ],
+            "remaining": 25
+          }
+        },
+        {
+          "name": "neither-destination-nor-remark-leaves-the-row-headless",
+          "why": "Real shape (Citybus 702 inbound, this build): the row still names its route and counts down, it just has nothing to point at. A renderer must draw no \"→\" at all rather than an arrow into empty space.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:31+08:00",
+                    "2026-07-29T12:00:22+08:00",
+                    "2026-07-29T12:16:17+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": null,
+                  "fare": "7.1",
+                  "remark": null,
+                  "remarkKind": null
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": null,
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              }
+            ],
+            "remaining": 25
+          }
+        },
+        {
+          "name": "a-blank-destination-in-this-locale-falls-through-to-the-remark",
+          "why": "Upstream really sends an empty `en` — this package carries required corpus rows for it elsewhere. Every one of these rules was written as a JSX truthiness test, so blank behaved as absent; a port comparing against null instead would show an empty headline on a real feed.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:31+08:00",
+                    "2026-07-29T12:00:22+08:00",
+                    "2026-07-29T12:16:17+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1",
+                  "remark": {
+                    "en": "Last Bus",
+                    "zh-Hant": "尾班車",
+                    "zh-Hans": "尾班车"
+                  },
+                  "remarkKind": "lastBus"
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Last Bus",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              }
+            ],
+            "remaining": 25
+          }
+        },
+        {
+          "name": "the-urgency-bands-at-every-boundary",
+          "why": "THE ROW THIS MODULE WAS WRITTEN FOR. One card, eight readings, at −61/−60/−1/59/60/179/180/359 s. `none` past the symmetric due band, `due` inside it either side of zero, `soon` under `warnUnderSec`, `normal` above. The 180 s and 359 s rows are the witnesses to a real disagreement: `EtaBadge` used a literal `value <= 5` (360 s) while the served `warnUnderSec` was 180, so 7 of 40 rows in a live sample were coloured imminent against the policy. Urgency is a NAME, never a colour — each platform maps `soon` through its own colour system (ADR-053). `maxRows` is lifted to 8 here so every band is visible in one row of the corpus; the cap itself is pinned by the two cases above.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:100:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:49:29+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:101:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:49:30+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:102:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:50:29+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:103:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:51:29+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:104:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:51:30+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:105:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:53:29+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:106:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:53:30+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:107:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:56:29+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                }
+              ],
+              "routeCount": 8
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00",
+            "policy": {
+              "dueUnderSec": 60,
+              "warnUnderSec": 180,
+              "staleAfterMs": 90000,
+              "refreshAfterMs": 30000,
+              "maxArrivals": 3,
+              "maxRows": 8
+            }
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:100:outbound:1",
+                "operator": "KMB",
+                "routeNo": "100",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "departed"
+                },
+                "urgency": "none",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:101:outbound:1",
+                "operator": "KMB",
+                "routeNo": "101",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:102:outbound:1",
+                "operator": "KMB",
+                "routeNo": "102",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:103:outbound:1",
+                "operator": "KMB",
+                "routeNo": "103",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:104:outbound:1",
+                "operator": "KMB",
+                "routeNo": "104",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 1,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:105:outbound:1",
+                "operator": "KMB",
+                "routeNo": "105",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 2,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:106:outbound:1",
+                "operator": "KMB",
+                "routeNo": "106",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:107:outbound:1",
+                "operator": "KMB",
+                "routeNo": "107",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 5,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 0
+          }
+        },
+        {
+          "name": "a-reading-older-than-the-stale-threshold-is-marked-stale",
+          "why": "Aged by `dataTimestamp` — when the OPERATOR generated the reading — not by when we fetched it, so an offline replay ages honestly (ADR-058). 91 s against a 90 s threshold. Dimming is the renderer's choice; the judgement is not.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:54:30+08:00"],
+                  "dataTimestamp": "2026-07-29T11:48:59+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 4,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": true
+              }
+            ],
+            "remaining": 25
+          }
+        },
+        {
+          "name": "a-reading-with-no-arrivals-is-departed-not-absent",
+          "why": "An `Eta` can arrive with an empty `arrivals` array. The row exists — the route is there and named — but there is nothing to count down, so `label` is `departed` and `urgency` is `none`. A port that indexed `arrivals[0]` unchecked crashes here.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "departed"
+                },
+                "urgency": "none",
+                "stale": false
+              }
+            ],
+            "remaining": 25
+          }
+        },
+        {
+          "name": "an-unparseable-route-id-shows-the-whole-id-on-the-chip",
+          "why": "The grammar lives in `ids.ts` and it can fail — a future operator, a corrupted cache entry. The chip then shows the raw id rather than going blank, because an unreadable id is still information and an empty chip is not.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "NOT-AN-ID",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:55:30+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                }
+              ],
+              "routeCount": 26
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "NOT-AN-ID",
+                "operator": "KMB",
+                "routeNo": "NOT-AN-ID",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 5,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 25
+          }
+        },
+        {
+          "name": "a-served-policy-narrows-the-card",
+          "why": "The whole reason these numbers are served (ADR-053): `maxRows: 2` and `dueUnderSec: 30` arrive from the edge and BOTH are honoured — the cap, the recomputed \"+N more\", and the due band. `dueUnderSec` reaching the label is the Wave 3 loose end this closes: `etaLabelParts` had no such parameter, so an edge override was honoured by every other caller and silently dropped by the one the badge used.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "4039C75BB85BF238"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "66BF94751BD28BAD"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "A401ECF82924D465"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 1,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:31+08:00",
+                    "2026-07-29T12:00:22+08:00",
+                    "2026-07-29T12:16:17+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "KMB:49X:outbound:1",
+                  "stopId": "66BF94751BD28BAD",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:49:52+08:00",
+                    "2026-07-29T11:59:22+08:00",
+                    "2026-07-29T12:09:10+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.601Z",
+                  "destination": {
+                    "en": "TSING YI FERRY",
+                    "zh-Hant": "青衣碼頭",
+                    "zh-Hans": "青衣碼頭"
+                  },
+                  "fare": "10.4"
+                },
+                {
+                  "routeId": "KMB:86C:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T11:52:57+08:00", "2026-07-29T12:26:03+08:00"],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "CHEUNG SHA WAN",
+                    "zh-Hant": "長沙灣",
+                    "zh-Hans": "長沙灣"
+                  },
+                  "fare": "9"
+                },
+                {
+                  "routeId": "KMB:299X:inbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:53:20+08:00",
+                    "2026-07-29T12:12:29+08:00",
+                    "2026-07-29T12:32:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN CENTRAL",
+                    "zh-Hant": "沙田巿中心",
+                    "zh-Hans": "沙田巿中心"
+                  },
+                  "fare": "4.6"
+                },
+                {
+                  "routeId": "KMB:284:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:53:43+08:00",
+                    "2026-07-29T12:13:49+08:00",
+                    "2026-07-29T12:39:54+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "RAVANA GARDEN (CIRCULAR)",
+                    "zh-Hant": "濱景花園(循環線)",
+                    "zh-Hans": "濱景花園(循環線)"
+                  },
+                  "fare": "4.6"
+                },
+                {
+                  "routeId": "KMB:83K:outbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:55:15+08:00",
+                    "2026-07-29T12:11:08+08:00",
+                    "2026-07-29T12:26:18+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHA TIN CENTRAL (CIRCULAR)",
+                    "zh-Hant": "沙田市中心(循環線)",
+                    "zh-Hans": "沙田市中心(循環線)"
+                  },
+                  "fare": "5.2"
+                },
+                {
+                  "routeId": "CTB:B8:inbound:1",
+                  "stopId": "001965",
+                  "operator": "CTB",
+                  "arrivals": [
+                    "2026-07-29T11:56:27+08:00",
+                    "2026-07-29T12:17:09+08:00",
+                    "2026-07-29T12:38:43+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:12+08:00",
+                  "observedAt": "2026-07-29T03:50:29.500Z",
+                  "destination": {
+                    "en": "Tai Wai Station (via Tai Po)",
+                    "zh-Hant": "大圍站 (經大埔)",
+                    "zh-Hans": "大圍站 (經大埔)"
+                  },
+                  "fare": "7.6"
+                },
+                {
+                  "routeId": "KMB:81C:outbound:1",
+                  "stopId": "A401ECF82924D465",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:56:47+08:00",
+                    "2026-07-29T12:10:46+08:00",
+                    "2026-07-29T12:26:29+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.609Z",
+                  "destination": {
+                    "en": "TSIM SHA TSUI EAST (MODY ROAD)",
+                    "zh-Hant": "尖沙咀東(麼地道)",
+                    "zh-Hans": "尖沙咀東(麼地道)"
+                  },
+                  "fare": "9"
+                },
+                {
+                  "routeId": "KMB:89X:inbound:1",
+                  "stopId": "548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-07-29T11:57:38+08:00",
+                    "2026-07-29T12:11:19+08:00",
+                    "2026-07-29T12:31:36+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.622Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "6.3"
+                },
+                {
+                  "routeId": "KMB:A41:outbound:1",
+                  "stopId": "4039C75BB85BF238",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:09:22+08:00", "2026-07-29T12:38:54+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                  "observedAt": "2026-07-29T03:50:29.578Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                    "zh-Hant": "機場(地面運輸中心)",
+                    "zh-Hans": "機場(地面運輸中心)"
+                  },
+                  "fare": "23.4"
+                },
+                {
+                  "routeId": "KMB:182:outbound:1",
+                  "stopId": "66BF94751BD28BAD",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:09:38+08:00", "2026-07-29T12:34:38+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                  "observedAt": "2026-07-29T03:50:29.601Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "CENTRAL (MACAO FERRY)",
+                    "zh-Hant": "中環(港澳碼頭)",
+                    "zh-Hans": "中環(港澳碼頭)"
+                  },
+                  "fare": "20.8"
+                },
+                {
+                  "routeId": "KMB:85A:outbound:1",
+                  "stopId": "66BF94751BD28BAD",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:12:04+08:00", "2026-07-29T12:43:37+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.601Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "KOWLOON CITY FERRY",
+                    "zh-Hant": "九龍城碼頭",
+                    "zh-Hans": "九龍城碼頭"
+                  },
+                  "fare": "7.8"
+                },
+                {
+                  "routeId": "KMB:74A:outbound:1",
+                  "stopId": "A401ECF82924D465",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-29T12:39:55+08:00"],
+                  "remark": {
+                    "en": "Scheduled Bus",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                  "observedAt": "2026-07-29T03:50:29.609Z",
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "KAI YIP",
+                    "zh-Hant": "啟業",
+                    "zh-Hans": "啟業"
+                  },
+                  "fare": "7.8"
+                }
+              ],
+              "routeCount": 9
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00",
+            "policy": {
+              "dueUnderSec": 30,
+              "warnUnderSec": 180,
+              "staleAfterMs": 90000,
+              "refreshAfterMs": 30000,
+              "maxArrivals": 3,
+              "maxRows": 2
+            }
+          },
+          "expect": {
+            "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+            "name": {
+              "label": "Belair Garden, Tai Chung Kiu Road",
+              "code": null
+            },
+            "caption": "Southwest-bound  ·  0m · 1 min walk",
+            "bearingDeg": 225,
+            "rows": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "operator": "KMB",
+                "routeNo": "86K",
+                "headline": "Shatin Station",
+                "remark": null,
+                "label": {
+                  "kind": "departed"
+                },
+                "urgency": "none",
+                "stale": false
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "49X",
+                "headline": "Tsing Yi Ferry",
+                "remark": null,
+                "label": {
+                  "kind": "departed"
+                },
+                "urgency": "none",
+                "stale": false
+              }
+            ],
+            "remaining": 7
+          }
+        },
+        {
+          "name": "favourites-has-no-route-total-so-the-readings-are-the-total",
+          "why": "Favourites knows what a rider saved, not what serves the place, so it passes neither `routeCount` nor `distanceM`. `remaining` falls back to the readings — never a silent filter — and with 5 readings under a cap of 6 there is no affordance to show.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "GMB:20010695",
+                "name": {
+                  "en": "Sha Tin Station",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "location": {
+                  "lat": 22.38331,
+                  "lng": 114.18765
+                },
+                "sources": [
+                  {
+                    "operator": "GMB",
+                    "operatorStopId": "20010695"
+                  }
+                ]
+              },
+              "etas": [
+                {
+                  "routeId": "GMB:60K:outbound:2003669",
+                  "stopId": "20010695",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T11:50:00.000+08:00",
+                    "2026-07-29T11:54:00.000+08:00",
+                    "2026-07-29T11:58:00.000+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:53.925+08:00",
+                  "observedAt": "2026-07-29T03:49:53.790Z",
+                  "remark": {
+                    "en": "Scheduled",
+                    "zh-Hant": "未開出",
+                    "zh-Hans": "未开出"
+                  },
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "Fo Tan Cottage Area",
+                    "zh-Hant": "火炭平房區",
+                    "zh-Hans": "火炭平房區"
+                  }
+                },
+                {
+                  "routeId": "GMB:67A:outbound:2009119",
+                  "stopId": "20010695",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T11:50:18.473+08:00",
+                    "2026-07-29T11:51:15.009+08:00",
+                    "2026-07-29T11:56:03.530+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:53.925+08:00",
+                  "observedAt": "2026-07-29T03:49:53.790Z",
+                  "destination": {
+                    "en": "Sha Tin Station",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  }
+                },
+                {
+                  "routeId": "GMB:66K:outbound:2009117",
+                  "stopId": "20010695",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T11:50:43.193+08:00",
+                    "2026-07-29T12:00:05.861+08:00",
+                    "2026-07-29T12:13:06.904+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:53.925+08:00",
+                  "observedAt": "2026-07-29T03:49:53.790Z",
+                  "destination": {
+                    "en": "Kau To (Circular)",
+                    "zh-Hant": "九肚 (循環線)",
+                    "zh-Hans": "九肚 (循環線)"
+                  }
+                },
+                {
+                  "routeId": "GMB:67A:inbound:2009119",
+                  "stopId": "20010695",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T11:54:00.000+08:00",
+                    "2026-07-29T12:06:00.000+08:00",
+                    "2026-07-29T12:18:00.000+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:53.925+08:00",
+                  "observedAt": "2026-07-29T03:49:53.790Z",
+                  "remark": {
+                    "en": "Scheduled",
+                    "zh-Hant": "未開出",
+                    "zh-Hans": "未开出"
+                  },
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "Shek Mun Estate",
+                    "zh-Hant": "碩門邨",
+                    "zh-Hans": "碩門邨"
+                  }
+                },
+                {
+                  "routeId": "GMB:67K:inbound:2009118",
+                  "stopId": "20010695",
+                  "operator": "GMB",
+                  "arrivals": [
+                    "2026-07-29T12:00:00.000+08:00",
+                    "2026-07-29T12:15:00.000+08:00",
+                    "2026-07-29T12:30:00.000+08:00"
+                  ],
+                  "dataTimestamp": "2026-07-29T11:49:53.925+08:00",
+                  "observedAt": "2026-07-29T03:49:53.790Z",
+                  "remark": {
+                    "en": "Scheduled",
+                    "zh-Hant": "未開出",
+                    "zh-Hans": "未开出"
+                  },
+                  "remarkKind": "scheduled",
+                  "destination": {
+                    "en": "A Kung Kok",
+                    "zh-Hant": "亞公角",
+                    "zh-Hans": "亞公角"
+                  }
+                }
+              ],
+              "routeCount": null,
+              "distanceM": null
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "stopId": "GMB:20010695",
+            "name": {
+              "label": "Sha Tin Station",
+              "code": null
+            },
+            "caption": "",
+            "bearingDeg": null,
+            "rows": [
+              {
+                "routeId": "GMB:60K:outbound:2003669",
+                "operator": "GMB",
+                "routeNo": "60K",
+                "headline": "Fo Tan Cottage Area",
+                "remark": {
+                  "text": "Scheduled",
+                  "kind": "scheduled"
+                },
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "GMB:67A:outbound:2009119",
+                "operator": "GMB",
+                "routeNo": "67A",
+                "headline": "Sha Tin Station",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "GMB:66K:outbound:2009117",
+                "operator": "GMB",
+                "routeNo": "66K",
+                "headline": "Kau To (Circular)",
+                "remark": null,
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              {
+                "routeId": "GMB:67A:inbound:2009119",
+                "operator": "GMB",
+                "routeNo": "67A",
+                "headline": "Shek Mun Estate",
+                "remark": {
+                  "text": "Scheduled",
+                  "kind": "scheduled"
+                },
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "routeId": "GMB:67K:inbound:2009118",
+                "operator": "GMB",
+                "routeNo": "67K",
+                "headline": "A Kung Kok",
+                "remark": {
+                  "text": "Scheduled",
+                  "kind": "scheduled"
+                },
+                "label": {
+                  "kind": "mins",
+                  "value": 9,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 0
+          }
+        }
+      ]
+    },
+    "nearbyView": {
+      "doc": "Nearby's list: every card, nearest first. The wire promises no order, so the sort is a rule — and it is stable, so a tie keeps the response order rather than shuffling between renderers.",
+      "cases": [
+        {
+          "name": "nearest-first-whatever-order-the-response-arrived-in",
+          "why": "THE ORDERING IS A RULE, not a formality: `/v1/nearby`'s schema describes `distanceM` and promises nothing about sequence, so a renderer iterating the response as received produces a different list — and only sometimes, which is the worst kind of divergence. Here the four real Belair cards are fed in reverse.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "GMB:20001553",
+                  "name": {
+                    "en": "Tai Chung Kiu Road, outside Belair Gardens",
+                    "zh-Hant": "大涌橋路, 富豪花園外",
+                    "zh-Hans": "大涌橋路, 富豪花園外"
+                  },
+                  "location": {
+                    "lat": 22.38497,
+                    "lng": 114.19844
+                  },
+                  "sources": [
+                    {
+                      "operator": "GMB",
+                      "operatorStopId": "20001553"
+                    }
+                  ]
+                },
+                "distanceM": 44,
+                "etas": [
+                  {
+                    "routeId": "GMB:804:outbound:2010275",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:51:52.634+08:00",
+                      "2026-07-29T12:01:33.746+08:00",
+                      "2026-07-29T12:07:29.708+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Hin Keng",
+                      "zh-Hant": "顯徑",
+                      "zh-Hans": "顯徑"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:65A:outbound:2009082",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:51:53.269+08:00",
+                      "2026-07-29T11:56:49.501+08:00",
+                      "2026-07-29T12:02:11.973+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Sha Tin Central",
+                      "zh-Hant": "沙田市中心",
+                      "zh-Hans": "沙田市中心"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:67A:outbound:2009119",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:02.788+08:00",
+                      "2026-07-29T11:59:16.455+08:00",
+                      "2026-07-29T12:11:16.455+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Sha Tin Station",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:803:inbound:2010269",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:54:05.256+08:00",
+                      "2026-07-29T11:55:46.470+08:00",
+                      "2026-07-29T11:56:27.044+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Hin Keng",
+                      "zh-Hant": "顯徑",
+                      "zh-Hans": "顯徑"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:67K:outbound:2009118",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T12:11:47.157+08:00",
+                      "2026-07-29T12:26:47.157+08:00",
+                      "2026-07-29T12:41:47.157+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "remark": {
+                      "en": "Scheduled",
+                      "zh-Hant": "未開出",
+                      "zh-Hans": "未开出"
+                    },
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "Sha Tin  Station",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    }
+                  }
+                ],
+                "routeCount": 6
+              },
+              {
+                "stop": {
+                  "id": "GMB:20001557",
+                  "name": {
+                    "en": "Tai Chung Kiu Road, opposite Belair Gardens",
+                    "zh-Hant": "大涌橋路, 富豪花園對面",
+                    "zh-Hans": "大涌橋路, 富豪花園對面"
+                  },
+                  "location": {
+                    "lat": 22.38507,
+                    "lng": 114.19813
+                  },
+                  "sources": [
+                    {
+                      "operator": "GMB",
+                      "operatorStopId": "20001557"
+                    }
+                  ]
+                },
+                "distanceM": 42,
+                "etas": [
+                  {
+                    "routeId": "GMB:804:inbound:2010275",
+                    "stopId": "20001557",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:50:26.100+08:00",
+                      "2026-07-29T11:58:33.891+08:00",
+                      "2026-07-29T12:03:04.810+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.672+08:00",
+                    "observedAt": "2026-07-29T03:50:29.501Z",
+                    "destination": {
+                      "en": "Kwong Yuen",
+                      "zh-Hant": "廣源",
+                      "zh-Hans": "廣源"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:67A:inbound:2009119",
+                    "stopId": "20001557",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:50:27.151+08:00",
+                      "2026-07-29T11:58:37.445+08:00",
+                      "2026-07-29T12:10:37.445+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.672+08:00",
+                    "observedAt": "2026-07-29T03:50:29.501Z",
+                    "destination": {
+                      "en": "Shek Mun Estate",
+                      "zh-Hant": "碩門邨",
+                      "zh-Hans": "碩門邨"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:67K:inbound:2009118",
+                    "stopId": "20001557",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:51:28.899+08:00",
+                      "2026-07-29T12:04:37.445+08:00",
+                      "2026-07-29T12:19:37.445+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.672+08:00",
+                    "observedAt": "2026-07-29T03:50:29.501Z",
+                    "destination": {
+                      "en": "A Kung Kok",
+                      "zh-Hant": "亞公角",
+                      "zh-Hans": "亞公角"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:65A:inbound:2009082",
+                    "stopId": "20001557",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:54:29.174+08:00",
+                      "2026-07-29T11:59:14.824+08:00",
+                      "2026-07-29T12:04:14.824+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.672+08:00",
+                    "observedAt": "2026-07-29T03:50:29.501Z",
+                    "remark": {
+                      "en": "Scheduled",
+                      "zh-Hant": "未開出",
+                      "zh-Hans": "未开出"
+                    },
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "Wong Nai Tau",
+                      "zh-Hant": "黃泥頭",
+                      "zh-Hans": "黃泥頭"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:803:outbound:2010269",
+                    "stopId": "20001557",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T12:07:01.913+08:00",
+                      "2026-07-29T12:15:01.913+08:00",
+                      "2026-07-29T12:23:01.913+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.672+08:00",
+                    "observedAt": "2026-07-29T03:50:29.501Z",
+                    "remark": {
+                      "en": "Scheduled",
+                      "zh-Hant": "未開出",
+                      "zh-Hans": "未开出"
+                    },
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "Lee On",
+                      "zh-Hant": "利安",
+                      "zh-Hans": "利安"
+                    }
+                  }
+                ],
+                "routeCount": 6
+              },
+              {
+                "stop": {
+                  "id": "P:CTB:001968+KMB:179D40F1BB78ACDC+KMB:A67E402790581309+KMB:C0D515CA78A56B65",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.385022499999998,
+                    "lng": 114.1981075
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001968"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "179D40F1BB78ACDC"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "A67E402790581309"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "C0D515CA78A56B65"
+                    }
+                  ],
+                  "bearingDeg": 54
+                },
+                "distanceM": 26,
+                "etas": [
+                  {
+                    "routeId": "KMB:85A:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:49:21+08:00",
+                      "2026-07-29T12:17:48+08:00",
+                      "2026-07-29T12:47:19+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "KWONG YUEN",
+                      "zh-Hant": "廣源",
+                      "zh-Hans": "廣源"
+                    },
+                    "fare": "6.7"
+                  },
+                  {
+                    "routeId": "KMB:182:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T11:50:56+08:00", "2026-07-29T12:21:28+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "YU CHUI COURT",
+                      "zh-Hant": "愉翠苑",
+                      "zh-Hans": "愉翠苑"
+                    },
+                    "fare": "8"
+                  },
+                  {
+                    "routeId": "KMB:49X:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:28+08:00",
+                      "2026-07-29T11:57:46+08:00",
+                      "2026-07-29T12:13:37+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "KWONG YUEN",
+                      "zh-Hant": "廣源",
+                      "zh-Hans": "廣源"
+                    },
+                    "fare": "5.2"
+                  },
+                  {
+                    "routeId": "KMB:86K:inbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:54:53+08:00",
+                      "2026-07-29T12:15:08+08:00",
+                      "2026-07-29T12:35:08+08:00"
+                    ],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KAM YING COURT",
+                      "zh-Hant": "錦英苑",
+                      "zh-Hans": "錦英苑"
+                    },
+                    "fare": "7.1"
+                  },
+                  {
+                    "routeId": "KMB:81C:inbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:57:25+08:00",
+                      "2026-07-29T12:20:51+08:00",
+                      "2026-07-29T12:45:28+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "destination": {
+                      "en": "YIU ON",
+                      "zh-Hant": "耀安",
+                      "zh-Hans": "耀安"
+                    },
+                    "fare": "7.4"
+                  },
+                  {
+                    "routeId": "CTB:B8:outbound:1",
+                    "stopId": "001968",
+                    "operator": "CTB",
+                    "arrivals": [
+                      "2026-07-29T11:58:23+08:00",
+                      "2026-07-29T12:08:20+08:00",
+                      "2026-07-29T12:20:20+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:12+08:00",
+                    "observedAt": "2026-07-29T03:50:29.505Z",
+                    "destination": {
+                      "en": "Heung Yuen Wai Port (via Tai Po)",
+                      "zh-Hant": "香園圍口岸 (經大埔)",
+                      "zh-Hans": "香園圍口岸 (經大埔)"
+                    },
+                    "fare": "18.1"
+                  },
+                  {
+                    "routeId": "KMB:284:outbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:00:34+08:00", "2026-07-29T12:25:57+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "RAVANA GARDEN (CIRCULAR)",
+                      "zh-Hant": "濱景花園(循環線)",
+                      "zh-Hans": "濱景花園(循環線)"
+                    },
+                    "fare": "4.6"
+                  },
+                  {
+                    "routeId": "KMB:A41:inbound:1",
+                    "stopId": "179D40F1BB78ACDC",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:02:05+08:00", "2026-07-29T12:28:40+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.605Z",
+                    "destination": {
+                      "en": "SHEK MUN ESTATE",
+                      "zh-Hant": "碩門邨",
+                      "zh-Hans": "碩門邨"
+                    },
+                    "fare": "6.4"
+                  },
+                  {
+                    "routeId": "KMB:299X:outbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T12:04:40+08:00",
+                      "2026-07-29T12:24:40+08:00",
+                      "2026-07-29T12:44:40+08:00"
+                    ],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "SAI KUNG",
+                      "zh-Hant": "西貢",
+                      "zh-Hans": "西貢"
+                    },
+                    "fare": "11.7"
+                  },
+                  {
+                    "routeId": "KMB:89X:outbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T12:05:10+08:00",
+                      "2026-07-29T12:25:10+08:00",
+                      "2026-07-29T12:45:10+08:00"
+                    ],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KWUN TONG (TSUI PING ROAD)",
+                      "zh-Hant": "觀塘(翠屏道)",
+                      "zh-Hans": "觀塘(翠屏道)"
+                    },
+                    "fare": "8.6"
+                  },
+                  {
+                    "routeId": "KMB:74A:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:05:56+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "TAI PO (TAI WO)",
+                      "zh-Hant": "大埔(太和)",
+                      "zh-Hans": "大埔(太和)"
+                    },
+                    "fare": "11"
+                  },
+                  {
+                    "routeId": "KMB:86C:inbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:13:38+08:00", "2026-07-29T12:42:53+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "destination": {
+                      "en": "LEE ON",
+                      "zh-Hant": "利安",
+                      "zh-Hans": "利安"
+                    },
+                    "fare": "7.4"
+                  },
+                  {
+                    "routeId": "CTB:182:outbound:1",
+                    "stopId": "001968",
+                    "operator": "CTB",
+                    "arrivals": ["2026-07-29T12:47:47+08:00"],
+                    "remark": {
+                      "en": "KMB Cycle",
+                      "zh-Hant": "九巴時段",
+                      "zh-Hans": "九巴时段"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:02+08:00",
+                    "observedAt": "2026-07-29T03:50:29.498Z",
+                    "remarkKind": "info",
+                    "destination": {
+                      "en": "YU CHUI COURT",
+                      "zh-Hant": "愉翠苑",
+                      "zh-Hans": "愉翠苑"
+                    },
+                    "fare": "8"
+                  }
+                ],
+                "routeCount": 20
+              },
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "4039C75BB85BF238"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "66BF94751BD28BAD"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "A401ECF82924D465"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 1,
+                "etas": [
+                  {
+                    "routeId": "KMB:86K:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:49:31+08:00",
+                      "2026-07-29T12:00:22+08:00",
+                      "2026-07-29T12:16:17+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    },
+                    "fare": "7.1"
+                  },
+                  {
+                    "routeId": "KMB:49X:outbound:1",
+                    "stopId": "66BF94751BD28BAD",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:49:52+08:00",
+                      "2026-07-29T11:59:22+08:00",
+                      "2026-07-29T12:09:10+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.601Z",
+                    "destination": {
+                      "en": "TSING YI FERRY",
+                      "zh-Hant": "青衣碼頭",
+                      "zh-Hans": "青衣碼頭"
+                    },
+                    "fare": "10.4"
+                  },
+                  {
+                    "routeId": "KMB:86C:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T11:52:57+08:00", "2026-07-29T12:26:03+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "CHEUNG SHA WAN",
+                      "zh-Hant": "長沙灣",
+                      "zh-Hans": "長沙灣"
+                    },
+                    "fare": "9"
+                  },
+                  {
+                    "routeId": "KMB:299X:inbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:20+08:00",
+                      "2026-07-29T12:12:29+08:00",
+                      "2026-07-29T12:32:00+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHATIN CENTRAL",
+                      "zh-Hant": "沙田巿中心",
+                      "zh-Hans": "沙田巿中心"
+                    },
+                    "fare": "4.6"
+                  },
+                  {
+                    "routeId": "KMB:284:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:43+08:00",
+                      "2026-07-29T12:13:49+08:00",
+                      "2026-07-29T12:39:54+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "RAVANA GARDEN (CIRCULAR)",
+                      "zh-Hant": "濱景花園(循環線)",
+                      "zh-Hans": "濱景花園(循環線)"
+                    },
+                    "fare": "4.6"
+                  },
+                  {
+                    "routeId": "KMB:83K:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:55:15+08:00",
+                      "2026-07-29T12:11:08+08:00",
+                      "2026-07-29T12:26:18+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHA TIN CENTRAL (CIRCULAR)",
+                      "zh-Hant": "沙田市中心(循環線)",
+                      "zh-Hans": "沙田市中心(循環線)"
+                    },
+                    "fare": "5.2"
+                  },
+                  {
+                    "routeId": "CTB:B8:inbound:1",
+                    "stopId": "001965",
+                    "operator": "CTB",
+                    "arrivals": [
+                      "2026-07-29T11:56:27+08:00",
+                      "2026-07-29T12:17:09+08:00",
+                      "2026-07-29T12:38:43+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:49:12+08:00",
+                    "observedAt": "2026-07-29T03:50:29.500Z",
+                    "destination": {
+                      "en": "Tai Wai Station (via Tai Po)",
+                      "zh-Hant": "大圍站 (經大埔)",
+                      "zh-Hans": "大圍站 (經大埔)"
+                    },
+                    "fare": "7.6"
+                  },
+                  {
+                    "routeId": "KMB:81C:outbound:1",
+                    "stopId": "A401ECF82924D465",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:56:47+08:00",
+                      "2026-07-29T12:10:46+08:00",
+                      "2026-07-29T12:26:29+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.609Z",
+                    "destination": {
+                      "en": "TSIM SHA TSUI EAST (MODY ROAD)",
+                      "zh-Hant": "尖沙咀東(麼地道)",
+                      "zh-Hans": "尖沙咀東(麼地道)"
+                    },
+                    "fare": "9"
+                  },
+                  {
+                    "routeId": "KMB:89X:inbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:57:38+08:00",
+                      "2026-07-29T12:11:19+08:00",
+                      "2026-07-29T12:31:36+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    },
+                    "fare": "6.3"
+                  },
+                  {
+                    "routeId": "KMB:A41:outbound:1",
+                    "stopId": "4039C75BB85BF238",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:09:22+08:00", "2026-07-29T12:38:54+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                    "observedAt": "2026-07-29T03:50:29.578Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                      "zh-Hant": "機場(地面運輸中心)",
+                      "zh-Hans": "機場(地面運輸中心)"
+                    },
+                    "fare": "23.4"
+                  },
+                  {
+                    "routeId": "KMB:182:outbound:1",
+                    "stopId": "66BF94751BD28BAD",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:09:38+08:00", "2026-07-29T12:34:38+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.601Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "CENTRAL (MACAO FERRY)",
+                      "zh-Hant": "中環(港澳碼頭)",
+                      "zh-Hans": "中環(港澳碼頭)"
+                    },
+                    "fare": "20.8"
+                  },
+                  {
+                    "routeId": "KMB:85A:outbound:1",
+                    "stopId": "66BF94751BD28BAD",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:12:04+08:00", "2026-07-29T12:43:37+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.601Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KOWLOON CITY FERRY",
+                      "zh-Hant": "九龍城碼頭",
+                      "zh-Hans": "九龍城碼頭"
+                    },
+                    "fare": "7.8"
+                  },
+                  {
+                    "routeId": "KMB:74A:outbound:1",
+                    "stopId": "A401ECF82924D465",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:39:55+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.609Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KAI YIP",
+                      "zh-Hant": "啟業",
+                      "zh-Hans": "啟業"
+                    },
+                    "fare": "7.8"
+                  }
+                ],
+                "routeCount": 26
+              }
+            ],
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+              "name": {
+                "label": "Belair Garden, Tai Chung Kiu Road",
+                "code": null
+              },
+              "caption": "Southwest-bound  ·  0m · 1 min walk",
+              "bearingDeg": 225,
+              "rows": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "headline": "Shatin Station",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:49X:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "49X",
+                  "headline": "Tsing Yi Ferry",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:86C:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86C",
+                  "headline": "Cheung Sha Wan",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 2,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:299X:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "299X",
+                  "headline": "Shatin Central",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 2,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:284:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "284",
+                  "headline": "Ravana Garden (Circular)",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 3,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:83K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "83K",
+                  "headline": "Sha Tin Central (Circular)",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 4,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 20
+            },
+            {
+              "stopId": "P:CTB:001968+KMB:179D40F1BB78ACDC+KMB:A67E402790581309+KMB:C0D515CA78A56B65",
+              "name": {
+                "label": "Belair Garden, Tai Chung Kiu Road",
+                "code": null
+              },
+              "caption": "Northeast-bound  ·  30m · 1 min walk",
+              "bearingDeg": 54,
+              "rows": [
+                {
+                  "routeId": "KMB:85A:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "85A",
+                  "headline": "Kwong Yuen",
+                  "remark": null,
+                  "label": {
+                    "kind": "departed"
+                  },
+                  "urgency": "none",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:182:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "182",
+                  "headline": "Yu Chui Court",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:49X:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "49X",
+                  "headline": "Kwong Yuen",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 2,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:86K:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "headline": "Kam Ying Court",
+                  "remark": {
+                    "text": "Scheduled Bus",
+                    "kind": "scheduled"
+                  },
+                  "label": {
+                    "kind": "mins",
+                    "value": 4,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:81C:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "81C",
+                  "headline": "Yiu On",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 6,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "CTB:B8:outbound:1",
+                  "operator": "CTB",
+                  "routeNo": "B8",
+                  "headline": "Heung Yuen Wai Port (via Tai Po)",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 7,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 14
+            },
+            {
+              "stopId": "GMB:20001557",
+              "name": {
+                "label": "Tai Chung Kiu Road, opposite Belair Gardens",
+                "code": null
+              },
+              "caption": "40m · 1 min walk",
+              "bearingDeg": null,
+              "rows": [
+                {
+                  "routeId": "GMB:804:inbound:2010275",
+                  "operator": "GMB",
+                  "routeNo": "804",
+                  "headline": "Kwong Yuen",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:67A:inbound:2009119",
+                  "operator": "GMB",
+                  "routeNo": "67A",
+                  "headline": "Shek Mun Estate",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:67K:inbound:2009118",
+                  "operator": "GMB",
+                  "routeNo": "67K",
+                  "headline": "A Kung Kok",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:65A:inbound:2009082",
+                  "operator": "GMB",
+                  "routeNo": "65A",
+                  "headline": "Wong Nai Tau",
+                  "remark": {
+                    "text": "Scheduled",
+                    "kind": "scheduled"
+                  },
+                  "label": {
+                    "kind": "mins",
+                    "value": 3,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:803:outbound:2010269",
+                  "operator": "GMB",
+                  "routeNo": "803",
+                  "headline": "Lee On",
+                  "remark": {
+                    "text": "Scheduled",
+                    "kind": "scheduled"
+                  },
+                  "label": {
+                    "kind": "mins",
+                    "value": 16,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 1
+            },
+            {
+              "stopId": "GMB:20001553",
+              "name": {
+                "label": "Tai Chung Kiu Road, outside Belair Gardens",
+                "code": null
+              },
+              "caption": "40m · 1 min walk",
+              "bearingDeg": null,
+              "rows": [
+                {
+                  "routeId": "GMB:804:outbound:2010275",
+                  "operator": "GMB",
+                  "routeNo": "804",
+                  "headline": "Hin Keng",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 1,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:65A:outbound:2009082",
+                  "operator": "GMB",
+                  "routeNo": "65A",
+                  "headline": "Sha Tin Central",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 1,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:67A:outbound:2009119",
+                  "operator": "GMB",
+                  "routeNo": "67A",
+                  "headline": "Sha Tin Station",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 2,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:803:inbound:2010269",
+                  "operator": "GMB",
+                  "routeNo": "803",
+                  "headline": "Hin Keng",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 3,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "GMB:67K:outbound:2009118",
+                  "operator": "GMB",
+                  "routeNo": "67K",
+                  "headline": "Sha Tin  Station",
+                  "remark": {
+                    "text": "Scheduled",
+                    "kind": "scheduled"
+                  },
+                  "label": {
+                    "kind": "mins",
+                    "value": 21,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 1
+            }
+          ]
+        },
+        {
+          "name": "an-empty-response-is-an-empty-list",
+          "why": "Not an error and not a card: the screen shows its own \"no service nearby\" copy, which is i18n's job, not the kernel's.",
+          "args": {
+            "stops": [],
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "two-places-at-the-same-distance-keep-their-given-order",
+          "why": "Both Belair kerbs can tie once distances are equal. A stable sort keeps the response order, so the list does not shuffle between two renderers — or between two refreshes on one. `Array.prototype.sort` is required to be stable; a port using an unstable sort diverges here and nowhere else.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001968+KMB:179D40F1BB78ACDC+KMB:A67E402790581309+KMB:C0D515CA78A56B65",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.385022499999998,
+                    "lng": 114.1981075
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001968"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "179D40F1BB78ACDC"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "A67E402790581309"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "C0D515CA78A56B65"
+                    }
+                  ],
+                  "bearingDeg": 54
+                },
+                "distanceM": 30,
+                "etas": [
+                  {
+                    "routeId": "KMB:85A:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:49:21+08:00",
+                      "2026-07-29T12:17:48+08:00",
+                      "2026-07-29T12:47:19+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "KWONG YUEN",
+                      "zh-Hant": "廣源",
+                      "zh-Hans": "廣源"
+                    },
+                    "fare": "6.7"
+                  },
+                  {
+                    "routeId": "KMB:182:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T11:50:56+08:00", "2026-07-29T12:21:28+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "YU CHUI COURT",
+                      "zh-Hant": "愉翠苑",
+                      "zh-Hans": "愉翠苑"
+                    },
+                    "fare": "8"
+                  },
+                  {
+                    "routeId": "KMB:49X:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:28+08:00",
+                      "2026-07-29T11:57:46+08:00",
+                      "2026-07-29T12:13:37+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "KWONG YUEN",
+                      "zh-Hant": "廣源",
+                      "zh-Hans": "廣源"
+                    },
+                    "fare": "5.2"
+                  },
+                  {
+                    "routeId": "KMB:86K:inbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:54:53+08:00",
+                      "2026-07-29T12:15:08+08:00",
+                      "2026-07-29T12:35:08+08:00"
+                    ],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KAM YING COURT",
+                      "zh-Hant": "錦英苑",
+                      "zh-Hans": "錦英苑"
+                    },
+                    "fare": "7.1"
+                  },
+                  {
+                    "routeId": "KMB:81C:inbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:57:25+08:00",
+                      "2026-07-29T12:20:51+08:00",
+                      "2026-07-29T12:45:28+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "destination": {
+                      "en": "YIU ON",
+                      "zh-Hant": "耀安",
+                      "zh-Hans": "耀安"
+                    },
+                    "fare": "7.4"
+                  },
+                  {
+                    "routeId": "CTB:B8:outbound:1",
+                    "stopId": "001968",
+                    "operator": "CTB",
+                    "arrivals": [
+                      "2026-07-29T11:58:23+08:00",
+                      "2026-07-29T12:08:20+08:00",
+                      "2026-07-29T12:20:20+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:12+08:00",
+                    "observedAt": "2026-07-29T03:50:29.505Z",
+                    "destination": {
+                      "en": "Heung Yuen Wai Port (via Tai Po)",
+                      "zh-Hant": "香園圍口岸 (經大埔)",
+                      "zh-Hans": "香園圍口岸 (經大埔)"
+                    },
+                    "fare": "18.1"
+                  },
+                  {
+                    "routeId": "KMB:284:outbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:00:34+08:00", "2026-07-29T12:25:57+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "RAVANA GARDEN (CIRCULAR)",
+                      "zh-Hant": "濱景花園(循環線)",
+                      "zh-Hans": "濱景花園(循環線)"
+                    },
+                    "fare": "4.6"
+                  },
+                  {
+                    "routeId": "KMB:A41:inbound:1",
+                    "stopId": "179D40F1BB78ACDC",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:02:05+08:00", "2026-07-29T12:28:40+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.605Z",
+                    "destination": {
+                      "en": "SHEK MUN ESTATE",
+                      "zh-Hant": "碩門邨",
+                      "zh-Hans": "碩門邨"
+                    },
+                    "fare": "6.4"
+                  },
+                  {
+                    "routeId": "KMB:299X:outbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T12:04:40+08:00",
+                      "2026-07-29T12:24:40+08:00",
+                      "2026-07-29T12:44:40+08:00"
+                    ],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "SAI KUNG",
+                      "zh-Hant": "西貢",
+                      "zh-Hans": "西貢"
+                    },
+                    "fare": "11.7"
+                  },
+                  {
+                    "routeId": "KMB:89X:outbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T12:05:10+08:00",
+                      "2026-07-29T12:25:10+08:00",
+                      "2026-07-29T12:45:10+08:00"
+                    ],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KWUN TONG (TSUI PING ROAD)",
+                      "zh-Hant": "觀塘(翠屏道)",
+                      "zh-Hans": "觀塘(翠屏道)"
+                    },
+                    "fare": "8.6"
+                  },
+                  {
+                    "routeId": "KMB:74A:inbound:1",
+                    "stopId": "C0D515CA78A56B65",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:05:56+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:30.634Z",
+                    "destination": {
+                      "en": "TAI PO (TAI WO)",
+                      "zh-Hant": "大埔(太和)",
+                      "zh-Hans": "大埔(太和)"
+                    },
+                    "fare": "11"
+                  },
+                  {
+                    "routeId": "KMB:86C:inbound:1",
+                    "stopId": "A67E402790581309",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:13:38+08:00", "2026-07-29T12:42:53+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.600Z",
+                    "destination": {
+                      "en": "LEE ON",
+                      "zh-Hant": "利安",
+                      "zh-Hans": "利安"
+                    },
+                    "fare": "7.4"
+                  },
+                  {
+                    "routeId": "CTB:182:outbound:1",
+                    "stopId": "001968",
+                    "operator": "CTB",
+                    "arrivals": ["2026-07-29T12:47:47+08:00"],
+                    "remark": {
+                      "en": "KMB Cycle",
+                      "zh-Hant": "九巴時段",
+                      "zh-Hans": "九巴时段"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:02+08:00",
+                    "observedAt": "2026-07-29T03:50:29.498Z",
+                    "remarkKind": "info",
+                    "destination": {
+                      "en": "YU CHUI COURT",
+                      "zh-Hant": "愉翠苑",
+                      "zh-Hans": "愉翠苑"
+                    },
+                    "fare": "8"
+                  }
+                ],
+                "routeCount": 20
+              },
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "4039C75BB85BF238"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "66BF94751BD28BAD"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "A401ECF82924D465"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 30,
+                "etas": [
+                  {
+                    "routeId": "KMB:86K:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:49:31+08:00",
+                      "2026-07-29T12:00:22+08:00",
+                      "2026-07-29T12:16:17+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    },
+                    "fare": "7.1"
+                  },
+                  {
+                    "routeId": "KMB:49X:outbound:1",
+                    "stopId": "66BF94751BD28BAD",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:49:52+08:00",
+                      "2026-07-29T11:59:22+08:00",
+                      "2026-07-29T12:09:10+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.601Z",
+                    "destination": {
+                      "en": "TSING YI FERRY",
+                      "zh-Hant": "青衣碼頭",
+                      "zh-Hans": "青衣碼頭"
+                    },
+                    "fare": "10.4"
+                  },
+                  {
+                    "routeId": "KMB:86C:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T11:52:57+08:00", "2026-07-29T12:26:03+08:00"],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "CHEUNG SHA WAN",
+                      "zh-Hant": "長沙灣",
+                      "zh-Hans": "長沙灣"
+                    },
+                    "fare": "9"
+                  },
+                  {
+                    "routeId": "KMB:299X:inbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:20+08:00",
+                      "2026-07-29T12:12:29+08:00",
+                      "2026-07-29T12:32:00+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHATIN CENTRAL",
+                      "zh-Hant": "沙田巿中心",
+                      "zh-Hans": "沙田巿中心"
+                    },
+                    "fare": "4.6"
+                  },
+                  {
+                    "routeId": "KMB:284:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:43+08:00",
+                      "2026-07-29T12:13:49+08:00",
+                      "2026-07-29T12:39:54+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "RAVANA GARDEN (CIRCULAR)",
+                      "zh-Hant": "濱景花園(循環線)",
+                      "zh-Hans": "濱景花園(循環線)"
+                    },
+                    "fare": "4.6"
+                  },
+                  {
+                    "routeId": "KMB:83K:outbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:55:15+08:00",
+                      "2026-07-29T12:11:08+08:00",
+                      "2026-07-29T12:26:18+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHA TIN CENTRAL (CIRCULAR)",
+                      "zh-Hant": "沙田市中心(循環線)",
+                      "zh-Hans": "沙田市中心(循環線)"
+                    },
+                    "fare": "5.2"
+                  },
+                  {
+                    "routeId": "CTB:B8:inbound:1",
+                    "stopId": "001965",
+                    "operator": "CTB",
+                    "arrivals": [
+                      "2026-07-29T11:56:27+08:00",
+                      "2026-07-29T12:17:09+08:00",
+                      "2026-07-29T12:38:43+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:49:12+08:00",
+                    "observedAt": "2026-07-29T03:50:29.500Z",
+                    "destination": {
+                      "en": "Tai Wai Station (via Tai Po)",
+                      "zh-Hant": "大圍站 (經大埔)",
+                      "zh-Hans": "大圍站 (經大埔)"
+                    },
+                    "fare": "7.6"
+                  },
+                  {
+                    "routeId": "KMB:81C:outbound:1",
+                    "stopId": "A401ECF82924D465",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:56:47+08:00",
+                      "2026-07-29T12:10:46+08:00",
+                      "2026-07-29T12:26:29+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.609Z",
+                    "destination": {
+                      "en": "TSIM SHA TSUI EAST (MODY ROAD)",
+                      "zh-Hant": "尖沙咀東(麼地道)",
+                      "zh-Hans": "尖沙咀東(麼地道)"
+                    },
+                    "fare": "9"
+                  },
+                  {
+                    "routeId": "KMB:89X:inbound:1",
+                    "stopId": "548DAB3A4F71EB68",
+                    "operator": "KMB",
+                    "arrivals": [
+                      "2026-07-29T11:57:38+08:00",
+                      "2026-07-29T12:11:19+08:00",
+                      "2026-07-29T12:31:36+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.622Z",
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    },
+                    "fare": "6.3"
+                  },
+                  {
+                    "routeId": "KMB:A41:outbound:1",
+                    "stopId": "4039C75BB85BF238",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:09:22+08:00", "2026-07-29T12:38:54+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:49:48+08:00",
+                    "observedAt": "2026-07-29T03:50:29.578Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                      "zh-Hant": "機場(地面運輸中心)",
+                      "zh-Hans": "機場(地面運輸中心)"
+                    },
+                    "fare": "23.4"
+                  },
+                  {
+                    "routeId": "KMB:182:outbound:1",
+                    "stopId": "66BF94751BD28BAD",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:09:38+08:00", "2026-07-29T12:34:38+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:18+08:00",
+                    "observedAt": "2026-07-29T03:50:29.601Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "CENTRAL (MACAO FERRY)",
+                      "zh-Hant": "中環(港澳碼頭)",
+                      "zh-Hans": "中環(港澳碼頭)"
+                    },
+                    "fare": "20.8"
+                  },
+                  {
+                    "routeId": "KMB:85A:outbound:1",
+                    "stopId": "66BF94751BD28BAD",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:12:04+08:00", "2026-07-29T12:43:37+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.601Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KOWLOON CITY FERRY",
+                      "zh-Hant": "九龍城碼頭",
+                      "zh-Hans": "九龍城碼頭"
+                    },
+                    "fare": "7.8"
+                  },
+                  {
+                    "routeId": "KMB:74A:outbound:1",
+                    "stopId": "A401ECF82924D465",
+                    "operator": "KMB",
+                    "arrivals": ["2026-07-29T12:39:55+08:00"],
+                    "remark": {
+                      "en": "Scheduled Bus",
+                      "zh-Hant": "原定班次",
+                      "zh-Hans": "原定班次"
+                    },
+                    "dataTimestamp": "2026-07-29T11:50:19+08:00",
+                    "observedAt": "2026-07-29T03:50:29.609Z",
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "KAI YIP",
+                      "zh-Hant": "啟業",
+                      "zh-Hans": "啟業"
+                    },
+                    "fare": "7.8"
+                  }
+                ],
+                "routeCount": 26
+              }
+            ],
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "P:CTB:001968+KMB:179D40F1BB78ACDC+KMB:A67E402790581309+KMB:C0D515CA78A56B65",
+              "name": {
+                "label": "Belair Garden, Tai Chung Kiu Road",
+                "code": null
+              },
+              "caption": "Northeast-bound  ·  30m · 1 min walk",
+              "bearingDeg": 54,
+              "rows": [
+                {
+                  "routeId": "KMB:85A:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "85A",
+                  "headline": "Kwong Yuen",
+                  "remark": null,
+                  "label": {
+                    "kind": "departed"
+                  },
+                  "urgency": "none",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:182:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "182",
+                  "headline": "Yu Chui Court",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:49X:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "49X",
+                  "headline": "Kwong Yuen",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 2,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:86K:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "headline": "Kam Ying Court",
+                  "remark": {
+                    "text": "Scheduled Bus",
+                    "kind": "scheduled"
+                  },
+                  "label": {
+                    "kind": "mins",
+                    "value": 4,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:81C:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "81C",
+                  "headline": "Yiu On",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 6,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "CTB:B8:outbound:1",
+                  "operator": "CTB",
+                  "routeNo": "B8",
+                  "headline": "Heung Yuen Wai Port (via Tai Po)",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 7,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 14
+            },
+            {
+              "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+              "name": {
+                "label": "Belair Garden, Tai Chung Kiu Road",
+                "code": null
+              },
+              "caption": "Southwest-bound  ·  30m · 1 min walk",
+              "bearingDeg": 225,
+              "rows": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "headline": "Shatin Station",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:49X:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "49X",
+                  "headline": "Tsing Yi Ferry",
+                  "remark": null,
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:86C:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86C",
+                  "headline": "Cheung Sha Wan",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 2,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:299X:inbound:1",
+                  "operator": "KMB",
+                  "routeNo": "299X",
+                  "headline": "Shatin Central",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 2,
+                    "unit": "min"
+                  },
+                  "urgency": "soon",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:284:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "284",
+                  "headline": "Ravana Garden (Circular)",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 3,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:83K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "83K",
+                  "headline": "Sha Tin Central (Circular)",
+                  "remark": null,
+                  "label": {
+                    "kind": "mins",
+                    "value": 4,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 20
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

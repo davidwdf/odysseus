@@ -316,7 +316,7 @@
       }
     },
     {
-      "includes": ["apps/mobile/**"],
+      "includes": ["apps/mobile/**", "apps/web/**"],
       "linter": {
         "rules": {
           "style": {

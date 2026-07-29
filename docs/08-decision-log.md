@@ -3163,3 +3163,94 @@ rather than the docs. **The blocking open question above is unchanged** — this
     `dataset.yml`; `ci.yml` is WP0-5, deferred), so every gate named above runs from a package `test`
     script via `turbo run test` and the pre-commit hook. The README says so in its own "not guaranteed"
     section, because a porter reading "gated" would otherwise assume a server enforces it.
+
+## ADR-068 — The client's derived view is kernel logic, so a second renderer calls it rather than reading the JSX
+- **Status:** **Decided and implemented 2026-07-29** (WP4-0, the prerequisite Wave 4's plan row did not
+  have). Implementation: `packages/core/src/stop-card.ts`, additions to `packages/core/src/eta.ts`
+  (`etaUrgency`, `etaReadout`, `remarkView`, and a `dueUnderSec` parameter on `etaLabelParts`),
+  `packages/core/spec/stop-card.spec.json`, and the repointed components in `apps/mobile`.
+- **Context:** [`docs/proposals/03`](../proposals/03-clean-separation-and-phase2-plan.md) WP4-1 asks for
+  `apps/web` — a Vite + React DOM renderer of one screen — with the acceptance *"CI asserts its derived
+  output is **byte-identical** to the RN golden; lines of new logic outside `.tsx` and adapters: **zero**"*.
+  Both halves presupposed an artefact that did not exist. There was no *derived output*: no view-model
+  layer on the client (`check-vm-no-styling` polices the wire), and the plan itself lists a served `/v2`
+  view-model tier as the **rejected** alternative. So the derivation had to be client-side — and six of
+  them were sitting inside `apps/mobile`'s components, reachable only by rendering a React tree: the
+  list's order, the `maxRows` cap and its "+N more" count, the caption's parts and its two different
+  separators, destination-else-remark as the headline, the route number and its fallback, and the stop
+  name split into label + code. A second renderer's only options were to re-implement each or to read the
+  JSX and guess. **A re-implementation would have passed a byte-identity check on the day it was written
+  while proving the opposite of the thesis**, which is why this is an ADR and not a refactor.
+- **Decision:**
+  1. **The derived view is kernel logic and lives in `packages/core`**, under Wave 2's method: copy,
+     pin with a language-neutral corpus, delete the original. The module is `stop-card`, not `nearby`,
+     because Favourites renders the same card through the same component — naming it after one of its two
+     callers would have been wrong inside a week. `nearbyView` (the ordering) is the part that really is
+     Nearby's own.
+  2. **The line inside the client is the same line ADR-053 draws across the network: content and
+     meaning versus layout and colour.** So `etaUrgency` returns `'due' | 'soon' | 'normal' | 'none'` — a
+     **name**, never a token and certainly never a colour — and `EtaBadge`'s `soon → text-warning` table
+     stays in the view, where it is correct. What could not stay there was the *threshold*.
+  3. **`core` owns the rule; `i18n` owns the word** ([ADR-054](#adr-054)). `remaining` is a number and
+     `t(locale, 'moreRoutes', { n })` stays in the renderer, because a plural is an ICU rule. The caption
+     is the deliberate exception: its parts are already kernel functions (`formatBearing`,
+     `formatDistance`, `formatWalk`) and what a second renderer would otherwise have to re-guess is their
+     order and the fact that `' · '` binds a distance to its walk time while a wider `'  ·  '` separates
+     that pair from the compass direction.
+  4. **The expectations in the corpus were derived from the implementation, and that is only honest
+     because a parity harness proved the implementation first.** A temporary harness transcribed the old
+     `.tsx` derivations verbatim and diffed both over real `/v1/nearby` snapshots: **30 cards / 120 rows
+     across 3 locales, with every difference declared in advance.** The harness was watched failing on an
+     injected cap change (exit 1, measured directly rather than through a pipe) and then **deleted** — a
+     shipped parity harness would be a second declaration of the very rules being consolidated.
+  5. **`etaReadout` and `remarkView` are extracted too, because the Place screen was the second copy.**
+     `app/stop/[id].tsx` derived label, urgency, staleness and the remark's locale/classification by hand,
+     in parallel with the Nearby card. Leaving that copy behind while Nearby moved is precisely how the
+     imminence threshold came to disagree with the policy in the first place; the two screens now call one
+     function. The three fields travel together because they must **agree** — the label's "Due" band and
+     the urgency's `due` band are the same `dueUnderSec`, so a caller computing one with a served policy
+     and the other with the default renders the word "Due" in the ordinary colour.
+  6. **`apps/web` was added to `layers.json` and to `check-no-raw-colours.mjs` before it holds a single
+     file.** Every dependency-cruiser rule the generator emits is keyed `from` a layer dir, and the only
+     rule with a non-layer `from` is `no-circular` — so a directory absent from that list is the `from` of
+     **no rule at all**. A new app would have been free to import `data-normalize` or to call an upstream
+     HK API directly with golden rule 2 silent. All three nets were watched firing on an injected probe.
+- **The bug this found before any second renderer existed:** `EtaBadge` decided imminence with a literal
+  `parts.value <= 5` — **360 s**, since `value` is floored minutes — while `CLIENT_POLICY_DEFAULTS`
+  served **`warnUnderSec: 180`** and the comment on that field read *"Nothing reads this yet"*. Both were
+  true: the field had no reader, and the screen had its own number. That is
+  [ADR-053](#adr-053)'s three-way arrival-cap disagreement one field over, and the **seventh** instance in
+  this repo of one judgement written down twice. In a live sample it mis-coloured **7 of 40 rows**. The
+  band is now the served one, which is the single user-visible change in this work package: an arrival
+  between 3 and 6 minutes away is no longer coloured as "run".
+- **Consequences, including what we are accepting:**
+  - **The visible change is a narrowing, and it is deliberate.** Riders who learned that amber meant
+    "within about five minutes" now see amber only under three. The alternative — moving `warnUnderSec` to
+    300 to preserve the appearance — would have kept a number nobody had chosen and thrown away the reason
+    the field exists.
+  - **`etaLabelParts` gained a fourth parameter**, closing the Wave 3 loose end from the other side: it
+    was the one place a served `dueUnderSec` was silently dropped, and it happens to be the widest-reached
+    ETA renderer in the app. `staleAfterMs` is threaded too. Neither changes anything today, because the
+    served values equal the defaults — the trap was that the day one of them changed, only some callers
+    would have moved.
+  - **`remarkView` accepts `null` as well as `undefined`, and the type is wider than `Eta.remark`'s.**
+    The app does no runtime validation ([ADR-052](#adr-052) decision 2), so an explicit `"remark": null`
+    reaches the kernel however the schema types it. The component this replaced read the field through
+    optional chaining and survived; the first cut of the extraction guarded `=== undefined` and threw.
+    **No live sample would have caught that** — real feeds do not currently send it. A corpus row did.
+  - **Two of the four gate scopes for `apps/web` are armed but unexercised until the package is real.**
+    A bare `@nextbus/data-normalize` specifier is unresolvable before `apps/web` has a `package.json`, so
+    dependency-cruiser cruises nothing and reports clean; Biome's textual rule fires regardless. That the
+    two-net design of [ADR-051](#adr-051) covers the gap is the reason it has two nets, and it is worth
+    knowing rather than discovering.
+  - **The second CSS emit target for `apps/web` is deliberately deferred to WP4-1**, not forgotten: it
+    cannot be emitted into an app that does not exist, `check-tokens-current.mjs` iterates the emitter's
+    own output so the target is drift-gated the moment it is added, and nothing in `apps/web` can render
+    without the custom properties. That is the one deferral here that cannot rot unnoticed.
+  - **"CI asserts" remains unenforced.** `.github/workflows/` still holds only `dataset.yml`, so the
+    corpus runs from `packages/core`'s `test` script via `turbo run test` and the pre-commit hook — the
+    same position ADR-067 records. WP4-1's byte-identity assertion inherits it.
+  - **`pnpm install --frozen-lockfile` had been failing on `main`** since Wave 1 wrote the lockfile and
+    `apps/edge` later gained `@nextbus/contract`. Nothing noticed because every local install was
+    non-frozen; CI defaults it to true, so the workflow WP4-1's acceptance assumes would have died at
+    install before a single gate ran. Fixed here because adding a workspace package forces it anyway.

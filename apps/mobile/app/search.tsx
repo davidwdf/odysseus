@@ -1,4 +1,5 @@
 import {
+  displayName,
   EMPTY_FILTER,
   indexAlphabet,
   type Locale,
@@ -496,7 +497,7 @@ function StopResultRow({
       className="flex-row items-center justify-between gap-3 px-4 py-3.5 active:opacity-60"
     >
       <View className="flex-1">
-        <StopName name={stop.name[locale]} variant="body" />
+        <StopName name={displayName(stop.name[locale])} variant="body" />
       </View>
       <Icon icon={ChevronRight} tone="subtle" size={20} />
     </Pressable>

@@ -1,4 +1,4 @@
-import type { Locale, NearbyStop } from '@nextbus/core'
+import { type Locale, nearbyView } from '@nextbus/core'
 import { type LocalizedString, t } from '@nextbus/i18n'
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -12,11 +12,13 @@ import { StopRow } from '../../components/StopRow'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
+import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLocation } from '../../lib/useLocation'
 import { useLocale } from '../../providers/LocaleProvider'
 
 export default function Nearby() {
   const locale = useLocale()
+  const { policy } = useClientPolicy()
   const insets = useSafeAreaInsets()
   const tab = useTabBarLayout()
   const router = useRouter()
@@ -37,7 +39,11 @@ export default function Nearby() {
   }, [query])
 
   const now = Date.now()
-  const data = query.data ?? []
+  // The whole screen's content, derived in one call by the kernel (WP4-0). The order, the row cap, the
+  // captions and the "+N more" counts are all `nearbyView`'s — pinned by
+  // `packages/core/spec/stop-card.spec.json` and shared byte-for-byte with any other renderer. This
+  // component's remaining job is layout, navigation and the location states below.
+  const cards = nearbyView(query.data ?? [], { locale, now, policy })
 
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
@@ -91,28 +97,21 @@ export default function Nearby() {
           refreshControl={<RefreshControl refreshing={query.isFetching} onRefresh={onRefresh} />}
         >
           <View style={{ paddingBottom: tab.contentInset }}>
-            {[...data]
-              .sort((a, b) => a.distanceM - b.distanceM)
-              .map((n: NearbyStop, i) => (
-                <View key={n.stop.id} className={i === 0 ? '' : 'border-border border-t'}>
-                  <StopRow
-                    name={n.stop.name[locale]}
-                    distanceM={n.distanceM}
-                    bearingDeg={n.stop.bearingDeg}
-                    etas={n.etas}
-                    routeCount={n.routeCount}
-                    locale={locale}
-                    now={now}
-                    onPress={() => router.push(`/stop/${encodeURIComponent(n.stop.id)}`)}
-                    onRoutePress={(routeId) =>
-                      router.push(
-                        `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(n.stop.id)}`,
-                      )
-                    }
-                  />
-                </View>
-              ))}
-            {data.length === 0 ? (
+            {cards.map((card, i) => (
+              <View key={card.stopId} className={i === 0 ? '' : 'border-border border-t'}>
+                <StopRow
+                  view={card}
+                  locale={locale}
+                  onPress={() => router.push(`/stop/${encodeURIComponent(card.stopId)}`)}
+                  onRoutePress={(routeId) =>
+                    router.push(
+                      `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(card.stopId)}`,
+                    )
+                  }
+                />
+              </View>
+            ))}
+            {cards.length === 0 ? (
               <Text variant="body" className="px-4 pt-4 text-muted">
                 {t(locale, 'noService')}
               </Text>

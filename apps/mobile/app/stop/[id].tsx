@@ -1,6 +1,13 @@
-import type { Locale, OperatorId, StopDetailPole, StopDetailRoute } from '@nextbus/core'
+import type {
+  Locale,
+  OperatorId,
+  ResolvedClientPolicy,
+  StopDetailPole,
+  StopDetailRoute,
+} from '@nextbus/core'
 import {
   dedupeRoutes,
+  etaReadout,
   formatBearing,
   formatDistance,
   formatHeadway,
@@ -10,6 +17,7 @@ import {
   operatorsOf,
   orderPoles,
   parseStopId,
+  remarkView,
   splitStopCode,
   titleCaseName,
 } from '@nextbus/core'
@@ -327,6 +335,7 @@ export default function StopDetail() {
                           r={r}
                           locale={locale}
                           now={now}
+                          policy={policy}
                           onPress={() =>
                             router.push(
                               `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
@@ -348,6 +357,7 @@ export default function StopDetail() {
                     r={r}
                     locale={locale}
                     now={now}
+                    policy={policy}
                     onPress={() =>
                       router.push(
                         `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
@@ -444,13 +454,23 @@ function RouteRowItem({
   r,
   locale,
   now,
+  policy,
   onPress,
 }: {
   r: StopDetailRoute
   locale: Locale
   now: number
+  policy: ResolvedClientPolicy
   onPress: () => void
 }) {
+  // The readout and the remark come from the kernel, by the same two functions the Nearby card uses
+  // (WP4-0). This row had been deriving both by hand — `isStale` + `etaLabelParts` plus an imminence
+  // literal inside `EtaBadge`, and the locale lookup + `classifyRemark` fallback inside `RemarkTag` —
+  // so two screens held two copies of one rule. This is the copy that would have been left behind when
+  // Nearby moved, which is how the imminence threshold came to disagree with the served policy in the
+  // first place.
+  const readout = r.eta ? etaReadout(r.eta, locale, now, policy) : undefined
+  const remark = remarkView(r.eta?.remark, locale, r.eta?.remarkKind)
   // Row content and the save star are *sibling* tap targets (never nested — nested
   // interactive elements are invalid HTML on web, which RN-web flags). The star is just a
   // saved-state indicator here (hidden until saved); favouriting happens via the route
@@ -469,13 +489,11 @@ function RouteRowItem({
               <Text className="text-subtle">→ </Text>
               {titleCaseName(r.route.destination[locale])}
             </Text>
-            {r.eta?.remark ? (
-              <RemarkTag remark={r.eta.remark} locale={locale} kind={r.eta.remarkKind} />
-            ) : null}
+            {remark ? <RemarkTag remark={remark} /> : null}
           </View>
         </View>
-        {r.eta ? (
-          <EtaBadge eta={r.eta} locale={locale} now={now} />
+        {readout ? (
+          <EtaBadge label={readout.label} urgency={readout.urgency} stale={readout.stale} />
         ) : r.route.service?.headway ? (
           <Text variant="caption" className="max-w-[120px] text-right text-subtle">
             {formatHeadway(r.route.service.headway, locale)}
