@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      // The projection suite reads `packages/core/spec/stop-card.spec.json` directly — the corpus is
+      // its golden (ADR-069). This package *does* depend on `@nextbus/core`, but the root `test` task
+      // declares no `dependsOn`, so its hash does not include the dependency's files and a corpus
+      // change would replay a stale pass. Stated explicitly rather than fixed by making `test`
+      // topological, which would serialise every suite behind the kernel's for no gain here.
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/spec/*.spec.json"]
+    }
+  }
+}

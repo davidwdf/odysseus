@@ -11,7 +11,14 @@
       "persistent": true
     },
     "lint": {},
-    "typecheck": {},
+    "typecheck": {
+      // Topological, and this closes a loose end Wave 2 recorded and nobody owned: turbo replayed a
+      // cached `@nextbus/mobile:typecheck` across a `packages/core` SOURCE change, so the app could
+      // report green without being rechecked. Every integration run since has passed `--force` to work
+      // around it — a flag somebody has to remember is not a fix. `^typecheck` makes a package's hash
+      // include its internal dependencies', which is the property that was missing.
+      "dependsOn": ["^typecheck"]
+    },
     "test": {}
   }
 }

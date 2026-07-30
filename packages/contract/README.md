@@ -26,7 +26,7 @@ One framing to start with, because it decides how you spend your first week:
 | --- | --- | --- |
 | `packages/contract/openapi.json` | OpenAPI 3.1, v1.0.0 — **7 paths, 33 component schemas** | Generate your models. This is the only artefact you *must* consume. |
 | `packages/contract/src/ids/id-grammar.abnf` | ABNF (RFC 5234) for every id that crosses the wire | Hand-write a parser against it. The `ids` corpus below is what proves your parser agrees with ours. |
-| `packages/core/spec/` | **11 corpora, 65 groups, 510 cases, 4 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
+| `packages/core/spec/` | **12 corpora, 73 groups, 568 cases, 4 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
 | `packages/contract/native/ios/CorpusConformanceTests.swift` | **Template — never compiled, never run** | Copy into your test target on day one and make it build. See §6. |
 | `packages/contract/native/android/CorpusConformanceTest.kt` | **Template — never compiled, never run** | Ditto, for `src/test/kotlin`. |
 | `packages/ui/generated/NextBusTokens.swift` | 122 design tokens — **never compiled** | Compile it. A compile error here is a bug in the emitter, not something to patch in place. |
@@ -219,18 +219,19 @@ one rot check covers them all.
 <!-- BEGIN GENERATED: corpus -->
 | Corpus | Reference implementation | Groups | Cases | `knownDefect` |
 | --- | --- | --: | --: | --: |
-| `eta.spec.json` | `packages/core/src/eta.ts` | 16 | 114 | — |
+| `eta.spec.json` | `packages/core/src/eta.ts` | 19 | 135 | — |
 | `geo-snap.spec.json` | `packages/core/src/geo-snap.ts` | 1 | 12 | — |
-| `geo.spec.json` | `packages/core/src/geo.ts` | 7 | 60 | — |
+| `geo.spec.json` | `packages/core/src/geo.ts` | 8 | 68 | — |
 | `ids.spec.json` | `packages/core/src/ids.ts` | 10 | 56 | — |
 | `mercator.spec.json` | `packages/core/src/mercator.ts` | 6 | 37 | 1 |
 | `policy.spec.json` | `packages/core/src/policy.ts` | 1 | 7 | — |
 | `route-detail.spec.json` | `packages/core/src/route-detail.ts` | 4 | 35 | 1 |
 | `route-position.spec.json` | `packages/core/src/route-position.ts` | 1 | 14 | — |
 | `search.spec.json` | `packages/core/src/search.ts` | 12 | 106 | — |
+| `stop-card.spec.json` | `packages/core/src/stop-card.ts` | 4 | 29 | — |
 | `stop-detail.spec.json` | `packages/core/src/stop-detail.ts` | 3 | 22 | 2 |
 | `stop-name.spec.json` | `packages/core/src/stop-name.ts` | 4 | 47 | — |
-| **total** |  | **65** | **510** | **4** |
+| **total** |  | **73** | **568** | **4** |
 <!-- END GENERATED: corpus -->
 
 Each file is `{module, source, version, doc, groups}`; each group is `{doc, cases[]}`; each case is

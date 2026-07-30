@@ -109,6 +109,7 @@ object Corpus {
         "route-detail",
         "route-position",
         "search",
+        "stop-card",
         "stop-detail",
         "stop-name",
     )

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      // `check-native-guide.mjs` verifies that the README and the two native conformance templates
+      // quote the CURRENT corpus figures — and the corpus lives in `packages/core`, which this package
+      // does not depend on (the graph runs the other way: `core` imports `contract`). turbo hashes a
+      // package's own files plus its dependencies', so neither the default hash nor `dependsOn` can see
+      // a corpus change, and the task replays a stale pass.
+      //
+      // This is not hypothetical. WP4-0 added a corpus module and WP4-1 added groups to two more; the
+      // gate went red on a clean checkout while replaying green here — and the replayed log came from
+      // **another worktree entirely** (`.claude/worktrees/agent-…`), because the turbo cache is shared
+      // across them. Green locally, red in CI, from a run days old.
+      //
+      // Declared rather than switched off (`packages/ui/turbo.json` chose `cache: false` for the same
+      // shape) because the dependency is real and stating it is more useful than hiding it: a reader
+      // learns what this task reads, and the cache keeps working.
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/spec/*.spec.json"]
+    }
+  }
+}
