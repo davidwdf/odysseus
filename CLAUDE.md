@@ -26,7 +26,8 @@ pnpm lint               # Biome
 pnpm format             # Biome --write
 
 pnpm --filter @nextbus/contract openapi:emit   # regenerate packages/contract/openapi.json (ADR-052)
-                        # …it's committed + gated: `pnpm test` fails if it's stale
+pnpm --filter @nextbus/contract asyncapi:emit  # …and asyncapi.json — the /v1/live frames (ADR-056)
+                        # …both are committed + gated: `pnpm test` fails if either is stale
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
@@ -43,6 +44,7 @@ apps/web             Vite + React DOM — ONE screen (Nearby), rendered from the
 apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health;
                      reads precomputed dataset shards from KV/R2 — ADR-055)
 packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
+                     + the /v1/live frames → AsyncAPI 3.0 (`asyncapi.json`, ADR-056)
 packages/core        canonical types (`z.infer` of contract, `import type` only) · DataSource · ETA helpers
 packages/data-normalize  KMB + Citybus adapters (upstream → canonical)
 packages/api-client  EdgeClient (the v1 DataSource) + watch() polling shim

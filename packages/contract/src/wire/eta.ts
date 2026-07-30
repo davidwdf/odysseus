@@ -21,12 +21,18 @@ export const RemarkKindSchema = z
 /**
  * A normalized estimated-arrival reading. **ETAs are approximations** — ADR-008. A client must not
  * run a per-second countdown off these; update the displayed value only when a fresh reading
- * arrives, and indicate staleness using `observedAt`.
+ * arrives, and indicate staleness using `dataTimestamp`.
  *
- * The two timestamps are not interchangeable and both are needed: `dataTimestamp` is when the
- * *operator* generated the reading, `observedAt` is when *our* layer fetched it. A reading replayed
- * from an offline cache keeps its original `observedAt` (ADR-058), which is precisely what lets the
- * UI label it stale rather than presenting cached arrivals as live.
+ * The two timestamps are not interchangeable and both are needed, but only one of them ages a
+ * reading. `dataTimestamp` is when the *operator* generated it, and that is the staleness clock:
+ * `isStale` in `@nextbus/core` reads it, so a reading replayed from the offline cache ages by the
+ * operator's clock instead of looking fresh because we fetched it recently (ADR-058). `observedAt` is
+ * when *our* layer fetched it, which distinguishes a replayed reading from a just-fetched one — a
+ * diagnostic, not a threshold.
+ *
+ * This description used to tell clients to judge staleness from `observedAt`, which no code has ever
+ * done. It was corrected rather than the code changed, because the code is right: a cache replay must
+ * not reset the age of the operator's reading.
  */
 export const EtaSchema = z
   .object({
@@ -57,7 +63,7 @@ export const EtaSchema = z
     observedAt: z
       .string()
       .describe(
-        'When our layer fetched/observed it. ISO-8601 with a +08:00 offset. Survives offline replay — use it for staleness.',
+        'When our layer fetched/observed it, and the one field here we stamp ourselves. **ISO-8601 `Z`-suffixed UTC, not the `+08:00` the conventions list describes** — the normalizers use `Date#toISOString()`. Parse it as an instant; never compare it lexically against `dataTimestamp`, which carries the upstream offset. Survives offline replay (ADR-058) so a client can tell a replayed reading from a fetched one — but **judge staleness from `dataTimestamp`**, which is the operator clock the ETA helpers age a reading by.',
       ),
   })
   .meta({ id: 'Eta' })

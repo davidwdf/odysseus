@@ -24,7 +24,8 @@ One framing to start with, because it decides how you spend your first week:
 <!-- BEGIN GENERATED: artefacts -->
 | Artefact | What it is today | What you do with it |
 | --- | --- | --- |
-| `packages/contract/openapi.json` | OpenAPI 3.1, v1.0.0 — **7 paths, 33 component schemas** | Generate your models. This is the only artefact you *must* consume. |
+| `packages/contract/openapi.json` | OpenAPI 3.1, v1.0.0 — **7 paths, 34 component schemas** | Generate your models. This is the only artefact you *must* consume. |
+| `packages/contract/asyncapi.json` | AsyncAPI 3.0.0 for the `/v1/live` socket — **6 frames, 45 component schemas** | Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7. |
 | `packages/contract/src/ids/id-grammar.abnf` | ABNF (RFC 5234) for every id that crosses the wire | Hand-write a parser against it. The `ids` corpus below is what proves your parser agrees with ours. |
 | `packages/core/spec/` | **12 corpora, 73 groups, 568 cases, 4 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
 | `packages/contract/native/ios/CorpusConformanceTests.swift` | **Template — never compiled, never run** | Copy into your test target on day one and make it build. See §6. |
@@ -88,7 +89,10 @@ build; edit `packages/contract/src/openapi.ts` and re-emit.*
 - **Enums marked `x-unknown-tolerant`** will gain members without a major version bump.
   Generate a fallback case (`case unknown(String)`); do not throw on an unrecognized value.
 - **ETAs are approximations.** Do not run a per-second countdown; refresh the value only when
-  a new reading arrives, and use `observedAt` to show staleness.
+  a new reading arrives, and judge staleness from `dataTimestamp` — the operator's clock.
+  `observedAt` is when *we* fetched it, which tells a replayed reading from a fresh one but must
+  not be used as the age: a cache replay would then look live. It is also the one timestamp here
+  that is `Z`-suffixed UTC rather than `+08:00`, because our layer stamps it.
 - **`RouteLite.sortKey` is the order to display, not a hint.** Sort by it verbatim and every
   platform agrees; the ordering it encodes is `localeCompare(numeric: true)`, which has no
   faithful Swift or Kotlin equivalent, so the server computes it rather than asking three
@@ -295,6 +299,31 @@ Read this section twice; it is the honest half of the document.
 - **`openapi.json` is generated and gated; the prose in §§1–7 is not, except where marked.** The three
   generated regions (the artefact table, the conventions list, the corpus table) are checked against a
   fresh count on every `pnpm test`. Everything else is judgement written by hand and can age.
+- **`asyncapi.json` is a specification artefact with a validator, and only aspirationally a codegen
+  input.** Four things you would otherwise assume about it, each of which was checked:
+  - **There is no AsyncAPI→Swift generator in existence.** Modelina, the reference generator, emits 12
+    languages and Swift is not among them; a sweep of `asyncapi.com/tools` found no tool mentioning
+    Swift, Objective-C or iOS in any category. Hand-write the frame types from the document.
+  - **Kotlin generation exists and cannot serialise.** Modelina's Kotlin output lists JSON, XML and
+    binary serialization as "currently not supported", so you get annotation-free data classes and
+    hand-write the decode layer anyway — which puts the `x-unknown-tolerant` obligation on hand-written
+    code on Android too, exactly as on iOS.
+  - **`asyncapi diff` is not an `oasdiff` equivalent.** Its standards table has no
+    `/components/schemas/*` pointer, so adding *or removing* a payload field classifies as
+    `unclassified` rather than `breaking`. A gate built on it would go green on a removed field, so
+    there is no such gate: breaking-change discipline for the frames is ADR-052 §5 plus review.
+  - **The document has never been validated against the AsyncAPI meta-schema.** That would need a
+    dependency this repo has not taken. `packages/contract/scripts/check-asyncapi-current.mjs`
+    transcribes the field lists and constraints that matter from the 3.0.0 spec and the websockets
+    binding meta-schema, and each of its rules is watched failing on a synthetic document
+    (`--selftest`) — but "AsyncAPI 3.0" here is a careful reading, not a validator's verdict.
+
+  What *is* gated: the document is rebuilt and compared on every `pnpm test`; every schema keyword is
+  checked to lie inside the draft-07 ∩ AsyncAPI vocabulary the document claims (the payloads are
+  emitted as 2020-12 and AsyncAPI's Schema Object is a superset of draft-07, which the
+  `x-json-schema-dialect` extension records); every frame is checked to carry a distinct required
+  `type` const, which is the spec's "valid against one and only one message" MUST that no AsyncAPI tool
+  enforces; and the socket frames are checked **not** to appear in `openapi.json`.
 - **No package here is published.** No registry, no semantic version per artefact, no CI that would
   notify you of a change. `CONTRACT_VERSION` is `1.0.0` and bumps only on a *breaking* wire change;
   additive-optional changes are free and deliberately silent, which is exactly why you should regenerate

@@ -10,10 +10,12 @@
 // Nothing here may import from `@nextbus/core`: the dependency runs core → contract, and
 // WP1-4's `layers.json` enforces it.
 
+export * from './asyncapi'
 export * from './json-schema'
 export * from './openapi'
 export * from './wire/detail'
 export * from './wire/eta'
+export * from './wire/live'
 export * from './wire/policy'
 export * from './wire/primitives'
 export * from './wire/responses'

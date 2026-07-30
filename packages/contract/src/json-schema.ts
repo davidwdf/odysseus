@@ -40,3 +40,39 @@ export const WIRE_JSON_SCHEMA_OPTIONS = {
 export function toWireJsonSchema(schema: z.ZodType): Record<string, unknown> {
   return z.toJSONSchema(schema, WIRE_JSON_SCHEMA_OPTIONS) as Record<string, unknown>
 }
+
+/**
+ * Every registered wire schema, as a `components.schemas` map — the one emit **both** published
+ * documents call.
+ *
+ * `openapi.json` and `asyncapi.json` describe different transports and must still agree about what an
+ * `Eta` is, byte for byte. That holds only if there is one registry emit and one set of pointers, so
+ * this function is it: one `z.globalRegistry` pass, one `uri` template, one place `$schema` is
+ * stripped. The pointer prefix `#/components/schemas/` is *identical* in OpenAPI 3.1 and AsyncAPI 3.0,
+ * which is the small piece of luck that makes sharing possible at all.
+ *
+ * **Do not reach for a second `z.registry()` for a new family of shapes.** Verified against the
+ * installed zod 4.4.3: a separate registry that references a globally-registered schema emits
+ * `"$ref": "#/components/schemas/__shared#/$defs/Eta"` plus a synthetic `__shared` component — a
+ * nested-fragment pointer that means nothing to an AsyncAPI parser or a code generator. Register every
+ * shape on the global registry with `.meta({ id })`, like the rest of `src/wire/`.
+ *
+ * Registry mode only sees schemas whose module has actually been imported, so **what a document
+ * contains is decided by that document's import graph**, not by this function. `openapi.ts` reaches
+ * `wire/responses` and therefore the seven endpoints' shapes; `asyncapi.ts` reaches `wire/live` as
+ * well and therefore also the frames. That is deliberate — a frame is not a JSON GET response and has
+ * no business in the OpenAPI document — and it is why both emit scripts import exactly one assembly
+ * module and nothing else.
+ */
+export function wireComponents(): Record<string, Record<string, unknown>> {
+  const emitted = z.toJSONSchema(z.globalRegistry, {
+    ...WIRE_JSON_SCHEMA_OPTIONS,
+    uri: (id: string) => `#/components/schemas/${id}`,
+  } as never) as { schemas: Record<string, Record<string, unknown>> }
+
+  // `$schema` is meaningful for a standalone JSON Schema document and noise inside a components map,
+  // where the dialect is declared once by the document (`jsonSchemaDialect`, or — AsyncAPI having no
+  // such field — the `x-json-schema-dialect` extension `asyncapi.ts` sets).
+  for (const schema of Object.values(emitted.schemas)) delete schema.$schema
+  return emitted.schemas
+}

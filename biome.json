@@ -17,6 +17,7 @@
       "!**/.context",
       "!**/*.gen.ts",
       "!packages/contract/openapi.json",
+      "!packages/contract/asyncapi.json",
       "!scripts/boundaries/fixtures"
     ]
   },

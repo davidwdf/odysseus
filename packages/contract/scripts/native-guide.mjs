@@ -40,6 +40,7 @@ const read = (p) => readFileSync(p, 'utf8')
 /** Every figure the guide quotes, counted from the artefact itself rather than remembered. */
 export function figures() {
   const doc = JSON.parse(read(join(PKG_ROOT, 'openapi.json')))
+  const live = JSON.parse(read(join(PKG_ROOT, 'asyncapi.json')))
 
   const specDir = join(REPO_ROOT, 'packages', 'core', 'spec')
   const corpora = readdirSync(specDir)
@@ -72,6 +73,9 @@ export function figures() {
     // The bullet list of `info.description`, which is canonical for wire conventions. Everything
     // before the first bullet is the document's own title matter and belongs to the document.
     conventions: doc.info.description.slice(doc.info.description.indexOf('\n- ')).trim(),
+    asyncApiVersion: live.asyncapi,
+    liveMessages: Object.keys(live.components.messages).length,
+    liveSchemas: Object.keys(live.components.schemas).length,
     corpora,
     corpusFiles: corpora.length,
     corpusGroups: sum('groups'),
@@ -97,6 +101,11 @@ function artefactsBlock(f) {
       '`packages/contract/openapi.json`',
       `OpenAPI 3.1, v${f.contractVersion} — **${f.paths} paths, ${f.schemas} component schemas**`,
       'Generate your models. This is the only artefact you *must* consume.',
+    ]),
+    row([
+      '`packages/contract/asyncapi.json`',
+      `AsyncAPI ${f.asyncApiVersion} for the \`/v1/live\` socket — **${f.liveMessages} frames, ${f.liveSchemas} component schemas**`,
+      'Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7.',
     ]),
     row([
       '`packages/contract/src/ids/id-grammar.abnf`',

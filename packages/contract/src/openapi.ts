@@ -6,10 +6,11 @@
 // 2020-12, which Zod 4 emits natively, so the only thing left to do is the paths/components
 // scaffolding below — and one generator fewer to keep in step.
 
-import { z } from 'zod'
-import { WIRE_JSON_SCHEMA_OPTIONS } from './json-schema'
+import { wireComponents } from './json-schema'
 // Importing the module (not just `WIRE_ENDPOINTS`) is what registers every shape it reaches —
-// including `ErrorResponseSchema`, which appears below only as a `$ref` string.
+// including `ErrorResponseSchema`, which appears below only as a `$ref` string. Note what is
+// deliberately *not* imported: `./wire/live`. The frames belong to `asyncapi.json`; a socket has no
+// GET response, and pulling them in here would publish them in a document that cannot describe them.
 import { ERROR_CODES, WIRE_ENDPOINTS } from './wire/responses'
 
 /**
@@ -32,25 +33,6 @@ const ERROR_RESPONSES: Record<string, unknown> = Object.fromEntries(
     },
   ]),
 )
-
-/**
- * Emit every registered wire schema as OpenAPI components.
- *
- * Registry mode only sees schemas whose module has actually been imported, which is why this file
- * imports through `./wire/responses` — that reaches every shape transitively. A schema that no
- * endpoint can return is a schema no client needs.
- */
-function components(): Record<string, unknown> {
-  const emitted = z.toJSONSchema(z.globalRegistry, {
-    ...WIRE_JSON_SCHEMA_OPTIONS,
-    uri: (id: string) => `#/components/schemas/${id}`,
-  } as never) as { schemas: Record<string, Record<string, unknown>> }
-
-  // `$schema` is meaningful for a standalone JSON Schema document and noise inside an OpenAPI
-  // components map, where the dialect is declared once by `jsonSchemaDialect`.
-  for (const schema of Object.values(emitted.schemas)) delete schema.$schema
-  return emitted.schemas
-}
 
 export function buildOpenApiDocument(): Record<string, unknown> {
   const paths: Record<string, unknown> = {}
@@ -111,7 +93,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         '- **Enums marked `x-unknown-tolerant`** will gain members without a major version bump.',
         '  Generate a fallback case (`case unknown(String)`); do not throw on an unrecognized value.',
         '- **ETAs are approximations.** Do not run a per-second countdown; refresh the value only when',
-        '  a new reading arrives, and use `observedAt` to show staleness.',
+        "  a new reading arrives, and judge staleness from `dataTimestamp` — the operator's clock.",
+        '  `observedAt` is when *we* fetched it, which tells a replayed reading from a fresh one but must',
+        '  not be used as the age: a cache replay would then look live. It is also the one timestamp here',
+        '  that is `Z`-suffixed UTC rather than `+08:00`, because our layer stamps it.',
         '- **`RouteLite.sortKey` is the order to display, not a hint.** Sort by it verbatim and every',
         '  platform agrees; the ordering it encodes is `localeCompare(numeric: true)`, which has no',
         '  faithful Swift or Kotlin equivalent, so the server computes it rather than asking three',
@@ -133,6 +118,6 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       ].join('\n'),
     },
     paths,
-    components: { schemas: components() },
+    components: { schemas: wireComponents() },
   }
 }
