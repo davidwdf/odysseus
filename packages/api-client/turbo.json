@@ -1,0 +1,19 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      // This package's suite asserts the output of **kernel** functions — `applyLiveFrame`, `diffEtas`,
+      // `acceptTargets`, `liveSocketUrl` — as it arrives through the transports. It does depend on
+      // `@nextbus/core`, but the root `test` task declares no `dependsOn`, so a package's test hash covers
+      // only its own files: a change to `packages/core/src/live.ts` that broke the reduced ordering would
+      // replay a stale pass here. The same shape `packages/contract`, `apps/mobile` and `apps/web` each
+      // declare for the corpus they read across the package boundary.
+      //
+      // Declared rather than `cache: false` for the reason `packages/contract/turbo.json` gives: stating
+      // what a task reads is more useful to the next reader than switching the cache off, and the cache
+      // keeps working.
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/src/*.ts"]
+    }
+  }
+}

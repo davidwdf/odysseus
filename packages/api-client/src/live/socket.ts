@@ -1,0 +1,316 @@
+// The real transport: one WebSocket, and the reconnect policy nothing in this repo has ever held.
+//
+// WHY THE POLICY IS WRITTEN DOWN HERE RATHER THAN DISCOVERED PER PLATFORM
+// Before this file the repo had no reconnect of any kind: `watch()`'s `setInterval` simply failed and
+// tried again a cadence later, and nothing anywhere decided how long to wait, how fast to widen or when
+// to stop. A socket has to decide all three, and if it is not written down each platform will answer
+// differently — iOS in a `URLSession` delegate, Android in an OkHttp listener — and a reviewer will have
+// no artefact to disagree with. So the numbers and their reasons are here, in one place, with a test that
+// watches the second attempt happen at the right moment.
+//
+// THE POLICY
+//   · **Initial delay 1 s.** Short enough that a dropped connection on a train through a tunnel repairs
+//     itself before a rider notices, long enough not to be a tight loop against a Worker that is
+//     rejecting the upgrade.
+//   · **Doubling, capped at 30 s.** 1 → 2 → 4 → 8 → 16 → 30 → 30 … The cap matters more than the growth:
+//     an uncapped exponential reaches an hour, and a screen that has been open all afternoon on a bad
+//     connection would then take an hour to notice the network came back. 30 s is below the shard's own
+//     45–60 s poll cadence, so a reconnect that lands inside one cycle loses no data at all.
+//   · **Half jitter.** The delay is `capped/2 + random()·capped/2`. Every client watching a shard that
+//     restarts is disconnected in the same instant, and a fixed 1 s would bring all of them back
+//     simultaneously, which is precisely the load the restarted shard cannot take. Half rather than full
+//     jitter because full jitter can produce a near-zero delay, which is the thundering herd again with
+//     extra steps. `random` is injected so the test asserts a schedule rather than a distribution.
+//   · **`retryable: false` stops it.** A `status` frame whose error says the request can never succeed
+//     is not a network problem, and reconnecting into it would produce the same frame for ever. The
+//     transport stops, having delivered the frame, so the session records the state and the screen can
+//     say so. This is ADR-064's boolean doing the job it was put on the wire for.
+//   · **The attempt counter resets when a *frame* arrives, not when the socket opens.** A socket that
+//     connects and dies before delivering anything is not a working connection — a Worker that accepts
+//     the upgrade and then throws looks exactly like that — and resetting on `open` would turn the
+//     backoff into a tight loop against it.
+//
+// WHAT IS DELIBERATELY NOT HERE
+// No `Origin` header (a browser sets it and cannot be told otherwise; a native client may omit it, so it
+// is never authorisation — see the scout's RFC 6455 reading), no auth, and no subscription rules. What a
+// frame *means* is `applyLiveFrame` in the kernel; declaring targets and asking for a resync is
+// `./controller.ts`. This file connects, sends bytes, receives bytes, and comes back when it drops.
+
+import type {
+  ClientFrame,
+  PingFrame,
+  ServerFrame,
+  SubscribeFrame,
+  WatchTarget,
+} from '@nextbus/core'
+import type { Clock, LiveTransportSink } from '@nextbus/ports'
+import { wireErrorOf } from '../errors'
+import { frameAt, type LiveEtaEngine, systemTimers, type Timers } from './engine'
+
+/**
+ * The platform's socket, reduced to what this transport needs: send a string, close, and three events.
+ *
+ * **Why a second seam, when `LiveTransport` is already the port.** They answer different questions.
+ * `LiveTransport` is what the controller talks to, so a platform that wants its own reconnect policy
+ * implements *that* and this file is not involved. This interface is the hole in *this* implementation
+ * where a platform socket goes — so any platform whose socket can send a string (the browser, React
+ * Native, `URLSessionWebSocketTask`, OkHttp) inherits the policy above instead of reinventing it. The
+ * DOM's `WebSocket` type stays confined to `browserSocketFactory` below, which is also what lets a test
+ * drive a connection without jsdom.
+ */
+export interface LiveSocketHandlers {
+  /** The connection is usable. Queued frames go out now. */
+  onOpen(): void
+  /** One inbound message, as text. Binary messages are not ours and are dropped by the factory. */
+  onMessage(data: string): void
+  /**
+   * The connection is gone, for any reason. Called **at most once** per connection by contract; the
+   * transport also guards against a double call, because a browser fires `error` *and* `close`.
+   */
+  onClose(reason: string): void
+}
+
+/** One live connection, as this transport uses it. */
+export interface LiveSocketConnection {
+  send(data: string): void
+  /** Close, and do not call `onClose` — a deliberate teardown is not an event the caller needs back. */
+  close(): void
+}
+
+export type LiveSocketFactory = (url: string, handlers: LiveSocketHandlers) => LiveSocketConnection
+
+/** How the reconnect delay grows. See the policy in the header; every field has a reason there. */
+export interface SocketBackoff {
+  initialMs: number
+  factor: number
+  maxMs: number
+}
+
+export const DEFAULT_SOCKET_BACKOFF: SocketBackoff = { initialMs: 1_000, factor: 2, maxMs: 30_000 }
+
+/**
+ * How often to ping.
+ *
+ * One incoming message every 30 s, which is the cheapest thing a client can send: incoming protocol
+ * pings are not billed, and Cloudflare's hibernation auto-response answers them **without waking the
+ * shard**, provided the bytes match exactly (see `LIVE_PING_MESSAGE` in `@nextbus/contract`). It is a
+ * round number chosen to sit well inside the idle timeouts intermediaries impose, **not** a measurement:
+ * WP0-5 has not happened, so there is no deployment to have measured one against. Revisit it with the
+ * first real socket rather than treating it as settled.
+ */
+export const DEFAULT_KEEPALIVE_MS = 30_000
+
+/**
+ * The keepalive bytes.
+ *
+ * Encoded from a value the compiler checks is a `PingFrame`, rather than restating the string, which
+ * closes the loop with the contract: `buildAsyncApiDocument()` asserts that `LIVE_PING_MESSAGE` *is* the
+ * JSON encoding of `PingFrameSchema` and refuses to emit the document otherwise. So a change to the
+ * frame breaks the `satisfies` here and the assertion there, and neither the auto-response string nor
+ * this client can drift alone. One different byte would mean every keepalive wakes a hibernated shard —
+ * the difference between an idle connection costing nothing and one billed around the clock.
+ */
+const PING_MESSAGE = JSON.stringify({ type: 'ping' } satisfies PingFrame)
+
+export interface SocketTransportDeps {
+  /** The socket URL, e.g. `wss://api.nextbus.hk/v1/live` — `resolveEndpoints().socketUrl`. */
+  url: string
+  clock: Clock
+  timers?: Timers
+  /** Defaults to the platform `WebSocket`. Injected in tests, and by a native client that has its own. */
+  socketFactory?: LiveSocketFactory
+  keepaliveMs?: number
+  backoff?: Partial<SocketBackoff>
+  /** Jitter source. `Math.random` in production; a constant in a test asserting the schedule. */
+  random?: () => number
+}
+
+/**
+ * A `LiveTransport` over one WebSocket, with keepalive and reconnect.
+ *
+ * It connects on the first `subscribe` rather than on `open`, and that is forced by D4: the shard is
+ * derived by the **Worker** from `?targets=` on the connect URL, so the URL cannot be built until the
+ * client has said what it wants. It is also the same sequence the poll emulator follows, which is what
+ * lets the two be compared at all.
+ */
+export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine {
+  const timers = deps.timers ?? systemTimers
+  const backoff = { ...DEFAULT_SOCKET_BACKOFF, ...deps.backoff }
+  const keepaliveMs = deps.keepaliveMs ?? DEFAULT_KEEPALIVE_MS
+  const random = deps.random ?? Math.random
+  const socketFactory = deps.socketFactory ?? browserSocketFactory
+
+  let sink: LiveTransportSink<ServerFrame> | null = null
+  /** `close()` was called. Terminal, and nothing is emitted afterwards. */
+  let released = false
+  /** A `retryable: false` failure arrived. Terminal too, but the caller was told why. */
+  let stopped = false
+  let connection: LiveSocketConnection | null = null
+  let ready = false
+  /** Consecutive connections that never delivered a frame. Drives the backoff. */
+  let attempt = 0
+  /** The last target declaration. A reconnect re-sends exactly this — `subscribe` replaces, so one is enough. */
+  let subscription: SubscribeFrame | null = null
+  let queued: ClientFrame[] = []
+  let stopKeepalive: (() => void) | null = null
+  let cancelReconnect: (() => void) | null = null
+
+  const emit = (frame: ServerFrame) => {
+    if (!released) sink?.frame(frame)
+  }
+
+  /** `capped/2 + random()·capped/2`, rounded. See the policy in the header. */
+  const delayFor = (failures: number): number => {
+    const capped = Math.min(backoff.maxMs, backoff.initialMs * backoff.factor ** (failures - 1))
+    return Math.round(capped / 2 + random() * (capped / 2))
+  }
+
+  /**
+   * `?targets=` — the comma-separated stop ids the **Worker** hashes to pick a shard.
+   *
+   * Sent unfiltered: `liveShardFor` runs `acceptTargets` server-side before hashing, so a malformed id
+   * in the list cannot change which shard we land on, and the client deciding for itself which targets
+   * are legal would make the `snapshot`'s accepted-set echo — the mechanism the contract specifies for
+   * telling a rider a favourite was dropped — describe a set the client had already filtered.
+   */
+  const connectUrl = (targets: readonly WatchTarget[]): string =>
+    `${deps.url}?targets=${encodeURIComponent(targets.map((t) => t.stopId).join(','))}`
+
+  const teardownConnection = () => {
+    stopKeepalive?.()
+    stopKeepalive = null
+    connection?.close()
+    connection = null
+    ready = false
+  }
+
+  const connect = () => {
+    if (released || stopped || subscription === null) return
+    // Whatever was queued is superseded: a subscription is a replacement, so re-declaring the latest one
+    // is both necessary and sufficient. Anything else in the queue was written for a connection that no
+    // longer exists.
+    queued = [subscription]
+    let settled = false
+    ready = false
+    connection = socketFactory(connectUrl(subscription.targets), {
+      onOpen() {
+        if (released) return
+        ready = true
+        const pending = queued
+        queued = []
+        for (const frame of pending) connection?.send(JSON.stringify(frame))
+        stopKeepalive = timers.every(keepaliveMs, () => connection?.send(PING_MESSAGE))
+      },
+      onMessage(data) {
+        if (released) return
+        let frame: ServerFrame
+        try {
+          frame = JSON.parse(data) as ServerFrame
+        } catch {
+          // Not JSON, so not ours. Dropped rather than reported: this client performs no validation at
+          // all (ADR-052 decision 2 — the contract's types erase), so "malformed" here can only mean
+          // "not from our Worker", and the reducer's own tolerant default already covers a frame type
+          // this build has never heard of.
+          return
+        }
+        attempt = 0
+        emit(frame)
+        if (frame.type === 'status' && frame.error?.retryable === false) {
+          // Delivered first, then torn down: the session must record the state before we stop, or a
+          // screen would be left labelled `retrying` for ever with nothing coming.
+          stopped = true
+          cancelReconnect?.()
+          cancelReconnect = null
+          teardownConnection()
+        }
+      },
+      onClose(reason) {
+        if (settled) return // a browser fires `error` and then `close`; one is enough
+        settled = true
+        stopKeepalive?.()
+        stopKeepalive = null
+        connection = null
+        ready = false
+        if (released || stopped) return
+        // A close code is not an HTTP status and `ERROR_CODES` has no member for one, so this reuses the
+        // same `internal` / `retryable: true` fallback `classifyFailure` uses for a response body that is
+        // not ours (see `wireErrorOf`). Inventing a code for it would put a value on the wire that the
+        // status table does not bind.
+        emit({
+          type: 'status',
+          at: frameAt(deps.clock.now()),
+          state: 'retrying',
+          error: wireErrorOf(new Error(reason)),
+        })
+        attempt += 1
+        cancelReconnect = timers.after(delayFor(attempt), () => {
+          cancelReconnect = null
+          connect()
+        })
+      },
+    })
+  }
+
+  return {
+    engine: 'socket',
+    open(nextSink) {
+      sink = nextSink
+      // Nothing to connect to yet: the connect URL carries the target set (D4). See `createSocketTransport`.
+    },
+    send(frame: ClientFrame) {
+      if (released || stopped) return
+      if (frame.type === 'subscribe') {
+        subscription = frame
+        if (connection === null) {
+          connect()
+          return
+        }
+      }
+      if (ready && connection !== null) connection.send(JSON.stringify(frame))
+      else queued.push(frame)
+    },
+    close() {
+      released = true
+      cancelReconnect?.()
+      cancelReconnect = null
+      teardownConnection()
+      sink = null
+    },
+  }
+}
+
+/**
+ * The platform `WebSocket`, as a `LiveSocketFactory`.
+ *
+ * Legal here and nowhere near the kernel: `layers.json` denies the `WebSocket` global in
+ * `packages/core` and biome renders that ban as a lint message, precisely so this stays in the `client`
+ * layer where a platform object belongs. React Native ships the same global, so this one adapter serves
+ * both renderers.
+ */
+export const browserSocketFactory: LiveSocketFactory = (url, handlers) => {
+  const socket = new WebSocket(url)
+  socket.onopen = () => handlers.onOpen()
+  socket.onmessage = (event: MessageEvent) => {
+    // Text only. Our frames are JSON, so a `Blob`/`ArrayBuffer` message did not come from our Worker;
+    // handing its stringification to `JSON.parse` would produce noise rather than an error.
+    if (typeof event.data === 'string') handlers.onMessage(event.data)
+  }
+  socket.onclose = (event: CloseEvent) => handlers.onClose(`socket closed (${event.code})`)
+  // `error` carries no detail by design (browsers withhold it to avoid leaking cross-origin
+  // information), so there is nothing to report but the fact.
+  socket.onerror = () => handlers.onClose('socket error')
+  return {
+    send(data) {
+      socket.send(data)
+    },
+    close() {
+      // Detach first: a deliberate close would otherwise arrive back as `onClose` and schedule a
+      // reconnect for a subscription that has just been released.
+      socket.onclose = null
+      socket.onerror = null
+      socket.onmessage = null
+      socket.onopen = null
+      socket.close()
+    },
+  }
+}

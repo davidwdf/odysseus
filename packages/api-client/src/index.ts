@@ -1,8 +1,6 @@
 import type {
   ClientPolicy,
   DataSource,
-  ErrorCode,
-  ErrorResponse,
   Eta,
   EtaListener,
   LatLng,
@@ -14,78 +12,83 @@ import type {
   WatchTarget,
 } from '@nextbus/core'
 import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
+import type { Clock } from '@nextbus/ports'
+import { type Endpoints, resolveEndpoints } from './endpoint'
+import { classifyFailure } from './errors'
+import { createLiveEtaController, createPollTransport, type LiveEtaEngine } from './live'
 
 /**
- * A failed edge request, carrying the server's own classification (ADR-064).
+ * Everything a transport factory could need to build itself, so the option is one function.
  *
- * `getJson` used to throw `new Error("/v1/stop/… → HTTP 502")`, which left every caller with a
- * string to regex. The field that matters is `retryable`: it is what lets a Favourites screen — or,
- * once there is one, an iOS Widget — drop a saved stop whose id no longer resolves instead of
- * re-requesting it on every refresh for as long as the rider keeps it.
- *
- * Nothing here validates: `@nextbus/core`'s types erase (ADR-052), so this reads the envelope as
- * data and falls back on the status line if the body is not ours.
+ * The poll emulator needs `getEtas` and a cadence; the socket needs a URL; both need a clock. Handing
+ * over the whole `EdgeClient` instead would let a transport reach for a second endpoint, which is how a
+ * "transport" grows into a second data layer.
  */
-export class EdgeRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: ErrorCode,
-    /** Whether the identical request may succeed later. `false` = stop asking. */
-    readonly retryable: boolean,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'EdgeRequestError'
-  }
-}
-
-/**
- * Read the taxonomy off a failed response.
- *
- * The Worker always sends the envelope, so the fallback covers only a response that did not come
- * from it — a Cloudflare error page, a captive portal, a proxy. There the status line is genuinely
- * all we have, and `retryable` for an unidentified failure has to be "yes": treating an unreadable
- * 404 from a captive portal as permanent would prune a rider's favourites over airport wifi.
- */
-async function classifyFailure(path: string, res: Response): Promise<EdgeRequestError> {
-  const body = (await res.json().catch(() => null)) as Partial<ErrorResponse> | null
-  if (body && typeof body.code === 'string' && typeof body.retryable === 'boolean') {
-    return new EdgeRequestError(
-      res.status,
-      body.code,
-      body.retryable,
-      body.message ?? body.error ?? `${path} → HTTP ${res.status}`,
-    )
-  }
-  return new EdgeRequestError(res.status, 'internal', true, `${path} → HTTP ${res.status}`)
+export interface LiveTransportContext {
+  endpoints: Endpoints
+  /** The client's own `/v1/etas/:id` call — what the poll emulator polls. */
+  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]>
+  /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
+  pollMs: number
+  clock: Clock
 }
 
 export interface EdgeClientOptions {
   /** Base URL of the edge API, e.g. https://api.nextbus.hk */
   baseUrl: string
-  /** Polling interval for the v1 watch() shim, ms. */
+  /** Polling interval for the poll-emulator transport, ms. Defaults to the served `refreshAfterMs`. */
   pollMs?: number
   fetchImpl?: typeof fetch
+  /**
+   * Explicit socket URL, for the one case deriving it from `baseUrl` cannot cover: a socket tier on a
+   * different host (D5). Normally absent — `wss://<same host>/v1/live` is derived.
+   */
+  liveUrl?: string
+  /**
+   * Reads "now" for the frame stamps the poll emulator synthesizes. Defaults to the host clock; injected
+   * by a test that needs the `at` fields to be predictable.
+   */
+  clock?: Clock
+  /**
+   * How `watch()` gets its frames. **Absent means the poll emulator**, so today's behaviour is the
+   * default and a socket is opt-in: one HTTP request per target per cadence, every target independent, a
+   * failure on one leaving the others alone. Supply `createSocketTransport` (or a `MemoryTransport`) to
+   * change engines without touching a screen — which is the property ADR-004 has claimed since v1 and
+   * `apps/mobile/test/seam-substitution.test.tsx` now actually tests.
+   */
+  transport?: (ctx: LiveTransportContext) => LiveEtaEngine
 }
 
 /**
- * v1 DataSource: talks to the Cloudflare edge API. `watch()` is a polling shim;
- * v2 will swap this for a WebSocket client behind the same interface (ADR-004).
+ * v1 DataSource: talks to the Cloudflare edge API.
+ *
+ * `watch()` is no longer a shim that concatenates lists — it runs a real frame protocol
+ * (`snapshot`/`delta`/`status`) over a pluggable transport, whose default is the poll emulator in
+ * `./live/poll.ts`. Swapping in `createSocketTransport` swaps the engine and nothing else (ADR-004).
  */
 export class EdgeClient implements DataSource {
+  private readonly endpoints: Endpoints
   private readonly base: string
   private readonly pollMs: number
+  private readonly clock: Clock
   private readonly fetchImpl: typeof fetch
+  private readonly transport: (ctx: LiveTransportContext) => LiveEtaEngine
 
   constructor(opts: EdgeClientOptions) {
-    this.base = opts.baseUrl.replace(/\/$/, '')
+    // One declaration of the base-URL normalisation, and of the `http:`→`ws:` derivation with it. The
+    // inline `.replace(/\/$/, '')` that used to be on this line stripped exactly one trailing slash, so a
+    // configured `http://host//` double-slashed every path; `resolveEndpoints` strips them all.
+    this.endpoints = resolveEndpoints(opts.baseUrl, opts.liveUrl)
+    this.base = this.endpoints.apiUrl
     // The **fourth** hard-coded 20 s the plan's three-way disagreement did not count: `watch()`'s
     // shim polled on its own cadence, so the one seam that exists to be swapped for a socket engine
     // disagreed with all three screens. Defaults to the policy value, which is the edge's own TTL.
     this.pollMs = opts.pollMs ?? CLIENT_POLICY_DEFAULTS.refreshAfterMs
+    this.clock = opts.clock ?? { now: () => Date.now() }
     // Bind to the global: browsers throw "Illegal invocation" if native fetch is
     // called with a receiver other than window (e.g. as this.fetchImpl(...)).
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis)
+    this.transport = opts.transport ?? createPollTransport
   }
 
   private async getJson<T>(path: string): Promise<T> {
@@ -127,29 +130,52 @@ export class EdgeClient implements DataSource {
     return this.getJson<ClientPolicy>('/v1/policy')
   }
 
+  /**
+   * Live ETAs for a set of targets. Signature unchanged (ADR-004) — the engine underneath is not.
+   *
+   * The listener still receives a flat `Eta[]`, so no caller has to change, but the list is now the
+   * **reduced session** the kernel maintains rather than a per-round concatenation, which has two visible
+   * consequences worth stating:
+   *
+   *  · It is canonically ordered by `(stopId, routeId)` (D1). The old shim pushed
+   *    `Promise.all`-completion order, so with more than one target the listener's ordering was
+   *    genuinely nondeterministic between two runs of the same data — nothing depended on it, and
+   *    nothing could have.
+   *  · A round in which nothing changed produces **no call at all**, where the shim called the listener
+   *    every cadence with a fresh copy of identical data. That is ADR-008's rule ("update the value only
+   *    when fresh data arrives") reaching the seam.
+   */
   watch(targets: WatchTarget[], onUpdate: EtaListener): Subscription {
-    let cancelled = false
-
-    const tick = async () => {
-      const all: Eta[] = []
-      await Promise.all(
-        targets.map(async (target) => {
-          try {
-            all.push(...(await this.getEtas(target.stopId, target.routeIds)))
-          } catch {
-            // Keep other targets alive; a stale tile is better than a dead screen.
-          }
-        }),
-      )
-      if (!cancelled) onUpdate(all)
-    }
-
-    void tick()
-    const id: ReturnType<typeof setInterval> = setInterval(() => void tick(), this.pollMs)
+    /**
+     * The last list handed over, by identity — so a status-only transition does not call a listener that
+     * cannot see the status.
+     *
+     * `EtaListener` takes `Eta[]` and nothing else, so `{ state: 'retrying' }` arriving on its own carries
+     * *no information* through this door: the same readings would be delivered again and every consumer
+     * would repaint for nothing. `applyLiveFrame`'s `status` case passes `etas: state.etas` through
+     * unchanged, so reference identity is exactly the right test, and if that ever stopped being true the
+     * failure mode is one redundant call with identical data — which is what the old shim did every single
+     * round anyway. A screen that wants the status holds a `createLiveEtaController` and gets both.
+     */
+    let last: readonly Eta[] | null = null
+    const controller = createLiveEtaController({
+      transport: this.transport({
+        endpoints: this.endpoints,
+        getEtas: (stopId, routeIds) => this.getEtas(stopId, routeIds),
+        pollMs: this.pollMs,
+        clock: this.clock,
+      }),
+      targets,
+      emit: ({ etas }) => {
+        if (etas === last) return
+        last = etas
+        onUpdate([...etas])
+      },
+    })
+    controller.start()
     return {
       unsubscribe() {
-        cancelled = true
-        clearInterval(id)
+        controller.stop()
       },
     }
   }
@@ -159,6 +185,12 @@ export function createEdgeClient(opts: EdgeClientOptions): DataSource {
   return new EdgeClient(opts)
 }
 
+// One declaration of where the API is, and of the socket URL derived from it (D5).
+export { DEFAULT_API_URL, type Endpoints, resolveEndpoints } from './endpoint'
+// The failure taxonomy (ADR-064), in its own module so `./live` can read it without a cycle.
+export { classifyFailure, EdgeRequestError, wireErrorOf } from './errors'
+// The live engines and the subscription lifecycle. See `./live/index.ts` for the map.
+export * from './live'
 // The location state machine — permission, a fix, and the remembered cell underneath. Shared rather
 // than per-renderer (WP4-1): see `./location.ts` for why the `client` layer is its only possible home.
 export {
