@@ -359,7 +359,7 @@ export const LIVE_CHANNEL = {
       required: true,
       type: 'string',
       description:
-        'Comma-separated canonical stop or place ids. The **server** derives the shard from this list (sorted ids → FNV-1a over the lowest → `% shardCount`, `liveShardFor` in `@nextbus/core`), so a client with a stale shard count cannot silently land on a different shard — it does not compute one. The `subscribe` frame re-declares the same set, with optional per-stop route narrowing this parameter cannot express.',
+        'Comma-separated canonical stop or place ids. **Percent-encode the value** — place ids contain "+", which a query string decodes as a space, so an unencoded `P:KMB:a+KMB:b` arrives as a malformed id and is dropped; this is the same requirement `/v1/stop/{id}` states for the same reason. The **server** derives the shard from this list (sorted ids → FNV-1a over the lowest → `% shardCount`, `liveShardFor` in `@nextbus/core`), so a client with a stale shard count cannot silently land on a different shard — it does not compute one. The `subscribe` frame re-declares the same set, with optional per-stop route narrowing this parameter cannot express.',
     },
   ],
 } as const satisfies LiveChannel
