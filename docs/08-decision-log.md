@@ -3386,3 +3386,48 @@ the same source Metro bundles.
 accepted in the *web* suite: the corpus states absent optionals as JSON `null`, and both suites were
 asserting them into `string | undefined`. Both now convert rather than cast. The version divergence is
 pre-existing and unaddressed; it earned its keep here.
+
+## ADR-070 — A turbo task's hash must include everything it reads, and says so
+- **Status:** **Decided and implemented 2026-07-29.** Implementation: `turbo.json` (root),
+  `packages/contract/turbo.json`, `apps/mobile/turbo.json`, `apps/web/turbo.json`.
+- **Context:** turbo hashes a task from its package's own files, plus its internal dependencies' when the
+  task declares a topological `dependsOn`. Both root `test` and `typecheck` were `{}` — neither. Three
+  gates in this repo read files **outside** the package whose task runs them, and each replayed a stale
+  pass in turn:
+  1. **Wave 2** — `@nextbus/mobile:typecheck` replayed across a `packages/core` source change, so the app
+     could report green without being rechecked. Recorded in `docs/11` and worked around with `--force` on
+     every integration run since. A flag somebody has to remember is not a fix.
+  2. **WP3-1** — `@nextbus/ui:test` cached while its drift gate read `apps/mobile/global.css`. Closed with
+     `cache: false`.
+  3. **Wave 4** — `@nextbus/contract:test` checks that `README.md` and the two native conformance
+     templates quote the *current* corpus figures, and the corpus lives in `packages/core`. WP4-0 added a
+     corpus module and WP4-1 grew two more, so those three artefacts went stale — and **the task replayed
+     a green log from a different worktree's run days earlier**, because the turbo cache is shared across
+     the agent worktrees under `.claude/worktrees/`. It was green locally, red on a clean checkout, and it
+     **merged that way**: `origin/main` at `3c9fb37` fails `pnpm test` on a fresh clone.
+- **Decision:**
+  1. **Root `typecheck` is `dependsOn: ["^typecheck"]`.** A package's hash now includes its internal
+     dependencies', which is the property that was missing. `--force` is no longer needed and should not
+     be used to paper over a hash that is wrong.
+  2. **Where a task reads outside its package, it declares that with `inputs`** —
+     `["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/spec/*.spec.json"]` in `packages/contract`,
+     `apps/mobile` and `apps/web`. **Declared rather than switched off**, diverging from WP3-1's
+     `cache: false`: the dependency is real, stating it teaches a reader what the task reads, and the
+     cache keeps working. `cache: false` remains right where the read set is not expressible as a glob.
+  3. **`dependsOn` is deliberately NOT used for `test`.** It would serialise every suite behind the
+     kernel's for no gain, and — decisively — it could not have fixed the contract case at all:
+     `@nextbus/contract` does not depend on `@nextbus/core`. The graph runs the other way, `core` imports
+     `contract`. A dependency-based fix is unavailable precisely where the bug was worst.
+- **Consequences, including what we are accepting:**
+  - **`origin/main` is red until this lands.** Worth stating plainly rather than folding into a changelog:
+    the merged Wave 4 PR left the tree failing a gate, and the only reason nobody saw it is that the cache
+    hid it. This is the argument for WP0-5's `ci.yml` in one sentence — a clean checkout is the only
+    honest test, and nothing here performs one.
+  - **The declaration is per-package and can go stale.** A future gate reading somewhere new must add its
+    own `inputs` entry, and nothing enforces that it does. The general fix would be a check that every
+    file a task opens is inside its hash, which needs tracing rather than static analysis; recorded as the
+    residual rather than pretended away.
+  - **The shared worktree cache is a hazard in its own right.** A pass computed in one checkout satisfies
+    a task in another, so "it was green on my machine" can mean "it was green in a checkout you have never
+    seen". `--force` remains the right tool when *diagnosing* a suspicious green; it is the wrong tool for
+    living with one.

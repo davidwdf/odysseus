@@ -626,9 +626,20 @@ polish** (walk it in-browser; Nearby filter chips; omnibox).
      Note `biome.json` is **half generated**: `scripts/boundaries/generate.mjs` rewrites only its
      `overrides` block from `layers.json`, so top-level `linter.rules` is safe to hand-edit —
      `pnpm boundaries:check` confirms no drift.
-   - **turbo replays a cached `@nextbus/mobile:typecheck` across a `packages/core` source change** — mobile
-     can report green **without being rechecked**. Use `turbo run typecheck --force` until the cache key is
-     fixed; every Wave 2 integration run used it.
+   - ✅ **Fixed 2026-07-29 — turbo tasks now declare what they read** ([ADR-070](./08-decision-log.md)).
+     This had stood since Wave 2 as *"turbo replays a cached `@nextbus/mobile:typecheck` across a
+     `packages/core` source change; use `--force` until the cache key is fixed"* — a workaround that
+     depends on somebody remembering a flag, which is not a fix. Root `typecheck` is now
+     `dependsOn: ["^typecheck"]`, so a package's hash includes its dependencies'. **It recurred a third
+     time first, and worse:** `@nextbus/contract:test` verifies that the README and the two native
+     templates quote current corpus figures, but the corpus is in `packages/core`, which `contract` does
+     **not** depend on — so neither the default hash nor `dependsOn` could ever see a corpus change. Wave
+     4 added one corpus and grew two, and the gate went red on a clean checkout while replaying green
+     locally **from another worktree's run days earlier** (the turbo cache is shared across the agent
+     worktrees). Green locally, red in CI, and it merged that way. Fixed with explicit
+     `inputs: ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/spec/*.spec.json"]` in
+     `packages/contract`, `apps/mobile` and `apps/web` — declared rather than switched off, so a reader
+     learns what the task reads.
    - **The plan's 50 m snap tier does not exist.** WP2-6's row says *"25 m nearby / 50 m elsewhere"*; only
      `SNAP_GRID_M = 25` was ever implemented, and `gridM` is a parameter no caller passes. Not invented
      during a move — the row should lose the clause or gain a follow-up.
