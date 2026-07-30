@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build:web": "node scripts/build-web.mjs"
+    "build:web": "node --import tsx scripts/build-web.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
