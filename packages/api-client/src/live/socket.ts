@@ -21,10 +21,21 @@
 //     simultaneously, which is precisely the load the restarted shard cannot take. Half rather than full
 //     jitter because full jitter can produce a near-zero delay, which is the thundering herd again with
 //     extra steps. `random` is injected so the test asserts a schedule rather than a distribution.
-//   · **`retryable: false` stops it.** A `status` frame whose error says the request can never succeed
-//     is not a network problem, and reconnecting into it would produce the same frame for ever. The
-//     transport stops, having delivered the frame, so the session records the state and the screen can
+//   · **`state: 'closed'` *with* a `retryable: false` error stops it, and both halves are required.**
+//     Reconnecting into a subscription that can never work would produce the same frame for ever, so the
+//     transport stops, having delivered the frame, and the session records the state so the screen can
 //     say so. This is ADR-064's boolean doing the job it was put on the wire for.
+//
+//     **It used to test `retryable` alone, and that was too broad — found by WP5-3, when a real server
+//     existed to send the frame.** `retryable` is documented as "whether the identical *request* may
+//     succeed later", and the request is the thing the message names: the shard reports a favourite whose
+//     id no longer parses as `{ state: 'live', error: { retryable: false } }` while the rider's other five
+//     stops keep updating. Under the old rule the socket tore itself down on that frame and never came
+//     back, so one stale favourite silently killed live ETAs everywhere — while the poll emulator, given
+//     the same flag, dropped the one target and carried on. Two engines, one frame, opposite behaviour,
+//     and nothing compared them: the scenario matrix drives the poll transport against a hand-written
+//     script, never against this file. `state` describes the **connection**; `error` describes the thing
+//     it names.
 //   · **The attempt counter resets when a *frame* arrives, not when the socket opens.** A socket that
 //     connects and dies before delivering anything is not a working connection — a Worker that accepts
 //     the upgrade and then throws looks exactly like that — and resetting on `open` would turn the
@@ -215,7 +226,11 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
         }
         attempt = 0
         emit(frame)
-        if (frame.type === 'status' && frame.error?.retryable === false) {
+        if (
+          frame.type === 'status' &&
+          frame.state === 'closed' &&
+          frame.error?.retryable === false
+        ) {
           // Delivered first, then torn down: the session must record the state before we stop, or a
           // screen would be left labelled `retrying` for ever with nothing coming.
           stopped = true

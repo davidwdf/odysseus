@@ -272,6 +272,37 @@ describe('createSocketTransport', () => {
     expect(h.sockets.length).toBe(1)
   })
 
+  it('keeps a working subscription when the server rejects one of its targets', () => {
+    // **The divergence WP5-3 found, as a test.** The first version of this transport treated *any*
+    // `status` frame whose error said `retryable: false` as terminal, and that is too broad: `retryable`
+    // is documented as "whether the identical **request** may succeed later", where the request is the
+    // thing the message names — a favourite whose id no longer parses — while `state` is what describes
+    // the connection. The shard emits exactly this frame for a target it has dropped, alongside the
+    // `snapshot` whose `targets` echo says which ones survived, and the other five stops keep updating.
+    //
+    // Under the old rule the socket tore itself down on that frame and never reconnected, so a rider with
+    // one stale favourite lost live ETAs for every stop they had. The poll emulator, given the same
+    // information, drops the one target and carries on — so the two engines disagreed about the same
+    // frame, and nothing compared them: the scenario matrix drives the poll transport against a
+    // hand-written script, never against this file.
+    const h = harness()
+    h.controller.start()
+    h.latest()?.handlers.onOpen()
+    h.latest()?.handlers.onMessage(JSON.stringify(snapshotFrame))
+    h.latest()?.handlers.onMessage(
+      JSON.stringify({
+        type: 'status',
+        at: '2026-07-30T02:00:00.000Z',
+        state: 'live',
+        error: { code: 'bad_request', message: 'not watching: legacy-id', retryable: false },
+      }),
+    )
+    expect(h.updates).toEqual(['connecting:1', 'live:1'])
+    expect(h.latest()?.closed, 'the connection must survive a per-target rejection').toBe(false)
+    // …and it is still a live connection, not a zombie: the keepalive is still running.
+    expect(h.liveRepeating()).toBe(1)
+  })
+
   it('releases everything on unsubscribe, including a pending reconnect', () => {
     const h = harness()
     h.controller.start()
