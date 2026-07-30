@@ -46,6 +46,7 @@ apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/he
 packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
                      + the /v1/live frames → AsyncAPI 3.0 (`asyncapi.json`, ADR-056)
 packages/core        canonical types (`z.infer` of contract, `import type` only) · DataSource · ETA helpers
+                     · `live.ts` = the live-protocol rules (frame reducer, diff, cadence, shard, socket URL)
 packages/data-normalize  KMB + Citybus adapters (upstream → canonical)
 packages/api-client  EdgeClient (the v1 DataSource) + watch() polling shim
 packages/i18n        en / zh-Hant / zh-Hans UI strings

@@ -104,6 +104,7 @@ object Corpus {
         "geo-snap",
         "geo",
         "ids",
+        "live",
         "mercator",
         "policy",
         "route-detail",

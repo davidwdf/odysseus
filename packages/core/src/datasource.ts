@@ -1,16 +1,24 @@
 import type { SearchIndex } from './search'
-import type { ClientPolicy, Eta, LatLng, NearbyStop, RouteDetail, StopDetail } from './types'
+import type {
+  ClientPolicy,
+  Eta,
+  LatLng,
+  NearbyStop,
+  RouteDetail,
+  StopDetail,
+  WatchTarget,
+} from './types'
 
 /** A live subscription to ETA updates. Call `unsubscribe` to release it. */
 export interface Subscription {
   unsubscribe(): void
 }
 
-export interface WatchTarget {
-  stopId: string
-  /** Optional: only these routes at the stop. */
-  routeIds?: string[]
-}
+// `WatchTarget` used to be declared here, as a hand-written interface. It is now `z.infer` of
+// `WatchTargetSchema` and re-exported from `./types` like every other wire shape, because since WP5-1
+// it crosses the network — it is what a `subscribe` frame carries and what `/v1/live?targets=` names.
+// Two declarations of a shape that travels are two declarations that can disagree (ADR-052).
+// `Subscription` and `EtaListener` stay here: they are function types, which no schema describes.
 
 export type EtaListener = (etas: Eta[]) => void
 
