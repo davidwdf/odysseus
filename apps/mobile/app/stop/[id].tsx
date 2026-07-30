@@ -57,6 +57,7 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { operatorName } from '../../lib/operatorName'
 import { useClientPolicy } from '../../lib/useClientPolicy'
+import { useLiveEtas } from '../../lib/useLiveEtas'
 import { useLocation } from '../../lib/useLocation'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
@@ -101,11 +102,18 @@ export default function StopDetail() {
     queryKey: ['stop', id],
     enabled: !!id,
     queryFn: () => dataSource.getStop(id as string),
-    // ETAs are live — refresh on an interval; honest display only updates on new data. The cadence is
-    // served (ADR-053) and matches the edge's coalescing TTL, so a poll can actually return a new
-    // reading; the hard-coded 20 s this replaces could not.
-    refetchInterval: policy.refreshAfterMs,
+    // No `refetchInterval` any more, and the whole stop document is no longer re-fetched on a cadence.
+    // This query is the initial snapshot and the ADR-058 persistence vehicle; the *ETAs* arrive by
+    // subscription and are merged into this very cache entry by `useLiveEtas` (WP5-0). The cadence still
+    // exists — it is the poll emulator's, still the served `refreshAfterMs` (ADR-053) — but it now fetches
+    // `/v1/etas/:id` instead of `/v1/stop/:id`, so a refresh costs the arrivals rather than the stop, its
+    // members, every route and their service summaries.
   })
+  // The first real consumer of the `watch()` seam. It holds no rules: the merge is the kernel's
+  // `applyLiveEtasToStopDetail`, and which engine is behind the seam is not something this screen knows.
+  // `enabled` waits for the first payload, because a pushed reading has nothing to merge into until then and
+  // a dropped one is not re-sent — see the hook.
+  useLiveEtas(id, { enabled: query.isSuccess })
 
   const stop = query.data?.stop
   const routes = query.data ? dedupeRoutes(query.data.routes) : []
