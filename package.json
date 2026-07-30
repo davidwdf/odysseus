@@ -17,7 +17,7 @@
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test && pnpm run boundaries",
-    "boundaries": "pnpm run boundaries:check && pnpm run boundaries:selftest && pnpm run check:no-adhoc-id-parsing && pnpm run check:vm-no-styling:selftest && pnpm run check:vm-no-styling && pnpm run check:no-raw-colours",
+    "boundaries": "pnpm run boundaries:check && pnpm run boundaries:selftest && pnpm run check:no-adhoc-id-parsing && pnpm run check:vm-no-styling:selftest && pnpm run check:vm-no-styling && pnpm run check:no-raw-colours && pnpm run check:view-transport-free:selftest && pnpm run check:view-transport-free",
     "boundaries:gen": "node scripts/boundaries/generate.mjs",
     "boundaries:check": "node scripts/boundaries/check.mjs",
     "boundaries:selftest": "node scripts/boundaries/selftest.mjs",
@@ -28,7 +28,9 @@
     "check:no-adhoc-id-parsing": "node scripts/check-no-adhoc-id-parsing.mjs",
     "check:vm-no-styling": "node scripts/check-vm-no-styling.mjs",
     "check:vm-no-styling:selftest": "node scripts/check-vm-no-styling.mjs --selftest",
-    "check:no-raw-colours": "node scripts/check-no-raw-colours.mjs"
+    "check:no-raw-colours": "node scripts/check-no-raw-colours.mjs",
+    "check:view-transport-free": "node scripts/check-view-transport-free.mjs",
+    "check:view-transport-free:selftest": "node scripts/check-view-transport-free.mjs --selftest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
