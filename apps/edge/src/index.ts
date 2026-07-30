@@ -5,10 +5,20 @@ import { type DatasetSource, datasetBuildCount, getDataset } from './dataset'
 import type { Env } from './env'
 import { errorResponse, fail as failWith } from './errors'
 import { ETA_TTL_SEC } from './eta-cache'
+import { LIVE_PATH, liveUpgrade } from './live'
 import { nearby } from './nearby'
 import { routeDetail, stopDetail, stopEtas } from './stop-route'
 import { fetchTile, parseTilePath } from './tiles'
 
+/**
+ * The `/v1/live` shard class, re-exported from the Worker's entrypoint.
+ *
+ * Not decoration: a Durable Object class must be a **named export of `main`**. Wrangler resolves
+ * `class_name` against this module, and `@cloudflare/vitest-pool-workers` throws
+ * "`src/index.ts` does not export a `EtaHub` Durable Object" without it — so a class living only in
+ * its own file would fail at deploy and in the specs, not at typecheck.
+ */
+export { EtaHub } from './eta-hub'
 export type { Env }
 
 /**
@@ -204,6 +214,15 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (parts[0] === 'v1' && parts[1] === 'policy') {
     return json(CLIENT_POLICY_DEFAULTS, POLICY_TTL_SEC)
   }
+
+  // GET /v1/live?targets=… with `Upgrade: websocket` → the `EtaHub` shard (WP5-3, ADR-056).
+  //
+  // Routed **before** every `caches.default` lookup below and matched on the contract's own
+  // `LIVE_PATH` rather than a fourth copy of the string — the constant's comment names this router as
+  // one of its three readers. An upgrade bypasses the cache anyway ("a `GET` request carrying
+  // `Upgrade: websocket` always invokes your Worker"), but the ordering means nothing on this path can
+  // reach `cached()` or `buildScopedKey` even for the non-upgrade case, which answers with the taxonomy.
+  if (url.pathname === LIVE_PATH) return liveUpgrade(request, env, CORS)
 
   // GET /v1/eta/:co/:stop/:route[/:serviceType]
   if (parts[0] === 'v1' && parts[1] === 'eta') {

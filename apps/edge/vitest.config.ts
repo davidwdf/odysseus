@@ -18,6 +18,13 @@ export default defineConfig({
         // same binding names `wrangler.toml` declares for production.
         kvNamespaces: ['DATASET'],
         r2Buckets: ['BUILDS'],
+        // **`durableObjects` is deliberately absent, and that is not an omission.** The pool calls
+        // wrangler's own config loader, so `[[durable_objects.bindings]]` and `[[migrations]]` are read
+        // straight from `wrangler.toml` and merged in — including the `new_sqlite_classes` → `useSQLite`
+        // mapping that decides whether `ctx.storage.sql` exists. Restating the binding here would be a
+        // second declaration that could disagree with the one that ships (the same redundancy the two
+        // lines above already are). What the pool *does* require is `main`, which `wrangler.toml`
+        // supplies, and that the DO class be a named export of it — see `src/index.ts`.
       },
     }),
   ],
