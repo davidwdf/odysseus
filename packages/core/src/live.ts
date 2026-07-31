@@ -829,9 +829,11 @@ function soonestArrivalMs(eta: Eta): number {
  * Swift (`sort(by:)` makes no stability guarantee), which is precisely the divergence ADR-060 exists to
  * catch.
  *
- * Readings are matched to a place through `memberStopIds`, because an `Eta.stopId` is always a **member
- * pole** while a `NearbyStop.stop.id` may be a merged `P:` place id (ADR-042). Comparing them directly
- * would leave every merged place — which is most of the interesting ones — with an empty card.
+ * Readings are matched to a place through `memberStopIds`, because an `Eta.stopId` is always a **pole**
+ * while a `NearbyStop.stop.id` may be a merged `P:` place id (ADR-042). Comparing them directly would
+ * leave every merged place — which is most of the interesting ones — with an empty card. A pole, note,
+ * and not necessarily a *member*: a reading off a pole the build folded onto another (WP5-11) carries
+ * its own id, and `memberStopIds` yields every clustered pole precisely so it still lands here.
  *
  * @spec live#applyLiveEtasToNearby
  */

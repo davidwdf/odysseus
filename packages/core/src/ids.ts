@@ -252,8 +252,16 @@ export function parseFavoriteRouteKey(key: string): FavoriteRouteKeyParts | null
 }
 
 /**
- * The member pole ids an id denotes: a place id's members, or the id itself for a lone pole.
+ * The pole ids an id denotes: a place id's poles, or the id itself for a lone pole.
  * The shape every "which poles do I fetch/compare?" call site actually wanted.
+ *
+ * **Every pole the place clusters, which is not the same as its `members`.** A `P:` id is minted from
+ * the full clustered set, and where the build folded one physical pole published under two ids onto a
+ * single member (WP5-11) the folded id is still in the place id — deliberately, because that id still
+ * carries route rows, still stamps its own readings and is still a favourite key a rider may hold.
+ * So this answers "does this place answer for that pole?", which is what its two callers ask:
+ * `applyLiveEtasToNearby` matching a reading to a card, and `isOriginStop` matching a route's stop to
+ * the place it was opened from. Narrowing it to `members` would silently drop both for 80 poles.
  *
  * The two edge cases are deliberate, and they preserve what the call sites did before:
  *   · A `P:`-prefixed string we cannot parse yields `[]` — it denotes no pole at all, and looking

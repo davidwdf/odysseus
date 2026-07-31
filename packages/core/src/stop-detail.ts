@@ -31,6 +31,52 @@ export type StopDetailRoute = StopDetail['routes'][number]
 export type StopDetailPole = StopDetail['members'][number]
 
 /**
+ * The **boarding point** a route row departs from: the member pole itself, or — where upstream
+ * published one physical pole under two stop ids — the member that pole was folded onto.
+ *
+ * ## Why a route row can name a pole that is not a member
+ *
+ * `buildPlaces` folds a cluster's poles onto its boarding points (`foldDuplicatePoles` in
+ * `@nextbus/data-normalize`, WP5-11), so a pole upstream published twice is **one** member with the
+ * other id listed in its `aliasIds`. The route rows are deliberately *not* re-based to match: a
+ * row's `stopId` is the id a rider's favourite is keyed on (ADR-062) and the id the route schematic
+ * offers, and re-basing it in the dataset would silently strand every favourite already saved at the
+ * folded pole. So the wire keeps both ids and the collapse happens here, at render time, where it is
+ * only a display decision and nothing persisted depends on it.
+ *
+ * That is the whole rule: **the dataset decides which ids are one pole; this decides what that means
+ * on screen.** Use it to pick the *heading* a row is grouped under, and pass `members` to
+ * `dedupeRoutes` so two ids of one pole collapse to one row.
+ *
+ * ## What must not be rewritten with the result, and why this returns an id instead of a row
+ *
+ * **Never write the answer back onto a row's `stopId`.** A row's id is a *key*: `SaveStar` saves
+ * `${row.stopId}|${routeId}` and the Favourites tab matches that key against `/v1/stop`'s own rows.
+ * Re-base the row and the star writes a key no row will ever carry, which orphans the favourite at
+ * the moment a rider creates it — the failure this whole work package exists to avoid, arriving from
+ * the other direction. So the two spellings never mix: **the wire and everything persisted speak raw
+ * pole ids; only what is grouped or counted goes through here.**
+ *
+ * The Favourites tab therefore does not call this at all, and does not need to: both ids stay valid
+ * keys for ever because the wire keeps naming both.
+ *
+ * An id the place does not name at all comes back unchanged, which is what makes it safe to call on
+ * a `?pole=` parameter from a deep link of any age.
+ *
+ * @spec stop-detail#boardingPoleId
+ */
+export function boardingPoleId(
+  poleId: string,
+  members: readonly Pick<StopDetailPole, 'id' | 'aliasIds'>[],
+): string {
+  for (const m of members) {
+    if (m.id === poleId) return m.id
+    if (m.aliasIds?.includes(poleId)) return m.id
+  }
+  return poleId
+}
+
+/**
  * Collapse rider-duplicate variants to one row per line, keeping the one with a live ETA.
  *
  * A "line" is **operator + route number + direction, at one pole** — the unit a rider thinks in,
@@ -76,18 +122,37 @@ export type StopDetailPole = StopDetail['members'][number]
  * rather than the *sooner* one. Read `spec/stop-detail.spec.json` before changing the tie-break.
  *
  * ⚠️ A display consequence, not a data one: where two members of a place print the same heading, a
- * line boarding at both renders twice under two identical labels. `poleSideOctants` below is the
- * remedy — a compass side on the heading, not a reason to fuse two services back together — and it
- * covers 226 of the 567 affected places. It deliberately declines the rest, Tin Shui Wai Park's two
- * `TN510` poles among them: at 1.1 m apart there is no side to name, because they are one physical
- * pole published twice. Read that function's last section before reaching for an ordinal.
+ * line boarding at both renders twice under two identical labels. Two rules share the remedy and
+ * neither fuses two services back together. `poleSideOctants` below puts a **compass side** on the
+ * heading where the two poles are far enough apart for one to mean something — 226 of the 567
+ * affected places. Where they are not, they are usually one physical pole published twice, and the
+ * build folds those onto one member (WP5-11) — which is what `members` is for here. Tin Shui Wai
+ * Park's two `TN510` poles, 1.1 m apart, are the case both rules were measured on: no side to name,
+ * one member after the fold. Read `poleSideOctants`' last section before reaching for an ordinal.
+ *
+ * ## `members` — collapsing two ids of one pole, without touching the rows
+ *
+ * Pass a place's `members` and the key uses each row's **boarding point** (`boardingPoleId`) instead
+ * of its raw pole, so a line boarding at two ids of one physical pole is one row rather than two.
+ * Omit it and nothing changes: every id is its own boarding point, which is the answer for a place
+ * that has no aliases — most of them — and for a caller that has no member list to hand.
+ *
+ * **The rows themselves come back untouched, raw pole id and all.** That is the load-bearing half.
+ * Re-basing the key is a display decision; re-basing the *row* would rewrite the id `SaveStar`
+ * persists, and the key it wrote would then match no row on the Favourites tab. So the collapse is
+ * expressed as a key here rather than as a `map()` at the call site — a call site cannot make that
+ * mistake if it never holds a rewritten row. See `boardingPoleId`.
  *
  * @spec stop-detail#dedupeRoutes
  */
-export function dedupeRoutes(routes: readonly StopDetailRoute[]): StopDetailRoute[] {
+export function dedupeRoutes(
+  routes: readonly StopDetailRoute[],
+  members: readonly Pick<StopDetailPole, 'id' | 'aliasIds'>[] = [],
+): StopDetailRoute[] {
   const byKey = new Map<string, StopDetailRoute>()
   for (const r of routes) {
-    const key = `${r.route.operator}|${r.route.routeNo}|${r.route.bound}|${r.stopId}`
+    const pole = boardingPoleId(r.stopId, members)
+    const key = `${r.route.operator}|${r.route.routeNo}|${r.route.bound}|${pole}`
     const existing = byKey.get(key)
     if (!existing || (!existing.eta && r.eta)) byKey.set(key, r)
   }
@@ -254,9 +319,15 @@ const POLE_SIDE_MIN_SEPARATION_M = 10
  * two poles that are, on the ground, one pole. Because that is what the declined cases mostly are —
  * two poles 0–1 m apart with the same operator, the same name and the same printed code are one
  * boarding point published under two upstream ids, and no word can separate them because there is
- * nothing there to separate. The remedy for those is upstream, in `buildPlaces`
- * (`@nextbus/data-normalize`), which today keeps them as two members; it is not a heading problem
- * and a heading cannot fix it.
+ * nothing there to separate. The remedy for those is upstream and is now built: `foldDuplicatePoles`
+ * (`@nextbus/data-normalize`, WP5-11) makes them **one member**. Measured over build
+ * `1ccad7436a8df480` by running this function twice, once over every clustered pole and once over the
+ * boarding points the fold leaves: colliding places fall **567 → 496** and colliding heading groups
+ * **571 → 498**, so 73 groups stop colliding because there is now only one pole to name. The number
+ * this function resolves barely moves (226 → 227), which is the point — the fold removes cases rather
+ * than making them nameable. The rest still collide, and this is still the right answer for them: a
+ * pair 2–10 m apart is too far to call one pole and too close to give a side, which is honest rather
+ * than solved (WP5-12 owns that residual — 141 pairs in 115 places).
  *
  * Order-independent, and it never reorders or mutates the input: the caller holds `members` off the
  * query cache and draws the map pins from it.

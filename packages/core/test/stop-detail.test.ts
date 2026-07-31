@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/stop-detail.spec.json'
 import {
+  boardingPoleId,
   dedupeRoutes,
   operatorsOf,
   orderPoles,
@@ -24,14 +25,59 @@ const rows = (routes: StopDetailRoute[]) =>
 /** The corpus states distances as an object because a Map is not JSON. */
 const distances = (byPole: Record<string, number>) => new Map(Object.entries(byPole))
 
-describe('stop-detail#dedupeRoutes', () => {
-  for (const c of cases<{ routes: StopDetailRoute[] }, Array<{ routeId: string; stopId: string }>>(
-    'dedupeRoutes',
-  )) {
+describe('stop-detail#boardingPoleId', () => {
+  type Args = { poleId: string; members: StopDetailPole[] }
+  for (const c of cases<Args, string>('boardingPoleId')) {
     it(c.name, () => {
-      expect(rows(dedupeRoutes(c.args.routes))).toEqual(c.expect)
+      expect(boardingPoleId(c.args.poleId, c.args.members)).toBe(c.expect)
     })
   }
+
+  it('is idempotent, so asking twice is asking once', () => {
+    // A property, not a value, and it is load-bearing because the two callers can meet an answer this
+    // function already gave: the Place screen groups its rows by the result *and* passes `members` to
+    // `dedupeRoutes`, which asks again. It holds because the answer is always a member id (or an id
+    // the place does not name at all), and a member never maps away from itself.
+    for (const c of cases<Args, string>('boardingPoleId')) {
+      const once = boardingPoleId(c.args.poleId, c.args.members)
+      expect(boardingPoleId(once, c.args.members)).toBe(once)
+    }
+  })
+
+  it('never invents a pole: the answer is a member, or the id it was asked about', () => {
+    // The safety property. A folded pole id is one a rider may have saved as a favourite (ADR-062),
+    // so the one thing this rule must never do is answer with some *other* pole — that would group a
+    // row under a kerb nobody asked for, and collapse two genuinely different rows into one.
+    for (const c of cases<Args, string>('boardingPoleId')) {
+      const got = boardingPoleId(c.args.poleId, c.args.members)
+      const isMember = c.args.members.some((m) => m.id === got)
+      expect(isMember || got === c.args.poleId, `${c.name}: invented ${got}`).toBe(true)
+    }
+  })
+})
+
+describe('stop-detail#dedupeRoutes', () => {
+  type Args = { routes: StopDetailRoute[]; members?: StopDetailPole[] }
+  for (const c of cases<Args, Array<{ routeId: string; stopId: string }>>('dedupeRoutes')) {
+    it(c.name, () => {
+      // `members` is absent from most rows on purpose — that is the default, and it is the answer for
+      // every place with no folded pole. Passing `[]` here instead would leave the default untested.
+      expect(rows(dedupeRoutes(c.args.routes, c.args.members))).toEqual(c.expect)
+    })
+  }
+
+  it('never returns a row whose stopId it was not given', () => {
+    // The property behind the second new corpus row, asserted over the whole group rather than in one
+    // case. `SaveStar` persists `${row.stopId}|${routeId}`, so a collapse that re-based a surviving
+    // row would mint a favourite key that matches no row on the Favourites tab — the orphaning
+    // WP5-11 exists to prevent, arriving from the display side.
+    for (const c of cases<Args, unknown>('dedupeRoutes')) {
+      const given = new Set(c.args.routes.map((r) => r.stopId))
+      for (const r of dedupeRoutes(c.args.routes, c.args.members)) {
+        expect(given.has(r.stopId), `${c.name}: invented ${r.stopId}`).toBe(true)
+      }
+    }
+  })
 })
 
 describe('stop-detail#operatorsOf', () => {
