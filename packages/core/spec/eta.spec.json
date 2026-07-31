@@ -539,22 +539,83 @@
         }
       ]
     },
+    "etaLineKey": {
+      "doc": "The rider-facing line an arrival belongs to, as a string two producers can compare: operator + route number + direction, with the service type deliberately absent because a rider does not choose one. An id the grammar cannot parse keys on the whole id, so one odd reading never collapses with another. The literal format is pinned, not just the equivalence classes, because it is a KEY: `dedupeEtas` builds its own key on top of it and the edge indexes a destination table by it, so two spellings of one line would silently drop a destination. Same reason `ids#formatFavoriteRouteKey` is pinned.",
+      "cases": [
+        {
+          "name": "the-service-type-is-not-part-of-the-line",
+          "why": "KMB and Citybus split one line into timetable variants (Citybus 969 is listed three times at one pole). The variant is in the route id and must not be in the line.",
+          "args": {
+            "operator": "KMB",
+            "routeId": "KMB:269D:outbound:4"
+          },
+          "expect": "KMB|269D|outbound"
+        },
+        {
+          "name": "the-direction-is",
+          "why": "Inbound and outbound are different journeys, so they are different lines.",
+          "args": {
+            "operator": "KMB",
+            "routeId": "KMB:269D:inbound:4"
+          },
+          "expect": "KMB|269D|inbound"
+        },
+        {
+          "name": "the-operator-is",
+          "why": "Route 10 exists for both KMB and Citybus, and a merged place can serve both at one kerb.",
+          "args": {
+            "operator": "CTB",
+            "routeId": "CTB:10:outbound:1"
+          },
+          "expect": "CTB|10|outbound"
+        },
+        {
+          "name": "a-gmb-number-that-repeats-across-regions-still-keys-on-the-number",
+          "why": "GMB numbers repeat, so the government's own route code is what makes the id unique (ADR-047) — and it is a service-type field, so it drops out here. Two GMB services sharing a number are one LINE and are told apart by their pole, which is `dedupeEtas`' job, not this one.",
+          "args": {
+            "operator": "GMB",
+            "routeId": "GMB:20:outbound:2002319"
+          },
+          "expect": "GMB|20|outbound"
+        },
+        {
+          "name": "an-unparseable-id-keys-on-the-whole-id",
+          "why": "The least-bad answer when the data is already odd: an unreadable id dedupes only against its own twin rather than collapsing every malformed reading from one operator into a single row. `split(':')` with '' defaults did the latter and dropped the rest.",
+          "args": {
+            "operator": "KMB",
+            "routeId": "KMB:garbage"
+          },
+          "expect": "KMB|KMB:garbage"
+        },
+        {
+          "name": "a-literal-pipe-in-the-route-id-keys-on-the-whole-id",
+          "why": "NAMED BOUNDARY ROW. Nothing escapes a '|' inside a field, so 'KMB:1|2:outbound:1' would have collided with 'KMB:1:2|outbound:1' when the key was built by splitting on ':'. `parseRouteId` rejects both, and an unparseable id keys on the whole id, so they stay two lines. See `dedupeEtas:literal-pipe-in-route-id-collides` for the arrival that disappeared.",
+          "args": {
+            "operator": "KMB",
+            "routeId": "KMB:1|2:outbound:1"
+          },
+          "expect": "KMB|KMB:1|2:outbound:1"
+        }
+      ]
+    },
     "dedupeEtas": {
-      "doc": "Collapse rider-duplicate arrivals to one row per line, keeping the soonest. A rider thinks 'route number + direction', so the key is operator + route number + bound, parsed out of the canonical route id. `args.etas` carries only the three fields the rule reads (routeId, operator, arrivals); a port should fill the remaining required Eta fields with inert values. `expect` is the surviving routeIds, in output order (insertion order of first sighting).",
+      "doc": "Collapse rider-duplicate arrivals to one reading per line AT ONE BOARDING POINT, keeping the soonest. A rider thinks 'route number + direction', so the key is operator + route number + bound — parsed out of the canonical route id, `etaLineKey` below — plus the canonical id of the POLE the reading's board was called at. The pole joined WP5-9: a place is N poles (ADR-042) and a rider walks to one of them, so one line boarding at two of them is two arrivals and not one. Service-type variants AT one pole still collapse, which is what the rule is for. `args.etas` carries only the four fields the rule reads (routeId, operator, stopId, arrivals); a port should fill the remaining required Eta fields with inert values. `expect` is the surviving routeIds, in output order (insertion order of first sighting).",
       "cases": [
         {
           "name": "service-type-variants-collapse-keeping-the-sooner",
-          "why": "KMB indexes the same line under several service types. Two rows, one line; the 12:05 reading wins over the 12:09 one even though it arrived second in the list.",
+          "why": "KMB indexes the same line under several service types, and both of these are at ONE pole. Two rows, one line; the 12:05 reading wins over the 12:09 one even though it arrived second in the list. This is the collapse the rule exists for and WP5-9 deliberately kept: a rider does not choose a timetable variant, and both buses call at the same kerb.",
           "args": {
             "etas": [
               {
                 "routeId": "KMB:1A:outbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:09:00+08:00"]
               },
               {
                 "routeId": "KMB:1A:outbound:2",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:05:00+08:00"]
               }
             ]
@@ -569,11 +630,13 @@
               {
                 "routeId": "KMB:1A:outbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:05:00+08:00"]
               },
               {
                 "routeId": "KMB:1A:inbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:07:00+08:00"]
               }
             ]
@@ -588,11 +651,13 @@
               {
                 "routeId": "KMB:10:outbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:05:00+08:00"]
               },
               {
                 "routeId": "CTB:10:outbound:1",
                 "operator": "CTB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:06:00+08:00"]
               }
             ]
@@ -601,22 +666,72 @@
         },
         {
           "name": "gmb-regional-variants-of-one-number-collapse",
-          "why": "GMB route numbers repeat across regions, but a stop belongs to exactly one region, so two arrivals here sharing number+bound are always the same route (ADR-047). Collapsing them, keeping the sooner, is intended — not a bug.",
+          "why": "GMB route numbers repeat across regions, but a stop belongs to exactly one region, so two arrivals at ONE POLE sharing number+bound are always the same route (ADR-047). Collapsing them, keeping the sooner, is intended — not a bug. Across two poles of one place the same shape means the opposite thing; see `one-minibus-number-at-two-poles-is-two-services`.",
           "args": {
             "etas": [
               {
                 "routeId": "GMB:1:outbound:1001",
                 "operator": "GMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:11:00+08:00"]
               },
               {
                 "routeId": "GMB:1:outbound:2002",
                 "operator": "GMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:04:00+08:00"]
               }
             ]
           },
           "expect": ["GMB:1:outbound:2002"]
+        },
+        {
+          "name": "one-line-at-two-poles-keeps-a-reading-for-each",
+          "why": "THE ROW THIS RULE WAS RE-KEYED FOR (WP5-9), and it exercises both halves at once. Tin Shui Estate, Tin Shui Road: KMB runs 269D outbound off two different poles of one place — service types 1 and 4 at `KMB:C052B4D46E1F48EA` and service type 3 at `KMB:BD53690B9DA1C956`, 20 m away. The two variants at the SAME pole still collapse to the sooner (12:03 beats 12:18, and the survivor keeps the first one's position); the second POLE keeps a reading of its own. Keyed without the pole, all three collapsed into one reading and the second pole's row rendered \"no reading right now\" while a bus was genuinely due there — measured against the live GMB feed on 2026-07-31, where 68K had buses at both poles of Fu Kin Street 11 s apart and we published one. The unit of an arrival is now the unit of a row (ADR-042: a place is N poles), and the boarding point is the one a rider walks to.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:269D:outbound:1",
+                "operator": "KMB",
+                "stopId": "KMB:C052B4D46E1F48EA",
+                "arrivals": ["2026-07-27T12:18:00+08:00"]
+              },
+              {
+                "routeId": "KMB:269D:outbound:4",
+                "operator": "KMB",
+                "stopId": "KMB:C052B4D46E1F48EA",
+                "arrivals": ["2026-07-27T12:03:00+08:00"]
+              },
+              {
+                "routeId": "KMB:269D:outbound:3",
+                "operator": "KMB",
+                "stopId": "KMB:BD53690B9DA1C956",
+                "arrivals": ["2026-07-27T12:07:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["KMB:269D:outbound:4", "KMB:269D:outbound:3"]
+        },
+        {
+          "name": "one-minibus-number-at-two-poles-is-two-services",
+          "why": "The case where fusing two poles was not merely unhelpful but WRONG about what a bus is. At Tai On Street, near Sai Wan Ho Station Exit A, `GMB:20:outbound:2002320` boards at `GMB:20000270` for Chai Wan (Fung Yip Street) and `GMB:20:outbound:2002319` boards at `GMB:20009406` for Chai Wan Industrial City. Both are circular, so both are \"outbound\" on every leg, and the number is the same — direction cannot separate them and neither can the number. Only the pole can. Keyed without it, the second destination was never published at all. `dedupeRoutes` was corrected the same way one wave earlier (ADR-042, WP5-10's correction 11); this is the reading behind the row.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "GMB:20:outbound:2002320",
+                "operator": "GMB",
+                "stopId": "GMB:20000270",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              },
+              {
+                "routeId": "GMB:20:outbound:2002319",
+                "operator": "GMB",
+                "stopId": "GMB:20009406",
+                "arrivals": ["2026-07-27T12:11:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["GMB:20:outbound:2002320", "GMB:20:outbound:2002319"]
         },
         {
           "name": "a-row-with-no-arrivals-yields-to-one-that-has-them",
@@ -626,11 +741,13 @@
               {
                 "routeId": "KMB:1A:outbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": []
               },
               {
                 "routeId": "KMB:1A:outbound:2",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:05:00+08:00"]
               }
             ]
@@ -644,11 +761,13 @@
               {
                 "routeId": "KMB:1A:outbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:05:00+08:00"]
               },
               {
                 "routeId": "KMB:1A:outbound:2",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": []
               }
             ]
@@ -663,11 +782,13 @@
               {
                 "routeId": "KMB:1|2:outbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:05:00+08:00"]
               },
               {
                 "routeId": "KMB:1:2|outbound:1",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:09:00+08:00"]
               }
             ]
@@ -682,16 +803,39 @@
               {
                 "routeId": "KMB:garbage",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:05:00+08:00"]
               },
               {
                 "routeId": "KMB:rubbish",
                 "operator": "KMB",
+                "stopId": "KMB:ST141",
                 "arrivals": ["2026-07-27T12:09:00+08:00"]
               }
             ]
           },
           "expect": ["KMB:garbage", "KMB:rubbish"]
+        },
+        {
+          "name": "an-unparseable-id-at-two-poles-stays-two-rows",
+          "why": "The pole is appended to the fallback key too, not just to the parsed one. An id we cannot read already dedupes only against its own twin (see the two rows above); after WP5-9 that twin also has to be at the same kerb, or one of two odd readings would still vanish. Note the stop id is the key's LAST field, so a pipe inside it can only ever split a line, never merge two — canonical ids carry colons and never a pipe (ADR-032).",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:garbage",
+                "operator": "KMB",
+                "stopId": "KMB:ST141",
+                "arrivals": ["2026-07-27T12:05:00+08:00"]
+              },
+              {
+                "routeId": "KMB:garbage",
+                "operator": "KMB",
+                "stopId": "KMB:ST142",
+                "arrivals": ["2026-07-27T12:09:00+08:00"]
+              }
+            ]
+          },
+          "expect": ["KMB:garbage", "KMB:garbage"]
         },
         {
           "name": "empty-input",

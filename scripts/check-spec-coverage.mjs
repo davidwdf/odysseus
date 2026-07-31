@@ -70,6 +70,12 @@ const REQUIRED_ROWS = [
   // An id containing a literal `|`. The favourites key is `${memberStopId}|${routeId}` and the
   // member id itself contains `:`, so nothing but convention keeps a pipe out of a field.
   'eta#dedupeEtas:literal-pipe-in-route-id-collides',
+  // One rider line boarding at TWO poles of one place, with two service-type variants at one of them
+  // (WP5-9). Both halves of the rule are in that one row: a place is N poles (ADR-042), so two poles
+  // are two arrivals, while two variants at one pole are still one. Delete it and the model can
+  // silently go back to publishing one reading per line per place, which reads as "no buses" at the
+  // sibling kerb.
+  'eta#dedupeEtas:one-line-at-two-poles-keeps-a-reading-for-each',
   // Empty `en` on a circular route. Upstream really does this; the blank sits in the field the
   // code reads first, so it is a live failure mode, not a hypothetical one.
   'search#searchStops:circular-route-blank-en-found-by-chinese-name',

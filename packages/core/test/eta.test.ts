@@ -10,6 +10,7 @@ import {
   estimateChildFare,
   estimateElderlyFare,
   etaLabelParts,
+  etaLineKey,
   etaReadout,
   etaUrgency,
   etaView,
@@ -36,15 +37,18 @@ import { at, nullToUndefined, specCases } from './corpus'
 
 const cases = <A, E>(group: string) => specCases<A, E>(corpus, group)
 
-/** The three fields `dedupeEtas` reads; the rest of `Eta` is filled with inert values. */
+/** The four fields `dedupeEtas` reads; the rest of `Eta` is filled with inert values. `stopId` joined
+ *  them in WP5-9 — it is the pole a reading's board was called at, and therefore half its identity —
+ *  so it is stated per row rather than defaulted here: a default would have made every row a
+ *  single-pole row and the cross-pole cases unwritable. */
 interface EtaRow {
   routeId: string
   operator: Eta['operator']
+  stopId: string
   arrivals: string[]
 }
 const toEta = (row: EtaRow): Eta => ({
   ...row,
-  stopId: 'KMB:ST141',
   dataTimestamp: '2026-07-27T12:00:00+08:00',
   observedAt: '2026-07-27T12:00:00+08:00',
 })
@@ -144,7 +148,12 @@ describe('eta#isStale', () => {
     'isStale',
   )) {
     it(c.name, () => {
-      const eta = toEta({ routeId: 'KMB:1:outbound:1', operator: 'KMB', arrivals: [] })
+      const eta = toEta({
+        routeId: 'KMB:1:outbound:1',
+        operator: 'KMB',
+        stopId: 'KMB:ST141',
+        arrivals: [],
+      })
       expect(
         isStale(
           { ...eta, dataTimestamp: c.args.dataTimestamp },
@@ -156,12 +165,35 @@ describe('eta#isStale', () => {
   }
 })
 
+describe('eta#etaLineKey', () => {
+  for (const c of cases<{ operator: Eta['operator']; routeId: string }, string>('etaLineKey')) {
+    it(c.name, () => {
+      expect(etaLineKey(c.args)).toBe(c.expect)
+    })
+  }
+})
+
 describe('eta#dedupeEtas', () => {
   for (const c of cases<{ etas: EtaRow[] }, string[]>('dedupeEtas')) {
     it(c.name, () => {
       expect(dedupeEtas(c.args.etas.map(toEta)).map((e) => e.routeId)).toEqual(c.expect)
     })
   }
+
+  // Not a corpus row: the corpus states which *readings* survive, and this is about the pole they are
+  // filed under. A key that dropped the pole would still satisfy every row above whose expectation is
+  // a route id — the cross-pole rows would fail, but a *later* regression that re-fused two poles of
+  // one line while keeping both route ids (they differ, after all) would not.
+  it('files each survivor under the pole its own board was called at', () => {
+    const rows = cases<{ etas: EtaRow[] }, string[]>('dedupeEtas').find(
+      (c) => c.name === 'one-line-at-two-poles-keeps-a-reading-for-each',
+    )
+    if (!rows) throw new Error('the named cross-pole row is gone; see REQUIRED_ROWS')
+    expect(dedupeEtas(rows.args.etas.map(toEta)).map((e) => e.stopId)).toEqual([
+      'KMB:C052B4D46E1F48EA',
+      'KMB:BD53690B9DA1C956',
+    ])
+  })
 })
 
 describe('eta#formatFare', () => {
