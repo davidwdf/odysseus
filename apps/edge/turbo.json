@@ -1,0 +1,31 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      // The Worker's suite asserts properties of code in two sibling packages, and the root `test` task
+      // declares no `dependsOn` (ADR-070 decision 3 — deliberately, so suites do not serialise behind the
+      // kernel's), so a package's test hash covers only its own files. Without this line a change to
+      // either dependency replays a stale pass here:
+      //
+      //  · `test/unknown-enum-tolerance.test.ts` builds the OpenAPI document from `@nextbus/contract` and
+      //    walks it — so a frame or field removed from a schema replays green.
+      //  · `test/eta-hub.test.ts` imports the kernel's live constants and rules (`LIVE_CADENCE_FLOOR_MS`,
+      //    `LIVE_MAX_TARGETS_PER_CONNECTION`, `liveShardFor`), and the shard is *built* out of `diffEtas`
+      //    and `nextLiveCadenceMs` — so a cadence or shard-hash change replays green.
+      //  · `test/wire-conformance.test.ts` and `test/eta-stop-id.test.ts` do the same for `classifyRemark`
+      //    and the id grammar.
+      //
+      // This gap is older than Wave 5 — on `main`, `unknown-enum-tolerance` already asserted the document's
+      // shape while hashing none of `packages/contract` — and it is the residual ADR-070 records for itself:
+      // *"the declaration is per-package and can go stale … nothing enforces that it does"*. It is declared
+      // here rather than switched off with `cache: false`, for the reason `packages/contract/turbo.json`
+      // gives: telling the next reader what a task reads is worth more than losing the cache.
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/core/src/*.ts",
+        "$TURBO_ROOT$/packages/contract/src/**/*.ts"
+      ]
+    }
+  }
+}

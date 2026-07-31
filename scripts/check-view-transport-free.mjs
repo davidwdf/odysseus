@@ -97,11 +97,20 @@ const PATTERNS = [
  * as loudly as a violation**, so the list can shrink but never quietly rot into a lie about what is
  * protected.
  *
+ * `pattern` names the **one rule** an entry exempts, and it is required for the reason an adversarial review
+ * measured: without it the match compared file and snippet only, so an entry exempted the *line* rather than
+ * the finding. A `fetch(` — or even a `new WebSocket(` — sharing a line with `/v1/tiles/` in the file below
+ * was silently allowed by an exception whose entire argument is about a URL template. Both patterns fire on
+ * one-line arrows returning a template literal there, which is the ordinary shape in that file rather than a
+ * contrived one, and the next natural edit to it (a tile prefetch, for ADR-058's offline work) would have
+ * walked straight through.
+ *
  * This list was *discovered by running the check*, not predicted. It found exactly one site.
  */
 const ALLOWLIST = [
   {
     file: 'apps/mobile/lib/tileSource.ts',
+    pattern: 'api-path',
     snippet: '/v1/tiles/',
     why:
       'The `TileSource` port is a URL template by definition — its whole contract is `basemap(z, x, y) => string`, ' +
@@ -116,6 +125,27 @@ const ALLOWLIST = [
 
 /** Whitespace-insensitive form of a source line, for stable snippet matching. */
 const normalize = (line) => line.trim().replace(/\s+/g, ' ')
+
+/**
+ * Does this allowlist entry cover this finding?
+ *
+ * A named function rather than an inline predicate so `--selftest` can exercise it, which is the gap an
+ * adversarial review found: every scenario below calls `findViolations` with no file, so the allowlist
+ * match had **never been executed by the selftest at all** — and the live-tree control passes happily when
+ * an entry over-matches, since over-matching produces no `unexpected` and no `stale`. Sixteen green
+ * fixtures and a green live document, over a matcher nothing had run.
+ *
+ * `entry.snippet` is expected pre-normalized (see `report`).
+ */
+function allows(entry, finding) {
+  return (
+    entry.file === finding.file &&
+    // The rule, not just the line. An entry with no `pattern` exempts every rule, which is the honest
+    // reading of a whole-file exception; an entry that names a line must name a rule too.
+    (entry.pattern === undefined || entry.pattern === finding.pattern.id) &&
+    (entry.snippet === undefined || finding.code.includes(entry.snippet))
+  )
+}
 
 /**
  * Strip comments, so prose about a transport stays legal.
@@ -209,9 +239,18 @@ function policedFiles() {
     ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...POLICED],
     { cwd: repoRoot, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
   )
-  return [...new Set(out.split('\0').filter(Boolean))]
+  const files = [...new Set(out.split('\0').filter(Boolean))]
     .map((f) => f.split(sep).join('/'))
     .filter((f) => /\.(m?[jt]sx?)$/.test(f))
+  // **Which of the five dirs actually contributed.** One `git ls-files` over all of them warns on stderr for
+  // a path that no longer exists and still exits 0, so a renamed directory dropped out of the check in
+  // silence: measured, moving `apps/web/src/` took the file count 74 → 60 with `unexpected` and `stale` both
+  // empty, and the success line went on printing "5 policed dirs" — `POLICED.length` is dirs *listed*, not
+  // dirs policed. That is the sixth instance of this repo's recurring failure, *a gate that passes because it
+  // is looking at nothing*, and the comment on POLICED claimed the printed count was the guard against
+  // exactly it. The whole source of the second renderer is 14 of those files.
+  const missing = POLICED.filter((dir) => !files.some((f) => f.startsWith(dir)))
+  return { files, missing }
 }
 
 // ── --selftest ─────────────────────────────────────────────────────────────────────────────────
@@ -282,6 +321,56 @@ function selftest() {
     console.log(`  ${ok ? '✓' : '✗'} ${scenario.name} → ${got.join(', ') || '(no problems)'}`)
     if (!ok) console.log(`      expected → ${want.join(', ') || '(no problems)'}`)
   }
+  // The allowlist matcher, which no scenario above reaches: `findViolations` is called with no file, so
+  // every one of them takes the "unallowed" branch. The middle row is the regression these exist for.
+  const entry = {
+    file: 'apps/mobile/lib/tileSource.ts',
+    pattern: 'api-path',
+    snippet: '/v1/tiles/',
+  }
+  const finding = (id, file, code) => ({ file, code, pattern: { id } })
+  const ALLOW_CASES = [
+    {
+      name: 'the rule it was granted for, on a line it names → allowed',
+      got: allows(
+        entry,
+        finding('api-path', entry.file, 'return `${API_URL}/v1/tiles/basemap/...`'),
+      ),
+      want: true,
+    },
+    {
+      name: 'a DIFFERENT rule on that same line → NOT allowed',
+      why: 'The measured defect: the entry argues only about a URL template, and without the `pattern` clause it silently exempted a `fetch(` — or a `new WebSocket(` — that happened to share the line. Both rules fire on one-line arrows returning a template literal, which is the ordinary shape in that file.',
+      got: allows(
+        entry,
+        finding('raw-fetch', entry.file, 'const warm = (z) => fetch(`${API_URL}/v1/tiles/${z}`)'),
+      ),
+      want: false,
+    },
+    {
+      name: 'the right rule in the wrong file → NOT allowed',
+      got: allows(
+        entry,
+        finding('api-path', 'apps/mobile/app/stop/[id].tsx', "get('/v1/tiles/x')"),
+      ),
+      want: false,
+    },
+    {
+      name: 'a whole-file entry covers every rule, deliberately',
+      got: allows(
+        { file: 'apps/web/src/sw.ts' },
+        finding('raw-fetch', 'apps/web/src/sw.ts', 'fetch(req)'),
+      ),
+      want: true,
+    },
+  ]
+  for (const c of ALLOW_CASES) {
+    const ok = c.got === c.want
+    if (!ok) failed += 1
+    console.log(`  ${ok ? '✓' : '✗'} allowlist: ${c.name}`)
+    if (!ok) console.log(`      expected ${c.want}, got ${c.got}`)
+  }
+
   // The live tree is the last and best control: every finding in it must be one the allowlist covers, so
   // `--selftest` alone catches a violation that has landed.
   const live = report()
@@ -295,13 +384,16 @@ function selftest() {
     console.error(`\n✗ ${failed} selftest scenario(s) did not behave as documented.`)
     process.exit(1)
   }
-  console.log(`  ✓ all ${SCENARIOS.length} scenarios plus the live tree behaved as documented.`)
+  console.log(
+    `  ✓ all ${SCENARIOS.length} pattern scenarios, ${ALLOW_CASES.length} allowlist cases and the live ` +
+      'tree behaved as documented.',
+  )
 }
 
 // ── main ───────────────────────────────────────────────────────────────────────────────────────
 
 function report() {
-  const files = policedFiles()
+  const { files, missing } = policedFiles()
   const findings = []
   for (const file of files) {
     let src
@@ -319,20 +411,17 @@ function report() {
   }))
   const unexpected = []
   for (const finding of findings) {
-    const match = allowed.find(
-      (a) =>
-        a.file === finding.file && (a.snippet === undefined || finding.code.includes(a.snippet)),
-    )
+    const match = allowed.find((a) => allows(a, finding))
     if (match) match.hits += 1
     else unexpected.push(finding)
   }
-  return { files, findings, unexpected, stale: allowed.filter((a) => a.hits === 0) }
+  return { files, missing, findings, unexpected, stale: allowed.filter((a) => a.hits === 0) }
 }
 
 if (process.argv.includes('--selftest')) {
   selftest()
 } else {
-  const { files, unexpected, stale } = report()
+  const { files, missing, unexpected, stale } = report()
   if (unexpected.length > 0 || stale.length > 0) {
     console.error('✗ a transport in the view layer (WP5-2, ADR-004, golden rule 2)\n')
     if (unexpected.length > 0) {
@@ -368,12 +457,31 @@ if (process.argv.includes('--selftest')) {
     )
     process.exit(1)
   }
+  if (missing.length > 0) {
+    // Per-directory, because the whole-set guard above only fires when *every* dir has gone. `git ls-files`
+    // warns on a path that no longer exists and exits 0, so one renamed directory left the check quietly
+    // narrower: measured, moving `apps/web/src/` took the count 74 → 60 with nothing reported, and the
+    // success line still said "5 policed dirs". The second renderer's entire source is those 14 files, and
+    // its whole purpose is proving the kernel renderer-agnostic (ADR-068/069).
+    console.error(
+      '✗ check-view-transport-free is no longer looking at a directory it claims to police\n',
+    )
+    for (const dir of missing)
+      console.error(`  · ${dir}  — no tracked files; renamed, moved or deleted?`)
+    console.error(
+      '\n  Update POLICED in this script in the same commit that moved the directory. A gate that\n' +
+        '  silently stops reading a renderer is worse than no gate: it reports success.',
+    )
+    process.exit(1)
+  }
   // The allowlist size is reported rather than asserted away: the number is the thing worth watching, and a
   // gate that claimed to police sites it was skipping would be exactly the trusted-but-wrong signal this
   // check exists to prevent.
   console.log(
     `✓ no transport in the view — ${PATTERNS.length} patterns over ${files.length} files in ` +
-      `${POLICED.length} policed dirs, ${ALLOWLIST.length} allowed site(s) ` +
+      // Dirs that *contributed*, not dirs listed. `POLICED.length` was the number here, which is what let a
+      // vanished directory keep printing "5 policed dirs" while four were read.
+      `${POLICED.length - missing.length} policed dirs, ${ALLOWLIST.length} allowed site(s) ` +
       `(${relative(repoRoot, fileURLToPath(import.meta.url))}).`,
   )
 }

@@ -49,9 +49,11 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
  * Every published wire document. **Hand-spelled, and a new one must be added here in the same commit
  * that creates it** — the same rule `check-no-raw-colours.mjs` states for a new renderer directory, and
  * for the same reason: a gate scoped to one of two documents passes while the other is unpoliced, which
- * is a gate looking at nothing. `asyncapi.json` (WP5-1) shares `components.schemas` with `openapi.json`
- * byte for byte, so most of its surface is checked twice — but the frames are its own, and they are the
- * newest place a `fontWeight` could land.
+ * is a gate looking at nothing. `asyncapi.json` (WP5-1) carries the same schema *declarations* as
+ * `openapi.json` — one registry emit, one set of pointers — so most of its surface is checked twice; the
+ * two are not byte-identical (that document drops `$id` and folds `$ref` siblings into `allOf`, which is
+ * stated in its own `info.description`), but neither transformation can introduce a styling token. The
+ * frames are its own, and they are the newest place a `fontWeight` could land.
  */
 const DOC_PATHS = ['packages/contract/openapi.json', 'packages/contract/asyncapi.json']
 
