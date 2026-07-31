@@ -8,11 +8,12 @@ import {
   formatWalk,
   formatWalkRange,
   haversineMeters,
+  initialBearingDeg,
   routeDistanceM,
   walkMinutes,
 } from '../src/geo'
 import type { LatLng, Locale } from '../src/types'
-import { type Approx, specCases } from './corpus'
+import { type Approx, type ApproxDeg, specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/geo.spec.json.
 
@@ -21,6 +22,11 @@ const cases = <A, E>(group: string) => specCases<A, E>(corpus, group)
 /** The corpus states a tolerance per row; see ./corpus.ts for why floats are compared this way. */
 function expectApprox(actual: number, e: Approx) {
   expect(Math.abs(actual - e.meters)).toBeLessThanOrEqual(e.tolerance)
+}
+
+/** The same, in degrees. */
+function expectApproxDeg(actual: number, e: ApproxDeg) {
+  expect(Math.abs(actual - e.degrees)).toBeLessThanOrEqual(e.tolerance)
 }
 
 describe('geo#haversineMeters', () => {
@@ -86,6 +92,54 @@ describe('geo#bearingOctant', () => {
     // that the two cannot part company — which is a relationship, not a value.
     for (const c of cases<{ deg: number }, number>('bearingOctant'))
       expect(bearingOctantDeg(c.args.deg)).toBe(c.expect * 45)
+  })
+})
+
+describe('geo#initialBearingDeg', () => {
+  for (const c of cases<{ a: LatLng; b: LatLng }, ApproxDeg>('initialBearingDeg')) {
+    it(c.name, () => {
+      expectApproxDeg(initialBearingDeg(c.args.a, c.args.b), c.expect)
+    })
+  }
+
+  it('is in 0–360 for every ordered pair of every row', () => {
+    // A property, not a value. The `+ 360` normalisation is the half a port drops, and it only shows
+    // up on a westward bearing — so this sweeps every pair in the corpus in BOTH directions rather
+    // than trusting that the one westward row is the only place it matters.
+    for (const c of cases<{ a: LatLng; b: LatLng }, ApproxDeg>('initialBearingDeg'))
+      for (const [a, b] of [
+        [c.args.a, c.args.b],
+        [c.args.b, c.args.a],
+      ] as const) {
+        const deg = initialBearingDeg(a, b)
+        expect(deg).toBeGreaterThanOrEqual(0)
+        expect(deg).toBeLessThan(360)
+      }
+  })
+
+  it('matches the bearing the dataset pipeline computes, to the last bit', () => {
+    // `buildPlaces` (`@nextbus/data-normalize`) held the only implementation of this until WP5-10 and
+    // now calls this one. Its bearings feed `BEARING_SPREAD_CAP_DEG`, which decides which poles merge
+    // into a place — so a last-bit difference could silently rebuild the whole dataset under a new
+    // hash. This is the pipeline's expression, transcribed here, compared with `Object.is` rather than
+    // `toBeCloseTo`: "close enough" is exactly what would not be caught.
+    const toRad = (deg: number): number => (deg * Math.PI) / 180
+    const pipeline = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+      const lat1r = toRad(lat1)
+      const lat2r = toRad(lat2)
+      const dLng = toRad(lng2 - lng1)
+      const y = Math.sin(dLng) * Math.cos(lat2r)
+      const x =
+        Math.cos(lat1r) * Math.sin(lat2r) - Math.sin(lat1r) * Math.cos(lat2r) * Math.cos(dLng)
+      return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+    }
+    for (const c of cases<{ a: LatLng; b: LatLng }, ApproxDeg>('initialBearingDeg'))
+      expect(
+        Object.is(
+          initialBearingDeg(c.args.a, c.args.b),
+          pipeline(c.args.a.lat, c.args.a.lng, c.args.b.lat, c.args.b.lng),
+        ),
+      ).toBe(true)
   })
 })
 

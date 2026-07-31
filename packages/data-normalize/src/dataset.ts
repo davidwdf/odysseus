@@ -1,10 +1,11 @@
-import type {
-  Bound,
-  FreqPattern,
-  I18nText,
-  OperatorId,
-  RouteServiceInfo,
-  ServiceDayType,
+import {
+  type Bound,
+  type FreqPattern,
+  type I18nText,
+  initialBearingDeg,
+  type OperatorId,
+  type RouteServiceInfo,
+  type ServiceDayType,
 } from '@nextbus/core'
 import { haversineM } from './kmb-static'
 import { canonicalRouteId, i18nText, toBound } from './normalize'
@@ -323,15 +324,15 @@ const BEARING_SPREAD_CAP_DEG = 60
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180
 
-/** Initial great-circle bearing from (lat1,lng1) to (lat2,lng2), degrees 0..360. */
-function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const lat1r = toRad(lat1)
-  const lat2r = toRad(lat2)
-  const dLng = toRad(lng2 - lng1)
-  const y = Math.sin(dLng) * Math.cos(lat2r)
-  const x = Math.cos(lat1r) * Math.sin(lat2r) - Math.sin(lat1r) * Math.cos(lat2r) * Math.cos(dLng)
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
-}
+// The initial great-circle bearing used to be a private `bearingDeg` here, and it was the only
+// implementation in the repo. WP5-10 needed one at *render* time — `poleSideOctants` labels two
+// identically-headed poles by the side they sit on — so it moved to `@nextbus/core`'s `geo.ts`
+// (`initialBearingDeg`) rather than being written a second time, which is the drift ADR-060 exists to
+// catch. The expression there is this one transcribed character for character, including the
+// `(deg * Math.PI) / 180` association: the bearings below feed `BEARING_SPREAD_CAP_DEG`, so a last-bit
+// difference could change which poles merge into a place and republish the whole dataset under a new
+// hash. Verified bit-identical over 18 430 real coordinate pairs before the switch, and pinned by
+// `geo#initialBearingDeg:*` plus a same-expression assertion in `packages/core/test/geo.test.ts`.
 
 /** Smallest absolute angle between two bearings (degrees, 0..180). */
 function angularDiffDeg(a: number, b: number): number {
@@ -688,7 +689,7 @@ export async function fetchConsolidatedIndex(
         const p = data.stopList[prevRaw]?.location
         const n = data.stopList[nextRaw]?.location
         if (p && n && prevRaw !== nextRaw) {
-          const b = toRad(bearingDeg(p.lat, p.lng, n.lat, n.lng))
+          const b = toRad(initialBearingDeg(p, n))
           const acc = bearingAcc.get(stopId)
           if (acc) {
             acc.x += Math.cos(b)
