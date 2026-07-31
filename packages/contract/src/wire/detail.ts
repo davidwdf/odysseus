@@ -40,10 +40,17 @@ export const RouteDetailSchema = z
 /**
  * A stop (or merged same-kerb place) + the routes that serve it, each with its current ETA.
  *
- * For a multi-pole place, `stopId` on each route is the canonical id of the **member pole** it
- * departs from, so the UI can group routes under their pole (ADR-042) — it is deliberately *not*
- * the place id. `members` carries each pole's id/name/location for the multi-pin map and the
- * per-pole walk estimate; a lone stop has exactly one member.
+ * For a multi-pole place, `stopId` on each route is the canonical id of the **pole** it departs
+ * from, so the UI can group routes under their pole (ADR-042) — it is deliberately *not* the place
+ * id. `members` carries each pole's id/name/location for the multi-pin map and the per-pole walk
+ * estimate; a lone stop has exactly one member.
+ *
+ * `members` is one entry per **boarding point**, so where upstream published one physical pole under
+ * two ids only one of them is a member and the other is in its `aliasIds` (WP5-11). A route row can
+ * therefore name a pole that is not itself a member — deliberately, because a row's `stopId` is the
+ * key a favourite is saved under, and the reading attached to that row carries the same id. The fold
+ * is a *display* collapse: `boardingPoleId`/`dedupeRoutes` (`@nextbus/core`) group and collapse the
+ * rows, nothing rewrites them, and both ids stay valid favourite keys for good.
  *
  * Routes here are `RouteSummary`, not `Route`: this endpoint serves the summary service tier, with
  * no frequency profiles (ADR-065, ADR-055 §7). That is a property of the *type*, so a generated
@@ -58,7 +65,11 @@ export const StopDetailSchema = z
         route: RouteSummarySchema,
         eta: EtaSchema.nullable(),
         fare: z.string().optional().describe('Boarding fare here, HK$ decimal string.'),
-        stopId: z.string().describe('Canonical id of the member pole this route departs from.'),
+        stopId: z
+          .string()
+          .describe(
+            'Canonical id of the pole this route departs from — the pole its own stop list names, which may be one of a member’s aliasIds rather than a member (WP5-11). Never re-base it: this is the key a favourite is saved under, and the eta beside it carries the same id.',
+          ),
       }),
     ),
     members: z.array(
@@ -66,6 +77,12 @@ export const StopDetailSchema = z
         id: z.string(),
         name: I18nTextSchema,
         location: LatLngSchema,
+        aliasIds: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Other canonical pole ids naming this same physical pole, because upstream published it more than once (WP5-11). A route row may depart from one of these rather than from the member, and its ETA carries the same id: every id here is a real addressable pole, not a spelling to be replaced. Use boardingPoleId/dedupeRoutes (@nextbus/core) to group and collapse rows for display, and never write the result back onto a row — a row id is the key a favourite is saved under, and both ids stay valid keys for good.',
+          ),
       }),
     ),
   })

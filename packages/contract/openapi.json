@@ -1163,7 +1163,7 @@
                 },
                 "stopId": {
                   "type": "string",
-                  "description": "Canonical id of the member pole this route departs from."
+                  "description": "Canonical id of the pole this route departs from — the pole its own stop list names, which may be one of a member’s aliasIds rather than a member (WP5-11). Never re-base it: this is the key a favourite is saved under, and the eta beside it carries the same id."
                 }
               },
               "required": [
@@ -1186,6 +1186,13 @@
                 },
                 "location": {
                   "$ref": "#/components/schemas/LatLng"
+                },
+                "aliasIds": {
+                  "description": "Other canonical pole ids naming this same physical pole, because upstream published it more than once (WP5-11). A route row may depart from one of these rather than from the member, and its ETA carries the same id: every id here is a real addressable pole, not a spelling to be replaced. Use boardingPoleId/dedupeRoutes (@nextbus/core) to group and collapse rows for display, and never write the result back onto a row — a row id is the key a favourite is saved under, and both ids stay valid keys for good.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "required": [

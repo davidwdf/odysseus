@@ -27,7 +27,7 @@ One framing to start with, because it decides how you spend your first week:
 | `packages/contract/openapi.json` | OpenAPI 3.1, v1.0.0 — **7 paths, 34 component schemas** | Generate your models. This is the only artefact you *must* consume. |
 | `packages/contract/asyncapi.json` | AsyncAPI 3.0.0 for the `/v1/live` socket — **6 frames, 45 component schemas** | Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7. |
 | `packages/contract/src/ids/id-grammar.abnf` | ABNF (RFC 5234) for every id that crosses the wire | Hand-write a parser against it. The `ids` corpus below is what proves your parser agrees with ours. |
-| `packages/core/spec/` | **13 corpora, 85 groups, 716 cases, 3 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
+| `packages/core/spec/` | **13 corpora, 86 groups, 726 cases, 3 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
 | `packages/contract/native/ios/CorpusConformanceTests.swift` | **Template — never compiled, never run** | Copy into your test target on day one and make it build. See §6. |
 | `packages/contract/native/android/CorpusConformanceTest.kt` | **Template — never compiled, never run** | Ditto, for `src/test/kotlin`. |
 | `packages/ui/generated/NextBusTokens.swift` | 122 design tokens — **never compiled** | Compile it. A compile error here is a bug in the emitter, not something to patch in place. |
@@ -234,9 +234,9 @@ one rot check covers them all.
 | `route-position.spec.json` | `packages/core/src/route-position.ts` | 1 | 14 | — |
 | `search.spec.json` | `packages/core/src/search.ts` | 12 | 106 | — |
 | `stop-card.spec.json` | `packages/core/src/stop-card.ts` | 4 | 29 | — |
-| `stop-detail.spec.json` | `packages/core/src/stop-detail.ts` | 4 | 29 | 1 |
+| `stop-detail.spec.json` | `packages/core/src/stop-detail.ts` | 5 | 39 | 1 |
 | `stop-name.spec.json` | `packages/core/src/stop-name.ts` | 4 | 47 | — |
-| **total** |  | **85** | **716** | **3** |
+| **total** |  | **86** | **726** | **3** |
 <!-- END GENERATED: corpus -->
 
 Each file is `{module, source, version, doc, groups}`; each group is `{doc, cases[]}`; each case is

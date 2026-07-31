@@ -137,8 +137,9 @@ export type RouteRef = z.infer<typeof RouteRefSchema>
 export type RouteDetail = z.infer<typeof RouteDetailSchema>
 
 /** A stop (or merged same-kerb place) + the routes that serve it, each with its current ETA. For a
- *  multi-pole place, `stopId` on each route is the canonical id of the *member pole* it departs
- *  from (ADR-042), and `members` carries each pole's id/name/location. */
+ *  multi-pole place, `stopId` on each route is the canonical id of the *pole* it departs from
+ *  (ADR-042) — a member, or one of a member's `aliasIds` where the build folded one physical pole
+ *  published twice (WP5-11) — and `members` carries each boarding point's id/name/location. */
 export type StopDetail = z.infer<typeof StopDetailSchema>
 
 /** A nearby stop (or merged place) with distance + its soonest arrivals. */
