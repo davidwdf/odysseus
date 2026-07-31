@@ -4000,7 +4000,12 @@ pre-existing and unaddressed; it earned its keep here.
   berths", and there is none.
   - Over `d598893de6add2e4`, the **516** member pairs sharing an operator *and* a full name within one
     place run **continuously from 0 to 31 m, with every band populated** — 88 · 11 · 47 · 109 · 164 · 71
-    across 0–0.5 / 0.5–2 / 2–5 / 5–10 / 10–20 / 20–31 m.
+    across 0–0.5 / 0.5–2 / 2–5 / 5–10 / 10–20 / 20–31 m. Those bands total **490**; the remaining **26**
+    sit at **31.8–54.9 m**, i.e. *beyond* `MERGE_RADIUS_M` (30 m), and are in one place only because
+    clustering is **single-linkage** — A–B and B–C each inside the radius puts A–C at 55 m (ADR-042). The
+    discrepancy is recorded rather than reconciled away because the tail is where the *clearest* genuine
+    berths live: **ND126, at 35.35 m, is in it**. Anyone tempted to make the figures add up by widening
+    the last band would be folding two boarding points a rider has to choose between.
   - **The genuine two-berth stands sit *inside* that continuum**: KMB prints one code on poles
     **TN507 22.88 m**, **TN581 19.01 m** and **ND126 35.35 m** apart, while Tin Shui Wai Park's duplicated
     **TN510** pair is **1.11 m**. So the thing not to swallow and the thing to fold are drawn from one
