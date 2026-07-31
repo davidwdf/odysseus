@@ -112,6 +112,43 @@ function boardJson(rawId: string): unknown {
   }
 }
 
+/**
+ * Hold a round open inside its own awaits.
+ *
+ * A round is not atomic: `round()` reads every session, then awaits a KV read and an upstream fetch, and
+ * neither is a `ctx.storage` operation — so the Durable Object input gate stays open and a client frame
+ * can be delivered in the middle of one. That window is the only way to observe what a round does with a
+ * subscription that changed underneath it, and nothing else in this suite can produce it: without a gate
+ * the stubbed fetch resolves in the same microtask and the window does not exist.
+ *
+ * `entered()` is what makes the test deterministic rather than a sleep: it waits until a board call is
+ * actually parked in the gate, which is proof the round is inside its awaits. It **polls a counter rather
+ * than awaiting a promise the stub resolves**, and that is not a style choice — a promise settled inside
+ * the shard's I/O context resumes the test *in that context*, and the next `ws.send()` then fails with
+ * "Cannot perform I/O on behalf of a different Durable Object". Polling keeps the test in its own.
+ */
+let boardGate: Promise<void> | null = null
+let boardsParked = 0
+
+function holdBoards(): { entered: () => Promise<void>; release: () => void } {
+  let open: () => void = () => {}
+  boardsParked = 0
+  boardGate = new Promise<void>((resolve) => {
+    open = resolve
+  })
+  return {
+    async entered() {
+      const deadline = Date.now() + 5_000
+      while (boardsParked === 0 && Date.now() < deadline) await settle(5)
+      if (boardsParked === 0) throw new Error('no upstream board call reached the gate')
+    },
+    release() {
+      boardGate = null
+      open()
+    },
+  }
+}
+
 const realFetch = globalThis.fetch
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
@@ -161,10 +198,18 @@ let opened: WebSocket[] = []
 beforeEach(async () => {
   resetBoards()
   resetEtaCache()
+  boardGate = null
+  boardsParked = 0
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const board = KMB_STOP_ETA.exec(url)
-    if (board?.[1]) return jsonResponse(boardJson(board[1]))
+    if (board?.[1]) {
+      if (boardGate !== null) {
+        boardsParked += 1
+        await boardGate
+      }
+      return jsonResponse(boardJson(board[1]))
+    }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof fetch
   await resetShards()
@@ -398,6 +443,8 @@ const POLE_A = poles[0] as (typeof poles)[number]
 const POLE_B = poles[1] as (typeof poles)[number]
 /** A pole of a *different* place, so a failure can be scoped to one target. */
 const POLE_C = poles[2] as (typeof poles)[number]
+/** And a third place, for the cases that need a target set to grow twice. */
+const POLE_D = poles[4] as (typeof poles)[number]
 
 const routeIdOf = (pole: (typeof poles)[number]): string => `KMB:${pole.route}:outbound:1`
 
@@ -492,6 +539,61 @@ describe('an alarm round', () => {
     const delta = only(await frames.take(1), 'delta')[0]
     expect(delta?.changed).toEqual([])
     expect(delta?.gone).toEqual([{ stopId: POLE_B.id, routeId: routeIdOf(POLE_B) }])
+  })
+
+  it('does not revert a `subscribe` that arrived while it was in flight', async () => {
+    // `round()` snapshots every session **before** its awaits and `sendRound` writes one back after them,
+    // so a `subscribe` handled inside that window was overwritten by a set the client had already replaced
+    // — and it is the *intended* use of the frame that lands there, because a new subscription pulls the
+    // alarm forward to *now*. Two ways it hurt: on a quiet round no frame goes out at all, so nothing sets
+    // the kernel's `resyncNeeded` and the newly added stop was silently unsubscribed while the echo said
+    // otherwise; on a changed round the delta carried the same `seq` as the snapshot and the reducer
+    // dropped it. Recovery depended on the *old* targets producing a later delta, which on a quiet pole
+    // does not happen.
+    const subscribeTo = (ws: WebSocket, ids: readonly string[]): void => {
+      ws.send(JSON.stringify({ type: 'subscribe', targets: ids.map((stopId) => ({ stopId })) }))
+    }
+    const { ws, frames } = await connectAndPoll([POLE_A.id])
+    frames.drain()
+
+    // The round is started by the shard itself, not by `runDurableObjectAlarm`: a subscription naming an
+    // unpolled stop pulls the alarm forward to *now*, which is exactly the production timing this defect
+    // needs. (Driving it from the harness is not an option — the test would then be holding the object's
+    // I/O context open and `ws.send` fails with "Cannot perform I/O on behalf of a different Durable
+    // Object", which is the runtime telling us the same thing.)
+    const hold = holdBoards()
+    subscribeTo(ws, [POLE_A.id, POLE_C.id])
+    await frames.take(2)
+    frames.drain()
+    await hold.entered()
+
+    try {
+      // …and *this* is the frame that lands inside the round's awaits.
+      subscribeTo(ws, [POLE_A.id, POLE_C.id, POLE_D.id])
+      // It was handled during the round — this snapshot is the proof, and it is why the wait is for a
+      // frame rather than for a timer.
+      const echo = only(await frames.take(2), 'snapshot')[0]
+      expect(echo?.targets.map((t) => t.stopId)).toEqual([POLE_A.id, POLE_C.id, POLE_D.id].sort())
+    } finally {
+      hold.release()
+    }
+    // The re-subscription pulled the alarm forward again, so a further round follows on its own.
+    await settle(300)
+
+    const attached = await runInDurableObject(stubFor([POLE_A.id]), (_i: EtaHub, state) =>
+      state.getWebSockets().map((w) => w.deserializeAttachment() as { targets: WatchTarget[] }),
+    )
+    expect(attached[0]?.targets.map((t) => t.stopId)).toEqual(
+      [POLE_A.id, POLE_C.id, POLE_D.id].sort(),
+    )
+
+    // …and the shard is really polling the added target, which is the half a rider would notice: the
+    // attachments are what the next round's poll set is built from, so a reverted one is a stop that is
+    // echoed as accepted and never asked about.
+    const rows = await runInDurableObject(stubFor([POLE_A.id]), (_i: EtaHub, state) =>
+      state.storage.sql.exec<{ target: string }>('SELECT target FROM readings').toArray(),
+    )
+    expect(rows.map((row) => row.target).sort()).toEqual([POLE_A.id, POLE_C.id, POLE_D.id].sort())
   })
 
   it('widens the cadence as rounds stay quiet', async () => {

@@ -737,7 +737,15 @@ export class EtaHub extends DurableObject<Env> {
     this.writeUnchangedRounds(quiet ? this.unchangedRounds() + 1 : 0)
   }
 
-  /** One socket's share of a round: its delta, its failures, and its `live` transition. */
+  /**
+   * One socket's share of a round: its delta, its failures, and its `live` transition.
+   *
+   * `session` is the snapshot `round()` took **before** its awaits, and a round is not atomic: a KV read
+   * and an upstream `fetch` are subrequests, not `ctx.storage` operations, so the input gate stays open
+   * and a `subscribe` frame can be handled inside that window — which is the *normal* timing, because a
+   * new subscription pulls the alarm forward to now. So the first thing this does is check whether the
+   * connection still has the subscription this round was computed for.
+   */
   private sendRound(
     ws: WebSocket,
     session: Session,
@@ -745,6 +753,17 @@ export class EtaHub extends DurableObject<Env> {
     after: ReadonlyMap<string, readonly Eta[]>,
     failures: ReadonlyMap<string, WireError>,
   ): void {
+    const current = sessionOf(ws)
+    // **It re-declared itself during this round's awaits, so its own snapshot is authoritative.** Both
+    // things this round has for it were computed against a target set it no longer has: the delta, and
+    // the attachment write at the end — which used to revert the re-declaration outright, since
+    // `serializeAttachment` writes whatever it is given. On a quiet round no frame went out at all, so
+    // nothing set the kernel's `resyncNeeded` and the newly added stop was silently unsubscribed while
+    // the accepted-set echo said it was being watched; on a changed round the delta went out carrying the
+    // same `seq` as the fresh snapshot and `applyLiveFrame` dropped it as already seen. `seq` increases
+    // strictly on every `subscribe()`, so comparing it is a precise detector rather than a heuristic.
+    if (current === null || current.seq !== session.seq) return
+
     // A target dropped for good leaves this connection's subscription, so the shard stops polling it on
     // the next round as well. `before` is projected through the *old* target list and `after` through
     // the new one, which is what puts the departed target's readings in `gone`.
