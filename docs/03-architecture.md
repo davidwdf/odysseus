@@ -17,7 +17,7 @@ We use the **Cloudflare stack**, because it's the only option that gives us edge
 | **Pages** (or Workers static assets) | Hosts the built web/PWA bundle on the global CDN. |
 | **Workers KV** | The dataset itself: precomputed, content-addressed shards that a request reads a few keys at a time (ADR-055). Plus the short-TTL ETA cache. ("Redis as a cache.") |
 | **R2** | The bulk per-build artefacts a KV value doesn't suit: the search index and the manifest (cheap, no egress fees). |
-| **Durable Objects (DO)** | Stateful actors for v2: one per "hot stop", holds WebSocket subscribers, polls upstream on an alarm, fans out diffs. ("Redis as pub/sub + coordination.") |
+| **Durable Objects (DO)** | Stateful actors: `EtaHub`, **one per shard and not one per stop** (see Phase 2 below — the per-stop shape was refuted by the cost model and by the battery argument before it was built), holding hibernatable WebSocket subscribers, polling upstream on an alarm and fanning out diffs. ("Redis as pub/sub + coordination.") |
 | **D1** (SQLite at edge) | Optional: relational canonical data / future account sync. |
 | **Cron Triggers** | **Not used.** The daily dataset build runs in GitHub Actions instead (ADR-055) — a Worker can't afford the 8.3 MB fetch, the clustering and ~20 MB of heap, and a 128 MB DO couldn't do it at all. There is no `[triggers] crons` and no `scheduled` handler. |
 | **Queues** | Not used. The build is one node process end to end; there is no pipeline to orchestrate. |
@@ -157,10 +157,13 @@ Client ──1 WebSocket──▶ Worker  GET /v1/live?targets=<canonical ids, %
   no local knob; only an explicit eviction). Outgoing messages are free, incoming ones are billed 20:1,
   and the keepalive is answered by the runtime's auto-response without waking the shard — so **reconnect
   churn, not message volume, is what a socket costs.**
-- **Caps, because a `subscribe` frame is an amplifier**: 12 targets per connection, 48 per shard, 64
-  sockets per shard, 8 KiB per client frame. Excess is *rejected and named* in the snapshot's echo, never
-  truncated silently. What would actually protect the endpoint is zone rate limiting, which needs the
-  custom domain (WP0-5); the caps only stop one connection from fanning out.
+- **Caps, because a `subscribe` frame is an amplifier**: 12 targets per connection, 48 per shard, 12 CTB
+  routes per place per round, 64 sockets per shard, 8 KiB per client frame. Excess is *rejected and named* in
+  the snapshot's echo, never truncated silently — and never by refusing the connection: a shard that refused
+  a full upgrade was a lock-out one script could trigger for every rider on that shard, which is why the cap
+  lives in `subscribe()` and the excess is `internal`/`retryable: true` rather than `bad_request` (ADR-056
+  decision 15). What would actually protect the endpoint is zone rate limiting, which needs the custom domain
+  (WP0-5); the caps only stop one connection from fanning out.
 - **Swapped in behind `DataSource.watch()`** — and that claim is now tested rather than asserted: the
   same screen renders identically from the poll emulator and from a scripted socket
   (`apps/mobile/test/seam-substitution.test.tsx`), and a gate keeps transports out of the view layer.

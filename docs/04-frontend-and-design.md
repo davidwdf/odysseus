@@ -222,7 +222,13 @@ escaping, and nothing more. Expect to fix something the first time they are cons
   `lib/useLiveEtas.ts` subscribes through `DataSource.watch()` and writes the merged result with
   `setQueryData` on **the key `useQuery` already owns** (`['stop', id]`), never a key of its own —
   that is what keeps ADR-058's persisted cache and its cold-start replay working, and the seam proof
-  fails when it is changed. Place detail is the first adopter; its `refetchInterval` is gone.
+  fails when it is changed. Place detail is the first adopter; its `refetchInterval` is gone — **and the
+  hook hands back the clock that went with it.** `refetchInterval` re-rendered as well as fetched, and a
+  screen's `const now = Date.now()` only advances when something re-renders it, so deleting it froze
+  `etaReadout`'s staleness cue: the times stayed confident for ever. `useLiveEtas` returns a `now` ticking on
+  the served `refreshAfterMs` (ADR-056 decision 16), so any screen converted off `refetchInterval` gets its
+  clock back in the same call rather than remembering to ask for one. The interval survives for the *failure*
+  case only, because otherwise one lost packet on open is permanent.
 - **Zustand** — light local UI state (selected direction, theme, favorites).
 - **AsyncStorage** — one persistence API across all three targets (`localStorage` on web, the
   native store on iOS/Android). It backs the preferences store (theme · appearance · locale ·
