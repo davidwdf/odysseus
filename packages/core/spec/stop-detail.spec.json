@@ -360,8 +360,8 @@
           ]
         },
         {
-          "name": "a-live-reading-at-another-pole-moves-the-row-to-that-pole",
-          "why": "The surviving entry carries its own `stopId`, so 'keep the one with a reading' also decides which pole group the row is filed under. All three 269D entries at Tin Shui Wai Park are the same rider line, but only the one at KMB:DC5B5F4350685442 has a reading, so the row leaves KMB:AFB9321F7CD2C2E4's group and joins that pole's. Pinned because it is the coupling between this rule and the grouped list — a port that returned only the route and dropped the pole would file the row under the wrong kerb.",
+          "name": "a-line-boarding-two-poles-keeps-a-row-at-each",
+          "why": "THE ROW THAT PINNED THE DEFECT, NOW PINNING THE FIX — and it exercises both halves of the key at once. Three 269D entries at Tin Shui Wai Park across two poles: service types 1 and 4 board at KMB:AFB9321F7CD2C2E4, type 3 at KMB:DC5B5F4350685442, and only type 3 has a reading. Before Wave 5 the key omitted the pole, so all three fused and 'keep the one with a reading' also decided which pole group the row was filed under — the row LEFT AFB9…'s group and joined DC5B…'s, and would move back when the reading did. Now: same-pole variants still collapse (types 1 and 4 become one row, first appearance wins, which is what this function is for), and the two poles keep a row each, so nothing moves when a bus departs. This is also the place that pays the display cost: both members print the stop code TN510, so 269D now shows twice under two identically-labelled pole headings until a heading is labelled by something that distinguishes it. A port that dropped `stopId` from the key files a row under the wrong kerb; a port that dropped it from the OUTPUT cannot file it at all.",
           "args": {
             "routes": [
               {
@@ -438,6 +438,10 @@
           },
           "expect": [
             {
+              "routeId": "KMB:269D:outbound:1",
+              "stopId": "KMB:AFB9321F7CD2C2E4"
+            },
+            {
               "routeId": "KMB:269D:outbound:3",
               "stopId": "KMB:DC5B5F4350685442"
             }
@@ -445,8 +449,7 @@
         },
         {
           "name": "one-minibus-number-at-two-poles-loses-a-destination",
-          "knownDefect": true,
-          "why": "WRONG, PINNED SO EVERY PLATFORM IS WRONG IDENTICALLY. Two different green-minibus services both numbered 20 leave Tai On Street: one from GMB:20000270 for Chai Wan (Fung Yip Street), one from GMB:20009406 for Chai Wan Industrial City. They share operator, number and direction, so the key fuses them and the second destination is never shown — and since route 20 was that pole's only route, the pole's whole group disappears from the list while its dot stays on the map, so tapping the dot scrolls nowhere. Not a rarity: in the 2026-07-27 build 44 rider lines span more than one pole of a place and 26 of them have differing destinations, GMB most of all. The module's old comment claimed this was safe because 'route_code is unique within a region' — true of the code, not of the public number. Once fixed, `expect` keeps both entries, one per pole. The fix is not merely adding `stopId` to the key: at Tin Shui Wai Park two members share the stop code TN510, and keying by pole there would show 269D twice under two identically-labelled headings.",
+          "why": "Two different green-minibus services both numbered 20 leave Tai On Street: `GMB:20:outbound:2002320` from pole GMB:20000270 for Chai Wan (Fung Yip Street), and `GMB:20:outbound:2002319` from pole GMB:20009406 for Chai Wan Industrial City. They share operator, number and direction, and both are circular so both are 'outbound' on every leg — direction cannot separate them either. FIXED in Wave 5 by putting the member pole in the key: one row per line PER POLE. Before the fix the two fused, the second destination was never shown, and where route 20 was a pole's only route the pole's whole group vanished from the list while its dot stayed on the map (21 poles emptied in the 2026-07-27 build; 44 rider lines span more than one pole and 26 of those have differing destinations, GMB most of all). The live merge then made it worse: /v1/etas/:id collapses readings across the whole place, so only one pole's row could be filled and the survivor — chosen by which row had a reading — moved between kerbs as buses departed (measured 2026-07-31: GMB 68K, both poles publishing 11 s apart). The old comment claimed the fusion was safe because 'route_code is unique within a region': true of the code, not of the number on the front of the bus. Residual, deliberately not fixed here: the edge still dedupes across poles, so at most one of a line's poles carries a reading and the other reads 'no reading right now' even when a bus is due there — that needs the canonical model to carry a reading per boarding point, which is a wire change with its own owner. A port that keyed on operator|routeNo|bound alone passes every other row here and fails this one.",
           "args": {
             "routes": [
               {
@@ -497,6 +500,10 @@
             {
               "routeId": "GMB:20:outbound:2002320",
               "stopId": "GMB:20000270"
+            },
+            {
+              "routeId": "GMB:20:outbound:2002319",
+              "stopId": "GMB:20009406"
             }
           ]
         },
