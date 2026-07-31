@@ -1,6 +1,11 @@
-import { applyLiveEtasToStopDetail, type DataSource, type StopDetail } from '@nextbus/core'
+import {
+  applyLiveEtasToStopDetail,
+  CLIENT_POLICY_DEFAULTS,
+  type DataSource,
+  type StopDetail,
+} from '@nextbus/core'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { dataSource as appDataSource } from './datasource'
 
 /**
@@ -26,6 +31,32 @@ import { dataSource as appDataSource } from './datasource'
  * `route`, all of which the screen reads; the result renders as a screen with no name and no map pins.
  * The merge also sets a row with no live reading to `null` rather than leaving its last value, which is
  * `gone`'s honesty rule (ADR-008) reaching the screen.
+ *
+ * ## It returns the clock, because the refetch it replaced *was* the clock
+ *
+ * `refetchInterval` did two jobs and only one of them was obvious. It fetched, and it **re-rendered** —
+ * and a screen's `const now = Date.now()` only advances when something re-renders it. Deleting it took the
+ * clock with it: a round in which nothing changed calls no listener (by design, ADR-008), `useClientPolicy`
+ * has a `staleTime` and no interval, and `refetchOnWindowFocus` is `false`. So on a quiet stop nothing
+ * re-rendered at all, and the one cue that exists to say *"these times have stopped arriving"* —
+ * `etaReadout`'s `stale` flag, at 90 s — **could never fire**. The screen kept showing confident minutes
+ * against a frozen clock. Found by review after WP5-0 shipped, not by a test.
+ *
+ * So the clock comes back out of this hook rather than from a `useNow` a screen has to remember to call.
+ * The pairing is the whole point: converting a screen off `refetchInterval` is exactly the moment its clock
+ * stops, and a hook that hands the replacement back cannot be half-adopted. A separate hook could be
+ * forgotten, and a grep-level gate asserting "calls `useNow`" would pass on a screen that called it and
+ * used `Date.now()` anyway — the same *"referenced is not rendered"* trap that killed WP4-1's cheap gate.
+ *
+ * **Why a tick is not the countdown ADR-008 forbids.** What that rule bans is *fabricated precision* — a
+ * per-second countdown implying the estimate is refreshing when it is not. Recomputing "minutes until this
+ * fixed timestamp" on the served cadence is arithmetic on data we were given, it is the granularity riders
+ * have seen since v1 (the 30 s refetch did exactly this), and it is what makes the staleness cue possible
+ * at all. The tick is `refreshAfterMs`, so the cue appears within one cadence of becoming true.
+ *
+ * Not handled, and worth knowing: **nothing in this repo pauses on background.** The tick keeps running
+ * while the app is hidden, exactly as three `refetchInterval`s already do. That is a battery question for
+ * whoever adds visibility handling, not a correctness one — and it is one of the arguments for the socket.
  *
  * ## What it deliberately does not do
  *
@@ -66,8 +97,16 @@ import { dataSource as appDataSource } from './datasource'
 export function useLiveEtas(
   stopId: string | undefined,
   opts: { source?: DataSource; enabled?: boolean; refreshAfterMs?: number } = {},
-): void {
+): { now: number } {
   const { source = appDataSource, enabled = true, refreshAfterMs } = opts
+  const tickMs = refreshAfterMs ?? CLIENT_POLICY_DEFAULTS.refreshAfterMs
+  const [now, setNow] = useState(() => Date.now())
+  // The clock, and why this hook of all places owns it — see the block comment above.
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), tickMs)
+    return () => clearInterval(tick)
+  }, [tickMs])
+
   const queryClient = useQueryClient()
   useEffect(() => {
     if (!stopId || !enabled) return
@@ -82,4 +121,6 @@ export function useLiveEtas(
     )
     return () => subscription.unsubscribe()
   }, [stopId, enabled, refreshAfterMs, source, queryClient])
+
+  return { now }
 }

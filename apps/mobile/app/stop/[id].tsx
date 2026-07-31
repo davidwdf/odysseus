@@ -121,13 +121,18 @@ export default function StopDetail() {
   // `applyLiveEtasToStopDetail`, and which engine is behind the seam is not something this screen knows.
   // `enabled` waits for the first payload, because a pushed reading has nothing to merge into until then and
   // a dropped one is not re-sent — see the hook.
-  useLiveEtas(id, { enabled: query.isSuccess, refreshAfterMs: policy.refreshAfterMs })
+  // `now` comes back out of the subscription hook on purpose: `refetchInterval` was this screen's clock as
+  // well as its fetch, so the hook that replaced the fetch hands the clock back. Without it the freshness
+  // cue freezes — see the hook. Read `Date.now()` here instead and the ETA rows silently stop ageing.
+  const { now } = useLiveEtas(id, {
+    enabled: query.isSuccess,
+    refreshAfterMs: policy.refreshAfterMs,
+  })
 
   const stop = query.data?.stop
   const routes = query.data ? dedupeRoutes(query.data.routes) : []
   const members: StopDetailPole[] = query.data?.members ?? []
   const multiPole = members.length > 1
-  const now = Date.now()
 
   const cleanName = stop ? titleCaseName(splitStopCode(stop.name[locale]).label) : ''
   const here = loc.status === 'ready' ? { lat: loc.lat, lng: loc.lng } : null
