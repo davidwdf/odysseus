@@ -1992,7 +1992,9 @@ rather than the docs. **The blocking open question above is unchanged** — this
     rule 2 was encoded only as `view` ✗→ `adapters`. It is now
     `scripts/check-view-transport-free.mjs` in the `boundaries` chain: five source patterns (a constructed
     socket, the factory spelling, a `ws://` literal, `fetch(`, a `/v1/` path) over 74 files in five policed
-    dirs, with seven selftest scenarios, two controls and the live tree as the last one
+    dirs, with seven pattern scenarios, **four allowlist cases** and the live tree as the last one — the
+    allowlist cases exist because the review found the matcher exempting a *line* rather than a rule, over a
+    selftest that had never executed it
     ([ADR-056](#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)).
     It took four waves and a work package that needed it to be true. Still open: `packages/ui/preset.js` and
     `global.css` sit outside the policed `src` directories and are unpoliced; and the full `Date`/`Intl` ban in
@@ -2413,9 +2415,11 @@ rather than the docs. **The blocking open question above is unchanged** — this
   is still a placeholder.
 
 ## ADR-056 — The live protocol: frames, a sharded hibernating `EtaHub`, and what we could not verify
-- **Status:** **Decided and implemented 2026-07-30** (Wave 5: WP5-0 … WP5-3). Implementation:
+- **Status:** **Decided and implemented 2026-07-30** (Wave 5: WP5-0 … WP5-3), **extended 2026-07-31** with
+  decisions 13–19, which an adversarial review over the finished diff forced. Implementation:
   `packages/contract/src/wire/live.ts` + `asyncapi.json` (emitted, committed, gated) ·
-  `packages/core/src/live.ts` + `spec/live.spec.json` (109 corpus rows) · `packages/ports/src/live-transport.ts` ·
+  `packages/core/src/live.ts` + `spec/live.spec.json` (row counts live in the generated table,
+  `packages/contract/README.md` §6 — no document restates them by hand) · `packages/ports/src/live-transport.ts` ·
   `packages/api-client/src/live/{engine,poll,memory,socket,controller}.ts` + `src/endpoint.ts` ·
   `apps/edge/src/{live,eta-hub}.ts` · `apps/mobile/lib/useLiveEtas.ts` ·
   `scripts/check-view-transport-free.mjs` · `scripts/check-one-endpoint-declaration.mjs` ·
@@ -2531,8 +2535,10 @@ rather than the docs. **The blocking open question above is unchanged** — this
      a refused upgrade's taxonomy body is **unreadable by a browser** — the WebSocket API exposes neither
      status nor body — so the readable rejection path is the snapshot's echo and `status` frames, and the
      envelope is for `curl`.
-  10. **Four caps, each bounding a different quantity, none tuned against a measurement.** 12 targets per
-     connection · 48 targets per shard · 64 sockets per shard · 8 KiB per client frame. A `subscribe` frame is
+  10. **Five caps, each bounding a different quantity, none tuned against a measurement.** 12 targets per
+     connection · 48 targets per shard · **12 CTB routes per place per round** · 64 sockets per shard · 8 KiB
+     per client frame. (It was four until the shard cap's arithmetic was measured; the CTB budget is the term
+     that decides a round's fan-out and it had no cap at all — see below and decision 15.) A `subscribe` frame is
      [ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)'s
      `radius=50000` amplification with a longer lever — it names an unbounded list of stops, each costing a
      place read plus a coalesced upstream call *every round, for as long as the socket is open*. Each cap
@@ -2543,7 +2549,10 @@ rather than the docs. **The blocking open question above is unchanged** — this
      of 24** — ≈67 s of queued fetching at six simultaneous outgoing connections, *past* the 45 s cadence
      floor — not the ≈100–150 calls / ≈6 s first published here. So a round passes the DO's own
      `LIVE_CTB_BUDGET = 12`, as `/v1/nearby` already did, and the same 48 places cost **785 calls ≈ 39 s**,
-     inside the floor. (8 KiB keeps a canonicalised session inside half of the attachment's 16,384-byte
+     inside the floor. **39 s against a 45 s floor is not a comfortable margin, and is stated rather than
+     rounded:** if either the cap or the cadence moves, that is the number to recompute, and
+     `apps/edge/test/eta-hub-caps.test.ts` is what holds the budget itself in place. (8 KiB keeps a
+     canonicalised session inside half of the attachment's 16,384-byte
      limit; that one was right.) Excess targets are **rejected and named**, never truncated
      silently, because a socket watching half a rider's list is the silent filter ADR-008 rules out. **The
      trade we accept: a cap is itself a lock-out vector** — 64 sockets from one script would refuse the 65th
@@ -2565,6 +2574,160 @@ rather than the docs. **The blocking open question above is unchanged** — this
      the merge asks for all routes") turned out to be exactly a shard's poll set. Nothing in `eta-hub.ts`
      decides anything a corpus could pin, which is the property that makes the server side portable evidence
      rather than a second implementation of the protocol.
+
+  **Decisions 13–19 were forced by an adversarial review over the finished diff (2026-07-31).** Six
+  read-only finders raised 28 candidates; three skeptics, one per area, judged 25 and **confirmed 13**. Most
+  of the 13 were repairs and are in the commit log; the seven below changed what this ADR *decides*, and each
+  is recorded with the defect it prevents rather than with the diff that closed it. Two facts about the
+  review itself belong in the decision record, because they are the reason the wave's own gates did not
+  substitute for it: **every one of the 13 was in code that passed `typecheck`, `test`, `lint`, `boundaries`
+  and a `--dry-run` bundle**, and **three were regressions that arrived by *removing* a line** — a served
+  threshold that stopped being in force, a failed first load that became permanent, and a freshness cue that
+  could never fire. Nothing in this repo can see a deletion whose loss is a behaviour.
+
+  13. **A boarding point is part of a route row's identity: `operator|routeNo|bound|stopId`.** (The owner's
+     call, 2026-07-31, chosen from three options.) `dedupeRoutes` discarded the pole on a comment claiming it
+     was noise. It *is* noise for KMB and Citybus — CTB 969 appears three times at one pole, all bound for
+     Causeway Bay, timetable variants of one bus, and those share a pole so they still collapse — and it is
+     **identity for GMB**, where numbers repeat: at Tai On Street `GMB:20:outbound:2002320` boards at one pole
+     for Chai Wan (Fung Yip Street) while `GMB:20:outbound:2002319` boards at another for Chai Wan Industrial
+     City, both circular so both "outbound" on every leg, so direction could not separate them either. Fused,
+     the second destination was never shown, and where 20 was a pole's only route **the pole's whole group
+     vanished from the list while its dot stayed on the map — 21 poles emptied in the 2026-07-27 build.** This
+     ADR owns the fix because the live protocol is what made it visible: `/v1/etas/:id` dedupes across the
+     whole place keeping the sooner arrival, so the merge could fill only one of two poles' rows, and
+     `dedupeRoutes` picked its survivor *by which row has a reading* — so the surviving row's destination
+     text, its lit map dot and its scroll target followed the sooner kerb and **moved as buses departed**
+     (measured against live upstream: GMB 68K publishing at both poles 11 s apart, and a pair flipping between
+     "Kai Ham" and "Ho Chung"). **The corpus had pinned the defect twice and argued both ways:** one
+     `knownDefect` row's `why` prescribed exactly this key, and a second row pinned the *flip* as intended
+     behaviour — that one is renamed and now pins the fix, exercising both halves of the key at once (same-pole
+     variants still collapse, the second pole keeps its own row). `knownDefect` rows 4 → 3. Two costs stated
+     rather than smoothed over: Tin Shui Wai Park's two members both print the stop code **TN510**, so 269D
+     now renders twice under headings that look identical (**WP5-10** — a heading is the wrong thing to fix by
+     fusing two services); and the edge still dedupes across poles, so at most one of a line's poles can carry
+     a reading. That residual is the canonical model **under-normalising**, not a client bug: the model's unit
+     of *an arrival* is (line, place) while its unit of *a row* is now (line, pole), and they have to be the
+     same unit — the pole is the one a rider walks to. **WP5-9.**
+  14. **A failed *first* round is not an empty world, and "nothing" includes a permanent rejection.**
+     Decision 5's rule held from round **two**: the poll emulator's `seq === 0` branch published whatever came
+     back, so a first round in which every request threw sent `snapshot { etas: [] }` — the frame that means
+     *this stop has no arrivals*. The Place screen paints minutes from its own `/v1/stop/:id` fetch and then
+     blanks one frame later, because `applyLiveEtasToStopDetail` nulls a row it cannot match (correctly — that
+     is `gone`'s honesty rule); the `retrying` status that would explain it cannot reach a listener whose
+     signature is `Eta[]`; and since WP5-0 the screen no longer polls while its query succeeds, so nothing
+     repaired it for a whole cadence. Worse, the blanked document is still `status: 'success'`, which is
+     exactly what ADR-058's persister dehydrates, so an offline start replays the blank instead of the
+     arrivals the persister exists to keep. A round that learned nothing now sends nothing and `seq` stays 0.
+     **The decision is in what "learned nothing" excludes**, and the first cut got it wrong: suppressing the
+     snapshot whenever no target *answered* also took the echo away from the case that needs it most — a
+     target rejected `retryable: false` leaves the watch set, and the empty snapshot is then not a claim about
+     buses but the accepted-set echo saying *we are not watching what you asked for*, the only signal a rider
+     gets that a saved favourite has stopped resolving. The corpus row that exists for that shape went red.
+  15. **A full shard rejects targets; it does not refuse riders — and cap excess is `internal` /
+     `retryable: true`, never `bad_request`.** `LIVE_MAX_TARGETS_PER_SHARD` was read at exactly one site, the
+     upgrade, and a `subscribe` frame reaches the same state without passing it. That frame is the *normal*
+     path — per-stop route narrowing, and `socket.ts` sends a changed target set on the open connection rather
+     than reconnecting — so the real bound was `LIVE_MAX_SOCKETS_PER_SHARD × LIVE_MAX_TARGETS_PER_CONNECTION`
+     = **768**, sixteen times the documented one, and the `readings` table's stated "≤ 48 rows" went with it.
+     The refusal was also a lock-out: once any five sockets had pushed a shard past 48, every subsequent
+     *legitimate* upgrade got `500 shard is at capacity` — a status and a body the browser WebSocket API
+     exposes to nobody, classified retryable, which `socket.ts` then reconnects on for ever. **One anonymous
+     script could take a shard's stops away from every rider watching them, and their whole experience of
+     those stops would be a reconnect loop.** So the cap moves to `subscribe()`, the one path every
+     subscription takes (the upgrade calls it too), and is applied through the rejection mechanism decision 10
+     already promised: sliced greedily in canonical order so `fits[0] === kept[0]` and a capped connection
+     stays on the shard `liveShardFor` routed it to, and counted with the kernel's `acceptTargets`, so a
+     target naming a stop somebody already watches costs the shard nothing and is not refused — which is the
+     case the whole sharded design exists for. **The taxonomy is the decision, and it is not the obvious
+     one.** `retryable: false` is the wire's instruction to *prune*: ADR-052's own reasoning is that a Widget
+     holding a deleted favourite must be able to drop it permanently. A full shard is **our** fault and the
+     rider's stop is perfectly fine, so the excess goes out as `internal` with `retryable: true`, in a second
+     `status` frame — the same argument the refused upgrade already made for the same condition, kept rather
+     than deleted along with the refusal.
+  16. **The hook that replaces a screen's `refetchInterval` returns the screen's clock.** `refetchInterval`
+     did two jobs and only one was obvious: it fetched, and it **re-rendered** — and a screen's
+     `const now = Date.now()` advances only when something re-renders it. WP5-0 deleted it and took the clock
+     with it. A round in which nothing changed calls no listener (decision 5, deliberately),
+     `useClientPolicy` has a `staleTime` and no interval, and `refetchOnWindowFocus` is `false`, so on a quiet
+     stop nothing re-rendered at all and `etaReadout`'s `stale` flag — the one cue that says *these times have
+     stopped arriving* — could never fire. Two minutes after the last reading, one minute before the bus was
+     due, the screen still read "4 min" with no hint that anything had stopped: the
+     [ADR-008](#adr-008--eta-honesty-approximations-never-fake-precision) failure the whole honesty design
+     exists to prevent, introduced by removing a line. **Only one of the two halves is a bug**, and separating
+     them is the decision: the *label* ageing on a coarse cadence is what riders have seen since v1 and is not
+     the countdown ADR-008 forbids — that rule bans fabricated precision, not arithmetic on a timestamp we
+     were handed — while the *stale flag never firing* is the regression. Both ride on one mechanism, a `now`
+     that moves, so `useLiveEtas` returns the tick, on the served `refreshAfterMs`. Not a separate `useNow` a
+     screen must remember to call: converting a screen off `refetchInterval` is precisely the moment its clock
+     stops, and a hook that hands the replacement back cannot be half-adopted. A grep-level gate asserting
+     *"calls `useNow`"* would not have helped either — it passes on a screen that calls it and then reads
+     `Date.now()` anyway, the same *referenced is not rendered* trap that killed WP4-1's cheap gate. Recorded
+     and not fixed: nothing pauses the tick while the app is hidden, exactly as three surviving
+     `refetchInterval`s already do not — a battery question for whoever adds visibility handling, and one more
+     argument for the socket.
+  17. **The two engines must re-echo a mid-stream drop identically, and only a `snapshot` can.** A `delta`
+     cannot restate membership, because only `SnapshotFrame` carries `targets`. When a round drops a target
+     permanently the shard therefore sends a corrected snapshot in place of the delta; the poll emulator's
+     re-echo was gated on `seq === 0`, so after round one it sent a delta. Same upstream, two different
+     clients: the socket client learns the set shrank while the poll client keeps an accepted set naming a
+     pole nobody polls, and its rider is then shown "no buses due" for a stop we are not watching — the silent
+     filter ADR-008 rules out, and the exact thing `SnapshotFrame.targets` exists to prevent. Both engines
+     re-echo now. **The honest part is why no existing test could catch it:** the scenario matrix's
+     `summarize()` reports status and readings, and both engines reduce a permanent drop to the same readings,
+     so the row that exercises this passed before and after — and adding `targets` to `summarize` would have
+     turned it green while *asserting the stale echo*, because the scripts are hand-written to describe one
+     engine. That is the limit of comparing two engines against a script rather than against each other, and
+     it is what **WP5-5** buys. The assertion is a separate test driving both engines through one drop.
+  18. **The accepted-set echo has a reader, and it stops at the controller rather than at `EtaListener`.**
+     The contract says in as many words what a client does with `SnapshotFrame.targets` — *"compare it with
+     what you sent and tell the rider about the difference"* — and nothing could: `applySnapshot` returned
+     `{ seq, etas, status }` and dropped the field, so on all three platforms the one comparison the field is
+     published for was unperformable, while both producers deliberately send no other signal for a target
+     they refused. Reachable today, not hypothetical: ADR-058's persister rehydrates a `['stop', <id>]` entry
+     as `success`, so a pole saved under a pre-ADR-062 id makes the subscription's `enabled` true while
+     `acceptTargets` rejects the same id; the emulator then sends `snapshot{targets: [], etas: []}` +
+     `closed`, every row nulls, and the screen reads "no buses due" for a stop nobody is watching — which
+     reads as a data outage rather than as a stale favourite. `LiveSession` gains `targets`, carried through
+     `LiveEtaUpdate` to the controller's holder, and it is kept **verbatim, never re-derived**: a client
+     filtering the server's answer through its own `acceptTargets` is the reason `?targets=` goes out
+     unfiltered in the first place. `EtaListener` is **unchanged**, because ADR-004 fixes `watch()` at
+     `(targets, onUpdate) => Subscription`; the comparison belongs to a caller holding a
+     `createLiveEtaController`, which is what `useLiveEtas` becomes when Favourites adopts it. **Whether to
+     *display* the difference is a product question with an i18n key attached and is deliberately not decided
+     here:** "not updating" is true and says nothing about why, "this stop has moved or closed" is a claim
+     about the world a parse failure cannot support, and "remove it?" is an action needing a confirm and a
+     store write. Five corpus rows had pinned the discard without arguing for it and now assert the
+     carry-through. `SnapshotFrame.targets` also comes **off** the reader-less-field register at the end of
+     this ADR: that list is `SnapshotFrame.at` / `DeltaFrame.at`, and now nothing else.
+  19. **The reconnect schedule is a kernel rule; the timer is not.** `packages/ports/src/live-transport.ts`
+     asserted that the reconnect policy *"is a policy three platforms must not each invent, and it is written
+     down once in `createSocketTransport`"* — two paragraphs below a table naming `URLSessionWebSocketTask`
+     and OkHttp as the iOS and Android implementations, neither of which can read TypeScript. So on the two
+     platforms the port exists for, the policy was written down nowhere. This repo's own argument settles
+     which layer owns it, turned around: `nextLiveCadenceMs` is **server-only**, has one consumer, and is a
+     kernel export with twelve corpus rows on the ground that a hand-port would otherwise transcribe an
+     unexplained integer — so a *client* rule all three platforms reconnect by has a stronger claim than that,
+     not a weaker one. `liveReconnectDelayMs` and its four constants are kernel exports with 24 corpus rows;
+     `jitter` crosses as a **number, not a callback**, because a rule the corpus cannot state is a rule three
+     platforms will each invent; and every fallback leans one way — an attempt below one is treated as the
+     *first* attempt, because an exponent of −1 makes the first retry faster than the initial delay, i.e. a
+     tight loop against a server that has just dropped us. The **scheduling** stays in
+     `createSocketTransport`, where a test can watch the second attempt happen at the right moment, and
+     `SocketBackoff` stays as the injection point.
+
+  **Also confirmed and repaired, recorded here because two of the three were published claims.** The
+  allowlist in `check-view-transport-free` exempted a *line* rather than a rule — the matcher compared file
+  and snippet and never `pattern.id`, so a `fetch(` or a `new WebSocket(` sharing a line with `/v1/tiles/`
+  in `tileSource.ts` was silently allowed — and its selftest had **never executed the matcher at all**:
+  sixteen green fixtures over code nothing ran. A policed directory that stopped existing dropped out in
+  silence, while the success line went on printing "5 policed dirs" (`POLICED.length` is directories
+  *listed*); renaming `apps/web/src/` took the file count 74 → 60 with nothing reported, and that
+  directory's whole purpose is proving the kernel renderer-agnostic. And `asyncapi.json`'s first paragraph
+  claimed the two documents *"share `components.schemas` byte for byte"*, which is false for **34 of 34**
+  shared schemas — `$id` on all of them and `Eta`/`RouteDetail` structurally, because of the `$ref`-sibling
+  fold recorded in §"AsyncAPI, honestly". The emitter said so itself 85 lines above the claim; only the
+  sentence a native author reads *first* was wrong.
 
 - **The cadence is 45–60 s because of the data, not because of the cost.** The plan rested it on *"a 10–15 s
   alarm makes the DO more expensive than polling"*, and **that argument does not survive sharding** — once
@@ -2679,11 +2842,17 @@ rather than the docs. **The blocking open question above is unchanged** — this
     1 recorded and nobody owned for four waves: `pnpm boundaries` checks the *import graph*, so it cannot see
     `fetch('https://data.etabus.gov.hk/…')`, which imports nothing. One allowlist entry, discovered by
     running it: `apps/mobile/lib/tileSource.ts`, whose whole contract is a URL template on our own Worker.
-  - **Two engines now implement two rules each, and only review binds them.** "A failed round is not a
-    departure" and "an unchanged round is silent" exist in `poll.ts` and in `eta-hub.ts`; the scenario matrix
-    drives the poll emulator against a *hand-written* script, never against the shard. Both defects this wave
-    found in its own code — `Eta.stopId` and the terminal-rule overreach — survived because **no test spanned
-    two implementations of one rule.** Named as WP5-5 rather than left as a resolution.
+    **The allowlist's own matcher was one of the review's findings** — it exempted a line rather than a rule,
+    and the selftest had never run it. An entry now has to name the rule it was granted for, and the selftest
+    has a case for the over-match.
+  - **Two engines now implement three rules each, and only review binds them.** "A failed round is not a
+    departure", "an unchanged round is silent" and — since decision 17 — "a mid-stream drop is re-echoed"
+    exist in `poll.ts` and in `eta-hub.ts`; the scenario matrix drives the poll emulator against a
+    *hand-written* script, never against the shard. Both defects this wave found in its own code —
+    `Eta.stopId` and the terminal-rule overreach — survived because **no test spanned two implementations of
+    one rule**, and so did the re-echo divergence, which was found by an agent's judgement while deciding
+    whether to widen `summarize()` and not by anything mechanical. Three for three. Named as WP5-5 rather than
+    left as a resolution.
   - **`retrying` is used for a per-target failure even when it is permanent**, and `seq` is monotonic across a
     re-subscription on the server while the poll emulator resets it. Two divergences the matrix does not
     cover, recorded rather than accidental.
@@ -2694,7 +2863,8 @@ rather than the docs. **The blocking open question above is unchanged** — this
     (ADR-064 binds the status to the meaning so a call site cannot pick one) and `bad_request` carries the
     meaning that matters. `upgrade_required` and `rate_limited` are recorded as the taxonomy's next two
     members, owned by WP0-5.
-  - **Test totals 705 → 891** (core 709 · edge 86 · api-client 42 · mobile 34 · web 20), and
+  - **Test totals 705 → 934** (core 738 · edge 93 · api-client 47 · mobile 36 · web 20 — counted on a clean
+    clone, because a figure taken from a cached run is the thing ADR-070 exists about), and
     `packages/api-client` has a `test` script for the first time — before this wave `turbo run test` skipped
     the package **silently**, so `EdgeClient.watch()` had never been executed by anything.
   - **`main` gets its first CI workflow**, which is the cheap half of WP0-5 and needs no credentials
@@ -2725,7 +2895,24 @@ rather than the docs. **The blocking open question above is unchanged** — this
     real build. `EdgeClientOptions.liveUrl` and `.transport` are the plumbing; `EXPO_PUBLIC_LIVE_URL` /
     `VITE_LIVE_URL` and `…_LIVE_TRANSPORT` are the documented spellings and **nothing reads them**. There is
     deliberately no `auto` value in the plan: an automatic choice implies a socket→poll fallback, and
-    `createSocketTransport` reconnects for ever rather than degrading.
+    `createSocketTransport` reconnects for ever rather than degrading. **This is also the bounding fact for
+    every shard defect the review found:** five of the thirteen were in `eta-hub.ts`, and no rider was
+    affected by any of them because nothing can reach the object — which is equally the reason five of them
+    shipped green. Whoever does WP5-6 is un-latching those five fixes, and should read
+    `.context/wave5/review/VERDICTS-do.md` before assuming the shard is now sound.
+  - **WP5-9 — one reading per boarding point.** Decision 13's residual, and the owner framed it better than
+    the finding did: *"we need to normalise the data to our own structure so we can understand what we're
+    doing and consistently present it."* `dedupeEtas` collapses on `operator|routeNo|bound`, so a place
+    publishes at most one reading per line and the sibling pole's arrival is discarded — measured, GMB 68K had
+    buses at both poles 11 s apart and we published one. Now that a row is per pole, the second pole reads "no
+    reading right now" while a bus is genuinely due there. A wire change: both `/v1/etas/:id` and
+    `/v1/stop/:id`'s embedded readings grow, so it needs its own ADR, a payload-size check at the biggest
+    interchange, and a look at whether `NearbyStop.etas`' `maxRows` still reads honestly when a line can
+    appear twice.
+  - **WP5-10 — a pole heading labelled by something that distinguishes it.** The display cost decision 13
+    accepted: two members of one place can print the same stop code (TN510 at Tin Shui Wai Park), so one route
+    renders twice under headings that look identical. `bearingOctant` is already in the kernel and already
+    renders the compass caption.
   - **WP5-7 — Nearby is not a live adopter, and the reason is a request-count regression.** Its live target set
     is up to six places, so the poll emulator would issue six requests per window where the screen issues one.
     The fix is a batch `/v1/etas?ids=…` (additive per ADR-052 §5) and then adoption — not "later, somehow".
@@ -2888,13 +3075,12 @@ rather than the docs. **The blocking open question above is unchanged** — this
      the `src` that implements it, so moving a package takes its spec along. `groups` keyed by export name;
      cases are `{name, why?, knownDefect?, args, expect}`; `version: 1`. **No `undefined`, no functions, no
      comments** — JSON `null` is the absent value and is translated at the boundary in `test/corpus.ts` — because
-     an XCTest or JUnit suite has to read these rows verbatim. **13 corpora, 82 groups, 677 cases, 4
-     `knownDefect` rows** as of Wave 5. (WP1-5 shipped 36 groups / 274 cases; every wave since has grown it —
-     11 / 65 / 510 at Wave 3, and Wave 5's `live.spec.json` added 9 groups and 109 rows. This line has now been
-     stale twice, which is the argument for the mechanism rather than the number: WP3-3 stopped restating the
-     figure by hand, so `packages/contract/README.md` *generates* it and
-     `packages/contract/scripts/check-native-guide.mjs` fails when it drifts. **Read the generated figure, not
-     this sentence.**)
+     an XCTest or JUnit suite has to read these rows verbatim. **The figure is generated, and this sentence no
+     longer states it** — read the table in `packages/contract/README.md` §6, which
+     `packages/contract/scripts/check-native-guide.mjs` fails on when it drifts. (WP1-5 shipped 36 groups /
+     274 cases; every wave since has grown it, and this line was found stale **three** times — at Wave 3, at
+     Wave 5, and again inside Wave 5 when the review pass added rows. Three strikes is enough: the mechanism is
+     the answer and a hand-written count here is just a fourth chance to be wrong.)
   2. **`@spec <module>#<export>`** in an export's JSDoc marks it corpus-specified. Both halves are checked
      against the file stem and the symbol, so a tag cannot drift onto the wrong corpus or outlive a rename.
   3. **`check-spec-coverage.mjs` enforces both directions** — a tagged export with an empty or missing corpus,
@@ -3758,11 +3944,18 @@ pre-existing and unaddressed; it earned its keep here.
   - **`origin/main` is red until this lands.** Worth stating plainly rather than folding into a changelog:
     the merged Wave 4 PR left the tree failing a gate, and the only reason nobody saw it is that the cache
     hid it. This is the argument for WP0-5's `ci.yml` in one sentence — a clean checkout is the only
-    honest test, and nothing here performs one.
+    honest test. ✅ **Since Wave 5 something performs one:** `.github/workflows/ci.yml` runs
+    `pnpm install --frozen-lockfile` and the whole gate set on a fresh checkout for every PR and every push
+    to `main` ([ADR-056](#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)).
   - **The declaration is per-package and can go stale.** A future gate reading somewhere new must add its
     own `inputs` entry, and nothing enforces that it does. The general fix would be a check that every
     file a task opens is inside its hash, which needs tracing rather than static analysis; recorded as the
-    residual rather than pretended away.
+    residual rather than pretended away. **It fired twice more inside Wave 5**, which is how quickly: `apps/edge`
+    had no `turbo.json` at all while its suite asserts the OpenAPI document's shape *and* imports the kernel's
+    live constants, and `apps/mobile` declared the corpus but not `packages/core/src`, which its two new suites
+    read through the components they render. Both now declare it, proven by a content change to
+    `packages/core/src/live.ts` turning both tasks from `cache HIT` to `cache MISS`. Instances four and five of
+    the same shape, in the ADR that exists to record it.
   - **The shared worktree cache is a hazard in its own right.** A pass computed in one checkout satisfies
     a task in another, so "it was green on my machine" can mean "it was green in a checkout you have never
     seen". `--force` remains the right tool when *diagnosing* a suspicious green; it is the wrong tool for
