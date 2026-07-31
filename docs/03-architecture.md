@@ -41,13 +41,18 @@ interface DataSource {
   getRoute(routeId): Promise<RouteDetail>                 // static + ETAs; carries `reverse?` (ADR-046)
   getStop(stopId): Promise<StopDetail>                    // static + ETAs
   getEtas(stopId, routeIds?): Promise<Eta[]>              // live
-  watch(targets): Subscription                            // v1: polling shim; v2: WebSocket
+  watch(targets): Subscription                            // a frame protocol over a pluggable transport
   getClientPolicy(): Promise<ClientPolicy>                // the numbers the server owns (ADR-053)
 }
 ```
 
-`watch()` is the key abstraction: in **v1** it's a polling shim over `getEtas`; in **v2** it
-becomes a real WebSocket subscription. The UI calls `watch()` either way.
+`watch()` is the key abstraction, and since Wave 5 both engines are *the same protocol* rather than two
+generations of one method (ADR-056). It runs `snapshot`/`delta`/`status` frames over a `LiveTransport`;
+the **default transport is a poll emulator** — HTTP polling on a timer, wearing the frames — and
+`createSocketTransport` is the real `/v1/live` socket. A screen subscribes and never learns which
+engine answered: the listener's `Eta[]` is canonically ordered by the kernel, so the two are
+byte-identical over identical data, and `apps/mobile/lib/useLiveEtas.ts` writes the result through to
+the query cache on the key `useQuery` already owns (ADR-058 keeps working).
 
 ### The line between the server and the client (ADR-053)
 
@@ -117,20 +122,52 @@ Client ──poll every ~20–30s──▶ Worker /v1/etas/:id
 - Pure serverless: trivial to scale, near-zero cost, minimal ops.
 - Trade-off: no push; the client drives polling; a cold stop pays one upstream round-trip.
 
-### Phase 2 — Normalization engine + Durable Objects + WebSocket push
+### Phase 2 — the live socket: a sharded `EtaHub` Durable Object (built; ADR-056)
 ```
-Client ──WebSocket──▶ Worker (upgrade) ──▶ DurableObject("stop:<id>")
-                                              │  maintains subscriber set (WS hibernation)
-                                              │  alarm() every ~10–15s → poll upstream → normalize
-                                              │  on change → broadcast diff to subscribers only
-                                              └─ idle (no subscribers) → stop polling
+Client ──1 WebSocket──▶ Worker  GET /v1/live?targets=<canonical ids, %-encoded>
+                          │  Upgrade? Origin? parse + canonicalise targets
+                          │  liveShardFor(targets) → "live-<n>"   ← the SERVER hashes, not the client
+                          ▼
+                     DurableObject EtaHub("live-<n>")   ·  8 shards, SQLite-backed
+                          │  ctx.acceptWebSocket(…) + the accepted target set in the ATTACHMENT
+                          │  snapshot ──▶ this client   (whatever the shard already knows)
+                          │  alarm() every 45→60 s: poll the UNION of every subscriber's targets
+                          │     through the same coalescer /v1/etas uses (ADR-057)
+                          │     diffEtas(previous, current) → delta { changed, gone }
+                          │     nothing changed → send NOTHING, widen the cadence one step
+                          └─ no subscriber with anything to watch → no alarm at all
 ```
-- We poll upstream **only for stops users are actually watching** — efficient and kind to the source.
-- **WebSocket Hibernation** keeps idle connections almost free, so many open subscriptions scale cheaply.
-- This is the foundation for v3 features: "bus approaching" push notifications, alerts, history.
-- Swapped in behind `DataSource.watch()` — the apps barely change.
-- Trade-off: stateful, more moving parts, slightly more cost — justified only where push matters
-  (watched stops & favorites), which is exactly where we apply it.
+- **Sharded, not one object per stop, and one socket per client.** A shard serves whatever its
+  subscribers ask for; the shard is derived from the client's *target set*, so everyone watching the
+  same places shares one upstream poll while a rider watching six places still holds one socket. The
+  cost is that two *partially* overlapping target sets land on different shards and poll the shared
+  stop twice — bounded by the shard count, and it duplicates reads, never rider-visible state.
+- **The object holds no rules.** The diff, the cadence, the shard hash and the accepted-target union
+  are all `packages/core` functions with corpus rows; `apps/edge/src/eta-hub.ts` is plumbing around
+  them, which is what keeps the server side portable evidence rather than a second implementation.
+- **The cadence is 45–60 s because that is what the data does**, not to save money: a measured
+  upstream `data_timestamp` interval of ~45 s (28–60 s observed, n=1 route, one morning) means a
+  15 s alarm returns a byte-identical body two ticks in three — and the upstream CDN's `max-age=300`
+  and *non-monotonic* `generated_timestamp` mean some of those ticks cannot even see a fresher value.
+  It widens by 5 s per quiet round to a 60 s ceiling and snaps back to the floor when something moves.
+- **WebSocket Hibernation** is why an idle connection is nearly free: per-connection state lives in the
+  socket's attachment and the cadence in SQLite, so the runtime may discard the instance and rebuild
+  it. Note what is *proved* — a rebuilt instance recovers its subscription, its readings and its ramp
+  position — versus what cannot be observed locally at all: that workerd chose to hibernate (there is
+  no local knob; only an explicit eviction). Outgoing messages are free, incoming ones are billed 20:1,
+  and the keepalive is answered by the runtime's auto-response without waking the shard — so **reconnect
+  churn, not message volume, is what a socket costs.**
+- **Caps, because a `subscribe` frame is an amplifier**: 12 targets per connection, 48 per shard, 64
+  sockets per shard, 8 KiB per client frame. Excess is *rejected and named* in the snapshot's echo, never
+  truncated silently. What would actually protect the endpoint is zone rate limiting, which needs the
+  custom domain (WP0-5); the caps only stop one connection from fanning out.
+- **Swapped in behind `DataSource.watch()`** — and that claim is now tested rather than asserted: the
+  same screen renders identically from the poll emulator and from a scripted socket
+  (`apps/mobile/test/seam-substitution.test.tsx`), and a gate keeps transports out of the view layer.
+- **Not deployed.** The shard runs under `wrangler dev` and inside workerd in the suite, against the live
+  KMB feed; nothing has ever served a socket from a real domain (WP0-5). The shipped default engine is
+  still HTTP polling wearing the same frames, and selecting the socket engine is a source edit today.
+- This is still the foundation for v3: "bus approaching" push, alerts, history.
 
 > **Reminder of the ceiling:** even with push, ETAs are only as fresh as upstream's ~1-min
 > refresh. The win from sockets is *liveness, battery, and server-controlled cadence* — not

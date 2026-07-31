@@ -217,8 +217,12 @@ escaping, and nothing more. Expect to fix something the first time they are cons
   one today; the first that does should be a decision, not a guess inside a generated file.
 
 ## State & data on the client
-- **TanStack Query (React Query)** — server-state caching, dedupe, background refresh; the v2
-  socket pushes updates straight into the query cache.
+- **TanStack Query (React Query)** — server-state caching, dedupe, background refresh; a live
+  subscription pushes updates straight into the query cache. Built in Wave 5 (ADR-056):
+  `lib/useLiveEtas.ts` subscribes through `DataSource.watch()` and writes the merged result with
+  `setQueryData` on **the key `useQuery` already owns** (`['stop', id]`), never a key of its own —
+  that is what keeps ADR-058's persisted cache and its cold-start replay working, and the seam proof
+  fails when it is changed. Place detail is the first adopter; its `refetchInterval` is gone.
 - **Zustand** — light local UI state (selected direction, theme, favorites).
 - **AsyncStorage** — one persistence API across all three targets (`localStorage` on web, the
   native store on iOS/Android). It backs the preferences store (theme · appearance · locale ·

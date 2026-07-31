@@ -110,7 +110,7 @@ not "helpfully" add them.
 | **Design tokens** | DTCG JSON → CSS vars · Swift · Kotlin | `packages/ui/tokens.json` | all | Codegen output committed + `git diff --exit-code` |
 | **i18n** | ICU messages → TS · `.strings` · `strings.xml` | `packages/i18n` | all | Key-parity across en/zh-Hant/zh-Hans + `LocalizedString` branded type |
 | **Client policy** | Served at runtime, not compiled in | Worker | all | Resolves the live 3-way cap disagreement (below) |
-| **Live protocol** | AsyncAPI 3.0 frames | `packages/contract/src/live/` | all | Poll-as-emulator emits real frames; parity test vs a fake transport |
+| **Live protocol** | AsyncAPI 3.0 frames | `packages/contract/src/wire/live.ts` (**corrected** — one module beside every other wire shape, not a `src/live/` directory: the frames share the schema registry) | all | Poll-as-emulator emits real frames; scenario matrix vs a fake transport; `asyncapi.json` staleness + a dialect gate. **Not a codegen input** — see ADR-056 |
 
 ### Wire details a native developer will otherwise guess wrong
 
@@ -332,14 +332,69 @@ claims about what Swift will need; this one is testable now.
 
 ### Wave 5 — Phase 2 (DO + WebSockets)
 
+> **Status 2026-07-30: Wave 5 is COMPLETE bar the deployment — WP5-0 … WP5-3 landed and verified**
+> ([ADR-056](../08-decision-log.md#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)).
+> Built sequentially by four agents in **one** workspace rather than in parallel worktrees — the pieces are
+> disjoint by package, so sequencing cost wall-clock and nothing else, and the local `main` these worktrees
+> are cut from is at *"Initial commit"*, a hazard Wave 3 already paid for in a milder form. Nine corrections
+> to what is written below, recorded because the plan was wrong in ways worth knowing:
+> **(1) WP5-2's acceptance was vacuous, and its own row says so.** *"`git diff --stat` shows zero lines
+> changed under `apps/mobile/app/**`"* is zero **by construction**, because nothing under those paths reached
+> `watch()` at all — the row notes *"`watch()` has no callers today"* and no work package fixed it. That is
+> exactly WP4-0's shape one wave later: an acceptance presupposing an artefact that does not exist. The
+> prerequisite is **WP5-0** below, which is not in this plan.
+> **(2) WP5-1's "byte-identical listener output" is unachievable as written**, and the row does not mention
+> the reason: the poll emulator's order is whatever `/v1/etas` returned, while a delta protocol's order is
+> history-dependent. It needs a **canonical order in the kernel** — `(stopId, routeId)`, code-point — which
+> is the load-bearing design decision of the whole wave and is not in the row. With it, reversing a
+> transport's own ordering changes nothing (17/17 matrix rows still pass); without it no implementation could
+> pass.
+> **(3) The cost argument in *"Phase 2 cost model"* below does not survive sharding** and must not be used to
+> justify the cadence — see the correction under that heading. The cadence is 45–60 s because of a
+> *measurement of upstream*, which holds at any scale.
+> **(4) `docs/03`'s Phase 2 sketch was contradicted by shipped code**, not just by this plan: it described one
+> Durable Object per stop on a 10–15 s alarm. Rewritten to what exists, ceiling reminder and diagram intact.
+> **(5) The module map's `packages/contract/src/live/` is wrong** — the frames are one module,
+> `src/wire/live.ts`, beside every other wire shape, because they share the schema registry and the `wire/`
+> conventions. Likewise `packages/api-client/src/live.ts` is a **directory**, `src/live/`, holding four
+> independent things (engine · poll · memory · socket) plus the controller.
+> **(6) AsyncAPI is not the OpenAPI story again.** Its Schema Object is a superset of **draft-07, not
+> 2020-12**; there is **no AsyncAPI→Swift generator in existence**; Kotlin generation cannot serialise; and
+> `asyncapi diff` classifies a removed payload field as `unclassified`, so a gate failing on `breaking` would
+> go green on a deleted field. It is a specification artefact with a validator — ADR-056 says so at length,
+> and `packages/contract/README.md` §7 carries the register.
+> **(7) Two defects shipped on `main` were found by building this, and both survived because no test spanned
+> two implementations of one rule** — `Eta.stopId` served as the operator's raw id where the contract declares
+> it canonical (so the kernel merge matched **nothing, always**: 8 live readings at a Mong Kok place became 0
+> one second after paint), and the socket transport treating any `retryable: false` as terminal (so **one
+> stale favourite killed live ETAs for every stop a rider had**). Both fixed. Neither was reachable by
+> reading either side alone.
+> **(8) `packages/api-client` had no `test` script at all**, so `turbo run test` skipped the package
+> *silently* and `EdgeClient.watch()` had never been executed by anything. It has 42 tests now. Repo total
+> **705 → 891**; the kernel corpus is **13 files / 82 groups / 677 cases**.
+> **(9) `check-core-budget.mjs`, named in the risk table below, still does not exist**, so nothing mechanical
+> stopped `packages/core/src/live.ts` at 691 lines (57% comment, in line with `eta.ts`'s proportions).
+
 | ID | Title | Acceptance | Depends |
 |---|---|---|---|
-| **WP5-1** | AsyncAPI frames + poll-as-emulator: refactor the `watch()` shim to emit real `Snapshot`/`Delta`/`Status` frames | Scenario-matrix test: byte-identical listener output from the poll emulator and a `MemoryTransport` fake | WP1-1 |
-| **WP5-2** | Seam proof | Substitute a `FakeSocketDataSource`; `git diff --stat` shows **zero** lines changed under `apps/mobile/app/**` and `components/**`. Converts ADR-004 from aspiration to gate — note `watch()` has **no callers today** | WP5-1 |
-| **WP5-3** | Sharded `EtaHub` DO (not one DO per stop) with WebSocket Hibernation and **adaptive alarm cadence** | Hibernation verified; alarm cadence ~45–60 s baseline | **WP0-1** (hard) |
+| **WP5-0** | *(added 2026-07-30, ✅ done — not in the original plan)* Give `watch()` a real consumer: `apps/mobile/lib/useLiveEtas.ts` + Place detail's `refetchInterval` replaced by a subscription that writes through to the same query key | The screen's request log is one `/v1/stop/:id` on mount and then `/v1/etas/:id` at the cadence, driven in a browser; ADR-058's persisted cache still replays |
+| **WP5-1** | *(✅ done)* AsyncAPI frames + poll-as-emulator: refactor the `watch()` shim to emit real `Snapshot`/`Delta`/`Status` frames | Scenario-matrix test: byte-identical listener output from the poll emulator and a `MemoryTransport` fake — **achievable only with correction (2)'s canonical order** | WP1-1 |
+| **WP5-2** | *(✅ done, acceptance rewritten)* Seam proof | ~~`git diff --stat`~~ → `apps/mobile/test/seam-substitution.test.tsx` renders one screen from two data sources sharing nothing below the seam and asserts the rendered text **and** the cache payload, with a hand-written control so a subscription that delivered nothing cannot pass; plus `scripts/check-view-transport-free.mjs`, which states the property the diff was standing in for — a screen *cannot* reach a transport | WP5-0, WP5-1 |
+| **WP5-3** | *(✅ done bar deployment)* Sharded `EtaHub` DO (not one DO per stop) with WebSocket Hibernation and **adaptive alarm cadence** | Hibernation's *consequence* verified on a cold instance (attachment + ramp recovered); its *policy* is not locally observable and the suite says so. Cadence 45→60 s, observed at +0/+45/+91 s against the live KMB feed | **WP0-1** (hard) |
 
 **WP0-1 is a hard prerequisite for WP5-3.** DO instances are 128 MB each; N instances each parsing an
 8.3 MB dataset (≈20 MB heap measured) is not survivable.
+
+**Added 2026-07-30 — five rows the wave found and deliberately did not do.** Each is a named owner for
+something that would otherwise sit in ADR-056's prose, which is how WP2-8 and WP2-9 nearly did not happen.
+
+| ID | Title | Scope & why | Acceptance | Size |
+|---|---|---|---|---|
+| **WP5-4** | **Per-pole ETA failure reporting** — `coalesce` must not turn an outage into "no buses" | `coalesce` resolves a *rejected* upstream call to `[]`, so `stopEtas` returns an empty list **successfully** and the shard's `diffEtas` reports every reading `gone`: *"a failed round is not a departure"* defeated one layer below where it is enforced. **Pre-existing and identical on HTTP** (`/v1/etas/:id` already answers `200 []` for a stop whose upstream is refusing) — the socket only makes it visible, because a screen blanks where a card was merely empty. The honest fix changes what `/v1/etas` and `/v1/nearby` can *say* (e.g. `{ etas, failed: string[] }`), so it needs an ADR of its own and must not ride along in a socket commit | A stop whose upstream refuses is distinguishable from a stop with no buses, on both the HTTP and the socket path; the shard reports `retrying` and **no** `gone` | M |
+| **WP5-5** | **Bind the two engines' failure semantics with a test, not a review** | Two implementations of *"a failed round is not a departure"* and *"an unchanged round is silent"* exist (`live/poll.ts`, `eta-hub.ts`) and the scenario matrix drives the poll emulator against a **hand-written** script, never against the shard. Both of the wave's own defects survived this exact gap | The matrix rows run against `EtaHub` through a real socket; a divergence in either rule fails | M |
+| **WP5-6** | **Make the socket engine selectable without a source edit** | `/v1/live` ships **unreachable from a real build**: `EdgeClientOptions.liveUrl`/`.transport` are the plumbing, `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` and `…_LIVE_TRANSPORT` are the documented spellings, and nothing reads them. Note the deliberate absence of an `auto` value — it would imply a socket→poll fallback that does not exist | Both app shells select `poll`\|`socket` from the environment; the default stays `poll`; docs/10's table loses its two "nothing yet" rows | S |
+| **WP5-7** | **Batch `/v1/etas?ids=…`, then adopt live on Nearby** | Nearby is not the first adopter because its live target set is ≤6 places, so the poll emulator would issue 6 requests per window where the screen issues 1 — a real regression. `applyLiveEtasToNearby` is written and corpus-pinned with no consumer until this lands. Additive per ADR-052 §5 | Nearby subscribes; request count per window does not increase | M |
+| **WP5-8** | **A `--range` mode for `scripts/precommit-docs-check.mjs`** | The docs-freshness rule of CLAUDE.md rule 7 **has never been enforced anywhere**: the hook is not installed (`core.hooksPath` unset) and the script is a Claude Code `PreToolUse` hook that reads a tool-call payload on stdin and diffs the *index*, so in CI it exits 0 having checked nothing. `ci.yml` states that rather than shipping the green no-op | One declaration of the rule, applied per commit over a PR's range in CI, with a selftest that watches it fail | S |
 
 ## Phase 2 cost model
 
@@ -359,6 +414,34 @@ cadence.** So the naive 10–15 s alarm from `docs/03` makes DO *more* expensive
 burns 4× the requests to deliver identical data, because `docs/01` and ADR-008 already concede
 upstream refreshes only ~1/min. **Align alarms to ~45–60 s and DO wins decisively at scale.**
 Crossover lands around 40–45k DAU.
+
+> ⚠️ **Correction, 2026-07-30 (WP5-3 / [ADR-056](../08-decision-log.md#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)):
+> the cadence conclusion above is right and every number supporting it is wrong.** Read the ADR's
+> cadence section instead of this table.
+> - **The cost argument does not survive sharding**, which is what this plan itself mandates. Once one
+>   object serves many stops, a 15 s alarm costs ≈**$10/month per 1000 continuously-hot stops** more than a
+>   60 s one — so cost would *not* decide the cadence. Unsharded, the expensive meter is `setAlarm`, billed
+>   as **one row written** at $1.00/M (6.7× the request price), which this model does not have at all.
+> - **The right argument is a measurement of upstream**, which holds at any scale: distinct
+>   `data_timestamp` values arrive at a **mean 44.75 s** (28–60 s observed; n=4 intervals, one KMB route, one
+>   off-peak morning — a *first* measurement). A 15 s alarm returns a byte-identical body ~2 ticks in 3, and
+>   the CDN's `max-age=300` plus a **non-monotonic** `generated_timestamp` mean some of those ticks cannot
+>   see a fresher value at all.
+> - **"Polling (today, 20 s)" is false** — `CLIENT_POLICY_DEFAULTS.refreshAfterMs` is **30 s** (ADR-053), so
+>   every request count in that column is 1.5× too high (100k DAU → 60M req, $15 over, not $24).
+> - **"Crossover 40–45k DAU" is not reproducible**: ≈37k from this table's own inputs, ≈56k at the real
+>   cadence, and it rests on an unstated *"10 active minutes per user per day"*. Derive it or drop it.
+> - **All four DO cells are UNVERIFIED** — no working is shown, and they omit the $12.50/M GB-s duration
+>   rate, `setAlarm` rows and connection requests. The heading **"Measured/verified inputs" overclaims**:
+>   those are vendor-published rates (re-verified 2026-07-30; several moved when SQLite storage billing went
+>   live in January 2026), not measurements taken here.
+> - **The *"upstream refreshes ~1/min"* citation is empty.** `docs/01` contains no refresh figure and ADR-008
+>   contains none either — it is about not faking a countdown. The real citation is the KMB vendor
+>   specification (`docs/02:23-25`) plus the measurement above. `packages/core/src/policy.ts:39` cites the
+>   same missing source for `staleAfterMs`.
+> - **One meter that changes the design rather than the bill:** *outgoing* WebSocket messages — the entire
+>   ETA fan-out — are **free**, incoming ones are billed 20:1, and hibernation auto-responses are free and do
+>   not wake the object. So **reconnect churn, not message volume, is what a socket costs.**
 
 **Decide Phase 2 on UX, not cost** — battery (one socket vs 180 wakeups/hour), server-controlled
 cadence, and the foundation for Phase 3 push.
@@ -389,7 +472,11 @@ DO+WS is fourth. Do not let it jump the queue.
 | Cache-key growth from locale-in-path × snapped fix | Low | Measure post-launch; `snapFix` (WP2-6) is the counterweight |
 
 **Unverified assumption, flagged:** the ~500-hot-stop figure in the cost model is an estimate, not a
-measurement. Instrument it before committing to WP5-3.
+measurement. Instrument it before committing to WP5-3. *(2026-07-30: still an estimate, and note the figure
+"~500" appears nowhere in the cost-model section itself — that section states no hot-stop count at all, so
+this flagged assumption is invisible at the point of use. WP5-3 shipped without it, on a cadence justified by
+a measurement of **upstream** instead, which does not depend on concurrency. The number that now matters more
+is sockets per shard: 64 × 8 shards = 512 concurrent live clients before a refusal — WP0-5's to revisit.)*
 
 ## ADRs to write
 

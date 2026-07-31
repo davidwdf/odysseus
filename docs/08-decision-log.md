@@ -1986,11 +1986,18 @@ rather than the docs. **The blocking open question above is unchanged** — this
     bans the `toLocale*` **pattern** in the kernel — watched firing. **Fixed while the function had zero
     callers**, which made it free; it is not dead code (`proposals/00` P5, the countdown⇄clock toggle, is built
     on it), so after P5 shipped this would have been a visible change to every arrival row.
-  - **Known gaps, left visible rather than papered over:** a raw upstream URL *literal* in a screen
-    (`fetch('https://data.etabus.gov.hk…')`) is invisible to both tools — golden rule 2 is encoded only as
-    `view` ✗→ `adapters`; `packages/ui/preset.js` and `global.css` sit outside the policed `src` directories
-    and are unpoliced; and the full `Date`/`Intl` ban in the kernel still waits on Wave 2 moving time
-    *formatting* out to the view layer (`eta.ts` legitimately does `new Date(iso).getTime()`).
+  - **Known gaps, left visible rather than papered over:** ✅ **the first of these is closed as of
+    2026-07-30** — a raw URL *literal* in a screen (`fetch('https://data.etabus.gov.hk…')`) was invisible to
+    both tools, because `pnpm boundaries` checks the **import graph** and that line imports nothing, so golden
+    rule 2 was encoded only as `view` ✗→ `adapters`. It is now
+    `scripts/check-view-transport-free.mjs` in the `boundaries` chain: five source patterns (a constructed
+    socket, the factory spelling, a `ws://` literal, `fetch(`, a `/v1/` path) over 74 files in five policed
+    dirs, with seven selftest scenarios, two controls and the live tree as the last one
+    ([ADR-056](#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)).
+    It took four waves and a work package that needed it to be true. Still open: `packages/ui/preset.js` and
+    `global.css` sit outside the policed `src` directories and are unpoliced; and the full `Date`/`Intl` ban in
+    the kernel still waits on Wave 2 moving time *formatting* out to the view layer (`eta.ts` legitimately does
+    `new Date(iso).getTime()`).
   - **Budget: over, and recorded as over.** `layers.json` (70) + `generate.mjs` (146) = **216 lines against the
     plan's ~150** (+44%), of which ~37 lines are the determinism *policy* data (14 denied globals, 4 banned
     patterns) that Biome's JSON formatter expands one per line. It generates 759 lines of config, so the
@@ -2405,10 +2412,330 @@ rather than the docs. **The blocking open question above is unchanged** — this
   Miniflare-local KV/R2 but **not** yet against real remote resources — the namespace id in `wrangler.toml`
   is still a placeholder.
 
-## ADR-056 — *(reserved: Phase 2 live protocol — AsyncAPI frames, sharded `EtaHub`, adaptive alarm cadence)*
-- **Status:** Not yet written. Reserved by
-  [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) so WP5-* can claim it; numbered
-  here only to stop a later decision taking the slot.
+## ADR-056 — The live protocol: frames, a sharded hibernating `EtaHub`, and what we could not verify
+- **Status:** **Decided and implemented 2026-07-30** (Wave 5: WP5-0 … WP5-3). Implementation:
+  `packages/contract/src/wire/live.ts` + `asyncapi.json` (emitted, committed, gated) ·
+  `packages/core/src/live.ts` + `spec/live.spec.json` (109 corpus rows) · `packages/ports/src/live-transport.ts` ·
+  `packages/api-client/src/live/{engine,poll,memory,socket,controller}.ts` + `src/endpoint.ts` ·
+  `apps/edge/src/{live,eta-hub}.ts` · `apps/mobile/lib/useLiveEtas.ts` ·
+  `scripts/check-view-transport-free.mjs` · `scripts/check-one-endpoint-declaration.mjs` ·
+  `.github/workflows/ci.yml`. **Not deployed** — WP0-5 still owns that, and several claims below say so.
+- **Context:** [ADR-004](#adr-004--data-strategy-pull-only-normalize-at-the-edge-no-scraping) has promised
+  since v1 that swapping the polling client for a socket engine would not touch the UI, and
+  `DataSource.watch()` existed to make that true. It was a shim that concatenated whole ETA lists on a timer,
+  and — the fact that decides this ADR's shape — **it had no callers at all.** So WP5-2's acceptance
+  (*"substitute a `FakeSocketDataSource`; `git diff --stat` shows zero lines changed under
+  `apps/mobile/app/**`"*) was zero by construction: nothing under those paths reached the seam, and nobody
+  edits a screen while running a test. That is [WP4-0](#adr-068)'s situation again — an acceptance
+  presupposing an artefact that does not exist — and it is why Wave 5 starts with an unplanned **WP5-0**:
+  give `watch()` a real consumer first, then measure the substitution. Two further inputs: `docs/03`'s Phase 2
+  sketch said one Durable Object per stop on a 10–15 s alarm, which the plan's own cost model had already
+  refuted; and the frames had to be *declared* somewhere, which raised the question of whether AsyncAPI is
+  the OpenAPI story again. It is not, and §"AsyncAPI, honestly" is that answer.
+- **Decision:**
+  1. **Six frames, and the listener's output is canonically ordered.** `subscribe` · `ping`/`pong` ·
+     `snapshot` · `delta` · `status`, declared once in Zod beside every other wire shape and published as
+     `asyncapi.json`. The reducer sorts the session's readings by `(stopId, routeId)`, code-point, no locale.
+     **Without a canonical order the two transports diverge by construction**, and WP5-1's acceptance
+     ("byte-identical listener output from the poll emulator and a memory fake") is unmeetable by *any*
+     implementation: the poll emulator's order is whatever `/v1/etas` returned, while a delta protocol that
+     merges in place and appends new keys has a history-dependent order. Same lesson as
+     [ADR-063](#adr-063--the-search-indexs-order-is-data-a-precomputed-sortkey-range-scans-a-content-hash-version-and-an-etag)
+     — *the order is data*. Nothing is lost, because display order is `stopCardView`/`nearbyView`'s job and
+     already in the kernel. **The negative result is the proof:** reversing both the target order and each
+     pole's reading order inside the poll emulator changed **nothing** — 17 of 17 matrix rows still passed.
+     The thing that would break byte-identity is the kernel losing the sort, not a transport choosing its own.
+     One deliberate exception: `applyLiveEtasToNearby` orders soonest-first, because `stopCardView` caps a
+     card by taking the first `maxRows` readings, so that order decides *which* buses a rider sees.
+  2. **`delta` can say `gone`, and the client must honour it.** Polling replaces the whole payload, so a
+     departed bus disappears for free; a delta protocol strands it, and the last reading for a route would sit
+     on screen for ever. That is precisely the silent staleness
+     [ADR-008](#adr-008--eta-honesty-approximations-never-fake-precision) forbids, so `gone` is not an
+     optimisation but the rule that makes the protocol legal. It carries `EtaRef`s — `(stopId, routeId)` —
+     and its documented meaning is *"the bus departed, **or** the target was dropped"*, which is what lets a
+     rejected favourite blank rather than freeze.
+  3. **Frame identity reuses the route-at-stop grammar, and the server had to be corrected to serve it.**
+     `(stopId, routeId)` is the same tuple `formatFavoriteRouteKey` encodes
+     ([ADR-062](#adr-062--the-favourite-key-is-the-member-pole-and-the-scheme-is-versioned)), so a Widget
+     watching a favourite maps 1:1 onto a live target and no second key spelling is minted. Building the first
+     real consumer found that **`Eta.stopId` carried the operator's own raw stop id** (`6AB438AD3AE100DD`)
+     where its own schema declares the identity canonical (`KMB:6AB438AD3AE100DD`). Every *reader* of the pair
+     therefore compared two alphabets and matched **nothing, always**: at a three-pole Mong Kok place,
+     `/v1/stop` served 21 route rows of which 8 carried a reading, and one second after paint the
+     subscription's first snapshot merged and **0 survived**. Fixed on the server (`memberEtaLists` stamps
+     each pole's readings with that pole's canonical id, on new objects, because `coalesce` hands the same
+     array to every concurrent caller), which repairs `/v1/etas`, `/v1/stop`, `/v1/nearby` and the shard's
+     frames at once. **No wire shape changed.** Four waves of gates could not see it: `stopDetail` attaches
+     readings by `routeId` alone, `/v1/nearby` hands a place its own readings by construction, the
+     conformance test asserts the field is a `string`, and **every fixture in the repo — including the
+     kernel's corpus — wrote the canonical spelling the contract asks for.** The corpus agreed with the
+     contract, the server disagreed with both, and no suite spanned the two. `Eta.stopId` was also the only
+     field of `EtaSchema` with no `.describe()`, which is how the ambiguity survived; it has one now.
+  4. **No frame carries an engine label.** A `snapshot` from the shard and a `snapshot` synthesized by the
+     poll emulator are the same bytes. Anything else would make the two transports differ *by construction*
+     and quietly retire the equivalence the wave exists to prove — and a screen that could tell would grow a
+     branch on it. The label exists on the `LiveTransport` (a custom transport must answer *"which engine are
+     you"*), never on the wire.
+  5. **Two failure rules, stated once and implemented twice: a failed round is not a departure, and an
+     unchanged round is silent.** A target whose fetch fails keeps its previous readings — reporting them
+     `gone` would say the bus had left when we merely could not ask — and a round in which nothing changed
+     sends **no frame at all**, not an empty `delta`, which is both what makes "an unchanged round" a
+     meaningful test row and what a shard on the 20:1 incoming-message meter should do. Both are expressed as
+     per-target bookkeeping rather than as a fallback, so no rule is invented: a target we did not hear from
+     simply has unchanged state. **Nothing binds the two implementations** — see §"What is not done".
+  6. **`state` describes the connection; `error` describes the thing the message names.** A per-target
+     rejection is `state: 'live'` with a permanent error beside the snapshot whose echo says which targets
+     survived; an accepted set that came back empty is `state: 'closed'` with a permanent error, which is
+     terminal; an empty `subscribe` is `closed` with **no** error, so the client may re-subscribe. This is a
+     contract clarification as much as a code fix: the socket transport originally treated *any*
+     `retryable: false` as terminal, so **one stale favourite silently killed live arrivals for every stop a
+     rider had**, permanently, with the socket reporting itself healthy. `WireError.retryable` is documented
+     as *"whether the identical **request** may succeed later"*; what describes the connection is
+     `StatusFrame.state`, and only `closed` plus a permanent error means *never*.
+  7. **One socket per client, and the *server* computes the shard.** The client connects to
+     `/v1/live?targets=<percent-encoded canonical ids>` and the **Worker** hashes the accepted, sorted target
+     set (FNV-1a over the lowest id, `% LIVE_SHARD_COUNT`, 8 today) with the kernel's `liveShardFor`. Sharding
+     by *stop* would poll a hot stop once but need up to six sockets for a rider watching six places, which
+     defeats the battery argument that is the whole UX case for Phase 2; sharding by *client* keeps one socket
+     and lands everyone watching the same places on the same shard, which is the case that matters. Having the
+     server hash it **deletes an agreement surface**: a client with a stale shard count would otherwise
+     compute a different shard and nothing would say so. **The cost we accept, observed rather than
+     predicted:** two clients whose target sets only *partially* overlap land on different shards and the
+     shared stop is polled once per shard — measured while writing the tests, where the same place answered
+     `etas=6` on the shared shard and `etas=0` on the other. Bounded by the shard count, and it only ever
+     duplicates upstream reads, never rider-visible state.
+  8. **One URL per renderer, and the socket URL is derived from it — so Wave 5 adds no new required
+     variable.** `liveSocketUrl` (corpus-pinned, in the kernel) maps `http:`→`ws:` / `https:`→`wss:` and
+     appends `/v1/live`. It is a kernel rule rather than three lines in three shells because the
+     `https:`→`wss:` half is the mistake that ships a rider's location and favourites in cleartext, **works
+     perfectly against `http://localhost:8787`, and shows no symptom anywhere.** The base URL itself now has
+     exactly one declaration, `DEFAULT_API_URL`, down from four copies under two variable names across three
+     build systems — with `scripts/check-one-endpoint-declaration.mjs` in the `pnpm boundaries` chain, because
+     "one declaration" is the kind of rule this repo gates rather than trusts. An optional
+     `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` override exists for the one case derivation cannot cover, a
+     socket tier on another host; **nothing reads it yet** (§"What is not done").
+  9. **The `Origin` check is browser-only and advisory, and the default is off.** A missing `Origin` is
+     always allowed; with `LIVE_ALLOWED_ORIGINS` unset there is no filtering at all; set, it refuses browser
+     origins outside the list at the handshake. Three facts force this shape, all from RFC 6455 and none from
+     CORS: a WebSocket upgrade **is not a CORS request** (no preflight, and the browser ignores
+     `Access-Control-Allow-Origin`, so the `*` this Worker sends on every `/v1/*` response neither grants nor
+     restricts anything here); §4.1 requires the header only *"if the request is coming from a browser
+     client"*, and React Native's `WebSocket` omits it by default, so **rejecting an absent `Origin` would
+     break exactly the iOS and Android clients this design exists for** while protecting nothing; and
+     therefore it is never authorisation, because any non-browser client sends any `Origin` it likes. What it
+     does do is stop a page on another site from opening a socket with a rider's browser doing the connecting.
+     **Three things would actually protect this endpoint: this check (exists, off), Cloudflare rate limiting
+     at the zone (does not exist — it needs the custom domain WP0-5 has not created), and the DO's own caps
+     (exist).** So the endpoint is unprotected today, and the caps do not change that; they stop one
+     *connection* from amplifying, not one script from opening many. One protocol limitation worth knowing:
+     a refused upgrade's taxonomy body is **unreadable by a browser** — the WebSocket API exposes neither
+     status nor body — so the readable rejection path is the snapshot's echo and `status` frames, and the
+     envelope is for `curl`.
+  10. **Four caps, each bounding a different quantity, none tuned against a measurement.** 12 targets per
+     connection · 48 targets per shard · 64 sockets per shard · 8 KiB per client frame. A `subscribe` frame is
+     [ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)'s
+     `radius=50000` amplification with a longer lever — it names an unbounded list of stops, each costing a
+     place read plus a coalesced upstream call *every round, for as long as the socket is open*. Each cap
+     carries its arithmetic in the code (48 targets ≈ 100–150 upstream calls, which at six simultaneous
+     outgoing connections queue in ≈6 s, inside the 45 s floor; 8 KiB keeps a canonicalised session inside
+     half of the attachment's 16,384-byte limit). Excess targets are **rejected and named**, never truncated
+     silently, because a socket watching half a rider's list is the silent filter ADR-008 rules out. **The
+     trade we accept: a cap is itself a lock-out vector** — 64 sockets from one script would refuse the 65th
+     rider on that shard. The values sit far above plausible legitimate concurrency and far below the
+     runtime's own 32,768, and the real answer is zone rate limiting, i.e. WP0-5.
+  11. **Per-connection state lives in the socket's attachment; the alarm cadence and the readings live in
+     SQLite.** Hibernation discards in-memory state, so an instance field is not storage — and the failure is
+     not subtle: re-injected as an instance field, 13 of 22 tests fail, because `fetch` and `alarm` reach the
+     object as separate invocations and the field is already empty on the very next round.
+     `[[migrations]] new_sqlite_classes` rather than the newer declarative `[exports.EtaHub]`: the two are
+     equivalent for dev and deploy, but `wrangler versions upload` fails fast when `exports` entries are
+     present, gradual deployments are unsupported across its lifecycle changes, a rollback cannot cross one,
+     and the move is one-way. Nothing has ever been deployed from here, so giving up versions, gradual
+     rollout and rollback **before the first deploy** is the worse trade. (`new_classes` was never an option:
+     the key-value backend is Paid-only and closed to new accounts.) This one constrains WP0-5.
+  12. **The Durable Object holds no rules.** The diff is `diffEtas`, the cadence is `nextLiveCadenceMs`, the
+     shard is `liveShardFor`, the accepted set is `acceptTargets` — and the *union* of two subscribers'
+     narrowings is `acceptTargets` again, whose documented union semantics ("if either asks for all routes,
+     the merge asks for all routes") turned out to be exactly a shard's poll set. Nothing in `eta-hub.ts`
+     decides anything a corpus could pin, which is the property that makes the server side portable evidence
+     rather than a second implementation of the protocol.
+
+- **The cadence is 45–60 s because of the data, not because of the cost.** The plan rested it on *"a 10–15 s
+  alarm makes the DO more expensive than polling"*, and **that argument does not survive sharding** — once
+  one object serves many stops, the marginal cost of a 15 s alarm over a 60 s one is ≈**$10/month per 1000
+  continuously-hot stops** (2.59M extra ticks × $0.15/M requests, with `setAlarm` row writes comfortably
+  inside the 50M included), so cost would not decide it. The data does. Measured 2026-07-30, ~10:46–10:50
+  HKT, `GET https://data.etabus.gov.hk/v1/transport/kmb/route-eta/1A/1` every 10 s, 20 samples: distinct
+  `data_timestamp` values arrived at **mean 44.75 s** (179 s over 4 intervals), range **28–60 s**. A 45 s
+  alarm is already at the data's own floor; a 15 s alarm returns a byte-identical body roughly two ticks in
+  three. Two further observations from the same run make the case stronger than "wasteful": every response
+  carried `Cache-Control: max-age=300` with **no `Age` header**, and `generated_timestamp` **went backwards**
+  across consecutive polls (10:49:11 → 10:48:59 → 10:49:11) — independent CDN edge copies, so a faster poll
+  can return an *older* generation than the one before it. Polling faster is not merely wasteful; it is
+  non-monotonic. **This is n=1 route on one off-peak weekday morning: a first measurement, not a
+  characterisation.** Peak hour, CTB and GMB are unmeasured, and the ramp (45 s floor → 60 s ceiling over 3
+  quiet rounds) is a *policy* fitted to that one measurement rather than a derived optimum. Recorded because
+  the alternative is inheriting the figure as settled. Real frames from `wrangler dev` against the live KMB
+  feed came out at +0 s, +45 s, +91 s with six readings changing on every round — the floor holding and the
+  ramp never widening, which is the rule working rather than a bug.
+  **Corrections to the plan's cost model, which is cited more often than it is checked:** its polling column
+  says *"today, 20 s"* when `CLIENT_POLICY_DEFAULTS.refreshAfterMs` is **30 s** (ADR-053), so every request
+  count in it is 1.5× too high and the 100k-DAU overage is $15, not $24; its *"crossover lands around
+  40–45k DAU"* is not reproducible (≈37k from its own inputs, ≈56k at the real cadence) and rests on an
+  unstated *"10 active minutes per user per day"*; its four DO cells show no working and omit the
+  $12.50/M GB-s duration rate, `setAlarm` row writes and connection requests, so they are **UNVERIFIED**;
+  and its heading *"Measured/verified inputs"* overclaims — the Cloudflare figures are vendor-published
+  rates (verified against the pricing pages on 2026-07-30, several of which moved when SQLite storage
+  billing went live in January 2026), not measurements taken here. Also: the *"upstream refreshes ~1/min"*
+  claim is cited across this repo to `docs/01` and ADR-008, and **neither document contains it** — the real
+  citation is the KMB vendor specification (`docs/02:23-25`) plus the measurement above.
+  **What the meters actually charge, since the design leans on it:** one client connection is two billed
+  requests (one Workers, one DO), full price; *outgoing* messages — the entire ETA fan-out this design exists
+  to send — are **free**; *incoming* messages are billed 20:1; incoming protocol pings and
+  `setWebSocketAutoResponse` replies are free and do not wake the object. So **reconnect churn, not message
+  volume, is the cost of a socket**, which is why the client's keepalive is the contract's exact
+  `LIVE_PING_MESSAGE` bytes (a one-byte mismatch would wake a hibernated shard on every ping, turning a free
+  idle connection into one billed around the clock) and why the reconnect backoff caps at 30 s, below the
+  shard's own cadence.
+
+- **AsyncAPI, honestly — a specification artefact with a validator, not a codegen input.** This paragraph
+  exists because the alternative is a future agent inheriting a claim of codegen that was never true.
+  **(a)** AsyncAPI 3.0's Schema Object is a superset of **JSON Schema draft-07**, not 2020-12 — `2020-12`
+  appears nowhere in the 3.0/3.1 specs or either meta-schema, and the issue asking for it was closed stale in
+  2022. Our schemas are *emitted* as 2020-12 by zod, so the document **asserts draft-07 over bytes generated
+  as 2020-12**; that is recorded in an `x-json-schema-dialect` root extension and made true by a gate that
+  fails on any keyword outside the intersection (`prefixItems`, `$defs`, `unevaluated*`, `$dynamicRef` …).
+  So: one registry, yes; one dialect, no. **(b) There is no AsyncAPI→Swift generator in existence.** Modelina
+  outputs twelve languages and Swift is not among them; a sweep of the tools directory found nothing
+  mentioning Swift, Objective-C or iOS in any category. **(c)** Kotlin generation exists and **cannot
+  serialise** — JSON, XML and binary serialization are all listed as unsupported — so `generate models kotlin`
+  yields annotation-free data classes and the decode layer is hand-written anyway, which puts ADR-052's
+  unknown-enum-tolerance obligation back on hand-written code on Android too. **(d) `asyncapi diff` is not an
+  `oasdiff` equivalent:** it compares the dereferenced document leaf-by-leaf with JSON Patch and classifies
+  by pointer prefix, and a payload field pointer matches no standard entry — so **removing a field classifies
+  as `unclassified`, not `breaking`**, and a gate that failed on `breaking` would go green on a deleted field.
+  Our own staleness gate says exactly that in its failure text, because the review is the mechanism here, not
+  a tool. **(e)** The gate **transcribes** the meta-schema's closed field lists rather than validating against
+  it: `@asyncapi/parser` was not added, so **`asyncapi.json` has never been validated against the official
+  meta-schema by anything**, and both the script header and `packages/contract/README.md` §7 say so. The
+  denial of numeric `exclusiveMinimum`/`exclusiveMaximum` is marked *unsettled* in the gate for the same
+  reason — draft-07 §6.2.3 specifies them as numbers, which suggests the scout's note was wrong, and we emit
+  neither keyword, so the first person who needs a bound settles it with a citation.
+  Two emit decisions belong with this: **`$ref` siblings are folded in the AsyncAPI emit, not in
+  `openapi.json`** (a Reference Object drops sibling keys, and four `$ref`-with-`description` sites would have
+  silently lost their notes — including `Eta.remarkKind`'s absent-vs-`"info"` trap, the single most
+  consequential field note in the contract), and **`seq` is `z.number().int()`**, which puts the first numeric
+  constraints (`±9007199254740991`) into the published contract deliberately: `type: integer` is what stops a
+  generator typing a monotonic counter as a `Double`, and the bounds are true of the producer.
+
+- **What we could not verify, said where a reader meets it.** Three things in this wave are unfalsifiable
+  locally, and each says so at its own site as well as here.
+  1. **That workerd *chose* to hibernate a shard.** What is proved outright is the *consequence*: the object
+     calls `ctx.acceptWebSocket` and registers no `'message'` listener, so a client frame that is answered at
+     all was dispatched to `webSocketMessage()`; and after `evictDurableObject(stub, { webSockets: 'hibernate' })`
+     the reconstructed instance still has the socket attached, recovers the exact accepted target set from
+     `deserializeAttachment()`, continues the cadence ramp at **55 s** (a fresh counter would restart at the
+     45 s floor) and still delivers a `delta`. But `evictDurableObject` is an explicit call into
+     `workerd:unsafe`; there is no local knob for the inactivity threshold and nothing hibernates
+     spontaneously inside a test's lifetime. So the suite covers hibernation's consequence and **not its
+     policy**, and the test is named for what it does — *"rebuilds the subscription from the attachment and
+     the ramp from storage, on a cold instance"* — rather than "hibernates". One local artefact worth
+     recording: the first injected defect held the session in a module-level `WeakMap` and **passed**,
+     because the object runs in the test's own isolate and module scope survives eviction.
+  2. **Whether a pending future alarm accrues duration charges.** Cloudflare's own pages contradict each
+     other: DO pricing says duration is billed in wall-clock time while the object is active and not eligible
+     for hibernation (and hibernation requires no in-progress awaited `fetch()`), while DO *limits* says time
+     spent waiting on network or storage does not count towards compute consumption. This swings the duration
+     term of a fetch-awaiting `alarm()` between ≈$0 and ≈$60 per 1000 stops per month, and it is
+     **load-bearing for the cost model above**. The falsifiable local test cannot distinguish "hibernated"
+     from "evicted", because eviction is the only local mechanism. It needs the real
+     `durableObjectsPeriodicGroups` dataset — i.e. WP0-5.
+  3. **AsyncAPI as a codegen input** — see §"AsyncAPI, honestly". This gets the same treatment as the
+     Swift/Kotlin token artefacts and the two conformance templates, which are generated, committed and
+     **never compiled** ([ADR-067](#adr-067--the-contract-is-published-for-native-consumers-and-every-part-we-cannot-verify-says-so)):
+     the artefact ships, and the claim is exactly as large as what has been run.
+  Also unverified, and cheaper: `caches.default` inside a Durable Object is not used and was not tested — two
+  shards in different colos cannot share a cache anyway, so it is not a cross-shard deduplication mechanism;
+  sharding by target set is, and it needs no cache.
+
+- **Consequences, including what we are accepting:**
+  - **Today's default engine is still HTTP polling**, wearing the frame protocol. The poll emulator is what
+    ships; the socket is opt-in and, as of this wave, opt-in *by source edit* — see the next section. On the
+    default path the Place screen's behaviour is unchanged bar two deliberate differences (a round in which
+    nothing changed no longer calls the listener — ADR-008 reaching the seam; and the list is canonically
+    ordered where the shim pushed `Promise.all`-completion order) and one reduction: a refresh now costs
+    `/v1/etas/:id` instead of the whole `/v1/stop/:id`.
+  - **The subscription writes through to the query cache, on the key `useQuery` already owns.** That is what
+    keeps [ADR-058](#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier)
+    working: `setQueryData` on a cached query keeps `status: 'success'`, so the pushed value is persisted and
+    a cold start replays it. Writing to a key of its own was tried, and the seam proof fails on it.
+  - **A gate now polices the view layer for transports** (`check-view-transport-free.mjs`), closing a gap Wave
+    1 recorded and nobody owned for four waves: `pnpm boundaries` checks the *import graph*, so it cannot see
+    `fetch('https://data.etabus.gov.hk/…')`, which imports nothing. One allowlist entry, discovered by
+    running it: `apps/mobile/lib/tileSource.ts`, whose whole contract is a URL template on our own Worker.
+  - **Two engines now implement two rules each, and only review binds them.** "A failed round is not a
+    departure" and "an unchanged round is silent" exist in `poll.ts` and in `eta-hub.ts`; the scenario matrix
+    drives the poll emulator against a *hand-written* script, never against the shard. Both defects this wave
+    found in its own code — `Eta.stopId` and the terminal-rule overreach — survived because **no test spanned
+    two implementations of one rule.** Named as WP5-5 rather than left as a resolution.
+  - **`retrying` is used for a per-target failure even when it is permanent**, and `seq` is monotonic across a
+    re-subscription on the server while the poll emulator resets it. Two divergences the matrix does not
+    cover, recorded rather than accidental.
+  - **`/v1/live` degrades to nothing if `ETA_HUB` is unbound**: the binding is optional like `DATASET` and
+    `BUILDS`, so a Worker without the Durable Object still runs and answers the taxonomy on that route, and
+    every client keeps working because the shipped engine is the poll emulator.
+  - **A 400, not a 426, for a missing upgrade**, because no member of `ERROR_CODES` carries 426 by design
+    (ADR-064 binds the status to the meaning so a call site cannot pick one) and `bad_request` carries the
+    meaning that matters. `upgrade_required` and `rate_limited` are recorded as the taxonomy's next two
+    members, owned by WP0-5.
+  - **Test totals 705 → 891** (core 709 · edge 86 · api-client 42 · mobile 34 · web 20), and
+    `packages/api-client` has a `test` script for the first time — before this wave `turbo run test` skipped
+    the package **silently**, so `EdgeClient.watch()` had never been executed by anything.
+  - **`main` gets its first CI workflow**, which is the cheap half of WP0-5 and needs no credentials
+    ([ADR-070](#adr-070--a-turbo-tasks-hash-must-include-everything-it-reads-and-says-so) is why it is
+    load-bearing rather than hygiene). Its deploy job is written out and deliberately inert. **The docs
+    freshness rule is still not enforced anywhere:** the hook CLAUDE.md rule 7 describes is not installed
+    (`core.hooksPath` unset), and `scripts/precommit-docs-check.mjs` cannot run in CI unmodified — it is a
+    Claude Code `PreToolUse` hook that reads a tool-call payload on stdin and diffs the *index*, so in CI both
+    of its early exits fire and it returns 0 having checked nothing. Left out with the reason stated in the
+    workflow, because a step that passes vacuously is worse than no step. WP5-8.
+- **What is not done, each with an owner:**
+  - **WP5-4 — `coalesce` turns an upstream outage into "no buses", and the shard cannot tell.** The most
+    consequential thing this wave found and deliberately did not fix. `stopEtas` → `stopArrivals` →
+    `memberEtaLists` routes every pole through `coalesce`, which resolves a *rejected* upstream call to `[]`.
+    So if KMB is down, every pole returns empty, `stopEtas` returns `[]` **successfully**, and `diffEtas`
+    reports every reading `gone` — the "a failed round is not a departure" rule of decision 5 defeated one
+    layer *below* where it is enforced. It is **pre-existing and identical on HTTP** (`/v1/etas/:id` already
+    answers `200 []` for a stop whose upstream is refusing); the socket only makes it visible, because a
+    screen blanks where a card was merely empty. It was not fixed here because the honest fix changes what
+    `/v1/etas` and `/v1/nearby` can *say* — per-pole failure reporting, e.g. `{ etas, failed: string[] }` —
+    which is a wire decision needing an ADR of its own, and doing it under cover of a socket wave would have
+    put a contract change in a commit whose message says "Durable Object". A numbered row now owns it, because
+    this repo has twice had a day-one requirement sit in prose that no work package owned (WP2-8, WP2-9) and
+    get done only because somebody noticed.
+  - **WP5-5 — nothing binds the two engines' failure semantics.** Drive the scenario-matrix rows against
+    `EtaHub` through a real socket, so decision 5 is enforced on both sides rather than agreed by review.
+  - **WP5-6 — the socket engine is not selectable without a source edit**, so `/v1/live` is unreachable from a
+    real build. `EdgeClientOptions.liveUrl` and `.transport` are the plumbing; `EXPO_PUBLIC_LIVE_URL` /
+    `VITE_LIVE_URL` and `…_LIVE_TRANSPORT` are the documented spellings and **nothing reads them**. There is
+    deliberately no `auto` value in the plan: an automatic choice implies a socket→poll fallback, and
+    `createSocketTransport` reconnects for ever rather than degrading.
+  - **WP5-7 — Nearby is not a live adopter, and the reason is a request-count regression.** Its live target set
+    is up to six places, so the poll emulator would issue six requests per window where the screen issues one.
+    The fix is a batch `/v1/etas?ids=…` (additive per ADR-052 §5) and then adoption — not "later, somehow".
+    `applyLiveEtasToNearby` is written, corpus-pinned and has no consumer until then.
+  - **WP5-8 — the docs-freshness rule has never been enforced anywhere.** A `--range` mode on
+    `scripts/precommit-docs-check.mjs`, with a selftest, so the one declaration of the rule can be applied per
+    commit over a PR's range in CI.
+  - **WP0-5 owns four things this wave sharpened:** zone rate limiting (the only real protection for
+    `/v1/live`), `LIVE_SHARD_COUNT` revisited against 64 sockets per shard, `rate_limited` /
+    `upgrade_required` in the taxonomy, and settling the pending-alarm billing question against the real
+    metrics dataset.
+  - **Two comments in the tree still assert that `observedAt` is the staleness field**
+    (`apps/mobile/providers/QueryProvider.tsx:11-13`, `apps/edge/src/eta-cache.ts:15`). `isStale` reads
+    `dataTimestamp` and always has; the schema description said otherwise and was corrected in this wave. The
+    comments are the residue, and `SnapshotFrame.at` / `DeltaFrame.at` have the same shape — no behavioural
+    reader on the client, which either wants one or wants the description to say "diagnostic".
 
 ## ADR-057 — Live ETA TTL is 30 s, and every upstream call is coalesced per pole
 - **Status:** **Decided and implemented 2026-07-27** (WP0-4). Revises the 8 s/10 s TTLs chosen in
@@ -2555,10 +2882,13 @@ rather than the docs. **The blocking open question above is unchanged** — this
      the `src` that implements it, so moving a package takes its spec along. `groups` keyed by export name;
      cases are `{name, why?, knownDefect?, args, expect}`; `version: 1`. **No `undefined`, no functions, no
      comments** — JSON `null` is the absent value and is translated at the boundary in `test/corpus.ts` — because
-     an XCTest or JUnit suite has to read these rows verbatim. **11 corpora, 65 groups, 510 cases, 4
-     `knownDefect` rows.** (WP1-5 shipped 36 groups / 274 cases; Waves 2 and 3 grew it. This line was
-     stale for two waves, so WP3-3 stopped restating the figure by hand: `packages/contract/README.md`
-     now *generates* it, and `packages/contract/scripts/check-native-guide.mjs` fails when it drifts.)
+     an XCTest or JUnit suite has to read these rows verbatim. **13 corpora, 82 groups, 677 cases, 4
+     `knownDefect` rows** as of Wave 5. (WP1-5 shipped 36 groups / 274 cases; every wave since has grown it —
+     11 / 65 / 510 at Wave 3, and Wave 5's `live.spec.json` added 9 groups and 109 rows. This line has now been
+     stale twice, which is the argument for the mechanism rather than the number: WP3-3 stopped restating the
+     figure by hand, so `packages/contract/README.md` *generates* it and
+     `packages/contract/scripts/check-native-guide.mjs` fails when it drifts. **Read the generated figure, not
+     this sentence.**)
   2. **`@spec <module>#<export>`** in an export's JSDoc marks it corpus-specified. Both halves are checked
      against the file stem and the symbol, so a tag cannot drift onto the wrong corpus or outlive a rename.
   3. **`check-spec-coverage.mjs` enforces both directions** — a tagged export with an empty or missing corpus,

@@ -1,0 +1,164 @@
+name: ci
+
+# The cheap half of WP0-5, and the only half that needs no credentials.
+#
+# WHY THIS FILE IS LOAD-BEARING RATHER THAN HYGIENE
+# `origin/main` was merged **red** once (ADR-070). Every gate was green locally because turbo replayed a
+# cached pass computed in a *different worktree* days earlier, for a task whose real inputs lay outside its
+# hash. A clean checkout is the only thing that would have caught it, and until this file existed nothing
+# in the project ever performed one. Wave 5 adds a Durable Object — a class that must be a named export of
+# the Worker's `main`, plus a `[[migrations]]` entry that cannot be changed after the first deploy — which
+# raises the cost of that class of miss rather than lowering it.
+#
+# The deploy half (a real `wrangler deploy`, a custom domain, Pages) is blocked on a domain and a
+# Cloudflare account, neither of which exists. It is the second job below, deliberately inert.
+#
+# WHAT IS DELIBERATELY NOT HERE — the docs-freshness gate
+# CLAUDE.md rule 7 describes a pre-commit hook that blocks a commit staging code without docs. **That hook
+# is not installed anywhere**: `git config --get core.hooksPath` is unset and the repo's `hooks/` directory
+# holds only samples, so the rule has been convention-only for the whole project — which is why CI looks
+# like the one place it could finally be enforced. It cannot be, not as written:
+# `scripts/precommit-docs-check.mjs` is a **Claude Code `PreToolUse` hook**, not a git hook. It reads a JSON
+# tool-call payload on stdin, extracts the `git commit` command line from it, checks that line for a
+# `[docs-ok]` bypass, and diffs the **index** (`git diff --cached --name-only`). In CI stdin is empty and
+# nothing is staged, so both of its early exits fire and it returns 0 without examining anything. Wiring it
+# here would add a step that passes for ever while checking nothing — this repo's own recurring failure
+# (five instances recorded in `docs/11`), and worse than having no step, because a green tick is a claim.
+# The honest fix is a `--range <base>..<head>` mode in that script, so the one declaration of the rule can
+# be applied per commit over a PR's range, with a selftest of its own. That is WP5-8 in
+# `docs/proposals/03`, not a two-line addition here.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # One run per ref: a force-push mid-review should not leave two answers about the same tree.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: gates (clean checkout)
+    runs-on: ubuntu-latest
+    # The suites are seconds; `pnpm install` and the Expo/workerd postinstalls are the long pole.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node **22**, matching `.nvmrc` and `dataset.yml`. Root `engines` says `>=20`, which is the floor
+      # this tree is *allowed* to run on rather than the version it is developed and tested against; CI
+      # asserting the floor would leave the pinned pair unexercised.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--frozen-lockfile` and **nothing else**. Do not add `--ignore-scripts` or narrow
+      # `pnpm.onlyBuiltDependencies`: `workerd` and `esbuild` need their postinstalls or every
+      # `apps/edge` test fails at import, and `.npmrc`'s `node-linker=hoisted` is why there is a single
+      # hoisted platform binary to build in the first place (golden rule 6).
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+      - run: pnpm lint
+
+      # `pnpm test` = `turbo run test && pnpm run boundaries` — every package suite plus the whole
+      # boundaries chain and each gate's `--selftest`. It is **offline-clean**: every `apps/edge` suite
+      # stubs `globalThis.fetch` and throws on an unexpected URL, `packages/core` is pure functions over
+      # committed corpora, and the two renderers assert against fixtures. Nothing here reaches HK open
+      # data or Cloudflare. A step that needs the network is a decision to state, not a default.
+      - run: pnpm test
+
+      # Does the Worker bundle — including the `EtaHub` Durable Object and its migration — still build?
+      # `--dry-run` short-circuits `requireAuth` in the installed wrangler, so this needs no token and no
+      # account id. **Its limit, stated because a green tick here is narrower than it looks:** because auth
+      # is skipped, nothing resolves the placeholder KV namespace id or validates the (commented) route
+      # against a zone. This validates the *bundle*, not the *bindings*. `dataset.yml`'s preflight is still
+      # the only thing that catches `REPLACE_WITH_KV_NAMESPACE_ID`, and it lives in the publish path.
+      - name: Worker bundle compiles (wrangler --dry-run, no auth)
+        run: pnpm --filter @nextbus/edge exec wrangler deploy --dry-run
+
+      # The `git diff --exit-code` that ADR-054's acceptance named and that has never run anywhere
+      # (recorded as correction (9) in `docs/proposals/03`'s Wave 3 status block). Every generated artefact
+      # in this repo is committed — `openapi.json`, `asyncapi.json`, the CSS/Swift/Kotlin tokens, the
+      # i18n `.strings`/`strings.xml`, the native guide — and each has a gate that *compares* rather than
+      # rewrites. This is the belt: if a gate ever regenerates in place and passes, or a suite leaves a
+      # scratch file behind, the tree is dirty and that is a defect in the gate, not in the tree.
+      - name: The gates left the tree unchanged
+        run: git diff --exit-code
+
+  deploy:
+    name: deploy (inert until WP0-5)
+    needs: gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # **Deliberately inert, and visibly skipped rather than silently green.** There is no domain, no
+    # Cloudflare account and no API token in this project yet, so this job must not run — but it is
+    # written out in full so that the day WP0-5 happens it is a repo-variable change and not a new file.
+    # Same shape as `dataset.yml`'s `DATASET_PUBLISH_ARMED` gate, for the same reason: an unguarded deploy
+    # would fail on every push and train everyone to ignore a red tick.
+    #
+    # To arm it: create the resources and the custom domain (docs/10 "Deploy"), set the
+    # `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets and the `EDGE_URL` variable, uncomment the
+    # `[[routes]]` block in `apps/edge/wrangler.toml`, then set `DEPLOY_ARMED=true`.
+    if: github.event_name == 'push' && vars.DEPLOY_ARMED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Preflight — credentials and bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          fail=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set. See docs/10 'Configuration & secrets'."
+              fail=1
+            fi
+          done
+          # A deploy against the placeholder id would resolve no bindings, and the Worker would fall back
+          # to building the 8.3 MB dataset per isolate while reporting itself healthy (ADR-055).
+          if grep -q REPLACE_WITH_KV_NAMESPACE_ID apps/edge/wrangler.toml; then
+            echo "::error::apps/edge/wrangler.toml still has the placeholder KV namespace id. Run 'wrangler kv namespace create DATASET' and commit the real id."
+            fail=1
+          fi
+          exit $fail
+
+      - name: Deploy the Worker
+        run: pnpm --filter @nextbus/edge exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # The ADR-055 production invariant, read off the deployment rather than a test double. Warns rather
+      # than skips silently when `EDGE_URL` is unset — see the same note in `dataset.yml`.
+      - name: Verify the Worker is serving from KV
+        env:
+          EDGE_URL: ${{ vars.EDGE_URL }}
+        run: |
+          if [ -z "$EDGE_URL" ]; then
+            echo "::warning::EDGE_URL is not set — the /v1/health acceptance check DID NOT RUN. Nothing has asserted \"dataset\":\"kv\" against the deployment."
+            exit 0
+          fi
+          health=$(curl -fsS "$EDGE_URL/v1/health")
+          echo "$health"
+          echo "$health" | grep -q '"dataset":"kv"' \
+            || { echo "::error::Worker is not serving from KV"; exit 1; }
+          echo "$health" | grep -q '"datasetBuildsThisIsolate":0' \
+            || { echo "::error::Worker built the dataset in-request"; exit 1; }
+
+      # NOT written, and not because it was forgotten: publishing `apps/mobile/dist` to Pages needs a
+      # Pages project that does not exist, and `build:web` bakes `EXPO_PUBLIC_API_URL` into both the
+      # bundle and the service worker's runtime-caching routes (ADR-058) — so a half-written PWA deploy
+      # ships caches that match nothing, silently. It lands with the domain, in WP0-5, together with the
+      # decision about which hostname the app is built against.

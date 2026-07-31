@@ -6,6 +6,31 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
+# ── The custom domain, ready for the day it exists (WP0-5) ─────────────────────────────────────
+# Deliberately commented, and deliberately without a hostname: inventing one would be claiming a
+# deployment. When the domain is registered and its zone is on this Cloudflare account, uncomment
+# both blocks, put the real hostname in `pattern`, and set `EXPO_PUBLIC_API_URL` / `VITE_API_URL` to
+# `https://<that host>` — one variable per renderer, because the `/v1/live` socket URL is derived
+# from it and not configured (ADR-056 decision 8).
+#
+# `workers_dev = false` matters here specifically, and it is not tidiness. Left at its default, the
+# Worker also answers on `<name>.<subdomain>.workers.dev` — a **second live hostname for one Worker**,
+# which is a second value `EXPO_PUBLIC_API_URL` could point at. This project's top-priority failure
+# mode is exactly that: one change reaching the platforms unequally. Two hostnames also means the
+# service worker's runtime-caching routes (baked from the API origin by `build:web`) match on one and
+# not the other, so a PWA built against the wrong one caches nothing and reports no error.
+#
+# `custom_domain = true` asks Cloudflare to create the DNS record and the certificate for an apex or
+# subdomain the Worker owns outright. The alternative is a zone route — `pattern = "api.example.com/*"`
+# with `zone_name = "example.com"` — which shares the hostname with other origins and is what you want
+# only if something else already serves that host. We want the former.
+#
+# [[routes]]
+# pattern = "REPLACE_WITH_API_HOSTNAME"   # e.g. api.<domain> — no scheme, no trailing slash
+# custom_domain = true
+#
+# workers_dev = false
+
 # Precomputed dataset shards, content-addressed by build hash (ADR-055 / WP0-1).
 #
 # There is no `[triggers] crons` any more: the daily normalization runs in GitHub Actions
@@ -23,6 +48,11 @@ enabled = true
 [[kv_namespaces]]
 binding = "DATASET"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# The preview namespace ADR-061 decision 2 already owes, and the cheapest of the three lines WP0-5
+# needs. `wrangler kv namespace create DATASET --preview` prints it; `wrangler dev --remote` and
+# `wrangler versions upload` read it, so the ~20k-key prune in `publish-dataset.mts` can be rehearsed
+# twice against a namespace that is not production (docs/10 "Environments"). Uncomment with the id.
+# preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
 
 [[r2_buckets]]
 binding = "BUILDS"

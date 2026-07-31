@@ -125,8 +125,15 @@ const normalize = (line) => line.trim().replace(/\s+/g, ' ')
  * comments in `apps/mobile/lib/` are precisely the ones explaining which endpoint a seam reaches and why.
  * String literals are **not** blanked, unlike `apps/web/scripts/check-no-derivation.mjs`: a path literal
  * inside a string is the violation, so blanking strings would make the `api-path` rule find nothing.
- * Deliberately lexical rather than a real parse — a `//` inside a string over-strips that one line, which
- * can only produce a false negative there, and the alternative is a JS parser in a 120-line check.
+ * Deliberately lexical rather than a real parse — the alternative is a JS parser in a 120-line check.
+ *
+ * It does, however, **skip over quoted spans**, and that was added after the fact:
+ * `scripts/check-one-endpoint-declaration.mjs` was written with this function verbatim and went blind on
+ * `packages/contract/src/asyncapi.ts`, where the prose `'/components/schemas/*'` *inside a string* opened
+ * a block comment that never closed — every line after it read as comment. Measured here before copying
+ * the fix across: none of the 74 files this gate polices currently contains that shape, so it was a
+ * latent blind spot rather than a live one, and the two gates now share the sharper lexer instead of
+ * differing by an accident of which files they happen to read.
  */
 function codeLines(src) {
   const out = []
@@ -145,6 +152,20 @@ function codeLines(src) {
       const block = rest.indexOf('/*')
       // `://` spares a URL inside a string; nothing else in this tree needs the exemption.
       const slash = rest.search(/(?<!:)\/\//)
+      const quote = rest.search(/['"`]/)
+      // A quote opening before either marker: copy the literal through unexamined, so its contents can
+      // neither start a comment nor hide one. Unterminated on this line ⇒ the remainder is code, which
+      // errs towards a false positive somebody reads rather than a silent false negative.
+      if (quote !== -1 && (block === -1 || quote < block) && (slash === -1 || quote < slash)) {
+        const closer = rest.indexOf(rest[quote], quote + 1)
+        if (closer === -1) {
+          line += rest
+          break
+        }
+        line += rest.slice(0, closer + 1)
+        rest = rest.slice(closer + 1)
+        continue
+      }
       if (block !== -1 && (slash === -1 || block < slash)) {
         line += rest.slice(0, block)
         rest = rest.slice(block + 2)

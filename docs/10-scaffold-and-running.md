@@ -9,11 +9,13 @@ The monorepo skeleton described in [`05`](./05-monorepo-and-tooling.md) now exis
 apps/
   mobile/          Expo app (iOS / Android / Web-PWA) — NativeWind + expo-router + reanimated
   edge/            Cloudflare Worker — cached ETA proxy, LandsD tile proxy, precomputed dataset
-                   reader (KV/R2); the daily build runs in GitHub Actions, not in the Worker
+                   reader (KV/R2), and the /v1/live socket served by a sharded `EtaHub` Durable
+                   Object; the daily build runs in GitHub Actions, not in the Worker
 packages/
   core/            canonical types, DataSource interface, honest-ETA helpers
   data-normalize/  KMB + Citybus fetch adapters (zod-validated) → canonical Eta
-  api-client/      EdgeClient (v1 DataSource) + watch() polling shim
+  api-client/      EdgeClient (v1 DataSource) + watch() as a real frame protocol over a
+                   pluggable transport: poll emulator (default) · memory fake · WebSocket
   i18n/            en / zh-Hant / zh-Hans UI strings
   ui/              NativeWind preset + themes.ts (light/dark + liveries) + tokens
   tsconfig/        shared TS configs
@@ -85,6 +87,14 @@ curl -s "http://localhost:8787/v1/index" | head -c 200
 # /v1/tiles/... → LandsD basemap + per-locale label overlay, proxied and made publicly cacheable
 curl -sI "http://localhost:8787/v1/tiles/basemap/16/53550/28598.png"
 curl -sI "http://localhost:8787/v1/tiles/label/tc/16/53550/28598.png"   # {lang} = en | tc | sc
+
+# /v1/live?targets=… → the live-ETA socket (ADR-056). curl can only see the refusals, which is who
+# the taxonomy envelope is for: a browser can read neither the status nor the body of a failed
+# WebSocket handshake. Targets must be **percent-encoded** — `+` decodes to a space, and a place id
+# is `P:<member>+<member>`.
+curl -i "http://localhost:8787/v1/live"                                  # 400: needs Upgrade: websocket
+curl -i -H "Upgrade: websocket" "http://localhost:8787/v1/live"          # 400: needs ?targets=
+curl -i -H "Upgrade: websocket" "http://localhost:8787/v1/live?targets=KMB%3A<stopId>"   # 101
 ```
 Responses are normalized and edge-cached, so many users on one stop = one upstream call. TTLs
 ([ADR-057](./08-decision-log.md)): **30 s for every live endpoint** (`/v1/eta`, `/v1/etas`,
@@ -171,14 +181,34 @@ upstream we depend on is keyless — the bus APIs (`docs/02`) and the LandsD bas
 ([ADR-049](./08-decision-log.md)) alike — so a fresh clone runs end-to-end with nothing configured.
 The only credentials that exist are the ones that let CI *publish* the dataset.
 
+**The inventory is [`.env.example`](../.env.example) at the repo root** — every variable in the repo, with
+its default and its reader. Nothing loads it; it exists so this table has one machine-readable twin rather
+than four scattered ones. The files that *are* loaded sit next to the thing that reads them:
+`apps/mobile/.env.local` (Expo), `apps/web/.env.local` (Vite), `apps/edge/.dev.vars` (Wrangler).
+
 | Variable | Secret? | Who reads it | Where it lives |
 |---|---|---|---|
-| `CLOUDFLARE_API_TOKEN` | **yes** | `dataset:publish`, in CI | GitHub Actions **secret** |
+| `CLOUDFLARE_API_TOKEN` | **yes** | `dataset:publish`, and `wrangler deploy` in `ci.yml` | GitHub Actions **secret** |
 | `CLOUDFLARE_ACCOUNT_ID` | it's an identifier, treat as one | as above | GitHub Actions **secret** |
 | `DATASET_PUBLISH_ARMED` | no | `.github/workflows/dataset.yml` | GitHub Actions **variable** — `true` once the KV namespace exists |
-| `EDGE_URL` | no | the workflow's `/v1/health` check | GitHub Actions **variable** (the step self-skips when unset) |
-| KV namespace id | no | the Worker | committed, in `apps/edge/wrangler.toml` |
-| `EXPO_PUBLIC_API_URL` | **no, and cannot be** | the app, at build time | `apps/mobile/.env.local` (see `.env.example`) or the build env |
+| `DEPLOY_ARMED` | no | `ci.yml`'s deploy job, which is inert without it | GitHub Actions **variable** — `true` once the domain and secrets exist |
+| `EDGE_URL` | no | both workflows' `/v1/health` check | GitHub Actions **variable**. Unset ⇒ the check **does not run** and both workflows now say so with a `::warning::`, because a skipped acceptance check that stays quiet is a gate looking at nothing |
+| KV namespace id | no | the Worker | committed, in `apps/edge/wrangler.toml` (with a commented `preview_id` — ADR-061 decision 2) |
+| `EXPO_PUBLIC_API_URL` | **no, and cannot be** | `apps/mobile`, at build time — the data source, the tile source **and** `build:web`, which bakes it into `dist/sw.js` | `apps/mobile/.env.local` (see `.env.example`) or the build env |
+| `VITE_API_URL` | **no, and cannot be** | `apps/web`, at build time (`src/adapters/datasource.ts`) | `apps/web/.env.local` (see `.env.example`) or the build env |
+| `LIVE_ALLOWED_ORIGINS` | no | the Worker, on a `/v1/live` upgrade | optional `[vars]` in `wrangler.toml`, or `apps/edge/.dev.vars` locally. Unset ⇒ **no origin filtering**, which is today's state (ADR-056 decision 9) |
+| `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` | no | **nothing yet** — reserved | the escape hatch for a socket tier on a different host. `EdgeClientOptions.liveUrl` is the plumbing and it is unwired; see WP5-6 |
+| `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` | no | **nothing yet** — reserved | `poll` \| `socket`. Selecting the socket engine is a source edit today, which is why `/v1/live` ships unreachable from a real build (WP5-6) |
+
+**One variable per renderer, and the socket URL is not one of them.** `EXPO_PUBLIC_API_URL` and
+`VITE_API_URL` are the *only* endpoint configuration; `wss://<same host>/v1/live` is **derived** from each
+by `liveSocketUrl` in `@nextbus/core`, corpus-pinned, because the `https:`→`wss:` half of that derivation is
+the one that ships a rider's location in cleartext when forgotten, works perfectly against
+`http://localhost:8787`, and shows no symptom anywhere ([ADR-056](./08-decision-log.md#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)
+decision 8). Both default to `DEFAULT_API_URL` in `packages/api-client/src/endpoint.ts` — the **one**
+declaration, down from four copies under two variable names, and
+`scripts/check-one-endpoint-declaration.mjs` (in the `pnpm boundaries` chain) fails the build if a second
+one appears or if an env read falls back to a literal instead of to it.
 
 ### Three homes, split by who consumes the value
 
@@ -191,10 +221,11 @@ The only credentials that exist are the ones that let CI *publish* the dataset.
 3. **Your own machine → `wrangler login`.** OAuth, credentials in `~/.wrangler`. You only ever need
    to *mint* an API token for CI to use — don't keep one lying around in a shell profile.
 
-**No `.env` file is loaded outside the Expo app.** Nothing in the repo depends on `dotenv`:
-`publish-dataset.mts` reads `process.env` directly, so `CLOUDFLARE_API_TOKEN` must come from the
-real environment (CI, or `export` in the shell for a one-off). Only Expo has built-in `.env`
-support, and only for its own directory.
+**Only a bundler loads a `.env` file, and only from its own project directory.** Expo reads
+`apps/mobile/.env*`; Vite reads `apps/web/.env*`. Nothing in the repo depends on `dotenv`, **nothing reads a
+`.env` at the repo root** (`.env.example` there is an inventory, not a configuration), and
+`publish-dataset.mts` reads `process.env` directly — so `CLOUDFLARE_API_TOKEN` must come from the real
+environment (CI, or `export` in the shell for a one-off).
 
 ### Two traps
 
@@ -236,8 +267,15 @@ Miniflare. The failure mode is deleting the live build, so it earns a rehearsal 
 backend.
 
 ## Deploy (later)
+**CI runs on every PR and every push to `main`** (`.github/workflows/ci.yml`, added in Wave 5): a clean
+checkout, `pnpm install --frozen-lockfile`, `typecheck` · `lint` · `test` (which includes the whole
+`boundaries` chain), `wrangler deploy --dry-run` to prove the Worker bundle and its Durable Object still
+compile, and `git diff --exit-code` to prove no gate rewrote a committed artefact. It needs **no
+credentials**. The workflow's own deploy job is written out in full and **deliberately inert** — it runs only
+when the `DEPLOY_ARMED` variable is `true`, so arming it is a settings change rather than a new file.
 - **Edge:** `pnpm --filter @nextbus/edge deploy` (Wrangler). First time, create the storage the
-  dataset lives in and wire it up:
+  dataset lives in, uncomment the `[[routes]]` / `workers_dev = false` block in `wrangler.toml` with the
+  real hostname, and wire it up:
   ```bash
   wrangler kv namespace create DATASET       # → replace REPLACE_WITH_KV_NAMESPACE_ID in wrangler.toml
   wrangler r2 bucket create nextbus-builds
