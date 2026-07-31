@@ -23,10 +23,19 @@
  * implementation is constantly tempted to grow, each of which belongs one layer up:
  *
  *  1. **Reconnection and backoff.** *When* to try again, how fast to widen the delay, when to stop
- *     asking — that is a policy three platforms must not each invent, and it is written down once in
- *     `createSocketTransport`. A port that owned it would make the policy unobservable: a test could
- *     no longer watch the second attempt happen at the right moment without a real socket and a real
- *     clock.
+ *     asking — that is a policy three platforms must not each invent, and it is split across two files
+ *     on purpose. The **arithmetic** — `min(maxMs, initialMs · factor^(attempt-1))` plus half jitter, and
+ *     the numbers it uses — is `liveReconnectDelayMs` in `@nextbus/core`, pinned by
+ *     `packages/core/spec/live.spec.json` and hand-ported to Swift and Kotlin from those rows. The
+ *     **scheduling** — the timer, the attempt counter, and the rule that it resets on a *frame* rather
+ *     than on an open — is `createSocketTransport`, because a port that owned it would make the policy
+ *     unobservable: a test could no longer watch the second attempt happen at the right moment without a
+ *     real socket and a real clock.
+ *
+ *     This bullet used to say the policy was "written down once in `createSocketTransport`", which was
+ *     false in exactly the way that matters here: this file names `URLSessionWebSocketTask` and OkHttp
+ *     two paragraphs up, and neither can read that file. A rule stated only in the JS implementation of a
+ *     port is a rule the port's other implementations will each invent.
  *  2. **The frame reducer.** What a `snapshot` or a `delta` *means* — merge by identity, honour
  *     `gone`, ask for a resync on a gap — is `applyLiveFrame` in `@nextbus/core`, pinned by
  *     `packages/core/spec/live.spec.json` and hand-ported to Swift and Kotlin from that corpus. A

@@ -1,26 +1,26 @@
-// The real transport: one WebSocket, and the reconnect policy nothing in this repo has ever held.
+// The real transport: one WebSocket, and the reconnect *schedule* nothing in this repo has ever held.
 //
-// WHY THE POLICY IS WRITTEN DOWN HERE RATHER THAN DISCOVERED PER PLATFORM
+// WHERE THE POLICY LIVES, AND WHY IT IS NOT ALL IN THIS FILE
 // Before this file the repo had no reconnect of any kind: `watch()`'s `setInterval` simply failed and
 // tried again a cadence later, and nothing anywhere decided how long to wait, how fast to widen or when
 // to stop. A socket has to decide all three, and if it is not written down each platform will answer
 // differently — iOS in a `URLSession` delegate, Android in an OkHttp listener — and a reviewer will have
-// no artefact to disagree with. So the numbers and their reasons are here, in one place, with a test that
-// watches the second attempt happen at the right moment.
+// no artefact to disagree with.
 //
-// THE POLICY
-//   · **Initial delay 1 s.** Short enough that a dropped connection on a train through a tunnel repairs
-//     itself before a rider notices, long enough not to be a tight loop against a Worker that is
-//     rejecting the upgrade.
-//   · **Doubling, capped at 30 s.** 1 → 2 → 4 → 8 → 16 → 30 → 30 … The cap matters more than the growth:
-//     an uncapped exponential reaches an hour, and a screen that has been open all afternoon on a bad
-//     connection would then take an hour to notice the network came back. 30 s is below the shard's own
-//     45–60 s poll cadence, so a reconnect that lands inside one cycle loses no data at all.
-//   · **Half jitter.** The delay is `capped/2 + random()·capped/2`. Every client watching a shard that
-//     restarts is disconnected in the same instant, and a fixed 1 s would bring all of them back
-//     simultaneously, which is precisely the load the restarted shard cannot take. Half rather than full
-//     jitter because full jitter can produce a near-zero delay, which is the thundering herd again with
-//     extra steps. `random` is injected so the test asserts a schedule rather than a distribution.
+// This file used to *be* that artefact, and that was the defect: `packages/ports/src/live-transport.ts`
+// asserted the policy "is written down once in `createSocketTransport`" in the same breath as naming
+// `URLSessionWebSocketTask` and OkHttp as the iOS and Android implementations — neither of which can read
+// TypeScript. So on the two platforms the port exists for, the policy was written down nowhere. The
+// arithmetic is now `liveReconnectDelayMs` in `@nextbus/core`, with 24 corpus rows that go red on every
+// platform until the schedule is ported, and the numbers themselves are the kernel's
+// `LIVE_RECONNECT_*` / `LIVE_KEEPALIVE_MS` constants, where each one's reason is stated.
+//
+// What stays here is everything the corpus cannot express, which is the part a test has to *watch*: the
+// timer, the attempt counter, and when the counter resets.
+//
+// THE HALF OF THE POLICY THAT IS THIS FILE'S
+//   · **Half jitter, from an injected source.** The delay is `capped/2 + random()·capped/2` — the sum is
+//     the kernel's; `random` is injected here so the test asserts a schedule rather than a distribution.
 //   · **`state: 'closed'` *with* a `retryable: false` error stops it, and both halves are required.**
 //     Reconnecting into a subscription that can never work would produce the same frame for ever, so the
 //     transport stops, having delivered the frame, and the session records the state so the screen can
@@ -53,6 +53,13 @@ import type {
   ServerFrame,
   SubscribeFrame,
   WatchTarget,
+} from '@nextbus/core'
+import {
+  LIVE_KEEPALIVE_MS,
+  LIVE_RECONNECT_FACTOR,
+  LIVE_RECONNECT_INITIAL_MS,
+  LIVE_RECONNECT_MAX_MS,
+  liveReconnectDelayMs,
 } from '@nextbus/core'
 import type { Clock, LiveTransportSink } from '@nextbus/ports'
 import { wireErrorOf } from '../errors'
@@ -90,26 +97,34 @@ export interface LiveSocketConnection {
 
 export type LiveSocketFactory = (url: string, handlers: LiveSocketHandlers) => LiveSocketConnection
 
-/** How the reconnect delay grows. See the policy in the header; every field has a reason there. */
+/**
+ * How the reconnect delay grows — the three inputs `liveReconnectDelayMs` takes, as an injection point.
+ *
+ * Kept as a shape here rather than folded into the kernel call because it is what a test overrides (the
+ * cap assertion runs the whole schedule at `maxMs: 3_000`), and because a native transport that wants a
+ * different curve should be able to say so without reimplementing the arithmetic. Each field's reason is
+ * on the kernel constant it defaults to.
+ */
 export interface SocketBackoff {
   initialMs: number
   factor: number
   maxMs: number
 }
 
-export const DEFAULT_SOCKET_BACKOFF: SocketBackoff = { initialMs: 1_000, factor: 2, maxMs: 30_000 }
-
 /**
- * How often to ping.
+ * The shipped schedule, restated from the kernel's constants rather than as literals.
  *
- * One incoming message every 30 s, which is the cheapest thing a client can send: incoming protocol
- * pings are not billed, and Cloudflare's hibernation auto-response answers them **without waking the
- * shard**, provided the bytes match exactly (see `LIVE_PING_MESSAGE` in `@nextbus/contract`). It is a
- * round number chosen to sit well inside the idle timeouts intermediaries impose, **not** a measurement:
- * WP0-5 has not happened, so there is no deployment to have measured one against. Revisit it with the
- * first real socket rather than treating it as settled.
+ * That indirection is the fix for finding 12: three numbers spelled here were the *only* statement of the
+ * policy, in a file iOS and Android cannot read. They are now declared where the corpus can pin them.
  */
-export const DEFAULT_KEEPALIVE_MS = 30_000
+export const DEFAULT_SOCKET_BACKOFF: SocketBackoff = {
+  initialMs: LIVE_RECONNECT_INITIAL_MS,
+  factor: LIVE_RECONNECT_FACTOR,
+  maxMs: LIVE_RECONNECT_MAX_MS,
+}
+
+/** How often to ping. See `LIVE_KEEPALIVE_MS` for the number and why it is not a measurement. */
+export const DEFAULT_KEEPALIVE_MS = LIVE_KEEPALIVE_MS
 
 /**
  * The keepalive bytes.
@@ -170,11 +185,13 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
     if (!released) sink?.frame(frame)
   }
 
-  /** `capped/2 + random()·capped/2`, rounded. See the policy in the header. */
-  const delayFor = (failures: number): number => {
-    const capped = Math.min(backoff.maxMs, backoff.initialMs * backoff.factor ** (failures - 1))
-    return Math.round(capped / 2 + random() * (capped / 2))
-  }
+  /**
+   * How long until the next attempt. The arithmetic is the kernel's, corpus-pinned and hand-ported; what
+   * this line contributes is the two things a fixture cannot hold — the live failure count and a jitter
+   * source. See `liveReconnectDelayMs`.
+   */
+  const delayFor = (failures: number): number =>
+    liveReconnectDelayMs({ attempt: failures, jitter: random(), ...backoff })
 
   /**
    * `?targets=` — the comma-separated stop ids the **Worker** hashes to pick a shard.

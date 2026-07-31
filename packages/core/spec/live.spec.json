@@ -2,7 +2,7 @@
   "module": "live",
   "source": "src/live.ts",
   "version": 1,
-  "doc": "The live-ETA protocol rules (WP5-1): what a frame means, what a client does with one, which targets can be watched, how fast a shard polls, which shard owns a target set, and how a socket URL is derived. Two things make this corpus different from the others in this package. First, several of these rules run in TWO runtimes — `diffEtas` builds the `delta` the Durable Object sends AND the one the polling emulator synthesises from two HTTP fetches; `acceptTargets` decides the accepted set on both sides — so a port that disagrees here does not merely render differently, it emits different frames. Second, every list these rules return is canonically ordered by `(stopId, routeId)`, with exactly one documented exception (`applyLiveEtasToNearby`, which is soonest-first because a card truncates); without a total order the socket engine and the polling engine produce the same data in two orders and the wave's byte-identity acceptance cannot be met by any implementation. Timestamps in these rows are verbatim in the two formats the wire really uses: `+08:00` from the operators, `Z`-suffixed UTC where our own layer stamped it. Third — added after review — one of these rules is here because it was *not*: a session's accepted target set. `applyLiveFrame` dropped `SnapshotFrame.targets`, so no platform could perform the comparison the field is published for, in the one function they all hand-port.",
+  "doc": "The live-ETA protocol rules (WP5-1): what a frame means, what a client does with one, which targets can be watched, how fast a shard polls, how long a client waits before reconnecting, which shard owns a target set, and how a socket URL is derived. Two things make this corpus different from the others in this package. First, several of these rules run in TWO runtimes — `diffEtas` builds the `delta` the Durable Object sends AND the one the polling emulator synthesises from two HTTP fetches; `acceptTargets` decides the accepted set on both sides — so a port that disagrees here does not merely render differently, it emits different frames. Second, every list these rules return is canonically ordered by `(stopId, routeId)`, with exactly one documented exception (`applyLiveEtasToNearby`, which is soonest-first because a card truncates); without a total order the socket engine and the polling engine produce the same data in two orders and the wave's byte-identity acceptance cannot be met by any implementation. Timestamps in these rows are verbatim in the two formats the wire really uses: `+08:00` from the operators, `Z`-suffixed UTC where our own layer stamped it. Third — added after review — two of these rules are here because they were *not*: a session's accepted target set (`applyLiveFrame` dropped `SnapshotFrame.targets`, so no platform could perform the comparison the field is published for) and the reconnect schedule (`liveReconnectDelayMs`, which lived in the client layer while the socket port named iOS and Android as its implementations). Both are the same species: a rule three platforms would each have had to reinvent, in the one function they hand-port.",
   "groups": {
     "sameReading": {
       "doc": "Is a second reading of the same route-at-stop *news*? Every field of `Eta` is compared except `observedAt`. That single exclusion is what makes a delta protocol worth having: `observedAt` records when we fetched a reading, so it moves on every poll round, and a port that compared it would report every reading as changed every round — a `delta` frame that is a `snapshot` with extra steps, and a screen that repaints continuously. A port that compared *too few* fields is the opposite failure and just as silent: the bus moves and nothing repaints.",
@@ -3369,6 +3369,299 @@
             "unchangedRounds": 0
           },
           "expect": 45000
+        }
+      ]
+    },
+    "liveReconnectDelayMs": {
+      "doc": "The client's reconnect schedule: `min(maxMs, initialMs · factor^(attempt-1))`, then **half jitter**, so the answer is always inside `[capped/2, capped]`. The rows read as the plain 1 → 2 → 4 → 8 → 16 → 30 s ramp because they pin `jitter: 1`, the band's deterministic top edge. This is arithmetic and not a timer: *when* to try again, the attempt counter and 'reset on a frame, not on an open' stay in `createSocketTransport`, where a test can watch the second attempt happen at the right moment. It is in this corpus because it was a client-layer secret while `packages/ports/src/live-transport.ts` claimed the policy was 'written down once' — in a file naming `URLSessionWebSocketTask` and OkHttp as the iOS and Android implementations, neither of which can read TypeScript. Two failures these rows exist to catch, both silent: an exponent that inverts (a retry *faster* than the initial delay, i.e. a tight loop against a server that has just dropped us) and a jitter that reaches zero (every client back in the same instant, which is the load a restarted shard cannot take).",
+      "cases": [
+        {
+          "name": "the-first-reconnect-waits-one-second",
+          "why": "The top of the band on the first attempt: `capped/2 + 1·capped/2` is `capped`, so `jitter: 1` is the deterministic upper edge of the real policy and the rows below read as the plain 1 → 2 → 4 → 8 → 16 → 30 s ramp. Short enough that a connection dropped in a tunnel repairs itself before a rider notices, long enough not to be a tight loop against a Worker that is refusing the upgrade.",
+          "args": {
+            "attempt": 1,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "the-second-attempt-doubles-it",
+          "why": "Doubling is the whole growth rule, and a port that read `factor · attempt` instead of `factor^(attempt-1)` agrees with the row above and with nothing after it.",
+          "args": {
+            "attempt": 2,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 2000
+        },
+        {
+          "name": "the-third-attempt-doubles-it-again",
+          "why": "Where a linear port and an exponential one have visibly parted company.",
+          "args": {
+            "attempt": 3,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 4000
+        },
+        {
+          "name": "the-fourth-attempt",
+          "why": "Still under the cap, so this row is about the exponent and nothing else.",
+          "args": {
+            "attempt": 4,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 8000
+        },
+        {
+          "name": "the-fifth-attempt",
+          "why": "The last step before the cap binds — 16 s, not yet 30 s. An off-by-one in the exponent shows up here as 32 s clipped to 30 s, which looks correct.",
+          "args": {
+            "attempt": 5,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 16000
+        },
+        {
+          "name": "the-sixth-attempt-is-capped-at-thirty-seconds",
+          "why": "`1000 · 2^5` is 32 s and the answer is 30 s. **The cap matters more than the growth:** an uncapped exponential reaches an hour, and a screen left open all afternoon on a bad connection would then take an hour to notice the network came back. 30 s is below the shard's own 45–60 s poll cadence, so a reconnect landing inside one cycle loses no data at all.",
+          "args": {
+            "attempt": 6,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 30000
+        },
+        {
+          "name": "the-cap-holds-however-long-the-outage-lasts",
+          "why": "Attempt 12 would be 2048 s uncapped. The row exists because an implementation that capped by clamping the *exponent* rather than the delay overflows quietly in a fixed-width integer on a hand-ported platform.",
+          "args": {
+            "attempt": 12,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 30000
+        },
+        {
+          "name": "a-jitter-of-zero-is-half-the-capped-delay",
+          "why": "The bottom of the band. **Half jitter, not full:** every client watching a shard that restarts is disconnected in the same instant, so a fixed delay brings all of them back simultaneously — precisely the load a restarted shard cannot take — while full jitter can produce a near-zero delay, which is the thundering herd again with extra steps. This row is the floor that guarantees it cannot.",
+          "args": {
+            "attempt": 1,
+            "jitter": 0,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 500
+        },
+        {
+          "name": "a-jitter-of-one-half-sits-in-the-middle-of-the-band",
+          "why": "`4000/2 + 0.5·4000/2`. The row that says the jitter is interpolated across the top half rather than added to the whole delay — a port doing `capped + jitter·capped` also passes both edges.",
+          "args": {
+            "attempt": 3,
+            "jitter": 0.5,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 3000
+        },
+        {
+          "name": "a-jitter-above-one-is-clamped-to-the-top-of-the-band",
+          "why": "Clamped rather than rejected: a jitter source that overshoots its range is still pointing the right way, and clamping keeps the answer inside the band the policy promises instead of inventing a delay no reviewer has seen.",
+          "args": {
+            "attempt": 1,
+            "jitter": 3,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "a-negative-jitter-is-clamped-to-the-bottom-of-the-band",
+          "why": "The dangerous end, and the reason the clamp is not a rejection: an unclamped `-1` would yield a delay of zero, which is an immediate retry into the server that just dropped us.",
+          "args": {
+            "attempt": 1,
+            "jitter": -1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 500
+        },
+        {
+          "name": "an-absent-jitter-falls-back-to-the-top-of-the-band",
+          "why": "`capped` — the plain exponential delay the policy would have had without jitter at all, which is the honest answer when the jitter source is the thing that is missing. Never the bottom of the band, because a broken jitter source must not be able to shorten a retry.",
+          "args": {
+            "attempt": 2,
+            "jitter": null,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 2000
+        },
+        {
+          "name": "a-fractional-delay-is-rounded",
+          "why": "`1001/2 + 0.5·1001/2` is 750.75. Rounded, not truncated, and pinned because a timer handed a fractional millisecond behaves differently on every platform — and because a port using integer division would land on 750 here and agree with every other row in this group.",
+          "args": {
+            "attempt": 1,
+            "jitter": 0.5,
+            "initialMs": 1001,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 751
+        },
+        {
+          "name": "the-zeroth-attempt-is-the-first-attempt",
+          "why": "A counter that has not been incremented yet. The exponent would be −1, i.e. a *shorter* delay than the initial one — the one arithmetic slip in this expression that produces a tight loop rather than a wrong-but-safe number. Same reasoning as `nextLiveCadenceMs`' guards: a computed number that is not a positive finite value is a misconfiguration, not an aggressive setting.",
+          "args": {
+            "attempt": 0,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "a-negative-attempt-is-the-first-attempt",
+          "why": "Same guard, from the other side. `2^-4` is a 62 ms retry loop.",
+          "args": {
+            "attempt": -3,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "an-absent-attempt-is-the-first-attempt",
+          "why": "Absent, rather than nonsense — the ordinary call from a caller that has not tracked failures.",
+          "args": {
+            "attempt": null,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "a-fractional-attempt-truncates-to-the-earlier-step",
+          "why": "Floored, so a counter that arrived as a fraction waits the *shorter* legal delay rather than an interpolated one no row in this group describes. 2.9 is attempt 2.",
+          "args": {
+            "attempt": 2.9,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 2000
+        },
+        {
+          "name": "an-attempt-below-one-does-not-invert-the-exponent",
+          "why": "The row the floor-then-clamp order exists for: 0.5 is positive, so a `> 0` guard alone lets it through, and `Math.floor(0.5)` is 0 — the same inverted exponent `the-zeroth-attempt-is-the-first-attempt` catches, reached by a value that guard cannot see.",
+          "args": {
+            "attempt": 0.5,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "a-supplied-cap-overrides-the-default",
+          "why": "The three schedule parameters are inputs, not constants, because that is what keeps them testable: this is the shape `createSocketTransport`'s `SocketBackoff` injection produces, and the socket's own suite asserts the same 1 → 2 → 3 → 3 s schedule against it.",
+          "args": {
+            "attempt": 4,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": 3000
+          },
+          "expect": 3000
+        },
+        {
+          "name": "a-supplied-initial-delay-overrides-the-default",
+          "why": "`250 · 2^1`. The other end of the same injection point.",
+          "args": {
+            "attempt": 2,
+            "jitter": 1,
+            "initialMs": 250,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 500
+        },
+        {
+          "name": "a-factor-of-one-never-widens",
+          "why": "A legal constant-delay policy: 1 s for ever. The boundary the guard below is measured against.",
+          "args": {
+            "attempt": 5,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": 1,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "a-factor-below-one-is-floored-at-one",
+          "why": "A factor under 1 *shrinks* the delay with every failure, which is a tight loop against a server that has just refused us — the opposite of what a backoff is. Floored rather than replaced by the default, because the caller's intent (do not widen) is legible and honouring it costs nothing.",
+          "args": {
+            "attempt": 5,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": 0.5,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "an-unusable-initial-delay-falls-back-to-the-default",
+          "why": "Zero is not a fast reconnect, it is no reconnect delay at all — `0 · 2^n` stays 0 for ever, so every attempt would retry immediately.",
+          "args": {
+            "attempt": 1,
+            "jitter": 1,
+            "initialMs": 0,
+            "factor": null,
+            "maxMs": null
+          },
+          "expect": 1000
+        },
+        {
+          "name": "an-unusable-cap-falls-back-to-the-default",
+          "why": "A negative cap would make `Math.min` return it and the delay would be negative — a timer scheduled in the past, i.e. the tight loop again, arrived at from the one parameter whose job is to prevent long waits.",
+          "args": {
+            "attempt": 6,
+            "jitter": 1,
+            "initialMs": null,
+            "factor": null,
+            "maxMs": -5
+          },
+          "expect": 30000
         }
       ]
     },

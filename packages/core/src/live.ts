@@ -117,6 +117,49 @@ export const LIVE_CADENCE_RAMP_ROUNDS = 3
 export const LIVE_SHARD_COUNT = 8
 
 /**
+ * The reconnect schedule: where it starts, how fast it widens, and where it stops widening.
+ *
+ * **Why these live in the kernel when the timer that uses them does not.** The numbers used to sit in
+ * `packages/api-client/src/live/socket.ts`, whose port declaration claimed the policy was *"written down
+ * once"* — in a file iOS and Android cannot read, in the same breath as naming
+ * `URLSessionWebSocketTask` and OkHttp as their implementations. So on the two platforms the port exists
+ * for, the policy was written down nowhere. The repo's own test for kernel membership settles it: the
+ * schedule is a pure rule over plain data whose only nondeterminism is an injected jitter, exactly the
+ * argument that keeps `nextLiveCadenceMs` here — a server-only ramp with a single consumer and twelve
+ * corpus rows, on the ground that a hand-port would otherwise transcribe an unexplained integer. A
+ * *client* rule that three platforms each reconnect by has a stronger claim than that, not a weaker one.
+ *
+ *  · **1 s to start.** Short enough that a connection dropped in a tunnel repairs itself before a rider
+ *    notices; long enough not to be a tight loop against a Worker that is refusing the upgrade.
+ *  · **Doubling to a 30 s cap.** 1 → 2 → 4 → 8 → 16 → 30 → 30 … The cap matters more than the growth: an
+ *    uncapped exponential reaches an hour, and a screen left open all afternoon on a bad connection would
+ *    then take an hour to notice the network came back. 30 s is below the shard's own 45–60 s poll
+ *    cadence (`LIVE_CADENCE_FLOOR_MS`), so a reconnect landing inside one cycle loses no data at all.
+ *
+ * *When* to try again — the timer, the attempt counter, and "reset on a frame, not on an open" — stays in
+ * `createSocketTransport`, where a test can watch the second attempt happen at the right moment. This is
+ * the arithmetic only.
+ */
+export const LIVE_RECONNECT_INITIAL_MS = 1_000
+/** See `LIVE_RECONNECT_INITIAL_MS`. Doubling; `1` would be a constant-delay policy, below `1` a tight loop. */
+export const LIVE_RECONNECT_FACTOR = 2
+/** See `LIVE_RECONNECT_INITIAL_MS`. Below the shard's poll cadence, so a reconnect inside one cycle loses nothing. */
+export const LIVE_RECONNECT_MAX_MS = 30_000
+
+/**
+ * How often a client pings to hold a socket open.
+ *
+ * Deliberately a **separate** constant from `LIVE_RECONNECT_MAX_MS` despite sharing its value: they are
+ * two unrelated round numbers, and a hand-port that folded them together would tie a keepalive interval
+ * to a backoff cap for ever. One incoming ping every 30 s is the cheapest thing a client can send —
+ * incoming protocol pings are not billed and Cloudflare's hibernation auto-response answers them
+ * **without waking the shard**, provided the bytes match `LIVE_PING_MESSAGE` exactly. Chosen to sit well
+ * inside the idle timeouts intermediaries impose, and **not** a measurement: WP0-5 has not happened, so
+ * there is no deployment to have measured one against. Revisit it with the first real socket.
+ */
+export const LIVE_KEEPALIVE_MS = 30_000
+
+/**
  * A session that has applied nothing yet.
  *
  * `seq: 0` is the sentinel, and it is load-bearing: the wire's counter starts at 1, so "`seq` is 0"
@@ -539,6 +582,32 @@ export function acceptTargets(targets: readonly WatchTarget[]): {
 // ── Cadence and routing ─────────────────────────────────────────────────────────────────────
 
 /**
+ * A finite, strictly positive number, or the fallback.
+ *
+ * The twin of `resolveClientPolicy`'s `usable()`, and the reasoning is transplanted whole: every number
+ * these two rules take is a count or a duration, so zero and negative are not aggressive settings but a
+ * misconfiguration, and a mistake should fall back to a value we know works rather than produce a `NaN`
+ * nobody can trace to its origin. Not shared with `policy.ts` because neither is exported and a
+ * cross-module private helper for a three-clause predicate would buy one line at the cost of a
+ * dependency; shared *within* this module because the alternative was two copies of it four functions
+ * apart, which is how the copies start disagreeing.
+ *
+ * The `typeof` clause is not belt-and-braces. Nothing in this package validates (ADR-052 decision 2), so
+ * a subscriber count or a backoff read from an environment variable arrives as a string typed as a
+ * number, and `'4' * 2` is `8` while `'a' * 2` is `NaN`.
+ */
+function positiveOr(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback
+  return value
+}
+
+/** `positiveOr` for a value where **zero is meaningful** — a jitter of 0 is the bottom of its band. */
+function finiteOr(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return value
+}
+
+/**
  * How long until a shard should poll upstream again — or `null` for "do not set an alarm at all".
  *
  * `null` is the whole economy of this design. A Durable Object with no subscribers and no alarm
@@ -563,15 +632,69 @@ export function nextLiveCadenceMs(input: {
   subscribers?: number
   unchangedRounds?: number
 }): number | null {
-  const subscribers = input.subscribers
-  if (typeof subscribers !== 'number' || !Number.isFinite(subscribers) || subscribers < 1)
-    return null
+  // `positiveOr(…, 0)` and then `< 1`, rather than the predicate written out here twice: a fractional
+  // subscriber count is as much a misconfiguration as a negative one and both mean "nobody is listening".
+  if (positiveOr(input.subscribers, 0) < 1) return null
 
-  const rounds = input.unchangedRounds
-  const quiet =
-    typeof rounds === 'number' && Number.isFinite(rounds) && rounds > 0 ? Math.floor(rounds) : 0
+  const quiet = Math.floor(positiveOr(input.unchangedRounds, 0))
   const step = (LIVE_CADENCE_CEILING_MS - LIVE_CADENCE_FLOOR_MS) / LIVE_CADENCE_RAMP_ROUNDS
   return Math.min(LIVE_CADENCE_CEILING_MS, LIVE_CADENCE_FLOOR_MS + quiet * step)
+}
+
+/**
+ * How long a client should wait before its `attempt`-th reconnect — the whole schedule, as arithmetic.
+ *
+ * `Math.min(maxMs, initialMs · factor^(attempt − 1))`, then **half jitter**: the answer is always inside
+ * `[capped / 2, capped]`. Every client watching a shard that restarts is disconnected in the same instant,
+ * and a fixed delay would bring all of them back simultaneously — precisely the load a restarted shard
+ * cannot take. Half rather than full jitter because full jitter can produce a near-zero delay, which is
+ * the thundering herd again with extra steps.
+ *
+ * **Why this is here rather than in the socket that calls it.** See `LIVE_RECONNECT_INITIAL_MS`: the
+ * policy was a client-layer secret while the port that declares the socket named iOS and Android as its
+ * implementations, so the one artefact a reviewer or a hand-porter could disagree with did not exist. It
+ * is pure arithmetic over plain data — the jitter is *injected*, not read — so it is corpus-expressible,
+ * and every platform's suite now goes red until the schedule is ported. The timer, the attempt counter and
+ * "reset on a frame, not on an open" stay in `createSocketTransport`, which is where they are observable.
+ *
+ * `jitter` is a number and not a function on purpose: a callback cannot be written in a JSON fixture, and
+ * a rule that cannot be stated in the corpus is a rule three platforms will each invent.
+ *
+ * Nonsense input falls back the same way `nextLiveCadenceMs`' does and for the same reason (`positiveOr`):
+ * `attempt` below one, fractional or unusable is the **first** attempt, so a broken counter waits rather
+ * than hammering; a `factor` under 1 would *shrink* the delay each time, which is a tight loop against a
+ * server that has just refused us, so it is floored at 1. An unusable `jitter` falls back to the top of
+ * the band — `capped`, the plain exponential delay the policy would have had without jitter at all, which
+ * is the honest answer when the jitter source itself is the thing that is broken.
+ *
+ * @spec live#liveReconnectDelayMs
+ */
+export function liveReconnectDelayMs(input: {
+  attempt?: number
+  /**
+   * `0`…`1`. The host's random source in production, injected by the caller; a constant in a test
+   * asserting the schedule. (Spelling that source's name here would fail `pnpm boundaries` — its
+   * banned-syntax half matches raw source lines with no comment stripper, recorded in the WP5-1 report.)
+   */
+  jitter?: number
+  initialMs?: number
+  factor?: number
+  maxMs?: number
+}): number {
+  const initialMs = positiveOr(input.initialMs, LIVE_RECONNECT_INITIAL_MS)
+  const maxMs = positiveOr(input.maxMs, LIVE_RECONNECT_MAX_MS)
+  const factor = Math.max(1, positiveOr(input.factor, LIVE_RECONNECT_FACTOR))
+  // `Math.max(1, …)` after the floor, not before it: `positiveOr` already rules out zero and negatives,
+  // but `Math.floor(0.5)` is `0`, and an exponent of −1 would make the first retry *faster* than the
+  // initial delay — the one arithmetic slip in this expression that produces a tight loop rather than a
+  // wrong-but-safe number.
+  const attempt = Math.max(1, Math.floor(positiveOr(input.attempt, 1)))
+  // Clamped rather than rejected: a jitter source that overshoots its range is still telling us something
+  // in the right direction, and clamping keeps the result inside the band the policy promises.
+  const jitter = Math.min(1, Math.max(0, finiteOr(input.jitter, 1)))
+
+  const capped = Math.min(maxMs, initialMs * factor ** (attempt - 1))
+  return Math.round(capped / 2 + jitter * (capped / 2))
 }
 
 /**

@@ -9,9 +9,11 @@ import {
   LIVE_CADENCE_CEILING_MS,
   LIVE_CADENCE_FLOOR_MS,
   LIVE_CADENCE_RAMP_ROUNDS,
+  LIVE_RECONNECT_INITIAL_MS,
   LIVE_SESSION_START,
   type LiveApplyResult,
   type LiveSession,
+  liveReconnectDelayMs,
   liveShardFor,
   liveSocketUrl,
   nextLiveCadenceMs,
@@ -100,6 +102,35 @@ describe('live#nextLiveCadenceMs', () => {
   }
 })
 
+describe('live#liveReconnectDelayMs', () => {
+  for (const c of specCases<
+    {
+      attempt: number | null
+      jitter: number | null
+      initialMs: number | null
+      factor: number | null
+      maxMs: number | null
+    },
+    number
+  >(corpus, 'liveReconnectDelayMs')) {
+    it(c.name, () => {
+      // `?? undefined` again, and here it is load-bearing twice over: `jitter: 0` is the bottom of the
+      // band (the row that proves the jitter can never reach zero) and a schedule parameter of `0` is a
+      // misconfiguration with its own row. Truthiness would turn both into "absent" and both rows would
+      // then pass against an implementation with no guard at all.
+      expect(
+        liveReconnectDelayMs({
+          attempt: c.args.attempt ?? undefined,
+          jitter: c.args.jitter ?? undefined,
+          initialMs: c.args.initialMs ?? undefined,
+          factor: c.args.factor ?? undefined,
+          maxMs: c.args.maxMs ?? undefined,
+        }),
+      ).toBe(c.expect)
+    })
+  }
+})
+
 describe('live#liveShardFor', () => {
   for (const c of specCases<{ targets: WatchTarget[]; shardCount: number | null }, number>(
     corpus,
@@ -178,6 +209,42 @@ describe('live#nextLiveCadenceMs — inputs JSON cannot express', () => {
     expect(nextLiveCadenceMs(hostileCount)).toBeNull()
     const hostileRounds = { subscribers: 1, unchangedRounds: '2' } as unknown as Cadence
     expect(nextLiveCadenceMs(hostileRounds)).toBe(LIVE_CADENCE_FLOOR_MS)
+  })
+})
+
+describe('live#liveReconnectDelayMs — inputs JSON cannot express', () => {
+  // Same boundary as the block above, and the same reason it is a TypeScript test rather than a row: a
+  // schedule parameter or an attempt counter can arrive as a string from an environment variable, or as
+  // `NaN` from arithmetic on one, and `JSON.parse` can produce neither.
+  type Schedule = Parameters<typeof liveReconnectDelayMs>[0]
+
+  it('treats a non-finite attempt or schedule parameter as absent', () => {
+    // `2 ** NaN` is `NaN` and `Math.min(30000, NaN)` is `NaN`, so without the guard this hands
+    // `setTimeout` a NaN delay — which fires *immediately* rather than never, i.e. the tight loop the
+    // whole backoff exists to prevent, against a server that has just dropped the connection.
+    expect(liveReconnectDelayMs({ attempt: Number.NaN, jitter: 1 })).toBe(LIVE_RECONNECT_INITIAL_MS)
+    // `Infinity` is the first attempt too, and not the cap: an unusable counter says nothing about how
+    // long the outage has been, so the schedule restarts rather than jumping to its slowest step.
+    expect(liveReconnectDelayMs({ attempt: Number.POSITIVE_INFINITY, jitter: 1 })).toBe(
+      LIVE_RECONNECT_INITIAL_MS,
+    )
+    expect(liveReconnectDelayMs({ attempt: 1, jitter: 1, initialMs: Number.NaN })).toBe(
+      LIVE_RECONNECT_INITIAL_MS,
+    )
+  })
+
+  it('treats a non-finite jitter as the top of the band', () => {
+    // The one input where zero is meaningful, so it has its own guard — and a `NaN` that fell through
+    // would make the delay `NaN` from the other side of the sum.
+    expect(liveReconnectDelayMs({ attempt: 1, jitter: Number.NaN })).toBe(LIVE_RECONNECT_INITIAL_MS)
+  })
+
+  it('treats values that are not numbers at all as absent', () => {
+    const hostile = { attempt: '4', jitter: '0' } as unknown as Schedule
+    // `'4'` would exponentiate correctly (`2 ** '3'` is 8) and `'0'` would multiply correctly, so this
+    // input produces a *plausible* 8 s delay without the `typeof` clause — the kind of wrong number no
+    // one investigates.
+    expect(liveReconnectDelayMs(hostile)).toBe(LIVE_RECONNECT_INITIAL_MS)
   })
 })
 
