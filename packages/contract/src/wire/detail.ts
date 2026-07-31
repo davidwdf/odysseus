@@ -102,12 +102,12 @@ export const NearbyStopSchema = z
     etas: z
       .array(EtaSchema)
       .describe(
-        'Soonest arrivals, deduped to one per route+direction. May be fewer than routeCount — routes with no live reading right now are not listed.',
+        'Soonest arrivals first, one per route+direction **at each boarding pole** — so a line boarding at two poles of this place appears twice, distinguished by `stopId` (WP5-9). A compact card with no per-pole heading should collapse them to one row per route+direction before capping and counting; `stopCardView` in @nextbus/core is that rule. May be fewer readings than routeCount: routes with no live reading right now are not listed.',
       ),
     routeCount: z
       .number()
       .describe(
-        'True number of distinct routes serving the place, from the static index (no live call). Lets a compact card say "soonest few of N · +N more" honestly, never a silent filter.',
+        'True number of distinct rider LINES — operator + route number + direction — serving the place, from the static index (no live call), counted once however many poles a line boards at. Lets a compact card say "soonest few of N · +N more" honestly, never a silent filter. Subtract rows counted in the same unit: subtracting per-pole readings from it understates what is hidden.',
       ),
   })
   .meta({ id: 'NearbyStop' })

@@ -34,7 +34,7 @@
 // Nothing here reads a clock, a device or a locale it was not handed — the property that makes the
 // package hand-portable at all (ADR-051).
 
-import { type EtaReadout, etaReadout, type RemarkView, remarkView } from './eta'
+import { type EtaReadout, etaLineKey, etaReadout, type RemarkView, remarkView } from './eta'
 import { formatBearing, formatDistance, formatWalk } from './geo'
 import { parseRouteId } from './ids'
 import { CLIENT_POLICY_DEFAULTS } from './policy'
@@ -97,9 +97,13 @@ export interface StopCardInput {
   /** Straight-line metres. Omitted where distance is irrelevant (Favourites), which hides the
    *  distance half of the caption. */
   distanceM?: number
+  /** The place's readings, soonest first — one per line per boarding pole since WP5-9, so a line
+   *  boarding at two kerbs appears twice. The card collapses them to one row per line; see
+   *  `stopCardView`. */
   etas: readonly Eta[]
-  /** True total routes serving the place, from the static index. Omitted by callers that have no
-   *  such total, where the fetched readings are the best available answer. */
+  /** True total **rider lines** (operator + number + direction) serving the place, from the static
+   *  index. Omitted by callers that have no such total, where the lines among the fetched readings
+   *  are the best available answer. */
   routeCount?: number
 }
 
@@ -127,15 +131,32 @@ export interface StopCardOptions {
  * serving as the headline (the feed sent no destination), so repeating it below would print the same
  * words twice; or its text is empty in the active locale, which the operators' feeds do produce.
  *
- * `routeCount` absent falls back to the number of readings, which is what a caller with no static
- * total can honestly claim — never a silent filter.
+ * `routeCount` absent falls back to the number of rider lines among the readings, which is what a
+ * caller with no static total can honestly claim — never a silent filter.
+ *
+ * **A compact card's row is a rider line at this PLACE, and since WP5-9 that has to be said out loud.**
+ * `/v1/etas` and `/v1/nearby` now publish one reading per line *per boarding pole* — a place is N poles
+ * (ADR-042) and the Place screen shows a row per kerb, which is the honest answer there because that
+ * screen prints a heading per kerb. This card has no such heading: two rows reading `68K → Julimount
+ * Garden` with two times would ask a rider to choose between them and give them nothing to choose
+ * with, which is the same failure `poleSideOctants` declines to commit one screen over. So the
+ * readings are collapsed to one row per line, keeping the soonest, and the kerb stays a Place-detail
+ * fact.
+ *
+ * That collapse is also what keeps the "+N more" count true, and it is the part that would have gone
+ * quietly wrong: `routeCount` is the number of distinct rider *lines* serving the place (the dataset
+ * counts `operator|route|bound` across every pole), so subtracting rows counted per *pole* from it
+ * understates what is hidden — 5 lines, 4 rows of which two are one line at two kerbs, and the card
+ * says "+1 more" while two whole lines are missing. One unit on both sides of the subtraction, or the
+ * affordance lies.
  *
  * @spec stop-card#stopCardView
  */
 export function stopCardView(input: StopCardInput, opts: StopCardOptions): StopCardView {
   const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
-  const shown = input.etas.slice(0, policy.maxRows)
-  const total = input.routeCount ?? input.etas.length
+  const lines = soonestPerLine(input.etas)
+  const shown = lines.slice(0, policy.maxRows)
+  const total = input.routeCount ?? lines.length
   return {
     stopId: input.stop.id,
     name: displayName(input.stop.name[opts.locale]),
@@ -144,6 +165,29 @@ export function stopCardView(input: StopCardInput, opts: StopCardOptions): StopC
     rows: shown.map((eta) => stopCardRow(eta, opts.locale, opts.now, policy)),
     remaining: Math.max(0, total - shown.length),
   }
+}
+
+/**
+ * One reading per rider line, in the order they arrived — the compact card's row unit.
+ *
+ * **First wins, and that is not laziness: it is the same assumption the cap already makes.** The cap
+ * takes the first `maxRows` readings, so every producer of this list serves it soonest-first —
+ * `/v1/nearby`'s schema says so, `stopArrivals` sorts, `applyLiveEtasToNearby` sorts, and Favourites
+ * sorts before it calls. Keeping the first sighting therefore keeps the soonest bus of the line, and
+ * doing it by parsing timestamps here would add a second answer to a question this module has already
+ * answered once.
+ *
+ * Not `dedupeEtas`: that rule is the *wire's* unit (a line at one pole) and this is the *card's* (a
+ * line at this place). They agree on the line and differ on the kerb, deliberately, so calling either
+ * one from the other would erase the distinction WP5-9 exists to draw.
+ */
+function soonestPerLine(etas: readonly Eta[]): Eta[] {
+  const byLine = new Map<string, Eta>()
+  for (const eta of etas) {
+    const line = etaLineKey(eta)
+    if (!byLine.has(line)) byLine.set(line, eta)
+  }
+  return [...byLine.values()]
 }
 
 /**
