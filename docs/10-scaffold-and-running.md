@@ -8,11 +8,18 @@ The monorepo skeleton described in [`05`](./05-monorepo-and-tooling.md) now exis
 ```
 apps/
   mobile/          Expo app (iOS / Android / Web-PWA) — NativeWind + expo-router + reanimated
+  web/             Vite + React DOM — ONE screen (Nearby) from the identical packages/core
+                   functions, the proof that the kernel is renderer-agnostic (ADR-068/069)
   edge/            Cloudflare Worker — cached ETA proxy, LandsD tile proxy, precomputed dataset
                    reader (KV/R2), and the /v1/live socket served by a sharded `EtaHub` Durable
                    Object; the daily build runs in GitHub Actions, not in the Worker
 packages/
-  core/            canonical types, DataSource interface, honest-ETA helpers
+  contract/        Zod = the ONE declaration of every wire shape → openapi.json (ADR-052) and the
+                   /v1/live frames → asyncapi.json (ADR-056); both committed and staleness-gated
+  core/            canonical types (z.infer of contract), DataSource interface, honest-ETA helpers,
+                   and the domain rules under a JSON fixture corpus (ADR-060)
+  ports/           the 7 type-only platform interfaces — `ls packages/ports/src` IS the iOS/Android
+                   porting checklist (ADR-051); imports nothing, emits no JS
   data-normalize/  KMB + Citybus fetch adapters (zod-validated) → canonical Eta
   api-client/      EdgeClient (v1 DataSource) + watch() as a real frame protocol over a
                    pluggable transport: poll emulator (default) · memory fake · WebSocket
