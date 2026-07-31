@@ -717,9 +717,10 @@ export class EtaHub extends DurableObject<Env> {
         // we could not ask. The `status` frame below is what says so honestly.
         after.set(result.target.stopId, before.get(result.target.stopId) ?? [])
       }
-      // …and a `retryable: false` failure leaves the target absent from `after` entirely, so its
-      // readings do land in `gone` — which is what `DeltaFrame.gone` already documents ("the bus
-      // departed, **or the target was dropped**") and what the poll emulator does with the same flag.
+      // …and a `retryable: false` failure leaves the target absent from `after` entirely, because it has
+      // left the subscription. Its readings are not reported as `gone`: `sendRound` sends the *corrected
+      // snapshot* for that case, so a set that changed under the client is re-echoed rather than
+      // described by a delta whose accepted set is stale (see `sendRound`).
     }
 
     // Whether *this shard* heard anything new, which is what the cadence ramp is a function of — a
@@ -760,15 +761,49 @@ export class EtaHub extends DurableObject<Env> {
     const mine = session.targets
       .map((target) => failures.get(target.stopId))
       .filter((error): error is WireError => error !== undefined)
+    const permanent = mine.filter((error) => !error.retryable)
 
     let seq = session.seq
-    if (changed.length > 0 || gone.length > 0) {
+    if (permanent.length > 0) {
+      // **A round that changes the accepted set re-echoes it, and a `snapshot` is the only frame that
+      // can.** A target that failed `retryable: false` has left this subscription for good, so the
+      // `targets` the client is holding — from its own `subscribe` — now names a stop nobody is polling,
+      // and `SnapshotFrame.targets`' rule ("compare it with what you sent and tell the rider about the
+      // difference") had nothing true to compare against after a round. Sent *instead of* the delta
+      // rather than after it: the two would describe the same state and the cost of a needless frame is
+      // the repaint, not the byte (see the module header). The snapshot is also the protocol's own
+      // authority frame — `applyLiveFrame` replaces the session's readings with it, whatever `seq` it
+      // carries — which is exactly right when the set it describes has changed underneath.
+      seq += 1
+      this.send(ws, {
+        type: 'snapshot',
+        seq,
+        at: frameAt(Date.now()),
+        targets: kept,
+        etas: canonicalEtas(readingsFor(kept, after)),
+      })
+    } else if (changed.length > 0 || gone.length > 0) {
       seq += 1
       this.send(ws, { type: 'delta', seq, at: frameAt(Date.now()), changed, gone })
     }
     // else: nothing changed for this subscriber, so nothing is sent at all. See the module header.
 
-    for (const error of mine) this.send(ws, this.status('retrying', error))
+    if (kept.length === 0 && permanent.length > 0) {
+      // **Nothing left to watch, and asking again cannot change that.** `reschedule` is about to delete
+      // the alarm and forget the readings — this subscription is *dead* — so `retrying` would leave a
+      // screen labelled "we are still trying" that never updates again: `socket.ts` is terminal only on
+      // `closed` **and** a permanent error, and a `status` frame never sets the kernel's `resyncNeeded`,
+      // so the client neither stops nor recovers. `closed` + a permanent error is the terminal pair, it
+      // is what `subscribe()` already sends for this same state, and it is what the poll emulator emits
+      // at the identical condition (`watching.length === 0`). Parity here is not tidiness: the two
+      // engines are supposed to be indistinguishable to a listener.
+      this.send(ws, this.status('closed', permanent[0]))
+    } else {
+      // `retrying` even for a permanent per-target failure, deliberately: it matches the poll emulator's
+      // choice rather than being more honest than it, and changing it must change both engines
+      // (BRIEF-3 §8 decision 7). The snapshot above is what carries the correction.
+      for (const error of mine) this.send(ws, this.status('retrying', error))
+    }
     const announcedLive = mine.length === 0
     if (announcedLive && !session.announcedLive) this.send(ws, this.status('live'))
 

@@ -601,6 +601,92 @@ describe('targets it will not or cannot watch', () => {
     }
   })
 
+  /**
+   * Make one target permanently unresolvable, run the body, then put the dataset back.
+   *
+   * **Deleted, not corrupted.** Corrupting the document into invalid JSON is what the test above does and
+   * it yields `upstream_unavailable` — *retryable*, which is the opposite of what these two cases are
+   * about. Removing the alias makes `ds.place()` return `null` and `requirePlace` throw `notFound`, which
+   * is `retryable: false`: the id parses, it simply no longer denotes anything. That is not a contrived
+   * state — `P:` ids change whenever clustering does, and the daily rebuild can drop a pole.
+   */
+  async function withUnresolvable<T>(pole: string, body: () => Promise<T>): Promise<T> {
+    const kv = env.DATASET as KVNamespace
+    const aliasKey = datasetKeys.alias(HASH, pole)
+    const placeId = (await kv.get(aliasKey, 'text')) as string
+    const savedPlace = (await kv.get(datasetKeys.place(HASH, placeId), 'text')) as string
+    expect(placeId, 'the fixture must resolve this pole before the test unresolves it').toBeTruthy()
+    await kv.delete(aliasKey)
+    await kv.delete(datasetKeys.place(HASH, placeId))
+    try {
+      return await body()
+    } finally {
+      await kv.put(aliasKey, placeId)
+      await kv.put(datasetKeys.place(HASH, placeId), savedPlace)
+    }
+  }
+
+  it('says closed, permanently, when a round drops a subscription’s last target', async () => {
+    // The path that had no terminal frame. A `retryable: false` failure empties this connection's target
+    // list, the shard then deletes its alarm and forgets its readings — the subscription is *dead* — and
+    // the last thing the client had been told was `retrying`. `socket.ts` is terminal only on `closed`
+    // **and** a permanent error, and the kernel never sets `resyncNeeded` for a `status`, so the transport
+    // neither stopped nor recovered: a screen that never updates again under a label saying we are still
+    // trying. The default engine says `closed` at the identical condition (`poll.ts`, `watching.length ===
+    // 0`), so this was a cross-engine divergence as well as an untruth.
+    const { frames, first } = await connectAndPoll([POLE_C.id])
+    expect(only(first, 'delta')[0]?.changed.length, 'it had readings to lose').toBe(2)
+    frames.drain()
+
+    await withUnresolvable(POLE_C.id, async () => {
+      expect(await runRound([POLE_C.id])).toBe(true)
+      const received = await frames.take(2)
+
+      const status = only(received, 'status')[0]
+      expect(status?.state).toBe('closed')
+      expect(status?.error?.code).toBe('not_found')
+      // The pair `socket.ts` needs to stop reconnecting, and the pair `poll.ts` already emits.
+      expect(status?.error?.retryable).toBe(false)
+
+      // …and the echo is corrected in the same breath, because a `snapshot` is the one frame that can say
+      // "this is now the whole truth" — the client is left holding an accurate empty subscription rather
+      // than an accepted set naming a stop nobody is polling.
+      expect(only(received, 'snapshot')[0]?.targets).toEqual([])
+      expect(only(received, 'snapshot')[0]?.etas).toEqual([])
+
+      // Nothing left to poll, so no alarm — the same end state an all-rejected `subscribe` frame reaches.
+      expect(await alarmOf([POLE_C.id])).toBeNull()
+    })
+  })
+
+  it('corrects the echo, and keeps retrying, when a round drops one of several targets', async () => {
+    // The partial case, and the reason it is not `closed`: the connection is still live and still being
+    // served, so `state` must say so. The per-target error stays `retrying` even though it is permanent —
+    // that is a deliberate parity with the poll emulator (BRIEF-3 §8 decision 7) and changing it has to
+    // change both engines. What was missing is the *echo*: after the round, `snapshot.targets` still named
+    // the dropped stop, so "compare the echo with what you sent" had nothing to compare against.
+    const { frames, first } = await connectAndPoll([POLE_A.id, POLE_C.id])
+    expect(only(first, 'delta')[0]?.changed.length).toBe(4)
+    frames.drain()
+
+    await withUnresolvable(POLE_C.id, async () => {
+      expect(await runRound([POLE_A.id, POLE_C.id])).toBe(true)
+      const received = await frames.take(2)
+
+      const snapshot = only(received, 'snapshot')[0]
+      expect(snapshot?.targets).toEqual([{ stopId: POLE_A.id }])
+      // The surviving target's readings, all of them: a snapshot is the whole truth for the set it echoes.
+      expect(snapshot?.etas.map((eta) => eta.stopId).sort()).toEqual([POLE_A.id, POLE_B.id])
+
+      const status = only(received, 'status').find((frame) => frame.error !== undefined)
+      expect(status?.state).toBe('retrying')
+      expect(status?.error?.code).toBe('not_found')
+
+      // Still a subscriber, so the cadence carries on for the target that still works.
+      expect(await alarmOf([POLE_A.id, POLE_C.id])).not.toBeNull()
+    })
+  })
+
   it('rejects targets past the per-connection cap rather than truncating them silently', async () => {
     const asked = poles.slice(0, LIVE_MAX_TARGETS_PER_CONNECTION + 3).map((pole) => pole.id)
     const { frames } = await connect(asked)
