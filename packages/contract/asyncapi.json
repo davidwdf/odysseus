@@ -242,7 +242,8 @@
             "type": "string"
           },
           "stopId": {
-            "type": "string"
+            "type": "string",
+            "description": "Canonical id of the POLE whose board this reading came off — never a place id, and never the boarding point a folded pole is displayed under (WP5-11). Together with `routeId` it is the pair `formatFavoriteRouteKey` encodes and a `delta` uses to say gone; with the route number and direction it is the identity of an arrival, so one line boarding at two poles of a place publishes one reading per pole (WP5-9)."
           },
           "operator": {
             "$ref": "#/components/schemas/OperatorId"
@@ -748,7 +749,8 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "The next arrival for this route AT THIS POLE, or `null` where there is none. Its `stopId` always equals the row’s `stopId`: a reading is never borrowed from a sibling pole, which is what made a bus appear at a kerb it was not coming to (WP5-9). Where upstream published a different service-type variant of the same rider line at this pole, that variant’s soonest reading is the one attached — a board publishes whichever variant is running and a row names one, so the exact route id alone dropped real arrivals."
                 },
                 "fare": {
                   "description": "Boarding fare here, HK$ decimal string.",

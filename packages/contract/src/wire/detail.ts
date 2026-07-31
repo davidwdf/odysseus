@@ -63,7 +63,9 @@ export const StopDetailSchema = z
     routes: z.array(
       z.object({
         route: RouteSummarySchema,
-        eta: EtaSchema.nullable(),
+        eta: EtaSchema.nullable().describe(
+          'The next arrival for this route AT THIS POLE, or `null` where there is none. Its `stopId` always equals the row’s `stopId`: a reading is never borrowed from a sibling pole, which is what made a bus appear at a kerb it was not coming to (WP5-9). Where upstream published a different service-type variant of the same rider line at this pole, that variant’s soonest reading is the one attached — a board publishes whichever variant is running and a row names one, so the exact route id alone dropped real arrivals.',
+        ),
         fare: z.string().optional().describe('Boarding fare here, HK$ decimal string.'),
         stopId: z
           .string()

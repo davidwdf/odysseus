@@ -9,6 +9,7 @@ import {
   type EtaView,
   estimateChildFare,
   estimateElderlyFare,
+  etaBoardingKey,
   etaLabelParts,
   etaLineKey,
   etaReadout,
@@ -169,6 +170,16 @@ describe('eta#etaLineKey', () => {
   for (const c of cases<{ operator: Eta['operator']; routeId: string }, string>('etaLineKey')) {
     it(c.name, () => {
       expect(etaLineKey(c.args)).toBe(c.expect)
+    })
+  }
+})
+
+describe('eta#etaBoardingKey', () => {
+  for (const c of cases<{ operator: Eta['operator']; routeId: string; stopId: string }, string>(
+    'etaBoardingKey',
+  )) {
+    it(c.name, () => {
+      expect(etaBoardingKey(c.args)).toBe(c.expect)
     })
   }
 })

@@ -225,7 +225,8 @@ export const WIRE_ENDPOINTS = [
   {
     operationId: 'getStopEtas',
     path: '/v1/etas/{id}',
-    summary: 'Live arrivals for a stop or place, deduped to one line per route+direction.',
+    summary:
+      'Live arrivals for a stop or place, one per route+direction at each boarding pole (WP5-9): service-type variants at one pole collapse to the soonest, and a line boarding at two poles of a place is two readings, distinguished by `stopId`.',
     response: EtaListSchema,
     params: [
       {

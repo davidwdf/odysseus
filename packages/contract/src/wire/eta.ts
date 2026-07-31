@@ -37,7 +37,11 @@ export const RemarkKindSchema = z
 export const EtaSchema = z
   .object({
     routeId: z.string(),
-    stopId: z.string(),
+    stopId: z
+      .string()
+      .describe(
+        'Canonical id of the POLE whose board this reading came off — never a place id, and never the boarding point a folded pole is displayed under (WP5-11). Together with `routeId` it is the pair `formatFavoriteRouteKey` encodes and a `delta` uses to say gone; with the route number and direction it is the identity of an arrival, so one line boarding at two poles of a place publishes one reading per pole (WP5-9).',
+      ),
     operator: OperatorIdSchema,
     arrivals: z
       .array(z.string())

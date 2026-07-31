@@ -1,8 +1,10 @@
 import {
+  applyLiveEtasToStopDetail,
   type Bound,
   classifyRemark,
   dedupeEtas,
   type Eta,
+  etaBoardingKey,
   parseRouteId,
   parseStopId,
   parseStopOrPlaceId,
@@ -223,25 +225,23 @@ function atPole(poleId: string, etas: Promise<Eta[]>): Promise<Eta[]> {
   return etas.then((list) => list.map((e) => ({ ...e, stopId: poleId })))
 }
 
-/** The rider-facing line an `Eta` belongs to. `dedupeEtas` collapses on exactly this, so it is
- *  the key that still matches when a live reading's service-type variant isn't the one the static
- *  data lists at this pole. */
-const lineKey = (operator: string, routeId: string): string => {
-  // Must agree with `dedupeEtas` exactly — including on an id it cannot parse, where both fall
-  // back to keying on the whole id so an odd reading dedupes only against its own twin.
-  const line = parseRouteId(routeId)
-  return line ? `${operator}|${line.routeNo}|${line.bound}` : `${operator}|${routeId}`
-}
-
 /**
  * `${routeId}|${rawStopId}` → the boarding fare there, plus route → destination. Both are
  * precomputed into the place document, so stamping costs no extra lookup.
  *
- * Destinations are indexed by **route id and by rider line**. The exact id can miss: a KMB
- * stop-board returns every service-type variant at the pole, `dedupeEtas` keeps whichever is
- * soonest, and that variant may not be the one the static data lists here. Falling back to
- * operator+number+direction — the same key `dedupeEtas` collapses on — keeps "→ destination" on
- * the card instead of dropping it for exactly the readings a rider is most likely to see.
+ * Destinations are indexed by **route id and by rider line at one pole**. The exact id can miss: a KMB
+ * stop-board returns every service-type variant at the pole, `dedupeEtas` keeps whichever is soonest,
+ * and that variant may not be the one the static data lists here — so falling back to the rider line
+ * keeps "→ destination" on the card instead of dropping it for exactly the readings a rider is most
+ * likely to see.
+ *
+ * **The fallback is per pole, and that is WP5-9.** Keyed by line alone it returned the first row of
+ * that line anywhere in the place, which is a different service rather than a different timetable
+ * wherever one number is run by two: at Tai On Street `GMB:20` boards for Chai Wan (Fung Yip Street)
+ * at one kerb and for Chai Wan Industrial City at the other, so a pole-blind fallback printed the
+ * wrong terminus on a real arrival. `etaLineKey` is the kernel's own line key (`@nextbus/core`), which
+ * this function used to keep a copy of under a comment saying it "must agree with `dedupeEtas`
+ * exactly" — a comment is not a mechanism.
  */
 function stampTables(place: PlaceDoc) {
   // Keyed on the **canonical** pole id, which is what `place.routes[].stopId` already carries and what a
@@ -252,14 +252,19 @@ function stampTables(place: PlaceDoc) {
   // its own — the two poles of one physical pole can list different fares for different routes.
   const fareByRouteAndPole = new Map<string, string>()
   const destinationByRoute = new Map<string, PlaceDoc['name']>()
-  const destinationByLine = new Map<string, PlaceDoc['name']>()
+  const destinationByBoardingLine = new Map<string, PlaceDoc['name']>()
   for (const r of place.routes) {
     destinationByRoute.set(r.route.id, r.route.destination)
-    const line = lineKey(r.route.operator, r.route.id)
-    if (!destinationByLine.has(line)) destinationByLine.set(line, r.route.destination)
+    const boarding = etaBoardingKey({
+      operator: r.route.operator,
+      routeId: r.route.id,
+      stopId: r.stopId,
+    })
+    if (!destinationByBoardingLine.has(boarding))
+      destinationByBoardingLine.set(boarding, r.route.destination)
     if (r.fare) fareByRouteAndPole.set(`${r.route.id}|${r.stopId}`, r.fare)
   }
-  return { fareByRouteAndPole, destinationByRoute, destinationByLine }
+  return { fareByRouteAndPole, destinationByRoute, destinationByBoardingLine }
 }
 
 /**
@@ -294,14 +299,14 @@ export async function stopArrivals(
   ctbBudget = DEFAULT_CTB_BUDGET,
 ): Promise<Eta[]> {
   const all = dedupeEtas(await memberEtaLists(place, ctbBudget))
-  const { fareByRouteAndPole, destinationByRoute, destinationByLine } = stampTables(place)
+  const { fareByRouteAndPole, destinationByRoute, destinationByBoardingLine } = stampTables(place)
   // Stamp each reading with its route's destination + boarding fare so flat ETA lists can show
   // "→ dest · $6.7" without the full Route object (ADR-036). Readings arrive carrying their canonical
   // pole id (`atPole`), which is the id both tables above are keyed on.
   return all
     .map((e) => {
       const destination =
-        destinationByRoute.get(e.routeId) ?? destinationByLine.get(lineKey(e.operator, e.routeId))
+        destinationByRoute.get(e.routeId) ?? destinationByBoardingLine.get(etaBoardingKey(e))
       const fare = fareByRouteAndPole.get(`${e.routeId}|${e.stopId}`)
       const stamped = withRemarkKind(e)
       if (!destination && !fare) return stamped
@@ -338,11 +343,9 @@ async function requirePlace(ds: DatasetSource, id: string): Promise<PlaceDoc> {
  *  inheriting whatever is in the namespace. */
 export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDetail> {
   const place = await requirePlace(ds, id)
+  const readings = (await memberEtaLists(place)).map(withRemarkKind)
 
-  const etaByRouteId = new Map<string, Eta>()
-  for (const e of await memberEtaLists(place)) etaByRouteId.set(e.routeId, withRemarkKind(e))
-
-  return {
+  const detail: StopDetail = {
     stop: toMergedStop(place),
     // `stopId` records which pole each route departs from, so the Place screen can group routes under
     // their pole (ADR-042). It is the pole the route's own stop list names — which may be a folded one
@@ -350,7 +353,7 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
     // attached beside it carries the same spelling (`atPole`).
     routes: place.routes.map((r) => ({
       route: toRouteSummary(r.route),
-      eta: etaByRouteId.get(r.route.id) ?? null,
+      eta: null,
       fare: r.fare,
       stopId: r.stopId,
     })),
@@ -364,6 +367,21 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
       ...(m.aliasIds?.length ? { aliasIds: m.aliasIds } : {}),
     })),
   }
+
+  // **Which reading belongs to which row is the kernel's rule, not this file's** (WP5-9). It used to
+  // be a local `Map` keyed on the route id alone, and a route id does not name a kerb: where two poles
+  // of one place run the same line — 43 rider lines across 37 places in build `1ccad7436a8df480`, and
+  // the norm for GMB — a reading off one pole was handed to the row that departs from the other.
+  // Measured live on 2026-07-31 at Hiram's Highway, opposite Marina Cove: the row for
+  // `GMB:1A:outbound:2002355` at `GMB:20001114` carried a reading stamped `GMB:20009421`, so the app
+  // showed a bus at a kerb it was not coming to *and* said nothing at the kerb it was.
+  //
+  // `applyLiveEtasToStopDetail` is the same function the live subscription applies to this payload one
+  // cadence later (`useLiveEtas` → `setQueryData`), which is the point of calling it here: two
+  // implementations of "this reading belongs to that row" is how the screen came to disagree with
+  // itself, and the previous one crossed poles where the kernel's does not. The `server` layer may
+  // import the kernel (ADR-051), and `classifyRemark` above is the same move.
+  return applyLiveEtasToStopDetail(detail, readings)
 }
 
 /**

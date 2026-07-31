@@ -326,6 +326,29 @@ export function etaLineKey(eta: Pick<Eta, 'operator' | 'routeId'>): string {
 }
 
 /**
+ * **The identity of an arrival: a rider line at one boarding point.** `<line>|<pole>`.
+ *
+ * This is the unit WP5-9 made the model agree on. A place is N poles (ADR-042); a route row is per
+ * pole; and this is the matching unit for a *reading*, so "one arrival" and "one row" finally mean the
+ * same thing. Two readers, and they must not disagree: `dedupeEtas` collapses on it, and
+ * `applyLiveEtasToStopDetail` uses it to find the reading for a row whose exact service-type variant
+ * is not the one upstream published. A fallback keyed differently from the normalisation would put a
+ * reading on a row the wire never gave it to.
+ *
+ * The pole is **last**, and both halves are joined with `|` while nothing escapes a `|` inside a
+ * field. That is a real hazard rather than a theoretical one — it cost this repo an arrival once
+ * already, see `dedupeEtas:literal-pipe-in-route-id-collides` — and it is bounded here: canonical ids
+ * carry colons and never a pipe (ADR-032), a route id that breaks that rule has already fallen back
+ * to the whole id in `etaLineKey`, and a pipe in the trailing field can only ever *split* one line,
+ * never merge two.
+ *
+ * @spec eta#etaBoardingKey
+ */
+export function etaBoardingKey(eta: Pick<Eta, 'operator' | 'routeId' | 'stopId'>): string {
+  return `${etaLineKey(eta)}|${eta.stopId}`
+}
+
+/**
  * Collapse rider-duplicate ETAs to one entry per line **at one boarding point**, keeping the soonest
  * reading.
  *
@@ -360,12 +383,7 @@ export function etaLineKey(eta: Pick<Eta, 'operator' | 'routeId'>): string {
 export function dedupeEtas(etas: Eta[]): Eta[] {
   const byLine = new Map<string, Eta>()
   for (const eta of etas) {
-    // `<line>|<pole>`, with the pole LAST. Both halves are joined with `|` and nothing escapes a `|`
-    // inside a field, which is a real hazard the corpus names rather than assumes: canonical ids carry
-    // colons and never a pipe (ADR-032), and where a route id breaks that rule `etaLineKey` has
-    // already fallen back to the whole id. A pipe in the trailing field can only ever split a line,
-    // never merge two.
-    const key = `${etaLineKey(eta)}|${eta.stopId}`
+    const key = etaBoardingKey(eta)
     const existing = byLine.get(key)
     if (!existing) {
       byLine.set(key, eta)

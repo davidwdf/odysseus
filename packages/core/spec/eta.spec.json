@@ -598,6 +598,41 @@
         }
       ]
     },
+    "etaBoardingKey": {
+      "doc": "The identity of an arrival — a rider line at one boarding point, `<line>|<pole>` — which since WP5-9 is the same unit as a route row's. `dedupeEtas` collapses on it and `applyLiveEtasToStopDetail` falls back to it when a row's exact service-type variant is not the one upstream published, so the literal format is pinned: a fallback keyed differently from the normalisation would attach a reading to a row the wire never gave it to. Same reason `ids#formatFavoriteRouteKey` is pinned.",
+      "cases": [
+        {
+          "name": "two-poles-of-one-line-are-two-keys",
+          "why": "The whole point. KMB runs 269D outbound off two poles of Tin Shui Estate, so there are two arrivals to publish and two rows to fill. Compare the next row: it is the SAME line and the keys differ only by the pole.",
+          "args": {
+            "operator": "KMB",
+            "routeId": "KMB:269D:outbound:3",
+            "stopId": "KMB:BD53690B9DA1C956"
+          },
+          "expect": "KMB|269D|outbound|KMB:BD53690B9DA1C956"
+        },
+        {
+          "name": "two-service-type-variants-at-one-pole-are-one-key",
+          "why": "The half that must not change: types 1 and 4 of 269D board at the same kerb, so they are one bus to a rider and one key. Citybus 969 appears three times at one pole for the same reason.",
+          "args": {
+            "operator": "KMB",
+            "routeId": "KMB:269D:outbound:4",
+            "stopId": "KMB:C052B4D46E1F48EA"
+          },
+          "expect": "KMB|269D|outbound|KMB:C052B4D46E1F48EA"
+        },
+        {
+          "name": "an-unparseable-route-id-still-keys-on-its-pole",
+          "why": "The pole is appended to the fallback line key too, so two unreadable readings at two kerbs stay two arrivals. The pole is deliberately LAST: a pipe in the trailing field can only split a line, never merge two, and canonical ids carry colons and never a pipe (ADR-032).",
+          "args": {
+            "operator": "KMB",
+            "routeId": "KMB:garbage",
+            "stopId": "KMB:ST141"
+          },
+          "expect": "KMB|KMB:garbage|KMB:ST141"
+        }
+      ]
+    },
     "dedupeEtas": {
       "doc": "Collapse rider-duplicate arrivals to one reading per line AT ONE BOARDING POINT, keeping the soonest. A rider thinks 'route number + direction', so the key is operator + route number + bound — parsed out of the canonical route id, `etaLineKey` below — plus the canonical id of the POLE the reading's board was called at. The pole joined WP5-9: a place is N poles (ADR-042) and a rider walks to one of them, so one line boarding at two of them is two arrivals and not one. Service-type variants AT one pole still collapse, which is what the rule is for. `args.etas` carries only the four fields the rule reads (routeId, operator, stopId, arrivals); a port should fill the remaining required Eta fields with inert values. `expect` is the surviving routeIds, in output order (insertion order of first sighting).",
       "cases": [
