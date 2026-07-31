@@ -332,12 +332,14 @@ claims about what Swift will need; this one is testable now.
 
 ### Wave 5 — Phase 2 (DO + WebSockets)
 
-> **Status 2026-07-30: Wave 5 is COMPLETE bar the deployment — WP5-0 … WP5-3 landed and verified**
+> **Status 2026-07-31: Wave 5 is COMPLETE bar the deployment — WP5-0 … WP5-3 landed and verified**
 > ([ADR-056](../08-decision-log.md#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)).
 > Built sequentially by four agents in **one** workspace rather than in parallel worktrees — the pieces are
 > disjoint by package, so sequencing cost wall-clock and nothing else, and the local `main` these worktrees
-> are cut from is at *"Initial commit"*, a hazard Wave 3 already paid for in a milder form. Nine corrections
-> to what is written below, recorded because the plan was wrong in ways worth knowing:
+> are cut from is at *"Initial commit"*, a hazard Wave 3 already paid for in a milder form. Then an
+> adversarial review ran over the finished diff and 13 of its 25 candidates survived a skeptic, so the wave
+> is 25 commits rather than ten. Thirteen corrections to what is written below, recorded because the plan
+> was wrong in ways worth knowing:
 > **(1) WP5-2's acceptance was vacuous, and its own row says so.** *"`git diff --stat` shows zero lines
 > changed under `apps/mobile/app/**`"* is zero **by construction**, because nothing under those paths reached
 > `watch()` at all — the row notes *"`watch()` has no callers today"* and no work package fixed it. That is
@@ -370,10 +372,44 @@ claims about what Swift will need; this one is testable now.
 > stale favourite killed live ETAs for every stop a rider had**). Both fixed. Neither was reachable by
 > reading either side alone.
 > **(8) `packages/api-client` had no `test` script at all**, so `turbo run test` skipped the package
-> *silently* and `EdgeClient.watch()` had never been executed by anything. It has 42 tests now. Repo total
-> **705 → 891**; the kernel corpus is **13 files / 82 groups / 677 cases**.
+> *silently* and `EdgeClient.watch()` had never been executed by anything. It has 47 tests now. Repo total
+> **705 → 934** (core 738 · edge 93 · api-client 47 · mobile 36 · web 20, counted on a clean clone). The
+> corpus figures are **not restated here** — Wave 3's own correction (10) established that no document states
+> them by hand any more; the generated table in `packages/contract/README.md` §6 is where they live.
 > **(9) `check-core-budget.mjs`, named in the risk table below, still does not exist**, so nothing mechanical
 > stopped `packages/core/src/live.ts` at 691 lines (57% comment, in line with `eta.ts`'s proportions).
+> **(10) The plan has no step for an adversarial review, and this wave shows it should.** Six read-only
+> finders over the finished diff raised 28 candidates; three skeptics (one per area, batched — not a
+> per-finding fan-out) judged 25 of them and **confirmed 13**. Every one of the 13 was in code that had
+> passed `typecheck`, `test`, `lint`, `boundaries` and a `--dry-run` bundle. The species worth planning for:
+> **three regressions arrived by *removing* a line** — the served cadence stopped being in force, a failed
+> first load became permanent, and the freshness cue could never fire because `refetchInterval` was the
+> screen's clock as well as its fetch. No gate in this repo can see a deletion whose loss is a *behaviour*,
+> and the seam-substitution harness in particular cannot: it pins `now` to a constant so two engines can be
+> compared byte for byte, which is exactly why the clock needed a test of its own.
+> **(11) Wave 2's `dedupeRoutes` key was wrong, and Wave 5 is what made it visible.** A rider line was keyed
+> `operator|routeNo|bound`, discarding the boarding point as noise. It is noise for KMB and Citybus and it is
+> **identity for GMB**, where numbers repeat: two different number-20 services at Tai On Street, both
+> circular so both "outbound", were rendered as one row — the second destination never shown, and where 20
+> was a pole's only route the pole's whole group vanished from the list while its dot stayed on the map (21
+> poles emptied in the 2026-07-27 build). The live merge is what forced it: with the surviving row chosen by
+> *which row has a reading*, that row's destination, its map dot and its scroll target followed the sooner
+> kerb and **moved as buses departed**. Fixed 2026-07-31 (owner's call, option A of three) — the key is now
+> `operator|routeNo|bound|stopId`. The residual is a plan-level fact, not a bug: the model's unit of *an
+> arrival* is (line, **place**) while its unit of *a row* is now (line, **pole**), and those must be the same
+> unit. **WP5-9** owns closing it.
+> **(12) Five of the wave's confirmed findings are latent only because WP5-6 has not shipped.** The socket
+> engine cannot be selected without a source edit, so no rider is affected by any shard defect today — which
+> is also why five of them could ship green. Whoever does WP5-6 is un-latching those five fixes, and should
+> read `.context/wave5/review/VERDICTS-do.md` before assuming the shard is now sound.
+> **(13) Three gates this wave shipped reported success while looking at less than they claimed** — the
+> repo's sixth, seventh and eighth instance of that one failure. An allowlist matcher compared file and
+> snippet but never `pattern.id`, and its selftest had never executed the matcher at all (sixteen green
+> fixtures over code nothing ran); a policed directory that stopped existing dropped out in silence while the
+> success line went on printing "5 policed dirs"; and `asyncapi.json`'s first paragraph claimed the two
+> documents share `components.schemas` byte for byte, which was false for **34 of 34** schemas. All three
+> fixed in `dc62352`. The pattern is now old enough that a new gate should be assumed vacuous until its
+> selftest has been watched failing on the *matcher*, not only on the pattern.
 
 | ID | Title | Acceptance | Depends |
 |---|---|---|---|
@@ -385,8 +421,9 @@ claims about what Swift will need; this one is testable now.
 **WP0-1 is a hard prerequisite for WP5-3.** DO instances are 128 MB each; N instances each parsing an
 8.3 MB dataset (≈20 MB heap measured) is not survivable.
 
-**Added 2026-07-30 — five rows the wave found and deliberately did not do.** Each is a named owner for
-something that would otherwise sit in ADR-056's prose, which is how WP2-8 and WP2-9 nearly did not happen.
+**Added 2026-07-30, extended 2026-07-31 — seven rows the wave found and deliberately did not do.** Each is a
+named owner for something that would otherwise sit in ADR-056's prose, which is how WP2-8 and WP2-9 nearly
+did not happen.
 
 | ID | Title | Scope & why | Acceptance | Size |
 |---|---|---|---|---|
@@ -395,25 +432,35 @@ something that would otherwise sit in ADR-056's prose, which is how WP2-8 and WP
 | **WP5-6** | **Make the socket engine selectable without a source edit** | `/v1/live` ships **unreachable from a real build**: `EdgeClientOptions.liveUrl`/`.transport` are the plumbing, `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` and `…_LIVE_TRANSPORT` are the documented spellings, and nothing reads them. Note the deliberate absence of an `auto` value — it would imply a socket→poll fallback that does not exist | Both app shells select `poll`\|`socket` from the environment; the default stays `poll`; docs/10's table loses its two "nothing yet" rows | S |
 | **WP5-7** | **Batch `/v1/etas?ids=…`, then adopt live on Nearby** | Nearby is not the first adopter because its live target set is ≤6 places, so the poll emulator would issue 6 requests per window where the screen issues 1 — a real regression. `applyLiveEtasToNearby` is written and corpus-pinned with no consumer until this lands. Additive per ADR-052 §5 | Nearby subscribes; request count per window does not increase | M |
 | **WP5-8** | **A `--range` mode for `scripts/precommit-docs-check.mjs`** | The docs-freshness rule of CLAUDE.md rule 7 **has never been enforced anywhere**: the hook is not installed (`core.hooksPath` unset) and the script is a Claude Code `PreToolUse` hook that reads a tool-call payload on stdin and diffs the *index*, so in CI it exits 0 having checked nothing. `ci.yml` states that rather than shipping the green no-op | One declaration of the rule, applied per commit over a PR's range in CI, with a selftest that watches it fail | S |
+| **WP5-9** | **One reading per boarding point — the canonical model is under-normalising** *(added 2026-07-31; the owner's own framing: "we need to normalise the data to our own structure so we can understand what we're doing and consistently present it")* | `dedupeEtas` (`packages/core/src/eta.ts`) collapses on `operator\|routeNo\|bound`, so `/v1/etas/:id` returns at most one reading per line **per place** and discards the sibling pole's arrival — measured: GMB 68K had buses at both poles 11 s apart and we published one. Since correction (11) a row is per *pole*, so the second pole's row now reads "no reading right now" while a bus is genuinely due there. Upstream keeps the two distinct and we fuse them; the fix is `stopId` in the key (or dedupe per member before merging). It is a **wire change** — `/v1/etas/:id` and `/v1/stop/:id`'s embedded readings both grow — so it needs its own ADR, a payload-size check against the biggest interchange, and a look at whether `NearbyStop.etas`' `maxRows` cap still reads honestly when a line can appear twice. Nothing in Wave 5 depends on it | A place with one line boarding at two poles publishes a reading for each; the live merge fills both rows; payload growth measured at the worst interchange | M |
+| **WP5-10** | **Label a pole heading by something that distinguishes it** *(added 2026-07-31)* | The display cost correction (11) accepted: at Tin Shui Wai Park both members print the stop code **TN510**, so 269D now renders twice under headings that look identical. The heading is the wrong thing to fix by fusing two services; label it by the pole's own name or bearing (`bearingOctant` is already in the kernel and already renders the compass caption) | Two poles of one place are distinguishable in the list without reading the routes under them | S |
 
 ## Phase 2 cost model
 
-Measured/verified inputs: Workers Paid $5/mo, 10M req + 30M CPU-ms included, then $0.30/M and
+Cited inputs — vendor-published rates, not measurements taken here (~~Measured/verified inputs~~;
+re-verified against the Cloudflare pricing pages 2026-07-30, and several had moved since they were first
+written): Workers Paid $5/mo, 10M req + 30M CPU-ms included, then $0.30/M and
 $0.02/M. Waiting on `fetch()`/KV does **not** count as CPU; **Cache API hits still count as billable
-requests**. DO: 1M req/mo included then $0.15/M, WS **messages count 20:1**, alarms count as
-requests, 400k GB-s included, hibernated objects accrue **no** duration.
+requests**. DO: 1M req/mo included then $0.15/M, WS **messages count 20:1** (*incoming* only — outgoing are
+free), alarms count as requests, 400k GB-s included **then $12.50/M GB-s**, hibernated objects accrue **no**
+duration. Not in this list and dominant when unsharded: **each `setAlarm()` is billed as one row written**,
+$1.00/M over 50M.
 
-| DAU | Polling (today, 20 s) | DO + WS @15 s alarm | DO + WS @60 s alarm |
+*Every cell below is superseded by the correction under this table. Kept rather than deleted because it is
+cited elsewhere and the citations need somewhere to land.*
+
+| DAU | Polling (stated "today, 20 s"; actually **30 s**) | DO + WS @15 s alarm (**UNVERIFIED**) | DO + WS @60 s alarm (**UNVERIFIED**) |
 |---|---|---|---|
-| 1k | $5 (0.9M req) | $5 | $5 |
-| 10k | $5 (9M req) | ~$8 | $5 |
-| 100k | ~$29 (90M req → $24 over) | ~$35–45 | **~$12** |
+| 1k | $5 (0.9M req → 0.6M) | $5 | $5 |
+| 10k | $5 (9M req → 6M) | ~$8 | $5 |
+| 100k | ~$29 (90M req → 60M, $15 over not $24) | ~$35–45 | **~$12** |
 
 **Polling cost scales with active user-minutes; DO cost scales with hot-stop-minutes × alarm
 cadence.** So the naive 10–15 s alarm from `docs/03` makes DO *more* expensive than polling — it
-burns 4× the requests to deliver identical data, because `docs/01` and ADR-008 already concede
-upstream refreshes only ~1/min. **Align alarms to ~45–60 s and DO wins decisively at scale.**
-Crossover lands around 40–45k DAU.
+burns 4× the requests to deliver identical data, because upstream refreshes only ~1/min — **a claim cited
+here to `docs/01` and ADR-008, neither of which contains it.** **Align alarms to ~45–60 s and DO wins
+decisively at scale.** Crossover lands around 40–45k DAU. *(The cadence conclusion survives; the argument
+for it does not — read the correction.)*
 
 > ⚠️ **Correction, 2026-07-30 (WP5-3 / [ADR-056](../08-decision-log.md#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)):
 > the cadence conclusion above is right and every number supporting it is wrong.** Read the ADR's
