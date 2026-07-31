@@ -1,14 +1,15 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-30**. **Waves 0–4 are on `main`** (PRs #11–#18); **Wave 5 is complete bar the
-> deployment** on `turbo-cache-inputs-v2` — **the PR is not open yet.**
+> Snapshot: **2026-07-31**. **Waves 0–4 are on `main`** (PRs #11–#18); **Wave 5 is complete bar the
+> deployment** on `turbo-cache-inputs-v2` — 25 commits, and the branch is larger than a wave should be
+> because an adversarial review and its thirteen fixes landed on the same branch as the feature.
 > **What Wave 5 is:** `DataSource.watch()` stopped being a promise. It is now a real frame protocol —
 > `snapshot`/`delta`/`status`, declared once in Zod and published as `asyncapi.json` — over a pluggable
 > transport, whose **default is a poll emulator** (HTTP polling wearing the frames) and whose other
 > implementation is a **sharded, hibernating `EtaHub` Durable Object** behind `/v1/live`, with an adaptive
 > 45→60 s alarm ([ADR-056](./08-decision-log.md#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)).
-> Four agents, one workspace, sequential, ten commits.
+> Four agents, one workspace, sequential, ten commits — **then a review pass of fifteen more.**
 > **The plan's own acceptance could not be met as written, twice over, and that is the wave's most useful
 > finding:** WP5-2's *"`git diff --stat` shows zero lines changed under `apps/mobile/app/**`"* was zero **by
 > construction** — nothing under those paths reached `watch()` at all, which the row itself notes and no work
@@ -45,8 +46,38 @@
 > deploy job is written out and deliberately inert), **one declaration of where the API is** (`DEFAULT_API_URL`,
 > down from four copies under two variable names, with a gate), an `.env.example` inventory at the root plus
 > the one `apps/web` never had, and the commented custom-domain block in `wrangler.toml`. Test totals
-> **868 → 891** (core 709 · edge 86 · api-client 42 · mobile 34 · web 20); `packages/api-client` has a `test`
+> **705 → 934** (core 738 · edge 93 · api-client 47 · mobile 36 · web 20, **counted on a clean clone** —
+> two reports of this wave quoted 891 and 937, neither counted); `packages/api-client` has a `test`
 > script for the first time, having been skipped **silently** by `turbo run test` until now.
+> **Then an adversarial review ran over the finished diff, and it is the most useful thing in the wave after
+> the seam itself.** Six read-only finders raised 28 candidates; three skeptics — one per area, batched, *not*
+> a per-finding fan-out — judged 25 and **confirmed 13**. Every one of the 13 was in code that had already
+> passed `typecheck`, `test`, `lint`, `boundaries` and a `--dry-run` bundle, and **three arrived by *removing*
+> a line**: the served cadence stopped being in force, a failed first load became permanent, and the freshness
+> cue could never fire because `refetchInterval` was the screen's clock as well as its fetch. Nothing here can
+> see a deletion whose loss is a behaviour — and the seam-substitution harness least of all, because it pins
+> `now` to a constant so two engines can be compared byte for byte, which is exactly why the clock needed a
+> test of its own. Five of the 13 were in the shard, where **no rider could be affected because nothing can
+> reach the object yet (WP5-6)** — which is equally why five of them shipped green. All 13 are closed; the
+> decisions among them are ADR-056 decisions 13–19.
+> **One of them was not a bug report but a product decision, and the owner took it:** a rider line is now
+> identified by operator + number + direction **at one pole**, so a line boarding at two poles of a merged
+> place keeps a row at each. That field is noise for KMB and Citybus and **identity for GMB** — two different
+> number-20 services at Tai On Street, both circular so both "outbound", were one row, the second destination
+> never shown, and where 20 was a pole's only route **the pole's whole group vanished from the list while its
+> dot stayed on the map** (21 poles emptied in the 2026-07-27 build). The corpus had pinned the defect twice
+> and argued both ways; one row is renamed and now pins the fix. Two costs were accepted rather than smoothed
+> over, and both are carried forward with an owner: WP5-9 and WP5-10 below.
+> **Verified by running, in the review pass too:** `pnpm dev:edge` against the real KV state (`/v1/health`
+> `"dataset":"kv"`, `datasetBuildsThisIsolate: 0`) with a Node WebSocket probe on `/v1/live` against the live
+> HK feeds, showing the corrected re-echo on real data (`KMB:NOPE` accepted by the parser, then re-echoed out
+> of the accepted set with `not_found` on the next round); the boarding-point fix measured against live
+> upstream (GMB 68K publishing at both poles 11 s apart, and a pair flipping between "Kai Ham" and "Ho
+> Chung"); and `wrangler deploy --dry-run` still resolving `EtaHub`. **Tested but not run:** the freshness-cue
+> fix (`apps/mobile/test/live-clock.test.tsx`, both cases watched failing against the shipped code, no browser
+> pass), the kernel's reconnect schedule and the accepted-set reader (corpus + unit only, and the field is not
+> reachable from a screen yet), and the two poll-emulator fixes. **Every one of the 13 fixes was watched
+> failing first**, which is the wave's standing rule and the only reason the assertions are worth anything.
 > Previously: **Wave 4 — the proof** (PR #17, [ADR-068](./08-decision-log.md) · [ADR-069](./08-decision-log.md)):
 > `apps/web` renders one screen from the identical kernel functions, and what it caught in the *first*
 > renderer was the return on the wave — see *Next steps*.
@@ -213,8 +244,9 @@ now arrive through `DataSource.watch()` on Place detail, from a poll emulator by
 `EtaHub` Durable Object over `/v1/live` when the socket engine is selected — which today needs a source edit
 (WP5-6). Pick up at **WP0-5**: it is now genuinely the next job rather than a deferral, because the cheap half
 (CI on every PR) has landed and the rest is a domain, a Cloudflare account and the settings that follow — plus
-the five Wave 5 follow-ups (WP5-4 … WP5-8), of which **WP5-4** (an upstream outage currently reads as "no
-buses") is the one with rider-visible consequences.
+the seven Wave 5 follow-ups (WP5-4 … WP5-10), of which **WP5-4** (an upstream outage currently reads as "no
+buses") and **WP5-9** (a pole's row can read "no reading" while a bus is due there) are the two with
+rider-visible consequences.
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
@@ -513,7 +545,28 @@ buses") is the one with rider-visible consequences.
   reconnect policy all exist and are tested; what does not exist is a way to *choose* the socket engine
   without editing source, because `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` are documented and
   **unread**. The shipped default is the poll emulator, so no rider is affected — but nothing outside a test
-  or a `wrangler dev` session has ever spoken to the Durable Object.
+  or a `wrangler dev` session has ever spoken to the Durable Object. **This is what makes the review's five
+  shard findings latent**, and the sentence a new session needs before it flips the variable: it is a
+  one-variable change that un-latches five fixes at once, so read
+  `.context/wave5/review/VERDICTS-do.md` first rather than assuming the shard is now sound.
+- 🟠 **A place publishes at most one reading per line, but now renders a row per pole** (WP5-9) — so the
+  second pole's row reads "no reading right now" while a bus is genuinely due there. `dedupeEtas` collapses on
+  `operator|routeNo|bound` across the whole place; measured, GMB 68K had buses at both poles 11 s apart and we
+  published one. Not a client bug: the canonical model is **under-normalising**, and the owner's framing is the
+  brief — *"we need to normalise the data to our own structure so we can understand what we're doing and
+  consistently present it."* A wire change, so it wants its own ADR and a payload-size check.
+- 🟠 **Two poles of one place can wear identical headings** (WP5-10) — Tin Shui Wai Park's two members both
+  print the stop code TN510, so since the boarding-point fix 269D renders twice under headings that look the
+  same. The answer is to label a heading by the pole's own name or bearing (`bearingOctant` is already in the
+  kernel), not to fuse two services back together.
+- ✅ **Closed by Wave 5, kept here for the history: a raw upstream URL literal in a screen was invisible to
+  both tools.** `pnpm boundaries` checks the *import graph*, and `fetch('https://data.etabus.gov.hk/…')`
+  imports nothing, so golden rule 2 was encoded only as `view` ✗→ `adapters` — recorded in Wave 1 and owned by
+  nobody for four waves. The mechanism, not a promise: `scripts/check-view-transport-free.mjs` in the
+  `boundaries` chain, five source patterns over five policed directories, with the live tree as its last
+  selftest scenario. Its allowlist matcher was itself one of the review's findings, so the selftest now has
+  four allowlist cases including the over-match. Still open in the same family: `packages/ui/preset.js` and
+  `global.css` sit outside the policed `src` directories.
 - 🔴 **An upstream outage currently reads as "no buses", on both the socket and HTTP** (WP5-4). `coalesce`
   resolves a rejected upstream call to `[]`, so `/v1/etas/:id` answers `200 []` and the shard's diff reports
   every reading `gone` — the *"a failed round is not a departure"* rule defeated one layer below where it is
@@ -526,8 +579,10 @@ buses") is the one with rider-visible consequences.
 - **`/v1/live` is unprotected**, and the `Origin` check does not change that: a WebSocket upgrade does not
   honour CORS, a missing `Origin` must be allowed (that is what native clients send), so the check is
   browser-only, advisory, and **off by default** because there is no production origin to allowlist yet. What
-  would protect it is zone rate limiting, which needs the domain. The DO's four caps bound one connection's
-  fan-out, not one script's.
+  would protect it is zone rate limiting, which needs the domain. The DO's five caps bound one connection's
+  fan-out, not one script's — and one of them was found in the review to be a lock-out in its own right: a
+  shard that had filled up **refused** every subsequent legitimate upgrade with a 500 the browser cannot read.
+  It rejects the excess targets now and keeps the rider.
 - **Live ETA / nearby data is server-side**; the **search index is on-device** (ADR-037 — first step of
   [ADR-007](./08-decision-log.md)), but it's still **server-computed** and fetched. The static data is now
   precomputed into KV/R2 (ADR-055), but it is still **derived from the hkbus consolidated dataset** — the own
@@ -575,12 +630,22 @@ buses") is the one with rider-visible consequences.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**891 tests**: core 709 · edge 86 · api-client 42 · mobile 34 · web 20, plus the whole
+3. `pnpm test` (**934 tests**: core 738 · edge 93 · api-client 47 · mobile 36 · web 20, plus the whole
    `pnpm boundaries` chain) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with
    `datasetBuildsThisIsolate: 0`.
 4. For the PWA specifically: `pnpm --filter @nextbus/mobile build:web`, serve `apps/mobile/dist`, then kill
    both the static server and the Worker to check the offline path.
+5. **If you touch `apps/edge/test/eta-hub*.test.ts`, two harness facts cost real time before they were
+   understood, and both are in comments where you will hit them.** (a) A promise resolved *inside* the shard's
+   I/O context resumes the test in that context, so the next `ws.send` dies with *"Cannot perform I/O on behalf
+   of a different Durable Object"* — a gate on a held round has to be **polled from a counter**, and the round
+   started by the shard itself (a `subscribe` naming an unpolled stop pulls the alarm to `now`, which is the
+   production timing anyway) rather than by `runDurableObjectAlarm`. (b) Any case that leaves **two live
+   sockets** on a shard makes a later `evictDurableObject(…, { webSockets: 'hibernate' })` in the same file
+   hang — reproduced on the *unfixed* object, so it is the pool and not any change of ours. That is why the cap
+   assertions live in their own file. Owner: whoever does WP5-5, which puts the matrix through a real socket
+   and will meet both.
 
 ## 🔜 Next steps (priority order)
 0. **Favourite routes-at-a-stop** ([ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes) + [ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant), **✅ done 2026-06-15**) —
@@ -775,9 +840,10 @@ buses") is the one with rider-visible consequences.
        `apps/mobile/dist/**` bundle — i.e. on *yesterday's source*. It was green in the authoring worktree
        (which had never run `build:web`), so the gate was red only for whoever had built recently. A gate
        that reports build output is a gate people learn to ignore.
-   - **Wave 5's own loose ends (2026-07-30), highest-consequence first** — each is also a numbered row in
-     `docs/proposals/03` now, because this repo has twice had a day-one requirement sit in prose that no work
-     package owned (WP2-8, WP2-9) and get done only because somebody noticed:
+   - **Wave 5's own loose ends (2026-07-30, extended after the review pass 2026-07-31), highest-consequence
+     first** — each is also a numbered row in `docs/proposals/03` now, because this repo has twice had a
+     day-one requirement sit in prose that no work package owned (WP2-8, WP2-9) and get done only because
+     somebody noticed:
      - 🔴 **WP5-4 — an upstream outage reads as "no buses".** `coalesce` resolves a rejected upstream call to
        `[]`, so `/v1/etas/:id` answers `200 []` and the shard's `diffEtas` reports every reading `gone`. The
        *"a failed round is not a departure"* rule the whole design is built around, defeated one layer below
@@ -800,6 +866,21 @@ buses") is the one with rider-visible consequences.
        `scripts/precommit-docs-check.mjs` cannot run in CI unmodified: it is a Claude Code `PreToolUse` hook
        that reads a tool-call payload on stdin and diffs the *index*, so in CI both of its early exits fire
        and it returns 0 having checked nothing. `ci.yml` says exactly that instead of shipping a green no-op.
+     - 🟠 **WP5-9 — a place publishes one reading per line, but now renders a row per pole.** Added
+       2026-07-31 out of the boarding-point decision (ADR-056 decision 13), and the owner's framing is the
+       brief: *"we need to normalise the data to our own structure so we can understand what we're doing and
+       consistently present it."* `dedupeEtas` keys on `operator|routeNo|bound` across the whole place, so the
+       sibling pole's arrival is discarded — GMB 68K had buses at both poles 11 s apart and we published one.
+       Since the fix, a row exists for each pole, so the one without the surviving reading says "no reading
+       right now" while a bus is due there. The model's unit of *an arrival* is (line, place) and its unit of
+       *a row* is (line, pole); they have to be the same unit, and the pole is the one a rider walks to. A wire
+       change (`/v1/etas/:id` and `/v1/stop/:id`'s embedded readings both grow), so it needs its own ADR, a
+       payload-size check at the biggest interchange, and a look at `NearbyStop.etas`' `maxRows`.
+     - 🟠 **WP5-10 — two poles of one place can wear identical headings.** The display cost decision 13
+       accepted rather than avoided: Tin Shui Wai Park's two members both print the stop code TN510, so 269D
+       renders twice under headings that look the same. Label the heading by the pole's own name or bearing —
+       `bearingOctant` is already in the kernel and already renders the compass caption — rather than fusing
+       two services back together to hide it.
      - 🟡 **`asyncapi.json` has never been validated against the official meta-schema.** Its gate
        *transcribes* the closed field lists rather than validating (`@asyncapi/parser` was not added), and the
        Operation Object's full field list is deliberately **not** transcribed because nothing here has read
@@ -820,8 +901,9 @@ buses") is the one with rider-visible consequences.
        monotonic across a re-subscription on the server while the poll emulator resets it. Two divergences the
        matrix does not cover; changing either should change both, and nothing binds them (WP5-5).
      - ⚪ **`SnapshotFrame.at` / `DeltaFrame.at` have no behavioural reader** on the client — the reducer
-       ignores them. Same shape as the `observedAt` finding: either something reads them or the description
-       should say "diagnostic". And **two comments still assert `observedAt` is the staleness field**
+       ignores them, and that is now the *complete* list: `SnapshotFrame.targets` was on it until the review
+       gave the accepted-set echo a reader (ADR-056 decision 18). Same shape as the `observedAt` finding:
+       either something reads them or the description should say "diagnostic". And **two comments still assert `observedAt` is the staleness field**
        (`apps/mobile/providers/QueryProvider.tsx:11-13`, `apps/edge/src/eta-cache.ts:15`) — `isStale` reads
        `dataTimestamp` and always has; the schema description was corrected in Wave 5, those comments are the
        residue.

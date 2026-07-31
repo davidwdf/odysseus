@@ -57,6 +57,10 @@ packages/api-client  EdgeClient (the v1 DataSource) · `watch()` = the live fram
                      pluggable transport in `src/live/` (poll emulator = the DEFAULT · memory fake ·
                      WebSocket) · `src/endpoint.ts` = the ONE declaration of where the API is
                      (`DEFAULT_API_URL`), with the socket URL derived from it · the location controller
+packages/ports       the 7 type-only platform interfaces — `KeyValueStore` · `LocationProvider` ·
+                     `LocaleProvider` · `LinkOpener` · `Clock` · `TileSource` · `LiveTransport` (new
+                     in Wave 5). `ls packages/ports/src` IS the iOS/Android porting checklist
+                     (ADR-051); the package imports nothing and emits no JS
 packages/i18n        en / zh-Hant / zh-Hans UI strings
 packages/ui          NativeWind preset + themes + tokens
 packages/tsconfig    shared TS configs
@@ -68,7 +72,10 @@ packages/tsconfig    shared TS configs
    `@nextbus/*`.
 2. **All data goes through the `DataSource` seam** (`@nextbus/core` → `@nextbus/api-client`). UI
    and screens NEVER call upstream HK APIs directly. Swapping the v1 client for the v2 socket
-   engine must not touch the UI. See `docs/03`, ADR-004.
+   engine must not touch the UI. See `docs/03`, ADR-004. **Two gates enforce this, not one:**
+   `pnpm boundaries` checks the import graph, and `check-view-transport-free` checks the *source*
+   for a `fetch(`, a `new WebSocket`, a `ws://` literal or a `/v1/` path in a view — because a URL
+   literal imports nothing and the import graph cannot see it (ADR-056).
 3. **ETAs are approximations — never fake precision** (ADR-008). No client-side per-second
    countdown. Update the value only when fresh data arrives; use tabular figures; show
    "Arriving/Due" under a minute; indicate staleness. Use the helpers in `@nextbus/core/eta`.
@@ -117,8 +124,12 @@ packages/tsconfig    shared TS configs
   `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"`. `curl .../v1/health` tells you
   which dataset tier you're on — **`"dataset":"kv"` with `datasetBuildsThisIsolate: 0`** is the
   production invariant (ADR-055); `"inline"` means it's building the 8.3 MB dataset per isolate.
+- **The live socket:** `pnpm dev:edge`, then open `/v1/live?targets=<percent-encoded canonical id>` with a
+  WebSocket client (Node 22 has a global `WebSocket`). **Percent-encode it** — a place id contains `+`, which
+  a query string decodes as a space. Expect `snapshot` → `status{live}` → a `delta` only when something
+  changed. Note `wrangler dev` will pick **8788** if 8787 is busy.
 - **Tests:** `pnpm --filter @nextbus/edge test` runs inside workerd with simulated KV/R2, so the
-  coalescer and the shard read path are exercised for real, not mocked.
+  coalescer, the shard read path and the Durable Object's caps are exercised for real, not mocked.
 - **App:** `pnpm dev:web` and open `http://localhost:8081`.
 - **Types/bundle:** `pnpm typecheck`; `pnpm --filter @nextbus/edge exec wrangler deploy --dry-run`.
 
@@ -133,9 +144,12 @@ TTL (ADR-057). **Waves 1–5 are done**: the wire contract and the id grammar (A
 the kernel's domain rules under corpus (ADR-062…066), the native artefacts (ADR-067), the second
 renderer (ADR-068/069) and — as of 2026-07-30 — the **live protocol** (ADR-056): `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
-hibernating `EtaHub` Durable Object on `/v1/live`. Two caveats worth knowing before you touch it: the
-socket cannot yet be *selected* without a source edit (WP5-6), and an upstream outage still reads as
-"no buses" (WP5-4). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
+hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
+confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before
+changing live behaviour. Three caveats worth knowing before you touch any of it: the socket cannot
+yet be *selected* without a source edit (WP5-6, which is what makes five shard fixes latent), an
+upstream outage still reads as "no buses" (WP5-4), and a pole's row can read "no reading" while a bus
+is due there (WP5-9). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
 Cloudflare credentials — though CI now runs on every PR. Roadmap/backlog: `docs/06`, `docs/07`.
 Cloudflare agent skills are installed — prefer the `cloudflare` / `wrangler` / `durable-objects`
 skills for edge work.
