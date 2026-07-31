@@ -201,7 +201,12 @@ describe('live — properties a corpus row cannot express', () => {
     // wire's counter starting at 1 is what keeps the two apart. A corpus row states the *behaviour*
     // (a delta against seq 0 asks for a resync); this states the constant that behaviour depends on,
     // so the two cannot drift apart silently.
-    expect(LIVE_SESSION_START).toEqual({ seq: 0, etas: [], status: { state: 'connecting' } })
+    expect(LIVE_SESSION_START).toEqual({
+      seq: 0,
+      etas: [],
+      targets: [],
+      status: { state: 'connecting' },
+    })
     expect(applyLiveFrame(LIVE_SESSION_START, { type: 'pong' }).state).toBe(LIVE_SESSION_START)
   })
 })

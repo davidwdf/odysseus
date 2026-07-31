@@ -157,6 +157,14 @@ export class EdgeClient implements DataSource {
      * unchanged, so reference identity is exactly the right test, and if that ever stopped being true the
      * failure mode is one redundant call with identical data — which is what the old shim did every single
      * round anyway. A screen that wants the status holds a `createLiveEtaController` and gets both.
+     *
+     * The **accepted target set** stops at this door for the same reason and it is the more consequential
+     * one: `LiveEtaUpdate.targets` is what a caller compares against what it asked for to notice that a
+     * saved pole has stopped resolving, and `EtaListener` has no room for it. Widening the signature is not
+     * the fix — ADR-004 fixes `watch()` as `(targets, onUpdate) => Subscription`, and a second listener
+     * argument would be a wire change to the seam the whole v2 plan turns on. A caller that needs the
+     * comparison holds a `createLiveEtaController` directly, which is what `useLiveEtas` becomes when
+     * Favourites adopts it (WP5-0 watches one target per screen, so there is nothing to diff yet).
      */
     let last: readonly Eta[] | null = null
     const controller = createLiveEtaController({

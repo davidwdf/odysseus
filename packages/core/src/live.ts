@@ -127,6 +127,7 @@ export const LIVE_SHARD_COUNT = 8
 export const LIVE_SESSION_START: LiveSession = {
   seq: 0,
   etas: [],
+  targets: [],
   status: { state: 'connecting' },
 }
 
@@ -145,6 +146,29 @@ export interface LiveSession {
   seq: number
   /** Every current reading, in canonical `(stopId, routeId)` order. */
   etas: readonly Eta[]
+  /**
+   * The target set the server said it **accepted**, from the last `snapshot`. Empty before any.
+   *
+   * **This field is the reader `SnapshotFrame.targets` was published for, and it did not exist.** The
+   * frame carries the accepted set precisely so a client can compare it with what it asked for —
+   * *"compare it with what you sent and tell the rider about the difference"*, in the schema's own words
+   * — and both producers deliberately send no other signal for a dropped target (the shard's `subscribe`
+   * and the poll emulator's `subscribe` both say so at the emit). The reducer used to drop it on the
+   * floor, so on every platform the comparison was unperformable: a rider whose saved pole had stopped
+   * resolving was shown *"no buses due"* for a stop nobody was watching. That is the silent filter
+   * ADR-008 rules out as firmly as a fake countdown, and it read as a data outage rather than as a stale
+   * favourite.
+   *
+   * Carried **verbatim**, never re-derived. Running `acceptTargets` over the echo would filter the
+   * server's answer through the client's own opinion of which ids are legal, and the two could then
+   * disagree with nothing to say so — which is the reason the client sends `?targets=` unfiltered in the
+   * first place (see the connect URL in `packages/api-client/src/live/socket.ts`). What the server
+   * accepted is a statement of fact about the subscription, not a derivation.
+   *
+   * A `delta`, a `status` and a `pong` all leave it exactly as it was: only a `snapshot` restates the
+   * set, which is why a round that *changes* the accepted set has to send one (the shard does).
+   */
+  targets: readonly WatchTarget[]
   status: LiveStatus
 }
 
@@ -314,7 +338,16 @@ export function diffEtas(
 /** A snapshot: the server's whole truth replaces ours, whatever `seq` it carries. See `applyLiveFrame`. */
 function applySnapshot(frame: SnapshotFrame, state: LiveSession): LiveApplyResult {
   return {
-    state: { seq: frame.seq, etas: canonicalEtas(frame.etas), status: state.status },
+    state: {
+      seq: frame.seq,
+      etas: canonicalEtas(frame.etas),
+      // Verbatim, and unlike `etas` it is not re-canonicalised — see `LiveSession.targets` for why the
+      // server's answer must not be filtered through the client's own rules. Both producers already
+      // send `acceptTargets(...).accepted`, which is canonical, so the two engines still agree byte for
+      // byte (D1) without this line asserting it.
+      targets: frame.targets,
+      status: state.status,
+    },
     applied: true,
     resyncNeeded: false,
   }
@@ -329,6 +362,10 @@ function applyDelta(frame: DeltaFrame, state: LiveSession): LiveApplyResult {
     state: {
       seq: frame.seq,
       etas: [...merged.values()].sort(compareRefs),
+      // A delta describes readings, never membership. Only a `snapshot` restates the accepted set, so a
+      // shard that drops a target mid-round sends one instead of a delta — otherwise the echo the rider's
+      // screen is comparing against would go on naming a stop nobody polls.
+      targets: state.targets,
       status: state.status,
     },
     applied: true,
@@ -348,8 +385,10 @@ function applyDelta(frame: DeltaFrame, state: LiveSession): LiveApplyResult {
  *
  * The rules, each with corpus rows:
  *
- *  · **`snapshot` replaces `etas` wholesale** and sets `seq`. It applies *whatever* `seq` it carries,
- *    including one at or below the current value, and that asymmetry with `delta` is deliberate: a
+ *  · **`snapshot` replaces `etas` wholesale, and restates the accepted target set** — the one frame that
+ *    does. `targets` is kept verbatim so a caller can diff it against what it asked for; see
+ *    `LiveSession.targets` for the defect a dropped echo produces. It also sets `seq`, and it applies
+ *    *whatever* `seq` it carries — including one at or below the current value, and that asymmetry with `delta` is deliberate: a
  *    snapshot is the recovery path. Refusing an "old" snapshot would make recovery unreachable exactly
  *    when it is needed — a shard that restarted and reset its counter would be ignored for ever.
  *  · **`delta` merges `changed` by identity and removes `gone`**, then sets `seq`.
@@ -359,9 +398,10 @@ function applyDelta(frame: DeltaFrame, state: LiveSession): LiveApplyResult {
  *    shard), and the only cure is a fresh snapshot. This is the one rule this module's brief did not
  *    settle; it is recorded here because "ignored and everything is fine" would wedge the session.
  *  · **A `delta` with a gap, or before any snapshot, is applied anyway** and reports `resyncNeeded`.
- *  · **`status` updates `status` only** — never `etas`. A reconnecting client keeps showing the
- *    readings it has, labelled, because a 40-second-old reading with an honest label is more use at a
- *    kerb than an empty screen.
+ *  · **`status` updates `status` only** — never `etas`, and never the accepted set. A reconnecting client
+ *    keeps showing the readings it has, labelled, because a 40-second-old reading with an honest label is
+ *    more use at a kerb than an empty screen; and it keeps the echo, because the frame that tells a rider
+ *    one favourite was refused is a `status` frame arriving *after* the snapshot that names the survivors.
  *  · **`pong` is not a state change.** It is liveness, and on Cloudflare it is answered by the runtime
  *    without the object waking, so it may not even have been produced by our own code.
  *
@@ -383,6 +423,12 @@ export function applyLiveFrame(state: LiveSession, frame: ServerFrame): LiveAppl
         state: {
           seq: state.seq,
           etas: state.etas,
+          // Kept, and this is the case that matters most for it: the shard reports a rejected favourite
+          // as `state: 'live'` with a `retryable: false` error *alongside* the snapshot whose echo says
+          // which targets survived. A `status` frame that reset the accepted set would erase the answer
+          // one frame after it arrived, leaving the rider's five working stops and no way to name the
+          // sixth.
+          targets: state.targets,
           status:
             frame.error === undefined
               ? { state: frame.state }

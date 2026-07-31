@@ -505,6 +505,75 @@ describe('properties the matrix table cannot state', () => {
     controller.stop()
   })
 
+  it('hands a holder the accepted set, so a rejected favourite can be named', async () => {
+    // **The reader `SnapshotFrame.targets` is published for, and until this it did not exist.** The frame
+    // carries the accepted set so a client can compare it with what it asked for and *"tell the rider
+    // about the difference"*; both engines deliberately send no other signal for a target they refused.
+    // With the echo discarded by the reducer, the comparison was unperformable on every platform — and the
+    // case is reachable today, not hypothetical: ADR-058's persister rehydrates a `['stop', <id>]` entry as
+    // `success`, so a pole saved under a pre-ADR-062 id enables the subscription while `acceptTargets`
+    // rejects the same id, and the rider is shown "no buses due" for a stop nobody is watching.
+    //
+    // Asserted at the controller and not at a screen: what to *say* is a product decision with an i18n key
+    // attached (see `LiveEtaUpdate.targets`). What is testable is that both halves reach one place.
+    const asked: WatchTarget[] = [{ stopId: STOP_A }, { stopId: 'legacy-id' }]
+    const missing = (update: LiveEtaUpdate): string[] => {
+      const accepted = new Set(update.targets.map((t) => t.stopId))
+      return asked.map((t) => t.stopId).filter((stopId) => !accepted.has(stopId))
+    }
+
+    const { timers } = manualTimers()
+    const polling = createPollTransport({
+      clock,
+      pollMs: 30_000,
+      timers,
+      getEtas: async () => [eta(STOP_A, ROUTE_1, '10:02')],
+    })
+    const polled: LiveEtaUpdate[] = []
+    const pollController = createLiveEtaController({
+      transport: polling,
+      targets: asked,
+      emit: (update) => polled.push(update),
+    })
+    pollController.start()
+    await flush()
+    pollController.stop()
+
+    // The same thing through a scripted server, because the echo is a *wire* field and a rule proven
+    // against one engine is a rule the other can contradict — which is how the socket's terminal-frame
+    // divergence was found.
+    const scripted: LiveEtaUpdate[] = []
+    const scriptController = createLiveEtaController({
+      transport: createMemoryTransport([
+        snapshot(1, [{ stopId: STOP_A }], [eta(STOP_A, ROUTE_1, '10:02')]),
+        status('live'),
+      ]),
+      targets: asked,
+      emit: (update) => scripted.push(update),
+    })
+    scriptController.start()
+    await flush()
+    scriptController.stop()
+
+    for (const [engine, updates] of [
+      ['poll', polled],
+      ['script', scripted],
+    ] as const) {
+      const first = updates[0]
+      if (first === undefined)
+        throw new Error(`${engine} emitted nothing — the assertion is vacuous`)
+      expect(first.targets, engine).toEqual([{ stopId: STOP_A }])
+      // The readings alone say nothing: one stop's arrivals arrived and the rider asked about two, which
+      // is indistinguishable from a stop with no buses due. The echo is what names the difference.
+      expect(first.etas.length, engine).toBe(1)
+      expect(missing(first), engine).toEqual(['legacy-id'])
+    }
+    // …and it survives the `status` frame that follows, which is the frame the shard uses to explain the
+    // rejection. A reducer that reset the set on a status would erase the answer one frame after it landed.
+    expect(scripted.at(-1)?.status.state).toBe('live')
+    expect(missing(scripted.at(-1) as LiveEtaUpdate)).toEqual(['legacy-id'])
+  })
+
   it('asks for a fresh snapshot exactly once when a frame gaps', async () => {
     const scenario = SCENARIOS.find((s) => s.name.startsWith('a seq gap'))
     if (!scenario)

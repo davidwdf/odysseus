@@ -16,15 +16,41 @@
 // session can no longer be trusted. It owns no rule about what a frame means, no ordering, no threshold
 // and no fallback — all of those are in `@nextbus/core`, pinned by `spec/live.spec.json`, because they
 // are the part iOS and Android have to reproduce byte-for-byte.
+//
+// It also refuses to own the comparison between what was *asked for* and what the server *accepted*. It
+// publishes both halves — the caller handed in `targets`, and every update carries the accepted set — and a
+// holder decides what a rider is told, because that sentence needs an i18n key and a product decision. See
+// `LiveEtaUpdate.targets`.
 
 import type { Eta, LiveSession, LiveStatus, SubscribeFrame, WatchTarget } from '@nextbus/core'
 import { applyLiveFrame, LIVE_SESSION_START } from '@nextbus/core'
 import type { LiveEngine, LiveEtaEngine } from './engine'
 
-/** One repaint's worth of truth: every current reading, and what the connection is doing. */
+/** One repaint's worth of truth: every current reading, what is being watched, and what the connection is doing. */
 export interface LiveEtaUpdate {
   /** Canonically ordered by `(stopId, routeId)` — the kernel's order, so both engines agree (D1). */
   etas: readonly Eta[]
+  /**
+   * The targets the **server accepted**, from the last `snapshot` — to be compared with the ones this
+   * controller was handed.
+   *
+   * **Why a holder gets both halves and the diff is not done here.** The accepted set is a fact about the
+   * subscription; what to *say* about a target that is missing from it is a product decision with an i18n
+   * key attached, and a controller that decided it would be deciding for three renderers at once. So the
+   * comparison belongs to whoever holds the controller: it already knows what it asked for, because it
+   * passed `deps.targets` in.
+   *
+   * It is here at all because until this field existed the comparison was unperformable on every platform.
+   * `SnapshotFrame.targets` is published so a client can *"compare it with what you sent and tell the
+   * rider about the difference"*, and both engines deliberately send no other signal for a target they
+   * refused — so with the echo dropped, a rider whose saved pole had stopped resolving was shown "no buses
+   * due" for a stop nobody was watching. That is the silent filter ADR-008 rules out.
+   *
+   * Empty before the first `snapshot`, and empty is not "everything": it is either "we have not been told
+   * yet" (`status.state === 'connecting'`) or "nothing you asked for is being watched", which is the state
+   * both engines pair with `closed`.
+   */
+  targets: readonly WatchTarget[]
   /**
    * The connection state and the failure behind it. The whole `LiveStatus` rather than the bare
    * `LiveState`, because the two are only useful together: "retrying" is a label, and `error.code` /
@@ -104,7 +130,11 @@ export function createLiveEtaController(deps: LiveEtaControllerDeps): LiveEtaCon
           // the readings changed, so a repaint would be work for no new information. The reducer's own
           // doc says a caller may skip on `false`; this is the caller that does.
           if (result.applied && alive()) {
-            deps.emit({ etas: session.etas, status: session.status })
+            deps.emit({
+              etas: session.etas,
+              targets: session.targets,
+              status: session.status,
+            })
           }
           // Re-declaring the targets *is* the resync: the server answers a `subscribe` with a fresh
           // `snapshot`, and the poll emulator restarts its rounds from one. Sent after the emit, so the
