@@ -6,6 +6,7 @@ import type {
   StopDetailRoute,
 } from '@nextbus/core'
 import {
+  boardingPoleId,
   dedupeRoutes,
   etaReadout,
   formatBearing,
@@ -145,8 +146,12 @@ export default function StopDetail() {
   })
 
   const stop = query.data?.stop
-  const routes = query.data ? dedupeRoutes(query.data.routes) : []
   const members: StopDetailPole[] = query.data?.members ?? []
+  // `members` is passed so `dedupeRoutes` keys on each row's **boarding point**: where upstream
+  // published one physical pole under two ids, a line boarding at "both" is one row (WP5-11).
+  // The rows come back with their own raw pole ids, which is what `SaveStar` below persists — see
+  // `boardingPoleId`. Rewriting them here instead would orphan every favourite it saves.
+  const routes = query.data ? dedupeRoutes(query.data.routes, members) : []
   const multiPole = members.length > 1
 
   const cleanName = stop ? titleCaseName(splitStopCode(stop.name[locale]).label) : ''
@@ -159,15 +164,26 @@ export default function StopDetail() {
 
   // Routes grouped under the member pole they depart from (ADR-042); poles ordered with the
   // arrived-from `pole` first, then nearest, then the server order (`orderPoles`).
+  // Grouped by the row's **boarding point**, not its raw pole: a row departing from a folded id
+  // belongs under the member it was folded onto, and there is no heading of its own to put it under
+  // (WP5-11). The row itself keeps its raw id for the star.
   const byPole = new Map<string, StopDetailRoute[]>()
-  for (const r of routes) byPole.set(r.stopId, [...(byPole.get(r.stopId) ?? []), r])
+  for (const r of routes) {
+    const key = boardingPoleId(r.stopId, members)
+    byPole.set(key, [...(byPole.get(key) ?? []), r])
+  }
   // A pole with no rows left after `dedupeRoutes` is not rendered at all, so it is not part of the
   // list a rider is choosing between. Hoisted out of the JSX because `poleSideOctants` below must be
   // asked about exactly these poles: a side printed to tell a heading apart from one that is not on
   // screen is noise, and the whole rule is about not adding any.
-  const shownPoles = orderPoles(members, pole, poleDist).filter(
-    (m) => (byPole.get(m.id)?.length ?? 0) > 0,
-  )
+  // `?pole=` goes through `boardingPoleId` for the same reason the grouping does: a route schematic
+  // hands us the id its own stop list carries, which may be a folded one, and tier 1 of `orderPoles`
+  // matches a member id.
+  const shownPoles = orderPoles(
+    members,
+    pole === undefined ? undefined : boardingPoleId(pole, members),
+    poleDist,
+  ).filter((m) => (byPole.get(m.id)?.length ?? 0) > 0)
   // A compass side for the poles whose heading would otherwise be indistinguishable from a sibling's
   // — 567 of the 10 118 places in the shipped build print a duplicate one (WP5-10). The screen
   // contributes the heading text and the layout; every decision about *whether* a side is warranted
