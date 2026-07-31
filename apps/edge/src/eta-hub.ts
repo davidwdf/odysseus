@@ -51,6 +51,10 @@
 //    delta, no heartbeat. Incoming WebSocket messages bill at 20:1 and outgoing ones are free, so the
 //    cost of a needless frame is not the byte but the repaint: `applyLiveEtasToStopDetail` rebuilds
 //    every row it is handed, and staleness is already honest from each reading's own `dataTimestamp`.
+//  · A round that *changed the accepted set* — because a target failed permanently — sends a `snapshot`
+//    instead of that delta, so the echo a client compares against what it asked for stays true after a
+//    round and not only after a frame. And when nothing at all is left, `closed` + a permanent error:
+//    the terminal pair, which is what the poll emulator sends at the identical condition.
 //  · A per-target upstream failure is a `status` frame carrying the taxonomy (`code`, `retryable`) —
 //    never a throw, never a silent drop, and never `gone`. A target we could not *ask* about has not
 //    departed; reporting it as gone would say the bus had left because our own fetch failed.
@@ -85,10 +89,12 @@ import { stopEtas } from './stop-route'
 // of hazard with a longer lever — it names an unbounded list of stops, and every one of them costs a
 // place read plus a coalesced upstream call **on every round, for as long as the socket is open.**
 //
-// So there are three caps, each bounding a different quantity, and each with a stated arithmetic. They
-// are not tuned against a measurement, because there is no deployment to measure (WP0-5); they are
-// derived from the platform's own published limits and from the fixture's shape, and the numbers are
-// the part a reviewer should be able to disagree with.
+// So there are five caps, each bounding a different quantity, and each with a stated arithmetic. None is
+// tuned against *traffic*, because there is no deployment to measure (WP0-5): they are derived from the
+// platform's own published limits and from the shape of the real dataset, and the numbers are the part a
+// reviewer should be able to disagree with. The shard cap's arithmetic was first derived from the *test
+// fixture's* shape instead, and it was wrong by an order of magnitude — the correction, and the
+// measurement behind it, is in its own docblock.
 
 /**
  * Targets one connection may watch.
