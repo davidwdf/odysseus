@@ -1,9 +1,17 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-31**. **Waves 0–4 are on `main`** (PRs #11–#18); **Wave 5 is complete bar the
-> deployment** on `turbo-cache-inputs-v2` — 25 commits, and the branch is larger than a wave should be
+> Snapshot: **2026-07-31**. **Waves 0–5 are on `main`** (PRs #11–**#19**); **Wave 5 was complete bar the
+> deployment** on `turbo-cache-inputs-v2` — 25 commits, and the branch was larger than a wave should be
 > because an adversarial review and its thirteen fixes landed on the same branch as the feature.
+> **Two of Wave 5's own follow-ups are now built on `wave5-followups-v1`** (10 commits above `origin/main`;
+> **WP5-10** and **WP5-11**, one ADR between them —
+> [ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)),
+> and the dataset build hash moves to **`1ccad7436a8df480`**, so production needs a publish.
+> **Why the history looks odd:** WP5-10 was authored on `turbo-cache-inputs-v2` *before* PR #19 merged, and
+> **#19 was squash-merged, which orphaned every original commit on that branch** — so those three commits and
+> the WP5-11 work were **cherry-picked** onto a branch cut from `origin/main`. Nothing was lost and nothing was
+> re-derived; the commit hashes in `.context/wave5/reports/WP5-10.md` simply no longer exist in any branch.
 > **What Wave 5 is:** `DataSource.watch()` stopped being a promise. It is now a real frame protocol —
 > `snapshot`/`delta`/`status`, declared once in Zod and published as `asyncapi.json` — over a pluggable
 > transport, whose **default is a poll emulator** (HTTP polling wearing the frames) and whose other
@@ -67,7 +75,9 @@
 > never shown, and where 20 was a pole's only route **the pole's whole group vanished from the list while its
 > dot stayed on the map** (21 poles emptied in the 2026-07-27 build). The corpus had pinned the defect twice
 > and argued both ways; one row is renamed and now pins the fix. Two costs were accepted rather than smoothed
-> over, and both are carried forward with an owner: WP5-9 and WP5-10 below.
+> over, and both were carried forward with an owner: WP5-9 and WP5-10 below. **WP5-10 is now closed, and
+> closing it turned out to need two rules rather than one** (ADR-071): most of the pairs wearing identical
+> headings were *one physical pole published twice*, which no label can fix.
 > **Verified by running, in the review pass too:** `pnpm dev:edge` against the real KV state (`/v1/health`
 > `"dataset":"kv"`, `datasetBuildsThisIsolate: 0`) with a Node WebSocket probe on `/v1/live` against the live
 > HK feeds, showing the corrected re-echo on real data (`KMB:NOPE` accepted by the parser, then re-echoed out
@@ -244,9 +254,13 @@ now arrive through `DataSource.watch()` on Place detail, from a poll emulator by
 `EtaHub` Durable Object over `/v1/live` when the socket engine is selected — which today needs a source edit
 (WP5-6). Pick up at **WP0-5**: it is now genuinely the next job rather than a deferral, because the cheap half
 (CI on every PR) has landed and the rest is a domain, a Cloudflare account and the settings that follow — plus
-the seven Wave 5 follow-ups (WP5-4 … WP5-10), of which **WP5-4** (an upstream outage currently reads as "no
-buses") and **WP5-9** (a pole's row can read "no reading" while a bus is due there) are the two with
-rider-visible consequences.
+the Wave 5 follow-ups (WP5-4 … WP5-12), of which **WP5-10** and **WP5-11** are ✅ **done on
+`wave5-followups-v1`** — one pole published twice is now one boarding point, and two real poles get a compass
+side ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two);
+the build hash moved to `1ccad7436a8df480`, so production needs a publish) — leaving **WP5-4** (an upstream
+outage currently reads as "no buses") and **WP5-9** (a pole's row can read "no reading" while a bus is due
+there) as the two with rider-visible consequences, plus **WP5-12**, the 2–10 m residual those two rules
+deliberately leave between them.
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
@@ -528,6 +542,54 @@ rider-visible consequences.
   - **Verified:** typecheck 9/9 · 22 edge + 88 mobile + 282 core · 4 script gates · 13 boundary self-tests ·
     100% `core` branch coverage · Biome at the 7 pre-existing findings. WP1-2 also drove the Worker by `curl`
     and walked the PWA in a browser.
+- **One pole published twice is one boarding point; two real poles get a compass side** — **WP5-11 + WP5-10**,
+  both 2026-07-31 on `wave5-followups-v1`
+  ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)).
+  `foldDuplicatePoles` + `SAME_POLE_MAX_SEPARATION_M` = **2 m** (`packages/data-normalize/src/dataset.ts`)
+  fold a cluster's poles onto **boarding points** where a rider could not possibly tell them apart — same
+  operator, the same name in **all three locales**, complete-linkage separation ≤ 2 m; the other id rides the
+  wire as `StopDetailPole.aliasIds` and stays a valid favourite key **for ever**. `poleSideOctants` +
+  `POLE_SIDE_MIN_SEPARATION_M` = **10 m** (`packages/core/src/stop-detail.ts`) put a **compass side** on a
+  heading — "Citybus · North side" / 「九巴 · ND126 · 東面」 — but **only** where two poles of one place print
+  the same text and sit far enough apart for a side to mean something; `core` returns the octant and
+  `@nextbus/i18n`'s eight `poleSide*` keys supply the word (ADR-054). `initialBearingDeg` moved out of the
+  pipeline into `packages/core/src/geo.ts`, **verified bit-identical over 18 430 real coordinate pairs**
+  before the switch, because those bearings feed the clustering spread cap.
+  **Effect on the rebuilt build `1ccad7436a8df480`:** 80 poles folded across 75 places, members 6 354 →
+  6 274, duplicate pole headings **567 → 496 places**, 226 places gaining a side and 9 892 rendering exactly
+  as before — while `placeByStopId` keeps **6 354** keys, so **not one id stopped resolving**. TN507
+  (22.88 m), TN581 (19.01 m) and ND126 (35.35 m) provably stay two members. Tests **977** (core 768 · edge
+  106 · api-client 47 · mobile 36 · web 20); corpus 86 groups · 726 cases · 3 `knownDefect`; `core` still
+  100 % on all four thresholds.
+  - **Driven, not merely tested.** `pnpm dataset:build` → `pnpm dataset:publish --local` → `pnpm dev:edge`
+    with `/v1/health` reporting `"dataset":"kv"`, `"buildHash":"1ccad7436a8df480"`,
+    `datasetBuildsThisIsolate: 0` (the ADR-055 production invariant). Then in a browser against that Worker:
+    **Peaksville** two Citybus poles that both read bare "Citybus" now read **North side / South side** and
+    the map dots agree; **Cheerful Park** reads **"KMB · ND126 · East side"** (20 routes) and **"· West
+    side"** (W3) while "Citybus" and "KMB · ND127" are untouched, and in 繁體中文 「九巴 · ND126 · 東面」/
+    「· 西面」; **Tin Shui Wai Park** now prints **three** headings where it printed four, with **269D once**,
+    live at 2 min. Locale switched through the app's own Settings picker, never by poking a store; console
+    clean.
+  - **The favourites proof, stated concretely because it is the requirement that outranked the feature.**
+    Read the **real** `localStorage['nextbus.preferences']` (12 genuine favourites present),
+    **read-modify-write** appended `KMB:FADDB1E247E62936|KMB:106:inbound:1` — a key on a pole this change
+    **merged away** — opened `/favorites`, and the card rendered **A Kung Ngam Road, Chai Wan Road** with
+    **`106 → Wong Tai Sin  7 min`** under it. Then removed the two test keys the same way and confirmed the
+    rider's **12 favourites are back exactly as found**. Backed at three lower levels too: `allAliases` derived from
+    `placeByStopId` (6 354 keys), `apps/edge/test/pole-merge.test.ts` resolving `/v1/stop/<folded id>` for
+    **both** ids of the folded pair inside workerd, and `curl` showing 11 of 11 readings matching a row
+    (**0** matching none) plus a `/v1/live` delta carrying the folded pole's id.
+  - **Tested but not driven:** the four `pole-merge` assertions that pin the id-spelling rule (they run the
+    real kernel merge over real Worker responses in workerd, one set of readings off a real `/v1/live`
+    socket, and **all four were watched failing** against the pre-fix tree — including the merge returning
+    `undefined` for a route boarding only at the folded pole), and the two `poleSideOctants` guards, watched
+    failing by building the rule without them.
+  - **The measurement is the finding, and it rewrote its own work package.** WP5-11 assumed a distance gap
+    between "one pole published twice" and "two genuine berths": **516** same-operator same-name member pairs
+    run **continuously 0 → 31 m**, the two-berth stands sit *inside* that continuum, and route-disjointness
+    discriminates nothing (**24 of 464 overlap**, 8 of them in the nearest band). So the row's original
+    acceptance — *"no place shows two identical headings"* — is unachievable, and it was **reworded with the
+    work stopped** rather than quietly failed after shipping.
 - **Docs:** plan `01–10`, the full ADR set in [`docs/08`](./08-decision-log.md) (Wave 0 adds **055** ·
   **057** · **058** and implements **049**), research + proposals sets, `CLAUDE.md` / `AGENTS.md`,
   pre-commit docs-check skill + hook.
@@ -555,10 +617,19 @@ rider-visible consequences.
   published one. Not a client bug: the canonical model is **under-normalising**, and the owner's framing is the
   brief — *"we need to normalise the data to our own structure so we can understand what we're doing and
   consistently present it."* A wire change, so it wants its own ADR and a payload-size check.
-- 🟠 **Two poles of one place can wear identical headings** (WP5-10) — Tin Shui Wai Park's two members both
-  print the stop code TN510, so since the boarding-point fix 269D renders twice under headings that look the
-  same. The answer is to label a heading by the pole's own name or bearing (`bearingOctant` is already in the
-  kernel), not to fuse two services back together.
+- ✅ **Closed 2026-07-31 by WP5-10 + WP5-11** ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)),
+  kept for the history: *"two poles of one place can wear identical headings"* — Tin Shui Wai Park's two
+  members both printed the stop code TN510, so 269D rendered twice under labels that looked the same. Both
+  halves shipped: the pairs that are **one pole published twice** are folded onto one boarding point, and the
+  rest get a **compass side** where the poles are far enough apart for one to mean something. **The residual
+  is real and owned:** 141 pairs across 115 places sit 2–10 m apart — too far to fold, too close for a side
+  (**WP5-12** below).
+- 🟡 **A favourite whose route has no current arrival renders an empty card** (found by WP5-11, **pre-existing
+  and unowned — worth its own row**, adjacent to WP5-4). `FavoritePlaceRow` filters rows to those carrying an
+  `eta` and drops the rest, so a peak-only service shows a card with a name and nothing under it (269D:3 at
+  Tin Shui Wai Park, tested at 22:55; the row *was* matched — fare 18.5 present by `curl`). The consequence
+  that matters is diagnostic: **an empty card cannot be told from a broken favourite key by eye**, which is
+  why WP5-11's favourites proof rests on a route with a live arrival instead.
 - ✅ **Closed by Wave 5, kept here for the history: a raw upstream URL literal in a screen was invisible to
   both tools.** `pnpm boundaries` checks the *import graph*, and `fetch('https://data.etabus.gov.hk/…')`
   imports nothing, so golden rule 2 was encoded only as `view` ✗→ `adapters` — recorded in Wave 1 and owned by
@@ -630,7 +701,8 @@ rider-visible consequences.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**934 tests**: core 738 · edge 93 · api-client 47 · mobile 36 · web 20, plus the whole
+3. `pnpm test` (**934 tests** on `main`: core 738 · edge 93 · api-client 47 · mobile 36 · web 20; **977 on
+   `wave5-followups-v1`**: core 768 · edge 106 · the rest unchanged, plus the whole
    `pnpm boundaries` chain) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with
    `datasetBuildsThisIsolate: 0`.
@@ -660,9 +732,11 @@ rider-visible consequences.
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
 1. **[`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) — Waves 1 … 5 are all ✅ complete**
-   (ADR-051 … ADR-054, ADR-059, ADR-060, ADR-062 … ADR-069, and **ADR-056** for Wave 5). Wave 3 landed
-   2026-07-29, Wave 4 the same day, **Wave 5 on 2026-07-30 — bar the deployment, and its PR is not open yet.**
-   ← **start at WP0-5**, then the five Wave 5 follow-ups below.
+   (ADR-051 … ADR-054, ADR-059, ADR-060, ADR-062 … ADR-069, **ADR-056** for Wave 5 and **ADR-071** for two of
+   its follow-ups). Wave 3 landed 2026-07-29, Wave 4 the same day, **Wave 5 on 2026-07-30 — bar the
+   deployment; it merged as PR #19 on 2026-07-31.**
+   ← **start at WP0-5**, then the remaining Wave 5 follow-ups below (**WP5-10 and WP5-11 are done**, on
+   `wave5-followups-v1`).
    **Why Wave 3 went first, against this doc's own earlier advice:** it was framed here as "the larger, more
    speculative bet … every claim is about a Swift compiler nobody has run". That was true of **one** of its
    four packages. The other three closed drift that was live on `main`: design values written down four
@@ -876,11 +950,32 @@ rider-visible consequences.
        *a row* is (line, pole); they have to be the same unit, and the pole is the one a rider walks to. A wire
        change (`/v1/etas/:id` and `/v1/stop/:id`'s embedded readings both grow), so it needs its own ADR, a
        payload-size check at the biggest interchange, and a look at `NearbyStop.etas`' `maxRows`.
-     - 🟠 **WP5-10 — two poles of one place can wear identical headings.** The display cost decision 13
-       accepted rather than avoided: Tin Shui Wai Park's two members both print the stop code TN510, so 269D
-       renders twice under headings that look the same. Label the heading by the pole's own name or bearing —
-       `bearingOctant` is already in the kernel and already renders the compass caption — rather than fusing
-       two services back together to hide it.
+     - ✅ **WP5-10 + WP5-11 done 2026-07-31** on `wave5-followups-v1`
+       ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)) —
+       decision 13's accepted display cost, closed from both sides. One physical pole published under two
+       upstream ids is now **one member** with the other id in its `aliasIds` (2 m, derived from the ~1.1 m
+       coordinate grid and confirmed by the build: 85 qualifying pairs at exactly four separations, nothing
+       between the grid diagonal and two steps), and where two poles are genuinely two, `poleSideOctants`
+       puts a **compass side** on the heading (10 m floor — a *different* number on purpose: declining to
+       name a side is weaker than asserting two poles are one). **Read ADR-071 decision 3 before touching
+       any of it:** a reading is stamped with the pole whose board it came off, an alias is an addressable
+       pole rather than a spelling to be replaced, and the collapse lives in `dedupeRoutes`' **key** — the
+       first design stamped readings with the boarding point and blanked every arrival at a folded pole on
+       all three engines. The build hash moved to **`1ccad7436a8df480`**, so production needs a publish.
+     - 🟠 **WP5-12 — the 2–10 m residual: two poles a rider can be told nothing about.** Filed by WP5-11's
+       measurement and **unstarted**: **141 member pairs across 115 places** share an operator and a name in
+       every locale and sit 2–10 m apart (43 at 2–5 m, 98 at 5–10 m; **0 remain at or under 2 m**). Too far
+       to fold — 2 m is one grid step, 3 m is two, and two poles 3 m apart may genuinely be two poles — and
+       too close for a compass side, which at 3 m would be fake precision. Both rules are right and the gap
+       between them is real, so it needs a **third kind of answer, not a wider threshold on either.** The
+       lead to start from is unexpected: the **14 pairs excluded at ≤ 2 m for differing in one locale all
+       print the code in *Chinese* and omit it in *English*** (Prince Edward Station's two poles read
+       `PRINCE EDWARD STATION, MONG KOK POLICE STATION` in English at the same coordinate while the Chinese
+       reads `(MK356)`/`(MK357)`) — so the code **exists upstream** and only the English label lacks it,
+       which is a true answer rather than a threshold nudge.
+     - 🟡 **A favourite with no current arrival renders an empty card** — pre-existing, found by WP5-11, and
+       **unowned**: `FavoritePlaceRow` drops rows without an `eta`, so an empty card cannot be told from a
+       broken favourite key by eye. Wants a row of its own beside WP5-4; see *Not done yet* above.
      - 🟡 **`asyncapi.json` has never been validated against the official meta-schema.** Its gate
        *transcribes* the closed field lists rather than validating (`@asyncapi/parser` was not added), and the
        Operation Object's full field list is deliberately **not** transcribed because nothing here has read

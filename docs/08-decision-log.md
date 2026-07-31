@@ -1182,7 +1182,11 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   follow-ups; this screen is explicitly a **first pass to iterate on**.
 
 ## ADR-042 — Direction-aware same-kerb clustering (N-member places); supersedes ADR-022's pair-merge + invariant
-- **Status:** **Built & verified — backend + place UI (2026-06-11), member-keyed favourites (2026-06-15).** Shipped:
+- **Status:** **Amended by [ADR-071](#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)
+  (2026-07-31)** — a cluster's poles are now folded onto **boarding points**: where upstream published one
+  physical pole under two stop ids, the cluster keeps **one member** and lists the other in its `aliasIds`.
+  Members are no longer the same thing as clustered poles, though every clustered pole still resolves.
+  **Built & verified — backend + place UI (2026-06-11), member-keyed favourites (2026-06-15).** Shipped:
   the quick-win direction gate, the full **N-member single-linkage clustering** (`buildPlaces`) with cluster-level
   vetoes + bearing-spread cap and same-operator members, the **per-place ETA fetch** (KMB `stop-eta` = 1 call/pole,
   CTB per-route to a budget, cross-member dedupe) with an honest `routeCount`, and the **mobile UI**: Nearby cards
@@ -1304,7 +1308,12 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     one-member-per-operator wording), [docs/07](./07-backlog.md) (move "better name matching" notes), and
     [docs/11](./11-status.md).
 - **Open follow-ups (raised 2026-06-11):**
-  1. **Same-name pole disambiguation.** Within a multi-pole place the poles share a landmark name; the group label
+  1. **Same-name pole disambiguation.** ✅ **Answered 2026-07-31 by
+     [ADR-071](#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)**, which measured
+     the problem at **567 of 10 118 places** and split it in two: the pairs that are one pole published twice are
+     folded onto one member, and the rest get a **compass side** on the heading where the poles are far enough
+     apart for one to mean anything — 141 pairs at 2–10 m stay ambiguous by design (WP5-12).
+     Within a multi-pole place the poles share a landmark name; the group label
      "KMB · ST141" reads as opaque at first — *but* `ST141`-style codes are **printed on KMB's physical stop flags
      and shown in KMB's own app**, so they are a real-world anchor, not an internal id: **keep them as the pole
      label.** (A "lead the group with its headline routes" tweak was tried 2026-06-15 and **reverted** — it didn't
@@ -3960,3 +3969,224 @@ pre-existing and unaddressed; it earned its keep here.
     a task in another, so "it was green on my machine" can mean "it was green in a checkout you have never
     seen". `--force` remains the right tool when *diagnosing* a suspicious green; it is the wrong tool for
     living with one.
+
+## ADR-071 — What counts as one boarding point, and what a rider is told about two
+- **Status:** **Decided and implemented 2026-07-31** (WP5-10 + WP5-11, on `wave5-followups-v1`).
+  **Amends [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)**
+  (a cluster's poles are now folded onto *boarding points*) and closes
+  [ADR-062](#adr-062--the-favourite-key-is-the-member-pole-and-the-scheme-is-versioned)'s orphaning hazard
+  **structurally rather than by migration**. Implementation: `foldDuplicatePoles`,
+  `SAME_POLE_MAX_SEPARATION_M` and `sameLabelEverywhere` in `packages/data-normalize/src/dataset.ts`
+  (+ `allAliases` in `shards.ts`); `StopDetailPole.aliasIds` in `packages/contract/src/wire/detail.ts`;
+  `boardingPoleId`, `dedupeRoutes(routes, members)`, `poleSideOctants` and `POLE_SIDE_MIN_SEPARATION_M`
+  in `packages/core/src/stop-detail.ts`; `initialBearingDeg` in `packages/core/src/geo.ts`; eight
+  `poleSide*` keys + `poleSideLabel` in `packages/i18n`; `atPole` in `apps/edge/src/stop-route.ts`; the
+  Place screen `apps/mobile/app/stop/[id].tsx`. Pinned by `apps/edge/test/pole-merge.test.ts` (13 tests
+  in workerd over a seeded KV build, one of them off a real `/v1/live` socket) and the corpus
+  (`stop-detail` + `geo`; 86 groups · 726 cases · 3 `knownDefect`, `core` still 100 % on all four
+  thresholds over 415 branches; 977 tests). The dataset moves `d598893de6add2e4` →
+  **`1ccad7436a8df480`**, so production needs a publish.
+- **Context:** [ADR-056](#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)
+  decision 13 put the boarding pole into a route row's identity, which is noise for KMB and Citybus and
+  **identity for GMB**. The accepted cost was a display one: where two members of a place print the same
+  heading, a line boarding at both renders **twice, under two labels identical character for character**,
+  and the rider is asked to choose between two rows with nothing to choose with. WP5-10 was to label the
+  heading; WP5-11 was then filed *by WP5-10's measurement*, which found that most of those pairs are one
+  physical pole published under two upstream ids. They are recorded as one ADR because they are one
+  decision seen twice — **what counts as a distinct boarding point, and what a rider is told about it** —
+  and because each rule's correctness argument is the other rule's declining to act.
+- **The measurement that disproved WP5-11's premise, which is why the row was rewritten rather than
+  satisfied:** the row assumed a distance gap between "one pole published twice" and "two genuine
+  berths", and there is none.
+  - Over `d598893de6add2e4`, the **516** member pairs sharing an operator *and* a full name within one
+    place run **continuously from 0 to 31 m, with every band populated** — 88 · 11 · 47 · 109 · 164 · 71
+    across 0–0.5 / 0.5–2 / 2–5 / 5–10 / 10–20 / 20–31 m.
+  - **The genuine two-berth stands sit *inside* that continuum**: KMB prints one code on poles
+    **TN507 22.88 m**, **TN581 19.01 m** and **ND126 35.35 m** apart, while Tin Shui Wai Park's duplicated
+    **TN510** pair is **1.11 m**. So the thing not to swallow and the thing to fold are drawn from one
+    distribution.
+  - **Route-disjointness discriminates nothing**, and it was the obvious second signal. Re-measured over
+    the 464 pairs matching in all three locales: **24 overlap**, they do not sort by distance (8 of them
+    in the *nearest* band), and disjointness is the norm at every distance including 36 of 36 at 25–31 m.
+    It is not evidence, in either direction, and the rule does not use it. (An earlier note in the stopped
+    work claimed all 464 were disjoint; that figure was wrong and is corrected in the docblock.)
+  - **No threshold above ~2 m can separate the two populations.** The row's original acceptance — *"no
+    place shows two identical headings"* — is therefore unachievable, and was reworded **with the work
+    stopped** rather than quietly failed after shipping. A row that promises it is a row someone later
+    satisfies by lowering a threshold until it lies.
+  - The ambiguity is also 9× wider than the plan's row assumed: **567 of 10 118 places print a duplicate
+    pole heading**, and only **64** are stop-code collisions — **507** are poles with no printed code at
+    all (two Citybus poles at Peaksville both reading just "Citybus"). Neither the code nor the name
+    separates them, so `location` is the only field on the wire that can, which is what makes the labelling
+    rule a kernel rule rather than a screen decision.
+- **Decisions:**
+  1. **`SAME_POLE_MAX_SEPARATION_M = 2`, and it is not a guess.** Two poles fold only where a rider could
+     not possibly tell them apart: **same operator, the same name in all three locales, and complete-linkage
+     separation ≤ 2 m**. The number comes from the **coordinate quantisation**, not from the histogram —
+     upstream publishes five decimals, so a position is a point on a ~1.1 m grid and two feeds describing
+     one pole can differ by at most one grid step per axis — and the build *confirms* the derivation rather
+     than merely permitting it: all **85** qualifying pairs sit at **exactly four** separations
+     (**0.000 m ×75**, **1.027–1.029 ×3**, **1.112 ×4**, **1.515 ×3**) with **nothing** between the grid
+     diagonal and two steps (2.058 m). The boundary must lie in **(1.515, 2.058)**; 2 is the round number
+     inside it, so its exact value changes no outcome. **A native port must copy this number exactly** —
+     a discrete distribution is the signature of the grid, and a port that rounds it to 3 m starts merging
+     berths. Three supporting choices: **complete linkage, not single** (chaining would let 0 m / 2 m / 4 m
+     become one 4 m group, which is two grid steps and unsupported by the argument); **the lowest id
+     survives**, because it is already the head of the sorted member list and does not move when routes or
+     coordinates change; and **distance is necessary, never sufficient** — `sameLabelEverywhere` does the
+     real work, which the build proves, since **TN511 shares a coordinate *exactly* with the surviving
+     TN510 pole and is not folded** because its printed code differs and a rider can read it.
+  2. **The two thresholds must stay different numbers, and both docblocks say so.** 2 m to fold two ids
+     into one pole; **`POLE_SIDE_MIN_SEPARATION_M` = 10 m** before `poleSideOctants` will name a compass
+     side. **Declining to name a side is a weaker act than asserting two poles are one** — the first fails
+     by saying nothing, the second fails by hiding a berth — so the weaker claim gets the looser threshold.
+     Recorded because they sit two packages apart, answer adjacent questions, and somebody will otherwise
+     tidy them into one constant. (The 10 m floor has three independent derivations of its own, in
+     `POLE_SIDE_MIN_SEPARATION_M`'s docblock: `formatDistance` already rounds metres to the nearest 10 under
+     [ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown), so an app that refuses a finer
+     *distance* must not imply a finer *direction*; ~10 m is the GPS error `mercator.ts` already names; and
+     below ~2 m the octant is not even *stable* — ±0.55 m per axis is ~21° of bearing wobble at 2 m against
+     an octant's 22.5° half-width, versus ≤ ~9° at 10 m.)
+  3. **The id-spelling rule, which is the one a port will get wrong.** **A reading is stamped with the pole
+     whose board it came off** — the id the route's own row names — **never with the boarding point that row
+     is displayed under**; **an alias is an *addressable pole*, not a spelling to be replaced**; and **the
+     wire and everything persisted speak raw pole ids**. The fold is a display collapse on the client's side
+     of the wire. Concretely: `atPole(call.poleId, …)`, the fare table keyed on the row's own `stopId`, and
+     `boardingPoleId` used only to *group* and to *key*.
+     **The first design got this backwards and it is worth recording that it did.** It stamped each reading
+     with the boarding point, so a route boarding **only** at a folded pole had a row naming the folded id
+     and a reading naming the survivor: `applyLiveEtasToStopDetail` matches `(row.stopId, row.route.id)` over
+     the **raw** `StopDetail` in the query cache, so the merge matched nothing and **every arrival on that
+     row blanked one cadence after paint, with no error anywhere**. All three live paths share one stamping
+     site (`/v1/etas/:id`, `/v1/stop/:id`'s embedded readings and the `EtaHub` frames all reach `atPole`), so
+     one line broke three engines and one line fixed them — which is also why the proof drives all three
+     rather than reasoning from the shared site, since "one site, so they must agree" is exactly the
+     reasoning that shipped the last spelling bug. It also restores the invariant
+     `apps/edge/test/eta-stop-id.test.ts` has asserted since Wave 5, `row.eta.stopId === row.stopId`, which
+     had passed only because its fixture has no aliases.
+     **This is the third time the same shape has appeared in this project**, and that is the reason it is a
+     numbered decision rather than a commit message: (a) `Eta.stopId` carrying the *operator's* spelling
+     where the schema declares the identity canonical (ADR-056 decision 3 — every reader compared two
+     alphabets and matched nothing, always); (b) the live merge's `(stopId, routeId)` pair, which is the
+     tuple that made (a) visible; and (c) this. Each was a case of one id being written in two alphabets and
+     no test spanning them.
+  4. **The collapse lives in the *key*, so no future call site can repeat the mistake.** `dedupeRoutes(routes,
+     members)` keys on the boarding point and **returns the rows untouched, raw pole id and all**. That shape
+     is load-bearing rather than incidental, and it avoided a *second* orphaning found while settling the
+     first: the screen was re-basing each row's `stopId` before deduping, and `SaveStar` persists
+     `${row.stopId}|${routeId}` — so **starring a re-based row would have written a favourite key that no
+     `/v1/stop` response will ever carry**, orphaning the favourite at the moment the rider created it. The
+     feature would have caused the exact failure it exists to prevent, from the display side. A call site
+     that never holds a rewritten row cannot make that mistake. `members` defaults to `[]`, which is the
+     previous behaviour and the right answer for the ~10 040 places with no aliases.
+  5. **`StopDetailPole.aliasIds` is additive-optional** — free per
+     [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+     §5 — **and it answers ADR-062 structurally rather than by migration.** Both ids stay permanently valid
+     favourite keys, because the wire keeps naming both and `allAliases` is derived from `placeByStopId`
+     rather than from each place's `members`, so the two cannot disagree about which poles resolve
+     (**6 354 keys before the fold, 6 354 after — not one id stopped resolving**). **This is the stronger
+     form of the answer: a migration has to run, an invariant does not.** ADR-062 exists because a
+     place-keyed favourite was stranded by a clustering change; a fold that *removed* an id would have
+     stranded every favourite saved at it and needed a numbered migration step, with all the ways one can
+     fail to run. Nothing is deleted instead — a folded pole keeps its stop record, its route rows, its slot
+     in every route's stop sequence, its `alias:` entry and its place in the `P:` id. Merging what a place
+     *displays* is reversible; deleting an id a rider holds is not.
+  6. **`poleSideOctants` names a side only where two headings collide, and declines rather than inventing
+     one.** Five things about its shape, each measured rather than assumed:
+     - **The kernel returns an octant (`0`–`7`, clockwise from North) and `i18n` supplies the word**
+       ([ADR-054](#adr-054--design-tokens-and-i18n-as-generated-cross-platform-artefacts)) — eight
+       `poleSide*` keys via `poleSideLabel(octant, locale)`. These are
+       deliberately **not** `formatBearing`'s words: that renders the same eight octants as *travel*
+       directions ("Northeast-bound"), which would print a heading about where the buses go over a group of
+       routes mostly heading the other way. "East side" / 「東面」 is a side of this place, not a service.
+     - **It speaks only where two poles of one place print the same heading**, so **226 places gain a side
+       and 9 892 render exactly as they did**. Restraint is the design: a cue that appears on 2 % of places
+       means something when it appears.
+     - **The centroid is of the *colliding* poles, not of the place.** With the place centroid a colliding
+       pair off to one side of a five-member interchange gets two bearings a few degrees apart and the
+       separation guard **discards 11 of the 15 cases it should keep** — measured, which is why this departs
+       from the obvious reading. Relative to each other is also the comparison a rider's eyes make, and for
+       a pair the bearings are reciprocal, so the two sides are opposite by construction.
+     - **The heading text is an argument, not something the rule derives, because *whether two headings
+       collide is itself locale-dependent*.** At Shau Kei Wan East Government Secondary School three KMB
+       poles print bare "KMB" in English while upstream gives one of them `(ED522)` in both Chinese
+       locales — so the place is ambiguous **three ways in `en` and two ways in Chinese**. A rule that
+       rebuilt the heading from `name.en` would answer the wrong question in two of the three locales we
+       ship; one that compared ids would answer it in none. Both readings are corpus rows.
+     - **It declines rather than inventing an ordinal**, and there is no fallback anywhere — not in the
+       kernel, not in the `.tsx`. 345 of the 571 groups get nothing: 331 because a member sits inside the
+       10 m floor, and **14 because two of three colliding poles land in one octant** (checked separately,
+       since reciprocity only saves a pair; printing those would leave two headings identical *and* longer
+       while claiming the ambiguity was resolved). **"1 of 2" is a number a rider cannot walk anywhere
+       with, which is the same dishonesty ADR-008 forbids for ETAs** — and worse here, because it
+       manufactures a distinction between two poles that are, on the ground, one pole. That those are
+       mostly *exactly* what the declined cases were is what filed decision 1.
+  7. **`buildPlaces`' private copy of the bearing calculation is deleted**, in favour of the kernel's
+     `initialBearingDeg` — the pipeline held the repo's only initial-bearing expression, private to the
+     offline build, where no rule the app runs could reach it, and the labelling rule needed one at render
+     time. It was transcribed character for character (association included) rather than reassociated to
+     match `haversineMeters`, and **verified bit-identical (`Object.is`) over 18 430 real coordinate pairs
+     from the shipped build** before the pipeline was switched over; `geo.test.ts` now holds the pipeline's
+     own expression beside ours and compares them exactly. That is not ceremony: those bearings feed
+     `BEARING_SPREAD_CAP_DEG`, so **a last-bit difference could change which poles cluster into a place and
+     republish the whole 8.3 MB dataset under a new hash** for no reason anyone could see. A bearing written
+     twice, with sign conventions easy to get subtly right in one copy and wrong in the other, is precisely
+     the drift [ADR-060](#adr-060--the-fixture-corpus-is-the-equivalence-mechanism-for-domain-rules) exists
+     to catch.
+- **Why — the effect over the rebuilt build `1ccad7436a8df480`:** **80 poles folded across 75 places**,
+  members **6 354 → 6 274**, 30 places falling to a single member, places printing a duplicate pole heading
+  **567 → 496** and colliding groups **571 → 498**. Place counts are unchanged **by construction**, not by
+  luck: the place id and the `< 2` cluster gate are both minted from the *clustered* set. **TN507, TN581 and
+  ND126 are each still two members**, asserted both synthetically and through the running API; the widest
+  separation among all 80 folded poles is **1.515 m**, the grid diagonal, so nothing sits near the threshold
+  from either side. `poleSideOctants` barely moves (**226 → 227**), which is the honest reading and the
+  argument for doing both halves: **the fold removes cases rather than making them nameable.** **Every defect
+  either rule prevents was watched failing first**, which is the standing rule of this wave and the only
+  reason the assertions are worth anything: with `poleSideOctants`' two guards deleted, Tin Shui Wai Park came
+  out North *and* South from a 1.11 m offset, the coincident pair came out North and North (`atan2(0,0)`), and
+  the school came out North / North / South; and against the pre-fix tree, four `pole-merge` assertions went
+  red, including the live merge returning `undefined` for a route boarding only at the folded pole — on all
+  three engines, one of them read off a real `/v1/live` socket.
+- **Consequences, including what we are accepting:**
+  - **The favourites requirement outranked the feature and was proved end to end, not read.** Rebuilt →
+    `dataset:publish --local` → `pnpm dev:edge` with `/v1/health` reporting `"dataset":"kv"`,
+    `datasetBuildsThisIsolate: 0`; then a favourite keyed on a **merged-away** pole
+    (`KMB:FADDB1E247E62936|KMB:106:inbound:1`) written into the **real** `localStorage` preferences by
+    read-modify-write, rendering on the Favourites tab as *A Kung Ngam Road, Chai Wan Road · Northwest-bound*
+    with *`106 → Wong Tai Sin  7 min`* under it — then the two test keys removed the same way and the rider's
+    own **12** favourites confirmed back exactly as found.
+  - **Open: WP5-12 — the 2–10 m residual.** Post-fold, **141 pairs across 115 places** (43 at 2–5 m, 98 at
+    5–10 m; **0 remain at or under 2 m**) share an operator and a name in every locale: too far apart to
+    call one pole (2 m is one grid step; 3 m is two, and two poles 3 m apart may genuinely be two poles),
+    too close for a compass side. Both rules are right and the gap between them is real, so it needs a
+    **third kind of answer, not a widened threshold on either.** Its most promising lead is unexpected and
+    runs the opposite way from what anyone assumed: the **14 pairs excluded at ≤ 2 m for differing in one
+    locale all print the code in *Chinese* and omit it in *English*** — at Prince Edward Station both poles
+    read `PRINCE EDWARD STATION, MONG KOK POLICE STATION` in English at exactly the same coordinate while
+    the Chinese reads `(MK356)` and `(MK357)`. So the code **exists upstream** and only the English label
+    lacks it, which is a true answer rather than a threshold nudge.
+  - **Open, pre-existing and not ours: a favourite whose route has no current arrival renders an empty
+    card.** `FavoritePlaceRow` filters rows to those carrying an `eta` and drops the rest, so a peak-only
+    service shows a card with a name and nothing under it (269D:3 at Tin Shui Wai Park, tested at 22:55; the
+    row *was* matched — fare 18.5 present by `curl`). **It means an empty card cannot be told from a broken
+    key by eye**, which is why the favourites proof above rests on a route with a live arrival rather than on
+    that one. Worth a row of its own, adjacent to WP5-4.
+  - **Unchanged, and not made worse: WP5-9.** `dedupeEtas` still collapses a line across the poles of a
+    place, so where two ids of one *folded* pole both serve a line the losing variant's row blanks. The fold
+    shrinks its blast radius if anything, since two rows became one.
+  - **One existing `knownDefect` grew slightly.** Collapsing two service-type variants across a folded pair
+    inherits `dedupeRoutes`' tie-break defect — the survivor is the first row *carrying a reading*, not the
+    one with the *sooner* bus, and two variants can have different destinations. Post-fold those behave
+    exactly like two variants at one pole, which is the case the corpus row already covers: no new defect,
+    a wider blast radius.
+  - **The build hash moved**, so production needs a `dataset:publish`; the daily workflow will do it, and the
+    first serve after a deploy is the moment to confirm `/v1/health` still says `"dataset":"kv"` with
+    `datasetBuildsThisIsolate: 0` ([ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)).
+  - **Four figures in the stopped work were wrong and are corrected in the tree** rather than carried
+    forward: "0 of 325 route rows" → 324; "85 of 331 heading groups no longer collide" → **73 groups across
+    71 places**; "all 464 candidate pairs have disjoint route sets" → 24 overlap; and a `VICTORIA PARK`
+    locale example that contradicted its own claim, replaced with the three measured ones. `docs/03`'s "in
+    67 places" is 75, since **all 80 folded poles carry route rows** — which is also why `boardCalls` still
+    calls each alias's own upstream board: **0 of the 324 route rows on a folded pole also appear on its
+    member**, so skipping it would leave those rows blank across 75 places while everything else looked
+    healthy.
