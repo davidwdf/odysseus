@@ -112,10 +112,18 @@ export const LIVE_MAX_TARGETS_PER_CONNECTION = 12
  * — comfortably inside both the 45 s cadence floor and an alarm's 15-minute wall clock, with the
  * subrequest budget (10,000 on Paid) an order of magnitude clear.
  *
- * A connection whose targets would push the shard's union past this is **refused the upgrade**, before
- * a socket exists. That is deliberately blunter than dropping the excess targets: at this point the
- * client has said nothing except which stops it wants, and telling it "not now" is honest, whereas
- * accepting a socket that silently watches half the list is the silent filter ADR-008 rules out.
+ * **Excess targets are dropped and named, never refused as a whole.** The first draft refused the
+ * *upgrade* when a connection's targets would push the union past this, on the argument that bluntness
+ * is honest before a socket exists. Two things were wrong with it. It guarded one of the two doors — a
+ * `subscribe` frame is the other, and it is the normal one (route narrowing, and `socket.ts` sending a
+ * changed target set on the open connection), so the real bound was `LIVE_MAX_SOCKETS_PER_SHARD ×
+ * LIVE_MAX_TARGETS_PER_CONNECTION` = 768. And the refusal was itself a lock-out: once any five sockets
+ * had pushed a shard past 48, every subsequent *legitimate* upgrade to it got a 500 that a browser
+ * cannot read and that `socket.ts` reconnects on for ever. So the cap is applied where the
+ * per-connection cap already is, through the one rejection mechanism `subscribe()` has: the excess is
+ * absent from the snapshot's accepted echo and named in a `status` frame. It carries `internal`
+ * (`retryable: true`), not `bad_request` — a full shard is our fault, not the rider's, and a background
+ * client must not prune a favourite whose stop is perfectly fine.
  */
 export const LIVE_MAX_TARGETS_PER_SHARD = 48
 
@@ -302,9 +310,15 @@ export class EtaHub extends DurableObject<Env> {
    *
    * `./live.ts` has already checked the method, the header, the origin and that the target list parses
    * to something watchable — everything decidable from the request alone, so an invalid request is
-   * never billed against this object. The two checks below are the ones that need this shard's own
-   * state, plus a cheap re-check of the upgrade header so that reaching this object by any other route
-   * is a 400 rather than an exception.
+   * never billed against this object. The one check below is the one that needs this shard's own state,
+   * plus a cheap re-check of the upgrade header so that reaching this object by any other route is a 400
+   * rather than an exception.
+   *
+   * **No target check here.** There used to be one — the shard union against
+   * `LIVE_MAX_TARGETS_PER_SHARD` — and it was both incomplete and harmful: incomplete because a
+   * `subscribe` frame reaches the same state without passing through here, and harmful because it turned
+   * a full shard into a lock-out for the riders who had done nothing wrong. The cap now lives in
+   * `subscribe()`, which every subscription goes through, this one included.
    */
   override async fetch(request: Request): Promise<Response> {
     if (request.headers.get('upgrade') === null) {
@@ -323,11 +337,6 @@ export class EtaHub extends DurableObject<Env> {
     }
 
     const asked = parseLiveTargets(new URL(request.url).searchParams.get('targets') ?? '')
-    const incoming = this.acceptForConnection(asked).kept
-    const union = acceptTargets([...this.subscribedTargets(open), ...incoming]).accepted
-    if (union.length > LIVE_MAX_TARGETS_PER_SHARD) {
-      return fail('internal', `shard is at capacity (${LIVE_MAX_TARGETS_PER_SHARD} targets)`)
-    }
 
     // Destructured by key, not `Object.values()`: `WebSocketPair` is typed with named numeric
     // properties rather than an index signature, so under `noUncheckedIndexedAccess` the array form
@@ -512,6 +521,40 @@ export class EtaHub extends DurableObject<Env> {
   }
 
   /**
+   * How much of one connection's accepted set this shard has room for, and what is left over.
+   *
+   * **The shard cap has to be applied here, not at the upgrade.** `LIVE_MAX_TARGETS_PER_SHARD` used to be
+   * checked in `fetch()` alone, and `subscribe()` is the *other* door into the same state — the one §8.1
+   * designates for route narrowing and the one `socket.ts` uses when a rider's target set changes on an
+   * open connection. So the checked bound and the real bound were 48 and 768.
+   *
+   * Counted the kernel's way, which is the only way it can be counted correctly: the shard polls the
+   * *union* of every subscriber's targets, and `acceptTargets` is what merges two requests for the same
+   * stop (a narrowed set and "all routes" collapse to one entry). Adding one target at a time and
+   * re-merging is therefore not wasteful — a target that names a stop somebody already watches costs the
+   * shard nothing and must not be refused. `ws` is excluded from `others` because a re-subscription
+   * *replaces* what this connection watches; counting its own previous set would refuse it its own room.
+   *
+   * Greedy in canonical order, so `fits[0] === kept[0]`: `liveShardFor` hashes the lowest accepted id, so
+   * dropping from the tail is what keeps a capped connection on the shard it was routed to.
+   */
+  private fitInShard(
+    ws: WebSocket,
+    kept: readonly WatchTarget[],
+  ): { fits: WatchTarget[]; excess: WatchTarget[] } {
+    const others = acceptTargets(
+      this.subscribedTargets(this.liveSockets().filter((other) => other !== ws)),
+    ).accepted
+    const fits: WatchTarget[] = []
+    for (const target of kept) {
+      const union = acceptTargets([...others, ...fits, target]).accepted
+      if (union.length > LIVE_MAX_TARGETS_PER_SHARD) break
+      fits.push(target)
+    }
+    return { fits, excess: kept.slice(fits.length) }
+  }
+
+  /**
    * Declare (or re-declare) what one socket watches: store the session, send a `snapshot`, then say how
    * much of what was asked for is actually being watched.
    *
@@ -525,6 +568,7 @@ export class EtaHub extends DurableObject<Env> {
   private async subscribe(ws: WebSocket, asked: readonly WatchTarget[]): Promise<void> {
     const previous = sessionOf(ws)
     const { kept, dropped } = this.acceptForConnection(asked)
+    const { fits, excess } = this.fitInShard(ws, kept)
 
     // Monotonic across a re-subscription rather than reset to 1, which is what `SnapshotFrame.seq`'s
     // own description asks for ("monotonic frame counter for this connection"). The kernel tolerates
@@ -532,7 +576,7 @@ export class EtaHub extends DurableObject<Env> {
     // snapshot is the recovery path — and the client's poll emulator does reset. Recorded as a
     // divergence the scenario matrix does not cover, not as an accident.
     const seq = (previous?.seq ?? 0) + 1
-    const session: Session = { targets: kept, seq, announcedLive: true }
+    const session: Session = { targets: fits, seq, announcedLive: true }
     ws.serializeAttachment(session)
 
     const stored = this.storedReadings()
@@ -545,24 +589,43 @@ export class EtaHub extends DurableObject<Env> {
       // got five readings cannot tell a dropped target from a stop with no buses due, which is the same
       // class of dishonesty as a fake countdown (ADR-008). `SnapshotFrame.targets` says to compare it
       // with what was sent and tell the rider about the difference.
-      targets: kept,
-      etas: canonicalEtas(readingsFor(kept, stored)),
+      targets: fits,
+      etas: canonicalEtas(readingsFor(fits, stored)),
     })
 
+    // Two reasons a target is not being watched, and they are **not** the same error. A malformed or
+    // over-cap-for-this-connection target is the caller's to fix (`bad_request`, `retryable: false`, so a
+    // background client prunes rather than retries on the rider's battery). A target the *shard* had no
+    // room for is ours (`internal`, `retryable: true`) — the stop is fine, and telling a Widget to prune
+    // a favourite because our shard was busy would be exactly the wrong instruction. `internal` is the
+    // least wrong member of a taxonomy with no word for "at capacity", and it is the one the refused
+    // upgrade used for this same condition; `ERROR_CODES`' own comment names `rate_limited` as the
+    // obvious next member. Both go out through the one door, so a client that reads `status` learns about
+    // either without knowing the difference.
+    //
+    // `state` describes the *connection*, `error` the thing the message names — the distinction that lets
+    // a rider be told one favourite is dead while the other five keep updating.
+    const refusals: WireError[] = []
     if (dropped.length > 0) {
-      // `retryable: false` — the caller must change the request, and a background client should prune
-      // rather than retry. Paired with `state: 'live'` when the rest of the subscription works, and with
-      // `closed` when nothing survived: `state` describes the *connection*, `error` describes the thing
-      // named in the message. That distinction is what lets a rider be told a favourite is dead while
-      // the other five keep updating.
-      this.send(
-        ws,
-        this.status(
-          kept.length === 0 ? 'closed' : 'live',
-          wireErrorFor('bad_request', `not watching: ${dropped.map((t) => t.stopId).join(', ')}`),
+      refusals.push(
+        wireErrorFor('bad_request', `not watching: ${dropped.map((t) => t.stopId).join(', ')}`),
+      )
+    }
+    if (excess.length > 0) {
+      refusals.push(
+        wireErrorFor(
+          'internal',
+          `shard is at capacity (${LIVE_MAX_TARGETS_PER_SHARD} targets), not watching: ${excess
+            .map((t) => t.stopId)
+            .join(', ')}`,
         ),
       )
-    } else if (kept.length === 0) {
+    }
+
+    if (refusals.length > 0) {
+      const state = fits.length === 0 ? 'closed' : 'live'
+      for (const error of refusals) this.send(ws, this.status(state, error))
+    } else if (fits.length === 0) {
       // A legal, empty `subscribe`: "stop sending me readings" without closing the socket. It gets the
       // snapshot too, because an empty echo with no error is how a client tells this apart from "every
       // target you named was rejected". No error, so the transport stays connected and may re-subscribe.
@@ -579,7 +642,7 @@ export class EtaHub extends DurableObject<Env> {
     // forward is bounded by `coalesce`'s 30 s window, so a client reconnecting in a loop cannot amplify
     // it into upstream traffic.
     await this.reschedule({
-      pollNow: kept.some((target) => !stored.has(target.stopId)),
+      pollNow: fits.some((target) => !stored.has(target.stopId)),
     })
   }
 
@@ -620,7 +683,9 @@ export class EtaHub extends DurableObject<Env> {
     // The shard's poll set: every subscriber's targets merged by the kernel's own union semantics — if
     // one connection narrows a stop to three routes and another asks for all of them, the shard asks
     // for all of them, and `readingsFor` gives each connection only what it asked for. Bounded by
-    // `LIVE_MAX_TARGETS_PER_SHARD`, enforced at the upgrade.
+    // `LIVE_MAX_TARGETS_PER_SHARD`, enforced in `subscribe()` — the one path every subscription takes,
+    // including the upgrade's. Counted here the same way `fitInShard` counts it, which is why the two
+    // agree: `acceptTargets` over every subscriber's targets.
     const union = acceptTargets(entries.flatMap((entry) => entry.session.targets)).accepted
 
     const dataset = await getDataset(this.env)
