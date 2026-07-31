@@ -24,7 +24,7 @@ import {
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
-import { LIVE_MAX_TARGETS_PER_CONNECTION } from '../src/eta-hub'
+import { LIVE_MAX_TARGETS_PER_CONNECTION, sessionChanged } from '../src/eta-hub'
 import worker from '../src/index'
 import { liveShardName, liveUpgrade } from '../src/live'
 import { datasetJson, poles } from './fixtures'
@@ -1089,6 +1089,38 @@ describe('the /v1/live request itself', () => {
     )
     expect(res.status).toBe(404)
     await expectTaxonomy(res, 'not_found', false)
+  })
+})
+
+// ── The attachment write's own guard ─────────────────────────────────────────────────────────────
+
+describe('sessionChanged', () => {
+  // Asserted on the function rather than through a round, because `serializeAttachment` cannot be spied
+  // on from the workerd harness — which is exactly how the guard came to be dead without anything
+  // noticing. Its third clause was `kept !== session.targets`, and `kept` is `session.targets.filter(…)`:
+  // `Array.prototype.filter` always allocates, so the comparison was a tautology, the write ran on every
+  // round for every session, and the two clauses before it could never gate anything.
+  const session = {
+    targets: [{ stopId: 'KMB:A' }, { stopId: 'KMB:B' }],
+    seq: 7,
+    announcedLive: true,
+  }
+
+  it('says nothing changed when a quiet round kept the same targets', () => {
+    // A *different array with the same contents* — which is what a round always produces, and the case
+    // the old predicate got wrong.
+    expect(
+      sessionChanged(session, { ...session, targets: session.targets.filter(() => true) }),
+    ).toBe(false)
+    expect(sessionChanged(session, { ...session, targets: [...session.targets] })).toBe(false)
+  })
+
+  it('says something changed when any of the three moves', () => {
+    expect(sessionChanged(session, { ...session, seq: 8 })).toBe(true)
+    expect(sessionChanged(session, { ...session, announcedLive: false })).toBe(true)
+    // A dropped target. `kept` is a subsequence of `targets`, so a shorter list is a different list.
+    expect(sessionChanged(session, { ...session, targets: [{ stopId: 'KMB:A' }] })).toBe(true)
+    expect(sessionChanged(session, { ...session, targets: [] })).toBe(true)
   })
 })
 

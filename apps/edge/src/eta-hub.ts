@@ -238,6 +238,30 @@ function sessionOf(ws: WebSocket): Session | null {
   return { targets: candidate.targets, seq: candidate.seq, announcedLive: candidate.announcedLive }
 }
 
+/**
+ * Is a round's outcome different from the session it started with — i.e. is there anything to write?
+ *
+ * A module-level pure function rather than three clauses inside `sendRound`, because a predicate inside a
+ * Durable Object method is unreachable from a test: `serializeAttachment` cannot be spied on from the
+ * workerd harness, so the only way to *see* the answer is to ask for it.
+ *
+ * @param previous the session the round was computed against
+ * @param next what the round concluded
+ */
+export function sessionChanged(previous: Session, next: Session): boolean {
+  return (
+    next.seq !== previous.seq ||
+    next.announcedLive !== previous.announcedLive ||
+    // **Length, not identity.** `next.targets` is `previous.targets.filter(…)`, and
+    // `Array.prototype.filter` always allocates — `[1,2,3].filter(() => true) !== [1,2,3]`, and so is the
+    // empty case — so a reference comparison here is a tautology: it made the whole guard dead, the
+    // `seq`/`announcedLive` clauses unreachable, and the comment above the write ("re-serialized because
+    // something changed") describe something the code did not do. It is a subsequence of the same array,
+    // so equal length is equal membership; nothing weaker would be sound and nothing stronger is needed.
+    next.targets.length !== previous.targets.length
+  )
+}
+
 // ── Readings ────────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -864,14 +888,11 @@ export class EtaHub extends DurableObject<Env> {
     const announcedLive = mine.length === 0
     if (announcedLive && !session.announcedLive) this.send(ws, this.status('live'))
 
-    if (
-      seq !== session.seq ||
-      announcedLive !== session.announcedLive ||
-      kept !== session.targets
-    ) {
+    const next: Session = { targets: kept, seq, announcedLive }
+    if (sessionChanged(session, next)) {
       // Re-serialized because a mutation of the object the attachment was built from is *not* captured;
       // the runtime snapshots at the call.
-      ws.serializeAttachment({ targets: kept, seq, announcedLive } satisfies Session)
+      ws.serializeAttachment(next)
     }
   }
 
