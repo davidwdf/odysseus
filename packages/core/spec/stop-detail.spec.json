@@ -2,7 +2,7 @@
   "module": "stop-detail",
   "source": "src/stop-detail.ts",
   "version": 1,
-  "doc": "The three list rules the Place (stop-detail) screen is assembled from. A place is N member poles at one kerb (ADR-042) — a lone stop is a place with one — and each pole carries its own routes, its own live readings and its own walk. `dedupeRoutes` decides which route rows a rider sees, by collapsing the operators' service-type variants to one row per rider line (operator + number + direction) and keeping the one carrying a reading. `operatorsOf` names the operators for the 'served by' line, in first-seen order. `orderPoles` decides what order the pole groups (and their map dots) appear in, in three tiers: the pole the rider arrived from, then nearest, then the dataset's own member order. Every row below is built from the real dataset build of 2026-07-27 — real canonical ids, real names in all three locales, real service-type variants — because the shapes that break these rules (a number run by two operators, a loop whose two directions share a destination, one minibus number covering two different services) are ones nobody invents. Live readings are the one synthetic part: they are stated against a fixed `nowIso` of 2026-07-27T12:00:00+08:00, since a fixture that read a clock would be worthless to a second platform. TWO ROWS ARE `knownDefect` — read them before changing the dedupe key.",
+  "doc": "The four list rules the Place (stop-detail) screen is assembled from. A place is N member poles at one kerb (ADR-042) — a lone stop is a place with one — and each pole carries its own routes, its own live readings and its own walk. `dedupeRoutes` decides which route rows a rider sees, by collapsing the operators' service-type variants to one row per rider line (operator + number + direction, at one pole) and keeping the one carrying a reading. `operatorsOf` names the operators for the 'served by' line, in first-seen order. `orderPoles` decides what order the pole groups (and their map dots) appear in, in three tiers: the pole the rider arrived from, then nearest, then the dataset's own member order. `poleSideOctants` decides whether a pole's heading needs a compass side to tell it apart from a sibling's, and which side that is. Every row below is built from a real dataset build — real canonical ids, real names in all three locales, real service-type variants — because the shapes that break these rules (a number run by two operators, a loop whose two directions share a destination, one minibus number covering two different services, one stop code printed on two poles a metre apart) are ones nobody invents; the first three groups are from the build of 2026-07-27 and `poleSideOctants` from `d598893de6add2e4` of 2026-07-31. Live readings are the one synthetic part: they are stated against a fixed `nowIso` of 2026-07-27T12:00:00+08:00, since a fixture that read a clock would be worthless to a second platform. ONE ROW IS `knownDefect` — read it before changing the dedupe key.",
   "groups": {
     "dedupeRoutes": {
       "doc": "One row per rider line, in first-appearance order, keeping the entry that carries a live reading. The key is `operator|routeNo|bound` — deliberately not the service type (riders do not choose one) and deliberately not the pole (see the two knownDefect rows for what that costs). Replacing a keyed entry keeps the position its first variant held, so the list does not reshuffle when a reading arrives on a later variant. `expect` states the surviving entries as route id + the member pole they depart from, because both halves matter: the pole is what files the row under a heading.",
@@ -1283,6 +1283,235 @@
             "distanceM": {}
           },
           "expect": []
+        }
+      ]
+    },
+    "poleSideOctants": {
+      "doc": "Which compass side each pole of a place sits on — returned ONLY for poles whose heading would otherwise be indistinguishable from another pole's, and only where the geometry can honestly answer. `args.poles` is each member's canonical id, its own coordinate and the heading text a renderer already prints for it; `expect` maps id → octant (0–7 clockwise from North, the same scale as `geo#bearingOctant`) and OMITS every pole that gets nothing, which is the overwhelming majority. The octant is the bearing from the centroid of the *colliding* poles, not of the whole place. Every row is real: the members, their coordinates and their names are verbatim from the dataset build of 2026-07-31 (`d598893de6add2e4`), where 567 of 10 118 places print a duplicate pole heading, 226 of them can be told apart this way and 9 892 places are untouched. The kernel returns a number and never a word — `core` owns the rule, `i18n` owns the word (ADR-054).",
+      "cases": [
+        {
+          "name": "a-lone-stop-gets-nothing",
+          "why": "A place with one member. There is nothing to tell apart, so the heading must come through untouched — this is 7 721 of the 10 118 places in the shipped build and the rule's restraint starts here.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001001",
+                "location": {
+                  "lat": 22.27992,
+                  "lng": 114.15458
+                },
+                "heading": "Citybus"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "an-ordinary-multi-pole-place-with-distinct-headings-gets-nothing",
+          "why": "Cheerful Park, Pak Wo Road, verbatim from the shipped build — and it carries BOTH answers at once, which is why it is one row rather than two. The lone Citybus pole and KMB's ND127 already print unique headings and get nothing; ND126 is printed on two poles 35.4 m apart, so those two, and only those two, are given a side. A port that returned a side for every member of a place with any collision would pass a single-collision row and fail this one.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:003379",
+                "location": {
+                  "lat": 22.49544,
+                  "lng": 114.13174
+                },
+                "heading": "Citybus"
+              },
+              {
+                "id": "KMB:98EBAB9468C80DD2",
+                "location": {
+                  "lat": 22.49543,
+                  "lng": 114.13187
+                },
+                "heading": "KMB · ND126"
+              },
+              {
+                "id": "KMB:9B0A34A1BF585BC4",
+                "location": {
+                  "lat": 22.49551,
+                  "lng": 114.13165
+                },
+                "heading": "KMB · ND127"
+              },
+              {
+                "id": "KMB:CCDD774F50E8650C",
+                "location": {
+                  "lat": 22.49552,
+                  "lng": 114.13154
+                },
+                "heading": "KMB · ND126"
+              }
+            ]
+          },
+          "expect": {
+            "KMB:98EBAB9468C80DD2": 2,
+            "KMB:CCDD774F50E8650C": 6
+          }
+        },
+        {
+          "name": "two-poles-with-no-stop-code-at-all-become-north-and-south",
+          "why": "The commonest shape by a wide margin, and the one the plan's row did not name: 507 of the 571 colliding groups in the shipped build are poles with NO printed stop code, so the heading is the bare operator name. Peaksville, Robinson Road has two Citybus poles 20.3 m apart, both printing just \"Citybus\". They come out North (0) and South (4) — opposite, because for a pair the two bearings from their midpoint are reciprocal.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001147",
+                "location": {
+                  "lat": 22.28215,
+                  "lng": 114.14758
+                },
+                "heading": "Citybus"
+              },
+              {
+                "id": "CTB:003158",
+                "location": {
+                  "lat": 22.28197,
+                  "lng": 114.14761
+                },
+                "heading": "Citybus"
+              }
+            ]
+          },
+          "expect": {
+            "CTB:001147": 0,
+            "CTB:003158": 4
+          }
+        },
+        {
+          "name": "tin-shui-wai-park-two-tn510-poles-are-one-metre-apart-and-get-nothing",
+          "why": "The place the whole work package was raised for, all four members verbatim from the shipped build. KMB prints the stop code TN510 on two of them and their full names are identical too, so neither the code nor the name can separate them. Measured: they are 1.11 m apart — ONE coordinate grid step at the five decimal places upstream publishes — so no compass word can send a rider to one rather than the other, and any word derived from that offset flips the day a coordinate is nudged. The honest answer is nothing, and it stays nothing: this pair is one physical pole published under two upstream ids, and the remedy is in `buildPlaces`, not in a heading. A port tempted to add an ordinal here should read `poleSideOctants`' last section first.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001992",
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "heading": "Citybus"
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "heading": "KMB · TN511"
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "heading": "KMB · TN510"
+              },
+              {
+                "id": "KMB:DC5B5F4350685442",
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "heading": "KMB · TN510"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "exactly-coincident-poles-get-nothing",
+          "why": "West Kowloon Cultural District, M+ — two KMB poles on stop code YT266 at byte-identical coordinates. 49 of the 64 code collisions in the shipped build are at exactly 0.0 m like this. Both bearings from the centroid are 0° (`atan2(0, 0)`), so the separation guard is what declines it; without that guard the two headings would both read \"North\" and the rider would be no better off while believing they had been told something.",
+          "args": {
+            "poles": [
+              {
+                "id": "KMB:008FB3966C991A02",
+                "location": {
+                  "lat": 22.30151,
+                  "lng": 114.15819
+                },
+                "heading": "KMB · YT266"
+              },
+              {
+                "id": "KMB:F843A0E566CF4147",
+                "location": {
+                  "lat": 22.30151,
+                  "lng": 114.15819
+                },
+                "heading": "KMB · YT266"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "three-colliding-poles-where-two-share-a-side-are-all-declined",
+          "why": "Shau Kei Wan East Government Secondary School: three KMB poles all printing bare \"KMB\" in English. Two are at identical coordinates and the third is 26.3 m south, so every member clears the separation floor from the group centroid and the sides come out North / North / South. The reciprocity that saves a pair does not generalise, so distinctness is checked on its own — 14 groups in the shipped build fail exactly here. Declining the WHOLE group is deliberate: labelling them would leave two headings identical AND longer.",
+          "args": {
+            "poles": [
+              {
+                "id": "KMB:75767448DA6FA081",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "KMB"
+              },
+              {
+                "id": "KMB:E060D03C30317F2C",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "KMB"
+              },
+              {
+                "id": "KMB:F754AED08F0B6B97",
+                "location": {
+                  "lat": 22.27206,
+                  "lng": 114.2327
+                },
+                "heading": "KMB"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "the-same-place-in-chinese-has-only-two-colliding-headings",
+          "why": "The identical three poles, with the headings a Chinese reader sees: upstream gives KMB:E060D03C30317F2C the code ED522 in `zh-Hant`/`zh-Hans` but not in `en`. So that pole's heading is unique here, the collision is between the other two — 26.3 m apart — and they are labelled North and South while the English rendering of the same place is declined. This is why the rule takes the heading TEXT and not the pole's name or id: whether two headings collide is a property of what is printed, and what is printed depends on the locale.",
+          "args": {
+            "poles": [
+              {
+                "id": "KMB:75767448DA6FA081",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "九巴"
+              },
+              {
+                "id": "KMB:E060D03C30317F2C",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "九巴 · ED522"
+              },
+              {
+                "id": "KMB:F754AED08F0B6B97",
+                "location": {
+                  "lat": 22.27206,
+                  "lng": 114.2327
+                },
+                "heading": "九巴"
+              }
+            ]
+          },
+          "expect": {
+            "KMB:75767448DA6FA081": 0,
+            "KMB:F754AED08F0B6B97": 4
+          }
         }
       ]
     }

@@ -4,6 +4,8 @@ import {
   dedupeRoutes,
   operatorsOf,
   orderPoles,
+  type PoleHeading,
+  poleSideOctants,
   type StopDetailPole,
   type StopDetailRoute,
 } from '../src/stop-detail'
@@ -68,5 +70,47 @@ describe('stop-detail#orderPoles', () => {
     const before = c.args.poles.map((p) => p.id)
     orderPoles(c.args.poles, undefined, distances(c.args.distanceM))
     expect(c.args.poles.map((p) => p.id)).toEqual(before)
+  })
+})
+
+describe('stop-detail#poleSideOctants', () => {
+  /** The corpus omits every pole that gets nothing, so the Map is compared as a plain object. */
+  const sides = (poles: PoleHeading[]) => Object.fromEntries(poleSideOctants(poles))
+
+  for (const c of cases<{ poles: PoleHeading[] }, Record<string, number>>('poleSideOctants')) {
+    it(c.name, () => {
+      expect(sides(c.args.poles)).toEqual(c.expect)
+    })
+  }
+
+  it('is order-independent, and leaves the caller’s array alone', () => {
+    // Two properties over every row rather than values, so they belong here. Order-independence is
+    // load-bearing because the screen hands this `orderPoles`' output — three tiers that move a pole
+    // when a location fix lands — and a side that changed as the list reordered would look like a
+    // live-data bug. Non-mutation matters for the same reason it does for `orderPoles`: the caller
+    // draws its map pins from the very array it passes in.
+    for (const c of cases<{ poles: PoleHeading[] }, Record<string, number>>('poleSideOctants')) {
+      const before = c.args.poles.map((p) => p.id)
+      expect(sides([...c.args.poles].reverse())).toEqual(c.expect)
+      expect(c.args.poles.map((p) => p.id)).toEqual(before)
+    }
+  })
+
+  it('never labels two poles of one place with the same side', () => {
+    // The rule's whole purpose stated as an invariant. A row asserts what one place produces; this
+    // asserts the thing that must be true of every place, and it is the assertion that fails if a
+    // port keeps the separation guard but drops the distinctness one — which is the likelier of the
+    // two omissions, because reciprocity makes a pair look like it can never collide.
+    for (const c of cases<{ poles: PoleHeading[] }, Record<string, number>>('poleSideOctants')) {
+      const labelled = poleSideOctants(c.args.poles)
+      const byHeading = new Map<string, number[]>()
+      for (const pole of c.args.poles) {
+        const octant = labelled.get(pole.id)
+        if (octant === undefined) continue
+        byHeading.set(pole.heading, [...(byHeading.get(pole.heading) ?? []), octant])
+      }
+      for (const octants of byHeading.values())
+        expect(new Set(octants).size, `${c.name}: two poles share a side`).toBe(octants.length)
+    }
   })
 })

@@ -1,5 +1,6 @@
-// The three list rules the Place (stop-detail) screen is built out of: which route rows a rider
-// sees, which operators the place is "served by", and what order its poles appear in.
+// The four list rules the Place (stop-detail) screen is built out of: which route rows a rider
+// sees, which operators the place is "served by", what order its poles appear in, and — where two
+// poles would otherwise print the same heading — which compass side each of them is on.
 //
 // They lived inside `apps/mobile/app/stop/[id].tsx` until WP2-2, where they were reachable only by
 // rendering a React tree — so nothing could assert them, and Swift and Kotlin would each have had to
@@ -10,8 +11,11 @@
 // Nothing here reads a clock, a locale or a device. `orderPoles` takes the distances it needs as an
 // argument for the same reason `inferBusMarkers` takes `now`: the rule must produce the same answer
 // on every platform and in a test, and a function that measures its own inputs cannot.
+// `poleSideOctants` takes the heading *text* for the same reason and returns an **octant, not a
+// word** — the rule is the kernel's, the word is `@nextbus/i18n`'s (ADR-054).
 
-import type { OperatorId, StopDetail } from './types'
+import { bearingOctant, haversineMeters, initialBearingDeg } from './geo'
+import type { LatLng, OperatorId, StopDetail } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
 // JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
@@ -71,11 +75,12 @@ export type StopDetailPole = StopDetail['members'][number]
  * variants **at one pole** still collapse, and the rule keeps the first variant carrying a reading
  * rather than the *sooner* one. Read `spec/stop-detail.spec.json` before changing the tie-break.
  *
- * ⚠️ A display consequence, not a data one: where two members of a place share a printed stop code
- * (Tin Shui Wai Park has two on TN510), a line boarding at both now renders twice under two
- * identically-labelled pole headings. The remedy is to label a heading by something that
- * distinguishes it — the pole's own name or bearing — which is a header change, not a reason to fuse
- * two services back together.
+ * ⚠️ A display consequence, not a data one: where two members of a place print the same heading, a
+ * line boarding at both renders twice under two identical labels. `poleSideOctants` below is the
+ * remedy — a compass side on the heading, not a reason to fuse two services back together — and it
+ * covers 226 of the 567 affected places. It deliberately declines the rest, Tin Shui Wai Park's two
+ * `TN510` poles among them: at 1.1 m apart there is no side to name, because they are one physical
+ * pole published twice. Read that function's last section before reaching for an ordinal.
  *
  * @spec stop-detail#dedupeRoutes
  */
@@ -152,4 +157,139 @@ export function orderPoles(
       return a.index - b.index
     })
     .map((entry) => entry.pole)
+}
+
+/**
+ * One pole as the heading rule sees it: where it is, and **the heading a renderer already prints
+ * for it**.
+ *
+ * `heading` is passed in rather than derived because assembling it needs an operator name and a
+ * locale, and this package has neither. That is not a concession — it is what makes the rule
+ * correct. Whether two headings collide *is itself locale-dependent*: at Shau Kei Wan East
+ * Government Secondary School three KMB poles print bare "KMB" in English while the Chinese name of
+ * one of them carries `(ED522)`, so the same place is ambiguous three ways in `en` and two ways in
+ * `zh-Hant`. A rule that rebuilt the heading from `name.en` would answer the wrong question in two
+ * of the three locales we ship, and a rule that compared ids would answer it in none.
+ */
+export interface PoleHeading {
+  /** Canonical member-pole id (ADR-042). The key the result is returned under. */
+  id: string
+  /** The pole's own coordinate — `StopDetailPole.location`, the only field on the wire that can
+   *  tell two identically-named poles apart. */
+  location: LatLng
+  /** Exactly the text the renderer shows above this pole's routes. Compared, never parsed. */
+  heading: string
+}
+
+/**
+ * Minimum ground separation, in metres, between two identically-headed poles before a compass side
+ * is worth printing. Three independent lines land on 10 m and none of them is a round-number
+ * preference:
+ *
+ *   · **`formatDistance` rounds metres to the nearest 10** because ADR-008 forbids fake precision.
+ *     An app that refuses to print a distance finer than 10 m must not imply a *direction* finer
+ *     than 10 m either.
+ *   · **~10 m is the GPS error** `mercator.ts` already names as the reason not to frame a lone stop
+ *     tighter than z19. Below it, "the east one" is not a thing a rider standing there can resolve.
+ *   · **Below ~2 m the octant is not even stable.** Upstream publishes coordinates to five decimal
+ *     places — a ~1.1 m grid — so a member's position carries ±0.55 m per axis. At a 10 m separation
+ *     that is ≤ ~9° of wobble on the bearing, comfortably inside an octant's 22.5° half-width; at
+ *     2 m it is ~21° and the printed word flips on a one-grid-step coordinate change, which is drift
+ *     with extra steps.
+ */
+const POLE_SIDE_MIN_SEPARATION_M = 10
+
+/**
+ * Which compass side each pole of a place sits on — **but only for the poles whose heading would
+ * otherwise be indistinguishable from another pole's.**
+ *
+ * ## The defect this prevents
+ *
+ * Wave 5 put the boarding pole into a route row's identity (`dedupeRoutes` above), which was right:
+ * two different minibuses sharing a number were being fused into one row. The accepted display cost
+ * was that a line boarding at two poles of one place now renders **twice, under two headings that
+ * can be character-for-character identical** — the rider is asked to choose between two rows and
+ * given nothing to choose with.
+ *
+ * Measured over the shipped build `d598893de6add2e4` (10 118 places), and the shape of the problem
+ * is wider than the stop code the plan's row named: **567 places print at least one duplicate pole
+ * heading**, across 571 colliding groups. Only 64 of those are stop-code collisions (Tin Shui Wai
+ * Park's two `TN510` poles, 61 of the 64 with identical full names too). The other **507 are poles
+ * with no printed code at all** — two Citybus poles at Peaksville both reading just "Citybus", three
+ * minibus stands both reading just "Minibus". Neither the code nor the name can separate any of
+ * them; `location` is the only field on the wire that can, which is why this is a kernel rule and
+ * not a screen decision.
+ *
+ * ## The shape, and why it declines so often
+ *
+ * The octant is the bearing from the **centroid of the colliding poles** to each of them — not from
+ * the centroid of the whole place. That is a deliberate departure from the obvious reading, and it
+ * was measured: with the place centroid, a pair sitting off to one side of a five-member interchange
+ * gets two bearings only a few degrees apart, and the guard below then throws away 11 of the 15
+ * cases it should keep. Relative to *each other* is also the comparison the rider's eyes make, and
+ * for a pair the two bearings are reciprocal, so the two sides are opposite by construction.
+ *
+ * Two guards, and both of them are the point of the rule rather than defensive trimming:
+ *
+ *   1. **`POLE_SIDE_MIN_SEPARATION_M`** — no side for any pole in a group where some member sits
+ *      closer than half that to the group's centroid (for a pair, exactly "closer together than the
+ *      floor"). **331 of the 571 groups fail here**, including Tin Shui Wai Park, whose two `TN510`
+ *      poles are **1.1 m** apart — one coordinate grid step. 49 of the 64 code collisions are at
+ *      *exactly* 0.0 m.
+ *   2. **The sides must actually be distinct.** Reciprocity only helps a pair; three colliding poles
+ *      can put two of them in one octant, and **14 groups really do** — at that school three KMB
+ *      poles print bare "KMB", two of them share a coordinate exactly and the third is 26 m south, so
+ *      the octants come out North / North / South. Printing them would make two headings *longer*
+ *      and still identical, while telling the rider the ambiguity had been resolved. Silence is the
+ *      honest answer, so the whole group is declined.
+ *
+ * Net: **226 places gain a side, 9 892 render exactly as they do today.** Restraint is the design,
+ * not a side effect — a cue that appears on 2 % of places is a cue that means something when it
+ * appears.
+ *
+ * ## What a caller does with a pole that gets nothing
+ *
+ * Print the heading exactly as it stands, and stop there. **Do not fall back to an ordinal** ("1 of
+ * 2"): a number tells a rider nothing they can walk on, and it manufactures a distinction between
+ * two poles that are, on the ground, one pole. Because that is what the declined cases mostly are —
+ * two poles 0–1 m apart with the same operator, the same name and the same printed code are one
+ * boarding point published under two upstream ids, and no word can separate them because there is
+ * nothing there to separate. The remedy for those is upstream, in `buildPlaces`
+ * (`@nextbus/data-normalize`), which today keeps them as two members; it is not a heading problem
+ * and a heading cannot fix it.
+ *
+ * Order-independent, and it never reorders or mutates the input: the caller holds `members` off the
+ * query cache and draws the map pins from it.
+ *
+ * @spec stop-detail#poleSideOctants
+ */
+export function poleSideOctants(poles: readonly PoleHeading[]): Map<string, number> {
+  const byHeading = new Map<string, PoleHeading[]>()
+  for (const pole of poles) {
+    const group = byHeading.get(pole.heading)
+    if (group) group.push(pole)
+    else byHeading.set(pole.heading, [pole])
+  }
+
+  const sides = new Map<string, number>()
+  for (const group of byHeading.values()) {
+    // A heading that is already unique gets nothing — the overwhelmingly common case.
+    if (group.length < 2) continue
+    // A planar mean of the group's coordinates. Over the tens of metres ADR-042 clustering allows,
+    // the difference from a spherical centroid is far below the ~1.1 m the source data is quantised
+    // to; it is also exactly how the pipeline places a `Place`'s own lat/lng, so the two agree.
+    const centre: LatLng = {
+      lat: group.reduce((sum, p) => sum + p.location.lat, 0) / group.length,
+      lng: group.reduce((sum, p) => sum + p.location.lng, 0) / group.length,
+    }
+    if (group.some((p) => haversineMeters(centre, p.location) < POLE_SIDE_MIN_SEPARATION_M / 2))
+      continue
+    const sided = group.map((pole) => ({
+      pole,
+      octant: bearingOctant(initialBearingDeg(centre, pole.location)),
+    }))
+    if (new Set(sided.map((s) => s.octant)).size !== sided.length) continue
+    for (const s of sided) sides.set(s.pole.id, s.octant)
+  }
+  return sides
 }
