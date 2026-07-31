@@ -306,6 +306,25 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    name: 'the first round fails for every target',
+    why: 'The header\'s rule — *a failed round is not a departure* — used to hold from round two only. The `seq === 0` branch fired whatever came back, so a round where every request threw published `snapshot { etas: [] }`: the frame for "this stop has no arrivals". The screen loses the minutes it painted from its own HTTP fetch, ADR-058\'s persister dehydrates the blank because the document is still `success`, and the `retrying` status that would explain it cannot reach a listener that receives only `Eta[]`. No answer from anybody means no snapshot yet — which is what a subscription before its first successful round actually is. Every other failure row here opens with a round that succeeded, which is why nothing caught it.',
+    targets: ONE_TARGET,
+    rounds: [{ [STOP_A]: { throws: unavailable } }, { [STOP_A]: [eta(STOP_A, ROUTE_1, '10:02')] }],
+    frames: [
+      status('retrying', unavailable),
+      snapshot(1, ONE_TARGET, [eta(STOP_A, ROUTE_1, '10:02')]),
+      status('live'),
+    ],
+    expect: [
+      // `[]` here is the *absence* of a snapshot, not an empty one: the listener has never been handed
+      // readings, so a screen keeps whatever its own fetch painted. Round two arrives under the
+      // `retrying` label still standing, exactly as the recovery row below does, and `live` follows.
+      'retrying!upstream_unavailable []',
+      'retrying!upstream_unavailable [KMB:A/1@10:02]',
+      'live [KMB:A/1@10:02]',
+    ],
+  },
+  {
     name: 'a target fails and then recovers',
     why: 'A failed fetch is not a departure: the reading stays, labelled. Recovery has to re-announce `live`, or the screen keeps a "reconnecting" label for ever with data flowing behind it.',
     targets: ONE_TARGET,

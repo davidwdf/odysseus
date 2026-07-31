@@ -154,7 +154,31 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
 
     const next = flatten()
     const { changed, gone } = diffEtas(sent, next)
-    if (seq === 0) {
+    // **A failed first round is not an empty world.** The header's rule — *a failed round is not a
+    // departure* — held from round two only: the `seq === 0` branch used to fire whatever came back, so a
+    // round in which every request threw published `snapshot { etas: [] }`, which is the frame for "this
+    // stop has no arrivals". Downstream, `applyLiveEtasToStopDetail` nulls every row it cannot match (by
+    // design, that is `gone`'s honesty rule), the screen loses the minutes it had just painted from its own
+    // HTTP fetch, and the blanked document is still `status: 'success'` — so ADR-058's persister dehydrates
+    // it and an offline start replays the blank instead of the arrivals it exists to keep. The `retrying`
+    // status that would explain it cannot reach a listener that only receives `Eta[]`, and with the Place
+    // screen no longer polling while its query succeeds, nothing repaired it for a whole cadence.
+    //
+    // So: a round that told us **nothing** produces no snapshot. `seq` stays at 0 and the next round that
+    // learns something sends it — which is the state a subscription is in before its first successful
+    // round, exactly.
+    //
+    // "Nothing" has to include a permanent rejection, and that distinction is not decoration: the first
+    // draft suppressed the snapshot whenever no target *answered*, which took the echo away from the one
+    // case that needs it most. A target rejected `retryable: false` leaves `watching`, and the empty
+    // snapshot is then not a claim that the stop has no buses — it is the accepted-set echo saying *we are
+    // not watching what you asked for*, which is the only signal a rider gets that a saved favourite has
+    // stopped resolving (ADR-008's no-silent-filter rule, and `SnapshotFrame.targets`' whole purpose).
+    // Caught by the `nothing left to watch closes the subscription` row going red, which is the row that
+    // exists for precisely this shape.
+    const answered = results.some((result) => 'etas' in result)
+    const dropped = failed.some(({ error }) => !error.retryable)
+    if (seq === 0 && (answered || dropped)) {
       seq = 1
       sent = next
       emit({
@@ -164,7 +188,7 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
         targets: watching,
         etas: next,
       })
-    } else if (changed.length > 0 || gone.length > 0) {
+    } else if (seq > 0 && (changed.length > 0 || gone.length > 0)) {
       seq += 1
       sent = next
       emit({ type: 'delta', seq, at: frameAt(deps.clock.now()), changed, gone })
