@@ -88,6 +88,14 @@
 	<string name="mapAttribution">地图由地政总署提供</string>
 	<string name="mapAttributionAction">地图由地政总署提供 — 打开版权公告及免责声明</string>
 	<string name="keypadBackspace">退格</string>
+	<string name="poleSideNorth">北面</string>
+	<string name="poleSideNortheast">东北面</string>
+	<string name="poleSideEast">东面</string>
+	<string name="poleSideSoutheast">东南面</string>
+	<string name="poleSideSouth">南面</string>
+	<string name="poleSideSouthwest">西南面</string>
+	<string name="poleSideWest">西面</string>
+	<string name="poleSideNorthwest">西北面</string>
 	<string name="openInMaps">在地图打开</string>
 	<string name="arrivalsHere">本站即将到站</string>
 	<string name="save">收藏</string>

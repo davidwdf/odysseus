@@ -84,6 +84,14 @@
 "mapAttribution" = "Map from Lands Department";
 "mapAttributionAction" = "Map from Lands Department — open the copyright notice and disclaimer";
 "keypadBackspace" = "Backspace";
+"poleSideNorth" = "North side";
+"poleSideNortheast" = "Northeast side";
+"poleSideEast" = "East side";
+"poleSideSoutheast" = "Southeast side";
+"poleSideSouth" = "South side";
+"poleSideSouthwest" = "Southwest side";
+"poleSideWest" = "West side";
+"poleSideNorthwest" = "Northwest side";
 "openInMaps" = "Open in Maps";
 "arrivalsHere" = "Next buses at this stop";
 "save" = "Save";

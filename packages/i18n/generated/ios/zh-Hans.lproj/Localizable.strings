@@ -84,6 +84,14 @@
 "mapAttribution" = "地图由地政总署提供";
 "mapAttributionAction" = "地图由地政总署提供 — 打开版权公告及免责声明";
 "keypadBackspace" = "退格";
+"poleSideNorth" = "北面";
+"poleSideNortheast" = "东北面";
+"poleSideEast" = "东面";
+"poleSideSoutheast" = "东南面";
+"poleSideSouth" = "南面";
+"poleSideSouthwest" = "西南面";
+"poleSideWest" = "西面";
+"poleSideNorthwest" = "西北面";
 "openInMaps" = "在地图打开";
 "arrivalsHere" = "本站即将到站";
 "save" = "收藏";

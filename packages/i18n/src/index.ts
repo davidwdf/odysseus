@@ -122,6 +122,41 @@ const ENDONYMS: Record<Locale, LocalizedString> = {
 }
 
 /**
+ * The eight pole-side words, indexed by the octant `poleSideOctants` (`@nextbus/core`) returns —
+ * 0 = North, clockwise.
+ *
+ * It lives here rather than in the screen because there is more than one screen. `apps/mobile` needs
+ * it today and `apps/web` needs it the moment it grows a Place view; two lookup tables is how the
+ * `OPERATOR_LABEL` map and the tile-source locale table came to disagree with the catalogue in the
+ * first place (ADR-054). The kernel returns the number, this turns it into the word, and neither
+ * knows about the other's half.
+ */
+const POLE_SIDE_KEYS = [
+  'poleSideNorth',
+  'poleSideNortheast',
+  'poleSideEast',
+  'poleSideSoutheast',
+  'poleSideSouth',
+  'poleSideSouthwest',
+  'poleSideWest',
+  'poleSideNorthwest',
+] as const satisfies readonly PlainMessageKey[]
+
+/**
+ * The word for a pole's compass side — "East side" / "東面" — from the octant the kernel returned.
+ *
+ * The octant comes from `poleSideOctants`, which only produces one where a place has two poles whose
+ * headings would otherwise be identical, so this is never asked for decoratively. An octant outside
+ * 0–7 cannot arise from that rule, and `?? ''` is what it costs to say so without a throw on a label
+ * path: a missing suffix leaves today's ambiguous-but-true heading, where a crash would take the
+ * whole screen.
+ */
+export function poleSideLabel(octant: number, locale: Locale): LocalizedString {
+  const key = POLE_SIDE_KEYS[octant]
+  return key ? t(locale, key) : ('' as LocalizedString)
+}
+
+/**
  * A name from the canonical bus-data model, for a display slot that requires a `LocalizedString`.
  *
  * Bus data is localized *upstream* — `I18nText` already carries all three renderings (CLAUDE.md
