@@ -240,6 +240,31 @@ Distance alone is never the rule: it is a necessary condition, and the name test
 work. Above 2 m the pairs stay as two members — see WP5-11's row in
 [`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) for what remains.
 
+**One arrival = one rider line at one boarding pole (WP5-9).** A place is N poles and a route row is
+per pole, so a reading is too: `dedupeEtas` keys on `operator|routeNo|bound|stopId`
+(`etaBoardingKey`), and a line boarding at two poles of a place publishes **two** readings on
+`/v1/etas/:id`, on `/v1/nearby` and in the `EtaHub` frames. Service-type variants at *one* pole still
+collapse to the soonest — Citybus 969 is listed three times at one kerb — which is what the rule is
+for. Keyed across the place it published one, so the sibling pole's row read "no reading right now"
+while a bus was due there: 43 rider lines board at two poles in build `1ccad7436a8df480`, mostly GMB,
+and at Tai On Street the two `GMB:20`s are *different services* sharing a number, so the pole is
+identity and not a tie-break. Three consequences worth knowing:
+
+- **Which reading belongs to which row is one rule, in the kernel.** `/v1/stop/:id` builds its rows
+  with `eta: null` and calls `applyLiveEtasToStopDetail` — the same function the live subscription
+  applies to that payload one cadence later. The edge's own index was keyed on the route id alone,
+  which crossed poles; two implementations of one rule is how the screen came to disagree with itself.
+- **A row whose service-type variant upstream did not publish takes the soonest reading for its own
+  line at its own pole.** Boards publish whichever variant is running (2 of 2124 readings measured
+  across 156 places named a variant no row at their own pole lists), so the exact pair alone drops
+  real arrivals. The fallback index is `dedupeEtas` keyed by `etaBoardingKey` — the same
+  normalisation, not a second rule — and it never crosses a pole, so `row.eta.stopId === row.stopId`
+  holds for every filled row.
+- **A compact card collapses back to one row per line, because it has no kerb heading.** `stopCardView`
+  does that before the cap, and `NearbyStop.routeCount` counts rider *lines*, so both sides of the
+  "+N more" subtraction stay in one unit. Two rows reading `68K → Julimount Garden` on a card would
+  ask a rider to choose with nothing to choose by; the kerb is a Place-detail fact.
+
 **Why the flip is last.** A failed run leaves an unreachable orphan rather than a half-served
 dataset, and a rollback is a single key write. That property is the write *order*, not a
 convention — see `apps/edge/scripts/publish-dataset.mts`.
