@@ -105,13 +105,24 @@ export interface IndexRouteStop {
  * `stopMap` over-clusters and breaks ETA resolution (ADR-021), so we don't use it.
  */
 export interface IndexPlace {
-  /** `P:` + member canonical ids (sorted) joined by `+` — self-describing so the
-   *  edge can resolve members from the id alone. */
+  /** `P:` + **every clustered upstream pole's** canonical id (sorted) joined by `+` —
+   *  self-describing so the edge can resolve members from the id alone. Deliberately *not*
+   *  `members.map(id)`: a pole folded onto another by `foldDuplicatePoles` stays in the id, so
+   *  the id of an already-published place does not churn when the fold changes, and
+   *  `memberStopIds` (which is how a live reading finds its place) still names every pole the
+   *  edge may stamp onto one. See `foldDuplicatePoles`. */
   id: string
   name: I18nText
   lat: number
   lng: number
+  /** The **boarding points** a rider chooses between — one per physical pole, so two upstream
+   *  ids for one pole appear once (WP5-11). Every id is still addressable: see `aliases`. */
   members: IndexStop[]
+  /** Member canonical id → the upstream poles folded onto it because they are the *same physical
+   *  pole* published twice (`foldDuplicatePoles`). Absent for all but ~75 of 10 118 places. The
+   *  folded poles keep their `stopToRoutes` entry, their place in every route's stop sequence and
+   *  their own entry in `placeByStopId`, so nothing a rider saved stops resolving. */
+  aliases?: ReadonlyMap<string, IndexStop[]>
   /** Mean travel bearing of the place (deg, 0–360) — the direction buses move through
    *  it. Undefined only if no member has bearing data (e.g. a place of pure termini). */
   meanBearingDeg?: number
@@ -134,7 +145,9 @@ export interface StaticIndex {
   routeToStops: Map<string, IndexRouteStop[]>
   /** Same-kerb cross-operator groupings (KMB+CTB at one kerb). */
   places: IndexPlace[]
-  /** canonical stop id → the place it belongs to (members only). */
+  /** canonical stop id → the place it belongs to. Every *clustered* pole is a key, including one
+   *  folded onto a member by `foldDuplicatePoles` — so "is this pole part of a place?" and "which
+   *  place does this pole resolve to?" have the same answer for every id upstream publishes. */
   placeByStopId: Map<string, IndexPlace>
   /** GMB live-ETA resolution (ADR-047): `${gtfsId}:${bound}` → canonical route id. The GMB
    *  stop-board feed identifies routes by numeric route_id (= `gtfsId`) + `route_seq`; this
@@ -421,6 +434,169 @@ function placeConfidence(
   return Math.max(0, Math.min(100, Math.round(c)))
 }
 
+// ── One physical pole, published twice (WP5-11) ───────────────────────────────────────────
+//
+// Upstream sometimes publishes one pole under two stop ids. Clustering already puts them in one
+// place, but as two *members*, so the Place screen prints two headings that are identical
+// character for character and a line boarding at "both" gets two rows. `poleSideOctants`
+// (`@nextbus/core`) cannot fix that — at these distances there is no compass side to name — and
+// its docblock names this function as where the remedy belongs.
+//
+// The rule below is deliberately the **narrowest defensible** version of the merge, because the
+// measurement that filed this work said the obvious wider versions are not supportable. Measured over
+// build `1ccad7436a8df480`, across the **464** clustered pole pairs that share an operator and the
+// same name in all three locales:
+//
+//                     pairs   disjoint routes   overlapping
+//     0–0.5 m           75          67               8
+//     0.5–2 m           10           8               2
+//     2–5   m           44          41               3
+//     5–10  m           99          97               2
+//     10–20 m          149         142               7
+//     20 m +            87          85               2
+//
+//  · **Distance is a continuum.** The distribution is smooth from 0 m upward and the genuine
+//    two-berth stands sit *inside* it — KMB prints one code on poles 19–36 m apart (TN507 22.88 m,
+//    TN581 19.01 m, ND126 35.35 m) while Tin Shui Wai Park's duplicated TN510 pole is 1.11 m. So no
+//    threshold anywhere above the quantisation floor separates "one pole published twice" from "two
+//    real berths", and this rule does not pretend otherwise: it merges only *below* that floor.
+//  · **Route-disjointness discriminates nothing.** It was the candidate signal ("if the two poles
+//    share no route they must be the same pole"), and the table kills it: disjointness is the norm at
+//    **every** distance, two-berth stands included, and the exceptions do not sort by distance either
+//    (8 overlapping pairs sit in the nearest band). It is not evidence and it is not used.
+//
+// So the only pairs merged are the ones where a rider could not possibly tell the two apart: same
+// operator, the same name in **every locale we ship**, and a separation no larger than the
+// coordinate grid the source data is quantised to.
+
+/**
+ * The largest separation, in metres, at which two same-named poles are treated as **one physical
+ * pole published twice** rather than two berths of one stand.
+ *
+ * Derived from the **coordinate quantisation**, not from the shape of the distance histogram
+ * (which has no gap to read a threshold out of). The upstream feed publishes five decimal places,
+ * so a position is a point on a ~1.1 m grid and two feeds describing the *same* pole can disagree
+ * by at most one grid step per axis. At Hong Kong's latitudes that makes exactly four achievable
+ * separations for one physical pole — and the real build contains all four and nothing else below
+ * 2 m:
+ *
+ *   | offset                    | metres      | pairs in `1ccad7436a8df480` |
+ *   |---------------------------|-------------|------------------------------|
+ *   | none                      | 0.000       | 75 |
+ *   | one step of longitude     | 1.027–1.029 | 3 |
+ *   | one step of latitude      | 1.112       | 4 |
+ *   | one step of both          | 1.515       | 3 |
+ *   | **two** steps (longitude) | 2.058       | — first separation that cannot be one grid step |
+ *
+ * Those 85 pairs are **every** same-named same-operator pair in the build at or under 2 m, and their
+ * separations are *only* those four values — the build contains nothing at 0.3 m, nothing at 1.8 m.
+ * A continuum that is discrete is the signature of the grid rather than of geography, which is the
+ * evidence this threshold rests on.
+ *
+ * The boundary therefore has to lie in **(1.515, 2.058)** — above the grid diagonal, below two
+ * steps — and 2 is the round number inside it. Nothing in the build sits between 1.515 m and
+ * 2.058 m, so the exact value inside that window changes no outcome; picking it from the grid
+ * rather than from the histogram is what makes it defensible when the data next moves.
+ *
+ * **Why this is tighter than `POLE_SIDE_MIN_SEPARATION_M` (10 m), which answers a nearby
+ * question:** that floor is where a *compass side* stops meaning anything, and its failure mode is
+ * to say nothing. This one asserts that two poles a rider might have saved separately are the same
+ * pole, and its failure mode is to merge two berths and hide one of them. Declining to name a side
+ * is weaker than asserting two poles are one, so the threshold for asserting must be the tighter of
+ * the two. Two different numbers, two different claims — not an inconsistency.
+ */
+const SAME_POLE_MAX_SEPARATION_M = 2
+
+/**
+ * Whether two poles are indistinguishable to a rider: same operator, and the same name in **all
+ * three locales**.
+ *
+ * All three, not just `en`, and that is the condition doing the real work. The Place screen's
+ * heading is `operatorName · splitStopCode(name).code`, so identical operator + identical name
+ * means an identical printed heading in that locale — and *whether two poles collide is itself
+ * locale-dependent* (the finding behind `poleSideOctants` taking its heading text as an argument).
+ * In build `1ccad7436a8df480` **14 pairs at ≤ 2 m share their English name but not their Chinese
+ * one**, and every one of them is the same shape: the Chinese name carries a printed code the English
+ * name omits entirely. At Prince Edward Station both poles read `PRINCE EDWARD STATION, MONG KOK
+ * POLICE STATION` in English at *exactly* the same coordinate, while the Chinese reads
+ * `太子站, 旺角警署 (MK356)` and `(MK357)`. Two more: `西隧轉車站 - 雅翔道 (YT302)`/`(YT301)`, and
+ * `高鐵(西九龍站)巴士總站 (YT954)`/`(YT955)`.
+ *
+ * A rider reading Chinese can tell those two apart and is standing at a stand that really has two
+ * berths, so merging them would delete a true distinction in one locale to tidy a duplicate in
+ * another. They stay as two members — and note which way round the deficiency runs: it is the
+ * *English* label that is missing the code, so the honest fix for those 14 is to find the code, not to
+ * fuse the poles. That is a lead for WP5-12, not for this function.
+ */
+function sameLabelEverywhere(a: IndexStop, b: IndexStop): boolean {
+  return (
+    a.operator === b.operator &&
+    a.name.en === b.name.en &&
+    a.name['zh-Hant'] === b.name['zh-Hant'] &&
+    a.name['zh-Hans'] === b.name['zh-Hans']
+  )
+}
+
+/**
+ * Fold a place's clustered poles onto its **boarding points**: the poles that are one physical
+ * pole published twice collapse to the first of them, and the rest come back as its aliases.
+ *
+ * **Complete linkage, not single linkage.** A pole joins a group only when it is within
+ * `SAME_POLE_MAX_SEPARATION_M` of *every* pole already in it. Chaining would let three poles at
+ * 0 m / 2 m / 4 m merge into one 4 m-wide group, and 4 m is two grid steps — a claim the
+ * quantisation argument does not support. `members` arrives sorted by id, so the group a pole lands
+ * in, and which pole survives, are both deterministic.
+ *
+ * **The lowest id survives**, because it is already the head of the sorted member list and does not
+ * move when route counts or coordinates change. Choosing (say) the pole with the most routes would
+ * re-pick the survivor whenever upstream re-attributes a route, which churns the heading a rider
+ * sees for no reason.
+ *
+ * **Nothing is deleted.** A folded pole keeps its stop record, its routes, its slot in every route's
+ * stop sequence and its own `placeByStopId` entry; the place id still names it. What changes is only
+ * how many boarding points the place *shows*. That is the whole safety argument for this rule:
+ * favourites key on a member pole id (ADR-062) precisely so clustering changes are survivable, and a
+ * fold that removed an id from the dataset would strand every favourite saved at it. Merging what a
+ * place displays is reversible; deleting an id a rider holds is not.
+ *
+ * The same argument decides what the *wire* says, and it is the trap this work fell into once already:
+ * a folded pole keeps its own id on every route row and on every reading stamped off its board
+ * (`atPole` in `apps/edge/src/stop-route.ts`), so the two ids never mix on anything persisted. The
+ * fold is a display collapse the client applies with `boardingPoleId`/`dedupeRoutes`. Re-basing an id
+ * on the way out looked tidier and blanked every arrival at the folded pole — the live merge matches a
+ * reading to a row by `(stopId, routeId)` and the two spellings stopped agreeing.
+ *
+ * Effect on build `1ccad7436a8df480`: **80 poles folded across 75 places** (85 same-named pairs at
+ * ≤ 2 m, some of them within one group of three), 30 places falling to a single member, and every one
+ * of the 6354 clustered pole ids still resolving through `placeByStopId`. Colliding pole headings fall
+ * 567 → 496 places.
+ */
+function foldDuplicatePoles(members: readonly IndexStop[]): {
+  boarding: IndexStop[]
+  aliases: Map<string, IndexStop[]>
+} {
+  const groups: IndexStop[][] = []
+  for (const m of members) {
+    const group = groups.find(
+      (g) =>
+        // biome-ignore lint/style/noNonNullAssertion: groups are never created empty
+        sameLabelEverywhere(g[0]!, m) &&
+        g.every((o) => haversineM(o.lat, o.lng, m.lat, m.lng) <= SAME_POLE_MAX_SEPARATION_M),
+    )
+    if (group) group.push(m)
+    else groups.push([m])
+  }
+  const boarding: IndexStop[] = []
+  const aliases = new Map<string, IndexStop[]>()
+  for (const group of groups) {
+    // biome-ignore lint/style/noNonNullAssertion: groups are never created empty
+    const survivor = group[0]!
+    boarding.push(survivor)
+    if (group.length > 1) aliases.set(survivor.id, group.slice(1))
+  }
+  return { boarding, aliases }
+}
+
 /** Max pairwise great-circle distance (m) among a set of stops; 0 if <2. */
 function clusterDiameterM(members: IndexStop[]): number {
   let max = 0
@@ -458,6 +634,11 @@ function bearingSpread(ids: string[], meanBearing: Map<string, number>): number 
  * `BEARING_SPREAD_CAP_DEG`. Members may now share an operator (e.g. three adjacent KMB poles
  * on one kerb); the bearing gate, not the operator, separates kerbs — superseding ADR-022's
  * one-member-per-operator invariant.
+ *
+ * A last step then folds the cluster's poles onto its **boarding points** (`foldDuplicatePoles`),
+ * so one physical pole that upstream published under two ids is one member rather than two. That is
+ * a *display* collapse, not a deletion: the folded id keeps everything it had and the place id
+ * still names it.
  */
 function buildPlaces(
   stops: IndexStop[],
@@ -561,38 +742,49 @@ function buildPlaces(
   const placeByStopId = new Map<string, IndexPlace>()
   for (const indices of clusters.values()) {
     if (indices.length < 2) continue
-    const members = indices
+    // Every clustered upstream pole, sorted — the set the place *id* is minted from.
+    const clustered = indices
       .map((i) => stops[i])
       .filter((s): s is IndexStop => Boolean(s))
       .sort((x, y) => x.id.localeCompare(y.id))
-    if (members.length < 2) continue
+    if (clustered.length < 2) continue
+    // …and the boarding points it collapses to, which is what the place shows (WP5-11). A place
+    // whose two poles are one physical pole becomes a place of one member — still a place, because
+    // demoting it to a lone stop would rename it and drop the second id's resolution.
+    const { boarding: members, aliases } = foldDuplicatePoles(clustered)
     const ids = members.map((m) => m.id)
     const spreadDeg = Math.round(bearingSpread(ids, meanBearing))
     const meanBearingDeg = meanBearingOf(ids, meanBearing)
-    // Any joint-route same-pole proof among the members raises confidence.
+    // Any joint-route same-pole proof raises confidence. Asked of **every** clustered pole, not
+    // just the boarding ones: a proof about a folded pole is still evidence about this place.
     let hasJointProof = false
-    for (let a = 0; a < ids.length && !hasJointProof; a++) {
-      for (let b = a + 1; b < ids.length; b++) {
-        // biome-ignore lint/style/noNonNullAssertion: a,b index within ids.length
-        if (jointPairs.has(pairKey(ids[a]!, ids[b]!))) {
+    const clusteredIds = clustered.map((m) => m.id)
+    for (let a = 0; a < clusteredIds.length && !hasJointProof; a++) {
+      for (let b = a + 1; b < clusteredIds.length; b++) {
+        // biome-ignore lint/style/noNonNullAssertion: a,b index within clusteredIds.length
+        if (jointPairs.has(pairKey(clusteredIds[a]!, clusteredIds[b]!))) {
           hasJointProof = true
           break
         }
       }
     }
     const place: IndexPlace = {
-      id: `P:${members.map((m) => m.id).join('+')}`,
+      id: `P:${clusteredIds.join('+')}`,
       name: pickName(members),
-      // Centroid — the most representative single anchor for a multi-pole place.
+      // Centroid of the **boarding points** — the anchor is where a rider stands, and a pole
+      // published twice should not pull it twice.
       lat: members.reduce((sum, m) => sum + m.lat, 0) / members.length,
       lng: members.reduce((sum, m) => sum + m.lng, 0) / members.length,
       members,
+      ...(aliases.size > 0 ? { aliases } : {}),
       meanBearingDeg: meanBearingDeg === undefined ? undefined : Math.round(meanBearingDeg),
       bearingSpreadDeg: spreadDeg,
       confidence: placeConfidence(members, spreadDeg, clusterDiameterM(members), hasJointProof),
     }
     places.push(place)
-    for (const m of members) placeByStopId.set(m.id, place)
+    // Keyed by every clustered pole, folded ones included — a favourite, a deep link or a live
+    // reading naming a folded pole must still land on this place.
+    for (const m of clustered) placeByStopId.set(m.id, place)
   }
   return { places, placeByStopId }
 }
