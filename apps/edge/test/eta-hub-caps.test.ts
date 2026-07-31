@@ -12,7 +12,7 @@ import { type BuildManifest, datasetKeys, type PlaceDoc } from '@nextbus/data-no
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
-import { LIVE_MAX_TARGETS_PER_SHARD } from '../src/eta-hub'
+import { LIVE_CTB_BUDGET, LIVE_MAX_TARGETS_PER_SHARD } from '../src/eta-hub'
 import worker from '../src/index'
 import { liveShardName } from '../src/live'
 
@@ -39,6 +39,7 @@ import { liveShardName } from '../src/live'
 // path that grew a second fetcher fails loudly instead of reaching Hong Kong.
 
 const KMB_STOP_ETA = /^https:\/\/data\.etabus\.gov\.hk\/v1\/transport\/kmb\/stop-eta\/(.+)$/
+const CTB_ETA = /^https:\/\/rt\.data\.gov\.hk\/v2\/transport\/citybus\/eta\/CTB\/([^/]+)\/(.+)$/
 const HASH = 'livecaps01'
 
 /**
@@ -66,6 +67,57 @@ function capPlaceDoc(rawId: string): PlaceDoc {
   }
 }
 
+/**
+ * A Central-class Citybus interchange: one pole, many routes.
+ *
+ * The shape is the whole point. CTB has no per-stop board (ADR-021), so its call key is per **(pole,
+ * route)** — a KMB pole costs one call whatever it serves, and a CTB pole costs one call per route
+ * number. Over the shipped dataset 113 real places have 24 or more distinct CTB (pole, routeNo) pairs and
+ * the heaviest costs 32 calls, so `CTB_ROUTE_COUNT` here is not a stress figure; it is Wan Chai.
+ */
+const CTB_HEAVY_RAW = '099099'
+const CTB_HEAVY_ID = `CTB:${CTB_HEAVY_RAW}`
+const CTB_ROUTE_COUNT = 20
+
+function ctbHeavyPlaceDoc(): PlaceDoc {
+  const name = { en: 'Wan Chai-ish', 'zh-Hant': '灣仔一帶', 'zh-Hans': '湾仔一带' }
+  return {
+    id: CTB_HEAVY_ID,
+    name,
+    lat: 22.2783,
+    lng: 114.1747,
+    members: [
+      {
+        id: CTB_HEAVY_ID,
+        operator: 'CTB',
+        stopId: CTB_HEAVY_RAW,
+        name,
+        lat: 22.2783,
+        lng: 114.1747,
+      },
+    ],
+    routes: Array.from({ length: CTB_ROUTE_COUNT }, (_, i) => {
+      const routeNo = `${900 + i}`
+      return {
+        stopId: CTB_HEAVY_ID,
+        route: {
+          id: `CTB:${routeNo}:outbound:1`,
+          operator: 'CTB' as const,
+          routeNo,
+          bound: 'outbound' as const,
+          serviceType: '1',
+          origin: name,
+          destination: name,
+        },
+      }
+    }),
+    routeCount: CTB_ROUTE_COUNT,
+  }
+}
+
+/** Every CTB ETA call this round made, as `<pole>|<route>` — the exact key `coalesce` deduplicates on. */
+let ctbCalls: string[] = []
+
 const realFetch = globalThis.fetch
 
 beforeAll(async () => {
@@ -73,6 +125,7 @@ beforeAll(async () => {
   for (const raw of capRawIds) {
     await kv.put(datasetKeys.place(HASH, `KMB:${raw}`), JSON.stringify(capPlaceDoc(raw)))
   }
+  await kv.put(datasetKeys.place(HASH, CTB_HEAVY_ID), JSON.stringify(ctbHeavyPlaceDoc()))
   const manifest: BuildManifest = {
     hash: HASH,
     sourceHash: 'seed',
@@ -87,14 +140,18 @@ let opened: WebSocket[] = []
 
 beforeEach(() => {
   resetEtaCache()
+  ctbCalls = []
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    const board = KMB_STOP_ETA.exec(url)
-    if (board?.[1]) {
-      return new Response(
-        JSON.stringify({ generated_timestamp: '2026-07-27T04:00:00.000Z', data: [] }),
-        { headers: { 'content-type': 'application/json' } },
-      )
+    const empty = () =>
+      new Response(JSON.stringify({ generated_timestamp: '2026-07-27T04:00:00.000Z', data: [] }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    if (KMB_STOP_ETA.test(url)) return empty()
+    const ctb = CTB_ETA.exec(url)
+    if (ctb) {
+      ctbCalls.push(`${ctb[1]}|${ctb[2]}`)
+      return empty()
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof fetch
@@ -292,4 +349,37 @@ describe('the shard target cap', () => {
     expect(rows.n).toBeLessThanOrEqual(LIVE_MAX_TARGETS_PER_SHARD)
     // Six sockets, five re-subscriptions and a round over 48 stubbed poles.
   }, 30_000)
+})
+
+describe('a round’s upstream fan-out', () => {
+  it('bounds CTB per place, so the cap’s stated arithmetic is the arithmetic it does', async () => {
+    // `stopEtas` dropped the budget parameter on its way to `stopArrivals`, so a round ran at
+    // `DEFAULT_CTB_BUDGET = 24` — the number chosen for a *single HTTP request*, not for something that
+    // repeats every 45 s for as long as a socket is open. Measured over the shipped dataset, the 48
+    // heaviest real places cost 1,342 upstream calls at 24, against the ~100–150 the cap's docblock
+    // claimed: ~67 s of queued fetching at six simultaneous connections, past the 45 s cadence floor, so
+    // a shard at its own cap would never stop fetching and never become hibernation-eligible — the
+    // economy the whole design is justified by. `/v1/nearby` already needed a smaller number for exactly
+    // this reason, under a comment saying "the v2 push engine replaces this", which is this object.
+    const { frames } = await connect([CTB_HEAVY_ID])
+    await frames.take(2)
+    // The connect pulls the alarm forward, so let its round finish and start counting from a cold cache:
+    // `coalesce` holds a pole for 30 s per isolate, and what is being counted is one round's fan-out.
+    await settle(200)
+    ctbCalls = []
+    resetEtaCache()
+
+    expect(await runDurableObjectAlarm(stubFor([CTB_HEAVY_ID]))).toBe(true)
+    await settle(100)
+
+    expect(
+      new Set(ctbCalls).size,
+      `one round asked upstream ${new Set(ctbCalls).size} times for one place`,
+    ).toBeLessThanOrEqual(LIVE_CTB_BUDGET)
+    // …and it really is the budget doing the bounding, not an empty fixture: the place serves more routes
+    // than the budget allows, and every call that *was* made is one of them.
+    expect(CTB_ROUTE_COUNT).toBeGreaterThan(LIVE_CTB_BUDGET)
+    expect(new Set(ctbCalls).size).toBe(LIVE_CTB_BUDGET)
+    for (const call of ctbCalls) expect(call).toMatch(new RegExp(`^${CTB_HEAVY_RAW}\\|9\\d\\d$`))
+  })
 })

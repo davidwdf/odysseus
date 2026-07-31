@@ -104,13 +104,27 @@ export const LIVE_MAX_TARGETS_PER_CONNECTION = 12
 /**
  * Distinct targets one shard will poll in one round — the cap that actually bounds the work.
  *
- * Forty-eight. The arithmetic: a round issues one `stopEtas` per distinct target, each of which reads a
- * place document (a colo-cached KV point read) and fans out to one upstream call per member pole,
- * deduplicated across the whole round by `coalesce` (ADR-057). The fixture's places average 2 poles and
- * a real Hong Kong interchange runs to 3–4, so 48 targets is ~100–150 upstream calls; Cloudflare allows
- * **6 simultaneous outgoing connections per invocation**, so those queue in ~20 rounds of ~300 ms ≈ 6 s
- * — comfortably inside both the 45 s cadence floor and an alarm's 15-minute wall clock, with the
- * subrequest budget (10,000 on Paid) an order of magnitude clear.
+ * Forty-eight, and **the arithmetic below is measured over the shipped dataset rather than estimated from
+ * the fixture** — the first version of it was not, and it was wrong by an order of magnitude.
+ *
+ * A round issues one `stopEtas` per distinct target, each of which reads a place document (a colo-cached
+ * KV point read) and then fans out to `min(distinct CTB (pole, routeNo), LIVE_CTB_BUDGET) + non-CTB poles`
+ * upstream calls, deduplicated across the whole round by `coalesce` (ADR-057). **CTB is the term that
+ * decides the number**, because it has no per-stop board (ADR-021) so its call key is per *route*, not per
+ * pole — the thing "average 2 poles" left out entirely. Over `apps/edge/.dataset/d598893de6add2e4` (10,118
+ * places): 113 places have 24 or more distinct CTB (pole, routeNo) pairs, 347 have 12 or more, the
+ * heaviest place costs 32 calls, and **the 48 heaviest total 1,342 calls at the read path's default budget
+ * of 24** — not the ~100–150 this docblock used to claim. Cloudflare allows **6 simultaneous outgoing
+ * connections per invocation**, so at ~300 ms a call that is ~224 batches ≈ **67 s**: past the 45 s
+ * cadence floor, which means a shard at its own cap would fetch continuously and never become
+ * hibernation-eligible. Four riders with twelve Central-class places each is exactly 48 — the load this
+ * cap was chosen to *permit*.
+ *
+ * At `LIVE_CTB_BUDGET = 12` the same 48 places cost **785 calls** ≈ 131 batches ≈ **39 s**, inside the
+ * floor, with the heaviest single place at 20 calls and the subrequest budget (10,000 on Paid) an order of
+ * magnitude clear. 39 s is not a comfortable margin and is stated rather than rounded: if the cap or the
+ * cadence moves, this is the number that has to be recomputed, and
+ * `test/eta-hub-caps.test.ts` is what holds the budget itself in place.
  *
  * **Excess targets are dropped and named, never refused as a whole.** The first draft refused the
  * *upgrade* when a connection's targets would push the union past this, on the argument that bluntness
@@ -126,6 +140,23 @@ export const LIVE_MAX_TARGETS_PER_CONNECTION = 12
  * client must not prune a favourite whose stop is perfectly fine.
  */
 export const LIVE_MAX_TARGETS_PER_SHARD = 48
+
+/**
+ * CTB routes one round will ask about, per place.
+ *
+ * Twelve — the number `/v1/nearby` already passes (`NEARBY_CTB_BUDGET`) and for the same reason. CTB has
+ * no per-stop board (ADR-021), so its upstream call key is per **(pole, route)** while a KMB or GMB pole
+ * costs one call whatever it serves; the fan-out of a round is therefore dominated by CTB and by nothing
+ * else. `stopEtas`/`stopArrivals` default to 24, which is right for a single HTTP request that happens
+ * once, and wrong for something that repeats every 45 s for as long as a socket is open — see the
+ * measurement in `LIVE_MAX_TARGETS_PER_SHARD` above.
+ *
+ * Routes past the budget are still counted and still shown on the Place screen from static data. What is
+ * bounded is the live fan-out, and the honest cost is that a rider watching a 30-route interchange may not
+ * see live minutes for every one of them — which is the same trade `/v1/nearby` already makes, on the same
+ * places.
+ */
+export const LIVE_CTB_BUDGET = 12
 
 /**
  * Sockets one shard will hold.
@@ -696,7 +727,14 @@ export class EtaHub extends DurableObject<Env> {
           // through the dataset, fans out per member pole and coalesces every upstream call per pole on
           // a 30 s TTL (ADR-057, WP0-4). A shard with its own fetcher would double the upstream rate
           // for every stop that is also being served over HTTP.
-          return { target, etas: await stopEtas(dataset, target.stopId, target.routeIds) }
+          //
+          // …with **this object's own CTB budget**, not the read path's default. That default is sized
+          // for one HTTP request; a round repeats at the cadence, and at 24 the 48 heaviest real places
+          // cost 1,342 calls a round (see `LIVE_MAX_TARGETS_PER_SHARD`).
+          return {
+            target,
+            etas: await stopEtas(dataset, target.stopId, target.routeIds, LIVE_CTB_BUDGET),
+          }
         } catch (err) {
           return { target, error: wireErrorOf(err) }
         }

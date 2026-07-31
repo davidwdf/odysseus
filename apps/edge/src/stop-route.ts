@@ -311,11 +311,24 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
   }
 }
 
-/** GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered). */
-export async function stopEtas(ds: DatasetSource, id: string, routeIds?: string[]): Promise<Eta[]> {
+/**
+ * GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered).
+ *
+ * `ctbBudget` is threaded rather than left to `stopArrivals`' default for the same reason `/v1/nearby`
+ * passes its own: the default is generous because one HTTP request happens once, and the `EtaHub` round
+ * that also reads through here happens every 45 s for as long as a socket is open. Dropping the parameter
+ * silently — which this function did — meant the live fan-out was double what the shard's own cap
+ * documented, and the number the cap published was wrong by an order of magnitude.
+ */
+export async function stopEtas(
+  ds: DatasetSource,
+  id: string,
+  routeIds?: string[],
+  ctbBudget?: number,
+): Promise<Eta[]> {
   const place = await requirePlace(ds, id)
 
-  const all = await stopArrivals(place)
+  const all = await stopArrivals(place, ctbBudget)
   if (!routeIds?.length) return all
   const wanted = new Set(routeIds)
   return all.filter((e) => wanted.has(e.routeId))

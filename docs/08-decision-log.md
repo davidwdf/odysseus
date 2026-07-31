@@ -2536,9 +2536,15 @@ rather than the docs. **The blocking open question above is unchanged** — this
      [ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path)'s
      `radius=50000` amplification with a longer lever — it names an unbounded list of stops, each costing a
      place read plus a coalesced upstream call *every round, for as long as the socket is open*. Each cap
-     carries its arithmetic in the code (48 targets ≈ 100–150 upstream calls, which at six simultaneous
-     outgoing connections queue in ≈6 s, inside the 45 s floor; 8 KiB keeps a canonicalised session inside
-     half of the attachment's 16,384-byte limit). Excess targets are **rejected and named**, never truncated
+     carries its arithmetic in the code, and the shard cap's was **corrected in 2026-07 after being
+     measured** rather than estimated from the fixture: the fan-out is dominated by CTB, which has no
+     per-stop board (ADR-021) and so costs one call per *route* rather than per pole. Over the shipped
+     dataset the 48 heaviest real places cost **1,342 upstream calls at the read path's default CTB budget
+     of 24** — ≈67 s of queued fetching at six simultaneous outgoing connections, *past* the 45 s cadence
+     floor — not the ≈100–150 calls / ≈6 s first published here. So a round passes the DO's own
+     `LIVE_CTB_BUDGET = 12`, as `/v1/nearby` already did, and the same 48 places cost **785 calls ≈ 39 s**,
+     inside the floor. (8 KiB keeps a canonicalised session inside half of the attachment's 16,384-byte
+     limit; that one was right.) Excess targets are **rejected and named**, never truncated
      silently, because a socket watching half a rider's list is the silent filter ADR-008 rules out. **The
      trade we accept: a cap is itself a lock-out vector** — 64 sockets from one script would refuse the 65th
      rider on that shard. The values sit far above plausible legitimate concurrency and far below the
