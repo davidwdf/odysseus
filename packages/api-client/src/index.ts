@@ -9,6 +9,7 @@ import type {
   SearchIndex,
   StopDetail,
   Subscription,
+  WatchOptions,
   WatchTarget,
 } from '@nextbus/core'
 import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
@@ -145,7 +146,7 @@ export class EdgeClient implements DataSource {
    *    every cadence with a fresh copy of identical data. That is ADR-008's rule ("update the value only
    *    when fresh data arrives") reaching the seam.
    */
-  watch(targets: WatchTarget[], onUpdate: EtaListener): Subscription {
+  watch(targets: WatchTarget[], onUpdate: EtaListener, opts?: WatchOptions): Subscription {
     /**
      * The last list handed over, by identity — so a status-only transition does not call a listener that
      * cannot see the status.
@@ -162,7 +163,12 @@ export class EdgeClient implements DataSource {
       transport: this.transport({
         endpoints: this.endpoints,
         getEtas: (stopId, routeIds) => this.getEtas(stopId, routeIds),
-        pollMs: this.pollMs,
+        // A caller that has the *served* policy wins over this client's construction-time default.
+        // `EdgeClient` is built at module scope, before any policy has been fetched, so `this.pollMs` is
+        // `CLIENT_POLICY_DEFAULTS.refreshAfterMs` unless someone passed one — which meant a served
+        // override reached three screens' `refetchInterval` and *not* the seam that replaced it. See
+        // `WatchOptions` in `@nextbus/core` for why this is threaded rather than fetched here.
+        pollMs: opts?.refreshAfterMs ?? this.pollMs,
         clock: this.clock,
       }),
       targets,

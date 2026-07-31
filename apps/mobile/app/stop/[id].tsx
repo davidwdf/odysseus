@@ -102,18 +102,26 @@ export default function StopDetail() {
     queryKey: ['stop', id],
     enabled: !!id,
     queryFn: () => dataSource.getStop(id as string),
-    // No `refetchInterval` any more, and the whole stop document is no longer re-fetched on a cadence.
-    // This query is the initial snapshot and the ADR-058 persistence vehicle; the *ETAs* arrive by
-    // subscription and are merged into this very cache entry by `useLiveEtas` (WP5-0). The cadence still
-    // exists — it is the poll emulator's, still the served `refreshAfterMs` (ADR-053) — but it now fetches
+    // The whole stop document is no longer re-fetched on a cadence. This query is the initial snapshot
+    // and the ADR-058 persistence vehicle; the *ETAs* arrive by subscription and are merged into this very
+    // cache entry by `useLiveEtas` (WP5-0). The cadence still exists — it is the poll emulator's, and it is
+    // the served `refreshAfterMs` because `useLiveEtas` is handed it below — but it now fetches
     // `/v1/etas/:id` instead of `/v1/stop/:id`, so a refresh costs the arrivals rather than the stop, its
     // members, every route and their service summaries.
+    //
+    // **The interval survives for the failure case only, and that is not tidiness.** Dropping it outright
+    // made a failed first load *permanent*: `retry: 1` and `refetchOnWindowFocus: false` (QueryProvider)
+    // mean nothing else ever asks again, so one lost packet on open left the rider looking at an error
+    // string until they navigated away and back — where before, the 30 s interval healed it unprompted. The
+    // subscription cannot help: it feeds ETAs into a cache entry that does not exist yet. So: no polling
+    // while this succeeds, and the old self-healing while it does not.
+    refetchInterval: (q) => (q.state.status === 'error' ? policy.refreshAfterMs : false),
   })
   // The first real consumer of the `watch()` seam. It holds no rules: the merge is the kernel's
   // `applyLiveEtasToStopDetail`, and which engine is behind the seam is not something this screen knows.
   // `enabled` waits for the first payload, because a pushed reading has nothing to merge into until then and
   // a dropped one is not re-sent — see the hook.
-  useLiveEtas(id, { enabled: query.isSuccess })
+  useLiveEtas(id, { enabled: query.isSuccess, refreshAfterMs: policy.refreshAfterMs })
 
   const stop = query.data?.stop
   const routes = query.data ? dedupeRoutes(query.data.routes) : []

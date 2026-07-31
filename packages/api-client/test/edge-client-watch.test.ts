@@ -103,6 +103,48 @@ describe('EdgeClient.watch() with no transport configured', () => {
     sub.unsubscribe()
   })
 
+  it('runs on the cadence the CALLER was served, not on the one compiled in', async () => {
+    // The regression this pins, found by review after WP5-0 shipped: `EdgeClient` is constructed at module
+    // scope (`apps/mobile/lib/datasource.ts`), so its `pollMs` is `CLIENT_POLICY_DEFAULTS` — the
+    // compiled-in number — and nothing later told it what the edge actually served. The three screens
+    // still using `refetchInterval` read the served value through `useClientPolicy`, so an edge that moved
+    // the cadence moved it for them and **not** for the seam meant to replace them. That is ADR-053's own
+    // defect (a threshold the edge can move, in force nowhere) rebuilt one layer down — and the screen
+    // carried a comment claiming the opposite.
+    //
+    // The case above pins the *default* path and remains right; this pins the served path, which nothing
+    // asserted. Deliberately a value nothing in the repo uses, so it cannot pass by coincidence.
+    const served = 7_000
+    expect(served).not.toBe(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
+
+    const answers = new Map([[STOP_A, [eta(STOP_A, '10:02')]]])
+    const { urls, fetchImpl } = stubFetch(answers)
+    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const sub = client.watch([{ stopId: STOP_A }], () => {}, { refreshAfterMs: served })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(urls.length).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(served - 1)
+    expect(urls.length).toBe(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(urls.length).toBe(2)
+    sub.unsubscribe()
+  })
+
+  it('falls back to the construction-time cadence when the caller states none', async () => {
+    // `WatchOptions`' absence must mean "I do not know the policy" — not "never poll" and not "poll at
+    // once". A cold start genuinely has no served policy, so a caller omitting it is the ordinary case.
+    const answers = new Map([[STOP_A, [eta(STOP_A, '10:02')]]])
+    const { urls, fetchImpl } = stubFetch(answers)
+    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl, pollMs: 5_000 })
+    const sub = client.watch([{ stopId: STOP_A }], () => {}, {})
+    await vi.advanceTimersByTimeAsync(0)
+    expect(urls.length).toBe(1)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(urls.length).toBe(2)
+    sub.unsubscribe()
+  })
+
   it('calls the listener only when the reading changed', async () => {
     const answers = new Map([[STOP_A, [eta(STOP_A, '10:02')]]])
     const { fetchImpl } = stubFetch(answers)

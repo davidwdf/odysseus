@@ -58,20 +58,28 @@ import { dataSource as appDataSource } from './datasource'
  * swapping the data source must reach the screen without editing it.
  * @param opts.enabled pass the query's own `isSuccess` — see above. A persisted entry restored on a cold
  * start is already `success`, so offline replay subscribes immediately rather than waiting for the network.
+ * @param opts.refreshAfterMs pass the **resolved** `ClientPolicy.refreshAfterMs`. Not optional in spirit,
+ * only in type: the `DataSource` is constructed at module scope, before any policy has been fetched, so
+ * omitting it silently reinstates the compiled-in default and an edge that moved the cadence would move it
+ * for the three `refetchInterval` screens and not for this one — ADR-053's own defect, one layer down.
  */
 export function useLiveEtas(
   stopId: string | undefined,
-  opts: { source?: DataSource; enabled?: boolean } = {},
+  opts: { source?: DataSource; enabled?: boolean; refreshAfterMs?: number } = {},
 ): void {
-  const { source = appDataSource, enabled = true } = opts
+  const { source = appDataSource, enabled = true, refreshAfterMs } = opts
   const queryClient = useQueryClient()
   useEffect(() => {
     if (!stopId || !enabled) return
-    const subscription = source.watch([{ stopId }], (etas) => {
-      queryClient.setQueryData<StopDetail>(['stop', stopId], (previous) =>
-        previous === undefined ? previous : applyLiveEtasToStopDetail(previous, etas),
-      )
-    })
+    const subscription = source.watch(
+      [{ stopId }],
+      (etas) => {
+        queryClient.setQueryData<StopDetail>(['stop', stopId], (previous) =>
+          previous === undefined ? previous : applyLiveEtasToStopDetail(previous, etas),
+        )
+      },
+      { refreshAfterMs },
+    )
     return () => subscription.unsubscribe()
-  }, [stopId, enabled, source, queryClient])
+  }, [stopId, enabled, refreshAfterMs, source, queryClient])
 }
