@@ -14,11 +14,13 @@
  * | {@link LinkOpener} | `window.open` | `UIApplication.open` | `Intent` |
  * | {@link Clock} | `Date.now()` | `Date()` | `System.currentTimeMillis()` |
  * | {@link TileSource} | `MiniMap` raster compositor | `MKTileOverlay` / MapLibre | `TileProvider` / MapLibre |
+ * | {@link LiveTransport} | `WebSocket` | `URLSessionWebSocketTask` | OkHttp `WebSocket` |
  *
  * Each file's doc comment is the actual specification — read it before implementing, because in
  * several cases the *constraint* is the interesting part and the signature is trivial: don't
  * prompt for location on launch, snap every fix before it leaves the device, pass `noopener` on
- * web, never let `core` read the clock, always render the basemap attribution.
+ * web, never let `core` read the clock, always render the basemap attribution, and keep the
+ * reconnect policy *out* of the socket.
  *
  * ## Three rules that keep this package honest
  *
@@ -55,6 +57,7 @@
 export type { Clock } from './clock'
 export type { KeyValueStore } from './key-value-store'
 export type { LinkOpener, MapTarget } from './link-opener'
+export type { LiveTransport, LiveTransportSink } from './live-transport'
 export type { LocaleProvider } from './locale-provider'
 export type {
   GeoFix,

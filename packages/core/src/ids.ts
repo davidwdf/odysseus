@@ -224,6 +224,13 @@ export function parseRouteId(id: string): RouteIdParts | null {
 /**
  * A favourite key: `<stopId>|<routeId>`.
  *
+ * **The grammar encodes the route-at-stop tuple, which is more general than the name suggests** (D3).
+ * The same pair is the identity of a *live reading*: `EtaRef` on the wire, and the key
+ * `packages/core/src/live.ts` indexes readings by. That is a feature rather than a coincidence to be
+ * tidied away — a Widget watching a saved favourite maps 1:1 onto a live target, so the two must not
+ * drift into two spellings. The name stays `favorite` because ADR-062's stored-preferences migration
+ * keys on it; renaming to a concept-level name would be a data migration wearing a refactor's clothes.
+ *
  * **Exactly one `|`.** This is the one id form where the naive split is not merely untidy but
  * wrong: `key.split('|')` destructured into `[stopId, routeId]` on a key carrying two pipes
  * yields a perfectly plausible pair and silently discards the rest — a corrupt entry then reads
@@ -307,7 +314,12 @@ export function formatPlaceId(memberIds: readonly string[]): string {
 }
 
 /** A route-at-stop favourite key (ADR-032). `stopId` should be the **member pole** id, never the
- *  churning `P:` place id — see `FavoriteRouteKeyParts.stop`.  *
+ *  churning `P:` place id — see `FavoriteRouteKeyParts.stop`.
+ *
+ *  Also the identity of a live ETA reading: `packages/core/src/live.ts` keys readings with this, and
+ *  `EtaRef` is the same tuple on the wire. One grammar for the pair, not two — see
+ *  `parseFavoriteRouteKey`, and note the `|` is structural, which is what makes the key unambiguous
+ *  where a `:`-joined one would collide with a route id's own fields.  *
  * @spec ids#formatFavoriteRouteKey
  */
 export function formatFavoriteRouteKey(stopId: string, routeId: string): string {

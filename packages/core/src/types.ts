@@ -21,19 +21,25 @@
 
 import type {
   BoundSchema,
+  ClientFrameSchema,
   ClientPolicySchema,
+  DeltaFrameSchema,
   ErrorCodeSchema,
   ErrorResponseSchema,
+  EtaRefSchema,
   EtaSchema,
   FreqBandSchema,
   FreqPatternSchema,
   I18nTextSchema,
   LatLngSchema,
+  LiveStateSchema,
   LocaleSchema,
   NearbyStopSchema,
   OperatorIdSchema,
   OperatorSchema,
+  PingFrameSchema,
   PlaceSchema,
+  PongFrameSchema,
   RemarkKindSchema,
   RouteDetailSchema,
   RouteRefSchema,
@@ -42,9 +48,15 @@ import type {
   RouteServiceSummarySchema,
   RouteStopSchema,
   RouteSummarySchema,
+  ServerFrameSchema,
   ServiceDayTypeSchema,
+  SnapshotFrameSchema,
+  StatusFrameSchema,
   StopDetailSchema,
   StopSchema,
+  SubscribeFrameSchema,
+  WatchTargetSchema,
+  WireErrorSchema,
 } from '@nextbus/contract'
 import type { z } from 'zod'
 
@@ -137,6 +149,10 @@ export type NearbyStop = z.infer<typeof NearbyStopSchema>
  *  on the envelope is for. */
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>
 
+/** A failure as a body: the code to branch on, prose for a human, and whether to try again. One
+ *  declaration for both transports — the HTTP envelope extends it, and `StatusFrame.error` is it. */
+export type WireError = z.infer<typeof WireErrorSchema>
+
 /** The envelope every non-2xx JSON response carries. `retryable` is the one field a background
  *  client needs: `false` means prune the request, not retry it. */
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>
@@ -145,6 +161,48 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>
  *  policy (ADR-053) and a cold start has none at all. Resolve it with `resolveClientPolicy` before
  *  reading a field — this type is the wire, not something a screen should branch on. */
 export type ClientPolicy = z.infer<typeof ClientPolicySchema>
+
+// ── The live protocol (WP5-1) ────────────────────────────────────────────────────────────────
+//
+// Frames are wire shapes like any other, so they are `z.infer` of the contract's declarations rather
+// than hand-written interfaces here. `WatchTarget` in particular *was* hand-written — in
+// `datasource.ts`, from the days when `watch()` was a polling shim whose targets never left the
+// process. It crosses the wire now, so it moved to `packages/contract/src/wire/live.ts` and arrives
+// here like everything else. `EtaListener` and `Subscription` stay in `datasource.ts`: they are
+// function types, and a function is not a shape a schema can describe.
+
+/** One thing a client wants live readings for. `routeIds` absent means every route at the stop. */
+export type WatchTarget = z.infer<typeof WatchTargetSchema>
+
+/** The identity of one live reading — the same `(stopId, routeId)` tuple a favourite key encodes. */
+export type EtaRef = z.infer<typeof EtaRefSchema>
+
+/** What a live connection is doing. Treat it as open; the vocabulary will grow. */
+export type LiveState = z.infer<typeof LiveStateSchema>
+
+/** Client → server: the complete target set for this connection. It replaces; it does not add. */
+export type SubscribeFrame = z.infer<typeof SubscribeFrameSchema>
+
+/** Client → server keepalive, answered without waking a hibernated shard. */
+export type PingFrame = z.infer<typeof PingFrameSchema>
+
+/** The keepalive answer. */
+export type PongFrame = z.infer<typeof PongFrameSchema>
+
+/** Server → client: the accepted target set and every reading held for it. */
+export type SnapshotFrame = z.infer<typeof SnapshotFrameSchema>
+
+/** Server → client: what changed, and what is gone. */
+export type DeltaFrame = z.infer<typeof DeltaFrameSchema>
+
+/** Server → client: the connection state, and the failure behind it. */
+export type StatusFrame = z.infer<typeof StatusFrameSchema>
+
+/** Anything a client may send. */
+export type ClientFrame = z.infer<typeof ClientFrameSchema>
+
+/** Anything the server may send — what `applyLiveFrame` reduces. */
+export type ServerFrame = z.infer<typeof ServerFrameSchema>
 
 /**
  * A policy with every field present — what `resolveClientPolicy` returns and what UI reads.

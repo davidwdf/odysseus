@@ -29,26 +29,60 @@ export type StopDetailPole = StopDetail['members'][number]
 /**
  * Collapse rider-duplicate variants to one row per line, keeping the one with a live ETA.
  *
- * A "line" is **operator + route number + direction** — the unit a rider thinks in. The operators
- * publish finer: KMB and Citybus split a route into service-type variants (Citybus 969 is listed
- * three times at one pole, all bound for Causeway Bay), and GMB does the same with
- * "Normal"/"Special" codes. Showing those raw is three identical-looking rows to choose between.
- * The key includes the operator so a merged same-kerb place still keeps KMB-6 and CTB-6 apart, and
- * it is the same key the edge's `dedupeEtas` collapses on, so the two agree about what a line is.
+ * A "line" is **operator + route number + direction, at one pole** — the unit a rider thinks in,
+ * boarded somewhere specific. The operators publish finer: KMB and Citybus split a route into
+ * service-type variants (Citybus 969 is listed three times at one pole, all bound for Causeway Bay),
+ * and GMB does the same with "Normal"/"Special" codes. Showing those raw is three identical-looking
+ * rows to choose between. The key includes the operator so a merged same-kerb place still keeps
+ * KMB-6 and CTB-6 apart.
+ *
+ * **The pole is in the key, and that is a Wave 5 change** whose reasoning is worth keeping, because
+ * the franchised case and the minibus case pull in opposite directions:
+ *
+ *   · For KMB and Citybus the pole-free key was almost right — the field it discarded is genuinely
+ *     noise, a timetable variant of the same bus, and those variants share a pole, so they still
+ *     collapse.
+ *   · **For GMB that field is the route's identity.** Minibus numbers repeat — it is why a GMB route
+ *     id is built on the government's globally-unique id rather than on the number (ADR-047) — and two
+ *     different services can share one number in one neighbourhood. At Tai On Street,
+ *     `GMB:20:outbound:2002320` boards at `GMB:20000270` for Chai Wan (Fung Yip Street) and
+ *     `GMB:20:outbound:2002319` boards at `GMB:20009406` for Chai Wan Industrial City. Both are
+ *     circular, so both are "outbound" on every leg and direction cannot separate them either. Fused,
+ *     the second destination was never shown — and where route 20 was that pole's only route the
+ *     pole's whole group vanished from the list while its dot stayed on the map: **21 poles emptied**
+ *     in the 2026-07-27 build.
+ *
+ * Wave 5 is why it is fixed now rather than eventually. `/v1/etas/:id` collapses readings across the
+ * **whole place** and keeps the sooner arrival, so the live merge fills only one of the two poles'
+ * rows — and with the survivor chosen by *which row has a reading*, that row's destination, its lit
+ * map dot and its scroll target followed the sooner kerb and **moved as buses departed**. Measured
+ * against live upstream on 2026-07-31: GMB 68K with both poles publishing 11 s apart, and another pair
+ * flipping between "Kai Ham" and "Ho Chung".
+ *
+ * Note the edge's `dedupeEtas` still collapses *across* poles, so at most one of a line's poles can
+ * carry a reading and the other renders as "no reading right now" even when a bus is due there. That
+ * is the honest half-answer: the row no longer lies about *where*, and the missing arrival needs the
+ * edge to stop discarding it — a wire change, owned separately.
  *
  * **Order is first-appearance:** replacing a keyed entry keeps the position its first variant had,
  * so the list does not reshuffle when a later variant happens to be the one carrying the reading.
  *
- * ⚠️ Two corpus rows here are `knownDefect`. Both are consequences of the key deliberately *not*
- * containing the pole, and neither is fixed here — this module is a move, and a move that changes
- * behaviour is untraceable. Read `spec/stop-detail.spec.json` before touching the key.
+ * ⚠️ One corpus row here is still `knownDefect`, and the pole does not touch it: two KMB service-type
+ * variants **at one pole** still collapse, and the rule keeps the first variant carrying a reading
+ * rather than the *sooner* one. Read `spec/stop-detail.spec.json` before changing the tie-break.
+ *
+ * ⚠️ A display consequence, not a data one: where two members of a place share a printed stop code
+ * (Tin Shui Wai Park has two on TN510), a line boarding at both now renders twice under two
+ * identically-labelled pole headings. The remedy is to label a heading by something that
+ * distinguishes it — the pole's own name or bearing — which is a header change, not a reason to fuse
+ * two services back together.
  *
  * @spec stop-detail#dedupeRoutes
  */
 export function dedupeRoutes(routes: readonly StopDetailRoute[]): StopDetailRoute[] {
   const byKey = new Map<string, StopDetailRoute>()
   for (const r of routes) {
-    const key = `${r.route.operator}|${r.route.routeNo}|${r.route.bound}`
+    const key = `${r.route.operator}|${r.route.routeNo}|${r.route.bound}|${r.stopId}`
     const existing = byKey.get(key)
     if (!existing || (!existing.eta && r.eta)) byKey.set(key, r)
   }

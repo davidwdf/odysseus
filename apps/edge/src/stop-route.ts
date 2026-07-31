@@ -107,7 +107,12 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
         ctbRemaining--
         // CTB has no per-stop board (ADR-021), so the call key is per (pole, route).
         const key = `CTB-eta|${m.stopId}|${routeNo}|1`
-        tasks.push(coalesce(key, () => fetchEta('CTB', m.stopId, routeNo, '1'), []))
+        tasks.push(
+          atPole(
+            m.id,
+            coalesce(key, () => fetchEta('CTB', m.stopId, routeNo, '1'), []),
+          ),
+        )
       }
     } else if (m.operator === 'GMB') {
       // GMB: one stop-board call returns every route at this pole (like KMB); the edge
@@ -118,15 +123,57 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
         () => fetchGmbStopEta(m.stopId),
         [],
       )
-      tasks.push(raw.then((entries) => gmbEtasFrom(entries, gmbLive)))
+      tasks.push(
+        atPole(
+          m.id,
+          raw.then((entries) => gmbEtasFrom(entries, gmbLive)),
+        ),
+      )
     } else {
       // KMB/LWB: one call returns every route at this pole. Both operators read the same
       // KMB `stop-eta` board, so the pole id alone is the call key.
-      tasks.push(coalesce<Eta[]>(`kmb-board|${m.stopId}`, () => fetchKmbStopEta(m.stopId), []))
+      tasks.push(
+        atPole(
+          m.id,
+          coalesce<Eta[]>(`kmb-board|${m.stopId}`, () => fetchKmbStopEta(m.stopId), []),
+        ),
+      )
     }
   }
   const lists = await Promise.all(tasks)
   return lists.flat().filter((e) => e.arrivals.length > 0)
+}
+
+/**
+ * Stamp every reading from one pole's call with that pole's **canonical** id.
+ *
+ * The normalizers stamp `Eta.stopId` with the *operator's* own stop id (`6AB438AD3AE100DD`), because
+ * they never see the dataset and canonical ids are minted from it — `packages/data-normalize/src/kmb.ts`
+ * says so at its `stopId` parameter. But the contract declares this field's identity **canonical**:
+ * `EtaRefSchema` — the `(stopId, routeId)` pair a `delta` uses to say *gone* — states that it is "the same
+ * pair `formatFavoriteRouteKey` encodes", and that grammar's stop half is a canonical pole id (it is what
+ * `SaveStar` saves). Everything that *reads* the pair therefore compares it against a canonical id:
+ * `applyLiveEtasToStopDetail` matches a row by `(row.stopId, row.route.id)` and `applyLiveEtasToNearby`
+ * maps a reading to a place through `memberStopIds`. Against the raw spelling, **both matched nothing.**
+ *
+ * It had no symptom for four waves because nothing had ever compared the two: `stopDetail` attaches
+ * `routes[].eta` by `routeId` alone, and `/v1/nearby` hands a place its own readings by construction. The
+ * first consumer of the pair was WP5-0's live merge, and the symptom was a Place screen whose every
+ * arrival blanked to "—" one second after it painted. Found by opening it in a browser (Mong Kok,
+ * MK513/514/515 — 8 of 21 rows had a reading and none survived the merge), not by a test: every fixture in
+ * the repo, including the kernel corpus, had written the canonical spelling the contract asks for.
+ *
+ * Stamped here — at the one place that knows both spellings for certain, since the call *is* per pole —
+ * rather than in the kernel, because this is the side that was wrong. Doing it here fixes all four
+ * consumers at once (`/v1/etas`, `/v1/stop`'s embedded readings, `/v1/nearby`, and the `EtaHub` frames,
+ * which will be built from these same lists). No wire *shape* changes: the field is the same field, now
+ * carrying the value its own contract describes.
+ *
+ * A **new object** per reading, never a mutation: these lists come out of `coalesce`, which hands the same
+ * array to every concurrent caller for 30 s, so mutating one would rewrite another place's readings.
+ */
+function atPole(poleId: string, etas: Promise<Eta[]>): Promise<Eta[]> {
+  return etas.then((list) => list.map((e) => ({ ...e, stopId: poleId })))
 }
 
 /** The rider-facing line an `Eta` belongs to. `dedupeEtas` collapses on exactly this, so it is
@@ -150,18 +197,20 @@ const lineKey = (operator: string, routeId: string): string => {
  * the card instead of dropping it for exactly the readings a rider is most likely to see.
  */
 function stampTables(place: PlaceDoc) {
-  const memberById = new Map(place.members.map((m) => [m.id, m]))
-  const fareByRouteAndRawStop = new Map<string, string>()
+  // Keyed on the **canonical** pole id, which is what `place.routes[].stopId` already carries and what a
+  // reading now carries too (see `atPole`). This map used to convert each row's canonical id back to the
+  // operator's own, via a `memberById` lookup, purely because readings arrived spelled that way — one
+  // conversion deleted rather than a second one added.
+  const fareByRouteAndPole = new Map<string, string>()
   const destinationByRoute = new Map<string, PlaceDoc['name']>()
   const destinationByLine = new Map<string, PlaceDoc['name']>()
   for (const r of place.routes) {
     destinationByRoute.set(r.route.id, r.route.destination)
     const line = lineKey(r.route.operator, r.route.id)
     if (!destinationByLine.has(line)) destinationByLine.set(line, r.route.destination)
-    const raw = memberById.get(r.stopId)?.stopId
-    if (r.fare && raw) fareByRouteAndRawStop.set(`${r.route.id}|${raw}`, r.fare)
+    if (r.fare) fareByRouteAndPole.set(`${r.route.id}|${r.stopId}`, r.fare)
   }
-  return { fareByRouteAndRawStop, destinationByRoute, destinationByLine }
+  return { fareByRouteAndPole, destinationByRoute, destinationByLine }
 }
 
 /**
@@ -196,14 +245,15 @@ export async function stopArrivals(
   ctbBudget = DEFAULT_CTB_BUDGET,
 ): Promise<Eta[]> {
   const all = dedupeEtas(await memberEtaLists(place, ctbBudget))
-  const { fareByRouteAndRawStop, destinationByRoute, destinationByLine } = stampTables(place)
+  const { fareByRouteAndPole, destinationByRoute, destinationByLine } = stampTables(place)
   // Stamp each reading with its route's destination + boarding fare so flat ETA lists can show
-  // "→ dest · $6.7" without the full Route object (ADR-036).
+  // "→ dest · $6.7" without the full Route object (ADR-036). Readings arrive carrying their canonical
+  // pole id (`atPole`), which is the id both tables above are keyed on.
   return all
     .map((e) => {
       const destination =
         destinationByRoute.get(e.routeId) ?? destinationByLine.get(lineKey(e.operator, e.routeId))
-      const fare = fareByRouteAndRawStop.get(`${e.routeId}|${e.stopId}`)
+      const fare = fareByRouteAndPole.get(`${e.routeId}|${e.stopId}`)
       const stamped = withRemarkKind(e)
       if (!destination && !fare) return stamped
       return { ...stamped, ...(destination ? { destination } : {}), ...(fare ? { fare } : {}) }
@@ -261,11 +311,24 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
   }
 }
 
-/** GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered). */
-export async function stopEtas(ds: DatasetSource, id: string, routeIds?: string[]): Promise<Eta[]> {
+/**
+ * GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered).
+ *
+ * `ctbBudget` is threaded rather than left to `stopArrivals`' default for the same reason `/v1/nearby`
+ * passes its own: the default is generous because one HTTP request happens once, and the `EtaHub` round
+ * that also reads through here happens every 45 s for as long as a socket is open. Dropping the parameter
+ * silently — which this function did — meant the live fan-out was double what the shard's own cap
+ * documented, and the number the cap published was wrong by an order of magnitude.
+ */
+export async function stopEtas(
+  ds: DatasetSource,
+  id: string,
+  routeIds?: string[],
+  ctbBudget?: number,
+): Promise<Eta[]> {
   const place = await requirePlace(ds, id)
 
-  const all = await stopArrivals(place)
+  const all = await stopArrivals(place, ctbBudget)
   if (!routeIds?.length) return all
   const wanted = new Set(routeIds)
   return all.filter((e) => wanted.has(e.routeId))

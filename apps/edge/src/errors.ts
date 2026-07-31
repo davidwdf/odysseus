@@ -20,7 +20,10 @@
 // system that guesses.
 
 import { ERROR_CODES } from '@nextbus/contract'
-import type { ErrorCode } from '@nextbus/core'
+// The wire shape of a failure, aliased because the *class* below already owns the name `WireError`
+// in this module. Same taxonomy, two carriers: an HTTP body (`errorBody`) and `StatusFrame.error` on
+// the `/v1/live` socket (`wireErrorOf`).
+import type { ErrorCode, WireError as WireErrorPayload } from '@nextbus/core'
 
 /** A failure that already knows its taxonomy member. Thrown by handlers, caught at the boundary. */
 export class WireError extends Error {
@@ -61,9 +64,34 @@ export function codeFor(err: unknown, fallback: ErrorCode = 'upstream_unavailabl
   return fallback
 }
 
+/**
+ * The taxonomy as a value — the three fields `WireError` declares, with `retryable` read off the
+ * table rather than passed in.
+ *
+ * This exists because since WP5-3 the same failure travels two ways: as an HTTP response body, and
+ * as `StatusFrame.error` on the `/v1/live` socket. The contract already made that one declaration
+ * (`WireErrorSchema`, and `ErrorResponseSchema` is *that plus* the deprecated `error`), so the code
+ * that builds it is one function too. Building the frame's error by hand at the shard would be the
+ * defect this module was written to end, one layer up: a `retryable` chosen at a call site rather
+ * than derived from the code, on the field a Widget uses to decide whether to prune a favourite.
+ *
+ * `packages/api-client` has a namesake for the client side of the same wire. They cannot share code —
+ * `layers.json` forbids `server → client` — so they share the contract instead: both produce a value
+ * of `WireError`, and both read `ERROR_CODES` for `retryable`.
+ */
+export function wireErrorFor(code: ErrorCode, message: string): WireErrorPayload {
+  return { code, message, retryable: ERROR_CODES[code].retryable }
+}
+
+/** A caught throw as a `WireError`, classified exactly as `errorResponse` classifies it. */
+export function wireErrorOf(err: unknown, fallback?: ErrorCode): WireErrorPayload {
+  const code = codeFor(err, fallback ?? 'upstream_unavailable')
+  return wireErrorFor(code, (err as Error)?.message ?? String(err))
+}
+
 /** The envelope, once. `error` duplicates `message` until ADR-064's deprecation window closes. */
 export function errorBody(code: ErrorCode, message: string): Record<string, unknown> {
-  return { error: message, code, message, retryable: ERROR_CODES[code].retryable }
+  return { error: message, ...wireErrorFor(code, message) }
 }
 
 /**

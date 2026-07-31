@@ -1,3 +1,4 @@
+import { DEFAULT_API_URL } from '@nextbus/api-client'
 import type { Locale } from '@nextbus/core'
 import { localeRecord } from '@nextbus/i18n'
 import type { TileSource as PortTileSource } from '@nextbus/ports'
@@ -22,8 +23,10 @@ import type { ImageSourcePropType } from 'react-native'
 export type TileSource = PortTileSource<Locale, ImageSourcePropType>
 
 /** Same base URL as the DataSource — tiles are served by our own Worker (`/v1/tiles/...`),
- *  which caches LandsD and re-emits the tiles as publicly cacheable. See apps/edge/src/tiles.ts. */
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8787'
+ *  which caches LandsD and re-emits the tiles as publicly cacheable. See apps/edge/src/tiles.ts.
+ *  "Same base URL" is now literally true rather than a claim about two copies of a string: the default
+ *  is `DEFAULT_API_URL` in `@nextbus/api-client`, and only the env read is per-platform. */
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL
 
 /** Our locale ids → LandsD's label-service language codes. */
 const LABEL_LANG: Record<Locale, string> = { en: 'en', 'zh-Hant': 'tc', 'zh-Hans': 'sc' }

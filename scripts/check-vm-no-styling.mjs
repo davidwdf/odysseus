@@ -44,7 +44,18 @@ import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const DOC_PATH = 'packages/contract/openapi.json'
+
+/**
+ * Every published wire document. **Hand-spelled, and a new one must be added here in the same commit
+ * that creates it** — the same rule `check-no-raw-colours.mjs` states for a new renderer directory, and
+ * for the same reason: a gate scoped to one of two documents passes while the other is unpoliced, which
+ * is a gate looking at nothing. `asyncapi.json` (WP5-1) carries the same schema *declarations* as
+ * `openapi.json` — one registry emit, one set of pointers — so most of its surface is checked twice; the
+ * two are not byte-identical (that document drops `$id` and folds `$ref` siblings into `allOf`, which is
+ * stated in its own `info.description`), but neither transformation can introduce a styling token. The
+ * frames are its own, and they are the newest place a `fontWeight` could land.
+ */
+const DOC_PATHS = ['packages/contract/openapi.json', 'packages/contract/asyncapi.json']
 
 /**
  * The banned shapes, as the plan states them: `/#[0-9a-f]{3,8}|px$|fontSize|fontWeight|margin/`.
@@ -198,7 +209,9 @@ function report(unexpected, stale) {
     for (const a of stale) console.error(`  · ${a.pointer}  ${JSON.stringify(a.value)}`)
   }
   console.error(`\n  The line: docs/08-decision-log.md → ADR-053`)
-  console.error(`  Declared: packages/contract/src/wire/*.ts (re-emit with openapi:emit)`)
+  console.error(
+    '  Declared: packages/contract/src/wire/*.ts (re-emit with openapi:emit and asyncapi:emit)',
+  )
 }
 
 // ── --selftest ─────────────────────────────────────────────────────────────────────────────────
@@ -320,14 +333,16 @@ function selftest() {
     console.log(`  ${ok ? '✓' : '✗'} ${fixture.name} → ${shown}`)
     if (!ok) console.log(`      expected → ${expected.join(', ') || '(no problems)'}`)
   }
-  // The real document is the last and best control: the committed contract must be clean, and
+  // The real documents are the last and best control: every committed contract must be clean, and
   // asserting it here as well means `--selftest` alone would catch a violation that had landed.
-  const live = findViolations(JSON.parse(readFileSync(join(repoRoot, DOC_PATH), 'utf8')))
-  const liveOk = partition(live).unexpected.length === 0
-  if (!liveOk) failed += 1
-  console.log(
-    `  ${liveOk ? '✓' : '✗'} the committed ${DOC_PATH} → ${liveOk ? 'clean' : 'VIOLATIONS'}`,
-  )
+  for (const docPath of DOC_PATHS) {
+    const live = findViolations(JSON.parse(readFileSync(join(repoRoot, docPath), 'utf8')))
+    const liveOk = partition(live).unexpected.length === 0
+    if (!liveOk) failed += 1
+    console.log(
+      `  ${liveOk ? '✓' : '✗'} the committed ${docPath} → ${liveOk ? 'clean' : 'VIOLATIONS'}`,
+    )
+  }
   if (failed > 0) {
     console.error(`\n✗ ${failed} selftest scenario(s) did not behave as documented.`)
     process.exit(1)
@@ -340,17 +355,25 @@ function selftest() {
 if (process.argv.includes('--selftest')) {
   selftest()
 } else {
-  const doc = JSON.parse(readFileSync(join(repoRoot, DOC_PATH), 'utf8'))
-  const { unexpected, stale } = partition(findViolations(doc))
+  // Both documents are walked and their findings partitioned **once, together**. Partitioning per
+  // document would report an allowlist entry that legitimately matches in one of them as stale in the
+  // other, and a gate that fails on its own bookkeeping gets an entry added to silence it.
+  const docs = DOC_PATHS.map((p) => ({
+    path: p,
+    doc: JSON.parse(readFileSync(join(repoRoot, p), 'utf8')),
+  }))
+  const { unexpected, stale } = partition(docs.flatMap(({ doc }) => findViolations(doc)))
   if (unexpected.length > 0 || stale.length > 0) {
     report(unexpected, stale)
     process.exit(1)
   }
-  const schemas = Object.keys(doc.components?.schemas ?? {}).length
+  const counted = docs
+    .map(({ path, doc }) => `${Object.keys(doc.components?.schemas ?? {}).length} in ${path}`)
+    .join(', ')
   const remaining =
     ALLOWLIST.length === 0 ? 'allowlist is empty' : `${ALLOWLIST.length} allowed exception(s) left`
   console.log(
-    `✓ no styling on the wire — ${RULES.length} rules over ${schemas} schema(s) in ${DOC_PATH}, ` +
+    `✓ no styling on the wire — ${RULES.length} rules over ${counted}, ` +
       `${remaining} (${relative(repoRoot, fileURLToPath(import.meta.url))}).`,
   )
 }

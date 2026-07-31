@@ -57,6 +57,7 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { operatorName } from '../../lib/operatorName'
 import { useClientPolicy } from '../../lib/useClientPolicy'
+import { useLiveEtas } from '../../lib/useLiveEtas'
 import { useLocation } from '../../lib/useLocation'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
@@ -101,17 +102,37 @@ export default function StopDetail() {
     queryKey: ['stop', id],
     enabled: !!id,
     queryFn: () => dataSource.getStop(id as string),
-    // ETAs are live — refresh on an interval; honest display only updates on new data. The cadence is
-    // served (ADR-053) and matches the edge's coalescing TTL, so a poll can actually return a new
-    // reading; the hard-coded 20 s this replaces could not.
-    refetchInterval: policy.refreshAfterMs,
+    // The whole stop document is no longer re-fetched on a cadence. This query is the initial snapshot
+    // and the ADR-058 persistence vehicle; the *ETAs* arrive by subscription and are merged into this very
+    // cache entry by `useLiveEtas` (WP5-0). The cadence still exists — it is the poll emulator's, and it is
+    // the served `refreshAfterMs` because `useLiveEtas` is handed it below — but it now fetches
+    // `/v1/etas/:id` instead of `/v1/stop/:id`, so a refresh costs the arrivals rather than the stop, its
+    // members, every route and their service summaries.
+    //
+    // **The interval survives for the failure case only, and that is not tidiness.** Dropping it outright
+    // made a failed first load *permanent*: `retry: 1` and `refetchOnWindowFocus: false` (QueryProvider)
+    // mean nothing else ever asks again, so one lost packet on open left the rider looking at an error
+    // string until they navigated away and back — where before, the 30 s interval healed it unprompted. The
+    // subscription cannot help: it feeds ETAs into a cache entry that does not exist yet. So: no polling
+    // while this succeeds, and the old self-healing while it does not.
+    refetchInterval: (q) => (q.state.status === 'error' ? policy.refreshAfterMs : false),
+  })
+  // The first real consumer of the `watch()` seam. It holds no rules: the merge is the kernel's
+  // `applyLiveEtasToStopDetail`, and which engine is behind the seam is not something this screen knows.
+  // `enabled` waits for the first payload, because a pushed reading has nothing to merge into until then and
+  // a dropped one is not re-sent — see the hook.
+  // `now` comes back out of the subscription hook on purpose: `refetchInterval` was this screen's clock as
+  // well as its fetch, so the hook that replaced the fetch hands the clock back. Without it the freshness
+  // cue freezes — see the hook. Read `Date.now()` here instead and the ETA rows silently stop ageing.
+  const { now } = useLiveEtas(id, {
+    enabled: query.isSuccess,
+    refreshAfterMs: policy.refreshAfterMs,
   })
 
   const stop = query.data?.stop
   const routes = query.data ? dedupeRoutes(query.data.routes) : []
   const members: StopDetailPole[] = query.data?.members ?? []
   const multiPole = members.length > 1
-  const now = Date.now()
 
   const cleanName = stop ? titleCaseName(splitStopCode(stop.name[locale]).label) : ''
   const here = loc.status === 'ready' ? { lat: loc.lat, lng: loc.lng } : null

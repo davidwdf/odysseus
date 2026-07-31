@@ -21,12 +21,17 @@ pnpm dev:mobile         # just Expo (press w = web/PWA, i = iOS, a = Android)
 pnpm dev:web            # Expo straight to web/PWA
 pnpm dev:dom            # apps/web — the Vite + React DOM renderer (WP4-1)  → http://localhost:8082
 pnpm typecheck          # tsc --noEmit across all packages — MUST pass before commit
-pnpm test               # vitest: apps/edge (inside workerd, simulated KV/R2) + apps/mobile
+pnpm test               # vitest in every package that has tests (apps/edge runs inside workerd with
+                        # simulated KV/R2) — and then the whole `pnpm boundaries` chain
+pnpm boundaries         # the gate chain: layer rules + each check-*.mjs and its --selftest
 pnpm lint               # Biome
 pnpm format             # Biome --write
+                        # …CI runs typecheck · lint · test · `wrangler deploy --dry-run` ·
+                        # `git diff --exit-code` on a CLEAN CHECKOUT (.github/workflows/ci.yml)
 
 pnpm --filter @nextbus/contract openapi:emit   # regenerate packages/contract/openapi.json (ADR-052)
-                        # …it's committed + gated: `pnpm test` fails if it's stale
+pnpm --filter @nextbus/contract asyncapi:emit  # …and asyncapi.json — the /v1/live frames (ADR-056)
+                        # …both are committed + gated: `pnpm test` fails if either is stale
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
@@ -40,12 +45,22 @@ apps/mobile          Expo app (iOS/Android/Web-PWA)
 apps/web             Vite + React DOM — ONE screen (Nearby), rendered from the identical
                      `packages/core` functions. The proof that the kernel is renderer-agnostic
                      (ADR-068/069); it derives nothing, and a gate enforces that
-apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health;
-                     reads precomputed dataset shards from KV/R2 — ADR-055)
+apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health; reads
+                     precomputed dataset shards from KV/R2 — ADR-055; and /v1/live, the ETA socket
+                     served by the sharded, hibernating `EtaHub` Durable Object — ADR-056)
 packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
+                     + the /v1/live frames → AsyncAPI 3.0 (`asyncapi.json`, ADR-056)
 packages/core        canonical types (`z.infer` of contract, `import type` only) · DataSource · ETA helpers
+                     · `live.ts` = the live-protocol rules (frame reducer, diff, cadence, shard, socket URL)
 packages/data-normalize  KMB + Citybus adapters (upstream → canonical)
-packages/api-client  EdgeClient (the v1 DataSource) + watch() polling shim
+packages/api-client  EdgeClient (the v1 DataSource) · `watch()` = the live frame protocol over a
+                     pluggable transport in `src/live/` (poll emulator = the DEFAULT · memory fake ·
+                     WebSocket) · `src/endpoint.ts` = the ONE declaration of where the API is
+                     (`DEFAULT_API_URL`), with the socket URL derived from it · the location controller
+packages/ports       the 7 type-only platform interfaces — `KeyValueStore` · `LocationProvider` ·
+                     `LocaleProvider` · `LinkOpener` · `Clock` · `TileSource` · `LiveTransport` (new
+                     in Wave 5). `ls packages/ports/src` IS the iOS/Android porting checklist
+                     (ADR-051); the package imports nothing and emits no JS
 packages/i18n        en / zh-Hant / zh-Hans UI strings
 packages/ui          NativeWind preset + themes + tokens
 packages/tsconfig    shared TS configs
@@ -57,7 +72,10 @@ packages/tsconfig    shared TS configs
    `@nextbus/*`.
 2. **All data goes through the `DataSource` seam** (`@nextbus/core` → `@nextbus/api-client`). UI
    and screens NEVER call upstream HK APIs directly. Swapping the v1 client for the v2 socket
-   engine must not touch the UI. See `docs/03`, ADR-004.
+   engine must not touch the UI. See `docs/03`, ADR-004. **Two gates enforce this, not one:**
+   `pnpm boundaries` checks the import graph, and `check-view-transport-free` checks the *source*
+   for a `fetch(`, a `new WebSocket`, a `ws://` literal or a `/v1/` path in a view — because a URL
+   literal imports nothing and the import graph cannot see it (ADR-056).
 3. **ETAs are approximations — never fake precision** (ADR-008). No client-side per-second
    countdown. Update the value only when fresh data arrives; use tabular figures; show
    "Arriving/Due" under a minute; indicate staleness. Use the helpers in `@nextbus/core/eta`.
@@ -82,11 +100,16 @@ packages/tsconfig    shared TS configs
    (NativeWind), TypeScript on **5.9** for shared packages. `esbuild` is pinned repo-wide via
    `pnpm.overrides` — `.npmrc` sets `node-linker=hoisted`, so two versions fight over the single
    hoisted platform binary and `wrangler dev` dies with *"Host version does not match binary version"*.
-7. **Docs are the source of truth and must stay in sync.** A pre-commit hook
-   (`scripts/precommit-docs-check.mjs` + the `check-docs` skill) **blocks** a commit that stages
-   code without `docs/` changes. Either update the relevant doc (and add an ADR in `docs/08` for any
-   new cross-cutting decision), or — if truly no doc change is needed — include `[docs-ok]` in the
-   commit message. Don't reach for `--no-verify`.
+7. **Docs are the source of truth and must stay in sync.** A commit that stages code without `docs/`
+   changes must either update the relevant doc (and add an ADR in `docs/08` for any new cross-cutting
+   decision) or — if truly no doc change is needed — include `[docs-ok]` in the commit message. Don't
+   reach for `--no-verify`. **Know what enforces this today: nothing.**
+   `scripts/precommit-docs-check.mjs` + the `check-docs` skill are a **Claude Code `PreToolUse` hook**,
+   not a git hook, and the hook is **not installed** in this repo (`git config --get core.hooksPath` is
+   unset; `hooks/` holds only samples). CI cannot run the script unmodified either — it reads a
+   tool-call payload on stdin and diffs the *index*, so in CI it exits 0 having checked nothing, and
+   `ci.yml` says so rather than shipping a step that passes vacuously. Fixing it is WP5-8. Until then
+   this rule is yours to keep, not a gate's.
 
 ## Definition of done (for any change)
 - [ ] `pnpm typecheck` passes.
@@ -101,8 +124,12 @@ packages/tsconfig    shared TS configs
   `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"`. `curl .../v1/health` tells you
   which dataset tier you're on — **`"dataset":"kv"` with `datasetBuildsThisIsolate: 0`** is the
   production invariant (ADR-055); `"inline"` means it's building the 8.3 MB dataset per isolate.
+- **The live socket:** `pnpm dev:edge`, then open `/v1/live?targets=<percent-encoded canonical id>` with a
+  WebSocket client (Node 22 has a global `WebSocket`). **Percent-encode it** — a place id contains `+`, which
+  a query string decodes as a space. Expect `snapshot` → `status{live}` → a `delta` only when something
+  changed. Note `wrangler dev` will pick **8788** if 8787 is busy.
 - **Tests:** `pnpm --filter @nextbus/edge test` runs inside workerd with simulated KV/R2, so the
-  coalescer and the shard read path are exercised for real, not mocked.
+  coalescer, the shard read path and the Durable Object's caps are exercised for real, not mocked.
 - **App:** `pnpm dev:web` and open `http://localhost:8081`.
 - **Types/bundle:** `pnpm typecheck`; `pnpm --filter @nextbus/edge exec wrangler deploy --dry-run`.
 
@@ -113,6 +140,16 @@ is [`docs/proposals/03`](./docs/proposals/03-clean-separation-and-phase2-plan.md
 are done** — the static dataset is precomputed daily into KV/R2 and the Worker only reads shards
 (ADR-055), the basemap is the Lands Department's behind a `TileSource` seam (ADR-049), the PWA has a
 service worker and a persisted query cache (ADR-058), and live ETAs are coalesced per pole at a 30 s
-TTL (ADR-057). **WP0-5 (deploy + CI + custom domain) is not done** and needs a real domain plus
-Cloudflare credentials. Roadmap/backlog: `docs/06`, `docs/07`. Cloudflare agent skills are installed
-— prefer the `cloudflare` / `wrangler` / `durable-objects` skills for edge work.
+TTL (ADR-057). **Waves 1–5 are done**: the wire contract and the id grammar (ADR-051/052/059/060),
+the kernel's domain rules under corpus (ADR-062…066), the native artefacts (ADR-067), the second
+renderer (ADR-068/069) and — as of 2026-07-30 — the **live protocol** (ADR-056): `watch()` is a real
+frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
+hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
+confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before
+changing live behaviour. Three caveats worth knowing before you touch any of it: the socket cannot
+yet be *selected* without a source edit (WP5-6, which is what makes five shard fixes latent), an
+upstream outage still reads as "no buses" (WP5-4), and a pole's row can read "no reading" while a bus
+is due there (WP5-9). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
+Cloudflare credentials — though CI now runs on every PR. Roadmap/backlog: `docs/06`, `docs/07`.
+Cloudflare agent skills are installed — prefer the `cloudflare` / `wrangler` / `durable-objects`
+skills for edge work.

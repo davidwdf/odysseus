@@ -55,19 +55,25 @@ export const ERROR_CODES = {
 } as const satisfies Record<z.infer<typeof ErrorCodeSchema>, { status: number; retryable: boolean }>
 
 /**
- * The error envelope every non-2xx JSON response carries.
+ * A failure, as a body — the three fields that say what went wrong and what to do about it.
  *
- * `error` is **deprecated and still served**: ADR-052 §5 makes additive free and removal breaking,
- * so `code`/`message`/`retryable` land alongside it and it is retired in a later, gated change
- * (ADR-064 says which one). It is a duplicate of `message` for as long as it exists — do not read
- * both, and do not parse either. `code` is the field to branch on.
+ * **Why this is not simply `ErrorResponse`.** Since WP5-1 the same taxonomy has to travel two ways:
+ * as an HTTP response body, and as `StatusFrame.error` on the `/v1/live` socket. Two hand-written
+ * declarations of "a failure" would fork the moment one of them gained a field — and they would fork
+ * *quietly*, because each side has its own tests and neither would notice the other had moved. So the
+ * failure body is declared once here, beside the `ERROR_CODES` table it is classified by, and
+ * `ErrorResponse` is defined below as *exactly this plus the deprecated duplicate*. Saying that in the
+ * type is better than saying it in a comment.
+ *
+ * It lives in this file rather than in `wire/live.ts` for a mechanical reason worth stating: the
+ * socket module needs `WireError`, and `WireError` needs `ErrorCodeSchema`, which is here with the one
+ * table that binds a code to its status. Declaring it there instead would make `responses.ts` and
+ * `live.ts` import each other, and an ESM cycle between two modules of top-level `const`s does not
+ * fail loudly — it evaluates one of them to `undefined`, which surfaces as a schema silently missing a
+ * field. The dependency runs one way: `live.ts` reads this file.
  */
-export const ErrorResponseSchema = z
+export const WireErrorSchema = z
   .object({
-    error: z.string().meta({
-      deprecated: true,
-      description: 'Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`.',
-    }),
     code: ErrorCodeSchema,
     message: z.string().meta({
       description:
@@ -78,7 +84,28 @@ export const ErrorResponseSchema = z
         'Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry.',
     }),
   })
-  .meta({ id: 'ErrorResponse' })
+  .meta({ id: 'WireError' })
+
+/**
+ * The error envelope every non-2xx JSON response carries: a `WireError`, plus one field kept alive
+ * for older clients.
+ *
+ * `error` is **deprecated and still served**: ADR-052 §5 makes additive free and removal breaking,
+ * so `code`/`message`/`retryable` land alongside it and it is retired in a later, gated change
+ * (ADR-064 says which one). It is a duplicate of `message` for as long as it exists — do not read
+ * both, and do not parse either. `code` is the field to branch on.
+ *
+ * `.extend()` emits a flat object rather than an `allOf` of the two, so the published component is
+ * unchanged in content — a generator sees the same four properties it always did. What changed is that
+ * `code`, `message` and `retryable` now have one declaration instead of two, and the socket's
+ * `StatusFrame.error` reads that one.
+ */
+export const ErrorResponseSchema = WireErrorSchema.extend({
+  error: z.string().meta({
+    deprecated: true,
+    description: 'Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`.',
+  }),
+}).meta({ id: 'ErrorResponse' })
 
 /**
  * `GET /v1/health` — the operational truth about one isolate (ADR-055).
