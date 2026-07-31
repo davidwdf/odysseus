@@ -188,6 +188,28 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
         targets: watching,
         etas: next,
       })
+    } else if (seq > 0 && dropped) {
+      // **A mid-stream drop re-echoes the accepted set, and it takes a snapshot to do it.** A `delta`
+      // carries readings and cannot restate membership — only a `snapshot` has `targets` — so a target
+      // that stops resolving after the first round would otherwise leave the client holding an accepted
+      // set naming a pole nobody polls. The rider is then shown "no buses due" for a stop we are not
+      // watching, which is the silent filter ADR-008 rules out and the exact thing
+      // `SnapshotFrame.targets` exists to prevent.
+      //
+      // This is a divergence the shard found first: `EtaHub` re-echoes on a round-time drop, and this
+      // engine's re-echo was gated on `seq === 0`, so the two engines answered the same upstream
+      // differently after round one. The scenario matrix could not see it, because its hand-written
+      // scripts describe what *this* engine does — which is the honest limit of comparing two engines
+      // against a script rather than against each other.
+      seq += 1
+      sent = next
+      emit({
+        type: 'snapshot',
+        seq,
+        at: frameAt(deps.clock.now()),
+        targets: watching,
+        etas: next,
+      })
     } else if (seq > 0 && (changed.length > 0 || gone.length > 0)) {
       seq += 1
       sent = next

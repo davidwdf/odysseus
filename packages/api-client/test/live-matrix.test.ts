@@ -574,6 +574,79 @@ describe('properties the matrix table cannot state', () => {
     expect(missing(scripted.at(-1) as LiveEtaUpdate)).toEqual(['legacy-id'])
   })
 
+  it('re-echoes the accepted set when a target dies mid-stream, on both engines', async () => {
+    // The round-1 case above is the easy half. A target that resolved once and *then* stops — a pole
+    // dropped by the daily rebuild, a `P:` id that churned under reclustering — is the half that needed a
+    // rule, because a `delta` cannot restate membership: only a `snapshot` carries `targets`. Without a
+    // re-echo the client keeps an accepted set naming a pole nobody polls, and the rider is shown
+    // "no buses due" for a stop we are not watching.
+    //
+    // **The shard found this first, and the two engines disagreed about it.** `EtaHub` re-echoes on a
+    // round-time drop; the poll emulator's re-echo was gated on `seq === 0`, so after round one it sent a
+    // `delta` and left the stale set standing. The scenario matrix could not see it: `summarize` reports
+    // status and readings, and both engines reduce a drop to the same readings. That is the honest limit of
+    // comparing two engines against hand-written scripts — the scripts describe one of them.
+    const asked: WatchTarget[] = [{ stopId: STOP_A }, { stopId: STOP_B }]
+    const acceptedIn = (update: LiveEtaUpdate) => update.targets.map((t) => t.stopId)
+
+    const { timers, tick } = manualTimers()
+    let round = 0
+    const polling = createPollTransport({
+      clock,
+      pollMs: 30_000,
+      timers,
+      getEtas: async (stopId) => {
+        // Round 0 answers for both; from round 1 STOP_B is permanently gone.
+        if (stopId === STOP_B && round > 0) throw gone
+        return [eta(stopId, stopId === STOP_A ? ROUTE_1 : ROUTE_6, '10:02')]
+      },
+    })
+    const polled: LiveEtaUpdate[] = []
+    const pollController = createLiveEtaController({
+      transport: polling,
+      targets: asked,
+      emit: (update) => polled.push(update),
+    })
+    pollController.start()
+    await flush()
+    expect(acceptedIn(polled.at(-1) as LiveEtaUpdate)).toEqual([STOP_A, STOP_B])
+    round = 1
+    tick()
+    await flush()
+
+    // The shard's own answer to the same upstream: a fresh snapshot carrying the survivors.
+    const scripted: LiveEtaUpdate[] = []
+    const scriptController = createLiveEtaController({
+      transport: createMemoryTransport([
+        snapshot(1, asked, [eta(STOP_A, ROUTE_1, '10:02'), eta(STOP_B, ROUTE_6, '10:02')]),
+        status('live'),
+        snapshot(2, [{ stopId: STOP_A }], [eta(STOP_A, ROUTE_1, '10:02')]),
+        status('retrying', gone),
+      ]),
+      targets: asked,
+      emit: (update) => scripted.push(update),
+    })
+    scriptController.start()
+    await flush()
+    scriptController.stop()
+
+    for (const [engine, updates] of [
+      ['poll', polled],
+      ['script', scripted],
+    ] as const) {
+      const last = updates.at(-1)
+      if (last === undefined)
+        throw new Error(`${engine} emitted nothing — the assertion is vacuous`)
+      // The set shrank, so a holder can now say *which* stop stopped resolving rather than showing it empty.
+      expect(acceptedIn(last), engine).toEqual([STOP_A])
+      expect(
+        last.etas.map((e) => e.stopId),
+        engine,
+      ).toEqual([STOP_A])
+    }
+    pollController.stop()
+  })
+
   it('asks for a fresh snapshot exactly once when a frame gaps', async () => {
     const scenario = SCENARIOS.find((s) => s.name.startsWith('a seq gap'))
     if (!scenario)
