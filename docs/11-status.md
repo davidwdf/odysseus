@@ -4,10 +4,14 @@
 > Snapshot: **2026-07-31**. **Waves 0–5 are on `main`** (PRs #11–**#19**); **Wave 5 was complete bar the
 > deployment** on `turbo-cache-inputs-v2` — 25 commits, and the branch was larger than a wave should be
 > because an adversarial review and its thirteen fixes landed on the same branch as the feature.
-> **Two of Wave 5's own follow-ups are now built on `wave5-followups-v1`** (10 commits above `origin/main`;
+> **Three of Wave 5's own follow-ups are now built on `wave5-followups-v1`** (16 commits above `origin/main`;
 > **WP5-10** and **WP5-11**, one ADR between them —
-> [ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)),
-> and the dataset build hash moves to **`1ccad7436a8df480`**, so production needs a publish.
+> [ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two) —
+> and then **WP5-9**,
+> [ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)),
+> and the dataset build hash moves to **`1ccad7436a8df480`**, so production needs a publish. **WP5-9 does not
+> move it again** — the rebuild after it is byte-identical, which is the proof that it changed nothing in the
+> offline pipeline.
 > **Why the history looks odd:** WP5-10 was authored on `turbo-cache-inputs-v2` *before* PR #19 merged, and
 > **#19 was squash-merged, which orphaned every original commit on that branch** — so those three commits and
 > the WP5-11 work were **cherry-picked** onto a branch cut from `origin/main`. Nothing was lost and nothing was
@@ -75,9 +79,11 @@
 > never shown, and where 20 was a pole's only route **the pole's whole group vanished from the list while its
 > dot stayed on the map** (21 poles emptied in the 2026-07-27 build). The corpus had pinned the defect twice
 > and argued both ways; one row is renamed and now pins the fix. Two costs were accepted rather than smoothed
-> over, and both were carried forward with an owner: WP5-9 and WP5-10 below. **WP5-10 is now closed, and
-> closing it turned out to need two rules rather than one** (ADR-071): most of the pairs wearing identical
-> headings were *one physical pole published twice*, which no label can fix.
+> over, and both were carried forward with an owner: WP5-9 and WP5-10 below. **Both are now closed, and
+> closing WP5-10 turned out to need two rules rather than one** (ADR-071): most of the pairs wearing identical
+> headings were *one physical pole published twice*, which no label can fix. **WP5-9 (ADR-072) finished the
+> thought the same night** — a reading is now keyed on the kerb too, so the two units the model was using for
+> "an arrival" and "a row" are one unit.
 > **Verified by running, in the review pass too:** `pnpm dev:edge` against the real KV state (`/v1/health`
 > `"dataset":"kv"`, `datasetBuildsThisIsolate: 0`) with a Node WebSocket probe on `/v1/live` against the live
 > HK feeds, showing the corrected re-echo on real data (`KMB:NOPE` accepted by the parser, then re-echoed out
@@ -254,13 +260,17 @@ now arrive through `DataSource.watch()` on Place detail, from a poll emulator by
 `EtaHub` Durable Object over `/v1/live` when the socket engine is selected — which today needs a source edit
 (WP5-6). Pick up at **WP0-5**: it is now genuinely the next job rather than a deferral, because the cheap half
 (CI on every PR) has landed and the rest is a domain, a Cloudflare account and the settings that follow — plus
-the Wave 5 follow-ups (WP5-4 … WP5-12), of which **WP5-10** and **WP5-11** are ✅ **done on
-`wave5-followups-v1`** — one pole published twice is now one boarding point, and two real poles get a compass
+the Wave 5 follow-ups (WP5-4 … WP5-12), of which **WP5-9**, **WP5-10** and **WP5-11** are ✅ **done on
+`wave5-followups-v1`** — one pole published twice is now one boarding point, two real poles get a compass
 side ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two);
-the build hash moved to `1ccad7436a8df480`, so production needs a publish) — leaving **WP5-4** (an upstream
-outage currently reads as "no buses") and **WP5-9** (a pole's row can read "no reading" while a bus is due
-there) as the two with rider-visible consequences, plus **WP5-12**, the 2–10 m residual those two rules
-deliberately leave between them.
+the build hash moved to `1ccad7436a8df480`, so production needs a publish), and **an arrival is now identified
+by a line at a kerb rather than a line at a place**, so both kerbs' rows carry their own bus
+([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)) — leaving
+**WP5-4** (an upstream outage still reads as "no buses") as the heaviest open item a rider can feel, plus
+**WP5-12**, the 2–10 m residual those rules deliberately leave between them. WP5-12 now owns two things it did
+not: a rider who stars one line at **both** kerbs still sees one Favourites row, and at Fu Kin Street the two
+kerbs' *names* differ ("outside" vs "opposite" Sin Sam House) where the printed code does not — a cheaper lead
+than any in its own row.
 
 ## ✅ Done & verified
 - **Monorepo:** pnpm + Turborepo + Biome; 8 packages; internal packages are source-only (no build step).
@@ -590,6 +600,49 @@ deliberately leave between them.
     discriminates nothing (**24 of 464 overlap**, 8 of them in the nearest band). So the row's original
     acceptance — *"no place shows two identical headings"* — is unachievable, and it was **reworded with the
     work stopped** rather than quietly failed after shipping.
+- **An arrival is a line at a kerb, not a line at a place** — **WP5-9**, 2026-07-31 on `wave5-followups-v1`
+  ([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)).
+  `dedupeEtas` keys on **`operator|routeNo|bound|stopId`** (`etaBoardingKey` = `etaLineKey` + the pole, both
+  exported from `@nextbus/core`), so a line boarding at two poles of a place publishes **one reading per
+  pole** on `/v1/etas/:id`, on `/v1/nearby` and in the `EtaHub` frames. Two service-type variants at *one*
+  kerb still collapse to the soonest (Citybus 969 is listed three times at one pole) — nobody chooses a
+  timetable variant and everybody chooses a kerb, which is one rule seen twice rather than two. `/v1/stop/:id`
+  now builds rows with `eta: null` and calls **`applyLiveEtasToStopDetail`**, so the HTTP payload and the live
+  merge are **one rule** where there had been two that must agree; a row with no exact `(pole, routeId)` match
+  takes the soonest reading for its own line **at its own pole**, and the fallback never crosses a kerb, so
+  `row.eta.stopId === row.stopId` is structural rather than a fixture's luck. `stopCardView` collapses back to
+  one row per line **before** the cap, because a compact card has no kerb heading and `NearbyStop.routeCount`
+  counts rider *lines*. Additive per ADR-052 §5: no field added or removed, only an array's cardinality, plus
+  four descriptions that now say so. Tests **1 008** (core 785 · edge 116 · api-client 47 · mobile 38 · web
+  22, from 977); corpus 88 groups · 742 cases · 19 named boundary rows; `core` still 100 % on all four
+  thresholds. **The build hash does not move** (`1ccad7436a8df480` reproduced byte for byte), so no publish.
+  - **Driven in a browser and against live feeds.** **Fu Kin Street** (`/stop/P:GMB:20015724+GMB:20015749`,
+    where GMB 68K really does board at both kerbs): **before**, the first kerb's 68K row printed *"every
+    7 – 9 min"* — the **static timetable band, i.e. no arrival at all** — while the second kerb read **3 min**;
+    **after**, the two rows read **9 min** and **4 min** (*Scheduled*), both real. Post-fix `/v1/etas` carries
+    `GMB:68K:outbound:2007762 @ GMB:20015724` **and** `…:2007765 @ GMB:20015749`, and over **all 37** places
+    with a two-pole line `/v1/stop` has **0** rows whose reading names another pole (**1 before** — a row at
+    `GMB:20001114` holding a reading stamped `GMB:20009421`, Hiram's Highway opposite Marina Cove: a bus shown
+    at a kerb it was not coming to *and* nothing at the kerb it was). The compact card was rendered from the
+    running worker's `/v1/nearby` and printed `68K → Julimount Garden 3 min` with **"+1 more"** (the hidden
+    line being 68S, which had no reading) — truthful in both halves. Favourites was exercised the same way as
+    ADR-071's proof: read-modify-write on the **real** `localStorage['nextbus.preferences']` (12 genuine
+    favourites), keys appended on **both** kerbs, then the original 777-byte string restored **verbatim** and
+    confirmed. Payload measured pre/post against live feeds ~90 s apart with a cache-busting query and a
+    `dataTimestamp` fingerprint, the pre-fix tree confirmed live before each pair: **`/v1/etas` unchanged at
+    all eight heaviest interchanges** (Victoria Park's 113 lines have no line at two poles), and the growth is
+    on `/v1/stop` from the variant fallback — **+942 B on Victoria Park's 58 kB**, **+1.1 %** over 13 places.
+    `pnpm dataset:build` reproduced `1ccad7436a8df480`; `/v1/health` held `"dataset":"kv"` with
+    `datasetBuildsThisIsolate: 0` throughout (local only, never remote).
+  - **Tested but not driven:** the 10 assertions in `apps/edge/test/eta-per-pole.test.ts` (Tin Shui Estate with
+    the Marina Cove board on its second pole, through `fetchConsolidatedIndex` → a seeded KV build in workerd →
+    `worker.fetch`, its live-merge cases reading off a **real `/v1/live` socket through the real `EtaHub`**) —
+    **6 of them watched failing** against the pre-fix tree; the kernel key's 10 new assertions and the fallback
+    row, each watched failing; and the new required boundary row, watched failing by renaming the case. The
+    card's two rows were **measured in both renderers** rather than argued about, since `apps/web`'s and
+    `apps/mobile`'s projection suites replay the group (web 20 → 22, mobile 36 → 38): with the collapse
+    removed, the live Fu Kin Street card printed `68K` **twice** and said **"+0 more"** while 68S was hidden,
+    and at `maxRows: 2` it was one route number printed twice.
 - **Docs:** plan `01–10`, the full ADR set in [`docs/08`](./08-decision-log.md) (Wave 0 adds **055** ·
   **057** · **058** and implements **049**), research + proposals sets, `CLAUDE.md` / `AGENTS.md`,
   pre-commit docs-check skill + hook.
@@ -611,12 +664,35 @@ deliberately leave between them.
   shard findings latent**, and the sentence a new session needs before it flips the variable: it is a
   one-variable change that un-latches five fixes at once, so read
   `.context/wave5/review/VERDICTS-do.md` first rather than assuming the shard is now sound.
-- 🟠 **A place publishes at most one reading per line, but now renders a row per pole** (WP5-9) — so the
-  second pole's row reads "no reading right now" while a bus is genuinely due there. `dedupeEtas` collapses on
-  `operator|routeNo|bound` across the whole place; measured, GMB 68K had buses at both poles 11 s apart and we
-  published one. Not a client bug: the canonical model is **under-normalising**, and the owner's framing is the
-  brief — *"we need to normalise the data to our own structure so we can understand what we're doing and
-  consistently present it."* A wire change, so it wants its own ADR and a payload-size check.
+- ✅ **Closed 2026-07-31 by WP5-9** ([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)),
+  kept for the history: *"a place publishes at most one reading per line, but now renders a row per pole"* — so
+  the second kerb's row read "no reading right now" while a bus was genuinely due there (at Fu Kin Street it
+  read the **static timetable band**, *"every 7 – 9 min"*, while a 68K was nine minutes out from that very
+  kerb). `dedupeEtas` keys on the pole now, so both rows carry their own bus, and *"which reading belongs to
+  which row"* is one kernel rule serving both `/v1/stop` and the live merge instead of two that had to agree.
+  **Two residuals it leaves are below**: a rider starring one line at *both* kerbs still sees one Favourites
+  row, and `stopCardView`'s collapse now depends on producers sorting soonest-first for *value* as well as
+  order.
+- 🟡 **A rider who stars one line at *both* kerbs of a place sees one Favourites row** (left by WP5-9,
+  ADR-072, and verified in a browser with both keys saved). Both keys resolve; the compact card's
+  collapse-to-one-row-per-line is what merges them, which is right for a card with no kerb heading and wrong
+  for a rider's explicit choice. **Not a regression** — before WP5-9 only one of the two kerbs had a reading at
+  all — but telling the two apart needs a **per-row kerb label the card does not have**. Owner: **WP5-12**,
+  which this joins from the favourites side; the alternative is ADR-072's rejected "collapse on what the row
+  *prints*" (26 of the 43 cross-pole lines show **different destinations** at their two kerbs).
+- 🟡 **`stopCardView`'s "keep the first" depends on every producer sorting soonest-first, and none is enforced
+  to** (pre-existing, sharpened by WP5-9). `/v1/nearby`'s schema says sorted, `stopArrivals` sorts,
+  `applyLiveEtasToNearby` sorts, Favourites sorts. The `maxRows` cap already had this dependency, so the
+  collapse adds no new risk — but a producer that stopped sorting used to merely reorder rows and would now
+  silently show the **later** bus of a line. A comparator in `soonestPerLine` or a gate on the producers would
+  fix it. Owner: unassigned, and it belongs to whoever adds the next producer — **WP5-7**'s batch
+  `/v1/etas?ids=…` is the next one.
+- 🟡 **`apps/edge/test/wire-conformance.test.ts` can reach the live internet, which is a hole in a gate CI
+  runs.** Its `fetch` stub ends `return realFetch(input, init)`, so any URL it does not recognise leaves the
+  sandbox. It flaked **once** during WP5-9 on *"returns a payload that satisfies the schema, with no
+  undocumented fields"* and has not reproduced in ~10 runs since — but one of ADR-052's three gates having a
+  live escape hatch is a red build that a re-run turns green, which teaches a reader to re-run. Fix: fail the
+  stub on an unrecognised URL. Owner: unassigned.
 - ✅ **Closed 2026-07-31 by WP5-10 + WP5-11** ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)),
   kept for the history: *"two poles of one place can wear identical headings"* — Tin Shui Wai Park's two
   members both printed the stop code TN510, so 269D rendered twice under labels that looked the same. Both
@@ -701,8 +777,8 @@ deliberately leave between them.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**934 tests** on `main`: core 738 · edge 93 · api-client 47 · mobile 36 · web 20; **977 on
-   `wave5-followups-v1`**: core 768 · edge 106 · the rest unchanged, plus the whole
+3. `pnpm test` (**934 tests** on `main`: core 738 · edge 93 · api-client 47 · mobile 36 · web 20; **1 008 on
+   `wave5-followups-v1`**: core 785 · edge 116 · api-client 47 · mobile 38 · web 22, plus the whole
    `pnpm boundaries` chain) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with
    `datasetBuildsThisIsolate: 0`.
@@ -732,10 +808,10 @@ deliberately leave between them.
    server promotes a member id to its place), grouped by the returned place id, so a multi-pole place shows
    once with its starred routes from every pole. Browser-verified end-to-end. Bare-route favourites deferred.
 1. **[`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) — Waves 1 … 5 are all ✅ complete**
-   (ADR-051 … ADR-054, ADR-059, ADR-060, ADR-062 … ADR-069, **ADR-056** for Wave 5 and **ADR-071** for two of
-   its follow-ups). Wave 3 landed 2026-07-29, Wave 4 the same day, **Wave 5 on 2026-07-30 — bar the
-   deployment; it merged as PR #19 on 2026-07-31.**
-   ← **start at WP0-5**, then the remaining Wave 5 follow-ups below (**WP5-10 and WP5-11 are done**, on
+   (ADR-051 … ADR-054, ADR-059, ADR-060, ADR-062 … ADR-069, **ADR-056** for Wave 5, **ADR-071** for two of
+   its follow-ups and **ADR-072** for a third). Wave 3 landed 2026-07-29, Wave 4 the same day, **Wave 5 on
+   2026-07-30 — bar the deployment; it merged as PR #19 on 2026-07-31.**
+   ← **start at WP0-5**, then the remaining Wave 5 follow-ups below (**WP5-9, WP5-10 and WP5-11 are done**, on
    `wave5-followups-v1`).
    **Why Wave 3 went first, against this doc's own earlier advice:** it was framed here as "the larger, more
    speculative bet … every claim is about a Swift compiler nobody has run". That was true of **one** of its
@@ -940,16 +1016,21 @@ deliberately leave between them.
        `scripts/precommit-docs-check.mjs` cannot run in CI unmodified: it is a Claude Code `PreToolUse` hook
        that reads a tool-call payload on stdin and diffs the *index*, so in CI both of its early exits fire
        and it returns 0 having checked nothing. `ci.yml` says exactly that instead of shipping a green no-op.
-     - 🟠 **WP5-9 — a place publishes one reading per line, but now renders a row per pole.** Added
-       2026-07-31 out of the boarding-point decision (ADR-056 decision 13), and the owner's framing is the
-       brief: *"we need to normalise the data to our own structure so we can understand what we're doing and
-       consistently present it."* `dedupeEtas` keys on `operator|routeNo|bound` across the whole place, so the
-       sibling pole's arrival is discarded — GMB 68K had buses at both poles 11 s apart and we published one.
-       Since the fix, a row exists for each pole, so the one without the surviving reading says "no reading
-       right now" while a bus is due there. The model's unit of *an arrival* is (line, place) and its unit of
-       *a row* is (line, pole); they have to be the same unit, and the pole is the one a rider walks to. A wire
-       change (`/v1/etas/:id` and `/v1/stop/:id`'s embedded readings both grow), so it needs its own ADR, a
-       payload-size check at the biggest interchange, and a look at `NearbyStop.etas`' `maxRows`.
+     - ✅ **WP5-9 done 2026-07-31** on `wave5-followups-v1`
+       ([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)) — the
+       model's unit of *an arrival* was (line, place) while its unit of *a row* had become (line, pole), and
+       they are now one unit: `dedupeEtas` keys on `operator|routeNo|bound|stopId`, so a line boarding at two
+       kerbs publishes a reading at each. Two service-type variants at *one* kerb still collapse, which is the
+       same rule rather than an exception — nobody chooses a timetable variant and everybody chooses a kerb.
+       **Two defects the row did not know about were found by sweeping real data, not by reading code:**
+       `/v1/stop` indexed readings by **route id alone** and so handed a row a reading off the other kerb
+       (1 of 37 places, now 0), and **2 of 2 124** readings name a service-type variant no row at their own pole
+       lists, so a strict pair match would have blanked a real arrival. Both close by the edge calling
+       `applyLiveEtasToStopDetail` — **one rule for the HTTP payload and the live merge**. **Read ADR-072
+       decision 4 before porting the merge:** exact `(pole, routeId)` first, then the soonest for that row's own
+       line **at its own pole**, and the fallback must never cross a kerb. The payload check inverted the
+       expectation: `/v1/etas` is **unchanged at all eight heaviest interchanges** and the growth is +1.1 % on
+       `/v1/stop`. **The build hash does not move**, so no publish.
      - ✅ **WP5-10 + WP5-11 done 2026-07-31** on `wave5-followups-v1`
        ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)) —
        decision 13's accepted display cost, closed from both sides. One physical pole published under two
@@ -976,6 +1057,21 @@ deliberately leave between them.
      - 🟡 **A favourite with no current arrival renders an empty card** — pre-existing, found by WP5-11, and
        **unowned**: `FavoritePlaceRow` drops rows without an `eta`, so an empty card cannot be told from a
        broken favourite key by eye. Wants a row of its own beside WP5-4; see *Not done yet* above.
+     - 🟡 **A rider who stars one line at *both* kerbs sees one Favourites row** — left by WP5-9 (ADR-072) and
+       verified in a browser. The card's collapse-to-one-row-per-line merges them, which is right for a card
+       with no kerb heading and wrong for an explicit choice. **Owner: WP5-12**, from the favourites side; the
+       alternative is ADR-072's rejected collapse on what the row *prints* (26 of 43 cross-pole lines show
+       different destinations at their two kerbs). WP5-12 also gained a cheaper lead from WP5-9: at Fu Kin
+       Street the two kerbs' **names** differ ("outside" vs "opposite" Sin Sam House, 1.51 m apart) while
+       `poleHeading` prints a bare "GMB" for both, because GMB names carry no stop code.
+     - 🟡 **`stopCardView`'s "keep the first" relies on producers sorting soonest-first** — pre-existing (the
+       cap already did) and now load-bearing for the *value* shown as well as the row order, since a producer
+       that stopped sorting would silently show the **later** bus of a line. **Owner: unassigned**, and it
+       belongs to whoever adds the next producer — WP5-7's batch `/v1/etas?ids=…`.
+     - 🟡 **`apps/edge/test/wire-conformance.test.ts` falls through to the live internet** — its `fetch` stub
+       ends `return realFetch(input, init)`. It flaked once during WP5-9 and has not reproduced in ~10 runs, but
+       a gate CI runs with a live escape hatch is a red build a re-run turns green. Fix: fail on an unrecognised
+       URL. **Owner: unassigned.**
      - 🟡 **`asyncapi.json` has never been validated against the official meta-schema.** Its gate
        *transcribes* the closed field lists rather than validating (`@asyncapi/parser` was not added), and the
        Operation Object's full field list is deliberately **not** transcribed because nothing here has read

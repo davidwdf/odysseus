@@ -356,6 +356,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   overlap, or the own-crawl's first-party coordinates) without changing the seam.
 
 ## ADR-023 — ETA lists are de-duplicated once, server-side (canonical API)
+- **Status:** **Amended by [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)
+  (2026-07-31)** — the decision below is unchanged (de-duplicate **once**, at a single server seam) and its
+  **key gained the boarding pole**, so the collapse is one line **per kerb** rather than one line per place. A
+  line boarding at two poles of a merged place now publishes **two** readings, distinguished by `stopId`.
 - **Context:** A stop is indexed **per direction** (and per operator service-type), but the upstream
   KMB/CTB ETA feed returns **every direction of a route in a single response** (verified: `/eta/{stop}/E42/1`
   returns both bounds; `/eta/{stop}/E42/2` → `[]`). So fetching a stop's routes once-per-ref re-fetches the
@@ -363,7 +367,9 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   Nearby card. The fix had initially been patched ad-hoc per call site (nearby, then the Favorites card),
   while `/v1/etas` (used by `watch()`/polling) wasn't deduped at all — exactly the inconsistency to avoid.
 - **Decision:** De-duplicate **once, at a single server seam.** `dedupeEtas` (one definition, in
-  `@nextbus/core/eta`) collapses an `Eta[]` to **one rider line per `operator|routeNo|bound`**, keeping the
+  `@nextbus/core/eta`) collapses an `Eta[]` to ~~**one rider line per `operator|routeNo|bound`**~~ — since
+  [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place), **one rider line per
+  `operator|routeNo|bound|stopId`**, i.e. one per line at *each boarding pole* — keeping the
   soonest. Every endpoint that returns an `Eta[]` flows through `stopArrivals` (`apps/edge/src/stop-route.ts`),
   which (a) dedupes the **upstream calls** by `(route, serviceType)` and (b) applies `dedupeEtas`, soonest
   first. `/v1/nearby` and `/v1/etas` both use it. **Contract:** any `Eta[]` the API returns is rider-deduped
@@ -1186,6 +1192,10 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   (2026-07-31)** — a cluster's poles are now folded onto **boarding points**: where upstream published one
   physical pole under two stop ids, the cluster keeps **one member** and lists the other in its `aliasIds`.
   Members are no longer the same thing as clustered poles, though every clustered pole still resolves.
+  **Partly reversed by [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)
+  (2026-07-31):** the *"listed once"* half of the query strategy below is gone. It is recorded here as *the
+  user-preferred behaviour* and **the user reversed it**, so a line boarding at two poles of a place is now
+  listed **once per pole** — see the marked paragraph. Everything else stands, the *fetch* dedupe included.
   **Built & verified — backend + place UI (2026-06-11), member-keyed favourites (2026-06-15).** Shipped:
   the quick-win direction gate, the full **N-member single-linkage clustering** (`buildPlaces`) with cluster-level
   vetoes + bearing-spread cap and same-operator members, the **per-place ETA fetch** (KMB `stop-eta` = 1 call/pole,
@@ -1260,9 +1270,17 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
   endpoint** (`data.etabus.gov.hk/v1/transport/kmb/stop-eta/{stopId}`) that returns **all routes at a pole in one
   call** (verified live), but **Citybus has none** (its `stop-eta` URL 422s; only per-route `eta/CTB/{stop}/{route}`
   works). So: **switch the KMB live fetch to `stop-eta`** (1 call per KMB pole, any route count) and keep CTB per-route;
-  **dedupe** so a route serving two poles is fetched and listed once (the user-preferred behaviour;
+  **dedupe** so a route serving two poles is fetched and ~~listed once (the user-preferred behaviour;
   [`dedupeEtas`](#adr-023--eta-lists-are-de-duplicated-once-server-side-canonical-api) already collapses
-  `operator|route|bound`). **Both** the Place page and the compact Nearby card fetch **every** route at the place
+  `operator|route|bound`)~~ — **struck here rather than merely noted elsewhere, because this is the sentence the
+  code stopped agreeing with. [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)
+  (2026-07-31) reversed the *listing* half, and it was the owner who reversed the preference this sentence
+  records** — once shown that GMB 68K had buses at **both** kerbs of
+  Fu Kin Street **11 s apart** while we published one, so `dedupeEtas` keys on `operator|route|bound|stopId`
+  and a line boarding at two poles is **two readings**, one per kerb a rider can walk to. The *fetch* dedupe
+  above is untouched (upstream calls are still deduped by `(route, serviceType)`, one `stop-eta` call per KMB
+  pole). Read that ADR before re-fusing two poles anywhere: for GMB the pole is **identity**, not tidiness.
+  **Both** the Place page and the compact Nearby card fetch **every** route at the place
   (KMB cheap, CTB per-route) so "the next few buses" are genuinely the soonest — a *capped* CTB fetch would silently
   mis-rank (we'd show "soonest of KMB + sampled CTB", not of all). A **per-place fetch budget** stays only as a guard
   for a pathological interchange; **honesty rule** (ADR-008): the **true route count is free from the static index**
@@ -1714,6 +1732,14 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
        so two arrivals at a stop sharing number+direction are always variants of the same route (collapse, keep the
        sooner). *Corrects an earlier attempt to key these by the full `gtfsId` id — that surfaced the 803 variants as
        two rows, the opposite of what we want.*
+       **Amended 2026-07-31: that argument is right at *one pole* and exactly wrong *across* poles, and both keys
+       now carry the pole** — `dedupeRoutes` since
+       [ADR-056](#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)
+       decision 13, `dedupeEtas` since
+       [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place). A merged place is N poles
+       (ADR-042), and at **Tai On Street** two *different* GMB services share the number **20** — both
+       circular, so both "outbound" — and only the pole separates them. *"A stop belongs to one region"* still
+       holds; *"a place is one stop"* never did, and this is the discrimination the corpus's two GMB rows draw.
 
      **Known v1 limitations:** a GMB number can still appear more than once in search across regions with no region label
      (a region/area tag is a follow-up); and the rare KLN/NT boundary case where two regions' same-numbered routes share
@@ -1746,7 +1772,8 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
     the **search index collapses variants to 1,089 GMB hits** — NT 803's "Normal" (22-stop) and "Special" (19-stop)
     outbound fold to one hit (the fuller "Normal" wins), while route "1" in HKI vs NT stays as 4 distinct entries, and
     "803" vs "803K" stay separate. At Hin Keng (a stop both 803 variants leave from) `/v1/etas` returns a single 803
-    outbound row (`dedupeEtas` collapse), keeping the sooner arrival.
+    outbound row (`dedupeEtas` collapse), keeping the sooner arrival. *(Still true under ADR-072: both variants
+    leave the **same pole**, which is exactly the case that still collapses.)*
 
 ## ADR-048 — PWA install metadata: web app manifest + iOS `apple-touch-icon` via a custom `+html`
 - **Status:** **Icons/manifest/head built (2026-07-14); on-device install not yet verified.** Adds
@@ -2909,16 +2936,24 @@ rather than the docs. **The blocking open question above is unchanged** — this
     affected by any of them because nothing can reach the object — which is equally the reason five of them
     shipped green. Whoever does WP5-6 is un-latching those five fixes, and should read
     `.context/wave5/review/VERDICTS-do.md` before assuming the shard is now sound.
-  - **WP5-9 — one reading per boarding point.** Decision 13's residual, and the owner framed it better than
-    the finding did: *"we need to normalise the data to our own structure so we can understand what we're
-    doing and consistently present it."* `dedupeEtas` collapses on `operator|routeNo|bound`, so a place
-    publishes at most one reading per line and the sibling pole's arrival is discarded — measured, GMB 68K had
-    buses at both poles 11 s apart and we published one. Now that a row is per pole, the second pole reads "no
-    reading right now" while a bus is genuinely due there. A wire change: both `/v1/etas/:id` and
-    `/v1/stop/:id`'s embedded readings grow, so it needs its own ADR, a payload-size check at the biggest
-    interchange, and a look at whether `NearbyStop.etas`' `maxRows` still reads honestly when a line can
-    appear twice.
-  - **WP5-10 — a pole heading labelled by something that distinguishes it.** The display cost decision 13
+  - ✅ **WP5-9 — one reading per boarding point. Closed 2026-07-31 by
+    [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)**, which added the pole to
+    `dedupeEtas`' key, moved "which reading belongs to which row" into the kernel for `/v1/stop` as well as the
+    live merge, and measured the payload cost (unchanged at all eight heaviest interchanges; +1.1 % on
+    `/v1/stop`). Kept as written because the framing is the reason it was done. Decision 13's residual, and the
+    owner framed it better than the finding did: *"we need to normalise the data to our own structure so we can
+    understand what we're doing and consistently present it."* `dedupeEtas` collapsed on
+    `operator|routeNo|bound`, so a place
+    published at most one reading per line and the sibling pole's arrival was discarded — measured, GMB 68K had
+    buses at both poles 11 s apart and we published one. Since a row became per pole, the second pole read "no
+    reading right now" while a bus was genuinely due there. A wire change: both `/v1/etas/:id` and
+    `/v1/stop/:id`'s embedded readings grow, so it needed its own ADR, a payload-size check at the biggest
+    interchange, and a look at whether `NearbyStop.etas`' `maxRows` still read honestly when a line can
+    appear twice. **All three were done; the payload check is the one that inverted the expectation.**
+  - ✅ **WP5-10 — a pole heading labelled by something that distinguishes it. Closed 2026-07-31 by
+    [ADR-071](#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)**, which needed
+    two rules rather than one: most of the pairs wearing identical headings were one physical pole published
+    twice. The display cost decision 13
     accepted: two members of one place can print the same stop code (TN510 at Tin Shui Wai Park), so one route
     renders twice under headings that look identical. `bearingOctant` is already in the kernel and already
     renders the compass caption.
@@ -3062,8 +3097,13 @@ rather than the docs. **The blocking open question above is unchanged** — this
   - ~~`apps/mobile/lib/preferences.ts` keeps its own `favoriteRouteKey` template. Folding it into the formatter
     needs the migration, which is WP2-5's by the plan.~~ **Closed by [ADR-062](#adr-062--the-favourite-key-is-the-member-pole-and-the-scheme-is-versioned) (WP2-5):** the template is
     gone, and the fold shipped with the versioned migration that made it safe.
-  - `lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`' key construction (both now go
-    through the shared parser, with a comment tying them). Exporting one line-key helper from `core` is WP2-2.
+  - ~~`lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`' key construction (both now go
+    through the shared parser, with a comment tying them). Exporting one line-key helper from `core` is WP2-2.~~
+    **Closed by [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place) (WP5-9, 2026-07-31):**
+    the helper is `etaLineKey` in `@nextbus/core`, with three readers (`dedupeEtas`, the edge's destination
+    table, `stopCardView`). The edge's copy and the comment saying it *"must agree with `dedupeEtas` exactly"*
+    are gone — a comment was never the mechanism, and a second spelling of one line drops a destination
+    silently rather than failing.
   - **A malformed id returns `502`, which is wrong** — it is a permanent client error, so `400` is correct,
     and `502` reads as *retryable*, so an iOS Widget holding a malformed favourite would retry forever. **Now
     scheduled as WP2-8** together with ADR-052's `{code, message, retryable}` taxonomy, since it is the same
@@ -3975,7 +4015,9 @@ pre-existing and unaddressed; it earned its keep here.
   **Amends [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)**
   (a cluster's poles are now folded onto *boarding points*) and closes
   [ADR-062](#adr-062--the-favourite-key-is-the-member-pole-and-the-scheme-is-versioned)'s orphaning hazard
-  **structurally rather than by migration**. Implementation: `foldDuplicatePoles`,
+  **structurally rather than by migration**. Its WP5-9 consequence is closed by
+  [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place), hours later on the same branch.
+  Implementation: `foldDuplicatePoles`,
   `SAME_POLE_MAX_SEPARATION_M` and `sameLabelEverywhere` in `packages/data-normalize/src/dataset.ts`
   (+ `allAliases` in `shards.ts`); `StopDetailPole.aliasIds` in `packages/contract/src/wire/detail.ts`;
   `boardingPoleId`, `dedupeRoutes(routes, members)`, `poleSideOctants` and `POLE_SIDE_MIN_SEPARATION_M`
@@ -4176,9 +4218,14 @@ pre-existing and unaddressed; it earned its keep here.
     row *was* matched — fare 18.5 present by `curl`). **It means an empty card cannot be told from a broken
     key by eye**, which is why the favourites proof above rests on a route with a live arrival rather than on
     that one. Worth a row of its own, adjacent to WP5-4.
-  - **Unchanged, and not made worse: WP5-9.** `dedupeEtas` still collapses a line across the poles of a
+  - ~~**Unchanged, and not made worse: WP5-9.** `dedupeEtas` still collapses a line across the poles of a
     place, so where two ids of one *folded* pole both serve a line the losing variant's row blanks. The fold
-    shrinks its blast radius if anything, since two rows became one.
+    shrinks its blast radius if anything, since two rows became one.~~ **Closed hours later on this same
+    branch by [ADR-072](#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)**, so the premise above
+    is no longer true of the code: `dedupeEtas` keys on the pole, and each id's board's readings are published
+    and matched under that id. The case this bullet described also needed one line listed at **both** ids of a
+    folded pair, and the figure below says that is **0 of the 324** route rows on a folded pole — so it was
+    already unreachable in build `1ccad7436a8df480` rather than merely narrow.
   - **One existing `knownDefect` grew slightly.** Collapsing two service-type variants across a folded pair
     inherits `dedupeRoutes`' tie-break defect — the survivor is the first row *carrying a reading*, not the
     one with the *sooner* bus, and two variants can have different destinations. Post-fold those behave
@@ -4195,3 +4242,229 @@ pre-existing and unaddressed; it earned its keep here.
     calls each alias's own upstream board: **0 of the 324 route rows on a folded pole also appear on its
     member**, so skipping it would leave those rows blank across 75 places while everything else looked
     healthy.
+
+## ADR-072 — An arrival is a line at a kerb, not a line at a place
+- **Status:** **Decided and implemented 2026-07-31** (WP5-9, four commits on `wave5-followups-v1`). Closes
+  [ADR-056](#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)
+  decision 13's stated residual and completes the boarding-point decision
+  [ADR-071](#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two) from the data
+  side, as that ADR does from the label side. **It also reverses a preference recorded in
+  [ADR-042](#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant)
+  as the user's own** — decision 7 below, because that is the part a future agent will otherwise undo in good
+  faith. Implementation: `etaLineKey`, `etaBoardingKey` and `dedupeEtas` in `packages/core/src/eta.ts`;
+  `applyLiveEtasToStopDetail` in `packages/core/src/live.ts`; `soonestPerLine` + `stopCardView` in
+  `packages/core/src/stop-card.ts`; the row build and `stampTables` in `apps/edge/src/stop-route.ts`; four
+  descriptions in `packages/contract/src/wire/` (`EtaSchema.stopId`, `StopDetail.routes[].eta`,
+  `NearbyStop.etas`, `NearbyStop.routeCount`), with `openapi.json`, `asyncapi.json` and the native guide
+  re-emitted. Pinned by `apps/edge/test/eta-per-pole.test.ts` (10 assertions in workerd over a seeded KV
+  build, its live-merge cases reading off a real `/v1/live` socket through the real `EtaHub`; **6 watched
+  failing** against the pre-fix tree) and the corpus (13 files · **88** groups · **742** cases · 3
+  `knownDefect` · **19** named boundary rows, one of them new and watched failing; `core` still 100 % on all
+  four thresholds over 416 branches; **1 008** tests, from 977). **The dataset does not move** —
+  `pnpm dataset:build` reproduces `1ccad7436a8df480` byte for byte — so unlike ADR-071 this needs no publish.
+- **Context — what a rider saw, because that is the whole argument.** At **Fu Kin Street**
+  (`/stop/P:GMB:20015724+GMB:20015749`, driven in a browser against live feeds) the place has two kerbs and GMB
+  **68K** boards at both. **Pre-fix the first kerb's 68K row read *"every 7 – 9 min"* — the static timetable
+  band, which is to say no arrival at all — while the second kerb's read a real 3 min. Post-fix the same two
+  rows read 9 min and 4 min (*Scheduled*).**
+  Both buses were real and upstream had published both. We had not: `dedupeEtas` collapsed on
+  `operator|routeNo|bound` across the **whole place**, so `/v1/etas/:id` carried at most one reading per line
+  however many kerbs the line boards at, and since decision 13 made a route row **per pole** the sibling
+  row had nothing to show and fell back to a frequency band. A rider standing at the first kerb was reading a
+  timetable while a bus was nine minutes out **from that kerb**. Falling back to the band is not itself
+  dishonest — it is labelled Static, per [ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown)
+  — but it is the honest presentation of an answer we had thrown away.
+  **The measurement, line-precise, against the live GMB feed at 23:20:** of the **43** rider lines that board
+  at **two** poles of one place in build `1ccad7436a8df480`, upstream had a bus at **both** kerbs
+  simultaneously for **2** of them (68K outbound *and* inbound at Fu Kin Street, three arrivals at each kerb)
+  and **for each of those two we published a single reading**. Two of 43 sounds small and is the honest figure:
+  most minibus lines are finishing for the day at 23:20, and the pole-precise count — poles publishing anything
+  at all — was **14 of 43**. The fusion was ours; upstream keeps the two apart.
+- **Decisions:**
+  1. **An arrival is identified by `operator|routeNo|bound|stopId`.** Factored as
+     `etaBoardingKey(eta)` = `` `${etaLineKey(eta)}|${eta.stopId}` ``, both exported from `@nextbus/core` and
+     corpus-pinned. **The unit of an arrival is now the unit of a row**: a rider line at one boarding point,
+     the kerb a rider actually walks to.
+     [ADR-023](#adr-023--eta-lists-are-de-duplicated-once-server-side-canonical-api) is **not** reversed —
+     "de-duplicate once, at a single server seam" is untouched, the seam is the same `stopArrivals`, and only
+     its key is finer.
+  2. **Two service-type variants at *one* kerb still collapse, and that is the same rule rather than an
+     exception to it.** Citybus **969 is listed three times at one pole**, all bound for Causeway Bay; KMB runs
+     269D as types 1 and 4 off one pole. Those are one bus to a rider, and the test is not "are these rows
+     distinguishable in the data" but **"is there anything here a rider can act on"**: nobody chooses a
+     timetable variant, and everybody has to choose a kerb. Seen that way the two halves of the key are one
+     decision, not a compromise between two.
+     **For GMB the pole is identity, not tidiness.** At **Tai On Street** two *different* minibus services
+     share the number **20** — `GMB:20:outbound:2002320` boards for Chai Wan (Fung Yip Street) at one kerb,
+     `GMB:20:outbound:2002319` for Chai Wan Industrial City at the other — and **both are circular**, so both
+     read "outbound" on every leg. Neither the number nor the direction separates them; only the pole does.
+     Both halves are pinned by one corpus row
+     (`eta#dedupeEtas:one-line-at-two-poles-keeps-a-reading-for-each`, now in `REQUIRED_ROWS`) which exercises
+     same-pole variants collapsing and the second pole keeping its own reading **in the same case**, so a
+     future edit cannot satisfy one half by breaking the other.
+  3. **`etaLineKey` is the line half of the key, exported because a comment is not a mechanism.**
+     `apps/edge/src/stop-route.ts` carried its own copy of the line key under a comment saying it *"must agree
+     with `dedupeEtas` exactly"* — a duplication [ADR-059](#adr-059--the-id-grammar-one-parser-in-core-the-spec-and-corpus-in-contract)
+     had already recorded and filed. There is one declaration now and three readers: `dedupeEtas`, the edge's
+     destination table (`stampTables`) and `stopCardView`.
+  4. **Which reading belongs to which row is *one* rule, and it lives in the kernel.** `/v1/stop/:id` builds
+     its rows with `eta: null` and calls **`applyLiveEtasToStopDetail`** — the same kernel function the live
+     subscription applies to that same payload one cadence later. **Two defects this work package did not know
+     about are closed by that move, and both were found by sweeping real data rather than by reasoning about
+     the code**, which is why they are recorded as findings and not as tidying:
+     - **`/v1/stop` indexed its readings by *route id alone*, and a route id does not name a kerb.** Measured
+       live over all **37** places with a two-pole line: **1** row carried a reading off the *other* pole —
+       `GMB:1A:outbound:2002355`'s row at `GMB:20001114` holding a reading stamped `GMB:20009421` (Hiram's
+       Highway, opposite Marina Cove). So the app showed a bus at a kerb it was **not** coming to *and* said
+       nothing at the kerb it was. Post-fix sweep: **0**.
+     - **A row whose service-type variant upstream did not publish got nothing.** Over 156 real places (the 37
+       plus the 120 heaviest): of **2 124** readings, **2 122** match a row on the exact `(pole, routeId)`
+       pair, **2** name a variant that no row at **their own pole** lists, and **0** match nothing at all. So a
+       *strict* pair match would have dropped a real arrival at the kerb it was coming to — the exact defect
+       this work package is named after, arriving from the other side. Boards publish whichever variant is
+       running; a row names one.
+     The rule is therefore **exact `(pole, routeId)` first, then the soonest reading for that row's own line at
+     that row's own pole**, with the fallback index built by `dedupeEtas` and keyed by `etaBoardingKey` — the
+     same normalisation and the same key the wire keys on, not a second rule. **It never crosses a pole**, so
+     `row.eta.stopId === row.stopId` is now **structural rather than a fixture's luck**:
+     `apps/edge/test/eta-stop-id.test.ts` has asserted that invariant since Wave 5 and was green only because
+     no fixture had one route id on two poles' boards. **This is the decision a native port will get wrong** —
+     the order, and the prohibition on the fallback crossing a kerb — and its cost is measured rather than
+     imagined: 1 in 37 places for the first half, 2 in 2 124 readings for the second. Two corpus rows cover it,
+     the fallback itself and `the-line-fallback-never-crosses-a-pole`.
+  5. **A compact card collapses back to one row per line *before* the cap, and `routeCount` stays in lines.**
+     `NearbyStop.etas` carries per-pole readings like every other path, and `stopCardView`'s `soonestPerLine`
+     collapses them keeping the soonest; `remaining` is counted in lines on both sides of the subtraction.
+     **`routeCount` is not a count of readings and never was** — `routeCountOf` in
+     `packages/data-normalize/src/shards.ts` counts distinct `operator|route|bound` across *every* pole of the
+     place — so the moment `etas` could hold two readings of one line, `remaining = routeCount − rows.length`
+     was subtracting poles from lines. **Watched, with the collapse removed:** the live Fu Kin Street card
+     printed **`68K → Julimount Garden` twice** (9 min and 15 min) and said **"+0 more"** while **68S, a whole
+     line, was hidden**; the same card at `maxRows: 2` was **one route number printed twice**, a duplicate
+     eating the slot the second line needed. Four reasons, in the order they mattered:
+     - **The card has no kerb heading.** Two rows reading `68K → Julimount Garden` with two times ask a rider
+       to choose between them and give them nothing to choose by — the same failure `poleSideOctants` declines
+       to commit one screen over (ADR-071 decision 6). The kerb is a **Place-detail** fact, and that screen has
+       a heading per pole to make it legible.
+     - **One unit end to end.** The card counts lines, shows lines and hides lines. Any other choice needs a
+       compensating rule somewhere, and the compensation is what goes quietly wrong.
+     - **It is where both Nearby paths meet.** `applyLiveEtasToNearby` does *not* collapse — correctly, it is
+       the readings' own list — so collapsing at the *edge* would have made the HTTP card and the future live
+       card (WP5-7) disagree. In the card rule they cannot.
+     - **The card reads exactly as it does today**, which for a wire change whose point is elsewhere is a
+       virtue.
+     **Rejected, and recorded as a design call rather than a defect:** collapsing on *what the row prints*
+     (line **+ destination**), which would keep both of Tai On Street's `GMB:20` services on the card —
+     **26 of the 43** cross-pole lines have **different destinations at their two poles**, nearly all GMB. It
+     is the better card if the compact list should enumerate *services* rather than *lines*; it costs a unit
+     mismatch in "+N more" and admits two rows with the same route id, which today's `key={row.routeId}` would
+     hit as a duplicate React key in **both** renderers. Both new card behaviours are corpus rows
+     (`one-line-at-two-kerbs-is-one-row-and-the-count-stays-in-lines`,
+     `a-line-at-two-kerbs-does-not-eat-two-slots-under-the-cap`), and because `apps/web`'s and `apps/mobile`'s
+     projection suites replay that group, **both renderers were measured rather than argued about** (web
+     20 → 22, mobile 36 → 38 — [ADR-069](#adr-069--a-second-renderer-and-what-it-caught-in-the-first)).
+  6. **Additive per [ADR-052](#adr-052--the-wire-contract-zod-is-the-single-declaration-types-erase-and-the-schema-stays-additive-safe)
+     §5, and exactly how: a line may now appear once *per pole* where it appeared once per place.** No field
+     added, none removed, no shape changed — the growth is in the **cardinality of an existing array**, which
+     `EtaListSchema` and `NearbyStop.etas` already permit, and `stopId` was already the field that
+     distinguishes the two readings. What did change is that four descriptions now *say* it
+     (`EtaSchema.stopId`, `StopDetail.routes[].eta`, `NearbyStop.etas`, `NearbyStop.routeCount`), because a
+     generated native decoder reads the description and nothing else. `openapi.json`, `asyncapi.json` and the
+     native guide are re-emitted and all three gates pass.
+  7. **ADR-042's "user-preferred behaviour" is reversed by the same user, and this log is corrected rather
+     than left to disagree with the code.** ADR-042's query-strategy paragraph recorded *"**dedupe** so a route
+     serving two poles is fetched and listed **once** (**the user-preferred behaviour**; `dedupeEtas` already
+     collapses `operator|route|bound`)"*. **The owner reversed that preference on 2026-07-31**, having been
+     shown that GMB 68K had buses at **both** kerbs of Fu Kin Street **11 s apart** while we published one —
+     first for *rows* (ADR-056 decision 13) and now for *readings*. The *fetch* half of that sentence still
+     stands: upstream calls are still deduped by `(route, serviceType)`, and one KMB `stop-eta` call still
+     serves a whole pole. **Four statements in this file were stale and are corrected in place**, each
+     annotated in the house style so a reader meets the correction where they meet the claim:
+     - **ADR-023's decision** — *"collapses an `Eta[]` to one rider line per `operator|routeNo|bound`"* → the
+       key gained the pole. Its decision stands; a status line now says so.
+     - **ADR-042's query strategy** — the sentence above, struck and corrected, with a pointer at the top of
+       its status.
+     - **ADR-047 decision 5** — *"Per-stop (`dedupeEtas` …): plain `operator|no|bound` for **all** operators —
+       safe for GMB too"*. The GMB argument is still right **at one pole** and is now exactly wrong **across**
+       poles; "a stop belongs to one region" holds, "a place is one stop" never did. (Its Hin Keng 803 example
+       is still correct: both variants leave *one* pole, so they still collapse.)
+     - **ADR-059's follow-ups** — *"`lineKey` in `apps/edge/src/stop-route.ts` still duplicates `dedupeEtas`'
+       key construction … Exporting one line-key helper from `core` is WP2-2"* → done, it is `etaLineKey`.
+       (The WP5-9 report attributed this line to ADR-052; it is ADR-059's.)
+     Two more were written *concurrently* with this work and are corrected too: ADR-056's WP5-9 follow-up row,
+     and ADR-071's *"Unchanged, and not made worse: WP5-9"* consequence, whose premise — that `dedupeEtas`
+     still collapses across a place's poles — is exactly what this ADR removes. **A decision log that argues
+     with the code is worse than one with a gap**, because the gap is visible and the argument is not: it hands
+     the next agent a rationale for re-fusing two kerbs and a citation to do it with.
+- **Why — the payload measurement, which inverted the expectation the work package was written on.** Pre/post
+  pairs were taken against live feeds ~90 s apart, each with a cache-busting query (the edge caches both
+  endpoints on the URL) and a `dataTimestamp` fingerprint so feed drift is *visible* rather than assumed;
+  pre-fix runs restored `cd2fc22`'s `apps/edge/src` + `packages/core/src`, waited for the worker to reload and
+  **confirmed the old behaviour was live** (68K publishing 1 reading, not 2) before measuring.
+  - **`/v1/etas` does not grow at the worst interchange at all — it is unchanged at all eight of the
+    heaviest.** Victoria Park has **126 rows across 113 rider lines at 7 poles and not one line boards at two
+    of them**, and that is structural rather than lucky: ADR-042's *"no single route+bound serves both"* veto
+    forbids one **canonical route id** at two poles of a place, so a shared **rider line** needs *two* route ids
+    that agree on number and direction — two service-type variants, or two GMB services sharing a number. That
+    is a minibus and outer-NT shape, not a Causeway Bay one. Growth is confined to the **43** lines at **37**
+    places, at most one extra reading each
+    — a territory-wide ceiling of **+43 readings ≈ +13 kB**, spread one place at a time.
+  - **The growth that exists is on `/v1/stop`, and it comes from the variant fallback rather than from the
+    pole.** Worst absolute in the sample: **+942 B on Victoria Park's 58 kB** (58 031 → 58 973 B, +1.6 %);
+    across 13 places **447.7 → 452.8 kB, +1.1 %**, against `/v1/etas`' **69.5 → 69.6 kB**. Those extra filled
+    rows are variants the client's `dedupeRoutes` collapses anyway, so they cost bytes without changing the
+    screen — the honest price of not blanking the 2-in-2 124 readings whose variant is not the one listed at
+    their pole. **Nothing here is within two orders of magnitude of the 188 kB document that motivated
+    [ADR-055](#adr-055--content-addressed-precompute-to-kvr2-the-dataset-leaves-the-request-path).**
+  - Four rows in the sample show a `dataTimestamp` change between their pair; their `/v1/etas` deltas of ±5 %
+    are feed drift, not this change, and the `/v1/stop` filled-row deltas are consistent across drifting and
+    non-drifting places alike. Recorded because a measurement whose noise is unlabelled is a measurement
+    someone later "corrects".
+- **Driven, not only tested.** `pnpm dataset:build` → **`1ccad7436a8df480`**, byte-identical to the shipped
+  build, and `dataset:publish --local` answered *"upstream unchanged — nothing to do"*, which is
+  content-addressing working; `/v1/health` held `{"dataset":"kv","datasetBuildsThisIsolate":0}` throughout
+  (the ADR-055 production invariant, **local only, never remote**). Post-fix, `/v1/etas` at Fu Kin Street
+  carries `GMB:68K:outbound:2007762 @ GMB:20015724` **and** `GMB:68K:outbound:2007765 @ GMB:20015749`; over
+  all 37 two-pole-line places `/v1/stop` has **0** rows whose reading names another pole. The compact card was
+  rendered from the running worker's `/v1/nearby` (`routeCount 2`, two 68K readings) and printed
+  `68K → Julimount Garden 3 min` with **"+1 more"** — the hidden line being 68S, which had no reading:
+  truthful in both halves.
+- **Consequences, including what we are accepting:**
+  - **Open — a rider who stars one line at *both* kerbs still sees one Favourites row.** Verified in a browser
+    with both keys saved (`GMB:20015724|GMB:68K:…2007762` **and** `GMB:20015749|GMB:68K:…2007765`): the Fu Kin
+    Street card renders a single `68K → Julimount Garden`. Both keys resolve and the card's own collapse
+    (decision 5) is what merges them, so this is **not a regression** — pre-fix only one of the two kerbs had a
+    reading at all — but **the rider's own explicit choice is invisible**, and telling the two apart needs a
+    **per-row kerb label the card does not have**. Owner: **WP5-12**, whose problem statement this joins from
+    the favourites side; the alternative is decision 5's rejected collapse-on-what-the-row-prints.
+  - **Open — `stopCardView`'s "keep the first" now depends on producers sorting soonest-first for *value* as
+    well as for order.** Every producer does (`/v1/nearby`'s schema says so, `stopArrivals` sorts,
+    `applyLiveEtasToNearby` sorts, Favourites sorts) and **none is enforced to**. The cap already had this
+    dependency, so the collapse adds no new risk — but a producer that stopped sorting used to merely reorder
+    rows and would now silently show the **later** bus of a line. A comparator here or a gate on the producers
+    would fix it; left as the pre-existing assumption, documented in `soonestPerLine`. Owner: unassigned, and
+    it belongs to whoever adds the next producer (WP5-7's batch `/v1/etas?ids=…` is the next one).
+  - **Open, and a real hole in a gate CI runs rather than flakiness:** `apps/edge/test/wire-conformance.test.ts`
+    flaked once, on *"returns a payload that satisfies the schema, with no undocumented fields"*, inside a root
+    `pnpm test` while another package was failing. It has not reproduced in ~10 subsequent runs, and the reason
+    it *can* is structural: its `fetch` stub ends `return realFetch(input, init)`, so **any URL it does not
+    recognise goes to the live internet**. One of ADR-052's three gates therefore has a live escape hatch, and
+    a suite with one is a flake waiting for a slow night — worse, a red build that a re-run makes green teaches
+    a reader to re-run. Owner: unassigned; the fix is to fail the stub on an unrecognised URL.
+  - **A cosmetic consequence of the fallback, recorded because it changes which row wins.** Where two
+    service-type variants at one pole now *both* carry a reading, `dedupeRoutes` keeps the **first-listed**
+    variant rather than the one that happened to hold the exact reading. The displayed time is the same and the
+    choice is more stable — it no longer moves as buses depart — but the destination shown is the first
+    variant's, and two variants of one line can differ there. The existing `knownDefect`
+    (`stop-detail#dedupeRoutes:the-first-live-variant-wins-even-when-a-later-one-is-sooner`) is **untouched and
+    still accurate**: it is about two variants at *one* pole, which still collapse, and `/v1/stop` still
+    carries each variant's own exact reading, so its 18-vs-3-minute example reproduces exactly as written.
+  - **A pole heading still cannot tell a rider which kerb the 9-minute bus is at**, which is the honest limit
+    of this change. Fu Kin Street's two members are named *"…, outside Sin Sam House…"* and *"…, opposite Sin
+    Sam House…"* — genuinely different, and published **1.51 m** apart, so `foldDuplicatePoles` rightly
+    declines on the name test and `poleSideOctants` rightly declines on distance (ADR-071 decisions 1 and 6).
+    But `poleHeading` in `apps/mobile/app/stop/[id].tsx` is *operator + the parenthesised stop code* and GMB
+    names carry no code, so **both headings print a bare "GMB"** while the *names* differ. That is a cheaper
+    lead than any in WP5-12's row: the name already distinguishes what the code does not. Owner: **WP5-12**.
+  - **No `dataset:publish` is needed** — the build hash did not move, which is also the proof that this changed
+    no derivation in the offline pipeline.
