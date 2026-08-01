@@ -6,6 +6,7 @@ import type {
   StopDetailRoute,
 } from '@nextbus/core'
 import {
+  boardingPoleId,
   dedupeRoutes,
   etaReadout,
   formatBearing,
@@ -17,11 +18,12 @@ import {
   operatorsOf,
   orderPoles,
   parseStopId,
+  poleSideOctants,
   remarkView,
   splitStopCode,
   titleCaseName,
 } from '@nextbus/core'
-import { type LocalizedString, t } from '@nextbus/i18n'
+import { type LocalizedString, poleSideLabel, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { type ReactNode, useRef, useState } from 'react'
@@ -70,6 +72,20 @@ import { useLocale } from '../../providers/LocaleProvider'
 function poleOperatorLabel(poleId: string, locale: Locale): LocalizedString {
   const operator = parseStopId(poleId)?.operator
   return operator ? operatorName(operator, locale) : ('' as LocalizedString)
+}
+
+/**
+ * The heading printed above a pole's routes: its operator, then the stop code the operator published
+ * in the name, if any — "KMB · TN510", "Citybus".
+ *
+ * Hoisted out of the JSX because it is now needed **twice**: once to render, and once to hand
+ * `poleSideOctants` the very text it must compare (see the render site). Two inline copies of this
+ * expression is precisely how the rule would come to be told about a heading the screen no longer
+ * prints, and then quietly stop disambiguating.
+ */
+function poleHeading(poleId: string, name: string, locale: Locale): string {
+  const code = splitStopCode(name).code
+  return `${poleOperatorLabel(poleId, locale)}${code ? ` · ${code}` : ''}`
 }
 
 /** The map is a **full-width hero at rest that shrinks into a right-aligned floating PIP on scroll**
@@ -130,8 +146,12 @@ export default function StopDetail() {
   })
 
   const stop = query.data?.stop
-  const routes = query.data ? dedupeRoutes(query.data.routes) : []
   const members: StopDetailPole[] = query.data?.members ?? []
+  // `members` is passed so `dedupeRoutes` keys on each row's **boarding point**: where upstream
+  // published one physical pole under two ids, a line boarding at "both" is one row (WP5-11).
+  // The rows come back with their own raw pole ids, which is what `SaveStar` below persists — see
+  // `boardingPoleId`. Rewriting them here instead would orphan every favourite it saves.
+  const routes = query.data ? dedupeRoutes(query.data.routes, members) : []
   const multiPole = members.length > 1
 
   const cleanName = stop ? titleCaseName(splitStopCode(stop.name[locale]).label) : ''
@@ -144,9 +164,39 @@ export default function StopDetail() {
 
   // Routes grouped under the member pole they depart from (ADR-042); poles ordered with the
   // arrived-from `pole` first, then nearest, then the server order (`orderPoles`).
+  // Grouped by the row's **boarding point**, not its raw pole: a row departing from a folded id
+  // belongs under the member it was folded onto, and there is no heading of its own to put it under
+  // (WP5-11). The row itself keeps its raw id for the star.
   const byPole = new Map<string, StopDetailRoute[]>()
-  for (const r of routes) byPole.set(r.stopId, [...(byPole.get(r.stopId) ?? []), r])
-  const orderedPoles = orderPoles(members, pole, poleDist)
+  for (const r of routes) {
+    const key = boardingPoleId(r.stopId, members)
+    byPole.set(key, [...(byPole.get(key) ?? []), r])
+  }
+  // A pole with no rows left after `dedupeRoutes` is not rendered at all, so it is not part of the
+  // list a rider is choosing between. Hoisted out of the JSX because `poleSideOctants` below must be
+  // asked about exactly these poles: a side printed to tell a heading apart from one that is not on
+  // screen is noise, and the whole rule is about not adding any.
+  // `?pole=` goes through `boardingPoleId` for the same reason the grouping does: a route schematic
+  // hands us the id its own stop list carries, which may be a folded one, and tier 1 of `orderPoles`
+  // matches a member id.
+  const shownPoles = orderPoles(
+    members,
+    pole === undefined ? undefined : boardingPoleId(pole, members),
+    poleDist,
+  ).filter((m) => (byPole.get(m.id)?.length ?? 0) > 0)
+  // A compass side for the poles whose heading would otherwise be indistinguishable from a sibling's
+  // — 567 of the 10 118 places in the shipped build print a duplicate one (WP5-10). The screen
+  // contributes the heading text and the layout; every decision about *whether* a side is warranted
+  // and *which* it is belongs to `poleSideOctants`, including its refusal where two poles sit too
+  // close together for a compass word to mean anything. There is deliberately no fallback here for
+  // the poles it declines: read that function's last section before adding one.
+  const poleSides = poleSideOctants(
+    shownPoles.map((m) => ({
+      id: m.id,
+      location: m.location,
+      heading: poleHeading(m.id, m.name[locale], locale),
+    })),
+  )
 
   // Collapsing header (ADR-033) — content scrolls beneath the floating chrome.
   const scrollY = useSharedValue(0)
@@ -315,58 +365,61 @@ export default function StopDetail() {
             {/* Flat list, no card chrome (docs/09: data is the hero). For a multi-pole place the
                 routes are grouped under their pole; otherwise one flat list under "Routes". */}
             {multiPole ? (
-              orderedPoles
-                .filter((m) => (byPole.get(m.id)?.length ?? 0) > 0)
-                .map((m, i, shown) => {
-                  const rs = byPole.get(m.id) ?? []
-                  const isLast = i === shown.length - 1
-                  const code = splitStopCode(m.name[locale]).code
-                  const d = poleDist.get(m.id)
-                  return (
-                    <View
-                      key={m.id}
-                      onLayout={(e) => {
-                        recordSection(m.id, e.nativeEvent.layout.y)
-                        if (isLast) setLastGroupH(e.nativeEvent.layout.height)
-                      }}
-                    >
-                      {/* Section divider, inset to the content margin (not full-bleed) so it lines up
+              shownPoles.map((m, i, shown) => {
+                const rs = byPole.get(m.id) ?? []
+                const isLast = i === shown.length - 1
+                const side = poleSides.get(m.id)
+                const d = poleDist.get(m.id)
+                return (
+                  <View
+                    key={m.id}
+                    onLayout={(e) => {
+                      recordSection(m.id, e.nativeEvent.layout.y)
+                      if (isLast) setLastGroupH(e.nativeEvent.layout.height)
+                    }}
+                  >
+                    {/* Section divider, inset to the content margin (not full-bleed) so it lines up
                           with the text and the map card. */}
-                      <View className="mx-4 border-border border-t" />
-                      {/* Tapping the pole header scrolls it to the top of the list and highlights its
+                    <View className="mx-4 border-border border-t" />
+                    {/* Tapping the pole header scrolls it to the top of the list and highlights its
                         map dot — the list-side twin of tapping the dot. */}
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => scrollToPole(m.id)}
-                        className="flex-row items-end justify-between px-4 pt-4 pb-1 active:opacity-60"
-                      >
-                        <Text variant="label" className="text-subtle">
-                          {poleOperatorLabel(m.id, locale)}
-                          {code ? ` · ${code}` : ''}
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => scrollToPole(m.id)}
+                      className="flex-row items-end justify-between px-4 pt-4 pb-1 active:opacity-60"
+                    >
+                      {/* The side is appended, never substituted: it earns its place only where
+                            two poles print the same heading, so the operator and code stay put and
+                            most places read exactly as they always have. `undefined` = the kernel
+                            declined, which is the answer for a place whose poles sit a metre apart
+                            — there is no fallback to reach for here. */}
+                      <Text variant="label" className="text-subtle">
+                        {poleHeading(m.id, m.name[locale], locale)}
+                        {side !== undefined ? ` · ${poleSideLabel(side, locale)}` : ''}
+                      </Text>
+                      {d != null ? (
+                        <Text variant="caption" className="text-subtle">
+                          {formatWalk(d, locale)}
                         </Text>
-                        {d != null ? (
-                          <Text variant="caption" className="text-subtle">
-                            {formatWalk(d, locale)}
-                          </Text>
-                        ) : null}
-                      </Pressable>
-                      {rs.map((r) => (
-                        <RouteRowItem
-                          key={r.route.id}
-                          r={r}
-                          locale={locale}
-                          now={now}
-                          policy={policy}
-                          onPress={() =>
-                            router.push(
-                              `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
-                            )
-                          }
-                        />
-                      ))}
-                    </View>
-                  )
-                })
+                      ) : null}
+                    </Pressable>
+                    {rs.map((r) => (
+                      <RouteRowItem
+                        key={r.route.id}
+                        r={r}
+                        locale={locale}
+                        now={now}
+                        policy={policy}
+                        onPress={() =>
+                          router.push(
+                            `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
+                          )
+                        }
+                      />
+                    ))}
+                  </View>
+                )
+              })
             ) : (
               <>
                 <Text variant="label" className="mb-1 px-4 text-subtle">

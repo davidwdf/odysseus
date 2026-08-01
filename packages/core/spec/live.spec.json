@@ -3929,7 +3929,7 @@
       ]
     },
     "applyLiveEtasToStopDetail": {
-      "doc": "Merge a set of live readings into the `StopDetail` a Place screen holds, replacing the ETAs and nothing else. Two rules carry the weight. **The reading list is the complete current set, not a patch**: a row with no matching reading becomes `null`, never its previous value, which is the same honesty `gone` exists for — and the corollary is the footgun, so pass the session's readings, never a delta's `changed`, or every other row on the screen blanks. **Every non-ETA field survives**: `stop`, `members`, and each row's `route`, `stopId` and `fare` are all read by the screen, and the value written back has to stay the shape the HTTP fetch produced or ADR-058's persisted cache replays a payload the screen cannot render.",
+      "doc": "Merge a set of live readings into the `StopDetail` a Place screen holds, replacing the ETAs and nothing else. Two rules carry the weight. **The reading list is the complete current set, not a patch**: a row with no matching reading becomes `null`, never its previous value, which is the same honesty `gone` exists for — and the corollary is the footgun, so pass the session's readings, never a delta's `changed`, or every other row on the screen blanks. **Every non-ETA field survives**: `stop`, `members`, and each row's `route`, `stopId` and `fare` are all read by the screen, and the value written back has to stay the shape the HTTP fetch produced or ADR-058's persisted cache replays a payload the screen cannot render. **A row whose exact service-type variant upstream did not publish takes the soonest reading for its own rider line at its OWN pole** (WP5-9): a board publishes whichever variant is running and a row names one, so the exact pair alone drops real arrivals. That fallback index is built by `dedupeEtas` and keyed by `etaBoardingKey` — the same normalisation and the same key the wire keys on, never a second rule — and it never crosses a pole, so a rider is never shown a bus at a kerb it is not coming to.",
       "cases": [
         {
           "name": "a-live-reading-replaces-the-row-it-belongs-to",
@@ -4769,6 +4769,359 @@
                   "fare": "7.1"
                 },
                 "stopId": "CTB:001965"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001965",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38471,
+                  "lng": 114.19814
+                }
+              },
+              {
+                "id": "KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-row-whose-variant-upstream-did-not-publish-takes-its-own-poles-line-reading",
+          "why": "A row names ONE service-type variant; a board publishes whichever variant is running, and the two disagree in the wild — 2 of 2124 readings across 156 real places on 2026-07-31 named a variant no row at their own pole lists. Here the row at KMB:548DAB3A4F71EB68 is 86K service type 1 and the only reading at that pole is service type 2: same operator, same number, same direction, same kerb, so the rider's answer is that time and not silence. Matching on the exact pair alone dropped a real arrival — at Hiram's Highway, opposite Marina Cove, upstream published GMB:1A:outbound:2002355 at GMB:20009421 while the static data lists that variant at GMB:20001114, and the row at the kerb the bus was coming to said nothing. The fallback index is built by `dedupeEtas` and keyed by `etaBoardingKey`, so it is the same normalisation and the same key the wire uses, never a second rule.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "routes": [
+                {
+                  "route": {
+                    "id": "KMB:86K:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "86K",
+                    "bound": "outbound",
+                    "serviceType": "1",
+                    "origin": {
+                      "en": "TAI WAI STATION",
+                      "zh-Hant": "TAI WAI STATION",
+                      "zh-Hans": "TAI WAI STATION"
+                    },
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "SHATIN STATION",
+                      "zh-Hans": "SHATIN STATION"
+                    }
+                  },
+                  "eta": null,
+                  "stopId": "KMB:548DAB3A4F71EB68"
+                }
+              ],
+              "members": [
+                {
+                  "id": "CTB:001965",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38471,
+                    "lng": 114.19814
+                  }
+                },
+                {
+                  "id": "KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  }
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:2",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              }
+            ]
+          },
+          "expect": {
+            "stop": {
+              "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+              "name": {
+                "en": "Belair Garden, Tai Chung Kiu Road",
+                "zh-Hant": "富豪花園, 大涌橋路",
+                "zh-Hans": "富豪花園, 大涌橋路"
+              },
+              "location": {
+                "lat": 22.3847,
+                "lng": 114.198139
+              },
+              "sources": [
+                {
+                  "operator": "CTB",
+                  "operatorStopId": "001965"
+                },
+                {
+                  "operator": "KMB",
+                  "operatorStopId": "548DAB3A4F71EB68"
+                }
+              ],
+              "bearingDeg": 225
+            },
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TAI WAI STATION",
+                    "zh-Hant": "TAI WAI STATION",
+                    "zh-Hans": "TAI WAI STATION"
+                  },
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "SHATIN STATION",
+                    "zh-Hans": "SHATIN STATION"
+                  }
+                },
+                "eta": {
+                  "routeId": "KMB:86K:outbound:2",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                "stopId": "KMB:548DAB3A4F71EB68"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001965",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38471,
+                  "lng": 114.19814
+                }
+              },
+              {
+                "id": "KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "the-line-fallback-never-crosses-a-pole",
+          "why": "The guard that makes the fallback safe, and the reason it is keyed on the boarding point rather than on the line. The only reading is 86K at the OTHER kerb, so the row here stays null: a rider is never shown a bus at a kerb it is not coming to, and `row.eta.stopId === row.stopId` holds for every filled row (asserted over real Worker responses in apps/edge/test/eta-stop-id.test.ts). Widen this to the line alone and both poles of every shared line show one bus twice, which is the defect WP5-9 was closing rather than one to reintroduce a layer up.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "routes": [
+                {
+                  "route": {
+                    "id": "KMB:86K:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "86K",
+                    "bound": "outbound",
+                    "serviceType": "1",
+                    "origin": {
+                      "en": "TAI WAI STATION",
+                      "zh-Hant": "TAI WAI STATION",
+                      "zh-Hans": "TAI WAI STATION"
+                    },
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "SHATIN STATION",
+                      "zh-Hans": "SHATIN STATION"
+                    }
+                  },
+                  "eta": null,
+                  "stopId": "KMB:548DAB3A4F71EB68"
+                }
+              ],
+              "members": [
+                {
+                  "id": "CTB:001965",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38471,
+                    "lng": 114.19814
+                  }
+                },
+                {
+                  "id": "KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  }
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:2",
+                "stopId": "CTB:001965",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              }
+            ]
+          },
+          "expect": {
+            "stop": {
+              "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+              "name": {
+                "en": "Belair Garden, Tai Chung Kiu Road",
+                "zh-Hant": "富豪花園, 大涌橋路",
+                "zh-Hans": "富豪花園, 大涌橋路"
+              },
+              "location": {
+                "lat": 22.3847,
+                "lng": 114.198139
+              },
+              "sources": [
+                {
+                  "operator": "CTB",
+                  "operatorStopId": "001965"
+                },
+                {
+                  "operator": "KMB",
+                  "operatorStopId": "548DAB3A4F71EB68"
+                }
+              ],
+              "bearingDeg": 225
+            },
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TAI WAI STATION",
+                    "zh-Hant": "TAI WAI STATION",
+                    "zh-Hans": "TAI WAI STATION"
+                  },
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "SHATIN STATION",
+                    "zh-Hans": "SHATIN STATION"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:548DAB3A4F71EB68"
               }
             ],
             "members": [

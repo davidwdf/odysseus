@@ -31,6 +31,7 @@
 // **as a type** so the kernel keeps its empty runtime dependency list (ADR-052 decision 2). See the
 // note on the constant below for why a restated literal is not a second declaration.
 import type { LIVE_PATH as WireLivePath } from '@nextbus/contract'
+import { dedupeEtas, etaBoardingKey } from './eta'
 import { formatFavoriteRouteKey, memberStopIds, parseRouteId, parseStopOrPlaceId } from './ids'
 import type {
   DeltaFrame,
@@ -785,15 +786,47 @@ export function liveSocketUrl(apiBaseUrl: string): string {
  * pins. The spread is what keeps ADR-058's persisted query cache usable too: the value written back is
  * the same shape the HTTP fetch produced, so a cold start still replays it.
  *
+ * ## Exact variant first, then the rider line **at that row's own pole** (WP5-9)
+ *
+ * A row names one service-type variant and a board publishes whichever variant is running, and those
+ * disagree in the wild: 2 of 2124 readings measured across 156 real places on 2026-07-31 named a
+ * variant that no row at their own pole lists. Matching on the exact `(pole, routeId)` pair alone
+ * therefore drops a real arrival — at Hiram's Highway, opposite Marina Cove, `269D`-shaped exactly:
+ * upstream published `GMB:1A:outbound:2002355` at `GMB:20009421` while the static data lists that
+ * variant at `GMB:20001114`. The row at the kerb the bus was coming to said nothing.
+ *
+ * So a row with no exact reading takes the soonest reading for **its own line at its own pole**, and
+ * the index for that is built by `dedupeEtas` — the same normalisation the wire applies — keyed by
+ * `etaBoardingKey`, the same key the wire keys on. Not a second rule: the *same* rule, which is what
+ * makes it safe. The pole is never crossed, so `row.eta.stopId === row.stopId` still holds for every
+ * row (`apps/edge/test/eta-stop-id.test.ts` asserts it), and a rider is never shown a bus at a kerb it
+ * is not coming to.
+ *
+ * The edge's `/v1/stop/:id` calls this too rather than indexing its own rows, so the payload a screen
+ * fetches and the frames it then subscribes to agree by construction. They did not: the edge attached
+ * readings by route id alone, which crossed poles, and one cadence later this function blanked what it
+ * had shown.
+ *
  * @spec live#applyLiveEtasToStopDetail
  */
 export function applyLiveEtasToStopDetail(detail: StopDetail, etas: readonly Eta[]): StopDetail {
-  const index = indexByRef(etas)
+  const exact = indexByRef(etas)
+  const byBoardingLine = new Map<string, Eta>()
+  for (const eta of dedupeEtas([...etas])) byBoardingLine.set(etaBoardingKey(eta), eta)
   return {
     ...detail,
     routes: detail.routes.map((row) => ({
       ...row,
-      eta: index.get(formatFavoriteRouteKey(row.stopId, row.route.id)) ?? null,
+      eta:
+        exact.get(formatFavoriteRouteKey(row.stopId, row.route.id)) ??
+        byBoardingLine.get(
+          etaBoardingKey({
+            operator: row.route.operator,
+            routeId: row.route.id,
+            stopId: row.stopId,
+          }),
+        ) ??
+        null,
     })),
   }
 }
@@ -829,9 +862,11 @@ function soonestArrivalMs(eta: Eta): number {
  * Swift (`sort(by:)` makes no stability guarantee), which is precisely the divergence ADR-060 exists to
  * catch.
  *
- * Readings are matched to a place through `memberStopIds`, because an `Eta.stopId` is always a **member
- * pole** while a `NearbyStop.stop.id` may be a merged `P:` place id (ADR-042). Comparing them directly
- * would leave every merged place — which is most of the interesting ones — with an empty card.
+ * Readings are matched to a place through `memberStopIds`, because an `Eta.stopId` is always a **pole**
+ * while a `NearbyStop.stop.id` may be a merged `P:` place id (ADR-042). Comparing them directly would
+ * leave every merged place — which is most of the interesting ones — with an empty card. A pole, note,
+ * and not necessarily a *member*: a reading off a pole the build folded onto another (WP5-11) carries
+ * its own id, and `memberStopIds` yields every clustered pole precisely so it still lands here.
  *
  * @spec live#applyLiveEtasToNearby
  */

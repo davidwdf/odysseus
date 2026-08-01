@@ -188,6 +188,7 @@ GitHub Actions  (daily 19:00 UTC = 03:00 HKT, or workflow_dispatch)
   ─▶ fetch the 8.3 MB consolidated dataset          → hash the raw body (sourceHash)
   ─▶ normalize to the canonical model (02-data-sources.md)
   ─▶ same-kerb direction-aware clustering (ADR-042) → Places
+  ─▶ fold one physical pole published twice onto one member (WP5-11) → boarding points
   ─▶ slice into per-id documents, hash the payloads → build <hash>
   ─▶ write EVERY shard to KV + R2                   (hash-namespaced ⇒ invisible to readers)
   ─▶ flip `build:current` LAST                      ← the moment the build becomes reachable
@@ -203,14 +204,66 @@ Every key carries the build hash, so two builds can coexist and no reader can se
 | Key | Holds |
 |---|---|
 | `place:<hash>:<id>` | One `PlaceDoc` — everything `/v1/stop/:id` and `/v1/etas/:id` need, in one read. |
-| `alias:<hash>:<stopId>` | Member pole → the place id that owns it, so a bare pole id off a route's stop list resolves. |
+| `alias:<hash>:<stopId>` | Any clustered pole → the place id that owns it, so a bare pole id off a route's stop list resolves. **Every** pole, including one folded onto a member (below) — a folded id is one riders have starred, so it has to keep resolving. |
 | `route:<hash>:<id>` | One `RouteDoc`: the route, its ordered stops with fares, and the reverse bound (ADR-046). |
 | `geo:<hash>:<cell>` | Ranking stubs for one 0.01° (~1.1 km) cell — id, anchor, member-pole coordinates. Nothing more. |
 | `build:current` | The manifest. **The only mutable key in the namespace.** |
 | R2 `builds/<hash>/search-index.json` · `manifest.json` | The bulk artefacts, too big for a comfortable KV value. |
 
-A real build: **10,118 places · 6,351 aliases · 3,653 routes · 486 geo cells (14,072 stops)** —
+A real build: **10,115 places · 6,354 aliases · 3,649 routes · 485 geo cells (14,071 stops)** —
 ≈20.6k KV keys, 2.6 s to build.
+
+**One physical pole, published twice (WP5-11).** Upstream sometimes lists one pole under two stop
+ids. Clustering already put them in one place, but as two members, so the Place screen printed two
+headings that were identical character for character. The build now folds a pole onto another when a
+rider could not possibly tell them apart — **same operator, same name in every locale, and no more
+than one coordinate grid step (2 m) apart** — leaving one member per *boarding point* (80 poles folded
+across 75 places). Two consequences worth knowing:
+
+- **Nothing is deleted.** The folded id keeps its stop record, its route rows, its slot in every
+  route's stop sequence, its `alias:` entry and its place in the `P:` id. Favourites key on a member
+  pole id (ADR-062) exactly so clustering changes are survivable, so a fold that removed an id would
+  strand every favourite saved at it. The member carries the folded ids in `aliasIds`, and
+  `boardingPoleId` (`@nextbus/core`) is the map back — applied at *render* time, where it is only a
+  display decision.
+- **The ETA fan-out calls both boards, and a reading keeps the id of the board it came off.** The
+  routes upstream lists at a folded pole are its own — 0 of the 324 route rows on a folded pole also
+  appear on its member, and all 80 folded poles carry rows — so skipping its board would leave those
+  rows blank across 75 places while everything else looked healthy. Each reading is stamped with the
+  **pole that was called**, never with the boarding point it is displayed under, because
+  `applyLiveEtasToStopDetail` matches a reading to a row by `(stopId, routeId)`: re-basing on the way
+  out makes the two disagree and blanks every arrival at a folded pole, on `/v1/stop`, `/v1/etas` and
+  the `EtaHub` frames alike. So an alias is a real addressable pole and the fold never reaches the
+  wire — it is a display collapse the client applies (`dedupeRoutes(routes, members)`).
+
+Distance alone is never the rule: it is a necessary condition, and the name test is what does the
+work. Above 2 m the pairs stay as two members — see WP5-11's row in
+[`docs/proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) for what remains.
+
+**One arrival = one rider line at one boarding pole (WP5-9).** A place is N poles and a route row is
+per pole, so a reading is too: `dedupeEtas` keys on `operator|routeNo|bound|stopId`
+(`etaBoardingKey`), and a line boarding at two poles of a place publishes **two** readings on
+`/v1/etas/:id`, on `/v1/nearby` and in the `EtaHub` frames. Service-type variants at *one* pole still
+collapse to the soonest — Citybus 969 is listed three times at one kerb — which is what the rule is
+for. Keyed across the place it published one, so the sibling pole's row read "no reading right now"
+while a bus was due there: 43 rider lines board at two poles in build `1ccad7436a8df480`, mostly GMB,
+and at Tai On Street the two `GMB:20`s are *different services* sharing a number, so the pole is
+identity and not a tie-break. Three consequences worth knowing:
+
+- **Which reading belongs to which row is one rule, in the kernel.** `/v1/stop/:id` builds its rows
+  with `eta: null` and calls `applyLiveEtasToStopDetail` — the same function the live subscription
+  applies to that payload one cadence later. The edge's own index was keyed on the route id alone,
+  which crossed poles; two implementations of one rule is how the screen came to disagree with itself.
+- **A row whose service-type variant upstream did not publish takes the soonest reading for its own
+  line at its own pole.** Boards publish whichever variant is running (2 of 2124 readings measured
+  across 156 places named a variant no row at their own pole lists), so the exact pair alone drops
+  real arrivals. The fallback index is `dedupeEtas` keyed by `etaBoardingKey` — the same
+  normalisation, not a second rule — and it never crosses a pole, so `row.eta.stopId === row.stopId`
+  holds for every filled row.
+- **A compact card collapses back to one row per line, because it has no kerb heading.** `stopCardView`
+  does that before the cap, and `NearbyStop.routeCount` counts rider *lines*, so both sides of the
+  "+N more" subtraction stay in one unit. Two rows reading `68K → Julimount Garden` on a card would
+  ask a rider to choose with nothing to choose by; the kerb is a Place-detail fact.
 
 **Why the flip is last.** A failed run leaves an unreachable orphan rather than a half-served
 dataset, and a rollback is a single key write. That property is the write *order*, not a

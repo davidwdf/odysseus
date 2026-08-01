@@ -334,7 +334,7 @@
     "/v1/etas/{id}": {
       "get": {
         "operationId": "getStopEtas",
-        "summary": "Live arrivals for a stop or place, deduped to one line per route+direction.",
+        "summary": "Live arrivals for a stop or place, one per route+direction at each boarding pole (WP5-9): service-type variants at one pole collapse to the soonest, and a line boarding at two poles of a place is two readings, distinguished by `stopId`.",
         "parameters": [
           {
             "name": "id",
@@ -357,7 +357,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Live arrivals for a stop or place, deduped to one line per route+direction.",
+            "description": "Live arrivals for a stop or place, one per route+direction at each boarding pole (WP5-9): service-type variants at one pole collapse to the soonest, and a line boarding at two poles of a place is two readings, distinguished by `stopId`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -660,7 +660,8 @@
             "type": "string"
           },
           "stopId": {
-            "type": "string"
+            "type": "string",
+            "description": "Canonical id of the POLE whose board this reading came off — never a place id, and never the boarding point a folded pole is displayed under (WP5-11). Together with `routeId` it is the pair `formatFavoriteRouteKey` encodes and a `delta` uses to say gone; with the route number and direction it is the identity of an arrival, so one line boarding at two poles of a place publishes one reading per pole (WP5-9)."
           },
           "operator": {
             "$ref": "#/components/schemas/OperatorId"
@@ -1155,7 +1156,8 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "The next arrival for this route AT THIS POLE, or `null` where there is none. Its `stopId` always equals the row’s `stopId`: a reading is never borrowed from a sibling pole, which is what made a bus appear at a kerb it was not coming to (WP5-9). Where upstream published a different service-type variant of the same rider line at this pole, that variant’s soonest reading is the one attached — a board publishes whichever variant is running and a row names one, so the exact route id alone dropped real arrivals."
                 },
                 "fare": {
                   "description": "Boarding fare here, HK$ decimal string.",
@@ -1163,7 +1165,7 @@
                 },
                 "stopId": {
                   "type": "string",
-                  "description": "Canonical id of the member pole this route departs from."
+                  "description": "Canonical id of the pole this route departs from — the pole its own stop list names, which may be one of a member’s aliasIds rather than a member (WP5-11). Never re-base it: this is the key a favourite is saved under, and the eta beside it carries the same id."
                 }
               },
               "required": [
@@ -1186,6 +1188,13 @@
                 },
                 "location": {
                   "$ref": "#/components/schemas/LatLng"
+                },
+                "aliasIds": {
+                  "description": "Other canonical pole ids naming this same physical pole, because upstream published it more than once (WP5-11). A route row may depart from one of these rather than from the member, and its ETA carries the same id: every id here is a real addressable pole, not a spelling to be replaced. Use boardingPoleId/dedupeRoutes (@nextbus/core) to group and collapse rows for display, and never write the result back onto a row — a row id is the key a favourite is saved under, and both ids stay valid keys for good.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "required": [
@@ -1218,11 +1227,11 @@
             "items": {
               "$ref": "#/components/schemas/Eta"
             },
-            "description": "Soonest arrivals, deduped to one per route+direction. May be fewer than routeCount — routes with no live reading right now are not listed."
+            "description": "Soonest arrivals first, one per route+direction **at each boarding pole** — so a line boarding at two poles of this place appears twice, distinguished by `stopId` (WP5-9). A compact card with no per-pole heading should collapse them to one row per route+direction before capping and counting; `stopCardView` in @nextbus/core is that rule. May be fewer readings than routeCount: routes with no live reading right now are not listed."
           },
           "routeCount": {
             "type": "number",
-            "description": "True number of distinct routes serving the place, from the static index (no live call). Lets a compact card say \"soonest few of N · +N more\" honestly, never a silent filter."
+            "description": "True number of distinct rider LINES — operator + route number + direction — serving the place, from the static index (no live call), counted once however many poles a line boards at. Lets a compact card say \"soonest few of N · +N more\" honestly, never a silent filter. Subtract rows counted in the same unit: subtracting per-pole readings from it understates what is hidden."
           }
         },
         "required": [

@@ -88,3 +88,13 @@ export interface Approx {
   meters: number
   tolerance: number
 }
+
+/**
+ * The same convention for an angle. Named for its unit rather than reusing `Approx`, because the two
+ * are compared identically and are not interchangeable: a row that said `meters` while holding
+ * degrees would read as a distance to every porter after the first.
+ */
+export interface ApproxDeg {
+  degrees: number
+  tolerance: number
+}

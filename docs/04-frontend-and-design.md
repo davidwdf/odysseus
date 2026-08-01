@@ -275,28 +275,40 @@ name, rather than implying a live position.
 
 ### What a place screen shows, and in what order (`@nextbus/core`, `src/stop-detail.ts`)
 A place is N poles at one kerb ([ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant));
-a lone stop is a place with one. Three rules turn that payload into a screen, and all three are pure
+a lone stop is a place with one. Five rules turn that payload into a screen, and all five are pure
 functions in the kernel rather than closures inside `app/stop/[id].tsx`, because Swift and Kotlin
 will hand-port them and a rule living inside a React tree cannot be asserted (ADR-060). The screen
 keeps the rendering and the hooks.
-- **`dedupeRoutes`** — one row per *rider line* (`operator|routeNo|bound`), keeping the one carrying
-  a live reading. Citybus lists 969 three times at one Tin Shui Wai pole; a rider does not choose a
-  service type. The operator is in the key so a merged kerb keeps KMB-104 and CTB-104 apart, and the
-  bound is in it so a loop route whose two directions share a destination (Citybus 26 at Statue
-  Square) does not collapse into one misleading row.
+- **`boardingPoleId`** — which pole's *heading* a route row is grouped under. It matters only where
+  upstream published one physical pole under two stop ids: the build folds those onto one member
+  (WP5-11) but the wire keeps both ids, because the folded one is a key riders have starred, and this
+  is the map back. 80 poles in the build. **It is used to group and to key, never to rewrite a row:**
+  a row's `stopId` is what `SaveStar` persists and what the Favourites tab matches, so a rewritten row
+  would mint a favourite key that matches nothing.
+- **`dedupeRoutes`** — one row per *rider line* (`operator|routeNo|bound`) **at one pole**, keeping the
+  one carrying a live reading. Citybus lists 969 three times at one Tin Shui Wai pole; a rider does not
+  choose a service type. The operator is in the key so a merged kerb keeps KMB-104 and CTB-104 apart;
+  the bound is in it so a loop route whose two directions share a destination (Citybus 26 at Statue
+  Square) does not collapse into one misleading row; and the pole is in it because two different
+  minibus services can share a number at one place (Wave 5 — fusing them took a pole's whole group off
+  the list while its map dot stayed). Pass the place's `members` and that pole is the row's *boarding
+  point*, so a line boarding at two ids of one physical pole is one row — the display half of the fold.
+  The surviving row comes back with its own raw id untouched.
 - **`operatorsOf`** — the "served by" line, first-seen order, derived from the routes because a
   merged `P:` id has no operator of its own.
 - **`orderPoles`** — pole groups (and their map dots) in three tiers: the pole the rider arrived
   from (`?pole=` — they have already named their kerb, so it outranks a nearer one they cannot board
   at), then nearest, then the server's own member order, which is arbitrary but *stable*, so the
   list does not rearrange itself when the GPS fix lands.
+- **`poleSideOctants`** — a compass side on the heading of the poles that would otherwise print an
+  identical one, and *nothing* where a side would be fake precision: no side under 10 m apart, and none
+  at all for a group where two poles fall in the same octant. It labels 226 places and declines the
+  rest on purpose (WP5-10).
 
-`packages/core/spec/stop-detail.spec.json` pins all three against the shipped dataset. **Two rows
-are `knownDefect`** and both come from the dedupe key deliberately not containing the pole: a later
-variant with a *sooner* bus loses to the first one that merely has a reading (so Nearby and Place
-detail can disagree about the next 269D), and two different minibus services sharing a number
-fuse into one row, taking a pole's whole group off the list while its map dot stays. Read those rows
-before touching the key.
+`packages/core/spec/stop-detail.spec.json` pins all five against the shipped dataset. **One row is
+`knownDefect`**: a later service-type variant with a *sooner* bus loses to the first one that merely
+has a reading, so Nearby and Place detail can disagree about the next 269D. Read it before touching
+the dedupe key.
 
 ## Maps
 - The basemap is the **Hong Kong Lands Department's** keyless raster, proxied and cached by our own

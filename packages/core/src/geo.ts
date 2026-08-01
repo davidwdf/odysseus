@@ -135,6 +135,37 @@ export function bearingOctantDeg(deg: number): number {
   return bearingOctant(deg) * 45
 }
 
+/**
+ * Initial great-circle bearing from `a` to `b`, degrees clockwise from North (0–360).
+ *
+ * **Every other bearing in this repo is a *travel* bearing that arrives precomputed** — `Stop`
+ * carries `bearingDeg`, and `bearingOctant`/`formatBearing`/`BearingArrow` only ever *consume* it.
+ * The arithmetic that produces one lived in exactly one place, `buildPlaces`' private `bearingDeg`
+ * in `@nextbus/data-normalize`, where no rule the app runs could reach it. `poleSideOctants`
+ * (`stop-detail.ts`) needs a bearing at *render* time, so the choice was to move this here or to
+ * write it a second time — and a bearing written twice is the drift ADR-060 exists to catch, with
+ * the added trap that the sign conventions are easy to get subtly right on one copy and wrong on
+ * the other. The pipeline now calls this one, and the corpus pins both callers at once.
+ *
+ * The expression is transcribed **exactly** as the pipeline had it, `(deg * Math.PI) / 180` and all,
+ * rather than reassociated to match `haversineMeters`' `deg * toRad`. Floating-point multiplication
+ * is not associative, so reordering could move a last bit — and a last bit here can move a cluster
+ * across `BEARING_SPREAD_CAP_DEG` and change which poles merge into a place, which would rebuild
+ * the dataset under a new hash for no reason anybody could see. Verified bit-identical
+ * (`Object.is`) against the pipeline's own implementation over 18 430 real coordinate pairs from
+ * the shipped build before the pipeline was switched over.
+ *
+ * @spec geo#initialBearingDeg
+ */
+export function initialBearingDeg(a: LatLng, b: LatLng): number {
+  const lat1 = (a.lat * Math.PI) / 180
+  const lat2 = (b.lat * Math.PI) / 180
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180
+  const y = Math.sin(dLng) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
 /** Localized 8-point compass direction for a travel bearing (deg, any range), e.g.
  *  "Northeast-bound" / "東北行". Snaps to the nearest octant.
  *

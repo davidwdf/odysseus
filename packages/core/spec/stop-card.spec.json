@@ -130,7 +130,7 @@
       ]
     },
     "stopCardView": {
-      "doc": "One whole card: the name split for display, the caption, the route rows under the served `maxRows` cap, and the \"+N more\" count — computed together with the cap, because they are one rule and a caller that pre-sliced its list made the count zero. Each row carries where the service is headed, its soonest arrival split into figure and unit, whether that reading is stale, and how much attention it is owed as a NAME rather than a colour (ADR-053).",
+      "doc": "One whole card: the name split for display, the caption, the route rows under the served `maxRows` cap, and the \"+N more\" count — computed together with the cap, because they are one rule and a caller that pre-sliced its list made the count zero. Each row carries where the service is headed, its soonest arrival split into figure and unit, whether that reading is stale, and how much attention it is owed as a NAME rather than a colour (ADR-053). Since WP5-9 the readings arrive one per line per BOARDING POLE, and a compact card has no kerb heading to make that legible, so they are collapsed to one row per rider line (first sighting, which is the soonest because every producer serves this list soonest-first) BEFORE the cap — and `routeCount` is a count of lines, so both sides of the \"+N more\" subtraction are in the same unit.",
       "cases": [
         {
           "name": "merged-place-caps-thirteen-readings-at-six-and-offers-twenty-more",
@@ -2568,6 +2568,248 @@
               }
             ],
             "remaining": 0
+          }
+        },
+        {
+          "name": "one-line-at-two-kerbs-is-one-row-and-the-count-stays-in-lines",
+          "why": "Measured live on 2026-07-31 and the reason this rule exists. GMB 68K boards at BOTH poles of Fu Kin Street and `/v1/etas` now publishes a reading for each (WP5-9) — 9 minutes at GMB:20015749, 15 at GMB:20015724. A compact card has no kerb heading, so two rows reading `68K → Julimount Garden` would ask a rider to choose with nothing to choose by; the kerb is a Place-detail fact and this card shows the line, soonest first. The count is the half that would have gone quietly wrong: `routeCount` is 2 rider LINES at this place (68K outbound and 68S inbound), so a card showing 2 pole-rows would have said '+0 more' and hidden 68S entirely. One unit on both sides of the subtraction.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:GMB:20015724+GMB:20015749",
+                "name": {
+                  "en": "Fu Kin Street, outside Sin Sam House, Lung Hang Estate",
+                  "zh-Hant": "富健街, 隆亨邨善心樓外",
+                  "zh-Hans": "富健街, 隆亨邨善心樓外"
+                },
+                "location": {
+                  "lat": 22.365185,
+                  "lng": 114.177175
+                },
+                "sources": [
+                  {
+                    "operator": "GMB",
+                    "operatorStopId": "20015724"
+                  },
+                  {
+                    "operator": "GMB",
+                    "operatorStopId": "20015749"
+                  }
+                ],
+                "bearingDeg": 167
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "GMB:68K:outbound:2007765",
+                  "stopId": "GMB:20015749",
+                  "operator": "GMB",
+                  "arrivals": ["2026-07-31T23:49:04+08:00", "2026-08-01T00:04:04+08:00"],
+                  "dataTimestamp": "2026-07-31T23:40:16+08:00",
+                  "observedAt": "2026-07-31T15:40:16.510Z",
+                  "destination": {
+                    "en": "Julimount Garden",
+                    "zh-Hant": "瑞峰花園",
+                    "zh-Hans": "瑞峰花园"
+                  },
+                  "fare": null,
+                  "remark": null,
+                  "remarkKind": null
+                },
+                {
+                  "routeId": "GMB:68K:outbound:2007762",
+                  "stopId": "GMB:20015724",
+                  "operator": "GMB",
+                  "arrivals": ["2026-07-31T23:55:36+08:00", "2026-08-01T00:04:36+08:00"],
+                  "dataTimestamp": "2026-07-31T23:40:16+08:00",
+                  "observedAt": "2026-07-31T15:40:16.510Z",
+                  "destination": {
+                    "en": "Julimount Garden",
+                    "zh-Hant": "瑞峰花園",
+                    "zh-Hans": "瑞峰花园"
+                  },
+                  "fare": null,
+                  "remark": null,
+                  "remarkKind": null
+                }
+              ],
+              "routeCount": 2
+            },
+            "locale": "en",
+            "now": "2026-07-31T23:40:16+08:00"
+          },
+          "expect": {
+            "stopId": "P:GMB:20015724+GMB:20015749",
+            "name": {
+              "label": "Fu Kin Street, outside Sin Sam House, Lung Hang Estate",
+              "code": null
+            },
+            "caption": "Southbound  ·  40m · 1 min walk",
+            "bearingDeg": 167,
+            "rows": [
+              {
+                "routeId": "GMB:68K:outbound:2007765",
+                "operator": "GMB",
+                "routeNo": "68K",
+                "headline": "Julimount Garden",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 8,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 1
+          }
+        },
+        {
+          "name": "a-line-at-two-kerbs-does-not-eat-two-slots-under-the-cap",
+          "why": "The cap takes the first rows, so before the collapse a line boarding at two kerbs consumed two of them: at `maxRows: 2` the whole card was one route number printed twice while two other lines went unnamed behind a '+2 more' that counted them correctly and showed neither. Collapse first, then cap — the same order the count already depends on.",
+          "args": {
+            "input": {
+              "stop": {
+                "id": "P:GMB:20015724+GMB:20015749",
+                "name": {
+                  "en": "Fu Kin Street, outside Sin Sam House, Lung Hang Estate",
+                  "zh-Hant": "富健街, 隆亨邨善心樓外",
+                  "zh-Hans": "富健街, 隆亨邨善心樓外"
+                },
+                "location": {
+                  "lat": 22.365185,
+                  "lng": 114.177175
+                },
+                "sources": [
+                  {
+                    "operator": "GMB",
+                    "operatorStopId": "20015724"
+                  },
+                  {
+                    "operator": "GMB",
+                    "operatorStopId": "20015749"
+                  }
+                ],
+                "bearingDeg": 167
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "GMB:68K:outbound:2007765",
+                  "stopId": "GMB:20015749",
+                  "operator": "GMB",
+                  "arrivals": ["2026-07-31T23:43:04+08:00"],
+                  "dataTimestamp": "2026-07-31T23:40:16+08:00",
+                  "observedAt": "2026-07-31T15:40:16.510Z",
+                  "destination": {
+                    "en": "Julimount Garden",
+                    "zh-Hant": "瑞峰花園",
+                    "zh-Hans": "瑞峰花园"
+                  },
+                  "fare": null,
+                  "remark": null,
+                  "remarkKind": null
+                },
+                {
+                  "routeId": "GMB:68K:outbound:2007762",
+                  "stopId": "GMB:20015724",
+                  "operator": "GMB",
+                  "arrivals": ["2026-07-31T23:44:36+08:00"],
+                  "dataTimestamp": "2026-07-31T23:40:16+08:00",
+                  "observedAt": "2026-07-31T15:40:16.510Z",
+                  "destination": {
+                    "en": "Julimount Garden",
+                    "zh-Hant": "瑞峰花園",
+                    "zh-Hans": "瑞峰花园"
+                  },
+                  "fare": null,
+                  "remark": null,
+                  "remarkKind": null
+                },
+                {
+                  "routeId": "GMB:68S:inbound:2007764",
+                  "stopId": "GMB:20015724",
+                  "operator": "GMB",
+                  "arrivals": ["2026-07-31T23:45:36+08:00"],
+                  "dataTimestamp": "2026-07-31T23:40:16+08:00",
+                  "observedAt": "2026-07-31T15:40:16.510Z",
+                  "destination": {
+                    "en": "Julimount Garden",
+                    "zh-Hant": "瑞峰花園",
+                    "zh-Hans": "瑞峰花园"
+                  },
+                  "fare": null,
+                  "remark": null,
+                  "remarkKind": null
+                },
+                {
+                  "routeId": "GMB:69:outbound:2007800",
+                  "stopId": "GMB:20015749",
+                  "operator": "GMB",
+                  "arrivals": ["2026-07-31T23:52:36+08:00"],
+                  "dataTimestamp": "2026-07-31T23:40:16+08:00",
+                  "observedAt": "2026-07-31T15:40:16.510Z",
+                  "destination": {
+                    "en": "Sha Tin Station",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": null,
+                  "remark": null,
+                  "remarkKind": null
+                }
+              ],
+              "routeCount": 3
+            },
+            "locale": "en",
+            "now": "2026-07-31T23:40:16+08:00",
+            "policy": {
+              "dueUnderSec": 60,
+              "warnUnderSec": 180,
+              "staleAfterMs": 90000,
+              "maxRows": 2
+            }
+          },
+          "expect": {
+            "stopId": "P:GMB:20015724+GMB:20015749",
+            "name": {
+              "label": "Fu Kin Street, outside Sin Sam House, Lung Hang Estate",
+              "code": null
+            },
+            "caption": "Southbound  ·  40m · 1 min walk",
+            "bearingDeg": 167,
+            "rows": [
+              {
+                "routeId": "GMB:68K:outbound:2007765",
+                "operator": "GMB",
+                "routeNo": "68K",
+                "headline": "Julimount Garden",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 2,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": false
+              },
+              {
+                "routeId": "GMB:68S:inbound:2007764",
+                "operator": "GMB",
+                "routeNo": "68S",
+                "headline": "Julimount Garden",
+                "remark": null,
+                "label": {
+                  "kind": "mins",
+                  "value": 5,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "remaining": 1
           }
         }
       ]

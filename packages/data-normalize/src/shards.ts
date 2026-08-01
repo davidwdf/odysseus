@@ -43,6 +43,29 @@ export interface MemberDoc {
   name: I18nText
   lat: number
   lng: number
+  /**
+   * Other canonical pole ids that name **this same physical pole**, because upstream published it
+   * more than once (WP5-11, `foldDuplicatePoles`). Absent for all but ~80 poles in the build.
+   *
+   * They are not decoration. Three things read them:
+   *   · the ETA fan-out, which must call *each* alias's own upstream board — the routes upstream
+   *     lists at an alias are **never** listed at the member (in `1ccad7436a8df480`, **0 of 324**
+   *     route rows on a folded pole also appear on its member), so skipping them would silently
+   *     strip those rows of their arrivals;
+   *   · the Place screen, which groups a route row under the boarding point it belongs to and
+   *     collapses two ids of one pole to one row (`boardingPoleId`, `dedupeRoutes` in
+   *     `@nextbus/core`) — **without rewriting the row's id**, which stays what the wire said;
+   *   · nothing else — and in particular *not* the favourite key, which stays the pole id the rider
+   *     actually starred. Both ids remain valid keys forever, which is the point.
+   *
+   * So this field says which ids *display* as one pole, and it changes nothing about which ids are
+   * addressable: an alias still resolves through the alias table, still carries its own route rows,
+   * and still stamps its own id onto every reading taken off its board. Anything that treated an
+   * alias as an id to be *replaced* would break the promise the field exists to keep.
+   *
+   * Same operator as this member by construction: `sameLabelEverywhere` requires it.
+   */
+  aliasIds?: string[]
 }
 
 /**
@@ -56,7 +79,15 @@ export interface MemberDoc {
  * profile, which is where the UI reads it from (ADR-065 names the tier so a decoder can see it).
  */
 export interface PlaceRouteDoc {
-  /** Canonical id of the member pole this route departs from (ADR-042 grouping). */
+  /**
+   * Canonical id of the pole this route departs from (ADR-042 grouping).
+   *
+   * Almost always a member id. Where upstream published one pole twice it is the **id the route's
+   * own stop list names** — which may be one of that member's `aliasIds` rather than the member
+   * itself (WP5-11). Kept raw on purpose: this is the id a rider's favourite is keyed on and the id
+   * the route schematic offers, so re-basing it here would invalidate saved keys. The display
+   * collapse is `boardingPoleId`'s, at render time.
+   */
   stopId: string
   route: RouteSummary
   fare?: string
@@ -209,8 +240,16 @@ export function cellsForRadius(lat: number, lng: number, radiusM: number): strin
 
 const EMPTY_TEXT: I18nText = { en: '', 'zh-Hant': '', 'zh-Hans': '' }
 
-function toMember(s: IndexStop): MemberDoc {
-  return { id: s.id, operator: s.operator, stopId: s.stopId, name: s.name, lat: s.lat, lng: s.lng }
+function toMember(s: IndexStop, aliases: readonly IndexStop[]): MemberDoc {
+  return {
+    id: s.id,
+    operator: s.operator,
+    stopId: s.stopId,
+    name: s.name,
+    lat: s.lat,
+    lng: s.lng,
+    ...(aliases.length > 0 ? { aliasIds: aliases.map((a) => a.id) } : {}),
+  }
 }
 
 /**
@@ -257,10 +296,13 @@ function seqOf(index: StaticIndex, routeId: string, stopId: string): number | un
   return index.routeToStops.get(routeId)?.find((rs) => rs.stopId === stopId)?.seq
 }
 
-/** GMB live-board resolution entries for exactly the routes at these members (ADR-047). */
-function gmbLiveFor(index: StaticIndex, members: MemberDoc[]): Record<string, string> | undefined {
+/** GMB live-board resolution entries for exactly the routes at these poles (ADR-047). */
+function gmbLiveFor(
+  index: StaticIndex,
+  poles: readonly IndexStop[],
+): Record<string, string> | undefined {
   const wanted = new Set<string>()
-  for (const m of members) {
+  for (const m of poles) {
     if (m.operator !== 'GMB') continue
     for (const r of index.stopToRoutes.get(m.id) ?? []) {
       wanted.add(canonicalRouteId(r.operator, r.route, r.bound, r.serviceType))
@@ -274,10 +316,10 @@ function gmbLiveFor(index: StaticIndex, members: MemberDoc[]): Record<string, st
   return Object.keys(out).length > 0 ? out : undefined
 }
 
-/** Distinct rider lines (operator + number + direction) across a member set. */
-function routeCountOf(index: StaticIndex, members: MemberDoc[]): number {
+/** Distinct rider lines (operator + number + direction) across a set of poles. */
+function routeCountOf(index: StaticIndex, poles: readonly IndexStop[]): number {
   const lines = new Set<string>()
-  for (const m of members) {
+  for (const m of poles) {
     for (const r of index.stopToRoutes.get(m.id) ?? [])
       lines.add(`${r.operator}|${r.route}|${r.bound}`)
   }
@@ -311,24 +353,29 @@ function placeFor(index: StaticIndex, id: string): { place?: IndexPlace; members
 export function placeDocFor(index: StaticIndex, id: string): PlaceDoc | null {
   const { place, members: raw } = placeFor(index, id)
   if (raw.length === 0) return null
-  const members = raw.map(toMember)
+  const aliasesOf = (memberId: string): readonly IndexStop[] => place?.aliases?.get(memberId) ?? []
+  const members = raw.map((m) => toMember(m, aliasesOf(m.id)))
   const anchor = place ?? raw[0]
   if (!anchor) return null
 
+  // Every upstream pole this place answers for: each boarding point, then the poles folded onto it.
+  // Routes are read per *pole*, because a folded pole's routes are its own — upstream lists them
+  // there and nowhere else — and each row keeps the pole id the route's own stop list names.
+  const poles = raw.flatMap((m) => [m, ...aliasesOf(m.id)])
   const routes: PlaceRouteDoc[] = []
-  for (const m of raw) {
-    for (const ref of index.stopToRoutes.get(m.id) ?? []) {
+  for (const pole of poles) {
+    for (const ref of index.stopToRoutes.get(pole.id) ?? []) {
       const routeId = canonicalRouteId(ref.operator, ref.route, ref.bound, ref.serviceType)
       const route = routeOf(index, routeId)
       if (!route) continue
       const meta = index.routeMeta.get(routeId)
-      const seq = seqOf(index, routeId, m.id)
+      const seq = seqOf(index, routeId, pole.id)
       const fare = meta && seq ? routeFareAtSeq(meta, seq) : undefined
-      routes.push({ stopId: m.id, route: toRouteSummary(route), ...(fare ? { fare } : {}) })
+      routes.push({ stopId: pole.id, route: toRouteSummary(route), ...(fare ? { fare } : {}) })
     }
   }
 
-  const gmbLive = gmbLiveFor(index, members)
+  const gmbLive = gmbLiveFor(index, poles)
   return {
     id: place ? place.id : anchor.id,
     name: place ? place.name : anchor.name,
@@ -337,7 +384,7 @@ export function placeDocFor(index: StaticIndex, id: string): PlaceDoc | null {
     ...(place?.meanBearingDeg === undefined ? {} : { bearingDeg: place.meanBearingDeg }),
     members,
     routes,
-    routeCount: routeCountOf(index, members),
+    routeCount: routeCountOf(index, poles),
     ...(gmbLive ? { gmbLive } : {}),
   }
 }
@@ -441,12 +488,18 @@ export function allGeoCells(index: StaticIndex): Map<string, GeoEntry[]> {
   return new Map([...cells].sort((a, b) => a[0].localeCompare(b[0])))
 }
 
-/** Member pole id → the place id that owns it. Only members; lone stops key themselves. */
+/**
+ * Pole id → the place id that owns it. Only clustered poles; lone stops key themselves.
+ *
+ * Read straight off `placeByStopId` rather than off each place's `members`, and that is
+ * load-bearing: a pole folded onto a member (WP5-11) is not in `members`, but it **is** an id a
+ * rider may have starred and a route's stop list still names, so it has to resolve. `placeByStopId`
+ * is the index's own answer to "which place does this pole belong to?", so deriving the table from
+ * it means the two can never disagree.
+ */
 export function allAliases(index: StaticIndex): Map<string, string> {
   const aliases = new Map<string, string>()
-  for (const place of index.places) {
-    for (const m of place.members) aliases.set(m.id, place.id)
-  }
+  for (const [stopId, place] of index.placeByStopId) aliases.set(stopId, place.id)
   return new Map([...aliases].sort((a, b) => a[0].localeCompare(b[0])))
 }
 

@@ -301,7 +301,56 @@ export function formatClock(arrivalIso: string): string {
 }
 
 /**
- * Collapse rider-duplicate ETAs to one entry per line, keeping the soonest reading.
+ * The rider-facing line an arrival belongs to: operator + route number + direction.
+ *
+ * **One declaration, three readers.** `dedupeEtas` builds its key on top of it, `stopCardView`
+ * collapses a compact card's rows with it, and the edge indexes a place's destinations by it
+ * (`stampTables` in `apps/edge/src/stop-route.ts`, which used to carry its own copy under a comment
+ * saying "must agree with `dedupeEtas` exactly" — a comment is not a mechanism, and a second spelling
+ * of one line silently drops a destination rather than failing).
+ *
+ * The service type is deliberately absent: a rider does not choose a timetable variant. The pole is
+ * absent too, because a *line* is not a boarding point — `dedupeEtas` appends the pole itself, and
+ * keeping the two halves separate is what lets the edge index by line while the wire keys by kerb.
+ *
+ * An unparseable route id keys on the whole id, so it only ever dedupes against its own twin. The
+ * `split(':')` this rule replaced defaulted the missing fields to `''`, which collapsed *every*
+ * malformed reading from one operator into a single row and dropped the rest — the worst available
+ * answer for the case where we already know the data is odd.
+ *
+ * @spec eta#etaLineKey
+ */
+export function etaLineKey(eta: Pick<Eta, 'operator' | 'routeId'>): string {
+  const line = parseRouteId(eta.routeId)
+  return line ? `${eta.operator}|${line.routeNo}|${line.bound}` : `${eta.operator}|${eta.routeId}`
+}
+
+/**
+ * **The identity of an arrival: a rider line at one boarding point.** `<line>|<pole>`.
+ *
+ * This is the unit WP5-9 made the model agree on. A place is N poles (ADR-042); a route row is per
+ * pole; and this is the matching unit for a *reading*, so "one arrival" and "one row" finally mean the
+ * same thing. Two readers, and they must not disagree: `dedupeEtas` collapses on it, and
+ * `applyLiveEtasToStopDetail` uses it to find the reading for a row whose exact service-type variant
+ * is not the one upstream published. A fallback keyed differently from the normalisation would put a
+ * reading on a row the wire never gave it to.
+ *
+ * The pole is **last**, and both halves are joined with `|` while nothing escapes a `|` inside a
+ * field. That is a real hazard rather than a theoretical one — it cost this repo an arrival once
+ * already, see `dedupeEtas:literal-pipe-in-route-id-collides` — and it is bounded here: canonical ids
+ * carry colons and never a pipe (ADR-032), a route id that breaks that rule has already fallen back
+ * to the whole id in `etaLineKey`, and a pipe in the trailing field can only ever *split* one line,
+ * never merge two.
+ *
+ * @spec eta#etaBoardingKey
+ */
+export function etaBoardingKey(eta: Pick<Eta, 'operator' | 'routeId' | 'stopId'>): string {
+  return `${etaLineKey(eta)}|${eta.stopId}`
+}
+
+/**
+ * Collapse rider-duplicate ETAs to one entry per line **at one boarding point**, keeping the soonest
+ * reading.
  *
  * A stop is indexed per direction (and per operator service-type), but the upstream
  * KMB feed returns *every* direction of a route in one response — so fetching a
@@ -310,24 +359,31 @@ export function formatClock(arrivalIso: string): string {
  * so we key by operator + route number + bound. Pure function; arrivals are ISO-8601
  * with a fixed +08:00 offset, so lexical comparison is chronological.
  *
+ * ## The pole is in the key, and that is WP5-9
+ *
+ * A place is N poles (ADR-042) and a rider walks to *one* of them, so one line boarding at two of
+ * them is **two arrivals**, not one. Keyed without the pole, this function was the last place in the
+ * model where the unit of "an arrival" was (line, place) while the unit of a row had become (line,
+ * pole) — so `/v1/etas/:id` published at most one reading per line for a whole place and the sibling
+ * pole's row read "no reading right now" while a bus was genuinely due there. Measured against the
+ * live GMB feed on 2026-07-31: 68K had buses at both poles of Fu Kin Street 11 s apart and we
+ * published one. Upstream keeps the two distinct; fusing them was ours.
+ *
+ * Two poles of one line are also not always two buses of one service. At Tai On Street two different
+ * minibus services share the number 20 and both are circular, so number and direction separate
+ * nothing and only the pole can (`dedupeRoutes` was corrected the same way one wave earlier). So the
+ * pole is not merely a tie-break here — for GMB it is part of the identity.
+ *
+ * **What still collapses, deliberately:** two service-type variants at the SAME pole. Citybus 969 is
+ * listed three times at one kerb, all bound for Causeway Bay; KMB runs 269D as types 1 and 4 off one
+ * pole. Those are one bus to a rider and this is the function that says so.
+ *
  * @spec eta#dedupeEtas
  */
 export function dedupeEtas(etas: Eta[]): Eta[] {
   const byLine = new Map<string, Eta>()
   for (const eta of etas) {
-    // Keyed by operator + number + direction. Safe even for GMB, whose numbers repeat across
-    // regions: a stop belongs to one region and route_code is unique within a region, so two
-    // arrivals here sharing number+direction are always variants of the same route — collapsing
-    // them (keeping the sooner) is exactly right (ADR-047).
-    //
-    // An unparseable route id keys on the id itself, so it only ever dedupes against its own twin.
-    // The `split(':')` this replaced defaulted the fields to `''`, which collapsed *every*
-    // malformed reading from one operator into a single row and dropped the rest — the worst
-    // available answer for the case where we already know the data is odd.
-    const line = parseRouteId(eta.routeId)
-    const key = line
-      ? `${eta.operator}|${line.routeNo}|${line.bound}`
-      : `${eta.operator}|${eta.routeId}`
+    const key = etaBoardingKey(eta)
     const existing = byLine.get(key)
     if (!existing) {
       byLine.set(key, eta)

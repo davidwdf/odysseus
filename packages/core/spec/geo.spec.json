@@ -682,6 +682,119 @@
           "expect": 1
         }
       ]
+    },
+    "initialBearingDeg": {
+      "doc": "Initial great-circle bearing from `a` to `b`, degrees clockwise from North, normalised to 0–360. New in WP5-10, and it exists because `poleSideOctants` (`stop-detail`) needs a bearing at render time while the only implementation in the repo was private to the offline dataset pipeline. Every row states a `tolerance` in **degrees**: trigonometry does not agree to the last bit across languages, and a port compares this way rather than for equality — see the file `doc` and `test/corpus.ts`. Two rows are boundaries rather than examples: `coincident-points-bear-due-north` (the input the pole rule is guarding against, where a naïve `atan2` port can produce NaN) and the westward pair, which is the only thing that catches a port omitting the `+ 360` normalisation and returning a negative bearing that then snaps to the wrong octant.",
+      "cases": [
+        {
+          "name": "coincident-points-bear-due-north",
+          "why": "Boundary, and a real input: 49 of the 64 same-stop-code member pairs in the shipped build sit at exactly 0.0 m. `atan2(0, 0)` is defined as 0 in IEEE-754 and in Swift and Kotlin alike, so the answer is 0° and NOT NaN — a port that special-cases the zero vector and returns NaN would push a NaN through `bearingOctant` into an empty label, which is the defect `formatBearing`'s own NaN test already records. Tolerance 0: this must be exact.",
+          "args": {
+            "a": {
+              "lat": 22.27992,
+              "lng": 114.15458
+            },
+            "b": {
+              "lat": 22.27992,
+              "lng": 114.15458
+            }
+          },
+          "expect": {
+            "degrees": 0,
+            "tolerance": 0
+          }
+        },
+        {
+          "name": "due-north-along-a-meridian",
+          "why": "Real: the northern Citybus pole at Peaksville, Robinson Road seen from the southern one. Identical longitude, so the answer is exactly 0° and a port that swapped the two `atan2` arguments would return 90° here.",
+          "args": {
+            "a": {
+              "lat": 22.28197,
+              "lng": 114.14761
+            },
+            "b": {
+              "lat": 22.28215,
+              "lng": 114.14761
+            }
+          },
+          "expect": {
+            "degrees": 0,
+            "tolerance": 0
+          }
+        },
+        {
+          "name": "due-south-is-the-reciprocal",
+          "why": "The same two Peaksville poles the other way round. 180°, exactly — the property `poleSideOctants` leans on for a colliding pair, whose two sides are opposite by construction.",
+          "args": {
+            "a": {
+              "lat": 22.28215,
+              "lng": 114.14761
+            },
+            "b": {
+              "lat": 22.28197,
+              "lng": 114.14761
+            }
+          },
+          "expect": {
+            "degrees": 180,
+            "tolerance": 0
+          }
+        },
+        {
+          "name": "eastwards-along-a-parallel-is-just-under-ninety",
+          "why": "1 km due east of Victoria Harbour's reference point. It is 89.9981°, not 90°, and the difference is the point: a great-circle course that starts due east curves north of the parallel, so a port that computed a rhumb-line bearing instead would answer exactly 90 and drift from us on every long hop. Well inside the octant either way.",
+          "args": {
+            "a": {
+              "lat": 22.3193,
+              "lng": 114.1694
+            },
+            "b": {
+              "lat": 22.3193,
+              "lng": 114.1794
+            }
+          },
+          "expect": {
+            "degrees": 89.998101,
+            "tolerance": 0.0001
+          }
+        },
+        {
+          "name": "westwards-along-a-parallel-normalises-past-zero",
+          "why": "THE row that catches a missing normalisation. `atan2` returns roughly −89.998° here; without the `+ 360` the result is negative, and `bearingOctant` normalises internally so the label would still look plausible — while `bearingOctantDeg` fed a needle straight into a CSS rotation would point the other way. Expect 270.0019°.",
+          "args": {
+            "a": {
+              "lat": 22.3193,
+              "lng": 114.1794
+            },
+            "b": {
+              "lat": 22.3193,
+              "lng": 114.1694
+            }
+          },
+          "expect": {
+            "degrees": 270.001899,
+            "tolerance": 0.0001
+          }
+        },
+        {
+          "name": "central-to-tsim-sha-tsui-across-the-harbour",
+          "why": "The same two points as `haversineMeters:central-to-tsim-sha-tsui`, so a port can check its distance and its bearing against one pair. Northeast — octant 1, the same octant `formatBearing` renders as \"Northeast-bound\".",
+          "args": {
+            "a": {
+              "lat": 22.2819,
+              "lng": 114.1585
+            },
+            "b": {
+              "lat": 22.2988,
+              "lng": 114.1722
+            }
+          },
+          "expect": {
+            "degrees": 36.870009,
+            "tolerance": 0.0001
+          }
+        }
+      ]
     }
   }
 }

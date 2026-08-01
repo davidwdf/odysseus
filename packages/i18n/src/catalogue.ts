@@ -480,6 +480,57 @@ export const CATALOGUE = {
     'zh-Hant': '退格',
     'zh-Hans': '退格',
   },
+  // Stop detail: the compass side of a pole, appended to its heading where two poles of one place
+  // would otherwise print the same thing (WP5-10). `poleSideLabel` in ./index.ts maps the octant
+  // `poleSideOctants` (`@nextbus/core`) returns onto these eight keys — `core` owns the rule, `i18n`
+  // owns the word (ADR-054).
+  //
+  // **These are POSITIONS, and they are deliberately not `formatBearing`'s words.** That function
+  // renders the same eight octants as *travel* directions — "Northeast-bound" / "東北行" — which is a
+  // statement about where the buses are going. Here the octant says where the rider must stand.
+  // Reusing the key would put "Northeast-bound" above a group of routes that mostly head the other
+  // way, which is worse than the ambiguity it set out to fix. Hence "side" / "面": the north side *of
+  // this place*, not a north-going service.
+  poleSideNorth: {
+    en: 'North side',
+    'zh-Hant': '北面',
+    'zh-Hans': '北面',
+  },
+  poleSideNortheast: {
+    en: 'Northeast side',
+    'zh-Hant': '東北面',
+    'zh-Hans': '东北面',
+  },
+  poleSideEast: {
+    en: 'East side',
+    'zh-Hant': '東面',
+    'zh-Hans': '东面',
+  },
+  poleSideSoutheast: {
+    en: 'Southeast side',
+    'zh-Hant': '東南面',
+    'zh-Hans': '东南面',
+  },
+  poleSideSouth: {
+    en: 'South side',
+    'zh-Hant': '南面',
+    'zh-Hans': '南面',
+  },
+  poleSideSouthwest: {
+    en: 'Southwest side',
+    'zh-Hant': '西南面',
+    'zh-Hans': '西南面',
+  },
+  poleSideWest: {
+    en: 'West side',
+    'zh-Hant': '西面',
+    'zh-Hans': '西面',
+  },
+  poleSideNorthwest: {
+    en: 'Northwest side',
+    'zh-Hant': '西北面',
+    'zh-Hans': '西北面',
+  },
   /** Stop detail: accessible label for the map tap target. */
   openInMaps: {
     en: 'Open in Maps',

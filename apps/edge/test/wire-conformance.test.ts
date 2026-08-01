@@ -64,12 +64,24 @@ function canonical(value: unknown): unknown {
 
 beforeEach(() => {
   resetEtaCache()
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (url === DATASET_URL) return jsonResponse(datasetJson())
     const stopEta = KMB_STOP_ETA.exec(url)
     if (stopEta?.[1]) return jsonResponse(kmbStopEtaJson(stopEta[1]))
-    return realFetch(input, init)
+    // **Throw rather than fall through to the network.** This line used to be
+    // `return realFetch(input, init)`, which made the conformance suite — the gate that decides whether
+    // the Worker's responses match the published contract — reach the live internet for any URL the two
+    // patterns above did not match. Three consequences, and the first is why it was found: the suite
+    // flaked once during WP5-9, and a gate that can fail on somebody's wifi teaches people to re-run it
+    // rather than read it. The second is worse: an upstream that answered *plausibly* would let a
+    // conformance run pass against real data nobody pinned, so the fixtures would stop being the thing
+    // under test. The third is that CI has no HK network path at all, so the failure would arrive as a
+    // timeout in the one job whose job is to be believable.
+    //
+    // Every other suite in this directory already throws here (`dataset-kv`, `eta-coalescing`,
+    // `search-index`, `tiles`, `eta-hub`). This one was the exception, and there was no reason for it.
+    throw new Error(`unexpected fetch in wire-conformance: ${url}`)
   }) as typeof fetch
 })
 

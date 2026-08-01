@@ -1,9 +1,12 @@
 import {
+  applyLiveEtasToStopDetail,
   type Bound,
   classifyRemark,
   dedupeEtas,
   type Eta,
+  etaBoardingKey,
   parseRouteId,
+  parseStopId,
   parseStopOrPlaceId,
   type RouteDetail,
   type Stop,
@@ -72,19 +75,58 @@ function gmbEtasFrom(entries: GmbEtaEntry[], gmbLive: Record<string, string>): E
   return out
 }
 
-/** Distinct CTB route numbers at one member pole, in document order. */
-function ctbRoutesAt(place: PlaceDoc, memberId: string): string[] {
+/** Distinct CTB route numbers at one pole, in document order. */
+function ctbRoutesAt(place: PlaceDoc, poleId: string): string[] {
   const seen = new Set<string>()
   for (const r of place.routes) {
-    if (r.stopId === memberId) seen.add(r.route.routeNo)
+    if (r.stopId === poleId) seen.add(r.route.routeNo)
   }
   return [...seen]
 }
 
+/** One upstream ETA board to call: the canonical pole whose board it is — the id every reading off
+ *  it is stamped with — and the raw id the operator's API takes. */
+interface BoardCall {
+  poleId: string
+  rawStopId: string
+  operator: MemberDoc['operator']
+}
+
 /**
- * Raw (call-deduped, not yet rider-deduped) ETAs across every member pole of a place
- * (ADR-042). Each KMB or GMB pole is ONE stop-board call (all its routes); CTB is per-route,
- * bounded by a per-place budget. Members and CTB routes are fetched concurrently.
+ * Every upstream board a place needs called — one per member, **plus one per alias**.
+ *
+ * An alias is a second upstream id for the same physical pole (WP5-11), and it has its own board
+ * with its own routes: in build `1ccad7436a8df480`, 0 of the 324 route rows sitting on a folded pole
+ * also appear on the member it was folded onto. Calling only the member would therefore leave those
+ * rows permanently blank while looking entirely healthy. The raw id an alias's API takes is the
+ * second field of its canonical id (`parseStopId` — ADR-059's grammar, not a `split(':')` here), and
+ * an alias that does not parse is skipped rather than guessed at.
+ *
+ * Each call keeps the pole's **own** canonical id, which is the id its readings are stamped with —
+ * *not* the boarding point it is displayed under. See `atPole` for why that is not a detail.
+ */
+function boardCalls(place: PlaceDoc): BoardCall[] {
+  const calls: BoardCall[] = []
+  const seen = new Set<string>()
+  for (const m of place.members) {
+    const push = (poleId: string, rawStopId: string) => {
+      if (seen.has(poleId)) return
+      seen.add(poleId)
+      calls.push({ poleId, rawStopId, operator: m.operator })
+    }
+    push(m.id, m.stopId)
+    for (const aliasId of m.aliasIds ?? []) {
+      const raw = parseStopId(aliasId)?.rawId
+      if (raw) push(aliasId, raw)
+    }
+  }
+  return calls
+}
+
+/**
+ * Raw (call-deduped, not yet rider-deduped) ETAs across every upstream pole of a place
+ * (ADR-042, WP5-11). Each KMB or GMB pole is ONE stop-board call (all its routes); CTB is per-route,
+ * bounded by a per-place budget. Poles and CTB routes are fetched concurrently.
  *
  * Every upstream call goes through `coalesce` (WP0-4), so a pole is fetched **once per 30 s
  * per isolate** no matter how many places, requests or concurrent callers want it: the
@@ -95,37 +137,34 @@ function ctbRoutesAt(place: PlaceDoc, memberId: string): string[] {
 async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): Promise<Eta[]> {
   const tasks: Array<Promise<Eta[]>> = []
   let ctbRemaining = ctbBudget
-  // A pole can appear twice in one member list (an overlapping caller, a malformed doc);
-  // dedupe here so the budget isn't spent on a repeat we'd only coalesce away.
-  const polesSeen = new Set<string>()
-  for (const m of place.members) {
-    if (polesSeen.has(m.id)) continue
-    polesSeen.add(m.id)
-    if (m.operator === 'CTB') {
-      for (const routeNo of ctbRoutesAt(place, m.id)) {
+  // `boardCalls` already drops a pole named twice (an overlapping caller, a malformed doc), so the
+  // CTB budget isn't spent on a repeat we'd only coalesce away.
+  for (const call of boardCalls(place)) {
+    if (call.operator === 'CTB') {
+      for (const routeNo of ctbRoutesAt(place, call.poleId)) {
         if (ctbRemaining <= 0) break
         ctbRemaining--
         // CTB has no per-stop board (ADR-021), so the call key is per (pole, route).
-        const key = `CTB-eta|${m.stopId}|${routeNo}|1`
+        const key = `CTB-eta|${call.rawStopId}|${routeNo}|1`
         tasks.push(
           atPole(
-            m.id,
-            coalesce(key, () => fetchEta('CTB', m.stopId, routeNo, '1'), []),
+            call.poleId,
+            coalesce(key, () => fetchEta('CTB', call.rawStopId, routeNo, '1'), []),
           ),
         )
       }
-    } else if (m.operator === 'GMB') {
+    } else if (call.operator === 'GMB') {
       // GMB: one stop-board call returns every route at this pole (like KMB); the edge
       // resolves its raw route_id/seq to our canonical ids (ADR-047).
       const gmbLive = place.gmbLive ?? {}
       const raw = coalesce<GmbEtaEntry[]>(
-        `gmb-board|${m.stopId}`,
-        () => fetchGmbStopEta(m.stopId),
+        `gmb-board|${call.rawStopId}`,
+        () => fetchGmbStopEta(call.rawStopId),
         [],
       )
       tasks.push(
         atPole(
-          m.id,
+          call.poleId,
           raw.then((entries) => gmbEtasFrom(entries, gmbLive)),
         ),
       )
@@ -134,8 +173,8 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
       // KMB `stop-eta` board, so the pole id alone is the call key.
       tasks.push(
         atPole(
-          m.id,
-          coalesce<Eta[]>(`kmb-board|${m.stopId}`, () => fetchKmbStopEta(m.stopId), []),
+          call.poleId,
+          coalesce<Eta[]>(`kmb-board|${call.rawStopId}`, () => fetchKmbStopEta(call.rawStopId), []),
         ),
       )
     }
@@ -171,46 +210,61 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
  *
  * A **new object** per reading, never a mutation: these lists come out of `coalesce`, which hands the same
  * array to every concurrent caller for 30 s, so mutating one would rewrite another place's readings.
+ *
+ * **The id is the pole whose board was called, even when the fold displays that pole as another
+ * (WP5-11) — and that is the one decision this function makes.** A place with an alias has two
+ * spellings for one pole; a route that boards only at the folded one has a row naming the folded id,
+ * so a reading stamped with the boarding point instead matches no row and every arrival on it blanks.
+ * That is the bug above, arriving from the other direction, and it was measured that way rather than
+ * reasoned about: `pole-merge.test.ts` runs the kernel merge over these responses and failed on
+ * exactly those rows. The wire therefore speaks raw pole ids throughout — every id upstream publishes
+ * stays a valid `Eta.stopId` and a valid favourite key — and the fold is a *display* collapse the
+ * client applies with `boardingPoleId`, on the far side of the wire from anything persisted.
  */
 function atPole(poleId: string, etas: Promise<Eta[]>): Promise<Eta[]> {
   return etas.then((list) => list.map((e) => ({ ...e, stopId: poleId })))
-}
-
-/** The rider-facing line an `Eta` belongs to. `dedupeEtas` collapses on exactly this, so it is
- *  the key that still matches when a live reading's service-type variant isn't the one the static
- *  data lists at this pole. */
-const lineKey = (operator: string, routeId: string): string => {
-  // Must agree with `dedupeEtas` exactly — including on an id it cannot parse, where both fall
-  // back to keying on the whole id so an odd reading dedupes only against its own twin.
-  const line = parseRouteId(routeId)
-  return line ? `${operator}|${line.routeNo}|${line.bound}` : `${operator}|${routeId}`
 }
 
 /**
  * `${routeId}|${rawStopId}` → the boarding fare there, plus route → destination. Both are
  * precomputed into the place document, so stamping costs no extra lookup.
  *
- * Destinations are indexed by **route id and by rider line**. The exact id can miss: a KMB
- * stop-board returns every service-type variant at the pole, `dedupeEtas` keeps whichever is
- * soonest, and that variant may not be the one the static data lists here. Falling back to
- * operator+number+direction — the same key `dedupeEtas` collapses on — keeps "→ destination" on
- * the card instead of dropping it for exactly the readings a rider is most likely to see.
+ * Destinations are indexed by **route id and by rider line at one pole**. The exact id can miss: a KMB
+ * stop-board returns every service-type variant at the pole, `dedupeEtas` keeps whichever is soonest,
+ * and that variant may not be the one the static data lists here — so falling back to the rider line
+ * keeps "→ destination" on the card instead of dropping it for exactly the readings a rider is most
+ * likely to see.
+ *
+ * **The fallback is per pole, and that is WP5-9.** Keyed by line alone it returned the first row of
+ * that line anywhere in the place, which is a different service rather than a different timetable
+ * wherever one number is run by two: at Tai On Street `GMB:20` boards for Chai Wan (Fung Yip Street)
+ * at one kerb and for Chai Wan Industrial City at the other, so a pole-blind fallback printed the
+ * wrong terminus on a real arrival. `etaLineKey` is the kernel's own line key (`@nextbus/core`), which
+ * this function used to keep a copy of under a comment saying it "must agree with `dedupeEtas`
+ * exactly" — a comment is not a mechanism.
  */
 function stampTables(place: PlaceDoc) {
   // Keyed on the **canonical** pole id, which is what `place.routes[].stopId` already carries and what a
   // reading now carries too (see `atPole`). This map used to convert each row's canonical id back to the
   // operator's own, via a `memberById` lookup, purely because readings arrived spelled that way — one
-  // conversion deleted rather than a second one added.
+  // conversion deleted rather than a second one added. It is the *raw* pole and not the boarding point
+  // for the same reason: a folded pole's rows keep their own id on the wire (WP5-11), and its fares are
+  // its own — the two poles of one physical pole can list different fares for different routes.
   const fareByRouteAndPole = new Map<string, string>()
   const destinationByRoute = new Map<string, PlaceDoc['name']>()
-  const destinationByLine = new Map<string, PlaceDoc['name']>()
+  const destinationByBoardingLine = new Map<string, PlaceDoc['name']>()
   for (const r of place.routes) {
     destinationByRoute.set(r.route.id, r.route.destination)
-    const line = lineKey(r.route.operator, r.route.id)
-    if (!destinationByLine.has(line)) destinationByLine.set(line, r.route.destination)
+    const boarding = etaBoardingKey({
+      operator: r.route.operator,
+      routeId: r.route.id,
+      stopId: r.stopId,
+    })
+    if (!destinationByBoardingLine.has(boarding))
+      destinationByBoardingLine.set(boarding, r.route.destination)
     if (r.fare) fareByRouteAndPole.set(`${r.route.id}|${r.stopId}`, r.fare)
   }
-  return { fareByRouteAndPole, destinationByRoute, destinationByLine }
+  return { fareByRouteAndPole, destinationByRoute, destinationByBoardingLine }
 }
 
 /**
@@ -245,14 +299,14 @@ export async function stopArrivals(
   ctbBudget = DEFAULT_CTB_BUDGET,
 ): Promise<Eta[]> {
   const all = dedupeEtas(await memberEtaLists(place, ctbBudget))
-  const { fareByRouteAndPole, destinationByRoute, destinationByLine } = stampTables(place)
+  const { fareByRouteAndPole, destinationByRoute, destinationByBoardingLine } = stampTables(place)
   // Stamp each reading with its route's destination + boarding fare so flat ETA lists can show
   // "→ dest · $6.7" without the full Route object (ADR-036). Readings arrive carrying their canonical
   // pole id (`atPole`), which is the id both tables above are keyed on.
   return all
     .map((e) => {
       const destination =
-        destinationByRoute.get(e.routeId) ?? destinationByLine.get(lineKey(e.operator, e.routeId))
+        destinationByRoute.get(e.routeId) ?? destinationByBoardingLine.get(etaBoardingKey(e))
       const fare = fareByRouteAndPole.get(`${e.routeId}|${e.stopId}`)
       const stamped = withRemarkKind(e)
       if (!destination && !fare) return stamped
@@ -289,26 +343,45 @@ async function requirePlace(ds: DatasetSource, id: string): Promise<PlaceDoc> {
  *  inheriting whatever is in the namespace. */
 export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDetail> {
   const place = await requirePlace(ds, id)
+  const readings = (await memberEtaLists(place)).map(withRemarkKind)
 
-  const etaByRouteId = new Map<string, Eta>()
-  for (const e of await memberEtaLists(place)) etaByRouteId.set(e.routeId, withRemarkKind(e))
-
-  return {
+  const detail: StopDetail = {
     stop: toMergedStop(place),
-    // `stopId` records which member pole each route departs from, so the Place screen can
-    // group routes under their pole (ADR-042).
+    // `stopId` records which pole each route departs from, so the Place screen can group routes under
+    // their pole (ADR-042). It is the pole the route's own stop list names — which may be a folded one
+    // rather than a member (WP5-11) — because it is also the key `SaveStar` persists, and the reading
+    // attached beside it carries the same spelling (`atPole`).
     routes: place.routes.map((r) => ({
       route: toRouteSummary(r.route),
-      eta: etaByRouteId.get(r.route.id) ?? null,
+      eta: null,
       fare: r.fare,
       stopId: r.stopId,
     })),
+    // One entry per **boarding point**; `aliasIds` names the other ids upstream published for the
+    // same physical pole, which is how the client groups a route row under the right heading and
+    // collapses two ids of one pole to one row (`boardingPoleId`, `dedupeRoutes` — WP5-11).
     members: place.members.map((m) => ({
       id: m.id,
       name: m.name,
       location: { lat: m.lat, lng: m.lng },
+      ...(m.aliasIds?.length ? { aliasIds: m.aliasIds } : {}),
     })),
   }
+
+  // **Which reading belongs to which row is the kernel's rule, not this file's** (WP5-9). It used to
+  // be a local `Map` keyed on the route id alone, and a route id does not name a kerb: where two poles
+  // of one place run the same line — 43 rider lines across 37 places in build `1ccad7436a8df480`, and
+  // the norm for GMB — a reading off one pole was handed to the row that departs from the other.
+  // Measured live on 2026-07-31 at Hiram's Highway, opposite Marina Cove: the row for
+  // `GMB:1A:outbound:2002355` at `GMB:20001114` carried a reading stamped `GMB:20009421`, so the app
+  // showed a bus at a kerb it was not coming to *and* said nothing at the kerb it was.
+  //
+  // `applyLiveEtasToStopDetail` is the same function the live subscription applies to this payload one
+  // cadence later (`useLiveEtas` → `setQueryData`), which is the point of calling it here: two
+  // implementations of "this reading belongs to that row" is how the screen came to disagree with
+  // itself, and the previous one crossed poles where the kernel's does not. The `server` layer may
+  // import the kernel (ADR-051), and `classifyRemark` above is the same move.
+  return applyLiveEtasToStopDetail(detail, readings)
 }
 
 /**

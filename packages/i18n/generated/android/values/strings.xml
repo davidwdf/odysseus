@@ -90,6 +90,14 @@
 	<string name="mapAttribution">Map from Lands Department</string>
 	<string name="mapAttributionAction">Map from Lands Department — open the copyright notice and disclaimer</string>
 	<string name="keypadBackspace">Backspace</string>
+	<string name="poleSideNorth">North side</string>
+	<string name="poleSideNortheast">Northeast side</string>
+	<string name="poleSideEast">East side</string>
+	<string name="poleSideSoutheast">Southeast side</string>
+	<string name="poleSideSouth">South side</string>
+	<string name="poleSideSouthwest">Southwest side</string>
+	<string name="poleSideWest">West side</string>
+	<string name="poleSideNorthwest">Northwest side</string>
 	<string name="openInMaps">Open in Maps</string>
 	<string name="arrivalsHere">Next buses at this stop</string>
 	<string name="save">Save</string>

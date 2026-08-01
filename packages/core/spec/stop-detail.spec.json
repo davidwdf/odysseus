@@ -2,10 +2,329 @@
   "module": "stop-detail",
   "source": "src/stop-detail.ts",
   "version": 1,
-  "doc": "The three list rules the Place (stop-detail) screen is assembled from. A place is N member poles at one kerb (ADR-042) — a lone stop is a place with one — and each pole carries its own routes, its own live readings and its own walk. `dedupeRoutes` decides which route rows a rider sees, by collapsing the operators' service-type variants to one row per rider line (operator + number + direction) and keeping the one carrying a reading. `operatorsOf` names the operators for the 'served by' line, in first-seen order. `orderPoles` decides what order the pole groups (and their map dots) appear in, in three tiers: the pole the rider arrived from, then nearest, then the dataset's own member order. Every row below is built from the real dataset build of 2026-07-27 — real canonical ids, real names in all three locales, real service-type variants — because the shapes that break these rules (a number run by two operators, a loop whose two directions share a destination, one minibus number covering two different services) are ones nobody invents. Live readings are the one synthetic part: they are stated against a fixed `nowIso` of 2026-07-27T12:00:00+08:00, since a fixture that read a clock would be worthless to a second platform. TWO ROWS ARE `knownDefect` — read them before changing the dedupe key.",
+  "doc": "The five list rules the Place (stop-detail) screen is assembled from. A place is N member poles at one kerb (ADR-042) — a lone stop is a place with one — and each pole carries its own routes, its own live readings and its own walk. `boardingPoleId` decides which member pole a route row belongs to, which matters only where upstream published one physical pole under two stop ids and the build folded them onto one member (WP5-11) — the wire keeps both ids so that nothing a rider saved stops resolving, and this is the map back. `dedupeRoutes` decides which route rows a rider sees, by collapsing the operators' service-type variants to one row per rider line (operator + number + direction, at one pole) and keeping the one carrying a reading. `dedupeRoutes` takes the member list too, so the same three rows state what the fold does and does not change: two ids of one pole collapse to one row, and the surviving row keeps the id upstream gave it — because that id is the key a favourite is saved under. `operatorsOf` names the operators for the 'served by' line, in first-seen order. `orderPoles` decides what order the pole groups (and their map dots) appear in, in three tiers: the pole the rider arrived from, then nearest, then the dataset's own member order. `poleSideOctants` decides whether a pole's heading needs a compass side to tell it apart from a sibling's, and which side that is. Every row below is built from a real dataset build — real canonical ids, real names in all three locales, real service-type variants — because the shapes that break these rules (a number run by two operators, a loop whose two directions share a destination, one minibus number covering two different services, one stop code printed on two poles a metre apart) are ones nobody invents; the first three groups are from the build of 2026-07-27, `poleSideOctants` and `boardingPoleId` from `d598893de6add2e4` of 2026-07-31, and `dedupeRoutes`' three folded-pole rows from `1ccad7436a8df480` — the first build the fold shipped in. Live readings are the one synthetic part: they are stated against a fixed `nowIso` of 2026-07-27T12:00:00+08:00, since a fixture that read a clock would be worthless to a second platform. ONE ROW IS `knownDefect` — read it before changing the dedupe key.",
   "groups": {
+    "boardingPoleId": {
+      "doc": "Which boarding point a pole id belongs to, given the place's members. `args.poleId` is the id a route row departs from (or the one a `?pole=` deep link names), `args.members` is the place's member list exactly as `/v1/stop/:id` sends it, and `expect` is the pole id to group that row under. A member answers with itself; an id listed in some member's `aliasIds` answers with that member; anything else comes back unchanged, so an id from an older build degrades to 'not one of these poles' rather than to nothing. Every row is Tin Shui Wai Park or its neighbour Tin Shui Estate, because between them they hold both answers: the park's `KMB:DC5B5F4350685442` and `KMB:AFB9321F7CD2C2E4` are 1.11 m apart — one grid step of latitude — with the same operator, the same name in all three locales and the same printed code TN510, so the build folds the second onto the first; the estate's two TN507 poles are 22.88 m apart and identical in every other field, and are deliberately NOT folded. Distance is not the rule on its own: TN511 shares a coordinate exactly with the surviving TN510 pole and is not folded either, because its printed code differs and a rider can read it.",
+      "cases": [
+        {
+          "name": "a-member-is-its-own-boarding-point",
+          "why": "The answer for all but ~80 of 14 072 poles in the build. A place with no folded pole must be untouched by this rule, which is what makes it safe to call unconditionally on every route row of every place.",
+          "args": {
+            "poleId": "CTB:001992",
+            "members": [
+              {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                }
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN511)",
+                  "zh-Hant": "天水圍公園 (TN511)",
+                  "zh-Hans": "天水圍公園 (TN511)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                }
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN510)",
+                  "zh-Hant": "天水圍公園 (TN510)",
+                  "zh-Hans": "天水圍公園 (TN510)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "aliasIds": ["KMB:DC5B5F4350685442"]
+              }
+            ]
+          },
+          "expect": "CTB:001992"
+        },
+        {
+          "name": "the-folded-tn510-pole-answers-with-the-member-it-was-folded-onto",
+          "why": "The rule's reason to exist. `KMB:DC5B5F4350685442` is the same physical pole as `KMB:AFB9321F7CD2C2E4`, so the one route row that departs from it — KMB 269D, service type 3 — has to group under that member instead of under a heading of its own. Before the fold the screen printed `KMB · TN510` twice, character for character, with 269D once under each and nothing to choose between them.",
+          "args": {
+            "poleId": "KMB:DC5B5F4350685442",
+            "members": [
+              {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                }
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN511)",
+                  "zh-Hant": "天水圍公園 (TN511)",
+                  "zh-Hans": "天水圍公園 (TN511)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                }
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN510)",
+                  "zh-Hant": "天水圍公園 (TN510)",
+                  "zh-Hans": "天水圍公園 (TN510)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "aliasIds": ["KMB:DC5B5F4350685442"]
+              }
+            ]
+          },
+          "expect": "KMB:AFB9321F7CD2C2E4"
+        },
+        {
+          "name": "the-member-a-pole-was-folded-onto-still-answers-with-itself",
+          "why": "The other half of the same place. It is the row that fails if a port searches the `aliasIds` lists before the member ids: a member is never an alias of anything, so its own id has to win outright.",
+          "args": {
+            "poleId": "KMB:AFB9321F7CD2C2E4",
+            "members": [
+              {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                }
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN511)",
+                  "zh-Hant": "天水圍公園 (TN511)",
+                  "zh-Hans": "天水圍公園 (TN511)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                }
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN510)",
+                  "zh-Hant": "天水圍公園 (TN510)",
+                  "zh-Hans": "天水圍公園 (TN510)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "aliasIds": ["KMB:DC5B5F4350685442"]
+              }
+            ]
+          },
+          "expect": "KMB:AFB9321F7CD2C2E4"
+        },
+        {
+          "name": "a-pole-at-the-same-coordinate-with-a-different-code-is-not-folded",
+          "why": "TN511 sits at *exactly* the coordinate of the surviving TN510 pole — 0.0 m — and is still its own boarding point, because the fold needs the same name in every locale and these print different codes. The row exists to stop a port reading the rule as \"poles at one coordinate are one pole\": distance is a necessary condition, never a sufficient one.",
+          "args": {
+            "poleId": "KMB:775642281FBFE336",
+            "members": [
+              {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                }
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN511)",
+                  "zh-Hant": "天水圍公園 (TN511)",
+                  "zh-Hans": "天水圍公園 (TN511)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                }
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN510)",
+                  "zh-Hant": "天水圍公園 (TN510)",
+                  "zh-Hans": "天水圍公園 (TN510)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "aliasIds": ["KMB:DC5B5F4350685442"]
+              }
+            ]
+          },
+          "expect": "KMB:775642281FBFE336"
+        },
+        {
+          "name": "a-genuine-two-berth-stand-is-not-folded-so-each-pole-answers-with-itself",
+          "why": "Tin Shui Estate's TN507 pair, 22.88 m apart: KMB really does print one code on two poles far enough apart to walk between (TN507 22.88 m, TN581 19.01 m, ND126 35.35 m). They agree on operator, name and code, so nothing the wire carries except position separates them — and the build leaves them as two members with no `aliasIds`, so this rule must be a no-op here. Fold them and one berth's whole route list disappears under the other's heading. This is the more important of the two directions to get right.",
+          "args": {
+            "poleId": "KMB:C052B4D46E1F48EA",
+            "members": [
+              {
+                "id": "CTB:001991",
+                "name": {
+                  "en": "Tin Shui Estate, Tin Shui Road",
+                  "zh-Hant": "天瑞邨, 天瑞路",
+                  "zh-Hans": "天瑞邨, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45639,
+                  "lng": 113.99943
+                }
+              },
+              {
+                "id": "KMB:080EF1BEA737A5D3",
+                "name": {
+                  "en": "TIN SHUI ESTATE (TN508)",
+                  "zh-Hant": "天瑞邨 (TN508)",
+                  "zh-Hans": "天瑞邨 (TN508)"
+                },
+                "location": {
+                  "lat": 22.45642,
+                  "lng": 113.99946
+                }
+              },
+              {
+                "id": "KMB:BD53690B9DA1C956",
+                "name": {
+                  "en": "TIN SHUI ESTATE (TN507)",
+                  "zh-Hant": "天瑞邨 (TN507)",
+                  "zh-Hans": "天瑞邨 (TN507)"
+                },
+                "location": {
+                  "lat": 22.45665,
+                  "lng": 113.99929
+                }
+              },
+              {
+                "id": "KMB:C052B4D46E1F48EA",
+                "name": {
+                  "en": "TIN SHUI ESTATE (TN507)",
+                  "zh-Hant": "天瑞邨 (TN507)",
+                  "zh-Hans": "天瑞邨 (TN507)"
+                },
+                "location": {
+                  "lat": 22.45649,
+                  "lng": 113.99943
+                }
+              },
+              {
+                "id": "KMB:F24C06FAF6EE076F",
+                "name": {
+                  "en": "TIN SHUI ESTATE (TN509)",
+                  "zh-Hant": "天瑞邨 (TN509)",
+                  "zh-Hans": "天瑞邨 (TN509)"
+                },
+                "location": {
+                  "lat": 22.45638,
+                  "lng": 113.99948
+                }
+              }
+            ]
+          },
+          "expect": "KMB:C052B4D46E1F48EA"
+        },
+        {
+          "name": "an-id-the-place-does-not-name-comes-back-unchanged",
+          "why": "A `?pole=` from a link saved before that pole left the dataset. Returning the id unchanged groups the row under nothing — and the screen renders only poles that have rows, so the outcome is exactly what it was before this rule existed. Returning some member instead would silently move a rider to a kerb they never asked for.",
+          "args": {
+            "poleId": "KMB:0000000000000000",
+            "members": [
+              {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                }
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN511)",
+                  "zh-Hant": "天水圍公園 (TN511)",
+                  "zh-Hans": "天水圍公園 (TN511)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                }
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN510)",
+                  "zh-Hant": "天水圍公園 (TN510)",
+                  "zh-Hans": "天水圍公園 (TN510)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "aliasIds": ["KMB:DC5B5F4350685442"]
+              }
+            ]
+          },
+          "expect": "KMB:0000000000000000"
+        },
+        {
+          "name": "no-members-yet",
+          "why": "The first render, before the query resolves: the screen calls this with an empty member list. It answers with the id it was given rather than throwing, because a place that has not loaded yet is not a place saying this pole is somewhere else.",
+          "args": {
+            "poleId": "KMB:DC5B5F4350685442",
+            "members": []
+          },
+          "expect": "KMB:DC5B5F4350685442"
+        }
+      ]
+    },
     "dedupeRoutes": {
-      "doc": "One row per rider line, in first-appearance order, keeping the entry that carries a live reading. The key is `operator|routeNo|bound` — deliberately not the service type (riders do not choose one) and deliberately not the pole (see the two knownDefect rows for what that costs). Replacing a keyed entry keeps the position its first variant held, so the list does not reshuffle when a reading arrives on a later variant. `expect` states the surviving entries as route id + the member pole they depart from, because both halves matter: the pole is what files the row under a heading.",
+      "doc": "One row per rider line, in first-appearance order, keeping the entry that carries a live reading. The key is `operator|routeNo|bound` plus the pole the row boards at — deliberately not the service type (riders do not choose one); see the two knownDefect rows for what the pole costs. That pole is the row's **boarding point** when `args.members` is given and its raw `stopId` when it is not: where upstream published one physical pole under two ids the build folds them onto one member (WP5-11), and passing the member list is what collapses the two into one row. Replacing a keyed entry keeps the position its first variant held, so the list does not reshuffle when a reading arrives on a later variant. `expect` states the surviving entries as route id + the pole they depart from, because both halves matter: the pole files the row under a heading, and — since it is also the key `SaveStar` persists — the surviving row must come back with the id upstream gave it and never with the one it is displayed under.",
       "cases": [
         {
           "name": "three-citybus-service-types-at-one-pole-are-one-row",
@@ -514,6 +833,326 @@
             "routes": []
           },
           "expect": []
+        },
+        {
+          "name": "two-ids-of-one-physical-pole-are-one-row-when-members-are-given",
+          "why": "Tin Shui Wai Park, verbatim from the shipped build: KMB lists 269D three times across the two upstream ids of ONE physical pole — service types 1 and 4 on `KMB:AFB9321F7CD2C2E4`, type 3 on `KMB:DC5B5F4350685442`, which the build folded onto it 1.11 m away (WP5-11). Given `members`, all three key on the same boarding point and a rider sees one row. This is the display half of the fold: without it the place would print one heading with 269D listed twice under it, which is worse than the two headings the fold replaced.",
+          "args": {
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:AFB9321F7CD2C2E4"
+              },
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:3",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "3",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:DC5B5F4350685442"
+              },
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:4",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "4",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:AFB9321F7CD2C2E4"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                }
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN511)",
+                  "zh-Hant": "天水圍公園 (TN511)",
+                  "zh-Hans": "天水圍公園 (TN511)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                }
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN510)",
+                  "zh-Hant": "天水圍公園 (TN510)",
+                  "zh-Hans": "天水圍公園 (TN510)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "aliasIds": ["KMB:DC5B5F4350685442"]
+              }
+            ]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:269D:outbound:1",
+              "stopId": "KMB:AFB9321F7CD2C2E4"
+            }
+          ]
+        },
+        {
+          "name": "the-surviving-row-keeps-the-folded-pole-s-own-id-when-that-is-the-row-with-a-reading",
+          "why": "THE row that must not be re-based. Type 3 boards at the folded id and is the only variant with an arrival, so it takes the row — and it comes back carrying `KMB:DC5B5F4350685442`, the id upstream published, NOT the member it is displayed under. `SaveStar` persists `${row.stopId}|${routeId}` and the Favourites tab matches that key against `/v1/stop`'s own rows, so a rule that rewrote the id here would write a favourite key no row will ever carry — orphaning it the moment a rider taps the star. The collapse is a key, never a row rewrite.",
+          "args": {
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:AFB9321F7CD2C2E4"
+              },
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:3",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "3",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": {
+                  "routeId": "KMB:269D:outbound:3",
+                  "stopId": "KMB:DC5B5F4350685442",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-31T12:04:00+08:00"],
+                  "dataTimestamp": "2026-07-31T12:00:00+08:00",
+                  "observedAt": "2026-07-31T04:00:00.000Z"
+                },
+                "stopId": "KMB:DC5B5F4350685442"
+              },
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:4",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "4",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:AFB9321F7CD2C2E4"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                }
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN511)",
+                  "zh-Hant": "天水圍公園 (TN511)",
+                  "zh-Hans": "天水圍公園 (TN511)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                }
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "en": "TIN SHUI WAI PARK (TN510)",
+                  "zh-Hant": "天水圍公園 (TN510)",
+                  "zh-Hans": "天水圍公園 (TN510)"
+                },
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "aliasIds": ["KMB:DC5B5F4350685442"]
+              }
+            ]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:269D:outbound:3",
+              "stopId": "KMB:DC5B5F4350685442"
+            }
+          ]
+        },
+        {
+          "name": "without-members-each-upstream-id-is-its-own-pole",
+          "why": "The same three rows with no member list: two rows, because the folded id is then just another pole. That is the default and it is the right answer twice over — for the ~10 040 places of the build that have no aliases at all, and for a caller that has rows but no members to hand (which is every caller before the fold shipped). A port that made `members` mandatory would change behaviour for every place; one that ignored it would print 269D twice under one heading.",
+          "args": {
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:AFB9321F7CD2C2E4"
+              },
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:3",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "3",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:DC5B5F4350685442"
+              },
+              {
+                "route": {
+                  "id": "KMB:269D:outbound:4",
+                  "operator": "KMB",
+                  "routeNo": "269D",
+                  "bound": "outbound",
+                  "serviceType": "4",
+                  "origin": {
+                    "en": "TIN FU",
+                    "zh-Hant": "天富",
+                    "zh-Hans": "天富"
+                  },
+                  "destination": {
+                    "en": "LEK YUEN",
+                    "zh-Hant": "瀝源",
+                    "zh-Hans": "瀝源"
+                  }
+                },
+                "eta": null,
+                "stopId": "KMB:AFB9321F7CD2C2E4"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:269D:outbound:1",
+              "stopId": "KMB:AFB9321F7CD2C2E4"
+            },
+            {
+              "routeId": "KMB:269D:outbound:3",
+              "stopId": "KMB:DC5B5F4350685442"
+            }
+          ]
         }
       ]
     },
@@ -1283,6 +1922,235 @@
             "distanceM": {}
           },
           "expect": []
+        }
+      ]
+    },
+    "poleSideOctants": {
+      "doc": "Which compass side each pole of a place sits on — returned ONLY for poles whose heading would otherwise be indistinguishable from another pole's, and only where the geometry can honestly answer. `args.poles` is each member's canonical id, its own coordinate and the heading text a renderer already prints for it; `expect` maps id → octant (0–7 clockwise from North, the same scale as `geo#bearingOctant`) and OMITS every pole that gets nothing, which is the overwhelming majority. The octant is the bearing from the centroid of the *colliding* poles, not of the whole place. Every row is real: the members, their coordinates and their names are verbatim from the dataset build of 2026-07-31 (`d598893de6add2e4`), where 567 of 10 118 places print a duplicate pole heading, 226 of them can be told apart this way and 9 892 places are untouched. The kernel returns a number and never a word — `core` owns the rule, `i18n` owns the word (ADR-054).",
+      "cases": [
+        {
+          "name": "a-lone-stop-gets-nothing",
+          "why": "A place with one member. There is nothing to tell apart, so the heading must come through untouched — this is 7 721 of the 10 118 places in the shipped build and the rule's restraint starts here.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001001",
+                "location": {
+                  "lat": 22.27992,
+                  "lng": 114.15458
+                },
+                "heading": "Citybus"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "an-ordinary-multi-pole-place-with-distinct-headings-gets-nothing",
+          "why": "Cheerful Park, Pak Wo Road, verbatim from the shipped build — and it carries BOTH answers at once, which is why it is one row rather than two. The lone Citybus pole and KMB's ND127 already print unique headings and get nothing; ND126 is printed on two poles 35.4 m apart, so those two, and only those two, are given a side. A port that returned a side for every member of a place with any collision would pass a single-collision row and fail this one.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:003379",
+                "location": {
+                  "lat": 22.49544,
+                  "lng": 114.13174
+                },
+                "heading": "Citybus"
+              },
+              {
+                "id": "KMB:98EBAB9468C80DD2",
+                "location": {
+                  "lat": 22.49543,
+                  "lng": 114.13187
+                },
+                "heading": "KMB · ND126"
+              },
+              {
+                "id": "KMB:9B0A34A1BF585BC4",
+                "location": {
+                  "lat": 22.49551,
+                  "lng": 114.13165
+                },
+                "heading": "KMB · ND127"
+              },
+              {
+                "id": "KMB:CCDD774F50E8650C",
+                "location": {
+                  "lat": 22.49552,
+                  "lng": 114.13154
+                },
+                "heading": "KMB · ND126"
+              }
+            ]
+          },
+          "expect": {
+            "KMB:98EBAB9468C80DD2": 2,
+            "KMB:CCDD774F50E8650C": 6
+          }
+        },
+        {
+          "name": "two-poles-with-no-stop-code-at-all-become-north-and-south",
+          "why": "The commonest shape by a wide margin, and the one the plan's row did not name: 507 of the 571 colliding groups in the shipped build are poles with NO printed stop code, so the heading is the bare operator name. Peaksville, Robinson Road has two Citybus poles 20.3 m apart, both printing just \"Citybus\". They come out North (0) and South (4) — opposite, because for a pair the two bearings from their midpoint are reciprocal.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001147",
+                "location": {
+                  "lat": 22.28215,
+                  "lng": 114.14758
+                },
+                "heading": "Citybus"
+              },
+              {
+                "id": "CTB:003158",
+                "location": {
+                  "lat": 22.28197,
+                  "lng": 114.14761
+                },
+                "heading": "Citybus"
+              }
+            ]
+          },
+          "expect": {
+            "CTB:001147": 0,
+            "CTB:003158": 4
+          }
+        },
+        {
+          "name": "tin-shui-wai-park-two-tn510-poles-are-one-metre-apart-and-get-nothing",
+          "why": "The place the whole work package was raised for, all four members verbatim from the shipped build. KMB prints the stop code TN510 on two of them and their full names are identical too, so neither the code nor the name can separate them. Measured: they are 1.11 m apart — ONE coordinate grid step at the five decimal places upstream publishes — so no compass word can send a rider to one rather than the other, and any word derived from that offset flips the day a coordinate is nudged. The honest answer is nothing, and it stays nothing: this pair is one physical pole published under two upstream ids, and the remedy is in `buildPlaces`, not in a heading. A port tempted to add an ordinal here should read `poleSideOctants`' last section first.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001992",
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "heading": "Citybus"
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "heading": "KMB · TN511"
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "heading": "KMB · TN510"
+              },
+              {
+                "id": "KMB:DC5B5F4350685442",
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "heading": "KMB · TN510"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "exactly-coincident-poles-get-nothing",
+          "why": "West Kowloon Cultural District, M+ — two KMB poles on stop code YT266 at byte-identical coordinates. 49 of the 64 code collisions in the shipped build are at exactly 0.0 m like this. Both bearings from the centroid are 0° (`atan2(0, 0)`), so the separation guard is what declines it; without that guard the two headings would both read \"North\" and the rider would be no better off while believing they had been told something.",
+          "args": {
+            "poles": [
+              {
+                "id": "KMB:008FB3966C991A02",
+                "location": {
+                  "lat": 22.30151,
+                  "lng": 114.15819
+                },
+                "heading": "KMB · YT266"
+              },
+              {
+                "id": "KMB:F843A0E566CF4147",
+                "location": {
+                  "lat": 22.30151,
+                  "lng": 114.15819
+                },
+                "heading": "KMB · YT266"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "three-colliding-poles-where-two-share-a-side-are-all-declined",
+          "why": "Shau Kei Wan East Government Secondary School: three KMB poles all printing bare \"KMB\" in English. Two are at identical coordinates and the third is 26.3 m south, so every member clears the separation floor from the group centroid and the sides come out North / North / South. The reciprocity that saves a pair does not generalise, so distinctness is checked on its own — 14 groups in the shipped build fail exactly here. Declining the WHOLE group is deliberate: labelling them would leave two headings identical AND longer.",
+          "args": {
+            "poles": [
+              {
+                "id": "KMB:75767448DA6FA081",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "KMB"
+              },
+              {
+                "id": "KMB:E060D03C30317F2C",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "KMB"
+              },
+              {
+                "id": "KMB:F754AED08F0B6B97",
+                "location": {
+                  "lat": 22.27206,
+                  "lng": 114.2327
+                },
+                "heading": "KMB"
+              }
+            ]
+          },
+          "expect": {}
+        },
+        {
+          "name": "the-same-place-in-chinese-has-only-two-colliding-headings",
+          "why": "The identical three poles, with the headings a Chinese reader sees: upstream gives KMB:E060D03C30317F2C the code ED522 in `zh-Hant`/`zh-Hans` but not in `en`. So that pole's heading is unique here, the collision is between the other two — 26.3 m apart — and they are labelled North and South while the English rendering of the same place is declined. This is why the rule takes the heading TEXT and not the pole's name or id: whether two headings collide is a property of what is printed, and what is printed depends on the locale.",
+          "args": {
+            "poles": [
+              {
+                "id": "KMB:75767448DA6FA081",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "九巴"
+              },
+              {
+                "id": "KMB:E060D03C30317F2C",
+                "location": {
+                  "lat": 22.27229,
+                  "lng": 114.23264
+                },
+                "heading": "九巴 · ED522"
+              },
+              {
+                "id": "KMB:F754AED08F0B6B97",
+                "location": {
+                  "lat": 22.27206,
+                  "lng": 114.2327
+                },
+                "heading": "九巴"
+              }
+            ]
+          },
+          "expect": {
+            "KMB:75767448DA6FA081": 0,
+            "KMB:F754AED08F0B6B97": 4
+          }
         }
       ]
     }
