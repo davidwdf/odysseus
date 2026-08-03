@@ -86,7 +86,11 @@ curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694&radius=500"
 # Slice 2 — canonical-id endpoints (ids are URL-encoded, e.g. KMB%3A<stopId>)
 curl "http://localhost:8787/v1/stop/KMB%3A<stopId>"            # → StopDetail (routes + next ETA)
 curl "http://localhost:8787/v1/route/KMB%3A6%3Aoutbound%3A1"   # → RouteDetail (ordered stops)
-curl "http://localhost:8787/v1/etas/KMB%3A<stopId>"            # → Eta[] (canonical; what getEtas calls)
+curl "http://localhost:8787/v1/etas/KMB%3A<stopId>"            # → { etas, failed? } — what getEtas calls
+# …and the batch (WP5-7): the parameter REPEATS, and each id is percent-encoded. A place id contains
+# `+`, which a query string decodes as a space — so `%2B` or the id is rejected. `,` would be ambiguous:
+# it is a legal `idchar`, and `%2C` is decoded before any delimiter could be split on.
+curl "http://localhost:8787/v1/etas?ids=KMB%3A<stopId>&ids=P%3AKMB%3A<a>%2BCTB%3A<b>"   # → { reports: […] }
 
 # /v1/index → SearchIndex (compact routes + stops for on-device search and the keypad)
 curl -s "http://localhost:8787/v1/index" | head -c 200
@@ -109,6 +113,25 @@ Responses are normalized and edge-cached, so many users on one stop = one upstre
 tiles, and no caching at all for `/v1/health`. 30 s rather than the old 8 s because upstream only
 refreshes about once a minute: at 8 s the cache almost never hit, so it wasn't saving an upstream
 call — and staleness is still surfaced honestly from each reading's own `observedAt` (ADR-008).
+
+### Two things about the dev loop that will waste a cycle if you do not know them
+
+Both were established by hitting them, and neither is guessable from the code.
+
+**Warm the dataset before you open a `/v1/live` socket.** In `wrangler dev` there is no KV, so the
+Worker falls back to building the 8.3 MB index in-isolate (ADR-055's degrade-to-slow path — `/v1/health`
+says `"dataset":"inline"`). The `EtaHub` shard reads the dataset **inside its alarm**, and on a cold
+isolate that build does not finish inside the alarm's window: the round never completes, so a socket
+opened first sits there answering `snapshot etas=0` + `status live` for ever and looks like a broken
+shard. One `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"` first memoizes it and the
+next round fires within seconds. Symptom to recognise: `wrangler dev`'s log shows the `101 Switching
+Protocols` and then nothing at all.
+
+**Metro dies if you edit a file while `pnpm dev:web` is running.** Not always, but often enough to plan
+around: `TypeError: Cannot read properties of undefined (reading 'addedFiles')` out of
+`metro/src/node-haste/DependencyGraph.js`, via NativeWind's Tailwind watcher. It kills the process
+rather than recovering, so the port goes dead mid-verification. Make the edit, *then* start Metro; if it
+does die, just restart it — nothing is corrupted.
 
 ### Point the app at the edge
 The **Nearby** screen is wired to live data: it requests location permission, geolocates, and calls
@@ -204,8 +227,8 @@ than four scattered ones. The files that *are* loaded sit next to the thing that
 | `EXPO_PUBLIC_API_URL` | **no, and cannot be** | `apps/mobile`, at build time — the data source, the tile source **and** `build:web`, which bakes it into `dist/sw.js` | `apps/mobile/.env.local` (see `.env.example`) or the build env |
 | `VITE_API_URL` | **no, and cannot be** | `apps/web`, at build time (`src/adapters/datasource.ts`) | `apps/web/.env.local` (see `.env.example`) or the build env |
 | `LIVE_ALLOWED_ORIGINS` | no | the Worker, on a `/v1/live` upgrade | optional `[vars]` in `wrangler.toml`, or `apps/edge/.dev.vars` locally. Unset ⇒ **no origin filtering**, which is today's state (ADR-056 decision 9) |
-| `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` | no | **nothing yet** — reserved | the escape hatch for a socket tier on a different host. `EdgeClientOptions.liveUrl` is the plumbing and it is unwired; see WP5-6 |
-| `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` | no | **nothing yet** — reserved | `poll` \| `socket`. Selecting the socket engine is a source edit today, which is why `/v1/live` ships unreachable from a real build (WP5-6) |
+| `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` | no | both app shells, at build time (`lib/datasource.ts` · `src/adapters/datasource.ts`) | the escape hatch for a socket tier on a different host, passed to `EdgeClientOptions.liveUrl`. **Unset is the normal case** and means `wss://<same host>/v1/live`, derived by `liveSocketUrl` ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)) |
+| `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` | no | both app shells, at build time | `poll` (**the shipped default**) \| `socket`. One declaration of the mapping, in `@nextbus/api-client`'s `live/select.ts`; there is deliberately no `auto`, and an unrecognised value falls back to `poll` with a `console.warn` naming it. Since WP5-7 it is **not** inert in `apps/web` either — `Nearby` holds a subscription there, so this variable decides which engine feeds its arrivals in both renderers ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll), [ADR-079](./08-decision-log.md#adr-079--one-request-per-round-the-batch-eta-endpoint-and-nearby-as-a-live-adopter)) |
 
 **One variable per renderer, and the socket URL is not one of them.** `EXPO_PUBLIC_API_URL` and
 `VITE_API_URL` are the *only* endpoint configuration; `wss://<same host>/v1/live` is **derived** from each
@@ -293,7 +316,10 @@ when the `DEPLOY_ARMED` variable is `true`, so arming it is a settings change ra
   back to the slow inline build and says so.
 - **Web/PWA:** `pnpm --filter @nextbus/mobile build:web` → deploy `apps/mobile/dist/` to
   Cloudflare Pages (with `EXPO_PUBLIC_API_URL` pointing at the deployed Worker).
-- **Native:** EAS Build/Submit (Phase 3 — see [roadmap](./06-roadmap.md)).
+- **Native:** hand-written Swift / Kotlin apps in **separate repos**, each with its own store pipeline
+  — **no EAS, no OTA** ([ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels),
+  Phase 3 — see [roadmap](./06-roadmap.md)). They start from
+  [`packages/contract/README.md`](../packages/contract/README.md).
 
 ## Status / next steps
 - **Slice 1 (Nearby) is live** — KMB only, computed **server-side** in the Worker (ADR-016).

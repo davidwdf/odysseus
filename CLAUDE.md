@@ -31,7 +31,9 @@ pnpm format             # Biome --write
 
 pnpm --filter @nextbus/contract openapi:emit   # regenerate packages/contract/openapi.json (ADR-052)
 pnpm --filter @nextbus/contract asyncapi:emit  # …and asyncapi.json — the /v1/live frames (ADR-056)
-                        # …both are committed + gated: `pnpm test` fails if either is stale
+pnpm --filter @nextbus/contract native:emit    # …and README.md + native/{ios,android} — it prints the
+                        # path/schema/corpus COUNTS, so it goes stale on any wire or corpus change too
+                        # …all three are committed + gated: `pnpm test` fails if any is stale
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
@@ -45,9 +47,10 @@ apps/mobile          Expo app (iOS/Android/Web-PWA)
 apps/web             Vite + React DOM — ONE screen (Nearby), rendered from the identical
                      `packages/core` functions. The proof that the kernel is renderer-agnostic
                      (ADR-068/069); it derives nothing, and a gate enforces that
-apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/tiles, /v1/health; reads
-                     precomputed dataset shards from KV/R2 — ADR-055; and /v1/live, the ETA socket
-                     served by the sharded, hibernating `EtaHub` Durable Object — ADR-056)
+apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/etas/:id and /v1/etas?ids=… — the
+                     batch one round of a live subscription is fetched in, ADR-079 — /v1/tiles,
+                     /v1/health; reads precomputed dataset shards from KV/R2 — ADR-055; and /v1/live,
+                     the ETA socket served by the sharded, hibernating `EtaHub` DO — ADR-056)
 packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
                      + the /v1/live frames → AsyncAPI 3.0 (`asyncapi.json`, ADR-056)
 packages/core        canonical types (`z.infer` of contract, `import type` only) · DataSource · ETA helpers
@@ -103,13 +106,15 @@ packages/tsconfig    shared TS configs
 7. **Docs are the source of truth and must stay in sync.** A commit that stages code without `docs/`
    changes must either update the relevant doc (and add an ADR in `docs/08` for any new cross-cutting
    decision) or — if truly no doc change is needed — include `[docs-ok]` in the commit message. Don't
-   reach for `--no-verify`. **Know what enforces this today: nothing.**
-   `scripts/precommit-docs-check.mjs` + the `check-docs` skill are a **Claude Code `PreToolUse` hook**,
-   not a git hook, and the hook is **not installed** in this repo (`git config --get core.hooksPath` is
-   unset; `hooks/` holds only samples). CI cannot run the script unmodified either — it reads a
-   tool-call payload on stdin and diffs the *index*, so in CI it exits 0 having checked nothing, and
-   `ci.yml` says so rather than shipping a step that passes vacuously. Fixing it is WP5-8. Until then
-   this rule is yours to keep, not a gate's.
+   reach for `--no-verify`. **Know what enforces it: CI, per commit** (WP5-8, ADR-078).
+   `scripts/precommit-docs-check.mjs` holds the rule once and applies it two ways — as a **Claude Code
+   `PreToolUse` hook** over the *index* while you work (`.claude/settings.json`; note this is not a git
+   hook, so a `git commit` outside Claude Code is unaffected), and as
+   `--range <base>..<head>` over every commit in a pull request, which is the step `ci.yml` runs. A range
+   naming no commits **fails**, so it cannot pass vacuously. `[docs-ok]` in the *message* is the only
+   bypass CI honours — `--no-verify` skips a hook, not a review — and it is permanent and visible in
+   `git log`, so use it with the reason in the body. `pnpm test` runs the gate's `--selftest`; check a
+   branch by hand with `pnpm check:docs-freshness` (`origin/main..HEAD`).
 
 ## Definition of done (for any change)
 - [ ] `pnpm typecheck` passes.
@@ -146,10 +151,18 @@ renderer (ADR-068/069) and — as of 2026-07-30 — the **live protocol** (ADR-0
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before
-changing live behaviour. Three caveats worth knowing before you touch any of it: the socket cannot
-yet be *selected* without a source edit (WP5-6, which is what makes five shard fixes latent), an
-upstream outage still reads as "no buses" (WP5-4), and a pole's row can read "no reading" while a bus
-is due there (WP5-9). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
+changing live behaviour. **WP5-4, WP5-5 and WP5-6 are done as of 2026-08-03** (ADR-073/074/076):
+`coalesce` no longer takes a `fallback`, so an upstream outage is no longer "no buses" on the arrivals
+path — `/v1/etas/:id` answers `{ etas, failed }` (**breaking**, `CONTRACT_VERSION` 2.0.0) and one kernel
+rule, `retainFailedPoles`, is what both engines apply to it; a shared corpus
+(`packages/core/fixtures/live-rounds.json`) drives those rules through the **real** `EtaHub` over a real
+socket as well as through the poll emulator; and the socket is selected by
+`EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`, **default still `poll`**. **WP5-13 followed**
+(ADR-077): `/v1/nearby` and `/v1/stop` carry `failed` too, the two kernel merge helpers now *take* the
+failure set so a stale list cannot outlive its round, and a card says *"Live times unavailable"* from
+`StopCardView.incomplete` in both renderers. Wave 5's remaining rows are **WP5-7** (batch
+`/v1/etas?ids=…`, then Nearby adopts live), **WP5-8** (nothing enforces the docs rule in rule 7 below)
+and **WP5-12** (the 2–10 m pole residual, which also owns the rider who stars one line at both kerbs). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
 Cloudflare credentials — though CI now runs on every PR. Roadmap/backlog: `docs/06`, `docs/07`.
 Cloudflare agent skills are installed — prefer the `cloudflare` / `wrangler` / `durable-objects`
 skills for edge work.

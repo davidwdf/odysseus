@@ -81,6 +81,7 @@
 "routesLabel" = "條路線";
 /* stopCount: plural — see Localizable.stringsdict */
 /* moreRoutes: plural — see Localizable.stringsdict */
+"etasUnavailable" = "無法取得即時班次";
 "mapAttribution" = "地圖由地政總署提供";
 "mapAttributionAction" = "地圖由地政總署提供 — 開啟版權公告及免責聲明";
 "keypadBackspace" = "退格";
@@ -92,6 +93,7 @@
 "poleSideSouthwest" = "西南面";
 "poleSideWest" = "西面";
 "poleSideNorthwest" = "西北面";
+"poleTooCloseToTell" = "數步之內另有站柱 — 請看站牌";
 "openInMaps" = "在地圖開啟";
 "arrivalsHere" = "本站即將到站";
 "save" = "收藏";

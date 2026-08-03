@@ -22,7 +22,9 @@ iOS/Android apps tomorrow without a rewrite.
    data renders immediately; live ETAs arrive fast because compute is near HK.
 2. **Delightful to use.** Thoughtful motion, haptics (on native), clean typography, light/dark.
 3. **Trustworthy.** We present ETAs honestly (see principle below) and indicate data freshness.
-4. **Mobile-first, multi-platform.** Responsive web/PWA now; iOS + Android from the same codebase later.
+4. **Mobile-first, multi-platform.** Responsive web/PWA now; iOS + Android later as **hand-written
+   native apps against one shared spec** ([ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+   — not, as this line used to read, "from the same codebase").
 5. **Cheap to run, easy to scale.** Edge + caching keep costs near-zero at small scale and flat at large scale.
 
 ## v1 scope (the MVP)
@@ -66,4 +68,7 @@ iOS/Android apps tomorrow without a rewrite.
 4. **Accessible by default.** Dynamic type, screen-reader labels, sufficient contrast, and
    **respect reduced-motion** (disable delight animations when the OS/user asks).
 
-5. **One codebase, no forks.** Web and native share everything they reasonably can.
+5. **One spec, no forks** ([ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)).
+   Web and native share the *rules* — wire shapes, domain logic, design values, strings, and the
+   component contracts — and each renders them idiomatically. Equivalence is a conformance suite per
+   renderer, not a shared component tree.

@@ -3,7 +3,7 @@
   "x-json-schema-dialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
     "title": "NextBus HK — live ETA stream",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "description": "The frames on `/v1/live`: one socket per client, a `snapshot` then `delta`s, pushed on a\nserver-controlled cadence. Companion to `openapi.json`, which describes the JSON endpoints.\n\nBoth documents are emitted from the same Zod declarations, through one registry pass, with one set\nof `#/components/schemas/` pointers — so they cannot disagree about what an `Eta` *is*. They are\n**not** byte-identical, and the two differences are deliberate losses of information that\nAsyncAPI's own rules force (see `foldRefSiblings` in `src/asyncapi.ts`): this document drops the\n`$id` every schema carries there, and it rewrites `$ref`-with-`description` into\n`allOf: [{$ref}, {description}]` at four sites — `Eta.destination`, `Eta.remark`,\n`Eta.remarkKind` and `RouteDetail.reverse` — because AsyncAPI's Reference Object ignores sibling\nkeywords, and `Eta.remarkKind`'s note (absent, never `\"info\"`) is the one field note in this\ncontract most expensive to lose. A generator therefore produces slightly different shapes for\nthose four from the two documents; everything else matches.\n\n**Read this before planning to generate anything from this document.** It is a specification\nartefact with a validator, and only aspirationally a codegen input:\n\n- **There is no AsyncAPI→Swift generator in existence.** Modelina — the reference generator —\n  emits 12 languages and Swift is not among them, and a sweep of `asyncapi.com/tools` finds no\n  tool mentioning Swift, Objective-C or iOS in any category. An iOS client hand-writes these\n  frame types.\n- **Kotlin generation exists and cannot serialise.** Modelina's Kotlin output lists JSON, XML\n  and binary serialization as \"currently not supported\", so `generate models kotlin` yields\n  annotation-free data classes and the decode layer is hand-written anyway — which puts the\n  unknown-enum tolerance obligation (`x-unknown-tolerant`) on hand-written code on Android too.\n- **`asyncapi diff` is not an `oasdiff` equivalent.** Its standards table has no\n  `/components/schemas/*` pointer, so adding *or removing* a payload field classifies as\n  `unclassified`, not `breaking`. A gate built on it would go green on a removed field — a gate\n  looking at nothing. Breaking-change discipline for these shapes is ADR-052 §5 plus review.\n- **The schemas are generated as JSON Schema 2020-12** and this document declares draft-07,\n  because that is what AsyncAPI 3.0's Schema Object is a superset of. The\n  `x-json-schema-dialect` extension above records what the bytes are, and\n  `packages/contract/scripts/check-asyncapi-current.mjs` fails on any keyword outside the\n  intersection of the two vocabularies, so the declaration stays true as the schemas grow.\n- **This document has never been validated against the AsyncAPI meta-schema.** Doing that needs\n  a dependency this repo has not taken (`@asyncapi/parser`, or `@asyncapi/specs` + ajv). The\n  gate transcribes the field lists and constraints that matter from the spec instead, and says\n  so. Treat \"AsyncAPI 3.0\" here as a careful reading, not a validator's verdict.\n\nConventions inherited from `openapi.json` and restated because a reader may only ever see this\nfile:\n\n- **Objects are open.** Additional properties are permitted by design; do not configure a\n  generator to reject unknown keys, or one added optional field stops every deployed client\n  decoding.\n- **Enums marked `x-unknown-tolerant` will gain members** without a major version bump.\n  Generate a fallback case; do not throw on an unrecognised value.\n- **A frame is identified by its `type` const, which is required on every frame.** That is what\n  makes the channel's \"valid against one and only one message\" rule hold given open objects.\n- **`Eta.dataTimestamp` carries a `+08:00` offset; a frame's own `at` and `Eta.observedAt` are\n  `Z`-suffixed UTC**, because our layer stamps those two and the operators stamp the other.\n  Parse them as instants. Judge staleness from `dataTimestamp` — never from `observedAt`, which\n  would make a replayed offline reading look fresh (ADR-008, ADR-058).\n- **ETAs are approximations.** No per-second countdown; repaint when a frame arrives."
   },
   "defaultContentType": "application/json",
@@ -118,7 +118,7 @@
       },
       "Snapshot": {
         "name": "Snapshot",
-        "summary": "The accepted target set and every reading held for it.",
+        "summary": "The accepted target set, every reading held for it, and the kerbs that would not answer.",
         "contentType": "application/json",
         "payload": {
           "$ref": "#/components/schemas/SnapshotFrame"
@@ -126,7 +126,7 @@
       },
       "Delta": {
         "name": "Delta",
-        "summary": "Readings that changed, and readings that are gone.",
+        "summary": "Readings that changed, readings that are gone, and the kerbs that would not answer.",
         "contentType": "application/json",
         "payload": {
           "$ref": "#/components/schemas/DeltaFrame"
@@ -150,6 +150,81 @@
       }
     },
     "schemas": {
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "bad_request",
+          "not_found",
+          "internal",
+          "upstream_unavailable",
+          "upstream_timeout"
+        ],
+        "x-unknown-tolerant": true
+      },
+      "WireError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
+          },
+          "error": {
+            "type": "string",
+            "deprecated": true,
+            "description": "Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`."
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "error"
+        ]
+      },
+      "EtaFailure": {
+        "type": "object",
+        "properties": {
+          "stopId": {
+            "type": "string",
+            "description": "Canonical id of the POLE whose upstream board did not answer — the same spelling `Eta.stopId` carries, so a client can pair a failure with the readings it already holds."
+          },
+          "error": {
+            "$ref": "#/components/schemas/WireError"
+          }
+        },
+        "required": [
+          "stopId",
+          "error"
+        ]
+      },
       "Locale": {
         "type": "string",
         "enum": [
@@ -796,6 +871,13 @@
                 "location"
               ]
             }
+          },
+          "failed": {
+            "description": "Boarding points of this place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). A route row whose `eta` is `null` and whose `stopId` appears here has no reading because we could not ask — not because nothing is due. **This field describes the moment this payload was built and must never be carried across a live merge:** `applyLiveEtasToStopDetail` replaces it from its own argument, so a subscription that has taken over becomes the authority (its `status: retrying` frames), rather than a stale list outliving the outage it describes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
           }
         },
         "required": [
@@ -824,6 +906,13 @@
           "routeCount": {
             "type": "number",
             "description": "True number of distinct rider LINES — operator + route number + direction — serving the place, from the static index (no live call), counted once however many poles a line boards at. Lets a compact card say \"soonest few of N · +N more\" honestly, never a silent filter. Subtract rows counted in the same unit: subtracting per-pole readings from it understates what is hidden."
+          },
+          "failed": {
+            "description": "Boarding points of THIS place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). Without it `etas: []` means two different things — this stop has no buses, or nobody would tell us — and a card renders identically for both. `stopCardView` in @nextbus/core turns it into the one thing a compact card can honestly say, since a card has no per-kerb heading to attach it to. A reading missing for a pole named here has NOT departed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
           }
         },
         "required": [
@@ -946,65 +1035,6 @@
           "stops"
         ]
       },
-      "ErrorCode": {
-        "type": "string",
-        "enum": [
-          "bad_request",
-          "not_found",
-          "internal",
-          "upstream_unavailable",
-          "upstream_timeout"
-        ],
-        "x-unknown-tolerant": true
-      },
-      "WireError": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "$ref": "#/components/schemas/ErrorCode"
-          },
-          "message": {
-            "type": "string",
-            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
-          },
-          "retryable": {
-            "type": "boolean",
-            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "retryable"
-        ]
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "$ref": "#/components/schemas/ErrorCode"
-          },
-          "message": {
-            "type": "string",
-            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
-          },
-          "retryable": {
-            "type": "boolean",
-            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
-          },
-          "error": {
-            "type": "string",
-            "deprecated": true,
-            "description": "Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`."
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "retryable",
-          "error"
-        ]
-      },
       "DatasetOrigin": {
         "type": "string",
         "enum": [
@@ -1069,6 +1099,71 @@
         "items": {
           "$ref": "#/components/schemas/NearbyStop"
         }
+      },
+      "EtaReport": {
+        "type": "object",
+        "properties": {
+          "etas": {
+            "$ref": "#/components/schemas/EtaList"
+          },
+          "failed": {
+            "description": "Boarding points whose upstream board did not answer, ordered by `stopId`. **Absent when every board answered.** A reading missing from `etas` for a pole named here has NOT departed — we could not ask; a client holding previous readings keeps them and labels them, and must not report them `gone`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
+          }
+        },
+        "required": [
+          "etas"
+        ]
+      },
+      "EtaBatchEntry": {
+        "type": "object",
+        "properties": {
+          "etas": {
+            "$ref": "#/components/schemas/EtaList"
+          },
+          "failed": {
+            "description": "Boarding points whose upstream board did not answer, ordered by `stopId`. **Absent when every board answered.** A reading missing from `etas` for a pole named here has NOT departed — we could not ask; a client holding previous readings keeps them and labels them, and must not report them `gone`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "The canonical stop or place id **as the request spelled it**, echoed verbatim so a caller can index its own per-target state by it. There is one entry per distinct requested id, always — a missing entry would be unattributable, and a caller would keep that target’s previous readings with nothing to explain why."
+          },
+          "error": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WireError"
+              },
+              {
+                "description": "Present when this id could not be answered at all — the failure a single `/v1/etas/{id}` would have returned as its status. `etas` is then empty and means nothing: branch on this field, never on the empty list. Absent means the id was answered, possibly partially — that is what `failed` is for."
+              }
+            ]
+          }
+        },
+        "required": [
+          "etas",
+          "id"
+        ]
+      },
+      "EtaBatch": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaBatchEntry"
+            }
+          }
+        },
+        "required": [
+          "reports"
+        ]
       },
       "WatchTarget": {
         "type": "object",
@@ -1188,6 +1283,13 @@
               "$ref": "#/components/schemas/Eta"
             },
             "description": "Every reading the server currently holds for the accepted targets, in canonical (stopId, routeId) code-point order. A route with no reading right now is simply absent, exactly as in `/v1/etas/{id}`."
+          },
+          "failed": {
+            "description": "Boarding points whose upstream board did not answer this round, ordered by `stopId` in code-point order — the complete current set, **restated in full on every data frame that carries it**, never a patch. **Absent means there are none**, so a client clears what it was holding: an absent optional cannot say both \"unchanged\" and \"empty\", and clearing is the direction that loses information rather than inventing it (ADR-077 decision 1, ADR-081). A reading missing from the readings for a pole named here has NOT departed — we could not ask — and `retainFailedPoles` in `@nextbus/core` is what a stateful client does about that. Pole ids only: a whole *target* that could not be answered is a `status` frame, and a permanent one is a re-echoed snapshot, because `EtaFailure.stopId` is a boarding point and a target may be a merged place (ADR-073 decision 2).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
           }
         },
         "required": [
@@ -1228,6 +1330,13 @@
               "$ref": "#/components/schemas/EtaRef"
             },
             "description": "Readings the server no longer has — the bus departed, or the target was dropped. Remove them; do not leave the last value on screen."
+          },
+          "failed": {
+            "description": "Boarding points whose upstream board did not answer this round, ordered by `stopId` in code-point order — the complete current set, **restated in full on every data frame that carries it**, never a patch. **Absent means there are none**, so a client clears what it was holding: an absent optional cannot say both \"unchanged\" and \"empty\", and clearing is the direction that loses information rather than inventing it (ADR-077 decision 1, ADR-081). A reading missing from the readings for a pole named here has NOT departed — we could not ask — and `retainFailedPoles` in `@nextbus/core` is what a stateful client does about that. Pole ids only: a whole *target* that could not be answered is a `status` frame, and a permanent one is a re-echoed snapshot, because `EtaFailure.stopId` is a boarding point and a target may be a merged place (ADR-073 decision 2).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
           }
         },
         "required": [

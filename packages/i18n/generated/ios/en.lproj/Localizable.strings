@@ -81,6 +81,7 @@
 "routesLabel" = "routes";
 /* stopCount: plural — see Localizable.stringsdict */
 /* moreRoutes: plural — see Localizable.stringsdict */
+"etasUnavailable" = "Live times unavailable";
 "mapAttribution" = "Map from Lands Department";
 "mapAttributionAction" = "Map from Lands Department — open the copyright notice and disclaimer";
 "keypadBackspace" = "Backspace";
@@ -92,6 +93,7 @@
 "poleSideSouthwest" = "Southwest side";
 "poleSideWest" = "West side";
 "poleSideNorthwest" = "Northwest side";
+"poleTooCloseToTell" = "Another stop a few steps away — check the sign";
 "openInMaps" = "Open in Maps";
 "arrivalsHere" = "Next buses at this stop";
 "save" = "Save";

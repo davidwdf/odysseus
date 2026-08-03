@@ -8,7 +8,7 @@ import {
   stopCardCaption,
   stopCardView,
 } from '../src/stop-card'
-import type { Eta, Locale, NearbyStop } from '../src/types'
+import type { Eta, EtaFailure, Locale, NearbyStop } from '../src/types'
 import { at, specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/stop-card.spec.json.
@@ -40,6 +40,8 @@ interface ViewArgs {
     etas?: Eta[]
     routeCount: number | null
     distanceM: number | null
+    /** Absent in most rows — the wire omits it when every board answered (ADR-077). */
+    failed?: EtaFailure[]
   }
   locale: Locale
   now: string
@@ -76,9 +78,12 @@ describe('stop-card#stopCardCaption', () => {
 describe('stop-card#stopCardView', () => {
   for (const c of cases<ViewArgs, unknown>('stopCardView')) {
     it(c.name, () => {
-      const { stop, etas, routeCount, distanceM } = c.args.input
+      // Destructured field by field rather than spread, deliberately: a row that grew a field the
+      // kernel does not read would otherwise pass silently. That is also how `failed` was found to be
+      // arriving nowhere — the flag stayed false against a row that named a refusing kerb.
+      const { stop, etas, routeCount, distanceM, failed } = c.args.input
       const got = stopCardView(
-        { stop, etas: etas ?? [], routeCount: nn(routeCount), distanceM: nn(distanceM) },
+        { stop, etas: etas ?? [], routeCount: nn(routeCount), distanceM: nn(distanceM), failed },
         optsOf(c.args),
       )
       expect(nulled(got)).toEqual(c.expect)

@@ -22,7 +22,14 @@
 // holder decides what a rider is told, because that sentence needs an i18n key and a product decision. See
 // `LiveEtaUpdate.targets`.
 
-import type { Eta, LiveSession, LiveStatus, SubscribeFrame, WatchTarget } from '@nextbus/core'
+import type {
+  Eta,
+  EtaFailure,
+  LiveSession,
+  LiveStatus,
+  SubscribeFrame,
+  WatchTarget,
+} from '@nextbus/core'
 import { applyLiveFrame, LIVE_SESSION_START } from '@nextbus/core'
 import type { LiveEngine, LiveEtaEngine } from './engine'
 
@@ -51,6 +58,20 @@ export interface LiveEtaUpdate {
    * both engines pair with `closed`.
    */
   targets: readonly WatchTarget[]
+  /**
+   * The boarding points the last data frame said it could not ask about (WP5-14, ADR-081).
+   *
+   * Straight off the session, which is straight off the frame: the kernel's reducer replaces it from
+   * every `snapshot` and `delta` and leaves it alone on a `status`, because the connection's state and the
+   * upstream's are different facts. Empty is the normal case and means "nothing is refusing", not "we have
+   * not been told" — the session resolves that ambiguity so no holder has to.
+   *
+   * A holder passes it into `applyLiveEtasToNearby` / `applyLiveEtasToStopDetail`, which have taken a
+   * failure set since ADR-077 and were being called with nothing until this field existed. That is the
+   * whole reason the field is here: the marker a card draws for an outage was first-paint-only, and this
+   * is what makes it live.
+   */
+  failed: readonly EtaFailure[]
   /**
    * The connection state and the failure behind it. The whole `LiveStatus` rather than the bare
    * `LiveState`, because the two are only useful together: "retrying" is a label, and `error.code` /
@@ -133,6 +154,7 @@ export function createLiveEtaController(deps: LiveEtaControllerDeps): LiveEtaCon
             deps.emit({
               etas: session.etas,
               targets: session.targets,
+              failed: session.failed,
               status: session.status,
             })
           }

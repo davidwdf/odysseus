@@ -5,6 +5,7 @@
 //   ./poll.ts        the poll emulator — HTTP polling wearing the socket protocol. **The default.**
 //   ./memory.ts      the scripted fake — WP5-1's other half and WP5-2's `FakeSocketDataSource` engine
 //   ./socket.ts      the real one: keepalive, reconnect, backoff
+//   ./select.ts      which engine a configured spelling names — the one declaration of it (WP5-6)
 //   ./controller.ts  the subscription lifecycle, in `createLocationController`'s shape
 //
 // A directory rather than one `live.ts` because these are four independent things a reader will want to
@@ -22,6 +23,7 @@ export {
   type LiveEngine,
   type LiveEtaEngine,
   type LiveEtaTransport,
+  type LiveTransportContext,
   systemTimers,
   type Timers,
 } from './engine'
@@ -31,6 +33,13 @@ export {
   type MemoryTransportOptions,
 } from './memory'
 export { createPollTransport, type PollTransportDeps } from './poll'
+export {
+  DEFAULT_LIVE_ENGINE,
+  LIVE_ENGINES,
+  liveEngineFrom,
+  liveTransportFor,
+  liveTransportFromEnv,
+} from './select'
 export {
   browserSocketFactory,
   createSocketTransport,

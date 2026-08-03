@@ -7,9 +7,15 @@
 // injected timers, the host's own `setInterval` under `vi.useFakeTimers()` — because a test that
 // supplied a transport would be testing the thing the default is supposed to be indistinguishable from.
 //
-// One behaviour deliberately differs, and it is asserted too: a round in which nothing changed no longer
-// calls the listener. The shim called it every cadence with a fresh copy of identical data, which is the
-// repaint ADR-008's "update the value only when fresh data arrives" rules out.
+// Two behaviours deliberately differ, and both are asserted here.
+//
+//  · A round in which nothing changed no longer calls the listener. The shim called it every cadence with
+//    a fresh copy of identical data, which is the repaint ADR-008's "update the value only when fresh data
+//    arrives" rules out.
+//  · **A round is one request, not one per target** (WP5-7). The shim — and this engine until WP5-7 —
+//    issued `/v1/etas/:id` per target, so a screen watching six places issued six requests per window
+//    where the screen itself issued one. That was the regression that kept Nearby off this engine, so the
+//    request *count* is now a pinned property rather than a consequence.
 
 import { CLIENT_POLICY_DEFAULTS, type Eta } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,14 +36,27 @@ function eta(stopId: string, hhmm: string): Eta {
   }
 }
 
-/** A `fetch` that records what was asked for and answers from a per-stop table. */
+/** The ids a `/v1/etas?ids=a&ids=b` URL asked about, decoded — the repeated parameter, read back. */
+function idsOf(url: string): string[] {
+  return new URL(url).searchParams.getAll('ids')
+}
+
+/**
+ * A `fetch` that records what was asked for and answers from a per-stop table.
+ *
+ * The body is an `EtaBatch` — one entry per requested id, each an `EtaReport` (`{ etas }` with `failed`
+ * **absent**, which is what the endpoint serves when every board answered, ADR-073) plus the id it
+ * answers for. Spelled out here rather than hidden in a helper because this file's whole subject is the
+ * *default* engine talking to the real endpoint shape: a stub that answered a bare array, or that
+ * omitted `id`, would keep passing against a client that had stopped reading the field.
+ */
 function stubFetch(answers: Map<string, Eta[]>) {
   const urls: string[] = []
   const fetchImpl = (async (input: string | URL | Request) => {
     const url = String(input)
     urls.push(url)
-    const stopId = [...answers.keys()].find((id) => url.includes(encodeURIComponent(id)))
-    return new Response(JSON.stringify(stopId ? (answers.get(stopId) ?? []) : []), {
+    const reports = idsOf(url).map((id) => ({ id, etas: answers.get(id) ?? [] }))
+    return new Response(JSON.stringify({ reports }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     })
@@ -53,7 +72,7 @@ afterEach(() => {
 })
 
 describe('EdgeClient.watch() with no transport configured', () => {
-  it('issues one /v1/etas request per target and hands the listener a flat list', async () => {
+  it('issues ONE /v1/etas request for the whole round and hands the listener a flat list', async () => {
     const answers = new Map([
       [STOP_A, [eta(STOP_A, '10:02')]],
       [STOP_B, [eta(STOP_B, '10:09')]],
@@ -64,25 +83,55 @@ describe('EdgeClient.watch() with no transport configured', () => {
     const sub = client.watch([{ stopId: STOP_A }, { stopId: STOP_B }], (etas) => seen.push(etas))
     await vi.advanceTimersByTimeAsync(0)
 
-    // The same endpoint the shim called — `/v1/etas/:id`, one request per target, not the whole
-    // `/v1/stop/:id` the screen's `useQuery` fetches (D6: the payload gets *smaller*).
-    expect(urls).toEqual([
-      'http://localhost:8787/v1/etas/KMB%3AA',
-      'http://localhost:8787/v1/etas/KMB%3AB',
-    ])
+    // The repeated parameter, percent-encoded per id — `,` is a legal `idchar`, so a delimited list
+    // could not be parsed back (see the `ids` parameter in `@nextbus/contract`). And it is the ETA
+    // endpoint rather than the whole `/v1/stop/:id` the screen's `useQuery` fetches: the payload gets
+    // *smaller* on the live path, not larger.
+    expect(urls).toEqual(['http://localhost:8787/v1/etas?ids=KMB%3AA&ids=KMB%3AB'])
     expect(seen.length).toBe(1)
     expect(seen[0]?.map((e) => e.stopId)).toEqual([STOP_A, STOP_B])
     sub.unsubscribe()
   })
 
-  it('narrows to routes when the target does', async () => {
-    const { urls, fetchImpl } = stubFetch(new Map([[STOP_A, []]]))
+  it('makes ONE request per window for a six-place screen, which is what Nearby needed', async () => {
+    // **The acceptance criterion of WP5-7, as an assertion.** Six is `MAX_STOPS` in
+    // `apps/edge/src/nearby.ts` — the number of cards Nearby renders — and the per-target fan-out this
+    // replaced would make this number 6 and then 12. The screen fetches `/v1/nearby` once per window, so
+    // anything above 1 here is a request-count regression a rider pays for a feature they cannot see.
+    const ids = ['KMB:1', 'KMB:2', 'KMB:3', 'CTB:4', 'GMB:5', 'P:KMB:6+CTB:7']
+    const { urls, fetchImpl } = stubFetch(new Map(ids.map((id) => [id, [eta(id, '10:02')]])))
     const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
-    const sub = client.watch([{ stopId: STOP_A, routeIds: [ROUTE_1] }], () => {})
+    const sub = client.watch(
+      ids.map((stopId) => ({ stopId })),
+      () => {},
+    )
     await vi.advanceTimersByTimeAsync(0)
-    expect(urls).toEqual([
-      `http://localhost:8787/v1/etas/KMB%3AA?routes=${encodeURIComponent(ROUTE_1)}`,
-    ])
+    expect(urls.length).toBe(1)
+    // Every id in one request, and the `+` of the place id escaped — unescaped it would arrive as a
+    // space, which is not an `idchar`, and the entry would come back `bad_request`.
+    expect(idsOf(urls[0] as string).sort()).toEqual([...ids].sort())
+    expect(urls[0]).toContain(encodeURIComponent('P:KMB:6+CTB:7'))
+
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
+    expect(urls.length).toBe(2)
+    sub.unsubscribe()
+  })
+
+  it('narrows to routes when the target does — after the batch answers, not in the request', async () => {
+    // The batch carries no per-id `routes=`: there is no delimiter safe under the id grammar for a
+    // nested list. So it answers every route and `narrowEtasToRoutes` — the kernel rule the edge applies
+    // to `/v1/etas/:id?routes=` — runs one hop later. The observable property is the listener's list,
+    // which is what the socket engine (narrowing server-side) produces too.
+    const ROUTE_6 = 'KMB:6:outbound:1'
+    const { urls, fetchImpl } = stubFetch(
+      new Map([[STOP_A, [eta(STOP_A, '10:02'), { ...eta(STOP_A, '10:09'), routeId: ROUTE_6 }]]]),
+    )
+    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const seen: Eta[][] = []
+    const sub = client.watch([{ stopId: STOP_A, routeIds: [ROUTE_1] }], (etas) => seen.push(etas))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(urls).toEqual(['http://localhost:8787/v1/etas?ids=KMB%3AA'])
+    expect(seen.at(-1)?.map((e) => e.routeId)).toEqual([ROUTE_1])
     sub.unsubscribe()
   })
 
@@ -167,20 +216,24 @@ describe('EdgeClient.watch() with no transport configured', () => {
   })
 
   it('keeps the other targets alive when one fails, exactly as the shim did', async () => {
+    // **A target-level failure is an entry, and the request is a 200** (WP5-7). It used to be a 504 on
+    // that target's own request; now the batch answers about both ids and names the failure on one of
+    // them, because failing the whole request would throw away the readings of the id that answered —
+    // the same judgement ADR-073 made one level down for a place whose second kerb refused.
     const urls: string[] = []
     const fetchImpl = (async (input: string | URL | Request) => {
       const url = String(input)
       urls.push(url)
-      if (url.includes(encodeURIComponent(STOP_B))) {
-        return new Response(
-          JSON.stringify({ code: 'upstream_timeout', retryable: true, message: 'slow' }),
-          {
-            status: 504,
-            headers: { 'content-type': 'application/json' },
-          },
-        )
-      }
-      return new Response(JSON.stringify([eta(STOP_A, '10:02')]), {
+      const reports = idsOf(url).map((id) =>
+        id === STOP_B
+          ? {
+              id,
+              etas: [],
+              error: { code: 'upstream_timeout', message: 'slow', retryable: true },
+            }
+          : { id, etas: [eta(STOP_A, '10:02')] },
+      )
+      return new Response(JSON.stringify({ reports }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })
@@ -193,7 +246,43 @@ describe('EdgeClient.watch() with no transport configured', () => {
     // asked again next round rather than dropped — `retryable: true` says the same request may work later.
     expect(seen.at(-1)?.map((e) => e.stopId)).toEqual([STOP_A])
     await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
-    expect(urls.filter((u) => u.includes(encodeURIComponent(STOP_B))).length).toBe(2)
+    expect(urls.filter((u) => idsOf(u).includes(STOP_B)).length).toBe(2)
+    sub.unsubscribe()
+  })
+
+  it('a whole-request failure is one status per target, and no reading departs', async () => {
+    // The one failure shape only this engine can have — the phone is offline, or the Worker 502s — and
+    // the shard cannot produce it at all, because it calls the read path per target inside the object.
+    // So it is fanned back out to one failure per target of the request: collapsing it to one would make
+    // the two engines emit a different number of `status` frames for identical circumstances, which is
+    // the byte-identity WP5-1 exists to assert.
+    let offline = false
+    const urls: string[] = []
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = String(input)
+      urls.push(url)
+      if (offline) throw new TypeError('Network request failed')
+      const reports = idsOf(url).map((id) => ({ id, etas: [eta(id, '10:02')] }))
+      return new Response(JSON.stringify({ reports }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const seen: Eta[][] = []
+    const sub = client.watch([{ stopId: STOP_A }, { stopId: STOP_B }], (etas) => seen.push(etas))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(seen.at(-1)?.map((e) => e.stopId)).toEqual([STOP_A, STOP_B])
+
+    offline = true
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
+    // **Nothing departed.** A failed round is not a departure (ADR-073), so the listener is not called
+    // again at all — the readings it holds are still the truth we have, ageing by the operator's clock.
+    expect(seen.length).toBe(1)
+    // And the round is retried rather than the targets dropped: the failure is retryable.
+    offline = false
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
+    expect(idsOf(urls.at(-1) as string)).toEqual([STOP_A, STOP_B])
     sub.unsubscribe()
   })
 

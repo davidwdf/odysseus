@@ -2,6 +2,9 @@ import type { SearchIndex } from './search'
 import type {
   ClientPolicy,
   Eta,
+  EtaBatch,
+  EtaFailure,
+  EtaReport,
   LatLng,
   NearbyStop,
   RouteDetail,
@@ -20,7 +23,27 @@ export interface Subscription {
 // Two declarations of a shape that travels are two declarations that can disagree (ADR-052).
 // `Subscription` and `EtaListener` stay here: they are function types, which no schema describes.
 
-export type EtaListener = (etas: Eta[]) => void
+/**
+ * What a subscription hands a screen: every current reading, and the boarding points it could not ask
+ * about (WP5-14, ADR-081).
+ *
+ * **`failed` is a trailing optional parameter, which is what makes it not a change to the seam.** ADR-004
+ * fixes `watch()` as `(targets, onUpdate) => Subscription`, and every listener already written stays
+ * assignable — a one-parameter function is a valid two-parameter one in TypeScript, in Swift with a
+ * default, and in Kotlin. So no caller *had* to change, and the two that wanted to (the Nearby and Place
+ * hooks) pass it straight into the kernel's merge helpers, which have taken a failure set since ADR-077.
+ *
+ * Absent and empty mean the same thing here, deliberately: a listener that received `undefined` and one
+ * that received `[]` must render identically, because on the wire the field is omitted when empty and a
+ * fake transport is free to materialise it. `StopCardView.incomplete` reads length, never presence, for
+ * exactly that reason (ADR-077 decision 4).
+ *
+ * **A round can call this with unchanged readings and a changed failure set**, which is new. The
+ * identity guard in `EdgeClient.watch` used to skip any update whose `etas` array was the same object;
+ * it now also asks whether the failure set moved, or the one round that matters most — a kerb starting to
+ * refuse while every other reading stands still — would be swallowed at the door.
+ */
+export type EtaListener = (etas: Eta[], failed?: EtaFailure[]) => void
 
 /**
  * What a caller may tell `watch()` about how to run, as opposed to what to watch.
@@ -67,8 +90,44 @@ export interface DataSource {
   getRoute(routeId: string): Promise<RouteDetail>
   /** A stop and every route serving it, each with its next arrival. */
   getStop(stopId: string): Promise<StopDetail>
-  /** Live ETAs for a stop (optionally filtered to specific routes). */
-  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]>
+  /**
+   * Live ETAs for a stop (optionally filtered to specific routes), **and the boarding points whose
+   * upstream board would not answer** (ADR-073).
+   *
+   * It returns an `EtaReport` rather than a bare `Eta[]`, and the extra field is not a diagnostic:
+   * it is what makes the list interpretable. An empty `etas` used to mean two different things — no
+   * buses due, or nobody would tell us — and a stateful caller has to tell them apart, because
+   * treating the second as the first reports every reading it holds as departed. `retainFailedPoles`
+   * in `@nextbus/core` is the rule for that, and both live engines apply it.
+   *
+   * `failed` is absent when every board answered, which is the common case and the cheap one.
+   */
+  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport>
+  /**
+   * The same answer as `getEtas`, for up to `ETAS_BATCH_MAX_IDS` ids, in **one** request (WP5-7).
+   *
+   * **Why the seam grew a second read of the same data.** A polling live engine issues one request per
+   * target per cadence. That is invisible while a screen watches one stop, and it is a regression the
+   * moment one watches six: Nearby fetched `/v1/nearby` once per window and would have fetched
+   * `/v1/etas/:id` six times, which is why `applyLiveEtasToNearby` sat corpus-pinned with no consumer
+   * for a whole wave. One request per round is what makes Nearby a live adopter at all.
+   *
+   * On the seam rather than private to `EdgeClient` for the reason `getEtas` is: **no screen calls
+   * either.** Both exist for the poll emulator, and an iOS or Android port that reimplements that
+   * emulator needs this call declared where it reads the rest of the seam (ADR-051). Its readers are
+   * `EdgeClient` itself and `createPollTransport`.
+   *
+   * **No route narrowing, deliberately.** A per-id route list would need a nested delimiter and there
+   * is no safe character for one (`,` is a legal `idchar`), so the batch answers every route at every
+   * id and a caller that wants fewer applies `narrowEtasToRoutes` — the same kernel rule the edge
+   * applies to `?routes=`. One declaration, two call sites, and the socket engine goes on narrowing
+   * server-side without the two engines' output diverging.
+   *
+   * There is **one entry per distinct id**, in code-point order, and an entry whose `error` is set
+   * carries an empty `etas` that means nothing. Branch on `error`, never on the empty list — that is
+   * the same distinction ADR-073 exists to preserve, one level up.
+   */
+  getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
   /** Subscribe to live updates for the given targets. */
   watch(targets: WatchTarget[], onUpdate: EtaListener, opts?: WatchOptions): Subscription
   /**

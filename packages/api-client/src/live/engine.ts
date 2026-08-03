@@ -11,8 +11,9 @@
 // around `vi.useFakeTimers`, which patches globals for the whole file and cannot express "advance this
 // transport but not that one". Two named methods a test can implement in six lines can.
 
-import type { ClientFrame, ServerFrame } from '@nextbus/core'
-import type { LiveTransport } from '@nextbus/ports'
+import type { ClientFrame, EtaBatch, ServerFrame } from '@nextbus/core'
+import type { Clock, LiveTransport } from '@nextbus/ports'
+import type { Endpoints } from '../endpoint'
 
 /**
  * Which engine is producing the frames a screen is being fed.
@@ -41,6 +42,39 @@ export type LiveEtaTransport = LiveTransport<ServerFrame, ClientFrame>
  */
 export interface LiveEtaEngine extends LiveEtaTransport {
   readonly engine: LiveEngine
+}
+
+/**
+ * Everything a transport factory could need to build itself, so the option is one function.
+ *
+ * The poll emulator needs `getEtas` and a cadence; the socket needs a URL; both need a clock. Handing
+ * over the whole `EdgeClient` instead would let a transport reach for a second endpoint, which is how a
+ * "transport" grows into a second data layer.
+ *
+ * Declared here rather than beside `EdgeClientOptions` since WP5-6: `./select.ts` builds a transport
+ * from this shape and `index.ts` imports `./select`, so leaving the declaration in `index.ts` would
+ * make the two modules import each other. Re-exported from the package root, where it always was.
+ */
+export interface LiveTransportContext {
+  endpoints: Endpoints
+  /**
+   * The client's own `/v1/etas?ids=…` call — **one request for a whole round** (WP5-7).
+   *
+   * It replaced a per-target `getEtas` rather than joining it, and the replacement is the point: two
+   * fan-out shapes for one round would mean the rules below it — retention, the drop, the failure
+   * ordering — were implemented twice, with a test able to exercise the branch production never takes.
+   * A single-target round asks for one id, which is a stable, shareable colo-cache key just as
+   * `/v1/etas/:id` was.
+   *
+   * An `EtaBatch` and not `Eta[][]` (ADR-073, one level up). The transport needs the `failed` half per
+   * id: without it an empty list from an outage is indistinguishable from a stop with no buses, and the
+   * diff it feeds reports every reading departed. It needs the per-entry `error` half for the same
+   * reason at the target level — a stale favourite must not look like a stop that went quiet.
+   */
+  getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
+  /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
+  pollMs: number
+  clock: Clock
 }
 
 /**

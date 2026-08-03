@@ -13,7 +13,17 @@
       // Declared rather than `cache: false` for the reason `packages/contract/turbo.json` gives: stating
       // what a task reads is more useful to the next reader than switching the cache off, and the cache
       // keeps working.
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/src/*.ts"]
+      //
+      // The `fixtures/` glob is WP5-5's: `test/live-rounds.test.ts` reads
+      // `@nextbus/core/fixtures/live-rounds.json`, whose whole purpose is that `apps/edge` reads the same
+      // bytes. A row edited to describe new behaviour with this suite replaying a cached pass would be
+      // ADR-070's failure in the one place it hurts most — the two engines would stop being compared and
+      // the build would stay green.
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/core/src/*.ts",
+        "$TURBO_ROOT$/packages/core/fixtures/*"
+      ]
     }
   }
 }

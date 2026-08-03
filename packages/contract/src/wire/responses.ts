@@ -9,103 +9,20 @@
 
 import { z } from 'zod'
 import { NearbyStopSchema, RouteDetailSchema, StopDetailSchema } from './detail'
+// The failure taxonomy moved to `./errors` in ADR-077 — see that file's header for the cycle that
+// forced it (`detail.ts` needs `EtaFailure`, and this module imports `detail.ts`). Re-exported below
+// so every existing importer of `ERROR_CODES` / `WireErrorSchema` / `ErrorResponseSchema` /
+// `EtaFailureSchema` from here keeps working, and so `@nextbus/contract`'s public surface is unchanged.
+import {
+  ERROR_CODES,
+  ErrorCodeSchema,
+  ErrorResponseSchema,
+  EtaFailureSchema,
+  WireErrorSchema,
+} from './errors'
 import { EtaSchema } from './eta'
 import { ClientPolicySchema } from './policy'
 import { SearchIndexSchema } from './search'
-
-/**
- * The error taxonomy (ADR-064).
- *
- * **`x-unknown-tolerant` matters more here than anywhere else in the contract.** This vocabulary
- * will grow — `rate_limited` is the obvious next member — and an error response is precisely the
- * payload a client is least able to recover from by throwing. That is also why `retryable` rides
- * on the wire as its own boolean instead of being a table a client compiles in: a client that has
- * never heard of a code still knows what to do with it.
- */
-export const ErrorCodeSchema = z
-  .enum(['bad_request', 'not_found', 'internal', 'upstream_unavailable', 'upstream_timeout'])
-  .meta({ id: 'ErrorCode', 'x-unknown-tolerant': true })
-
-/**
- * The status code and the retry advice that belong to each member — **one table, not three**.
- *
- * The defect this replaces was not "the envelope lacks a code". It was that the status code and
- * the meaning were chosen separately at each `fail()` call site, so a malformed id left the Worker
- * as `502` — which reads as *retryable* to every HTTP client and cache in the path. An iOS Widget
- * holding a favourite whose id no longer parses would retry it forever, and no amount of adding
- * `code` to the body fixes that, because the Widget's URLSession sees the status line first.
- * Binding the two together here is what makes them one decision: `apps/edge/src/errors.ts` takes a
- * code and reads the status off this table, so a new error path physically cannot pick a status
- * that disagrees with its meaning.
- *
- * `retryable` is "may the same request succeed later?", which is the question a Widget is actually
- * asking — *prune this favourite permanently, or try again next refresh?* So `internal` is
- * retryable: a fault on our side is not evidence that the rider's saved stop is gone, and pruning
- * their favourites over our own bug is the worse failure.
- *
- * `satisfies Record<z.infer<typeof ErrorCodeSchema>, …>` is the drift gate — adding a member to
- * the enum without a status is a typecheck error, and so is a table entry with no enum member.
- */
-export const ERROR_CODES = {
-  bad_request: { status: 400, retryable: false },
-  not_found: { status: 404, retryable: false },
-  internal: { status: 500, retryable: true },
-  upstream_unavailable: { status: 502, retryable: true },
-  upstream_timeout: { status: 504, retryable: true },
-} as const satisfies Record<z.infer<typeof ErrorCodeSchema>, { status: number; retryable: boolean }>
-
-/**
- * A failure, as a body — the three fields that say what went wrong and what to do about it.
- *
- * **Why this is not simply `ErrorResponse`.** Since WP5-1 the same taxonomy has to travel two ways:
- * as an HTTP response body, and as `StatusFrame.error` on the `/v1/live` socket. Two hand-written
- * declarations of "a failure" would fork the moment one of them gained a field — and they would fork
- * *quietly*, because each side has its own tests and neither would notice the other had moved. So the
- * failure body is declared once here, beside the `ERROR_CODES` table it is classified by, and
- * `ErrorResponse` is defined below as *exactly this plus the deprecated duplicate*. Saying that in the
- * type is better than saying it in a comment.
- *
- * It lives in this file rather than in `wire/live.ts` for a mechanical reason worth stating: the
- * socket module needs `WireError`, and `WireError` needs `ErrorCodeSchema`, which is here with the one
- * table that binds a code to its status. Declaring it there instead would make `responses.ts` and
- * `live.ts` import each other, and an ESM cycle between two modules of top-level `const`s does not
- * fail loudly — it evaluates one of them to `undefined`, which surfaces as a schema silently missing a
- * field. The dependency runs one way: `live.ts` reads this file.
- */
-export const WireErrorSchema = z
-  .object({
-    code: ErrorCodeSchema,
-    message: z.string().meta({
-      description:
-        'Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it.',
-    }),
-    retryable: z.boolean().meta({
-      description:
-        'Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry.',
-    }),
-  })
-  .meta({ id: 'WireError' })
-
-/**
- * The error envelope every non-2xx JSON response carries: a `WireError`, plus one field kept alive
- * for older clients.
- *
- * `error` is **deprecated and still served**: ADR-052 §5 makes additive free and removal breaking,
- * so `code`/`message`/`retryable` land alongside it and it is retired in a later, gated change
- * (ADR-064 says which one). It is a duplicate of `message` for as long as it exists — do not read
- * both, and do not parse either. `code` is the field to branch on.
- *
- * `.extend()` emits a flat object rather than an `allOf` of the two, so the published component is
- * unchanged in content — a generator sees the same four properties it always did. What changed is that
- * `code`, `message` and `retryable` now have one declaration instead of two, and the socket's
- * `StatusFrame.error` reads that one.
- */
-export const ErrorResponseSchema = WireErrorSchema.extend({
-  error: z.string().meta({
-    deprecated: true,
-    description: 'Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`.',
-  }),
-}).meta({ id: 'ErrorResponse' })
 
 /**
  * `GET /v1/health` — the operational truth about one isolate (ADR-055).
@@ -135,12 +52,125 @@ export const RootResponseSchema = z
 export const EtaListSchema = z.array(EtaSchema).meta({ id: 'EtaList' })
 export const NearbyListSchema = z.array(NearbyStopSchema).meta({ id: 'NearbyList' })
 
+/**
+ * What `/v1/etas/:id` answers: the readings we have, and the boarding points we could not ask about.
+ *
+ * **This replaced a bare `Eta[]`, and that is a breaking change made on purpose** (ADR-073, ADR-052 §5).
+ * The array could not distinguish "this stop has no buses" from "every board refused us": both are
+ * `200 []`, and a delta protocol built on top then reports every reading `gone` — *"a failed round is
+ * not a departure"* defeated one layer below where both engines enforce it. No additive shape fixes
+ * that, because the missing information is about the readings that are *absent*, and an array has
+ * nowhere to put it.
+ *
+ * `failed` is **omitted when empty**, not sent as `[]`. Same reason `Eta.remarkKind` is absent rather
+ * than `info`: "every board answered" and "we have nothing to say about failures" should not be the
+ * same bytes on the wire, and the common case then costs nothing — which matters here, because this is
+ * the payload the poll emulator's batch is assembled from, once per cadence (WP5-7).
+ *
+ * The list is ordered by `stopId` in code-point order, like every other list the live protocol
+ * produces (`packages/core/src/live.ts`'s header, D1). Both engines turn each entry into one
+ * `status: 'retrying'` frame, so an unordered list would make the two engines' frame sequences differ
+ * for identical data — the one property the scenario corpus exists to assert.
+ */
+export const EtaReportSchema = z
+  .object({
+    etas: EtaListSchema,
+    failed: z
+      .array(EtaFailureSchema)
+      .optional()
+      .describe(
+        'Boarding points whose upstream board did not answer, ordered by `stopId`. **Absent when every board answered.** A reading missing from `etas` for a pole named here has NOT departed — we could not ask; a client holding previous readings keeps them and labels them, and must not report them `gone`.',
+      ),
+  })
+  .meta({ id: 'EtaReport' })
+
+/**
+ * How many ids one `/v1/etas?ids=…` request may name (WP5-7).
+ *
+ * Twelve, and it is deliberately the same number as `EtaHub`'s `LIVE_MAX_TARGETS_PER_CONNECTION`,
+ * because it answers the same question: how many places does one client watch at once. `/v1/nearby`
+ * serves six; the largest legitimate set is a Favourites screen.
+ *
+ * **The cap is on the wire rather than inside the Worker because the caller has to chunk at it.** The
+ * poll emulator splits a subscription into batches of this size, and a client compiled against a
+ * different number would either waste a request or take a `400` it could have avoided — the same
+ * reason `LIVE_SHARD_COUNT` is a server-side constant and this one is not.
+ *
+ * Over the cap is a **`400`, never a truncation.** An id list *is* the question being asked, so
+ * answering a shorter one silently is ADR-008's no-silent-filter rule with the diagnostic removed: the
+ * caller would hold that target's previous readings for ever with nothing to say they had stopped being
+ * refreshed. `/v1/nearby` may clamp its `radius` because a clamped radius still answers the question;
+ * a shortened id list does not.
+ */
+export const ETAS_BATCH_MAX_IDS = 12
+
+/**
+ * One id's answer inside a batch: exactly an `EtaReport`, plus the id it answers for and the failure
+ * that came instead of one.
+ *
+ * **A superset of `EtaReport`, by extension rather than by restatement**, and that is the property the
+ * whole shape exists to have: `/v1/etas?ids=X` must be byte-identical to `/v1/etas/X` in its `etas` and
+ * its `failed`, so everything that already consumes an `EtaReport` — `retainFailedPoles`,
+ * `applyLiveEtasToNearby`, the poll emulator's per-target bookkeeping — takes an entry unchanged and
+ * the batch cannot quietly become a second read path. `.extend()` also emits a **flat** component
+ * rather than an `allOf`, which is the `ErrorResponseSchema` precedent and the shape ADR-067's native
+ * generators handle best.
+ *
+ * **`id` is the id as asked, verbatim, and it is not decoration.** A reading's `stopId` is a *pole*; a
+ * requested id may be a `P:` place spanning several poles, or a bare pole id that the dataset's alias
+ * table promotes to its place. So the map from "the id I asked about" to "the poles that answered"
+ * lives in the dataset and no client holds a copy — which is why a flat list of readings across all
+ * requested ids would be *undecodable* rather than merely awkward, and why every requested id gets an
+ * entry even when it has nothing to report.
+ *
+ * `error` is the wire form of the failure a single `/v1/etas/{id}` would have answered with as its
+ * status: a malformed id, a pole that has left the dataset. It is present **instead of** readings —
+ * when it is set, `etas` is empty and carries no meaning, so a caller branches on this field and never
+ * on the empty list. `retryable: false` means stop asking about this id, exactly as it does everywhere
+ * else in the taxonomy (ADR-064).
+ */
+export const EtaBatchEntrySchema = EtaReportSchema.extend({
+  id: z
+    .string()
+    .describe(
+      'The canonical stop or place id **as the request spelled it**, echoed verbatim so a caller can index its own per-target state by it. There is one entry per distinct requested id, always — a missing entry would be unattributable, and a caller would keep that target’s previous readings with nothing to explain why.',
+    ),
+  error: WireErrorSchema.optional().describe(
+    'Present when this id could not be answered at all — the failure a single `/v1/etas/{id}` would have returned as its status. `etas` is then empty and means nothing: branch on this field, never on the empty list. Absent means the id was answered, possibly partially — that is what `failed` is for.',
+  ),
+}).meta({ id: 'EtaBatchEntry' })
+
+/**
+ * What `/v1/etas?ids=…` answers: one entry per distinct requested id, ordered by `id`.
+ *
+ * An object rather than a bare array, unlike `/v1/nearby`. ADR-073 had to make `/v1/etas/{id}` a
+ * breaking change precisely because an array has nowhere to put a second fact, and a new endpoint is
+ * the cheapest possible moment not to repeat that.
+ *
+ * **Ordered, deduplicated and complete.** `reports.length` is the number of *distinct* ids asked for,
+ * and the order is those ids sorted in code-point order — the same total order `acceptTargets` puts its
+ * accepted set in (`packages/core/src/live.ts`, D1), so the batching engine and the socket engine
+ * cannot serialize one round differently. Two ids that resolve to the *same place* stay two entries:
+ * `KMB:A` and `P:KMB:A+CTB:B` are two questions with one answer, and the caller asked both.
+ */
+export const EtaBatchSchema = z
+  .object({ reports: z.array(EtaBatchEntrySchema) })
+  .meta({ id: 'EtaBatch' })
+
 /** One request parameter, in the subset of OpenAPI's parameter object we actually use. */
 export interface WireParam {
   name: string
   in: 'path' | 'query'
   required: boolean
-  type: 'string' | 'number'
+  /**
+   * `'string[]'` means a **repeated** query parameter (`?ids=a&ids=b`) — OpenAPI's
+   * `style: form, explode: true`.
+   *
+   * A member of its own rather than a `'string'` with prose, because the two serialize differently and
+   * a generator has to know which: a comma-joined string is not a legal spelling of this parameter.
+   * See the `ids` parameter of `getStopEtasBatch` for why the delimiter cannot be a character at all.
+   */
+  type: 'string' | 'number' | 'string[]'
   description: string
 }
 
@@ -226,8 +256,8 @@ export const WIRE_ENDPOINTS = [
     operationId: 'getStopEtas',
     path: '/v1/etas/{id}',
     summary:
-      'Live arrivals for a stop or place, one per route+direction at each boarding pole (WP5-9): service-type variants at one pole collapse to the soonest, and a line boarding at two poles of a place is two readings, distinguished by `stopId`.',
-    response: EtaListSchema,
+      'Live arrivals for a stop or place, one per route+direction at each boarding pole (WP5-9): service-type variants at one pole collapse to the soonest, and a line boarding at two poles of a place is two readings, distinguished by `stopId`. Since ADR-073 the body is an **object**, not an array: `failed` names the boarding points whose upstream board did not answer, so an outage is distinguishable from a stop with no buses.',
+    response: EtaReportSchema,
     params: [
       {
         name: 'id',
@@ -241,7 +271,25 @@ export const WIRE_ENDPOINTS = [
         in: 'query',
         required: false,
         type: 'string',
-        description: 'Comma-separated canonical route ids to restrict the fan-out to.',
+        description:
+          'Comma-separated canonical route ids to restrict the **readings** to. It filters the response and never the upstream fan-out — a KMB board is one call for every route at the pole, so there is nothing per-route to narrow — and it never filters `failed` (ADR-073). The description here used to say "restrict the fan-out to", which was a claim about cost that the code does not make.',
+      },
+    ],
+  },
+  {
+    operationId: 'getStopEtasBatch',
+    path: '/v1/etas',
+    summary:
+      'Live arrivals for up to 12 stops or places in one request — the same answer `/v1/etas/{id}` gives each of them, in one round trip (WP5-7). It exists because a screen watching six places through the polling live engine issued six requests per window where the screen itself issued one, which is a regression no rider would accept for a feature they cannot see. Every id goes through the same producer, so an entry is byte-identical to the single-id response, and the edge coalescer makes a pole shared by two ids one upstream call rather than two (ADR-057).',
+    response: EtaBatchSchema,
+    params: [
+      {
+        name: 'ids',
+        in: 'query',
+        required: true,
+        type: 'string[]',
+        description:
+          'Canonical stop or place ids, **repeated** (`?ids=a&ids=b`), each percent-encoded. Repeated and not comma-separated, and that is a grammar constraint rather than a preference: `,` is a legal `idchar` (`ids/id-grammar.abnf`) and a query string decodes `%2C` before any delimiter could be split on, so a comma list cannot be parsed back unambiguously — the parameter repetition is the only separator not drawn from the id alphabet. A `+` in a place id must be `%2B` or it arrives as a space and the id is rejected. At most 12 ids (`ETAS_BATCH_MAX_IDS`); more is a 400. Duplicates collapse to one entry.',
       },
     ],
   },
@@ -266,3 +314,11 @@ export const WIRE_ENDPOINTS = [
   response: z.ZodType
   params: readonly WireParam[]
 }>
+
+export {
+  ERROR_CODES,
+  ErrorCodeSchema,
+  ErrorResponseSchema,
+  EtaFailureSchema,
+  WireErrorSchema,
+} from './errors'

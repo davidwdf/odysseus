@@ -25,8 +25,12 @@ order, or jump to what you need:
 
 ## The 60-second summary
 
-- **One codebase, three targets.** Expo (React Native + React Native for Web) ships an
-  installable **PWA first**, then iOS/Android apps later **from the same code** — no rewrite.
+- **One spec, three renderers** ([ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels),
+  2026-08-03 — supersedes the earlier *"one codebase, three targets"*). An installable **PWA ships
+  first**; iOS and Android are **hand-written** (Swift / Kotlin), idiomatic for their platform, and all
+  three renderers are measured against the same executable spec — the wire contract, the corpus, the
+  generated tokens and strings, and the component specs. Web is moving from Expo/`react-native-web` to
+  **plain React**; the plan is [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md).
 - **Open data, no API keys.** Every HK bus operator publishes free real-time arrival APIs.
   We normalize them into one canonical model.
 - **Cloudflare edge stack.** Compute runs close to Hong Kong and to the upstream APIs, which

@@ -16,8 +16,18 @@ import { ERROR_CODES, WIRE_ENDPOINTS } from './wire/responses'
 /**
  * Bumped only for a **breaking** change, alongside the `oasdiff` gate and an ADR (ADR-052 §5).
  * Additive-optional changes are free and must not touch this.
+ *
+ * **2.0.0 — `/v1/etas/{id}` answers an object where it answered an array** (ADR-073). That is a type
+ * change, which §5 classifies as breaking and pairs with "a deprecation window in which both shapes
+ * are served". The window here is **empty, and the reason is a fact rather than an exemption**: WP0-5
+ * has not happened, so this document has never been published anywhere a generator could read it and
+ * no client of any kind consumes `/v1/etas` except the two in this repo. Serving both shapes would
+ * leave a dead array form in the contract for a native generator to emit against nobody. The window
+ * stops being free the day the Worker is deployed, which is the argument for taking the change now
+ * rather than later. §5's `oasdiff` gate still does not exist (recorded in ADR-052 and again here);
+ * what stands in for it is this constant, the ADR, and `wire-conformance.test.ts`.
  */
-export const CONTRACT_VERSION = '1.0.0'
+export const CONTRACT_VERSION = '2.0.0'
 
 /**
  * The documented failure statuses, derived from `ERROR_CODES` so the OpenAPI document cannot list
@@ -54,7 +64,18 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           in: p.in,
           required: p.required,
           description: p.description,
-          schema: { type: p.type },
+          // A repeated parameter (`?ids=a&ids=b`) is a different *serialization*, not just a different
+          // type, so it needs `style`/`explode` and not only an array schema. Both are spelled out
+          // even though `explode: true` is already the default for `style: form`: a generator that
+          // reads only one of the two must not be able to emit a comma-joined string, which for
+          // `/v1/etas?ids=` would be unparseable by construction (see that parameter's description).
+          ...(p.type === 'string[]'
+            ? {
+                schema: { type: 'array', items: { type: 'string' } },
+                style: 'form',
+                explode: true,
+              }
+            : { schema: { type: p.type } }),
         })),
         responses: {
           '200': {

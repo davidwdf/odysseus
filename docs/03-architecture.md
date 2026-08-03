@@ -40,7 +40,8 @@ interface DataSource {
   getNearby(lat, lng, radiusM): Promise<StopWithEtas[]>   // mostly on-device in v1
   getRoute(routeId): Promise<RouteDetail>                 // static + ETAs; carries `reverse?` (ADR-046)
   getStop(stopId): Promise<StopDetail>                    // static + ETAs
-  getEtas(stopId, routeIds?): Promise<Eta[]>              // live
+  getEtas(stopId, routeIds?): Promise<EtaReport>          // live: { etas, failed? } (ADR-073)
+  getEtasBatch(ids): Promise<EtaBatch>                    // one round in one request (ADR-079)
   watch(targets): Subscription                            // a frame protocol over a pluggable transport
   getClientPolicy(): Promise<ClientPolicy>                // the numbers the server owns (ADR-053)
 }
@@ -53,6 +54,12 @@ the **default transport is a poll emulator** — HTTP polling on a timer, wearin
 engine answered: the listener's `Eta[]` is canonically ordered by the kernel, so the two are
 byte-identical over identical data, and `apps/mobile/lib/useLiveEtas.ts` writes the result through to
 the query cache on the key `useQuery` already owns (ADR-058 keeps working).
+
+Since WP5-14 (ADR-081) a listener also receives **`failed`** — the boarding points that round could not
+be asked about — so a card can say *"Live times unavailable"* on the live path and not only on its first
+HTTP paint. The rule that makes it work is worth knowing before touching either engine: **a round whose
+failure set moved is news even when no reading did**, because an outage is precisely the round in which
+nothing changes.
 
 ### The line between the server and the client (ADR-053)
 
@@ -104,12 +111,21 @@ working perfectly on defaults, which is the design *and* the failure nobody woul
 
 ### Phase 1 — Edge proxy + cache (ship this first)
 ```
-Client ──poll every ~20–30s──▶ Worker /v1/etas/:id
+Client ──poll every ~30s──▶ Worker /v1/etas?ids=<a>&ids=<b>…   ← ONE request per round (ADR-079)
+                                  │  (or /v1/etas/:id for a single stop; same producer, same answer)
                                   │  Cache API hit (max-age 30s) → return cached
                                   └─ miss → coalesce(pole) ──┬─ in-flight? await it
                                                              └─ else fetch upstream (KMB/CTB/GMB)
                                             → normalize → cache → return
 ```
+- **A round is one request, not one per target** (WP5-7, ADR-079). `/v1/etas?ids=…` answers `{ reports:
+  [{ id, etas, failed?, error? }] }` — one entry per **distinct** id, in code-point order, each entry
+  byte-identical to what `/v1/etas/<that id>` serves, because it goes through the same producer. The
+  parameter **repeats** rather than carrying a delimiter: `,` is a legal `idchar` and a query string
+  decodes `%2C` before anything could split on it. Cap 12; over it is a `400` and the client chunks. A
+  per-id failure is that entry's own `error` with the request still a `200`, so one stale favourite cannot
+  take five working stops down with it. This is what let Nearby adopt a live subscription at all — the
+  per-target fan-out would have taken its six places from one request per window to six.
 - **Coalescing happens in two layers, and both are needed** (ADR-057, `apps/edge/src/eta-cache.ts`):
   the edge **Cache API** only helps once a response exists, so a burst of concurrent first-callers
   all miss it; an isolate-level map keyed per *upstream call* shares the **in-flight promise**, so a
@@ -133,8 +149,9 @@ Client ──1 WebSocket──▶ Worker  GET /v1/live?targets=<canonical ids, %
                           │  snapshot ──▶ this client   (whatever the shard already knows)
                           │  alarm() every 45→60 s: poll the UNION of every subscriber's targets
                           │     through the same coalescer /v1/etas uses (ADR-057)
-                          │     diffEtas(previous, current) → delta { changed, gone }
-                          │     nothing changed → send NOTHING, widen the cadence one step
+                          │     diffEtas(previous, current) → delta { changed, gone, failed? }
+                          │     nothing changed AND no kerb started or stopped refusing
+                          │        → send NOTHING, widen the cadence one step   (ADR-081)
                           └─ no subscriber with anything to watch → no alarm at all
 ```
 - **Sharded, not one object per stop, and one socket per client.** A shard serves whatever its

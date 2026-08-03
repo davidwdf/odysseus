@@ -87,6 +87,7 @@
 		<item quantity="one">+%1$d more route</item>
 		<item quantity="other">+%1$d more routes</item>
 	</plurals>
+	<string name="etasUnavailable">Live times unavailable</string>
 	<string name="mapAttribution">Map from Lands Department</string>
 	<string name="mapAttributionAction">Map from Lands Department — open the copyright notice and disclaimer</string>
 	<string name="keypadBackspace">Backspace</string>
@@ -98,6 +99,7 @@
 	<string name="poleSideSouthwest">Southwest side</string>
 	<string name="poleSideWest">West side</string>
 	<string name="poleSideNorthwest">Northwest side</string>
+	<string name="poleTooCloseToTell">Another stop a few steps away — check the sign</string>
 	<string name="openInMaps">Open in Maps</string>
 	<string name="arrivalsHere">Next buses at this stop</string>
 	<string name="save">Save</string>

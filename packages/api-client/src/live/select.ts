@@ -1,0 +1,99 @@
+// Which engine a configured spelling selects — the one declaration of it (WP5-6, ADR-076).
+//
+// WHY A MODULE, WHEN THE ANSWER IS A THREE-BRANCH SWITCH
+// Because the *read* of the environment variable cannot live here and the *decision* must not live at
+// the read. `process.env.EXPO_PUBLIC_*` and `import.meta.env.VITE_*` are inlined at build time by two
+// different bundlers — babel-preset-expo's inliner only visits a literal `process.env.X` member
+// expression, so a destructure, a computed key or a helper taking the name as an argument bakes in
+// **nothing** and the value is silently `undefined` in a production bundle. `endpoint.ts` explains the
+// same constraint for the API URL. So each app shell keeps one literal read, and both hand the string
+// here, which is the only part that can be shared and the only part with a rule in it.
+//
+// Before this, `EdgeClientOptions.transport` was the plumbing and nothing read the documented
+// variables: `/v1/live` shipped **unreachable from a real build**, and every one of the five shard
+// defects Wave 5's review found was latent for exactly that reason (ADR-056, "what is not done").
+// Flipping a variable is now the whole change, which is why the default has to be the safe one.
+
+import type { LiveEngine, LiveEtaEngine, LiveTransportContext } from './engine'
+import { createPollTransport } from './poll'
+import { createSocketTransport } from './socket'
+
+/**
+ * The two legal spellings, as data — so the warning below can name them and a test can enumerate them.
+ *
+ * **There is deliberately no `auto`.** An automatic choice implies a fallback from socket to poll, and
+ * no such fallback exists: `createSocketTransport` reconnects for ever rather than degrading, because a
+ * transport that quietly became a different transport would make "which engine is driving" unanswerable
+ * and would hide a broken socket behind a working poll. `auto` would be a promise the code does not
+ * keep. Recorded in ADR-056 and in `.env.example` in the same words.
+ */
+export const LIVE_ENGINES: readonly LiveEngine[] = ['poll', 'socket']
+
+/** The shipped default. `watch()` polls `/v1/etas/:id` per target per cadence unless told otherwise. */
+export const DEFAULT_LIVE_ENGINE: LiveEngine = 'poll'
+
+/**
+ * A configured spelling → the engine it names. Anything unrecognised is the default, **loudly**.
+ *
+ * The two failure modes were weighed and neither is free:
+ *
+ *  · **Throwing** on a typo — `EXPO_PUBLIC_LIVE_TRANSPORT=websocket` — breaks first paint over a
+ *    misconfigured *optional* knob, on a screen whose data layer is constructed at module scope. That
+ *    is a worse outcome than the misconfiguration.
+ *  · **Silently polling** is this repo's own recurring failure shape: a gate that passes while looking
+ *    at nothing. Somebody sets the variable, sees ordinary behaviour, and concludes the socket works.
+ *
+ * So it falls back and says so once, on the console, naming the value it did not understand and the two
+ * it does. `endpoint.ts` argues the same way about not validating a base URL: make a misconfiguration
+ * *visible* rather than fatal or invisible.
+ *
+ * An absent or empty value is the normal case and warns about nothing.
+ */
+export function liveEngineFrom(spelling: string | undefined): LiveEngine {
+  if (spelling === undefined || spelling === '') return DEFAULT_LIVE_ENGINE
+  if ((LIVE_ENGINES as readonly string[]).includes(spelling)) return spelling as LiveEngine
+  console.warn(
+    `[live] ignoring LIVE_TRANSPORT="${spelling}" — expected one of ${LIVE_ENGINES.join(' | ')}; ` +
+      `using "${DEFAULT_LIVE_ENGINE}"`,
+  )
+  return DEFAULT_LIVE_ENGINE
+}
+
+/**
+ * The transport factory for an engine — what an app shell passes to `EdgeClientOptions.transport`.
+ *
+ * The socket branch is three arguments wide and every one of them matters:
+ *
+ *  · **`ctx.endpoints.socketUrl`, read inside the factory.** `EdgeClient.watch()` calls the factory
+ *    once per *subscription*, and the socket's connect URL carries `?targets=` because the **Worker**
+ *    derives the shard from it (D4). A closure that captured a URL built at module scope would be wrong
+ *    the moment a second screen watched a different place.
+ *  · **`ctx.clock`, not `Date.now`.** The frames' `at` stamps come from the client's injected clock, so
+ *    a test that pinned the clock and got real timestamps anyway would be comparing two engines with
+ *    one of them ignoring the pin.
+ *  · **Nothing else.** `timers`, `socketFactory`, `keepaliveMs`, `backoff` and `random` all default —
+ *    and `browserSocketFactory` is the platform `WebSocket`, which React Native ships too, so one
+ *    adapter serves both renderers and no app shell ever names a socket.
+ */
+export function liveTransportFor(engine: LiveEngine): (ctx: LiveTransportContext) => LiveEtaEngine {
+  if (engine === 'socket') {
+    return (ctx) => createSocketTransport({ url: ctx.endpoints.socketUrl, clock: ctx.clock })
+  }
+  return createPollTransport
+}
+
+/**
+ * The whole of WP5-6 at a call site: a configured spelling → a transport, or `undefined` for the default.
+ *
+ * `undefined` rather than `createPollTransport` for the default case on purpose. `EdgeClient`'s
+ * constructor is `opts.transport ?? createPollTransport`, so both produce the poll emulator — but only
+ * `undefined` leaves *the client* holding the answer to "what is the default", which is where the two
+ * app shells and every test agree it lives. An app shell that spelled the default itself would be a
+ * second declaration of it, and the day the default changes it would be the one that did not.
+ */
+export function liveTransportFromEnv(
+  spelling: string | undefined,
+): ((ctx: LiveTransportContext) => LiveEtaEngine) | undefined {
+  const engine = liveEngineFrom(spelling)
+  return engine === DEFAULT_LIVE_ENGINE ? undefined : liveTransportFor(engine)
+}

@@ -119,6 +119,16 @@ export function StopCard({
         {view.rows.map((row) => (
           <RouteRow key={row.routeId} row={row} onPress={onRoutePress} />
         ))}
+        {/* **A boarding point that would not answer** (ADR-077). Rendered *below* the rows, because the
+            readings that did arrive are true and this is a statement about the ones that are missing —
+            and `text-muted` rather than an alert colour, because nothing is wrong with the rider's stop:
+            an upstream board refused us. Whether the card is incomplete is `stopCardView`'s answer, not
+            this component's — `check-no-derivation.mjs` polices that, and rightly: a renderer testing
+            `view.failed?.length` would be a second declaration of the rule, and the two renderers would
+            eventually disagree about the empty-array case. */}
+        {view.incomplete ? (
+          <p className="m-0 py-1.5 text-label text-muted">{t(locale, 'etasUnavailable')}</p>
+        ) : null}
         {/* **The count is shown whether or not it can be tapped.** `remaining > 0 && onPress` — which is
             what both renderers had — makes the card silently show 6 of 26 routes for any caller with
             nowhere to navigate, and this app is exactly that caller. Hiding an honest total because the

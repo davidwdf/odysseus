@@ -10,62 +10,112 @@
         {
           "name": "city-one-station-splits-operator-code",
           "why": "The canonical KMB shape, and the reason the rule exists: the pole code is data for the operator, not for the passenger, so the UI needs it as a separate field it can mute rather than as eight characters of shouting at the end of the name.",
-          "args": { "name": "CITY ONE STATION (ST311)" },
-          "expect": { "label": "CITY ONE STATION", "code": "ST311" }
+          "args": {
+            "name": "CITY ONE STATION (ST311)"
+          },
+          "expect": {
+            "label": "CITY ONE STATION",
+            "code": "ST311"
+          }
         },
         {
           "name": "tolerates-whitespace-after-the-code",
           "why": "Upstream names arrive with trailing spaces. If the anchor were a bare `\\)$` the code would go unsplit and the whole string would render as one label, so the trailing-space tolerance is load-bearing rather than defensive.",
-          "args": { "name": "FOO BAR (ST311)  " },
-          "expect": { "label": "FOO BAR", "code": "ST311" }
+          "args": {
+            "name": "FOO BAR (ST311)  "
+          },
+          "expect": {
+            "label": "FOO BAR",
+            "code": "ST311"
+          }
         },
         {
           "name": "no-trailing-code-returns-the-whole-name",
           "why": "Citybus and GMB names usually have no pole code at all. The absent value must be absent, not an empty string: the UI renders the code slot only when it is present, and \"\" would paint an empty muted gap after every Citybus stop.",
-          "args": { "name": "CHOI HUNG ESTATE" },
-          "expect": { "label": "CHOI HUNG ESTATE", "code": null }
+          "args": {
+            "name": "CHOI HUNG ESTATE"
+          },
+          "expect": {
+            "label": "CHOI HUNG ESTATE",
+            "code": null
+          }
         },
         {
           "name": "mid-name-parenthetical-is-not-a-code",
           "why": "A parenthetical that is part of the name must survive. Anchoring at the end is what separates \"(ST311)\" from a real disambiguator, and HK is full of the latter.",
-          "args": { "name": "FOO (NORTH) BAR" },
-          "expect": { "label": "FOO (NORTH) BAR", "code": null }
+          "args": {
+            "name": "FOO (NORTH) BAR"
+          },
+          "expect": {
+            "label": "FOO (NORTH) BAR",
+            "code": null
+          }
         },
         {
           "name": "real-mid-name-parenthetical-survives",
           "why": "The live version of the row above: HK genuinely names stops \"(SOUTH)\" / \"(NORTH)\" to tell two poles apart. Losing that word would leave two different stops rendering under identical labels — the failure is silent and it is the one passengers act on.",
-          "args": { "name": "TSZ WAN SHAN (SOUTH) BUS TERMINUS" },
-          "expect": { "label": "TSZ WAN SHAN (SOUTH) BUS TERMINUS", "code": null }
+          "args": {
+            "name": "TSZ WAN SHAN (SOUTH) BUS TERMINUS"
+          },
+          "expect": {
+            "label": "TSZ WAN SHAN (SOUTH) BUS TERMINUS",
+            "code": null
+          }
         },
         {
           "name": "last-parenthetical-wins-when-there-are-two",
           "why": "A disambiguator AND a pole code in the same name. The match is greedy on the label, so the code is the LAST bracketed group and the disambiguator stays in the label. A lazy quantifier would split at the first bracket and hand the UI \"KAI TAK\" plus a code of \"MTR\".",
-          "args": { "name": "KAI TAK (MTR) STATION (KT01)" },
-          "expect": { "label": "KAI TAK (MTR) STATION", "code": "KT01" }
+          "args": {
+            "name": "KAI TAK (MTR) STATION (KT01)"
+          },
+          "expect": {
+            "label": "KAI TAK (MTR) STATION",
+            "code": "KT01"
+          }
         },
         {
           "name": "letters-only-venue-code-is-still-a-code",
           "why": "The code slot is positional, not shaped: a venue acronym with no digits splits exactly like \"ST311\". This is why `titleCaseName` needs its own KEEP_UPPER allowlist rather than a rule about brackets — by the time the text reaches it, the brackets are gone.",
-          "args": { "name": "KOWLOON BAY (EKCC)" },
-          "expect": { "label": "KOWLOON BAY", "code": "EKCC" }
+          "args": {
+            "name": "KOWLOON BAY (EKCC)"
+          },
+          "expect": {
+            "label": "KOWLOON BAY",
+            "code": "EKCC"
+          }
         },
         {
           "name": "full-width-brackets-are-not-a-code",
           "why": "Pins an asymmetry that is easy to 'fix' by accident: this rule understands ASCII parentheses only, while `stripCircular` accepts full-width ones too. Chinese names are published with the loop marker in （）but never with a pole code, so widening the bracket class here would only ever produce a false split.",
-          "args": { "name": "第一城站（ST311）" },
-          "expect": { "label": "第一城站（ST311）", "code": null }
+          "args": {
+            "name": "第一城站（ST311）"
+          },
+          "expect": {
+            "label": "第一城站（ST311）",
+            "code": null
+          }
         },
         {
           "name": "empty-name",
           "why": "An empty upstream name must not become an exception on the render path. A missing name is a data problem to show plainly, not a crash between the passenger and the ETA.",
-          "args": { "name": "" },
-          "expect": { "label": "", "code": null }
+          "args": {
+            "name": ""
+          },
+          "expect": {
+            "label": "",
+            "code": null
+          }
         },
         {
           "name": "whitespace-only-name-is-not-trimmed",
           "why": "Nothing split, so nothing is trimmed — the label is the input byte for byte. Trimming here would be a quiet second responsibility, and it is `stripCircular`, not this rule, that owns whitespace.",
-          "args": { "name": "   " },
-          "expect": { "label": "   ", "code": null }
+          "args": {
+            "name": "   "
+          },
+          "expect": {
+            "label": "   ",
+            "code": null
+          }
         }
       ]
     },
@@ -75,115 +125,153 @@
         {
           "name": "all-caps-english-title-cases",
           "why": "The base case. ALL CAPS is how KMB publishes, and a list of shouting stop names is the single loudest thing on the nearby screen.",
-          "args": { "name": "CHOI HUNG ESTATE" },
+          "args": {
+            "name": "CHOI HUNG ESTATE"
+          },
           "expect": "Choi Hung Estate"
         },
         {
           "name": "known-acronym-stays-upper-leading",
           "why": "\"Mtr Kowloon Station\" is the giveaway that a title-caser was applied without an allowlist. Leading position, so this row also pins that an acronym is checked before the first-word rule.",
-          "args": { "name": "MTR KOWLOON STATION" },
+          "args": {
+            "name": "MTR KOWLOON STATION"
+          },
           "expect": "MTR Kowloon Station"
         },
         {
           "name": "known-acronym-stays-upper-operator-name",
           "why": "An operator initialism in a depot name. Same rule, different word — the allowlist is a set, and a port that special-cased only \"MTR\" would pass the row above and fail this one.",
-          "args": { "name": "KMB DEPOT" },
+          "args": {
+            "name": "KMB DEPOT"
+          },
           "expect": "KMB Depot"
         },
         {
           "name": "known-acronym-stays-upper-trailing",
           "why": "PTI (public transport interchange) at the END of the name. Covers the allowlist hit in non-first position, which is a different branch from the leading acronym above.",
-          "args": { "name": "TUNG CHUNG STATION PTI" },
+          "args": {
+            "name": "TUNG CHUNG STATION PTI"
+          },
           "expect": "Tung Chung Station PTI"
         },
         {
           "name": "minor-word-lower-cased-mid-title",
           "why": "\"Of\" mid-title reads as a typo. This is the rule that forces a small-words set to exist at all.",
-          "args": { "name": "UNIVERSITY OF HONG KONG" },
+          "args": {
+            "name": "UNIVERSITY OF HONG KONG"
+          },
           "expect": "University of Hong Kong"
         },
         {
           "name": "minor-word-for-lower-cased-mid-title",
           "why": "A second member of the small-words set, so the set is pinned rather than one entry of it.",
-          "args": { "name": "HONG KONG ACADEMY FOR PERFORMING ARTS" },
+          "args": {
+            "name": "HONG KONG ACADEMY FOR PERFORMING ARTS"
+          },
           "expect": "Hong Kong Academy for Performing Arts"
         },
         {
           "name": "on-is-a-romanised-syllable-lok-on-pai",
           "why": "THE REASON THIS MODULE HAS A TEST. \"On\" in a HK place name is the romanised syllable 安, not the English preposition. Put \"on\" in the small-words set and Lok On Pai becomes \"Lok on Pai\" — wrong in a way that looks deliberate, across hundreds of stops.",
-          "args": { "name": "LOK ON PAI" },
+          "args": {
+            "name": "LOK ON PAI"
+          },
           "expect": "Lok On Pai"
         },
         {
           "name": "on-is-a-romanised-syllable-tsz-on-court",
           "why": "Same syllable, different estate. Kept as a separate row because the temptation to add \"on\" to the small-words set recurs, and one example is easy to read as a quirk.",
-          "args": { "name": "TSZ ON COURT" },
+          "args": {
+            "name": "TSZ ON COURT"
+          },
           "expect": "Tsz On Court"
         },
         {
           "name": "on-is-a-romanised-syllable-hing-on-street",
           "why": "The street-name form, where \"on\" is most likely to be mistaken for a preposition by a general-purpose title-caser trained on English prose.",
-          "args": { "name": "HING ON STREET" },
+          "args": {
+            "name": "HING ON STREET"
+          },
           "expect": "Hing On Street"
         },
         {
           "name": "leading-syllable-on-is-capitalised",
           "why": "First word is never minor. Pins that the first-word rule and the syllable rule agree rather than fighting.",
-          "args": { "name": "ON TAI ESTATE" },
+          "args": {
+            "name": "ON TAI ESTATE"
+          },
           "expect": "On Tai Estate"
         },
         {
           "name": "leading-minor-word-is-capitalised",
           "why": "\"the Peak\" is the visible cost of applying the small-words set to position zero. This row is the whole justification for tracking `wasFirst`.",
-          "args": { "name": "THE PEAK" },
+          "args": {
+            "name": "THE PEAK"
+          },
           "expect": "The Peak"
         },
         {
           "name": "already-mixed-case-is-left-alone",
           "why": "Citybus and GMB publish names already cased. Re-casing them would re-shout an acronym the operator got right, and would make the same pole render differently depending on which operator's copy of it we read.",
-          "args": { "name": "Choi Hung Estate" },
+          "args": {
+            "name": "Choi Hung Estate"
+          },
           "expect": "Choi Hung Estate"
         },
         {
           "name": "cjk-name-is-left-alone",
           "why": "No Latin letters means nothing to case. Chinese has no case, so any transformation here is damage; this is the guard that makes the whole module safe to call unconditionally on the active locale's name.",
-          "args": { "name": "彩虹邨" },
+          "args": {
+            "name": "彩虹邨"
+          },
           "expect": "彩虹邨"
         },
         {
           "name": "latin-acronym-inside-a-chinese-name",
           "why": "A Chinese name containing Latin capitals DOES pass the guard (it has A–Z, no a–z), so it runs the word pass. The row proves the CJK characters survive untouched and the acronym stays upper — the word regex matches Latin runs only.",
-          "args": { "name": "MTR九龍站" },
+          "args": {
+            "name": "MTR九龍站"
+          },
           "expect": "MTR九龍站"
         },
         {
           "name": "mixed-script-with-lower-case-is-left-alone",
           "why": "The other half of the row above: one lower-case Latin letter anywhere means somebody already cased this string, so the whole thing is left alone rather than half-processed.",
-          "args": { "name": "彩虹邨 Choi Hung" },
+          "args": {
+            "name": "彩虹邨 Choi Hung"
+          },
           "expect": "彩虹邨 Choi Hung"
         },
         {
           "name": "apostrophe-stays-inside-the-word",
           "why": "\"St John'S\" is what you get when the apostrophe ends the word and the next letter counts as a new one. The apostrophe is part of the word, not a separator.",
-          "args": { "name": "ST JOHN'S" },
+          "args": {
+            "name": "ST JOHN'S"
+          },
           "expect": "St John's"
         },
         {
           "name": "typographic-apostrophe-stays-inside-the-word",
           "why": "Upstream mixes the ASCII apostrophe with the typographic one (’). Same rule, and a port whose word pattern only knows U+0027 renders \"King’S Park\".",
-          "args": { "name": "KING’S PARK" },
+          "args": {
+            "name": "KING’S PARK"
+          },
           "expect": "King’s Park"
         },
         {
           "name": "digits-and-punctuation-are-not-words",
           "why": "A stop name carrying a route-ish number and a bracketed disambiguator. Numbers pass through untouched and the bracket does not start a new title, so the word after it is not treated as first.",
-          "args": { "name": "TAI PO ROAD (SHAM SHUI PO) 100" },
+          "args": {
+            "name": "TAI PO ROAD (SHAM SHUI PO) 100"
+          },
           "expect": "Tai Po Road (Sham Shui Po) 100"
         },
         {
           "name": "empty-name",
           "why": "No upper-case letter, so the guard returns immediately. Same contract as `splitStopCode`: an empty upstream name renders as nothing, it does not throw on the way to the screen.",
-          "args": { "name": "" },
+          "args": {
+            "name": ""
+          },
           "expect": ""
         }
       ]
@@ -194,43 +282,57 @@
         {
           "name": "english-circular-marker",
           "why": "The English form. HK circular routes have no separate flag in the open data (ADR-046) — the loop lives in the destination string — so this substring test is the only signal there is.",
-          "args": { "name": "TAI KOK TSUI (CIRCULAR)" },
+          "args": {
+            "name": "TAI KOK TSUI (CIRCULAR)"
+          },
           "expect": true
         },
         {
           "name": "traditional-chinese-loop-marker",
           "why": "循環線 in the zh-Hant name. Detecting only the English form would make the same route circular in one locale and not the other, which is the class of drift this repo treats as a defect.",
-          "args": { "name": "大角咀（循環線）" },
+          "args": {
+            "name": "大角咀（循環線）"
+          },
           "expect": true
         },
         {
           "name": "simplified-chinese-loop-marker",
           "why": "循环线 in the zh-Hans name. 環 and 环 are different code points; matching one is not matching the other, and no normalization step runs before this.",
-          "args": { "name": "大角咀（循环线）" },
+          "args": {
+            "name": "大角咀（循环线）"
+          },
           "expect": true
         },
         {
           "name": "title-case-marker-matches",
           "why": "Operators are not consistent about case. The test is case-insensitive so a name that has already been through `titleCaseName` still answers the same — order of operations on the render path must not change the answer.",
-          "args": { "name": "Tai Kok Tsui (Circular)" },
+          "args": {
+            "name": "Tai Kok Tsui (Circular)"
+          },
           "expect": true
         },
         {
           "name": "plain-destination-is-not-circular",
           "why": "The negative case. A false positive here promotes an ordinary route to the 'Circular via …' treatment and hides its real destination.",
-          "args": { "name": "CHOI HUNG ESTATE" },
+          "args": {
+            "name": "CHOI HUNG ESTATE"
+          },
           "expect": false
         },
         {
           "name": "unbracketed-marker-still-counts",
           "why": "Pins the deliberate asymmetry with `stripCircular`: detection is a substring test, stripping is anchored to a bracketed suffix. So this name is circular AND survives stripping intact — the UI shows the loop treatment without silently losing the word.",
-          "args": { "name": "CIRCULAR" },
+          "args": {
+            "name": "CIRCULAR"
+          },
           "expect": true
         },
         {
           "name": "empty-name",
           "why": "A blank `en` is real in this dataset — ADR-060 keeps a row for a circular route whose English name is empty — so the blank must answer false rather than reach a substring index that does not exist.",
-          "args": { "name": "" },
+          "args": {
+            "name": ""
+          },
           "expect": false
         }
       ]
@@ -241,68 +343,213 @@
         {
           "name": "strips-english-marker",
           "why": "The base case. The UI renders the loop as its own 'Circular via …' treatment, so leaving the raw suffix in place would say it twice.",
-          "args": { "name": "TAI KOK TSUI (CIRCULAR)" },
+          "args": {
+            "name": "TAI KOK TSUI (CIRCULAR)"
+          },
           "expect": "TAI KOK TSUI"
         },
         {
           "name": "strips-title-case-marker",
           "why": "Case-insensitive, so stripping works either side of `titleCaseName`. Both orders occur on the route screen.",
-          "args": { "name": "Tai Kok Tsui (Circular)" },
+          "args": {
+            "name": "Tai Kok Tsui (Circular)"
+          },
           "expect": "Tai Kok Tsui"
         },
         {
           "name": "strips-traditional-marker-in-full-width-brackets",
           "why": "The published zh-Hant form: full-width brackets around 循環線. A port that only knows ASCII parentheses leaves Chinese destinations with the suffix while English ones lose it.",
-          "args": { "name": "大角咀（循環線）" },
+          "args": {
+            "name": "大角咀（循環線）"
+          },
           "expect": "大角咀"
         },
         {
           "name": "strips-simplified-marker-in-full-width-brackets",
           "why": "循环线, the zh-Hans spelling. Separate row from the traditional one because the characters differ, not the shape.",
-          "args": { "name": "大角咀（循环线）" },
+          "args": {
+            "name": "大角咀（循环线）"
+          },
           "expect": "大角咀"
         },
         {
           "name": "strips-chinese-marker-in-half-width-brackets",
           "why": "The same Chinese name with ASCII brackets — upstream mixes them within one feed. Bracket width and marker script vary independently, so both combinations have to be pinned.",
-          "args": { "name": "大角咀(循環線)" },
+          "args": {
+            "name": "大角咀(循環線)"
+          },
           "expect": "大角咀"
         },
         {
           "name": "leaves-a-plain-destination-alone",
           "why": "No marker, no change. The route screen calls this unconditionally, so a rule that mangled ordinary destinations would damage every non-circular route.",
-          "args": { "name": "CHOI HUNG ESTATE" },
+          "args": {
+            "name": "CHOI HUNG ESTATE"
+          },
           "expect": "CHOI HUNG ESTATE"
         },
         {
           "name": "only-a-trailing-marker-is-stripped",
           "why": "A marker followed by more name is part of the name. Dropping it would turn 'circular via Mong Kok' into a destination that reads as a different terminus.",
-          "args": { "name": "TAI KOK TSUI (CIRCULAR) VIA MONG KOK" },
+          "args": {
+            "name": "TAI KOK TSUI (CIRCULAR) VIA MONG KOK"
+          },
           "expect": "TAI KOK TSUI (CIRCULAR) VIA MONG KOK"
         },
         {
           "name": "unbracketed-marker-is-kept",
           "why": "The pair to `isCircular`'s row of the same shape: the word is detected but not stripped, because stripping it would leave an empty destination. Losing the whole label is worse than showing a redundant one.",
-          "args": { "name": "CIRCULAR" },
+          "args": {
+            "name": "CIRCULAR"
+          },
           "expect": "CIRCULAR"
         },
         {
           "name": "trims-whitespace-around-the-result",
           "why": "Upstream pads names. The trim runs after the substitution so the leading space goes too, and the label does not render with an inherited indent next to a route chip.",
-          "args": { "name": "  TAI KOK TSUI (CIRCULAR)  " },
+          "args": {
+            "name": "  TAI KOK TSUI (CIRCULAR)  "
+          },
           "expect": "TAI KOK TSUI"
         },
         {
           "name": "whitespace-only-name-becomes-empty",
           "why": "The trim applies even when nothing matched — unlike `splitStopCode`, which returns its input verbatim. Two rules, two whitespace contracts, and the difference is visible only in a row like this one.",
-          "args": { "name": "   " },
+          "args": {
+            "name": "   "
+          },
           "expect": ""
         },
         {
           "name": "empty-name",
           "why": "Blank in, blank out. Pairs with `isCircular`'s empty row so the blank-`en` route (ADR-060) has a defined answer from both halves of the pair.",
-          "args": { "name": "" },
+          "args": {
+            "name": ""
+          },
           "expect": ""
+        }
+      ]
+    },
+    "poleNameKey": {
+      "doc": "A pole name folded to what a rider could actually see a difference in — case, spaces (including the ideographic U+3000), and the ASCII/CJK punctuation pairs the feed mixes. COMPARED, NEVER DISPLAYED. It exists because the difference between two names is the honest way to tell two identically-headed poles apart (WP5-12), and a byte comparison would ship a lie: measured over build `ceb33eed99461e04`, 21 colliding heading groups have names that differ ONLY by case or punctuation, so a byte test calls them distinct, the screen prints the same words twice, and the app claims the ambiguity has been resolved. The character list is explicit rather than `NFKC` on purpose: NFKC would make the hand-port depend on a whole Unicode table agreeing across three languages, while this list is inspectable and pinnable here.",
+      "cases": [
+        {
+          "name": "an-unchanged-name-folds-to-itself-lower-cased",
+          "why": "THE CONTROL. A fold that stripped too much would satisfy every equality row below while making two genuinely different names equal, which is the failure that matters — it prints \"we cannot tell these apart\" at a place where the wire says otherwise.",
+          "args": {
+            "label": "Rumsey Street"
+          },
+          "expect": "rumseystreet"
+        },
+        {
+          "name": "a-case-only-difference-folds-equal",
+          "why": "Bonham Road, near Hospital Road — verbatim from build ceb33eed99461e04, where the two minibus poles 9.1 m apart differ by exactly one comma. This is the pair the required boundary row in `stop-detail#poleDistinctions` is built from.",
+          "args": {
+            "label": "Bonham Road near Hospital Road"
+          },
+          "expect": "bonhamroadnearhospitalroad"
+        },
+        {
+          "name": "the-comma-form-of-the-same-name-folds-to-the-same-key",
+          "why": "The other half of the pair above. Two rows rather than one because the key is only useful as a comparison and a single row cannot state an equality.",
+          "args": {
+            "label": "Bonham Road, near Hospital Road"
+          },
+          "expect": "bonhamroadnearhospitalroad"
+        },
+        {
+          "name": "an-all-caps-name-folds-to-the-title-cased-one",
+          "why": "`KENT ROAD, near Kowloon Tong Station` and `Kent Road, near Kowloon Tong Station` are one place's two poles in this build. `titleCaseName` leaves an already-mixed-case name alone, so the printed strings really do differ.",
+          "args": {
+            "label": "KENT ROAD, near Kowloon Tong Station"
+          },
+          "expect": "kentroadnearkowloontongstation"
+        },
+        {
+          "name": "a-full-width-comma-folds-like-an-ascii-one",
+          "why": "The Chinese half of the same problem: `昭信路, 近煜明苑煒明閣` versus `昭信路，近煜明苑煒明閣`. A fold that handled only ASCII punctuation would be right in `en` and wrong in both Chinese locales, which is the shape of defect the second renderer exists to catch.",
+          "args": {
+            "label": "昭信路，近煜明苑煒明閣"
+          },
+          "expect": "昭信路近煜明苑煒明閣"
+        },
+        {
+          "name": "an-ideographic-space-and-a-dash-are-both-invisible",
+          "why": "Verbatim shapes from this build: `楊屋道,　近　荃灣公園` carries U+3000, and upstream uses `-`, `‐`, `–` and `—` interchangeably. Both are in the list; a reader should be able to check that against this row.",
+          "args": {
+            "label": "楊屋道,　近　荃灣公園"
+          },
+          "expect": "楊屋道近荃灣公園"
+        }
+      ]
+    },
+    "poleFlagCode": {
+      "doc": "The operator's own flag code for a pole, in the locale a heading is printed in — BORROWING one from another locale when this one has none and the other's is flag-shaped (WP5-12). The borrow answers the lead WP5-12's row named: at Prince Edward Station two KMB poles sit at the same coordinate and read `PRINCE EDWARD STATION, MONG KOK POLICE STATION` in English while the Chinese carries `(MK356)` and `(MK357)`, so the code that tells them apart is on the wire and only the English label lacks it. A code is Latin letters and digits — what is printed on the physical flag — so it is locale-neutral by construction and showing the Chinese one to an English reader is the same string rather than a translation. The ACTIVE locale's own parenthetical is used verbatim whatever its shape, which is the pre-WP5-12 behaviour preserved; only the borrow is gated on the shape. Measured over build `ceb33eed99461e04`: of 63 poles whose `en` lacks a code while a Chinese name has one, 51 are flag-shaped and 12 are not, and 167 poles carry trailing parentheticals that DISAGREE across locales because they are translated place phrases.",
+      "cases": [
+        {
+          "name": "the-active-locales-own-code-wins",
+          "why": "THE CONTROL, and it is the pre-WP5-12 behaviour: when the printed name carries a code, that is the code, and nothing is borrowed. A rule that preferred another locale's would rewrite what a rider reads on 6 187 poles for no reason.",
+          "args": {
+            "name": {
+              "en": "CITY ONE STATION (ST311)",
+              "zh-Hant": "第一城站 (ST311)",
+              "zh-Hans": "第一城站 (ST311)"
+            },
+            "locale": "en"
+          },
+          "expect": "ST311"
+        },
+        {
+          "name": "an-english-name-with-no-code-borrows-the-chinese-one",
+          "why": "Prince Edward Station, verbatim. The two poles are at the SAME coordinate, so no compass rule can ever separate them and no fold may merge them (they are two real kerbs); the code is the only thing that can, and it was being thrown away because the English label lacks it.",
+          "args": {
+            "name": {
+              "en": "PRINCE EDWARD STATION, MONG KOK POLICE STATION",
+              "zh-Hant": "太子站, 旺角警署 (MK356)",
+              "zh-Hans": "太子站, 旺角警署 (MK356)"
+            },
+            "locale": "en"
+          },
+          "expect": "MK356"
+        },
+        {
+          "name": "a-chinese-reader-of-the-same-pole-still-reads-its-own-code",
+          "why": "The borrow is not a rewrite: the active locale's parenthetical is preferred, so this returns the same string by the first rule rather than by the borrow. Both rows are needed — either alone passes an implementation that always searched every locale.",
+          "args": {
+            "name": {
+              "en": "PRINCE EDWARD STATION, MONG KOK POLICE STATION",
+              "zh-Hant": "太子站, 旺角警署 (MK356)",
+              "zh-Hans": "太子站, 旺角警署 (MK356)"
+            },
+            "locale": "zh-Hant"
+          },
+          "expect": "MK356"
+        },
+        {
+          "name": "a-translated-parenthetical-is-not-borrowed",
+          "why": "THE SECOND CONTROL, and the row that stops the borrow becoming a bug. `黃泥涌道55-57號(近翠景樓)` ends in a Chinese place phrase, not a code — 12 of the 63 candidates in this build are this shape — and borrowing it would put Chinese into an English heading. The shape gate (Latin letters then digits) is exactly the discriminator.",
+          "args": {
+            "name": {
+              "en": "Wong Nai Chung Road No. 55-57 Green View Mansion",
+              "zh-Hant": "黃泥涌道55-57號(近翠景樓)",
+              "zh-Hans": "黄泥涌道55-57号(近翠景楼)"
+            },
+            "locale": "en"
+          },
+          "expect": null
+        },
+        {
+          "name": "no-code-in-any-locale-is-no-code",
+          "why": "THE THIRD CONTROL: the ordinary case for most of the network. A rule that invented something here would put a cue on every pole in Hong Kong.",
+          "args": {
+            "name": {
+              "en": "RUMSEY STREET",
+              "zh-Hant": "林士街",
+              "zh-Hans": "林士街"
+            },
+            "locale": "en"
+          },
+          "expect": null
         }
       ]
     }

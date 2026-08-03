@@ -30,12 +30,16 @@
 // The path is declared in the contract (`LIVE_PATH`) because it is part of the wire, and imported here
 // **as a type** so the kernel keeps its empty runtime dependency list (ADR-052 decision 2). See the
 // note on the constant below for why a restated literal is not a second declaration.
-import type { LIVE_PATH as WireLivePath } from '@nextbus/contract'
+import type {
+  ETAS_BATCH_MAX_IDS as WireBatchMaxIds,
+  LIVE_PATH as WireLivePath,
+} from '@nextbus/contract'
 import { dedupeEtas, etaBoardingKey } from './eta'
 import { formatFavoriteRouteKey, memberStopIds, parseRouteId, parseStopOrPlaceId } from './ids'
 import type {
   DeltaFrame,
   Eta,
+  EtaFailure,
   EtaRef,
   LiveState,
   NearbyStop,
@@ -72,6 +76,22 @@ import type {
  * Not exported: one public declaration of the path is enough, and it is the contract's.
  */
 const LIVE_PATH: typeof WireLivePath = '/v1/live'
+
+/**
+ * How many ids one `/v1/etas?ids=…` request may name — **restated from the contract and pinned to it by
+ * the type system**, exactly as `LIVE_PATH` is above and for the same reason.
+ *
+ * Exported, unlike `LIVE_PATH`, because a *client* has to chunk at it: the poll emulator splits a
+ * subscription into batches of this size, and `packages/api-client` depends on `@nextbus/core` and
+ * `@nextbus/ports` only — adding a contract dependency to reach one integer would be a package edge
+ * bought for nothing, and hard-coding `12` there would be the second declaration this idiom exists to
+ * prevent. `typeof WireBatchMaxIds` is the literal type `12`, so changing the contract's constant makes
+ * **this line a typecheck error**.
+ *
+ * The number's own justification — why twelve, and why exceeding it is a `400` rather than a truncation
+ * — is at the contract's declaration, which is where a native porter reads it.
+ */
+export const ETAS_BATCH_MAX_IDS: typeof WireBatchMaxIds = 12
 
 /**
  * The fastest cadence a shard will poll upstream, and the slowest.
@@ -172,6 +192,7 @@ export const LIVE_SESSION_START: LiveSession = {
   seq: 0,
   etas: [],
   targets: [],
+  failed: [],
   status: { state: 'connecting' },
 }
 
@@ -213,6 +234,25 @@ export interface LiveSession {
    * set, which is why a round that *changes* the accepted set has to send one (the shard does).
    */
   targets: readonly WatchTarget[]
+  /**
+   * The boarding points this round could not be asked about (WP5-14, ADR-081).
+   *
+   * **Replaced wholesale by every data frame, and an absent field on one means empty.** A frame carries
+   * the complete current set rather than a patch, because the alternative needs an optional field to
+   * distinguish "unchanged" from "none" and it cannot: absent would have to mean both. Clearing is the
+   * direction that loses information rather than inventing it, which is the same choice ADR-077 made for
+   * the merge helpers' argument — and it is why a producer whose failure set *moved* must send a frame
+   * even when no reading changed. Without that, a recovered kerb's marker outlives the recovery by a
+   * whole cadence, which the row's acceptance rules out.
+   *
+   * `status` frames leave it alone: the connection's state and the upstream's are different facts, and a
+   * reconnect must not erase what we know about the kerbs.
+   *
+   * Pole ids only, so it pairs directly with the `stopId` of a reading. A whole *target* that could not
+   * be answered arrives as a `status` frame — and, if permanent, as a re-echoed snapshot — because
+   * `EtaFailure.stopId` is a boarding point and a target may be a merged place (ADR-073 decision 2).
+   */
+  failed: readonly EtaFailure[]
   status: LiveStatus
 }
 
@@ -377,6 +417,169 @@ export function diffEtas(
   return { changed: changed.sort(compareRefs), gone: gone.sort(compareRefs) }
 }
 
+/**
+ * This round's readings, with the ones we could not ask about kept rather than dropped.
+ *
+ * **The rule is *"a failed round is not a departure"*, and this is the layer it was missing at**
+ * (ADR-073). Both engines already held it per *target*: if a whole `/v1/etas/:id` call failed, the poll
+ * emulator kept that target's previous readings and the shard did the same, so nothing landed in
+ * `gone`. Underneath a target is a *place*, and underneath a place are its boarding poles — and there
+ * the edge's coalescing cache resolved a rejected upstream board to an empty list, so the call
+ * *succeeded* carrying nothing. `diffEtas` then did exactly what it is supposed to do with readings
+ * that are no longer there: it reported every one of them departed. A rider watching a stop through a
+ * KMB outage saw the buses vanish one by one, on both engines, with the connection reading `live`.
+ *
+ * So the wire names the poles it could not read (`EtaReport.failed`) and this function is what a
+ * stateful consumer does with that: a previous reading whose pole is in `failed` **and which this
+ * round did not replace** survives into the result. Everything else is this round's truth, including
+ * an absence — a pole that *did* answer and no longer lists a route has genuinely lost that bus, and
+ * `gone` is the honest frame for it.
+ *
+ * Three consequences worth stating rather than discovering:
+ *
+ *  · **`next` always wins.** A pole can fail partway — Citybus is one upstream call per (pole, route),
+ *    so one route can refuse while its neighbours answer — and a retained reading must never displace
+ *    a fresh one. The retention is a *union*, not a merge, and `next` is indexed first.
+ *  · **A retained reading is not refreshed, and that is the point.** Its `dataTimestamp` stays where
+ *    it was, so `isStale` ages it by the operator's clock exactly as ADR-008 requires and the screen
+ *    labels it. A pole that refuses for ever therefore keeps showing an ageing, labelled reading rather
+ *    than blanking — which is the same thing the per-target rule has always done for a target that
+ *    keeps failing, deliberately, and consistency between the two is what makes one rule.
+ *  · **It cannot resurrect.** Only readings present in `prev` survive; a pole that failed on the very
+ *    first round contributes nothing, because there is nothing to keep.
+ *
+ * `failedStopIds` is a list of *pole* ids and is compared by equality, not parsed: a place id would
+ * simply match no reading, which is the safe direction, and the caller that has the list took it off
+ * the wire where it is already canonical.
+ *
+ * @spec live#retainFailedPoles
+ */
+export function retainFailedPoles(
+  prev: readonly Eta[],
+  next: readonly Eta[],
+  failedStopIds: readonly string[],
+): Eta[] {
+  if (failedStopIds.length === 0) return canonicalEtas(next)
+  const failed = new Set(failedStopIds)
+  const merged = indexByRef(next)
+  for (const eta of prev) {
+    if (!failed.has(eta.stopId)) continue
+    const key = formatFavoriteRouteKey(eta.stopId, eta.routeId)
+    if (!merged.has(key)) merged.set(key, eta)
+  }
+  return [...merged.values()].sort(compareRefs)
+}
+
+/**
+ * Keep only the readings for these routes — the `routes=` narrowing, as a rule rather than as two
+ * filters.
+ *
+ * **Why this is in the kernel and not left as the three lines it replaces.** `/v1/etas/:id?routes=` was
+ * a `Set` and a `.filter` inside `stopEtas`, which was fine while the edge was the only narrower. WP5-7
+ * makes the batch endpoint carry no per-id narrowing at all — there is no safe delimiter for a nested
+ * list, since `,` is a legal `idchar` (`ids.ts`) — so a target that asks for three routes is narrowed by
+ * the **client** after the batch answers, while the `EtaHub` shard goes on narrowing server-side by
+ * passing `routeIds` into the same producer. Two narrowings, one rule: written twice they would
+ * eventually disagree about a route id that no longer parses or about the empty list, and the two
+ * engines' listener output is precisely what ADR-074's corpus asserts is identical.
+ *
+ * Two decisions, both of which the three lines made implicitly and neither of which was written down:
+ *
+ *  · **An empty or absent list narrows nothing.** "I named no routes" is *not* "I want no readings" —
+ *    the caller that means the latter unsubscribes. `acceptTargets` rejects a `routeIds: []` target
+ *    outright for the same reason, so this branch is reachable only from the HTTP query parameter,
+ *    where `?routes=` with nothing after it is a caller mistake and serving the whole board is the
+ *    harmless direction.
+ *  · **It narrows readings and never failures.** A caller narrowing to three routes is saying which
+ *    arrivals it wants, not which outages it is willing to hear about — and a KMB board is one call for
+ *    every route at the pole, so "did this pole answer" has no per-route truth to filter by (ADR-073
+ *    decision 8). That is why this function takes and returns `Eta[]` rather than an `EtaReport`: the
+ *    shape it must not touch is not in its signature.
+ *
+ * Order is preserved, not canonicalised. This is a filter, and its caller has already decided the
+ * order — `stopArrivals` serves soonest-first and the poll emulator's per-target list feeds
+ * `retainFailedPoles`, which canonicalises. Re-sorting here would silently overwrite the one ordering
+ * in this system that is a rider-facing decision (see `applyLiveEtasToNearby`).
+ *
+ * @spec live#narrowEtasToRoutes
+ */
+export function narrowEtasToRoutes(
+  etas: readonly Eta[],
+  routeIds: readonly string[] | undefined,
+): Eta[] {
+  if (routeIds === undefined || routeIds.length === 0) return [...etas]
+  const wanted = new Set(routeIds)
+  return etas.filter((eta) => wanted.has(eta.routeId))
+}
+
+/**
+ * Are these two failure sets the same — i.e. is the second one *not news*?
+ *
+ * **This is the predicate that makes a frame's `failed` cheap enough to carry** (WP5-14, ADR-081). The
+ * protocol's second rule is that an unchanged round sends nothing at all, and the failure set moves
+ * independently of the readings: a pole can start refusing, or recover, while every reading a subscriber
+ * holds stays byte-identical. Without this predicate a producer has two bad options — send a data frame
+ * every round so the set is never stale (the repaint the delta protocol exists to avoid), or send one
+ * only when a reading changed, in which case a recovered kerb's marker outlives the recovery by a whole
+ * cadence, which the row's acceptance rules out. With it, "the failure set moved" is simply part of *is
+ * this round news*, and both engines ask it the same way.
+ *
+ * **`message` is deliberately not compared; `stopId`, `code` and `retryable` are.** The message is prose
+ * for a human and embeds whatever the upstream said, so a wording that varied between two rounds
+ * describing one outage would make every round news and undo the point of the predicate. The three
+ * compared fields are the three a caller *branches* on: which kerb, what kind of failure, and whether to
+ * keep asking. Same reasoning as `COMPARED_FIELDS` excluding `observedAt`, and the same risk if it is got
+ * wrong.
+ *
+ * Both lists are expected in canonical `stopId` order — every producer of one sorts (`unionFailures`
+ * below, and the wire's own ordering rule) — so this compares element-wise rather than building a set,
+ * which keeps it a total function of the data rather than of insertion order.
+ *
+ * @spec live#sameFailures
+ */
+export function sameFailures(a: readonly EtaFailure[], b: readonly EtaFailure[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((entry, i) => {
+    const other = b[i]
+    return (
+      other !== undefined &&
+      entry.stopId === other.stopId &&
+      entry.error.code === other.error.code &&
+      entry.error.retryable === other.error.retryable
+    )
+  })
+}
+
+/**
+ * One round's failure set, from the per-target lists it came back with: **deduplicated by pole and
+ * canonically ordered**.
+ *
+ * A round is N targets and each answers with its own `failed`, so a frame needs the union — and the union
+ * has to be built the same way on both engines or the two produce different bytes for identical upstream
+ * behaviour, which is the one property ADR-074's corpus exists to assert. Hence a kernel rule rather than
+ * a `flatMap().sort()` written twice.
+ *
+ * **Deduplicated because two targets can share a pole, and that is reachable rather than theoretical:** a
+ * rider can watch a merged place *and* one of its own member poles at once — a Nearby card is keyed on the
+ * place and a favourite on the kerb (ADR-062) — and the batch endpoint answers about both. First occurrence
+ * wins, which is a choice rather than an accident: the lists arrive in accepted-target order, so "first" is
+ * the earliest target that reported the pole, and both engines walk their targets in that same order.
+ *
+ * Sorted by `stopId` in code-point order like every other list in this module (see the header), and
+ * `sameFailures` above relies on that, so the two rules are only correct together.
+ *
+ * @spec live#unionFailures
+ */
+export function unionFailures(lists: ReadonlyArray<readonly EtaFailure[]>): EtaFailure[] {
+  const byPole = new Map<string, EtaFailure>()
+  for (const list of lists) {
+    for (const entry of list) {
+      if (!byPole.has(entry.stopId)) byPole.set(entry.stopId, entry)
+    }
+  }
+  return [...byPole.values()].sort((a, b) => compareCodePoints(a.stopId, b.stopId))
+}
+
 // ── The reducer ─────────────────────────────────────────────────────────────────────────────
 
 /** A snapshot: the server's whole truth replaces ours, whatever `seq` it carries. See `applyLiveFrame`. */
@@ -390,6 +593,11 @@ function applySnapshot(frame: SnapshotFrame, state: LiveSession): LiveApplyResul
       // send `acceptTargets(...).accepted`, which is canonical, so the two engines still agree byte for
       // byte (D1) without this line asserting it.
       targets: frame.targets,
+      // **Replaced from the frame, and an absent field means empty** (ADR-081). A snapshot is the
+      // server's whole truth, so anything it does not name is not failing — the same direction the merge
+      // helpers take for an absent argument (ADR-077 decision 1), and for the same reason: clearing
+      // loses information, keeping would invent it.
+      failed: frame.failed ?? [],
       status: state.status,
     },
     applied: true,
@@ -410,6 +618,12 @@ function applyDelta(frame: DeltaFrame, state: LiveSession): LiveApplyResult {
       // shard that drops a target mid-round sends one instead of a delta — otherwise the echo the rider's
       // screen is comparing against would go on naming a stop nobody polls.
       targets: state.targets,
+      // **A delta restates the failure set in full, unlike everything else about it** (ADR-081). It is
+      // the one field on this frame that is not a patch, and the asymmetry is forced: an optional field
+      // cannot distinguish "unchanged" from "none", so one of the two has to be the meaning and only
+      // "none" fails safe. The producers' side of the bargain is that a round whose failure set moved is
+      // *news* even when no reading did — otherwise this line would clear a marker that is still true.
+      failed: frame.failed ?? [],
       status: state.status,
     },
     applied: true,
@@ -473,6 +687,11 @@ export function applyLiveFrame(state: LiveSession, frame: ServerFrame): LiveAppl
           // one frame after it arrived, leaving the rider's five working stops and no way to name the
           // sixth.
           targets: state.targets,
+          // Kept for the same reason, and it is a different fact from this frame's: `state` describes the
+          // **connection**, `failed` describes the **upstream**. A reconnect must not erase what we know
+          // about which kerbs were refusing, and a `retrying` that cleared the per-kerb marker would be
+          // strictly less honest than the frame it arrived on.
+          failed: state.failed,
           status:
             frame.error === undefined
               ? { state: frame.state }
@@ -578,6 +797,46 @@ export function acceptTargets(targets: readonly WatchTarget[]): {
     )
 
   return { accepted, rejected }
+}
+
+/**
+ * A stable string identifying *which subscription this is* — one declaration, because two renderers
+ * each hold a hook that has to decide when to resubscribe.
+ *
+ * **This exists because of a request storm, not for tidiness.** A live hook subscribes inside an effect
+ * whose dependency list has to name the target set. A `WatchTarget[]` is a fresh array on every render;
+ * the subscription's own delivered readings re-render the screen; so an array dependency makes a
+ * subscription resubscribe *on its own output* — and `subscribe` fires a round immediately, so the loop
+ * is unbounded and each turn of it is an HTTP request. Measured as the first thing that goes wrong when
+ * `applyLiveEtasToNearby`'s result is written back to a query cache.
+ *
+ * A string dependency fixes it, and the string has to be built by a rule both renderers share: if one
+ * keyed on the set and the other on the ordered list they would resubscribe at different moments for
+ * the same rider action, which is drift on the spec rather than on the pixels (ADR-075).
+ *
+ * **The key is over the *accepted* set**, not over what was handed in, and that is what makes it useful:
+ * `watch()` canonicalises with `acceptTargets` anyway, so two orderings of one set — which is exactly
+ * what a Nearby list produces as a rider walks a few metres — are the *same subscription* and must not
+ * cost a reconnect. A duplicate id and an unwatchable one fall out for free. An **empty string
+ * therefore means "nothing here can be watched"**, which is the condition a hook needs before it opens
+ * anything at all.
+ *
+ * `|` is the only separator, because it is the one structural character that appears in **no** stop or
+ * route id: `:` is inside both and `+` separates the members of a place id, so either would collide —
+ * `{P:KMB:A+KMB:B}` and `{P:KMB:A, routes:[KMB:B]}` are different subscriptions that a `+` would spell
+ * identically. Each target contributes its id, then an **arity field** (`*` for all routes, otherwise
+ * the count), then its route ids; the arity is what keeps each target self-delimiting under one
+ * separator, so no two distinct accepted sets can produce one key. Opaque: nothing parses it back.
+ *
+ * @spec live#liveTargetsKey
+ */
+export function liveTargetsKey(targets: readonly WatchTarget[]): string {
+  const fields: string[] = []
+  for (const target of acceptTargets(targets).accepted) {
+    fields.push(target.stopId, target.routeIds === undefined ? '*' : String(target.routeIds.length))
+    if (target.routeIds !== undefined) fields.push(...target.routeIds)
+  }
+  return fields.join('|')
 }
 
 // ── Cadence and routing ─────────────────────────────────────────────────────────────────────
@@ -809,12 +1068,31 @@ export function liveSocketUrl(apiBaseUrl: string): string {
  *
  * @spec live#applyLiveEtasToStopDetail
  */
-export function applyLiveEtasToStopDetail(detail: StopDetail, etas: readonly Eta[]): StopDetail {
+export function applyLiveEtasToStopDetail(
+  detail: StopDetail,
+  etas: readonly Eta[],
+  failed?: readonly EtaFailure[],
+): StopDetail {
   const exact = indexByRef(etas)
   const byBoardingLine = new Map<string, Eta>()
   for (const eta of dedupeEtas([...etas])) byBoardingLine.set(etaBoardingKey(eta), eta)
+  // **`failed` is destructured OUT of the spread, not overwritten in it** — and the difference is the
+  // whole bug. `...detail` copies the document's own `failed`, so a conditional that only *adds* the
+  // argument's version would leave the stale list standing on exactly the call that has no failures to
+  // report: the live merge. Removing it first makes the absent-argument case clear the field, which is
+  // the direction that fails safe.
+  const { failed: _stale, ...rest } = detail
   return {
-    ...detail,
+    ...rest,
+    // **Replaced from the argument, never spread through** (ADR-077). `failed` describes the round the
+    // readings came from, so carrying the document's own copy forward would let an outage's list outlive
+    // the outage: a screen that fetched once over HTTP and then subscribed would keep saying "we could
+    // not reach this kerb" for as long as it stayed open. Absent argument means "I have no failure
+    // information", which is the honest state of a live consumer — the frames carry none, deliberately
+    // (ADR-073), so a subscription's `status: retrying` becomes the authority the moment it takes over.
+    // An optional parameter therefore fails safe: a caller that forgets clears the field rather than
+    // preserving a lie.
+    ...(failed !== undefined && failed.length > 0 ? { failed: sortFailures(failed) } : {}),
     routes: detail.routes.map((row) => ({
       ...row,
       eta:
@@ -829,6 +1107,11 @@ export function applyLiveEtasToStopDetail(detail: StopDetail, etas: readonly Eta
         null,
     })),
   }
+}
+
+/** Canonical `stopId` order, so two producers of one failure set serialize identically (D1). */
+function sortFailures(failed: readonly EtaFailure[]): EtaFailure[] {
+  return [...failed].sort((a, b) => compareCodePoints(a.stopId, b.stopId))
 }
 
 /**
@@ -873,6 +1156,7 @@ function soonestArrivalMs(eta: Eta): number {
 export function applyLiveEtasToNearby(
   stops: readonly NearbyStop[],
   etas: readonly Eta[],
+  failed?: readonly EtaFailure[],
 ): NearbyStop[] {
   const byPole = new Map<string, Eta[]>()
   for (const eta of indexByRef(etas).values()) {
@@ -880,16 +1164,32 @@ export function applyLiveEtasToNearby(
     if (pole === undefined) byPole.set(eta.stopId, [eta])
     else pole.push(eta)
   }
+  // Failures are attributed to a card exactly as readings are — through `memberStopIds`, because an
+  // `EtaFailure.stopId` is a **pole** while a `NearbyStop.stop.id` may be a merged `P:` place id
+  // (ADR-042). Comparing them directly would leave every merged place — which is most of the
+  // interesting ones — looking healthy while its kerbs were refusing.
+  const failedByPole = new Map<string, EtaFailure>()
+  for (const entry of failed ?? []) failedByPole.set(entry.stopId, entry)
 
-  return stops.map((stop) => ({
-    ...stop,
-    etas: memberStopIds(stop.stop.id)
-      .flatMap((poleId) => byPole.get(poleId) ?? [])
-      .sort((a, b) => {
-        const sa = soonestArrivalMs(a)
-        const sb = soonestArrivalMs(b)
-        if (sa !== sb) return sa < sb ? -1 : 1
-        return compareRefs(a, b)
-      }),
-  }))
+  return stops.map((stop) => {
+    const poles = memberStopIds(stop.stop.id)
+    // Replaced, never spread through — see `applyLiveEtasToStopDetail` for why an absent argument must
+    // clear the field rather than preserve the document's own copy.
+    const mine = sortFailures(poles.flatMap((poleId) => failedByPole.get(poleId) ?? []))
+    // Destructured out for the same reason as above: the card's own `failed` must not survive a merge
+    // that was handed none.
+    const { failed: _stale, ...rest } = stop
+    return {
+      ...rest,
+      ...(mine.length > 0 ? { failed: mine } : {}),
+      etas: poles
+        .flatMap((poleId) => byPole.get(poleId) ?? [])
+        .sort((a, b) => {
+          const sa = soonestArrivalMs(a)
+          const sb = soonestArrivalMs(b)
+          if (sa !== sb) return sa < sb ? -1 : 1
+          return compareRefs(a, b)
+        }),
+    }
+  })
 }

@@ -919,10 +919,19 @@ export async function fetchConsolidatedIndex(
       }
     }
 
-    // Joint-route same-pole signal (ADR-042): a co-run KMB+CTB route lists parallel,
-    // index-aligned stop sequences — the same physical pole under each operator's id. Used
-    // only to rescue an already-close, already-same-named candidate pair from the direction
-    // gate, so it cannot introduce a merge on its own.
+    // Joint-route co-run signal (ADR-042): a co-run KMB+CTB route lists parallel, index-aligned stop
+    // sequences, so two ids at the same index are served by the same bus on the same leg. Used only to
+    // rescue an already-close, already-same-named candidate pair from the direction gate, so it cannot
+    // introduce a merge on its own.
+    //
+    // **This comment used to say "the same physical pole under each operator's id", and its own data
+    // contradicts that** — corrected rather than deleted, because somebody reading the old sentence
+    // would build a merge on it. Measured over build `ceb33eed99461e04` (WP5-12): the 1 520 pairs this
+    // loop produces are **p50 16.4 m apart, p90 49.2 m, p99 110.7 m, max 354.4 m, with 403 of them
+    // (26.5 %) over 30 m**. Index alignment means "the same stand on this route", not "one pole": a
+    // franchised co-run lists a whole interchange, or a lay-by opposite, at one index. It is a usable
+    // *hint* for a pair already within the clustering radius and already sharing a name, which is
+    // exactly how it is used — and it is not evidence of identity for anything else.
     const kmbSeq = entry.stops?.kmb
     const ctbSeq = entry.stops?.ctb
     if (entry.co.includes('kmb') && entry.co.includes('ctb') && kmbSeq && ctbSeq) {

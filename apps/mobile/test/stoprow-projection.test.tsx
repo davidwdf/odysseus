@@ -59,6 +59,10 @@ function expectedText(view: StopCardView): string[] {
     else if (row.label.kind === 'due') out.push(row.label.label)
     else out.push('—')
   }
+  // The kernel decides *whether* the card is incomplete; the words are the catalogue's (ADR-054). Drawn
+  // below the rows and above the count, matching `apps/web` — the two renderers are measured against the
+  // same corpus expectation, so a difference in placement here is a difference this file would report.
+  if (view.incomplete) out.push(t('en', 'etasUnavailable'))
   if (view.remaining > 0) out.push(t('en', 'moreRoutes', { n: view.remaining }))
   return out
 }
@@ -129,6 +133,7 @@ describe('apps/mobile renders the kernel view and adds nothing', () => {
       bearingDeg: 0,
       rows: [],
       remaining: 0,
+      incomplete: false,
     }
     expect(render(view, { onPress: () => {} })).toEqual(['Somewhere', 'Northbound'])
     expect(container.querySelectorAll('svg').length).toBeGreaterThan(0)
@@ -142,6 +147,9 @@ describe('apps/mobile renders the kernel view and adds nothing', () => {
         caption: '',
         rows: [],
         remaining: 0,
+        // A card with genuinely nothing due, which is the fact `incomplete: false` distinguishes from a
+        // card whose kerbs refused (ADR-077) — this row asserts the name alone, with no marker line.
+        incomplete: false,
       }),
     ).toEqual(['Somewhere'])
   })

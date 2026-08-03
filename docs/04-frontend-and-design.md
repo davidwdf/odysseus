@@ -1,5 +1,28 @@
 # 04 — Frontend & Design
 
+> ⚠️ **The stack decision in this document is superseded (2026-08-03).**
+> [**ADR-075**](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+> replaced [ADR-002](./08-decision-log.md#adr-002--expo-rn--rn-for-web-pwa-first-native-later-ota):
+> **web is plain React** (`apps/web` — Vite + React DOM + Tailwind), **iOS is hand-written Swift** and
+> **Android hand-written Kotlin**, each idiomatic for its platform, all three measured against one
+> executable spec. There is no EAS Build, no OTA, and no shared component tree. The work plan is
+> [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md) (Wave 6); `apps/mobile` remains the
+> **reference implementation** until its last screen's spec passes on both renderers.
+>
+> **Kept as the record, because the reasoning is worth reading and one part of it aged badly.** §"Why
+> this beats the alternatives" and the three Q&As below are ADR-002's argument as it was made. What
+> actually happened: the shared artefact became the **kernel and its corpus**, not the component tree —
+> so the "3× the code" objection to hand-written native was answered by generated contracts rather than
+> by one renderer, and the *"~5% may need a platform branch"* estimate under **Honest trade-off** proved
+> optimistic. ADR-075 itemises what the `react-native-web` compatibility layer actually cost: a
+> reverted transition, a no-op `scrollTo`, an ignored `hitSlop`, a silently no-op `filter`, a
+> Chromium-only glass, and two test-only package aliases.
+>
+> **One thing this document got right and ADR-002 did not:** the note below that iOS push is *"better
+> since iOS 16.4 for home-screen installs"*. ADR-002's flat *"pure PWA forever loses iOS push"* is the
+> stale version. Background geolocation remains genuinely web-unavailable — but under ADR-075 it, push
+> and haptics are the **native app's** to deliver, so none of them is an argument about React Native.
+
 ## The stack: Expo (React Native + React Native for Web)
 
 **One codebase → three targets:** iOS, Android, and Web/PWA.
@@ -15,7 +38,9 @@
   the release pipelines. RN collapses it to one. A bus app is lists + search + a map + live
   counts — squarely RN's sweet spot; we give up almost nothing.
 
-### Our chosen path: **ship the PWA first, native later — same code**
+### ~~Our chosen path: **ship the PWA first, native later — same code**~~ *(superseded — ADR-075)*
+*PWA-first still holds and is still what WP0-5 ships. "Same code" does not: step 2 below is now a
+hand-written Swift and Kotlin client against the published spec.*
 Choosing Expo does **not** mean shipping native on day one. The Expo **web target builds an
 installable PWA**. So we:
 1. Ship the **PWA** as v1 (always-latest, zero install friction, no app-store gatekeeping).
@@ -60,6 +85,14 @@ delightful touches* — this stack is excellent, and native gets haptics on top.
 - Net: AI makes "two native apps" *more feasible* than before — but "one RN codebase" is still
   less total work and less drift, **and AI accelerates the RN path too.** So the relative
   advantage of one codebase largely persists. We keep one codebase.
+
+> **Reversed by ADR-075.** The conclusion assumed the only defence against drift was a shared
+> component tree. It is not: a generated wire contract, a 742-case corpus, generated tokens and
+> strings, and per-renderer conformance suites defend against it *mechanically*, which one codebase
+> never did — RN-for-Web shipped an instant cut where native slides and a Chromium-only glass. The
+> operational tax listed above is real and is now **accepted deliberately** (see ADR-075's
+> consequences: design review and QA triple). What changed is that drift stopped being the thing one
+> codebase was buying.
 
 ### Q: Users not having the latest version → should we just do a PWA?
 A smart, real concern — and the reason it pushes you toward PWA is exactly the thing Expo fixes:
@@ -304,8 +337,27 @@ keeps the rendering and the hooks.
   identical one, and *nothing* where a side would be fake precision: no side under 10 m apart, and none
   at all for a group where two poles fall in the same octant. It labels 226 places and declines the
   rest on purpose (WP5-10).
+- **`poleDistinctions`** — **what the Place screen actually calls** since WP5-12
+  ([ADR-080](./08-decision-log.md#adr-080--what-tells-two-boarding-points-apart-in-the-order-the-data-can-support-it)).
+  It answers with **at most one** of three things per pole, strongest-true-answer first, and the order
+  *is* the design: a **compass side** (tier 1 is one call to `poleSideOctants`' own guards, so the 226
+  places that speak today are byte-identical); else the pole's **own name**, where the group's names
+  differ once folded through `poleNameKey` — 143 groups, and the biggest win, because the heading throws
+  the name away; else **`poleTooCloseToTell`**, *"Another stop a few steps away — check the sign"*, for
+  the 103 groups where nothing in the data can separate two kerbs. The middle case that matters is the
+  *mixed* place: a group is partitioned into units by complete linkage at the same 10 m and the compass
+  question re-asked about the units, so two coincident poles share a side **and** say they are adjacent
+  while a third 50 m away gets its own side and is **not** called adjacent — where today all three get
+  nothing. A pole with nothing to say is absent from the map, never present-and-empty. Poles told nothing
+  fall from every pole in 271 declined groups to **54**; places carrying any cue go 226 → 464 of 10 115,
+  which is the honest cost.
+- **`poleFlagCode`** (in `stop-name.ts`) — the code a heading prints, **borrowed across locales when this
+  one has none and the other's is flag-shaped** (Latin letters then digits). At Prince Edward Station two
+  KMB poles share a coordinate and read identically in English while the Chinese carries `(MK356)` and
+  `(MK357)`; the code was on the wire and being discarded. The map dot label reads the same helper — change
+  one and the heading would say `KMB · MK356` while the dot said the raw upstream id.
 
-`packages/core/spec/stop-detail.spec.json` pins all five against the shipped dataset. **One row is
+`packages/core/spec/stop-detail.spec.json` pins all six against the shipped dataset. **One row is
 `knownDefect`**: a later service-type variant with a *sooner* bus loses to the first one that merely
 has a reading, so Nearby and Place detail can disagree about the next 269D. Read it before touching
 the dedupe key.

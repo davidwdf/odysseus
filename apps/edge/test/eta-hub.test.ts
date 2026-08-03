@@ -8,7 +8,7 @@ import {
   waitOnExecutionContext,
 } from 'cloudflare:test'
 import { LIVE_PATH, ServerFrameSchema } from '@nextbus/contract'
-import type { Eta, ServerFrame, WatchTarget } from '@nextbus/core'
+import type { Eta, EtaReport, ServerFrame, WatchTarget } from '@nextbus/core'
 import { LIVE_SHARD_COUNT, liveShardFor } from '@nextbus/core'
 import {
   allAliases,
@@ -1104,7 +1104,12 @@ describe('sessionChanged', () => {
     targets: [{ stopId: 'KMB:A' }, { stopId: 'KMB:B' }],
     seq: 7,
     announcedLive: true,
+    failed: [],
   }
+  const refusing = (stopId: string) => ({
+    stopId,
+    error: { code: 'upstream_unavailable' as const, message: 'KMB stop-ETA 502', retryable: true },
+  })
 
   it('says nothing changed when a quiet round kept the same targets', () => {
     // A *different array with the same contents* — which is what a round always produces, and the case
@@ -1115,12 +1120,25 @@ describe('sessionChanged', () => {
     expect(sessionChanged(session, { ...session, targets: [...session.targets] })).toBe(false)
   })
 
-  it('says something changed when any of the three moves', () => {
+  it('says something changed when any of the four moves', () => {
     expect(sessionChanged(session, { ...session, seq: 8 })).toBe(true)
     expect(sessionChanged(session, { ...session, announcedLive: false })).toBe(true)
     // A dropped target. `kept` is a subsequence of `targets`, so a shorter list is a different list.
     expect(sessionChanged(session, { ...session, targets: [{ stopId: 'KMB:A' }] })).toBe(true)
     expect(sessionChanged(session, { ...session, targets: [] })).toBe(true)
+  })
+
+  it('says something changed when only the failure set moved, in both directions', () => {
+    // **The clause WP5-14 added, and the one round it exists for** (ADR-081): a kerb starts refusing,
+    // `retainFailedPoles` keeps its readings, so nothing changed and nothing is gone — every other clause
+    // of this predicate says "quiet". Without this one the write is skipped, the stored set stays empty,
+    // and the *next* round reports the same outage as news all over again, once per cadence for as long as
+    // it lasts. The recovery direction matters just as much: it is what clears the card's marker.
+    const failing = { ...session, failed: [refusing('KMB:A')] }
+    expect(sessionChanged(session, failing)).toBe(true)
+    expect(sessionChanged(failing, session)).toBe(true)
+    // …and an outage that is merely continuing is still quiet, which is what keeps the frame rate down.
+    expect(sessionChanged(failing, { ...failing, failed: [refusing('KMB:A')] })).toBe(false)
   })
 })
 
@@ -1151,7 +1169,9 @@ describe('frame conformance', () => {
     const delta = only(first, 'delta')[0]
 
     resetEtaCache()
-    const http = (await (await get(`/v1/etas/${encodeURIComponent(POLE_A.id)}`)).json()) as Eta[]
+    const { etas: http } = (await (
+      await get(`/v1/etas/${encodeURIComponent(POLE_A.id)}`)
+    ).json()) as EtaReport
     const key = (eta: Eta) => `${eta.stopId}|${eta.routeId}`
     expect((delta?.changed ?? []).map(key).sort()).toEqual(http.map(key).sort())
     expect(http.length).toBeGreaterThan(0)

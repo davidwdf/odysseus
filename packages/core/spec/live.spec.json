@@ -1228,6 +1228,455 @@
         }
       ]
     },
+    "retainFailedPoles": {
+      "doc": "This round's readings, with the poles we could not ask about kept rather than dropped (ADR-073). The second rule in this module that runs in TWO runtimes: the poll emulator applies it to what `/v1/etas/:id` answered, and the `EtaHub` Durable Object applies it to what its own round read, so a hand-port that gets it wrong on one side produces a screen that blanks during an upstream outage on that platform only. The rule it completes is *a failed round is not a departure*, which both engines already held per **target** and neither held per **pole** — a place is N boarding points (ADR-042) and an upstream board call is per point, so an outage at one kerb of a two-kerb place arrived as a successful, partially empty answer. `next` always wins over a retained reading, a retained reading keeps its own timestamps so `isStale` can age it, and nothing is resurrected: only what `prev` already held can survive.",
+      "cases": [
+        {
+          "name": "no-failure-is-this-rounds-truth",
+          "why": "THE CONTROL. With nothing in `failedStopIds` the answer is exactly `next`, canonically ordered — no retention, no carry-over. Without this row an implementation that retained unconditionally would satisfy every other case here, and it would freeze a screen on the last reading it ever saw.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": []
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-pole-that-answered-reports-its-departure",
+          "why": "THE SECOND CONTROL, and the one that keeps the rule honest in the other direction. Identical to the row above and to the row below in every respect except which list the pole is in: the pole answered, it no longer lists 49X, so 49X has genuinely departed and must NOT be retained. `gone` exists for exactly this and ADR-008 forbids leaving a stale time on screen.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["KMB:SOME-OTHER-POLE"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-failed-poles-readings-survive-the-round",
+          "why": "The rule itself: *a failed round is not a departure*. The board refused, so `next` carries nothing from this pole — and reporting that as a departure would tell the rider the bus had left when all that happened is that we could not ask. Before ADR-073 the edge could not even say this had happened: `coalesce` resolved a rejected board to `[]` and the call succeeded empty.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "a-fresh-reading-beats-a-retained-one",
+          "why": "A pole can fail *partway*: Citybus has no stop board, so a place is one upstream call per (pole, route), and one route can refuse while its neighbours answer. The pole is therefore named in `failedStopIds` while `next` still carries some of its readings — and the fresh 86K must win over the retained one. An implementation that indexed `prev` last would show a rider the older of two times it holds.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-retained-reading-keeps-its-own-timestamps",
+          "why": "Retention is not a refresh. `dataTimestamp` stays at the operator clock it was published with, so `isStale` ages it honestly (ADR-008) and the screen labels it rather than presenting a two-minute-old time as new. Stated as its own row because the tempting implementation — rebuild the reading with this round’s `observedAt` — passes every other case and defeats the one honesty cue a rider has.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-first-round-failure-retains-nothing",
+          "why": "There is nothing to keep. A subscription whose very first round met an outage has no previous readings, so this returns empty rather than inventing a state — which is what lets both engines suppress the snapshot entirely for that round (ADR-056 decision 14) instead of publishing `snapshot { etas: [] }`, the frame that means *this stop has no arrivals*.",
+          "args": {
+            "prev": [],
+            "next": [],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": []
+        },
+        {
+          "name": "a-failed-pole-we-never-had-a-reading-for-adds-nothing",
+          "why": "The pole is in `failedStopIds` and `prev` holds nothing from it — a route that had no bus due before the outage started. Nothing is fabricated. The neighbouring pole’s reading is untouched, which is what makes this different from the first-round row above.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "failedStopIds": ["GMB:20009421"]
+          },
+          "expect": [
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20001114",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:54:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "a-place-id-in-the-failed-list-matches-no-reading",
+          "why": "BOUNDARY. `failedStopIds` names *poles*, because a pole is what an upstream board call is for. A caller that passed a merged `P:` place id gets no retention rather than a parse error or a wildcard match — the safe direction, and one an implementation that tried to be clever about place membership would get wrong. `Eta.stopId` is never a place id (the schema says so), so equality is the whole rule.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [],
+            "failedStopIds": ["P:GMB:20001114+GMB:20009421"]
+          },
+          "expect": []
+        },
+        {
+          "name": "one-line-at-two-poles-one-kerb-fails",
+          "why": "THE NAMED BOUNDARY ROW, and it is where WP5-9 and ADR-073 meet. Since ADR-072 an arrival is a line at a *kerb*, so 68K at Fu Kin Street is two readings under one place and a rider sees a row per kerb. When one kerb’s board refuses and the other answers, the two rules have to point in opposite directions in a single round: the answering kerb’s 68K genuinely departed and must go, the refusing kerb’s must stay. Collapse this to one reading per line — the model this repo had until 2026-07-31 — and there is no answer that is right for both kerbs.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:59:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "GMB:68S:outbound:2002401",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T11:07:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "failedStopIds": ["GMB:20009421"]
+          },
+          "expect": [
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20001114",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:54:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:59:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68S:outbound:2002401",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T11:07:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "the-result-is-canonically-ordered",
+          "why": "D1: every list this module returns is sorted by `(stopId, routeId)` in code-point order, and this one is a union of two sources that arrive in different orders. Both engines feed the result straight into `diffEtas` and into a `snapshot`, so an order that depended on which readings happened to be retained would make the poll emulator and the shard emit different frames for identical data — the one property the scenario corpus exists to assert.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68S:outbound:2002401",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T11:07:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:59:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["GMB:20009421"]
+          },
+          "expect": [
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20001114",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:54:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:59:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68S:outbound:2002401",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T11:07:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        }
+      ]
+    },
     "applyLiveFrame": {
       "doc": "The whole client half of the protocol, as one pure reducer over `{ seq, etas, status }`. Two asymmetries are the substance of it and both are deliberate: a `snapshot` applies whatever `seq` it carries (it is the recovery path — refusing an 'old' one would make recovery unreachable exactly when a shard has restarted), while a `delta` at or below the current `seq` is ignored *and* asks for a resync (on an ordered transport a repeated counter means a different producer, not a late frame). Everything the reducer returns is canonically ordered, which is what makes a socket and the poll emulator produce identical listener output. `resyncNeeded` is reported, never thrown: a frame that arrives out of order still carries real data, and discarding it would leave the screen further behind than the data just handed to us. A third asymmetry, no less deliberate: **only a `snapshot` restates the accepted target set**, and every other frame carries the session's own through untouched. That field is the sole signal either producer sends for a target it refused, so a port that drops it shows a rider 'no buses due' for a stop nobody is watching — see `a-snapshot-echoes-the-accepted-target-set`.",
       "cases": [
@@ -1239,6 +1688,7 @@
               "seq": 0,
               "etas": [],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -1294,6 +1744,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -1342,6 +1793,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1395,6 +1847,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1411,6 +1864,7 @@
               "seq": 0,
               "etas": [],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1518,6 +1972,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1553,6 +2008,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1606,6 +2062,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1626,6 +2083,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -1686,6 +2144,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -1742,6 +2201,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1797,6 +2257,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1845,6 +2306,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1909,6 +2371,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1957,6 +2420,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1997,6 +2461,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2061,6 +2526,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2133,6 +2599,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2168,6 +2635,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2219,6 +2687,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2235,6 +2704,7 @@
               "seq": 0,
               "etas": [],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -2282,6 +2752,7 @@
                 }
               ],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -2317,6 +2788,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2367,6 +2839,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2402,6 +2875,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2452,6 +2926,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2487,6 +2962,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2528,6 +3004,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2563,6 +3040,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -2597,6 +3075,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2632,6 +3111,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2671,6 +3151,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -2711,6 +3192,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -2750,6 +3232,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2785,6 +3268,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2824,6 +3308,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live",
                 "error": {
@@ -2864,6 +3349,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2896,6 +3382,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2931,6 +3418,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2964,6 +3452,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -4024,7 +4513,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -4252,7 +4742,8 @@
                   "zh-Hans": "青衣碼頭"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -4456,7 +4947,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -4675,7 +5167,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -4892,7 +5385,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5075,7 +5569,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5258,7 +5753,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5472,7 +5968,8 @@
                 }
               ]
             },
-            "etas": []
+            "etas": [],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5697,7 +6194,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5819,6 +6317,413 @@
               }
             ]
           }
+        },
+        {
+          "name": "a-stale-failed-list-does-not-survive-a-merge-that-was-handed-none",
+          "why": "THE ROW WP5-13 EXISTS FOR, and it is the reason `failed` was left off this payload in ADR-073 rather than added as a one-line field. The document arrives from HTTP naming a kerb that refused; a live subscription then takes over and its frames carry no failure list at all (deliberately — the shard applies the retention itself). If the merge spread the document through, the screen would keep saying “we could not reach this kerb” for as long as it stayed open, long after the socket recovered. An absent argument therefore CLEARS the field, and the subscription's own `status: retrying` becomes the authority.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "routes": [
+                {
+                  "route": {
+                    "id": "KMB:86K:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "86K",
+                    "bound": "outbound",
+                    "serviceType": "1",
+                    "origin": {
+                      "en": "TAI WAI STATION",
+                      "zh-Hant": "TAI WAI STATION",
+                      "zh-Hans": "TAI WAI STATION"
+                    },
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "SHATIN STATION",
+                      "zh-Hans": "SHATIN STATION"
+                    }
+                  },
+                  "eta": null,
+                  "stopId": "KMB:548DAB3A4F71EB68"
+                }
+              ],
+              "members": [
+                {
+                  "id": "CTB:001965",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38471,
+                    "lng": 114.19814
+                  }
+                },
+                {
+                  "id": "KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  }
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "stop": {
+              "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+              "name": {
+                "en": "Belair Garden, Tai Chung Kiu Road",
+                "zh-Hant": "富豪花園, 大涌橋路",
+                "zh-Hans": "富豪花園, 大涌橋路"
+              },
+              "location": {
+                "lat": 22.3847,
+                "lng": 114.198139
+              },
+              "sources": [
+                {
+                  "operator": "CTB",
+                  "operatorStopId": "001965"
+                },
+                {
+                  "operator": "KMB",
+                  "operatorStopId": "548DAB3A4F71EB68"
+                }
+              ],
+              "bearingDeg": 225
+            },
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TAI WAI STATION",
+                    "zh-Hant": "TAI WAI STATION",
+                    "zh-Hans": "TAI WAI STATION"
+                  },
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "SHATIN STATION",
+                    "zh-Hans": "SHATIN STATION"
+                  }
+                },
+                "eta": {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                "stopId": "KMB:548DAB3A4F71EB68"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001965",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38471,
+                  "lng": 114.19814
+                }
+              },
+              {
+                "id": "KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-merge-handed-failures-reports-exactly-those",
+          "why": "The other direction: a caller that DOES know which kerbs refused — the edge building `/v1/stop/:id`, which is the one producer holding both halves — passes them, and they replace whatever the document carried. Replace rather than merge, because two failure lists from two different rounds have no honest union.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "routes": [
+                {
+                  "route": {
+                    "id": "KMB:86K:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "86K",
+                    "bound": "outbound",
+                    "serviceType": "1",
+                    "origin": {
+                      "en": "TAI WAI STATION",
+                      "zh-Hant": "TAI WAI STATION",
+                      "zh-Hans": "TAI WAI STATION"
+                    },
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "SHATIN STATION",
+                      "zh-Hans": "SHATIN STATION"
+                    }
+                  },
+                  "eta": null,
+                  "stopId": "KMB:548DAB3A4F71EB68"
+                }
+              ],
+              "members": [
+                {
+                  "id": "CTB:001965",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38471,
+                    "lng": 114.19814
+                  }
+                },
+                {
+                  "id": "KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  }
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": {
+            "stop": {
+              "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+              "name": {
+                "en": "Belair Garden, Tai Chung Kiu Road",
+                "zh-Hant": "富豪花園, 大涌橋路",
+                "zh-Hans": "富豪花園, 大涌橋路"
+              },
+              "location": {
+                "lat": 22.3847,
+                "lng": 114.198139
+              },
+              "sources": [
+                {
+                  "operator": "CTB",
+                  "operatorStopId": "001965"
+                },
+                {
+                  "operator": "KMB",
+                  "operatorStopId": "548DAB3A4F71EB68"
+                }
+              ],
+              "bearingDeg": 225
+            },
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TAI WAI STATION",
+                    "zh-Hant": "TAI WAI STATION",
+                    "zh-Hans": "TAI WAI STATION"
+                  },
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "SHATIN STATION",
+                    "zh-Hans": "SHATIN STATION"
+                  }
+                },
+                "eta": {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                "stopId": "KMB:548DAB3A4F71EB68"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001965",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38471,
+                  "lng": 114.19814
+                }
+              },
+              {
+                "id": "KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -5887,7 +6792,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6005,7 +6911,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6118,7 +7025,8 @@
                   "zh-Hans": "青衣碼頭"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6232,7 +7140,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6341,7 +7250,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6438,7 +7348,8 @@
                 "dataTimestamp": "2026-07-30T10:50:19+08:00",
                 "observedAt": "2026-07-30T02:50:29.601Z"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6547,7 +7458,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6644,7 +7556,8 @@
                 "routeCount": 26
               }
             ],
-            "etas": []
+            "etas": [],
+            "failed": null
           },
           "expect": [
             {
@@ -6721,7 +7634,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6844,7 +7758,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6921,6 +7836,1209 @@
                 }
               ],
               "routeCount": 4
+            }
+          ]
+        },
+        {
+          "name": "a-failure-is-attributed-to-the-card-whose-pole-it-names",
+          "why": "A `NearbyStop.stop.id` may be a merged `P:` place id while an `EtaFailure.stopId` is always a pole, so attribution goes through `memberStopIds` exactly as readings do. Comparing the two directly would leave every merged place — which is most of the interesting ones — looking healthy while its kerbs refused, and a list of cards is precisely where that is invisible.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "CTB:001965",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26,
+              "failed": [
+                {
+                  "stopId": "CTB:001965",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "a-failure-at-a-pole-no-card-clusters-is-dropped",
+          "why": "BOUNDARY, and the safe direction. A failure naming a pole none of these cards contains belongs to no card, so it is dropped rather than attached to the first or to all of them. Reachable in practice: a batch endpoint (WP5-7) will report failures for a whole request while a caller renders a filtered subset of the cards.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:NO-SUCH-POLE",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26
+            }
+          ]
+        },
+        {
+          "name": "a-stale-card-failure-does-not-survive-a-merge-that-was-handed-none",
+          "why": "The same staleness rule as the stop-detail row, on the surface that will meet it first: once Nearby adopts the live merge (WP5-7) every round calls this with no failure list, so a card's own `failed` has to be cleared or an outage's note outlives the outage on every card at once.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26,
+                "failed": [
+                  {
+                    "stopId": "CTB:001965",
+                    "error": {
+                      "code": "upstream_unavailable",
+                      "message": "KMB stop-ETA 502",
+                      "retryable": true
+                    }
+                  }
+                ]
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": null
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26
+            }
+          ]
+        },
+        {
+          "name": "two-refusing-kerbs-of-one-place-come-out-in-canonical-order",
+          "why": "D1: every list this module returns is sorted, and this one is a place's own failures. It matters beyond tidiness because both live engines turn each entry into one `status: retrying` frame, so an unordered list would make the poll emulator and the shard emit different frame sequences for identical upstream behaviour — the one property the rounds corpus exists to assert. Passed deliberately in the wrong order, and a one-element list can never catch this: a sort of length one calls no comparator at all, which is how the missing order went unnoticed until the kernel's 100% function-coverage threshold refused the change.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              },
+              {
+                "stopId": "CTB:001965",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26,
+              "failed": [
+                {
+                  "stopId": "CTB:001965",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "narrowEtasToRoutes": {
+      "doc": "The `routes=` narrowing, as one rule rather than as two filters (WP5-7). It runs in the edge's `stopEtas` for `/v1/etas/:id?routes=` and in the poll emulator for a target that named routes — the batch endpoint carries no per-id route list, because `,` is a legal `idchar` and there is no safe delimiter for a nested one, so the client narrows one hop after the batch answers while the `EtaHub` shard goes on narrowing server-side. Written twice the two would eventually disagree about a route id that no longer parses or about the empty list, and identical listener output on both engines is exactly what the live-rounds corpus asserts. It narrows READINGS and never failures, and it preserves the caller's order rather than canonicalising.",
+      "cases": [
+        {
+          "name": "absent-routes-narrows-nothing",
+          "why": "THE CONTROL, and the branch every healthy round takes. `undefined` means \"every route at this stop\" — the ordinary case — so an implementation that treated it as an empty allow-list would blank every arrival in the app while satisfying every other row here.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": null
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "an-empty-list-narrows-nothing-rather-than-everything",
+          "why": "\"I named no routes\" is not \"I want no readings\" — the caller that means the latter unsubscribes. `acceptTargets` rejects a `routeIds: []` target outright, so this branch is reachable only from `?routes=` with nothing after it, which is a caller mistake; serving the whole board is the harmless direction and blanking the screen is not.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": []
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "keeps-only-the-named-routes-in-the-order-given",
+          "why": "The ordinary narrowing, and the order matters: this is a filter over a list whose caller has already decided the order — `stopArrivals` serves soonest-first and that ordering is a rider-facing decision. Re-sorting here would silently overwrite it.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": ["KMB:86K:outbound:1"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "narrows-by-route-across-every-pole-of-a-place",
+          "why": "A place is N boarding poles (ADR-042) and one line can board at two of them (WP5-9), so narrowing to a route must keep BOTH of that route's readings. An implementation keyed on the (pole, route) pair would drop the sibling kerb, which is the defect WP5-9 exists to prevent arriving from a new direction.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:9F0D1B0B21D0C0A6",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:57:10+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": ["KMB:86K:outbound:1"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:9F0D1B0B21D0C0A6",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:57:10+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "a-route-nobody-lists-narrows-to-nothing",
+          "why": "An empty result is the honest answer to \"show me a route that is not here\", and it is NOT the same as the empty-list case above. A rider watching one route at a stop that has stopped running it should see no arrivals rather than every arrival.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": ["KMB:999X:outbound:1"]
+          },
+          "expect": []
+        }
+      ]
+    },
+    "liveTargetsKey": {
+      "doc": "A stable string identifying WHICH SUBSCRIPTION THIS IS, so a live hook's effect can depend on a string instead of on an array (WP5-7). It exists because of a request storm rather than for tidiness: a `WatchTarget[]` is a fresh array on every render, the subscription's own readings re-render the screen, and `subscribe` fires a round immediately — so an array dependency makes a subscription resubscribe on its own output, unboundedly, one HTTP request per turn. The key is over the ACCEPTED set, so two orderings of one set are the same subscription (which is what a Nearby list produces as a rider walks a few metres) and an unwatchable id falls out for free; an EMPTY STRING therefore means \"nothing here can be watched\". `|` is the only separator because it is the one structural character absent from every stop and route id, and each target contributes an arity field (`*` for all routes, else the count) so that no two distinct accepted sets can spell one key.",
+      "cases": [
+        {
+          "name": "one-target-all-routes",
+          "why": "THE CONTROL and the ordinary case: absent `routeIds` means every route, spelled `*`, so the key of the commonest subscription in the app is stable and short.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68"
+              }
+            ]
+          },
+          "expect": "KMB:548DAB3A4F71EB68|*"
+        },
+        {
+          "name": "nothing-watchable-is-the-empty-string",
+          "why": "The condition a hook needs before it opens anything at all. `acceptTargets` rejects an id that does not parse, so a screen holding only stale favourites must not subscribe — and a key that was non-empty for a set with nothing in it would have it open a connection watching nothing.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "not-an-id"
+              }
+            ]
+          },
+          "expect": ""
+        },
+        {
+          "name": "two-orderings-of-one-set-are-one-key",
+          "why": "THE SECOND CONTROL, and the whole reason the key runs over the accepted set. A Nearby list reorders as a rider walks a few metres; keyed on the array as given, every such reorder would tear down the subscription and fire an extra round inside the same window — which breaks the request-count property WP5-7 exists for.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:B"
+              },
+              {
+                "stopId": "KMB:A"
+              }
+            ]
+          },
+          "expect": "KMB:A|*|KMB:B|*"
+        },
+        {
+          "name": "a-duplicate-id-does-not-change-the-key",
+          "why": "`acceptTargets` merges two targets for one stop by union, so asking twice is one subscription. A key built from the input would resubscribe when a caller deduplicated its own list.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:A"
+              },
+              {
+                "stopId": "KMB:A"
+              }
+            ]
+          },
+          "expect": "KMB:A|*"
+        },
+        {
+          "name": "a-narrowed-target-carries-its-arity-and-its-routes",
+          "why": "The count is what keeps each target self-delimiting under one separator. Without it `{P:KMB:A+KMB:B}` and `{P:KMB:A, routes:[KMB:B]}` — two different subscriptions — would spell the same key, because `+` separates the members of a place id and `:` is inside every id. That collision is a failure to resubscribe, which is silent.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:A",
+                "routeIds": ["KMB:6:outbound:1", "KMB:1:outbound:1"]
+              }
+            ]
+          },
+          "expect": "KMB:A|2|KMB:1:outbound:1|KMB:6:outbound:1"
+        },
+        {
+          "name": "a-place-id-with-a-plus-is-not-mistaken-for-a-route-list",
+          "why": "The collision the arity field prevents, from the other side: a merged place id contains `+`, and this key must be different from the narrowed single-pole target above. Both rows are needed — either alone passes an implementation that used `+` as its route separator.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "P:KMB:A+KMB:B"
+              }
+            ]
+          },
+          "expect": "P:KMB:A+KMB:B|*"
+        }
+      ]
+    },
+    "sameFailures": {
+      "doc": "Is this round's failure set news? The predicate that lets a frame carry `failed` without making every round a repaint (WP5-14, ADR-081). The failure set moves independently of the readings — a kerb can start refusing, or recover, while every reading a subscriber holds stays byte-identical — so \"an unchanged round is silent\" needs this to know whether the round was unchanged. Both engines ask it, so a disagreement here is two engines sending a different number of frames for one outage. `stopId`, `error.code` and `error.retryable` are compared; **`error.message` is NOT**, because it is prose that embeds whatever the upstream said and a wording that varied between two rounds describing one outage would make every round news. Both lists are canonically ordered by `stopId`, so the comparison is element-wise.",
+      "cases": [
+        {
+          "name": "two-empty-sets-are-the-same",
+          "why": "THE CONTROL, and the state almost every round is in. An implementation that returned false here would send a data frame every single round and undo the delta protocol.",
+          "args": {
+            "a": [],
+            "b": []
+          },
+          "expect": true
+        },
+        {
+          "name": "the-same-pole-failing-the-same-way-is-not-news",
+          "why": "The round-two-of-an-outage case, and the one this predicate exists for: the kerb is still refusing and no reading changed, so the round must stay silent and the client must keep the marker it already has.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": true
+        },
+        {
+          "name": "a-pole-that-started-refusing-is-news",
+          "why": "Round one of an outage. Without this the card could not say \"we could not ask\" until some *reading* happened to change, which during an outage is exactly what stops happening.",
+          "args": {
+            "a": [],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "a-pole-that-recovered-is-news",
+          "why": "THE ROW THE ACCEPTANCE NAMES: \"a recovered kerb's marker clears within one round\". A recovery often changes no reading a client can see — the fresh board can repeat what `retainFailedPoles` was already holding — so if this returned true the marker would outlive the recovery by a whole cadence.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": []
+          },
+          "expect": false
+        },
+        {
+          "name": "a-different-pole-failing-is-news",
+          "why": "Same count, different kerb. A predicate that compared only lengths would call this unchanged and the card would name the wrong kerb — or, on Nearby, attribute the outage to the wrong card entirely.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:9F0D1B0B21D0C0A6",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "the-same-pole-with-a-different-code-is-news",
+          "why": "A timeout becoming an outright refusal is a different fact about the same kerb, and `code` is what a caller branches on. It costs one frame and buys an accurate error.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_timeout",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "the-same-pole-turning-permanent-is-news",
+          "why": "`retryable` is the field that decides whether a background client keeps asking (ADR-064), so a change in it must reach the client even though nothing else about the failure moved.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": false
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "a-message-that-changed-is-not-news",
+          "why": "THE SECOND CONTROL, and the one that keeps the predicate useful. The message embeds the upstream's own words; if it carried a timestamp or a retry count it would differ every round, every round would be news, and the delta protocol would be pointless. Same argument as `COMPARED_FIELDS` excluding `observedAt`.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 503 (attempt 2)",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": true
+        }
+      ]
+    },
+    "unionFailures": {
+      "doc": "One round's failure set from the per-target lists it came back with: deduplicated by pole, sorted by `stopId` in code-point order (WP5-14, ADR-081). A round is N targets and each answers with its own `failed`, so the frame needs the union — and it has to be built identically on both engines or the two send different bytes for identical upstream behaviour, which is the property ADR-074's corpus asserts. First occurrence wins on a duplicate, and the lists arrive in accepted-target order, so \"first\" is the earliest target that reported the pole. `sameFailures` relies on the ordering, so the two rules are only correct together.",
+      "cases": [
+        {
+          "name": "no-failures-anywhere-is-an-empty-set",
+          "why": "THE CONTROL, and the shape of every healthy round. Note the input is a list per target, so this is three targets that all answered — not an empty round.",
+          "args": {
+            "lists": [[], [], []]
+          },
+          "expect": []
+        },
+        {
+          "name": "one-target-with-two-refusing-kerbs",
+          "why": "A place is N boarding points (ADR-042) and an upstream board call is per point, so one target can contribute two entries. The result is sorted, which is what makes the frame byte-identical on both engines.",
+          "args": {
+            "lists": [
+              [
+                {
+                  "stopId": "KMB:9F0D1B0B21D0C0A6",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
+            },
+            {
+              "stopId": "KMB:9F0D1B0B21D0C0A6",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "two-targets-sharing-a-pole-collapse-to-one-entry",
+          "why": "THE ROW THAT MATTERS, and it is reachable rather than theoretical: a rider can watch a merged place AND one of its own member kerbs at once — a Nearby card is keyed on the place, a favourite on the kerb (ADR-062) — and the batch endpoint answers about both. Two entries for one kerb would make the wire claim two outages, and `sameFailures` would then see a length change where nothing changed.",
+          "args": {
+            "lists": [
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ],
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "the-first-target-to-report-a-pole-wins",
+          "why": "The dedupe keeps the EARLIEST entry, not the last, and the difference is observable when two targets describe one kerb differently — a place-level fan-out that timed out and a pole-level one that got a 502. Both engines walk their targets in accepted order, so \"earliest\" is the same entry on each; last-wins would also be deterministic but would depend on target order in the opposite direction, which is the sort of thing two hand-ports get differently.",
+          "args": {
+            "lists": [
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_timeout",
+                    "message": "timed out",
+                    "retryable": true
+                  }
+                }
+              ],
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "error": {
+                "code": "upstream_timeout",
+                "message": "timed out",
+                "retryable": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "a-target-that-answered-contributes-nothing",
+          "why": "THE SECOND CONTROL. The common mixed round: one place refusing, one fine. An implementation that emitted a placeholder for the healthy target would mark every card on the screen incomplete.",
+          "args": {
+            "lists": [
+              [],
+              [
+                {
+                  "stopId": "KMB:9F0D1B0B21D0C0A6",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:9F0D1B0B21D0C0A6",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
             }
           ]
         }

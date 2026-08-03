@@ -76,6 +76,35 @@ const REQUIRED_ROWS = [
   // silently go back to publishing one reading per line per place, which reads as "no buses" at the
   // sibling kerb.
   'eta#dedupeEtas:one-line-at-two-poles-keeps-a-reading-for-each',
+  // The same place, one kerb refusing and the other answering, in one round (WP5-4, ADR-073). The two
+  // halves of "a failed round is not a departure" point in opposite directions inside a single call:
+  // the kerb that answered has genuinely lost its bus, the kerb that refused has not. Both controls go
+  // with it — a round with no failures must not retain anything, and a pole that answered and dropped
+  // a route must still report the departure. Delete any of the three and an outage can go back to
+  // reading as "no buses", which is the defect the whole ADR is about.
+  'live#retainFailedPoles:one-line-at-two-poles-one-kerb-fails',
+  'live#retainFailedPoles:no-failure-is-this-rounds-truth',
+  'live#retainFailedPoles:a-pole-that-answered-reports-its-departure',
+  // The two ways WP5-12's labelling rule gets ported wrong, and neither is reachable from a
+  // two-pole happy-path fixture (ADR-080).
+  //
+  // The mixed place is the row that fails a port which kept `poleSideOctants`' "never labels two poles
+  // with the same side" invariant: the unit tier *deliberately* gives two poles of one unit the same
+  // compass word, because the unit is the thing being placed, while the pole 50 m away gets its own and
+  // is **not** marked adjacent. Delete it and three poles that today are told nothing go back to being
+  // told nothing, or — worse — the far one gets called adjacent to siblings it is 50 m from.
+  //
+  // The case-only row is the one that stops a port comparing name bytes. Two names differing by one
+  // comma would take the name tier, print the same words twice, and claim the ambiguity resolved — which
+  // is exactly what the compass rule refuses to do with a word it cannot support. 21 groups in the
+  // measured build are that shape.
+  'stop-detail#poleDistinctions:lok-hin-terrace-a-crowded-unit-and-a-far-pole-each-get-a-side',
+  'stop-detail#poleDistinctions:a-case-only-name-difference-is-not-a-difference',
+  // The borrow that answers WP5-12's own named lead, and the control that keeps it from becoming a bug:
+  // a code is Latin letters and digits, so it crosses locales unchanged, and a *translated* trailing
+  // parenthetical must never be borrowed — 12 of the 63 candidates in the measured build are that shape.
+  'stop-name#poleFlagCode:an-english-name-with-no-code-borrows-the-chinese-one',
+  'stop-name#poleFlagCode:a-translated-parenthetical-is-not-borrowed',
   // Empty `en` on a circular route. Upstream really does this; the blank sits in the field the
   // code reads first, so it is a live failure mode, not a hypothetical one.
   'search#searchStops:circular-route-blank-en-found-by-chinese-name',

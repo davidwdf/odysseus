@@ -16,10 +16,23 @@ import {
   liveReconnectDelayMs,
   liveShardFor,
   liveSocketUrl,
+  liveTargetsKey,
+  narrowEtasToRoutes,
   nextLiveCadenceMs,
+  retainFailedPoles,
+  sameFailures,
   sameReading,
+  unionFailures,
 } from '../src/live'
-import type { Eta, EtaRef, NearbyStop, ServerFrame, StopDetail, WatchTarget } from '../src/types'
+import type {
+  Eta,
+  EtaFailure,
+  EtaRef,
+  NearbyStop,
+  ServerFrame,
+  StopDetail,
+  WatchTarget,
+} from '../src/types'
 import { specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/live.spec.json. JSON `null` becomes the language's absent
@@ -53,6 +66,108 @@ describe('live#diffEtas', () => {
       expect(diffEtas(c.args.prev, c.args.next)).toEqual(c.expect)
     })
   }
+})
+
+describe('live#retainFailedPoles', () => {
+  for (const c of specCases<{ prev: Eta[]; next: Eta[]; failedStopIds: string[] }, Eta[]>(
+    corpus,
+    'retainFailedPoles',
+  )) {
+    it(c.name, () => {
+      const before = JSON.stringify(c.args.prev)
+      expect(retainFailedPoles(c.args.prev, c.args.next, c.args.failedStopIds)).toEqual(c.expect)
+      // The retained readings come out of `prev`, and both callers hold `prev` as the state they are
+      // about to diff against — the poll emulator's `readings` map and the shard's `before`. Returning
+      // the same objects is fine and intended; mutating them is not, and an in-place merge would look
+      // identical on the first round and quietly corrupt the second.
+      expect(JSON.stringify(c.args.prev)).toBe(before)
+    })
+  }
+})
+
+describe('live#narrowEtasToRoutes', () => {
+  for (const c of specCases<{ etas: Eta[]; routeIds: string[] | null }, Eta[]>(
+    corpus,
+    'narrowEtasToRoutes',
+  )) {
+    it(c.name, () => {
+      // JSON `null` is the language's absent value at this boundary — see `test/corpus.ts`. Translated
+      // here rather than typed as `undefined`, because `null` must not leak into a parameter declared
+      // `string[] | undefined`: the function's absent branch is the one every healthy round takes.
+      const routeIds = c.args.routeIds ?? undefined
+      const before = JSON.stringify(c.args.etas)
+      expect(narrowEtasToRoutes(c.args.etas, routeIds)).toEqual(c.expect)
+      // A filter that returned its input array would let a caller's `.sort()` reorder somebody else's
+      // list. The edge hands this `stopArrivals`' output, which `coalesce` shares by reference across
+      // every concurrent request for 30 s, so an aliased return is a real hazard rather than a purist
+      // one — and the absent/empty branches are exactly where a `return etas` is tempting.
+      expect(narrowEtasToRoutes(c.args.etas, routeIds)).not.toBe(c.args.etas)
+      expect(JSON.stringify(c.args.etas)).toBe(before)
+    })
+  }
+})
+
+describe('live#liveTargetsKey', () => {
+  for (const c of specCases<{ targets: WatchTarget[] }, string>(corpus, 'liveTargetsKey')) {
+    it(c.name, () => {
+      expect(liveTargetsKey(c.args.targets)).toBe(c.expect)
+    })
+  }
+
+  it('two accepted sets that differ at all produce different keys', () => {
+    // The property the rows cannot state one at a time, and the one a collision would silently break:
+    // a key that repeated for a *different* subscription is a hook that never resubscribes. Every
+    // distinct set below must produce a distinct string.
+    const sets: WatchTarget[][] = [
+      [{ stopId: 'KMB:A' }],
+      [{ stopId: 'KMB:B' }],
+      [{ stopId: 'KMB:A' }, { stopId: 'KMB:B' }],
+      [{ stopId: 'P:KMB:A+KMB:B' }],
+      [{ stopId: 'KMB:A', routeIds: ['KMB:B'] }],
+      [{ stopId: 'KMB:A', routeIds: ['KMB:1:outbound:1'] }],
+      [{ stopId: 'KMB:A', routeIds: ['KMB:1:outbound:1', 'KMB:6:outbound:1'] }],
+    ]
+    const keys = sets.map(liveTargetsKey)
+    expect(new Set(keys).size).toBe(sets.length)
+  })
+})
+
+describe('live#sameFailures', () => {
+  for (const c of specCases<{ a: EtaFailure[]; b: EtaFailure[] }, boolean>(
+    corpus,
+    'sameFailures',
+  )) {
+    it(c.name, () => {
+      expect(sameFailures(c.args.a, c.args.b)).toBe(c.expect)
+      // Symmetry, over every row rather than as a row of its own — same argument as `sameReading`'s: an
+      // asymmetric "is this news?" would make a frame depend on which side happened to be the previous
+      // set, and the two engines assign those sides in opposite orders (the emulator holds `sent`, the
+      // shard holds the attachment).
+      expect(sameFailures(c.args.b, c.args.a)).toBe(c.expect)
+    })
+  }
+})
+
+describe('live#unionFailures', () => {
+  for (const c of specCases<{ lists: EtaFailure[][] }, EtaFailure[]>(corpus, 'unionFailures')) {
+    it(c.name, () => {
+      const before = JSON.stringify(c.args.lists)
+      expect(unionFailures(c.args.lists)).toEqual(c.expect)
+      // The caller holds these lists as the round's own per-target answers and diffs against them
+      // afterwards, so a union that sorted an input in place would corrupt the next round's comparison.
+      expect(JSON.stringify(c.args.lists)).toBe(before)
+    })
+  }
+
+  it('is idempotent over its own output', () => {
+    // The output is itself a valid single-element input, and both engines pass one to `sameFailures`
+    // against a previous *output*. A union that was not stable under a second pass would make two rounds
+    // with identical failures compare unequal, which is a frame per round for no news.
+    for (const c of specCases<{ lists: EtaFailure[][] }, EtaFailure[]>(corpus, 'unionFailures')) {
+      const once = unionFailures(c.args.lists)
+      expect(unionFailures([once]), c.name).toEqual(once)
+    }
+  })
 })
 
 describe('live#applyLiveFrame', () => {
@@ -151,23 +266,31 @@ describe('live#liveSocketUrl', () => {
 })
 
 describe('live#applyLiveEtasToStopDetail', () => {
-  for (const c of specCases<{ detail: StopDetail; etas: Eta[] }, StopDetail>(
-    corpus,
-    'applyLiveEtasToStopDetail',
-  )) {
+  // `failed` is `null` in the corpus wherever the caller passes nothing — JSON's stand-in for the
+  // language's absent value (see test/corpus.ts), and the case that must CLEAR a stale list rather than
+  // preserve it. `?? undefined` is that translation at the boundary; passing `null` through would type-
+  // error, which is the point of doing it here rather than widening the signature.
+  for (const c of specCases<
+    { detail: StopDetail; etas: Eta[]; failed: EtaFailure[] | null },
+    StopDetail
+  >(corpus, 'applyLiveEtasToStopDetail')) {
     it(c.name, () => {
-      expect(applyLiveEtasToStopDetail(c.args.detail, c.args.etas)).toEqual(c.expect)
+      expect(
+        applyLiveEtasToStopDetail(c.args.detail, c.args.etas, c.args.failed ?? undefined),
+      ).toEqual(c.expect)
     })
   }
 })
 
 describe('live#applyLiveEtasToNearby', () => {
-  for (const c of specCases<{ stops: NearbyStop[]; etas: Eta[] }, NearbyStop[]>(
-    corpus,
-    'applyLiveEtasToNearby',
-  )) {
+  for (const c of specCases<
+    { stops: NearbyStop[]; etas: Eta[]; failed: EtaFailure[] | null },
+    NearbyStop[]
+  >(corpus, 'applyLiveEtasToNearby')) {
     it(c.name, () => {
-      expect(applyLiveEtasToNearby(c.args.stops, c.args.etas)).toEqual(c.expect)
+      expect(applyLiveEtasToNearby(c.args.stops, c.args.etas, c.args.failed ?? undefined)).toEqual(
+        c.expect,
+      )
     })
   }
 })
@@ -272,6 +395,11 @@ describe('live — properties a corpus row cannot express', () => {
       seq: 0,
       etas: [],
       targets: [],
+      // Empty rather than absent, and the two are not interchangeable here: `failed` is a required field
+      // on a session precisely so a reader never has to ask whether "we know of no failures" and "we have
+      // not been told" are the same state. On the *wire* the field is optional and absent means empty
+      // (ADR-081); the session is where that ambiguity is resolved, once.
+      failed: [],
       status: { state: 'connecting' },
     })
     expect(applyLiveFrame(LIVE_SESSION_START, { type: 'pong' }).state).toBe(LIVE_SESSION_START)

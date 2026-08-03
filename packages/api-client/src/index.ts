@@ -2,7 +2,10 @@ import type {
   ClientPolicy,
   DataSource,
   Eta,
+  EtaBatch,
+  EtaFailure,
   EtaListener,
+  EtaReport,
   LatLng,
   NearbyStop,
   RouteDetail,
@@ -12,27 +15,16 @@ import type {
   WatchOptions,
   WatchTarget,
 } from '@nextbus/core'
-import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
+import { CLIENT_POLICY_DEFAULTS, sameFailures } from '@nextbus/core'
 import type { Clock } from '@nextbus/ports'
 import { type Endpoints, resolveEndpoints } from './endpoint'
 import { classifyFailure } from './errors'
-import { createLiveEtaController, createPollTransport, type LiveEtaEngine } from './live'
-
-/**
- * Everything a transport factory could need to build itself, so the option is one function.
- *
- * The poll emulator needs `getEtas` and a cadence; the socket needs a URL; both need a clock. Handing
- * over the whole `EdgeClient` instead would let a transport reach for a second endpoint, which is how a
- * "transport" grows into a second data layer.
- */
-export interface LiveTransportContext {
-  endpoints: Endpoints
-  /** The client's own `/v1/etas/:id` call — what the poll emulator polls. */
-  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]>
-  /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
-  pollMs: number
-  clock: Clock
-}
+import {
+  createLiveEtaController,
+  createPollTransport,
+  type LiveEtaEngine,
+  type LiveTransportContext,
+} from './live'
 
 export interface EdgeClientOptions {
   /** Base URL of the edge API, e.g. https://api.nextbus.hk */
@@ -52,9 +44,11 @@ export interface EdgeClientOptions {
   clock?: Clock
   /**
    * How `watch()` gets its frames. **Absent means the poll emulator**, so today's behaviour is the
-   * default and a socket is opt-in: one HTTP request per target per cadence, every target independent, a
-   * failure on one leaving the others alone. Supply `createSocketTransport` (or a `MemoryTransport`) to
-   * change engines without touching a screen — which is the property ADR-004 has claimed since v1 and
+   * default and a socket is opt-in: **one HTTP request per cadence** for the whole target set since
+   * WP5-7 (it was one per target, which is why a six-place screen could not adopt it), a target whose id
+   * stops resolving dropped without disturbing the others, and a failed round that is not a departure.
+   * Supply `createSocketTransport` (or a `MemoryTransport`) to change engines without touching a screen —
+   * which is the property ADR-004 has claimed since v1 and
    * `apps/mobile/test/seam-substitution.test.tsx` now actually tests.
    */
   transport?: (ctx: LiveTransportContext) => LiveEtaEngine
@@ -111,10 +105,20 @@ export class EdgeClient implements DataSource {
     return this.getJson<StopDetail>(`/v1/stop/${encodeURIComponent(stopId)}`)
   }
 
-  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]> {
+  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport> {
     // Canonical stop id → /v1/etas/:id (not the lower-level /v1/eta/:co/:stop/:route).
     const q = routeIds?.length ? `?routes=${encodeURIComponent(routeIds.join(','))}` : ''
-    return this.getJson<Eta[]>(`/v1/etas/${encodeURIComponent(stopId)}${q}`)
+    return this.getJson<EtaReport>(`/v1/etas/${encodeURIComponent(stopId)}${q}`)
+  }
+
+  getEtasBatch(ids: readonly string[]): Promise<EtaBatch> {
+    // **The parameter repeats; it is not a delimited list**, because `,` is a legal `idchar` and a query
+    // string decodes `%2C` before anything could split on it — see the `ids` parameter in
+    // `packages/contract/src/wire/responses.ts`. `encodeURIComponent` per id is therefore load-bearing
+    // twice over: it escapes the `+` in a place id, which would otherwise arrive as a space and be
+    // rejected, and it escapes a `&` or an `=` that the grammar permits inside a raw operator id.
+    const q = ids.map((id) => `ids=${encodeURIComponent(id)}`).join('&')
+    return this.getJson<EtaBatch>(`/v1/etas?${q}`)
   }
 
   getSearchIndex(): Promise<SearchIndex> {
@@ -167,10 +171,12 @@ export class EdgeClient implements DataSource {
      * Favourites adopts it (WP5-0 watches one target per screen, so there is nothing to diff yet).
      */
     let last: readonly Eta[] | null = null
+    /** The failure set already handed over. See the guard below for why `etas` alone is not enough. */
+    let lastFailed: readonly EtaFailure[] = []
     const controller = createLiveEtaController({
       transport: this.transport({
         endpoints: this.endpoints,
-        getEtas: (stopId, routeIds) => this.getEtas(stopId, routeIds),
+        getEtasBatch: (ids) => this.getEtasBatch(ids),
         // A caller that has the *served* policy wins over this client's construction-time default.
         // `EdgeClient` is built at module scope, before any policy has been fetched, so `this.pollMs` is
         // `CLIENT_POLICY_DEFAULTS.refreshAfterMs` unless someone passed one — which meant a served
@@ -180,10 +186,19 @@ export class EdgeClient implements DataSource {
         clock: this.clock,
       }),
       targets,
-      emit: ({ etas }) => {
-        if (etas === last) return
+      emit: ({ etas, failed }) => {
+        // **Two things can be news, and the second one was being swallowed here** (WP5-14, ADR-081).
+        // `applyLiveFrame`'s `status` case passes `etas` through by reference, so identity is exactly the
+        // right test for "the readings did not move" — but the failure set moves independently, and the
+        // round that matters most is a kerb starting to refuse while every reading stands still. Until
+        // `EtaListener` could carry `failed`, that round carried no information through this door and the
+        // guard was right to drop it; now it carries the one thing a card needs to stop reading as a quiet
+        // stop. `sameFailures` is the kernel's predicate, so the door and the producers agree about what
+        // counts as a change.
+        if (etas === last && sameFailures(lastFailed, failed)) return
         last = etas
-        onUpdate([...etas])
+        lastFailed = failed
+        onUpdate([...etas], [...failed])
       },
     })
     controller.start()

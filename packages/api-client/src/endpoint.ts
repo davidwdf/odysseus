@@ -53,8 +53,8 @@ export interface Endpoints {
  *
  * `socketUrlOverride` is the escape hatch for the one case derivation cannot cover: a socket tier on a
  * different host. It is passed through untouched apart from the trailing-slash strip, so a `wss://…`
- * value arrives intact. Nothing reads it from the environment yet — `EXPO_PUBLIC_LIVE_URL` /
- * `VITE_LIVE_URL` are the intended spellings and wiring them is the env-var row of this wave.
+ * value arrives intact. Since WP5-6 both app shells read it from `EXPO_PUBLIC_LIVE_URL` /
+ * `VITE_LIVE_URL`; unset — the normal case — means the derivation below.
  *
  * **The trailing-slash strip is restated here, and that is a known seam.** `liveSocketUrl` strips
  * `/+$` internally because it must be self-contained to be corpus-pinned and hand-portable; the API

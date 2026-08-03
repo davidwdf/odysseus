@@ -69,9 +69,14 @@ import {
   acceptTargets,
   diffEtas,
   type Eta,
+  type EtaFailure,
   LIVE_CADENCE_RAMP_ROUNDS,
+  memberStopIds,
   nextLiveCadenceMs,
+  retainFailedPoles,
   type ServerFrame,
+  sameFailures,
+  unionFailures,
   type WatchTarget,
   type WireError,
 } from '@nextbus/core'
@@ -223,6 +228,21 @@ interface Session {
    * it. The client's poll emulator holds the identical flag for the identical reason.
    */
   announcedLive: boolean
+  /**
+   * The failure set this connection was last *told* about (WP5-14, ADR-081).
+   *
+   * Per socket rather than per shard, because each connection watches its own subset of the shard's poll
+   * union and hears only about its own kerbs. And held here rather than recomputed, because the question
+   * it answers is "is this round news?" — `sameFailures(session.failed, mine)` — and the previous *frame*
+   * is the only thing that can answer it. Without it, a round whose failure set moved but whose readings
+   * did not would stay silent, and a recovered kerb's marker would outlive the recovery by a whole
+   * cadence; the poll emulator holds the identical field for the identical reason (`sentFailed`).
+   *
+   * A few tens of bytes on an attachment that already carries the target list, so the 2 KB budget is not
+   * in play. `sessionOf` tolerates its absence, which is what lets a socket opened by the previous deploy
+   * keep working.
+   */
+  failed: readonly EtaFailure[]
 }
 
 /**
@@ -241,7 +261,17 @@ function sessionOf(ws: WebSocket): Session | null {
   const candidate = raw as Partial<Session>
   if (!Array.isArray(candidate.targets)) return null
   if (typeof candidate.seq !== 'number' || typeof candidate.announcedLive !== 'boolean') return null
-  return { targets: candidate.targets, seq: candidate.seq, announcedLive: candidate.announcedLive }
+  return {
+    targets: candidate.targets,
+    seq: candidate.seq,
+    announcedLive: candidate.announcedLive,
+    // **Tolerated when absent rather than required**, unlike the three fields above: a socket that was
+    // opened before this field existed is a live rider mid-journey, and refusing its attachment would
+    // drop the connection on the deploy that added a field it does not miss. Empty is the safe default —
+    // the next round that finds a refusing kerb reports it as news, which is one frame the client did not
+    // strictly need and no wrong information.
+    failed: Array.isArray(candidate.failed) ? candidate.failed : [],
+  }
 }
 
 /**
@@ -264,7 +294,11 @@ export function sessionChanged(previous: Session, next: Session): boolean {
     // `seq`/`announcedLive` clauses unreachable, and the comment above the write ("re-serialized because
     // something changed") describe something the code did not do. It is a subsequence of the same array,
     // so equal length is equal membership; nothing weaker would be sound and nothing stronger is needed.
-    next.targets.length !== previous.targets.length
+    next.targets.length !== previous.targets.length ||
+    // The failure set is the one part of a session that can move on a round where nothing else does — that
+    // is the whole reason it is stored — so a guard that did not ask would drop exactly the write that
+    // matters and the next round would report the same outage as news all over again.
+    !sameFailures(previous.failed, next.failed)
   )
 }
 
@@ -314,8 +348,18 @@ function readingsFor(
  */
 const canonicalEtas = (etas: readonly Eta[]): Eta[] => diffEtas([], etas).changed
 
-/** One target's answer for one round: readings, or the failure that came instead. */
-type RoundResult = { target: WatchTarget; etas: Eta[] } | { target: WatchTarget; error: WireError }
+/**
+ * One target's answer for one round.
+ *
+ * Three outcomes, not two, since ADR-073. A target can now answer *partially*: `stopEtas` resolves with
+ * the readings it got plus `failed`, the boarding points whose upstream board refused. That is a
+ * different thing from `error`, which means the target itself could not be read at all — an unparseable
+ * id, a place that has left the dataset, a KV read that threw — and only that kind can drop a target
+ * from a subscription. A pole failure is advisory: it suppresses `gone` and it reports `retrying`.
+ */
+type RoundResult =
+  | { target: WatchTarget; etas: Eta[]; failed: readonly EtaFailure[] }
+  | { target: WatchTarget; error: WireError }
 
 /**
  * `Z`-suffixed UTC, which is what every frame's `at` is declared to be.
@@ -637,7 +681,28 @@ export class EtaHub extends DurableObject<Env> {
     // snapshot is the recovery path — and the client's poll emulator does reset. Recorded as a
     // divergence the scenario matrix does not cover, not as an accident.
     const seq = (previous?.seq ?? 0) + 1
-    const session: Session = { targets: fits, seq, announcedLive: true }
+    // **The failure set is carried forward for the targets that survived, exactly as the readings are.**
+    //
+    // A `subscribe` is answered from what the shard has *stored* — readings from the last round — so it has
+    // nothing fresher to say about the kerbs either. Sending `failed: []` here would therefore be the
+    // opposite of honest: it would pair stored readings with a claim that nothing is refusing, and a card
+    // that had been saying "we could not ask" would go quiet for a whole cadence before saying it again.
+    // Observed on a real socket before this line existed, which is why it is here rather than reasoned
+    // about: a `subscribe` answered `snapshot etas=6` with no failures one round after a delta that named
+    // three refusing kerbs.
+    //
+    // Filtered through `memberStopIds` because a stored entry names a **pole** while a target may be a
+    // merged place (ADR-042) — the question is "did this subscription keep the target this kerb belongs
+    // to", and comparing ids directly would answer it wrongly for every merged place. A target the caller
+    // has just dropped takes its kerbs with it.
+    //
+    // **What this does not recover, stated rather than left to be found:** a *reconnect* is a new
+    // WebSocket with no attachment, so its first snapshot carries no failures whatever the shard knows.
+    // The stored readings are equally invisible to that socket, so the two are at least consistent, and
+    // the next round tells it everything within one cadence.
+    const keptPoles = new Set(fits.flatMap((target) => memberStopIds(target.stopId)))
+    const carried = (previous?.failed ?? []).filter((entry) => keptPoles.has(entry.stopId))
+    const session: Session = { targets: fits, seq, announcedLive: true, failed: carried }
     ws.serializeAttachment(session)
 
     const stored = this.storedReadings()
@@ -652,6 +717,8 @@ export class EtaHub extends DurableObject<Env> {
       // with what was sent and tell the rider about the difference.
       targets: fits,
       etas: canonicalEtas(readingsFor(fits, stored)),
+      // Omitted when empty, like every list in this protocol.
+      ...(carried.length > 0 ? { failed: carried } : {}),
     })
 
     // Two reasons a target is not being watched, and they are **not** the same error. A malformed or
@@ -761,10 +828,8 @@ export class EtaHub extends DurableObject<Env> {
           // …with **this object's own CTB budget**, not the read path's default. That default is sized
           // for one HTTP request; a round repeats at the cadence, and at 24 the 48 heaviest real places
           // cost 1,342 calls a round (see `LIVE_MAX_TARGETS_PER_SHARD`).
-          return {
-            target,
-            etas: await stopEtas(dataset, target.stopId, target.routeIds, LIVE_CTB_BUDGET),
-          }
+          const report = await stopEtas(dataset, target.stopId, target.routeIds, LIVE_CTB_BUDGET)
+          return { target, etas: report.etas, failed: report.failed ?? [] }
         } catch (err) {
           return { target, error: wireErrorOf(err) }
         }
@@ -772,10 +837,29 @@ export class EtaHub extends DurableObject<Env> {
     )
 
     const failures = new Map<string, WireError>()
+    /** Per target, the boarding points inside it that refused — ordered as the wire ordered them. */
+    const poleFailures = new Map<string, readonly EtaFailure[]>()
     const after = new Map<string, readonly Eta[]>()
     for (const result of results) {
       if ('etas' in result) {
-        after.set(result.target.stopId, result.etas)
+        // **A failed round is not a departure, one level below where this object used to enforce it**
+        // (ADR-073). `stopEtas` can answer partially: a place is N boarding points and an upstream
+        // board call is per point, so one kerb can refuse while the others answer. Until the wire
+        // could say so, that arrived here as a perfectly ordinary successful list with readings
+        // missing from it, and `diffEtas` reported the missing ones `gone` — the same dishonesty the
+        // target-level branch below exists to prevent, reached by a route this object could not see.
+        // `retainFailedPoles` is the kernel's rule and the poll emulator applies the identical call.
+        after.set(
+          result.target.stopId,
+          result.failed.length === 0
+            ? result.etas
+            : retainFailedPoles(
+                before.get(result.target.stopId) ?? [],
+                result.etas,
+                result.failed.map((f) => f.stopId),
+              ),
+        )
+        if (result.failed.length > 0) poleFailures.set(result.target.stopId, result.failed)
         continue
       }
       failures.set(result.target.stopId, result.error)
@@ -798,7 +882,7 @@ export class EtaHub extends DurableObject<Env> {
     const quiet = shardDiff.changed.length === 0 && shardDiff.gone.length === 0
 
     for (const { ws, session } of entries) {
-      this.sendRound(ws, session, before, after, failures)
+      this.sendRound(ws, session, before, after, failures, poleFailures)
     }
 
     this.writeReadings(before, after)
@@ -820,6 +904,7 @@ export class EtaHub extends DurableObject<Env> {
     before: ReadonlyMap<string, readonly Eta[]>,
     after: ReadonlyMap<string, readonly Eta[]>,
     failures: ReadonlyMap<string, WireError>,
+    poleFailures: ReadonlyMap<string, readonly EtaFailure[]>,
   ): void {
     const current = sessionOf(ws)
     // **It re-declared itself during this round's awaits, so its own snapshot is authoritative.** Both
@@ -845,10 +930,51 @@ export class EtaHub extends DurableObject<Env> {
       readingsFor(kept, after),
     )
 
-    const mine = session.targets
+    // Every failure this connection should hear about, in accepted-target order and — within a target
+    // — in the order the wire listed its poles. One flat list rather than two, because the client
+    // receives one `status` frame per entry and the poll emulator builds the identical sequence from
+    // the identical `EtaReport`; two lists emitted in two loops would order them differently the
+    // moment a round had both kinds, and that difference is exactly what the scenario corpus asserts
+    // against. A target either failed outright or answered (possibly partially) — never both.
+    const mine = session.targets.flatMap((target): WireError[] => {
+      const whole = failures.get(target.stopId)
+      if (whole !== undefined) return [whole]
+      return (poleFailures.get(target.stopId) ?? []).map((f) => f.error)
+    })
+    // **Only a *target*-level failure can be permanent here**, and that is a rule rather than an
+    // observation about today's codes. `retryable: false` is the wire's instruction to prune, and a
+    // refusing board says nothing about whether the rider's stop exists — so a pole failure must never
+    // remove a target from a subscription, whatever code it happens to carry. `kept` above filters on
+    // `failures` alone for the same reason.
+    const permanent = session.targets
       .map((target) => failures.get(target.stopId))
-      .filter((error): error is WireError => error !== undefined)
-    const permanent = mine.filter((error) => !error.retryable)
+      .filter((error): error is WireError => error !== undefined && !error.retryable)
+
+    /**
+     * This connection's own failure set for the frame (WP5-14, ADR-081) — the kernel's union over the
+     * targets it is watching, so the poll emulator building the same thing from the same `EtaReport`s
+     * produces the identical bytes (D1).
+     *
+     * **Pole failures only, and over `kept` rather than `session.targets`.** `EtaFailure.stopId` is a
+     * boarding point while a target may be a merged place, so a whole-target failure has no pole to name
+     * and stays a `status` frame (ADR-073 decision 2). And a target that has just been dropped for good is
+     * not something this connection is watching any more, so naming its kerbs would mark a card the client
+     * is about to stop drawing.
+     */
+    const mineFailed = unionFailures(kept.map((target) => poleFailures.get(target.stopId) ?? []))
+    /**
+     * **A failure set that moved is news, even when no reading did.**
+     *
+     * The delta branch below used to fire on `changed || gone` alone, which is silent for exactly the
+     * round an outage produces: a kerb stops answering, `retainFailedPoles` keeps its previous readings, so
+     * nothing changed and nothing is gone. The card then could not say "we could not ask" until some other
+     * bus happened to move — and on recovery the marker would outlive the recovery by a cadence, which the
+     * row's acceptance rules out. `sameFailures` is the kernel's predicate, so this shard and the emulator
+     * agree about what counts as a change, down to ignoring a reworded error message.
+     */
+    const failuresAreNews = !sameFailures(session.failed, mineFailed)
+    /** Omitted when empty, on the wire and here — the convention every list in this protocol follows. */
+    const failedField = mineFailed.length > 0 ? { failed: mineFailed } : {}
 
     let seq = session.seq
     if (permanent.length > 0) {
@@ -868,10 +994,14 @@ export class EtaHub extends DurableObject<Env> {
         at: frameAt(Date.now()),
         targets: kept,
         etas: canonicalEtas(readingsFor(kept, after)),
+        ...failedField,
       })
-    } else if (changed.length > 0 || gone.length > 0) {
+    } else if (changed.length > 0 || gone.length > 0 || failuresAreNews) {
       seq += 1
-      this.send(ws, { type: 'delta', seq, at: frameAt(Date.now()), changed, gone })
+      // A delta with two empty lists and a `failed` is a legal frame and a new one: it is how a round that
+      // only learned "this kerb has started refusing" — or "has stopped" — reaches a screen. The module
+      // header's "an unchanged round sends nothing" still holds; what counts as unchanged has widened.
+      this.send(ws, { type: 'delta', seq, at: frameAt(Date.now()), changed, gone, ...failedField })
     }
     // else: nothing changed for this subscriber, so nothing is sent at all. See the module header.
 
@@ -894,7 +1024,7 @@ export class EtaHub extends DurableObject<Env> {
     const announcedLive = mine.length === 0
     if (announcedLive && !session.announcedLive) this.send(ws, this.status('live'))
 
-    const next: Session = { targets: kept, seq, announcedLive }
+    const next: Session = { targets: kept, seq, announcedLive, failed: mineFailed }
     if (sessionChanged(session, next)) {
       // Re-serialized because a mutation of the object the attachment was built from is *not* captured;
       // the runtime snapshots at the call.
