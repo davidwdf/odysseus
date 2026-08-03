@@ -39,7 +39,7 @@ import { formatBearing, formatDistance, formatWalk } from './geo'
 import { parseRouteId } from './ids'
 import { CLIENT_POLICY_DEFAULTS } from './policy'
 import { splitStopCode, titleCaseName } from './stop-name'
-import type { Eta, I18nText, Locale, NearbyStop, OperatorId } from './types'
+import type { Eta, EtaFailure, I18nText, Locale, NearbyStop, OperatorId } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
 // JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the one
@@ -89,6 +89,23 @@ export interface StopCardView {
   rows: StopCardRow[]
   /** Routes at this place beyond the rows shown — the "+N more" count. Zero means no affordance. */
   remaining: number
+  /**
+   * True when at least one of this place's boarding points would not answer, so `rows` may be
+   * incomplete and an empty `rows` is **not** a claim that nothing is due (ADR-077).
+   *
+   * **A boolean, and the granularity is the decision.** `failed` on the wire names poles, and this card
+   * deliberately has no per-kerb heading — that is the same argument `soonestPerLine` makes for
+   * collapsing two kerbs' readings into one row: printing a kerb a rider cannot choose between gives
+   * them nothing to choose with. A count of refusing kerbs would be a number with no referent on this
+   * surface. So the card says the one thing it can support: *some of what should be here is missing, and
+   * the reason is us, not the timetable.* Place detail prints a heading per kerb and can be more
+   * specific; that is its field to grow, not this one.
+   *
+   * **Not the same fact as an empty `rows`.** A stop with genuinely no buses due has `rows: []` and
+   * `incomplete: false`, and telling those two apart on a card is the entire point of the row — before
+   * it, both rendered as a name with nothing under it.
+   */
+  incomplete: boolean
 }
 
 /** What a card is built from: exactly the data the wire supplies, and nothing derived. */
@@ -105,6 +122,11 @@ export interface StopCardInput {
    *  index. Omitted by callers that have no such total, where the lines among the fetched readings
    *  are the best available answer. */
   routeCount?: number
+  /** Boarding points of this place whose upstream board did not answer (ADR-077). Straight off
+   *  `NearbyStop.failed`, so `nearbyView` needs no plumbing: absent or empty means every board
+   *  answered, which is why `incomplete` defaults to false for every caller that has no such field —
+   *  Favourites, and any client older than the wire change. */
+  failed?: readonly EtaFailure[]
 }
 
 /** The clock, locale and served numbers a card needs — all explicit, none measured here. */
@@ -164,6 +186,10 @@ export function stopCardView(input: StopCardInput, opts: StopCardOptions): StopC
     bearingDeg: input.stop.bearingDeg,
     rows: shown.map((eta) => stopCardRow(eta, opts.locale, opts.now, policy)),
     remaining: Math.max(0, total - shown.length),
+    // Presence, not length: one refusing kerb out of four is still a card whose rows may be short, and
+    // a rider cannot act on the difference between one and four. `?? []` rather than an optional chain
+    // so a client that has never heard of the field reads as complete rather than as unknown.
+    incomplete: (input.failed ?? []).length > 0,
   }
 }
 

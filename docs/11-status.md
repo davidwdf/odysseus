@@ -271,10 +271,11 @@ by a line at a kerb rather than a line at a place**, so both kerbs' rows carry t
 the `fallback` that caused it, `/v1/etas/:id` answers `{ etas, failed }` and both engines apply one kernel
 retention rule to it ([ADR-073](./08-decision-log.md#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire)), bound by a corpus that drives the real Durable Object over a real
 socket ([ADR-074](./08-decision-log.md#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)), and the socket is selectable from the environment
-([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)). That leaves **WP5-7** (batch `/v1/etas?ids=…`, then Nearby adopts live), **WP5-12**, the
-2–10 m residual those clustering rules deliberately leave between them, and the new **WP5-13** — `/v1/nearby`
-and `/v1/stop` still cannot say "we could not ask", which is why a Nearby card during an outage still reads
-as an empty stop. WP5-12 now owns two things it did
+([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)). **WP5-13** then closed the last rider-facing hole those three left: `/v1/nearby` and `/v1/stop` can say
+*"we could not ask"* now, so a card during an outage no longer reads as an empty stop
+([ADR-077](./08-decision-log.md#adr-077--a-card-can-say-we-could-not-ask-and-a-failure-list-must-not-outlive-its-round)). That leaves **WP5-7** (batch `/v1/etas?ids=…`, then Nearby adopts live), **WP5-8** (the
+docs-freshness rule, which nothing enforces) and **WP5-12**, the 2–10 m residual the clustering rules
+deliberately leave between them. WP5-12 now owns two things it did
 not: a rider who stars one line at **both** kerbs still sees one Favourites row, and at Fu Kin Street the two
 kerbs' *names* differ ("outside" vs "opposite" Sin Sam House) where the printed code does not — a cheaper lead
 than any in its own row.
@@ -736,15 +737,18 @@ than any in its own row.
   engines apply to it. **Residual, and it is real:** `/v1/nearby` and `/v1/stop` still cannot say it, so a
   Nearby card and a Place screen's *first paint* still read as "no buses" during an outage — see the
   🟡 bullet below and **WP5-13**.
-- 🟡 **`/v1/nearby` and `/v1/stop/:id` still cannot say "we could not ask"** (left by WP5-4,
-  [ADR-073](./08-decision-log.md#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire), owner **WP5-13**). Both embed readings from the same producer, so
-  the information exists and the field is one line — but it is **not** one line to make it correct:
-  `applyLiveEtasToNearby` and `applyLiveEtasToStopDetail` spread the document they are handed, so a `failed`
-  list fetched once over HTTP would outlive the outage it describes and a screen would keep saying "we could
-  not reach this kerb" long after the socket recovered. Fixing it means teaching the merge helpers about
-  failures — a kernel change with corpus rows. Sequenced **after WP5-7**, so the field lands with a reader
-  rather than being drift with a staleness bug behind it. Until then: Place detail learns within one cadence
-  from its subscription's `retrying`; Nearby has no subscription at all.
+- ✅ **Closed 2026-08-03 by WP5-13** ([ADR-077](./08-decision-log.md#adr-077--a-card-can-say-we-could-not-ask-and-a-failure-list-must-not-outlive-its-round)), kept for the history:
+  *"`/v1/nearby` and `/v1/stop/:id` cannot say 'we could not ask'"* — so a Nearby card during a KMB outage
+  rendered identically to a stop with no buses due. Both payloads carry `failed` now, and the thing that
+  made it safe is the fix ADR-073 said it was waiting for: the two kernel merge helpers **take** the
+  current failure set and destructure the old one *out* of the spread, so an absent argument clears the
+  field rather than letting an HTTP-era list outlive the outage it describes. A card says one thing —
+  `StopCardView.incomplete`, a boolean, because a compact card prints no kerb heading — rendered by both
+  renderers from the kernel's answer as a muted *"Live times unavailable"* below the rows. Measured with
+  the KMB upstream pointed at an unroutable host: the Citybus place in the same response kept its six
+  readings and reported nothing, and in a browser a mixed-operator place showed its NLB/Citybus arrivals
+  **and** the marker for its refusing KMB kerbs. **Residual:** the live path is coarser than the HTTP one
+  — a subscription's `retrying` names no kerb — which is deliberate and recorded in the ADR.
 - ✅ **Closed 2026-08-03 by WP5-5** ([ADR-074](./08-decision-log.md#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)), kept for the history:
   *"nothing binds the two engines' failure semantics"* — the rules were implemented in `live/poll.ts` **and**
   in `eta-hub.ts`, and the scenario matrix compared the poll emulator against a hand-written script, never

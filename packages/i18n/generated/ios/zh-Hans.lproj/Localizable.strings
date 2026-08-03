@@ -81,6 +81,7 @@
 "routesLabel" = "条路线";
 /* stopCount: plural — see Localizable.stringsdict */
 /* moreRoutes: plural — see Localizable.stringsdict */
+"etasUnavailable" = "无法获取实时班次";
 "mapAttribution" = "地图由地政总署提供";
 "mapAttributionAction" = "地图由地政总署提供 — 打开版权公告及免责声明";
 "keypadBackspace" = "退格";

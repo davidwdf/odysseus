@@ -74,7 +74,7 @@ import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
 import worker from '../src/index'
 import { liveShardName } from '../src/live'
-import { datasetJson, poles } from './fixtures'
+import { datasetJson, ORIGIN, poles } from './fixtures'
 
 // ── Logical → concrete ─────────────────────────────────────────────────────────────────────────
 //
@@ -579,6 +579,67 @@ describe('/v1/etas/:id says which boarding points would not answer', () => {
     // Both kerbs named, ordered by pole id — the order both engines turn into `retrying` frames, so an
     // unordered list would make them diverge for identical upstream behaviour.
     expect(body.failed.map((f) => f.stopId)).toEqual(['KMB:POLE00', 'KMB:POLE01'])
+  })
+
+  it('says it on /v1/stop/:id too, where a row can then be read honestly', async () => {
+    // WP5-13. `/v1/etas` was the arrivals endpoint and got `failed` first (ADR-073); this is the payload
+    // a Place screen paints from *before* its subscription has said anything, so without the field a row
+    // reading "—" is ambiguous between "nothing due" and "we could not ask". The field is safe to serve
+    // here only because `applyLiveEtasToStopDetail` replaces it from its own argument — which this
+    // endpoint passes — instead of spreading the document's copy into every later live merge.
+    // `R01` and not an invented number: `/v1/stop` builds its rows from the place's **static** route
+    // list, so a reading for a route the dataset does not list at this pole matches no row — unlike
+    // `/v1/etas`, which publishes whatever the board says. That distinction cost this test one run.
+    boards.set('POLE00', 'refused')
+    boards.set('POLE01', [{ route: 'R01', at: ['+6'] }])
+    const res = await get(
+      `/v1/stop/${encodeURIComponent(placeIds.get('C') as string)}?case=stop-one-refused`,
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      routes: Array<{ stopId: string; eta: unknown }>
+      failed?: Array<{ stopId: string }>
+    }
+    expect(body.failed?.map((f) => f.stopId)).toEqual(['KMB:POLE00'])
+    // …and the rows are untouched: a refusal changes what an absent reading *means*, never a reading.
+    const answered = body.routes.filter((r) => r.stopId === 'KMB:POLE01' && r.eta !== null)
+    expect(answered.length, 'the answering kerb still carries its reading').toBeGreaterThan(0)
+  })
+
+  it('omits `failed` on /v1/stop/:id when every board answered', async () => {
+    // The control. Absent means "nothing to say", so a producer that always sent `[]` would make
+    // `stopCardView`'s length test — and therefore every card in both renderers — read as incomplete.
+    boards.set('POLE00', [{ route: 'R00', at: ['+3'] }])
+    boards.set('POLE01', [{ route: 'R01', at: ['+6'] }])
+    const res = await get(
+      `/v1/stop/${encodeURIComponent(placeIds.get('C') as string)}?case=stop-all-answered`,
+    )
+    expect('failed' in ((await res.json()) as object)).toBe(false)
+  })
+
+  it('says it per card on /v1/nearby, attributed to the place whose kerb refused', async () => {
+    // The surface the outage was most invisible on: a card with no rows and no explanation reads exactly
+    // like a stop with no buses. `stopArrivals` runs per place here, so the failures already name this
+    // place's own poles — the kernel's `memberStopIds` attribution is for the live path, where one
+    // round's failures span every card (WP5-7).
+    for (const pole of poles) boards.set(pole.rawId, [{ route: pole.route, at: ['+4'] }])
+    boards.set('SOLO0', 'refused')
+    const res = await get(`/v1/nearby?lat=${ORIGIN.lat}&lng=${ORIGIN.lng}&radius=499`)
+    expect(res.status).toBe(200)
+    const cards = (await res.json()) as Array<{
+      stop: { id: string }
+      etas: unknown[]
+      failed?: Array<{ stopId: string }>
+    }>
+    const withFailures = cards.filter((c) => c.failed !== undefined)
+    // Only the card that clusters SOLO0 — never all of them, and never the first one.
+    expect(withFailures.length).toBeLessThanOrEqual(1)
+    for (const card of withFailures) {
+      expect(card.failed?.map((f) => f.stopId)).toEqual(['KMB:SOLO0'])
+      expect(card.stop.id).toContain('SOLO0')
+    }
+    // And a card whose boards all answered says nothing, which is what makes the field readable.
+    expect(cards.some((c) => c.failed === undefined && c.etas.length > 0)).toBe(true)
   })
 
   it('reports the refusal even when `routes=` narrows the readings away', async () => {

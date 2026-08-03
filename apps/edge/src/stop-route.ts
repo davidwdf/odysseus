@@ -403,15 +403,13 @@ async function requirePlace(ds: DatasetSource, id: string): Promise<PlaceDoc> {
  *  inheriting whatever is in the namespace. */
 export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDetail> {
   const place = await requirePlace(ds, id)
-  // **`failed` is deliberately dropped here and NOT put on `StopDetail`** (ADR-073). Not an oversight
-  // and not free: `applyLiveEtasToStopDetail` spreads the document it is handed, so a `failed` list
-  // fetched once over HTTP would survive every subsequent live merge unchanged — a screen would keep
-  // saying "we could not reach this kerb" for as long as it stayed open, long after the socket had
-  // recovered. Making it correct means teaching the merge helpers about failures, which is a kernel
-  // change with corpus rows of its own. The Place screen learns about an outage the way the ADR
-  // intends anyway: through its live subscription's `retrying` status, one cadence later. WP5-13 owns
-  // the first-paint gap for this endpoint and for `/v1/nearby`.
-  const readings = (await memberEtaLists(place)).etas.map(withRemarkKind)
+  // `failed` is served here since WP5-13 (ADR-077), and the mechanism that makes it safe is the one
+  // ADR-073 said it was waiting for: `applyLiveEtasToStopDetail` now *replaces* the field from its own
+  // argument rather than spreading the document's copy, so this list cannot outlive the round it
+  // describes. Pass it to that call below — omitting it there would clear it, which is exactly the
+  // fail-safe direction the kernel chose.
+  const { etas: raw, failed } = await memberEtaLists(place)
+  const readings = raw.map(withRemarkKind)
 
   const detail: StopDetail = {
     stop: toMergedStop(place),
@@ -449,7 +447,7 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
   // implementations of "this reading belongs to that row" is how the screen came to disagree with
   // itself, and the previous one crossed poles where the kernel's does not. The `server` layer may
   // import the kernel (ADR-051), and `classifyRemark` above is the same move.
-  return applyLiveEtasToStopDetail(detail, readings)
+  return applyLiveEtasToStopDetail(detail, readings, failed)
 }
 
 /**

@@ -4473,7 +4473,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -4701,7 +4702,8 @@
                   "zh-Hans": "青衣碼頭"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -4905,7 +4907,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5124,7 +5127,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5341,7 +5345,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5524,7 +5529,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5707,7 +5713,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -5921,7 +5928,8 @@
                 }
               ]
             },
-            "etas": []
+            "etas": [],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -6146,7 +6154,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": {
             "stop": {
@@ -6268,6 +6277,413 @@
               }
             ]
           }
+        },
+        {
+          "name": "a-stale-failed-list-does-not-survive-a-merge-that-was-handed-none",
+          "why": "THE ROW WP5-13 EXISTS FOR, and it is the reason `failed` was left off this payload in ADR-073 rather than added as a one-line field. The document arrives from HTTP naming a kerb that refused; a live subscription then takes over and its frames carry no failure list at all (deliberately — the shard applies the retention itself). If the merge spread the document through, the screen would keep saying “we could not reach this kerb” for as long as it stayed open, long after the socket recovered. An absent argument therefore CLEARS the field, and the subscription's own `status: retrying` becomes the authority.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "routes": [
+                {
+                  "route": {
+                    "id": "KMB:86K:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "86K",
+                    "bound": "outbound",
+                    "serviceType": "1",
+                    "origin": {
+                      "en": "TAI WAI STATION",
+                      "zh-Hant": "TAI WAI STATION",
+                      "zh-Hans": "TAI WAI STATION"
+                    },
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "SHATIN STATION",
+                      "zh-Hans": "SHATIN STATION"
+                    }
+                  },
+                  "eta": null,
+                  "stopId": "KMB:548DAB3A4F71EB68"
+                }
+              ],
+              "members": [
+                {
+                  "id": "CTB:001965",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38471,
+                    "lng": 114.19814
+                  }
+                },
+                {
+                  "id": "KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  }
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "stop": {
+              "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+              "name": {
+                "en": "Belair Garden, Tai Chung Kiu Road",
+                "zh-Hant": "富豪花園, 大涌橋路",
+                "zh-Hans": "富豪花園, 大涌橋路"
+              },
+              "location": {
+                "lat": 22.3847,
+                "lng": 114.198139
+              },
+              "sources": [
+                {
+                  "operator": "CTB",
+                  "operatorStopId": "001965"
+                },
+                {
+                  "operator": "KMB",
+                  "operatorStopId": "548DAB3A4F71EB68"
+                }
+              ],
+              "bearingDeg": 225
+            },
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TAI WAI STATION",
+                    "zh-Hant": "TAI WAI STATION",
+                    "zh-Hans": "TAI WAI STATION"
+                  },
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "SHATIN STATION",
+                    "zh-Hans": "SHATIN STATION"
+                  }
+                },
+                "eta": {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                "stopId": "KMB:548DAB3A4F71EB68"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001965",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38471,
+                  "lng": 114.19814
+                }
+              },
+              {
+                "id": "KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-merge-handed-failures-reports-exactly-those",
+          "why": "The other direction: a caller that DOES know which kerbs refused — the edge building `/v1/stop/:id`, which is the one producer holding both halves — passes them, and they replace whatever the document carried. Replace rather than merge, because two failure lists from two different rounds have no honest union.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "routes": [
+                {
+                  "route": {
+                    "id": "KMB:86K:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "86K",
+                    "bound": "outbound",
+                    "serviceType": "1",
+                    "origin": {
+                      "en": "TAI WAI STATION",
+                      "zh-Hant": "TAI WAI STATION",
+                      "zh-Hans": "TAI WAI STATION"
+                    },
+                    "destination": {
+                      "en": "SHATIN STATION",
+                      "zh-Hant": "SHATIN STATION",
+                      "zh-Hans": "SHATIN STATION"
+                    }
+                  },
+                  "eta": null,
+                  "stopId": "KMB:548DAB3A4F71EB68"
+                }
+              ],
+              "members": [
+                {
+                  "id": "CTB:001965",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38471,
+                    "lng": 114.19814
+                  }
+                },
+                {
+                  "id": "KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.38469,
+                    "lng": 114.198138
+                  }
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": {
+            "stop": {
+              "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+              "name": {
+                "en": "Belair Garden, Tai Chung Kiu Road",
+                "zh-Hant": "富豪花園, 大涌橋路",
+                "zh-Hans": "富豪花園, 大涌橋路"
+              },
+              "location": {
+                "lat": 22.3847,
+                "lng": 114.198139
+              },
+              "sources": [
+                {
+                  "operator": "CTB",
+                  "operatorStopId": "001965"
+                },
+                {
+                  "operator": "KMB",
+                  "operatorStopId": "548DAB3A4F71EB68"
+                }
+              ],
+              "bearingDeg": 225
+            },
+            "routes": [
+              {
+                "route": {
+                  "id": "KMB:86K:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "86K",
+                  "bound": "outbound",
+                  "serviceType": "1",
+                  "origin": {
+                    "en": "TAI WAI STATION",
+                    "zh-Hant": "TAI WAI STATION",
+                    "zh-Hans": "TAI WAI STATION"
+                  },
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "SHATIN STATION",
+                    "zh-Hans": "SHATIN STATION"
+                  }
+                },
+                "eta": {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                "stopId": "KMB:548DAB3A4F71EB68"
+              }
+            ],
+            "members": [
+              {
+                "id": "CTB:001965",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38471,
+                  "lng": 114.19814
+                }
+              },
+              {
+                "id": "KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -6336,7 +6752,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6454,7 +6871,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6567,7 +6985,8 @@
                   "zh-Hans": "青衣碼頭"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6681,7 +7100,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6790,7 +7210,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6887,7 +7308,8 @@
                 "dataTimestamp": "2026-07-30T10:50:19+08:00",
                 "observedAt": "2026-07-30T02:50:29.601Z"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -6996,7 +7418,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -7093,7 +7516,8 @@
                 "routeCount": 26
               }
             ],
-            "etas": []
+            "etas": [],
+            "failed": null
           },
           "expect": [
             {
@@ -7170,7 +7594,8 @@
                 },
                 "fare": "7.1"
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -7293,7 +7718,8 @@
                   "zh-Hans": "中環"
                 }
               }
-            ]
+            ],
+            "failed": null
           },
           "expect": [
             {
@@ -7370,6 +7796,575 @@
                 }
               ],
               "routeCount": 4
+            }
+          ]
+        },
+        {
+          "name": "a-failure-is-attributed-to-the-card-whose-pole-it-names",
+          "why": "A `NearbyStop.stop.id` may be a merged `P:` place id while an `EtaFailure.stopId` is always a pole, so attribution goes through `memberStopIds` exactly as readings do. Comparing the two directly would leave every merged place — which is most of the interesting ones — looking healthy while its kerbs refused, and a list of cards is precisely where that is invisible.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "CTB:001965",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26,
+              "failed": [
+                {
+                  "stopId": "CTB:001965",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "a-failure-at-a-pole-no-card-clusters-is-dropped",
+          "why": "BOUNDARY, and the safe direction. A failure naming a pole none of these cards contains belongs to no card, so it is dropped rather than attached to the first or to all of them. Reachable in practice: a batch endpoint (WP5-7) will report failures for a whole request while a caller renders a filtered subset of the cards.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:NO-SUCH-POLE",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26
+            }
+          ]
+        },
+        {
+          "name": "a-stale-card-failure-does-not-survive-a-merge-that-was-handed-none",
+          "why": "The same staleness rule as the stop-detail row, on the surface that will meet it first: once Nearby adopts the live merge (WP5-7) every round calls this with no failure list, so a card's own `failed` has to be cleared or an outage's note outlives the outage on every card at once.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26,
+                "failed": [
+                  {
+                    "stopId": "CTB:001965",
+                    "error": {
+                      "code": "upstream_unavailable",
+                      "message": "KMB stop-ETA 502",
+                      "retryable": true
+                    }
+                  }
+                ]
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": null
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26
+            }
+          ]
+        },
+        {
+          "name": "two-refusing-kerbs-of-one-place-come-out-in-canonical-order",
+          "why": "D1: every list this module returns is sorted, and this one is a place's own failures. It matters beyond tidiness because both live engines turn each entry into one `status: retrying` frame, so an unordered list would make the poll emulator and the shard emit different frame sequences for identical upstream behaviour — the one property the rounds corpus exists to assert. Passed deliberately in the wrong order, and a one-element list can never catch this: a sort of length one calls no comparator at all, which is how the missing order went unnoticed until the kernel's 100% function-coverage threshold refused the change.",
+          "args": {
+            "stops": [
+              {
+                "stop": {
+                  "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "location": {
+                    "lat": 22.3847,
+                    "lng": 114.198139
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001965"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "548DAB3A4F71EB68"
+                    }
+                  ],
+                  "bearingDeg": 225
+                },
+                "distanceM": 42,
+                "etas": [],
+                "routeCount": 26
+              }
+            ],
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "SHATIN STATION",
+                  "zh-Hant": "沙田站",
+                  "zh-Hans": "沙田站"
+                },
+                "fare": "7.1"
+              },
+              {
+                "routeId": "CTB:170:inbound:1",
+                "stopId": "CTB:001965",
+                "operator": "CTB",
+                "arrivals": ["2026-07-30T10:58:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z",
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                }
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              },
+              {
+                "stopId": "CTB:001965",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": [
+            {
+              "stop": {
+                "id": "P:CTB:001965+KMB:548DAB3A4F71EB68",
+                "name": {
+                  "en": "Belair Garden, Tai Chung Kiu Road",
+                  "zh-Hant": "富豪花園, 大涌橋路",
+                  "zh-Hans": "富豪花園, 大涌橋路"
+                },
+                "location": {
+                  "lat": 22.3847,
+                  "lng": 114.198139
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001965"
+                  },
+                  {
+                    "operator": "KMB",
+                    "operatorStopId": "548DAB3A4F71EB68"
+                  }
+                ],
+                "bearingDeg": 225
+              },
+              "distanceM": 42,
+              "etas": [
+                {
+                  "routeId": "KMB:86K:outbound:1",
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "operator": "KMB",
+                  "arrivals": ["2026-07-30T10:55:31+08:00", "2026-07-30T11:06:22+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "SHATIN STATION",
+                    "zh-Hant": "沙田站",
+                    "zh-Hans": "沙田站"
+                  },
+                  "fare": "7.1"
+                },
+                {
+                  "routeId": "CTB:170:inbound:1",
+                  "stopId": "CTB:001965",
+                  "operator": "CTB",
+                  "arrivals": ["2026-07-30T10:58:00+08:00"],
+                  "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                  "observedAt": "2026-07-30T02:50:29.601Z",
+                  "destination": {
+                    "en": "CENTRAL",
+                    "zh-Hant": "中環",
+                    "zh-Hans": "中環"
+                  }
+                }
+              ],
+              "routeCount": 26,
+              "failed": [
+                {
+                  "stopId": "CTB:001965",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
             }
           ]
         }

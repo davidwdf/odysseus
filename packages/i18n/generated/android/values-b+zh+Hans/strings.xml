@@ -85,6 +85,7 @@
 	<plurals name="moreRoutes">
 		<item quantity="other">另外 %1$d 条路线</item>
 	</plurals>
+	<string name="etasUnavailable">无法获取实时班次</string>
 	<string name="mapAttribution">地图由地政总署提供</string>
 	<string name="mapAttributionAction">地图由地政总署提供 — 打开版权公告及免责声明</string>
 	<string name="keypadBackspace">退格</string>

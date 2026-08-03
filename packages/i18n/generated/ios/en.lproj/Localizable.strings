@@ -81,6 +81,7 @@
 "routesLabel" = "routes";
 /* stopCount: plural — see Localizable.stringsdict */
 /* moreRoutes: plural — see Localizable.stringsdict */
+"etasUnavailable" = "Live times unavailable";
 "mapAttribution" = "Map from Lands Department";
 "mapAttributionAction" = "Map from Lands Department — open the copyright notice and disclaimer";
 "keypadBackspace" = "Backspace";

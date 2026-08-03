@@ -152,9 +152,12 @@ path — `/v1/etas/:id` answers `{ etas, failed }` (**breaking**, `CONTRACT_VERS
 rule, `retainFailedPoles`, is what both engines apply to it; a shared corpus
 (`packages/core/fixtures/live-rounds.json`) drives those rules through the **real** `EtaHub` over a real
 socket as well as through the poll emulator; and the socket is selected by
-`EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`, **default still `poll`**. Two caveats remain: a
-Nearby card and a Place screen's *first paint* still cannot say "we could not ask" (WP5-13), and a rider
-who stars one line at both kerbs sees one Favourites row (WP5-12). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
+`EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`, **default still `poll`**. **WP5-13 followed**
+(ADR-077): `/v1/nearby` and `/v1/stop` carry `failed` too, the two kernel merge helpers now *take* the
+failure set so a stale list cannot outlive its round, and a card says *"Live times unavailable"* from
+`StopCardView.incomplete` in both renderers. Wave 5's remaining rows are **WP5-7** (batch
+`/v1/etas?ids=…`, then Nearby adopts live), **WP5-8** (nothing enforces the docs rule in rule 7 below)
+and **WP5-12** (the 2–10 m pole residual, which also owns the rider who stars one line at both kerbs). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
 Cloudflare credentials — though CI now runs on every PR. Roadmap/backlog: `docs/06`, `docs/07`.
 Cloudflare agent skills are installed — prefer the `cloudflare` / `wrangler` / `durable-objects`
 skills for edge work.

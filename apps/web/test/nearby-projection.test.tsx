@@ -61,6 +61,10 @@ function expectedText(view: StopCardView, locale: Locale): string[] {
     else if (row.label.kind === 'due') out.push(row.label.label)
     else out.push('—')
   }
+  // The kernel decides *whether* the card is incomplete; the words are the ICU catalogue's (ADR-054).
+  // Below the rows and above the count, which is the order the component draws them in — the readings
+  // that arrived are true, and this is a statement about the ones that are missing.
+  if (view.incomplete) out.push(t(locale, 'etasUnavailable'))
   // The count is the kernel's; the phrase and its plural rule are the ICU catalogue's (ADR-054).
   if (view.remaining > 0) out.push(t(locale, 'moreRoutes', { n: view.remaining }))
   return out
@@ -130,6 +134,7 @@ describe('apps/web renders the kernel view and adds nothing', () => {
       caption: '',
       rows: [],
       remaining: 0,
+      incomplete: false,
     }
     expect(render(view, 'en')).toEqual(['Somewhere'])
   })

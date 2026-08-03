@@ -36,6 +36,7 @@ import { formatFavoriteRouteKey, memberStopIds, parseRouteId, parseStopOrPlaceId
 import type {
   DeltaFrame,
   Eta,
+  EtaFailure,
   EtaRef,
   LiveState,
   NearbyStop,
@@ -862,12 +863,31 @@ export function liveSocketUrl(apiBaseUrl: string): string {
  *
  * @spec live#applyLiveEtasToStopDetail
  */
-export function applyLiveEtasToStopDetail(detail: StopDetail, etas: readonly Eta[]): StopDetail {
+export function applyLiveEtasToStopDetail(
+  detail: StopDetail,
+  etas: readonly Eta[],
+  failed?: readonly EtaFailure[],
+): StopDetail {
   const exact = indexByRef(etas)
   const byBoardingLine = new Map<string, Eta>()
   for (const eta of dedupeEtas([...etas])) byBoardingLine.set(etaBoardingKey(eta), eta)
+  // **`failed` is destructured OUT of the spread, not overwritten in it** — and the difference is the
+  // whole bug. `...detail` copies the document's own `failed`, so a conditional that only *adds* the
+  // argument's version would leave the stale list standing on exactly the call that has no failures to
+  // report: the live merge. Removing it first makes the absent-argument case clear the field, which is
+  // the direction that fails safe.
+  const { failed: _stale, ...rest } = detail
   return {
-    ...detail,
+    ...rest,
+    // **Replaced from the argument, never spread through** (ADR-077). `failed` describes the round the
+    // readings came from, so carrying the document's own copy forward would let an outage's list outlive
+    // the outage: a screen that fetched once over HTTP and then subscribed would keep saying "we could
+    // not reach this kerb" for as long as it stayed open. Absent argument means "I have no failure
+    // information", which is the honest state of a live consumer — the frames carry none, deliberately
+    // (ADR-073), so a subscription's `status: retrying` becomes the authority the moment it takes over.
+    // An optional parameter therefore fails safe: a caller that forgets clears the field rather than
+    // preserving a lie.
+    ...(failed !== undefined && failed.length > 0 ? { failed: sortFailures(failed) } : {}),
     routes: detail.routes.map((row) => ({
       ...row,
       eta:
@@ -882,6 +902,11 @@ export function applyLiveEtasToStopDetail(detail: StopDetail, etas: readonly Eta
         null,
     })),
   }
+}
+
+/** Canonical `stopId` order, so two producers of one failure set serialize identically (D1). */
+function sortFailures(failed: readonly EtaFailure[]): EtaFailure[] {
+  return [...failed].sort((a, b) => compareCodePoints(a.stopId, b.stopId))
 }
 
 /**
@@ -926,6 +951,7 @@ function soonestArrivalMs(eta: Eta): number {
 export function applyLiveEtasToNearby(
   stops: readonly NearbyStop[],
   etas: readonly Eta[],
+  failed?: readonly EtaFailure[],
 ): NearbyStop[] {
   const byPole = new Map<string, Eta[]>()
   for (const eta of indexByRef(etas).values()) {
@@ -933,16 +959,32 @@ export function applyLiveEtasToNearby(
     if (pole === undefined) byPole.set(eta.stopId, [eta])
     else pole.push(eta)
   }
+  // Failures are attributed to a card exactly as readings are — through `memberStopIds`, because an
+  // `EtaFailure.stopId` is a **pole** while a `NearbyStop.stop.id` may be a merged `P:` place id
+  // (ADR-042). Comparing them directly would leave every merged place — which is most of the
+  // interesting ones — looking healthy while its kerbs were refusing.
+  const failedByPole = new Map<string, EtaFailure>()
+  for (const entry of failed ?? []) failedByPole.set(entry.stopId, entry)
 
-  return stops.map((stop) => ({
-    ...stop,
-    etas: memberStopIds(stop.stop.id)
-      .flatMap((poleId) => byPole.get(poleId) ?? [])
-      .sort((a, b) => {
-        const sa = soonestArrivalMs(a)
-        const sb = soonestArrivalMs(b)
-        if (sa !== sb) return sa < sb ? -1 : 1
-        return compareRefs(a, b)
-      }),
-  }))
+  return stops.map((stop) => {
+    const poles = memberStopIds(stop.stop.id)
+    // Replaced, never spread through — see `applyLiveEtasToStopDetail` for why an absent argument must
+    // clear the field rather than preserve the document's own copy.
+    const mine = sortFailures(poles.flatMap((poleId) => failedByPole.get(poleId) ?? []))
+    // Destructured out for the same reason as above: the card's own `failed` must not survive a merge
+    // that was handed none.
+    const { failed: _stale, ...rest } = stop
+    return {
+      ...rest,
+      ...(mine.length > 0 ? { failed: mine } : {}),
+      etas: poles
+        .flatMap((poleId) => byPole.get(poleId) ?? [])
+        .sort((a, b) => {
+          const sa = soonestArrivalMs(a)
+          const sb = soonestArrivalMs(b)
+          if (sa !== sb) return sa < sb ? -1 : 1
+          return compareRefs(a, b)
+        }),
+    }
+  })
 }

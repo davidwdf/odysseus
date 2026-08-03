@@ -109,6 +109,16 @@ export function StopRow({
             <RouteRow key={row.routeId} row={row} />
           ),
         )}
+        {/* **A boarding point that would not answer** (ADR-077). Below the rows, because the readings that
+            did arrive are true and this describes the ones that are missing; `text-muted` and not a
+            warning colour, because nothing is wrong with the rider's stop — an upstream board refused
+            us. `view.incomplete` is the kernel's answer, so this renderer and `apps/web`'s cannot
+            disagree about it, and both projection suites replay the same corpus rows to prove it. */}
+        {view.incomplete ? (
+          <Text variant="label" className="py-1.5 text-muted">
+            {t(locale, 'etasUnavailable')}
+          </Text>
+        ) : null}
         {/* **The count is shown whether or not it can be tapped.** The condition here used to be
             `remaining > 0 && onPress`, which silently showed 6 of 26 routes to any caller with nowhere
             to navigate — hiding an honest total because the affordance is unavailable is the silent

@@ -20,7 +20,15 @@ import {
   retainFailedPoles,
   sameReading,
 } from '../src/live'
-import type { Eta, EtaRef, NearbyStop, ServerFrame, StopDetail, WatchTarget } from '../src/types'
+import type {
+  Eta,
+  EtaFailure,
+  EtaRef,
+  NearbyStop,
+  ServerFrame,
+  StopDetail,
+  WatchTarget,
+} from '../src/types'
 import { specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/live.spec.json. JSON `null` becomes the language's absent
@@ -169,23 +177,31 @@ describe('live#liveSocketUrl', () => {
 })
 
 describe('live#applyLiveEtasToStopDetail', () => {
-  for (const c of specCases<{ detail: StopDetail; etas: Eta[] }, StopDetail>(
-    corpus,
-    'applyLiveEtasToStopDetail',
-  )) {
+  // `failed` is `null` in the corpus wherever the caller passes nothing — JSON's stand-in for the
+  // language's absent value (see test/corpus.ts), and the case that must CLEAR a stale list rather than
+  // preserve it. `?? undefined` is that translation at the boundary; passing `null` through would type-
+  // error, which is the point of doing it here rather than widening the signature.
+  for (const c of specCases<
+    { detail: StopDetail; etas: Eta[]; failed: EtaFailure[] | null },
+    StopDetail
+  >(corpus, 'applyLiveEtasToStopDetail')) {
     it(c.name, () => {
-      expect(applyLiveEtasToStopDetail(c.args.detail, c.args.etas)).toEqual(c.expect)
+      expect(
+        applyLiveEtasToStopDetail(c.args.detail, c.args.etas, c.args.failed ?? undefined),
+      ).toEqual(c.expect)
     })
   }
 })
 
 describe('live#applyLiveEtasToNearby', () => {
-  for (const c of specCases<{ stops: NearbyStop[]; etas: Eta[] }, NearbyStop[]>(
-    corpus,
-    'applyLiveEtasToNearby',
-  )) {
+  for (const c of specCases<
+    { stops: NearbyStop[]; etas: Eta[]; failed: EtaFailure[] | null },
+    NearbyStop[]
+  >(corpus, 'applyLiveEtasToNearby')) {
     it(c.name, () => {
-      expect(applyLiveEtasToNearby(c.args.stops, c.args.etas)).toEqual(c.expect)
+      expect(applyLiveEtasToNearby(c.args.stops, c.args.etas, c.args.failed ?? undefined)).toEqual(
+        c.expect,
+      )
     })
   }
 })

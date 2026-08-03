@@ -35,14 +35,25 @@ export async function nearby(
       // the place (KMB cheap, CTB to budget) so the soonest are genuinely soonest; the card
       // shows the true `routeCount` (free, precomputed) + "+N more" rather than a silent filter.
       //
-      // **`report.failed` is dropped here, and the card therefore still cannot tell an outage from
-      // an empty stop** (ADR-073, WP5-13). Stated rather than left as a silent `.etas`: the reason is
-      // the same one `stopDetail` gives — `applyLiveEtasToNearby` spreads each card, so a `failed`
-      // list from an HTTP fetch would outlive the outage it describes once Nearby adopts the live
-      // merge. Nearby is not a live adopter yet (WP5-7), so the honest sequence is WP5-7 then WP5-13,
-      // not a wire field with no reader and a staleness bug waiting behind it.
-      const { etas } = await stopArrivals(place, NEARBY_CTB_BUDGET)
-      return { stop: toMergedStop(place), distanceM, etas, routeCount: place.routeCount }
+      // `failed` rides on the card since WP5-13 (ADR-077): without it `etas: []` means either "no buses
+      // due" or "nobody would tell us", and a card renders identically for both — which is the outage
+      // reading as an empty stop that ADR-073 closed on `/v1/etas` and could not close here. It is safe
+      // to serve now because `applyLiveEtasToNearby` replaces the field rather than spreading it, so a
+      // list fetched here cannot survive into a live round that reported nothing (WP5-7).
+      //
+      // Already per-card: `stopArrivals` is called per place, so its failures name this place's own
+      // poles and need no attribution. The kernel does attribute, for the live path, where one round's
+      // failures span every card.
+      const { etas, failed } = await stopArrivals(place, NEARBY_CTB_BUDGET)
+      return {
+        stop: toMergedStop(place),
+        distanceM,
+        etas,
+        routeCount: place.routeCount,
+        // Absent, not `[]`, when every board answered — the shape the schema declares, and what
+        // `stopCardView` reads by length rather than by presence.
+        ...(failed?.length ? { failed } : {}),
+      }
     }),
   )
   // A cell can outlive the place it names only if a build half-landed, which content-addressing

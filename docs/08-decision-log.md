@@ -4919,3 +4919,98 @@ pre-existing and unaddressed; it earned its keep here.
   - **Turbo needs no change**, measured with `--dry=json`: framework inference already covers `VITE_*` and
     `EXPO_PUBLIC_*` for both app packages' `build`, `dev` and `test` tasks, so the new variables
     participate in the cache hash. A redundant `env` array would be one more thing to keep in sync.
+
+## ADR-077 — A card can say "we could not ask", and a failure list must not outlive its round
+- **Status:** **Decided and implemented 2026-08-03** (WP5-13). Implementation:
+  `packages/contract/src/wire/errors.ts` (**new** — the taxonomy extracted out of `responses.ts`),
+  `packages/contract/src/wire/detail.ts` (`failed` on `NearbyStop` and `StopDetail`),
+  `packages/core/src/live.ts` (`applyLiveEtasToNearby` / `applyLiveEtasToStopDetail` take the current
+  failure set), `packages/core/src/stop-card.ts` (`StopCardView.incomplete`),
+  `apps/edge/src/stop-route.ts`, `apps/edge/src/nearby.ts`, `packages/i18n/src/catalogue.ts`
+  (`etasUnavailable` ×3 locales + the 9 regenerated native artefacts),
+  `apps/mobile/components/StopRow.tsx`, `apps/web/src/components/StopCard.tsx`. Pinned by **9 new corpus
+  rows** across three groups, both renderers' projection suites (which caught the new field on their own),
+  and 3 new edge specs.
+- **Context.** [ADR-073](#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire)
+  put per-pole failure on `/v1/etas/:id` and deliberately left it off `/v1/nearby` and `/v1/stop/:id`,
+  with the reason recorded: those two payloads pass through the kernel's merge helpers, which **spread**
+  the document they are handed, so a `failed` list fetched once over HTTP would survive every later live
+  merge — a screen would keep saying "we could not reach this kerb" long after the socket recovered. The
+  consequence of leaving it out was equally recorded and equally real: **a Nearby card during a KMB
+  outage rendered identically to a stop with no buses due.** Measured, not argued — with the KMB base URL
+  pointed at an unroutable host, `/v1/nearby` returned six cards of which three had `etas: []` and
+  nothing whatsoever to distinguish them from a quiet stop.
+- **Decisions:**
+  1. **The merge helpers take the current failure set as an argument, and `failed` is destructured *out*
+     of the spread.** Not overwritten in it — the difference is the whole bug. `...detail` copies the
+     document's own list, so a conditional that only *adds* the argument's version leaves the stale list
+     standing on exactly the call that has none to report: the live merge. Removing it first means an
+     absent argument **clears** the field, which is the direction that fails safe: a caller that forgets
+     loses information rather than inventing it.
+  2. **An absent argument is the honest state of a live consumer**, not an oversight. The frames carry no
+     failure list, deliberately (ADR-073) — the shard applies the retention itself — so once a
+     subscription takes over, its `status: retrying` is the authority and the HTTP-era list must go. The
+     cost is precision: a two-kerb place whose second kerb is refusing reads as "retrying" for the whole
+     place on the live path, where the HTTP payload could name the kerb. Recorded rather than fixed; the
+     fix is frames that carry `failed`, which is a wire change to make when a screen renders per-kerb
+     failure, because that is when the extra precision has a reader.
+  3. **A card gets a boolean, not a count, and the kernel decides it.** `StopCardView.incomplete` is true
+     when at least one of the place's boarding points refused. The granularity *is* the decision: a
+     compact card prints no per-kerb heading — the same argument `soonestPerLine` makes for collapsing two
+     kerbs' readings into one row — so a count of refusing kerbs would be a number with no referent on
+     that surface. `apps/web`'s `check-no-derivation.mjs` makes this structural rather than conventional:
+     a renderer testing `view.failed?.length` would be a second declaration of the rule, and the two
+     renderers would eventually disagree about the empty-array case.
+  4. **Length, never presence.** `failed: []` reads as "every board answered", exactly as an absent field
+     does. The wire omits it when empty, but a fixture or a generated client that materialises empty
+     arrays must not flip every card in the app; a corpus row asserts it.
+  5. **Attribution goes through `memberStopIds`.** An `EtaFailure.stopId` is a pole while a
+     `NearbyStop.stop.id` may be a merged `P:` place id (ADR-042), so `applyLiveEtasToNearby` matches
+     failures to cards exactly as it matches readings. Comparing them directly would leave every merged
+     place — most of the interesting ones — looking healthy while its kerbs refused. A failure naming a
+     pole no card clusters is **dropped**, which is reachable in practice: a batch endpoint (WP5-7) will
+     report failures for a whole request while a caller renders a filtered subset.
+  6. **The string says the times are missing and that the reason is ours.** *"Live times unavailable"* —
+     not that the stop is closed, not that no bus is coming, and not how many kerbs refused. ADR-056
+     decision 18 declined the neighbouring question (what to say about a *refused target*) because "this
+     stop has moved or closed" is a claim about the world a parse failure cannot support. An upstream
+     refusal is the easier case: we know what went wrong and whose fault it is. Muted, below the rows, no
+     alert colour — the readings that arrived are true, and nothing is wrong with the rider's stop.
+  7. **The taxonomy moved to `wire/errors.ts`, and it was forced rather than chosen.** `EtaFailure` is now
+     a field in `detail.ts`, and `responses.ts` **imports** `detail.ts` for `WIRE_ENDPOINTS` — so
+     `detail.ts → responses.ts` closes an ESM cycle, which between two modules of top-level `const`s does
+     not fail loudly: it evaluates one to `undefined`, surfacing as a schema silently missing a field.
+     That is the exact hazard `responses.ts`' original note warned about, arriving from the other
+     direction. `ErrorCodeSchema`, `ERROR_CODES`, `WireErrorSchema`, `ErrorResponseSchema` and
+     `EtaFailureSchema` now live in a module that imports nothing of ours, and `responses.ts` re-exports
+     every one of them so **no caller anywhere changed**. Note the second-order trap that came with it:
+     adding `export * from './wire/errors'` to the package index alongside the existing
+     `export * from './wire/responses'` makes those names **ambiguous**, and ESM resolves an ambiguous
+     star export by *excluding* the name — `ERROR_CODES` would have become `undefined` at the package
+     root with no error anywhere. Caught by asserting the root's exports at runtime rather than by
+     reading; the index exports the taxonomy through exactly one path.
+- **Driven, not only tested.** Verified against the real Worker with the KMB upstream pointed at an
+  unroutable host, then reverted: `/v1/nearby` named all three kerbs of each KMB place with
+  `upstream_unavailable` / `retryable: true` while the **Citybus** place in the same response kept its six
+  readings and reported nothing; `/v1/stop/:id` named all three poles with every row's `eta` null. Then in
+  a browser, the mixed-operator case — the one no unit test would have produced: *"Belair Garden, Tai
+  Chung Kiu Road"* showed its NLB and Citybus arrivals (B8 4 min, 182 52 min) **and** the muted marker for
+  its refusing KMB kerbs, while the two all-GMB places beside it showed full times and no marker at all.
+  Per-operator, per-kerb, on live data.
+- **Consequences, including what we are accepting:**
+  - **The healthy payload is byte-identical to before.** `failed` is omitted when empty on both endpoints,
+    confirmed by `curl` against live data as well as by a control row in each suite.
+  - **`incomplete` is a required field on `StopCardView`**, so every hand-built view literal in the two
+    projection suites had to declare it. That is the type system doing its job — and both projection
+    suites failed on the new field before they were updated, which is `apps/web`'s whole purpose
+    (ADR-069) working as intended on a change that started in the kernel.
+  - **A card with rows *and* the marker is the common case, not the edge case** — a place is often served
+    by more than one operator, and only one of them is down. The marker sits below the rows for exactly
+    that reason.
+  - **Open — Favourites shows the marker too, and that is right but incomplete.** `FavoritePlaceRow`
+    renders the same `stopCardView`, so a favourite at a refusing place now says so. It does **not** fix
+    the adjacent unowned item: a favourite whose route simply has no arrival still renders an empty card,
+    and that is a different cause with the same symptom. Do not close one over the other.
+  - **Open — `/v1/route/:id` still says nothing.** Its ETAs come from one bulk call, so the failure is
+    all-or-nothing and the view degrades to static; giving it a per-stop failure field means deciding
+    what a route screen says about a whole feed being down, which no row owns yet.

@@ -87,6 +87,7 @@
 		<item quantity="one">+%1$d more route</item>
 		<item quantity="other">+%1$d more routes</item>
 	</plurals>
+	<string name="etasUnavailable">Live times unavailable</string>
 	<string name="mapAttribution">Map from Lands Department</string>
 	<string name="mapAttributionAction">Map from Lands Department — open the copyright notice and disclaimer</string>
 	<string name="keypadBackspace">Backspace</string>

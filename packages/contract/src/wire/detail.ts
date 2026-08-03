@@ -1,6 +1,7 @@
 // The composite screen payloads. See the three rules at the top of `primitives.ts`.
 
 import { z } from 'zod'
+import { EtaFailureSchema } from './errors'
 import { EtaSchema } from './eta'
 import { I18nTextSchema, LatLngSchema } from './primitives'
 import { RouteRefSchema, RouteSchema, RouteSummarySchema } from './route'
@@ -87,6 +88,12 @@ export const StopDetailSchema = z
           ),
       }),
     ),
+    failed: z
+      .array(EtaFailureSchema)
+      .optional()
+      .describe(
+        'Boarding points of this place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). A route row whose `eta` is `null` and whose `stopId` appears here has no reading because we could not ask — not because nothing is due. **This field describes the moment this payload was built and must never be carried across a live merge:** `applyLiveEtasToStopDetail` replaces it from its own argument, so a subscription that has taken over becomes the authority (its `status: retrying` frames), rather than a stale list outliving the outage it describes.',
+      ),
   })
   .meta({ id: 'StopDetail' })
 
@@ -108,6 +115,12 @@ export const NearbyStopSchema = z
       .number()
       .describe(
         'True number of distinct rider LINES — operator + route number + direction — serving the place, from the static index (no live call), counted once however many poles a line boards at. Lets a compact card say "soonest few of N · +N more" honestly, never a silent filter. Subtract rows counted in the same unit: subtracting per-pole readings from it understates what is hidden.',
+      ),
+    failed: z
+      .array(EtaFailureSchema)
+      .optional()
+      .describe(
+        'Boarding points of THIS place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). Without it `etas: []` means two different things — this stop has no buses, or nobody would tell us — and a card renders identically for both. `stopCardView` in @nextbus/core turns it into the one thing a compact card can honestly say, since a card has no per-kerb heading to attach it to. A reading missing for a pole named here has NOT departed.',
       ),
   })
   .meta({ id: 'NearbyStop' })

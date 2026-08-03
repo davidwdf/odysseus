@@ -150,6 +150,81 @@
       }
     },
     "schemas": {
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "bad_request",
+          "not_found",
+          "internal",
+          "upstream_unavailable",
+          "upstream_timeout"
+        ],
+        "x-unknown-tolerant": true
+      },
+      "WireError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
+          },
+          "error": {
+            "type": "string",
+            "deprecated": true,
+            "description": "Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`."
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "error"
+        ]
+      },
+      "EtaFailure": {
+        "type": "object",
+        "properties": {
+          "stopId": {
+            "type": "string",
+            "description": "Canonical id of the POLE whose upstream board did not answer — the same spelling `Eta.stopId` carries, so a client can pair a failure with the readings it already holds."
+          },
+          "error": {
+            "$ref": "#/components/schemas/WireError"
+          }
+        },
+        "required": [
+          "stopId",
+          "error"
+        ]
+      },
       "Locale": {
         "type": "string",
         "enum": [
@@ -796,6 +871,13 @@
                 "location"
               ]
             }
+          },
+          "failed": {
+            "description": "Boarding points of this place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). A route row whose `eta` is `null` and whose `stopId` appears here has no reading because we could not ask — not because nothing is due. **This field describes the moment this payload was built and must never be carried across a live merge:** `applyLiveEtasToStopDetail` replaces it from its own argument, so a subscription that has taken over becomes the authority (its `status: retrying` frames), rather than a stale list outliving the outage it describes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
           }
         },
         "required": [
@@ -824,6 +906,13 @@
           "routeCount": {
             "type": "number",
             "description": "True number of distinct rider LINES — operator + route number + direction — serving the place, from the static index (no live call), counted once however many poles a line boards at. Lets a compact card say \"soonest few of N · +N more\" honestly, never a silent filter. Subtract rows counted in the same unit: subtracting per-pole readings from it understates what is hidden."
+          },
+          "failed": {
+            "description": "Boarding points of THIS place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). Without it `etas: []` means two different things — this stop has no buses, or nobody would tell us — and a card renders identically for both. `stopCardView` in @nextbus/core turns it into the one thing a compact card can honestly say, since a card has no per-kerb heading to attach it to. A reading missing for a pole named here has NOT departed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
           }
         },
         "required": [
@@ -946,65 +1035,6 @@
           "stops"
         ]
       },
-      "ErrorCode": {
-        "type": "string",
-        "enum": [
-          "bad_request",
-          "not_found",
-          "internal",
-          "upstream_unavailable",
-          "upstream_timeout"
-        ],
-        "x-unknown-tolerant": true
-      },
-      "WireError": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "$ref": "#/components/schemas/ErrorCode"
-          },
-          "message": {
-            "type": "string",
-            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
-          },
-          "retryable": {
-            "type": "boolean",
-            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "retryable"
-        ]
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "$ref": "#/components/schemas/ErrorCode"
-          },
-          "message": {
-            "type": "string",
-            "description": "Human-readable, English, and **not** a stable identifier — it names the offending value and its wording changes freely. Do not match on it."
-          },
-          "retryable": {
-            "type": "boolean",
-            "description": "Whether the identical request may succeed later. `false` means the request is permanently wrong (a malformed or deleted id) and a background client — an iOS Widget, a watch complication — should prune it rather than retry."
-          },
-          "error": {
-            "type": "string",
-            "deprecated": true,
-            "description": "Duplicate of `message`, kept for pre-ADR-064 clients. Branch on `code`."
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "retryable",
-          "error"
-        ]
-      },
       "DatasetOrigin": {
         "type": "string",
         "enum": [
@@ -1069,22 +1099,6 @@
         "items": {
           "$ref": "#/components/schemas/NearbyStop"
         }
-      },
-      "EtaFailure": {
-        "type": "object",
-        "properties": {
-          "stopId": {
-            "type": "string",
-            "description": "Canonical id of the POLE whose upstream board did not answer — the same spelling `Eta.stopId` carries, so a client can pair a failure with the readings it already holds."
-          },
-          "error": {
-            "$ref": "#/components/schemas/WireError"
-          }
-        },
-        "required": [
-          "stopId",
-          "error"
-        ]
       },
       "EtaReport": {
         "type": "object",

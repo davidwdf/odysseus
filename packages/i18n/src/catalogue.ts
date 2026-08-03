@@ -460,6 +460,25 @@ export const CATALOGUE = {
     'zh-Hant': '{n, plural, other{另外 # 條路線}}',
     'zh-Hans': '{n, plural, other{另外 # 条路线}}',
   },
+  /**
+   * A compact card whose place had a boarding point that would not answer (ADR-077).
+   *
+   * **What it does and does not claim.** It says the *times* are missing and that the reason is on our
+   * side of the wire — not that the stop is closed, not that no bus is coming, and not how many kerbs
+   * refused. That is the most a card can support: it prints no per-kerb heading (see `stopCardView`), so
+   * a rider has nothing to attach a kerb to. ADR-056 decision 18 declined to answer the neighbouring
+   * question — what to say about a *refused target* — because "this stop has moved or closed" is a claim
+   * about the world that a parse failure cannot support. An upstream refusal is the easier case: we know
+   * exactly what went wrong and whose fault it is, so the string can say so plainly.
+   *
+   * No plural and no count, deliberately — see `StopCardView.incomplete` for why the kernel hands over a
+   * boolean rather than a number of kerbs.
+   */
+  etasUnavailable: {
+    en: 'Live times unavailable',
+    'zh-Hant': '無法取得即時班次',
+    'zh-Hans': '无法获取实时班次',
+  },
   // The basemap credit (ADR-049). These lived as two ad-hoc `Record<Locale, string>` tables in
   // `apps/mobile/lib/tileSource.ts` — outside this package, so no gate compared them and no
   // translator ever saw them. `localeRecord()` in ./index.ts rebuilds the shape `TileSource` wants.

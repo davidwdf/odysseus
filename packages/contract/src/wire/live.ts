@@ -28,8 +28,9 @@
 //     design is arranged to avoid (ADR-058).
 
 import { z } from 'zod'
+import { WireErrorSchema } from './errors'
 import { EtaSchema } from './eta'
-import { WireErrorSchema, type WireParam } from './responses'
+import type { WireParam } from './responses'
 
 /**
  * The socket's path, relative to the API origin.
