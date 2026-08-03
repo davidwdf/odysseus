@@ -27,7 +27,7 @@ One framing to start with, because it decides how you spend your first week:
 | `packages/contract/openapi.json` | OpenAPI 3.1, v2.0.0 — **8 paths, 38 component schemas** | Generate your models. This is the only artefact you *must* consume. |
 | `packages/contract/asyncapi.json` | AsyncAPI 3.0.0 for the `/v1/live` socket — **6 frames, 49 component schemas** | Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7. |
 | `packages/contract/src/ids/id-grammar.abnf` | ABNF (RFC 5234) for every id that crosses the wire | Hand-write a parser against it. The `ids` corpus below is what proves your parser agrees with ours. |
-| `packages/core/spec/` | **13 corpora, 94 groups, 790 cases, 3 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
+| `packages/core/spec/` | **13 corpora, 96 groups, 803 cases, 3 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
 | `packages/contract/native/ios/CorpusConformanceTests.swift` | **Template — never compiled, never run** | Copy into your test target on day one and make it build. See §6. |
 | `packages/contract/native/android/CorpusConformanceTest.kt` | **Template — never compiled, never run** | Ditto, for `src/test/kotlin`. |
 | `packages/ui/generated/NextBusTokens.swift` | 122 design tokens — **never compiled** | Compile it. A compile error here is a bug in the emitter, not something to patch in place. |
@@ -227,7 +227,7 @@ one rot check covers them all.
 | `geo-snap.spec.json` | `packages/core/src/geo-snap.ts` | 1 | 12 | — |
 | `geo.spec.json` | `packages/core/src/geo.ts` | 9 | 74 | — |
 | `ids.spec.json` | `packages/core/src/ids.ts` | 10 | 56 | — |
-| `live.spec.json` | `packages/core/src/live.ts` | 13 | 164 | — |
+| `live.spec.json` | `packages/core/src/live.ts` | 15 | 177 | — |
 | `mercator.spec.json` | `packages/core/src/mercator.ts` | 6 | 37 | 1 |
 | `policy.spec.json` | `packages/core/src/policy.ts` | 1 | 7 | — |
 | `route-detail.spec.json` | `packages/core/src/route-detail.ts` | 4 | 35 | 1 |
@@ -236,7 +236,7 @@ one rot check covers them all.
 | `stop-card.spec.json` | `packages/core/src/stop-card.ts` | 4 | 34 | — |
 | `stop-detail.spec.json` | `packages/core/src/stop-detail.ts` | 6 | 46 | 1 |
 | `stop-name.spec.json` | `packages/core/src/stop-name.ts` | 6 | 58 | — |
-| **total** |  | **94** | **790** | **3** |
+| **total** |  | **96** | **803** | **3** |
 <!-- END GENERATED: corpus -->
 
 Each file is `{module, source, version, doc, groups}`; each group is `{doc, cases[]}`; each case is

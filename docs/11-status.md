@@ -280,9 +280,12 @@ hook applies, and a range naming no commits fails rather than passing. **WP5-7**
 ([ADR-079](./08-decision-log.md#adr-079--one-request-per-round-the-batch-eta-endpoint-and-nearby-as-a-live-adopter)):
 `/v1/etas?ids=…` answers a whole round in one request, so both Nearby renderers subscribe, and the two
 frozen-clock/permanent-error defects that had been sitting on mobile Nearby are fixed with it. That leaves
-**WP5-12**, the 2–10 m residual the clustering rules deliberately leave between them, plus the new
-**WP5-14** WP5-7 opened (a live card cannot yet say *"we could not ask"*, because the frames carry no
-`failed`). **Before writing a test or a gate here, read
+**WP5-12** (the 2–10 m residual the clustering rules deliberately leave between them) and **WP5-14** —
+both now done as well
+([ADR-080](./08-decision-log.md#adr-080--what-tells-two-boarding-points-apart-in-the-order-the-data-can-support-it),
+[ADR-081](./08-decision-log.md#adr-081--the-frames-carry-failed-and-a-round-whose-failure-set-moved-is-news)),
+so **every numbered row of Wave 5 is closed**. WP0-5 (deploy) is Wave 0 and still needs a domain and
+Cloudflare credentials from a human; it remains the launch blocker. **Before writing a test or a gate here, read
 [`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
 gate chain's shared shape, which script polices which directory, the two `layers.json` facts that decide
 where a test can live, and the five things about the workerd suite that will bite (chiefly: `coalesce`
@@ -1170,6 +1173,24 @@ than any in its own row.
        moves.** Cost: places carrying a cue 226 → 464 of 10 115. Still open: **54 poles in 22 groups are
        told nothing**, and ADR-072's both-kerbs favourite is explicitly declined here rather than
        smuggled in.
+     - ✅ **WP5-14 done 2026-08-03**
+       ([ADR-081](./08-decision-log.md#adr-081--the-frames-carry-failed-and-a-round-whose-failure-set-moved-is-news))
+       — the live frames carry `failed`, so a card says *"Live times unavailable"* on the **live path** and
+       not only at first paint. The decision that makes it correct is one the row could not have
+       anticipated: **a round whose failure set moved is news even when no reading did.** Without it the
+       delta branch is silent for exactly the round an outage produces — a kerb stops answering,
+       `retainFailedPoles` keeps its readings, so nothing changed and nothing is gone — and a recovered
+       kerb's marker would outlive the recovery by a cadence. `sameFailures` is that predicate (in the
+       kernel, called by both engines, and it deliberately ignores the error *message*), `unionFailures`
+       builds the round's set identically on both sides and dedupes by pole. An absent `failed` means
+       **empty**, not unchanged; pole ids only, so a whole-target failure stays a `status` frame. **Found on
+       a real socket, not reasoned about:** a re-`subscribe` is answered from stored readings, so answering
+       it with `failed: []` paired six real readings with a claim that nothing was refusing — the shard now
+       carries the set forward for surviving targets. A *reconnect* still starts blank; stated, not fixed.
+       ADR-074's corpus grammar gained a `failed=[…]` column and **the real Durable Object reproduces all
+       11 rows independently over a real socket**. Verified with the KMB upstream unroutable: the socket
+       produced `delta changed=0 gone=0 failed=[3 kerbs]` — the frame that was silence before this row —
+       and in the browser the marker was still on the card after the times had advanced.
      - 🟡 **A favourite with no current arrival renders an empty card** — pre-existing, found by WP5-11, and
        **unowned**: `FavoritePlaceRow` drops rows without an `eta`, so an empty card cannot be told from a
        broken favourite key by eye. Wants a row of its own beside WP5-4; see *Not done yet* above.

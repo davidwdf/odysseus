@@ -21,7 +21,14 @@
 // difference here is that Nearby had **no** clock at all before this — no `refetchInterval`, no interval
 // anywhere — so its minutes never aged and the staleness cue could not fire. That is asserted below too.
 
-import type { DataSource, Eta, EtaListener, NearbyStop, WatchTarget } from '@nextbus/core'
+import type {
+  DataSource,
+  Eta,
+  EtaFailure,
+  EtaListener,
+  NearbyStop,
+  WatchTarget,
+} from '@nextbus/core'
 import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { act } from 'react'
@@ -98,10 +105,10 @@ function recordingSource() {
      * ever hears about it**. That looks exactly like a broken merge, which is a full half-hour of
      * looking at the wrong file.
      */
-    deliver: async (etas: Eta[]) => {
+    deliver: async (etas: Eta[], failed?: EtaFailure[]) => {
       if (live === null) throw new Error('deliver: no live listener — the subscription is not open')
       await act(async () => {
-        live?.(etas)
+        live?.(etas, failed)
         await vi.advanceTimersByTimeAsync(0)
       })
     },
@@ -137,7 +144,7 @@ function NearbyRows({ at, source }: { at: { lat: number; lng: number }; source: 
         <Text key={card.stop.id} variant="body">
           {`${card.stop.id}|${card.distanceM}|${card.routeCount}|${card.etas
             .map((e) => e.stopId)
-            .join('+')}`}
+            .join('+')}|${(card.failed ?? []).map((f) => f.stopId).join('+')}`}
         </Text>
       ))}
     </View>
@@ -268,25 +275,29 @@ describe('the merge keeps the document and replaces only the readings', () => {
   it('leaves distanceM, routeCount and the stop alone', async () => {
     const fake = recordingSource()
     const host = await mount(fake.source)
-    expect(visibleText(host)).toEqual(['now=set', `${PLACE_A}|42|9|`, `${PLACE_B}|130|3|`])
+    expect(visibleText(host)).toEqual(['now=set', `${PLACE_A}|42|9||`, `${PLACE_B}|130|3||`])
 
     // A reading stamped with a **pole** of the merged place — the only spelling the wire uses — must land
     // on that place's card. Compared directly against the card's `P:` id it would match nothing, which is
     // the defect `memberStopIds` exists to prevent and which would render as an empty card for ever.
     await fake.deliver([reading(POLE_A, '10:04')])
-    expect(visibleText(host)).toEqual(['now=set', `${PLACE_A}|42|9|${POLE_A}`, `${PLACE_B}|130|3|`])
+    expect(visibleText(host)).toEqual([
+      'now=set',
+      `${PLACE_A}|42|9|${POLE_A}|`,
+      `${PLACE_B}|130|3||`,
+    ])
   })
 
   it('blanks a card whose reading is gone rather than leaving the last one showing', async () => {
     const fake = recordingSource()
     const host = await mount(fake.source)
     await fake.deliver([reading(POLE_A, '10:04')])
-    expect(visibleText(host)).toContain(`${PLACE_A}|42|9|${POLE_A}`)
+    expect(visibleText(host)).toContain(`${PLACE_A}|42|9|${POLE_A}|`)
     // The session's list is the complete current set, not a patch — so a departed bus disappears. That is
     // `gone`'s honesty rule (ADR-008) reaching the card, and the opposite of the stale-list hazard
     // ADR-077 closed.
     await fake.deliver([])
-    expect(visibleText(host)).toContain(`${PLACE_A}|42|9|`)
+    expect(visibleText(host)).toContain(`${PLACE_A}|42|9||`)
   })
 })
 
@@ -319,5 +330,68 @@ describe('the clock Nearby never had', () => {
     })
     expect(seen.length).toBeGreaterThan(0)
     expect(seen.at(-1)).toBeGreaterThan(Date.parse('2026-07-30T02:00:00.000Z'))
+  })
+})
+
+describe('a card can say "we could not ask" on the live path, not only at first paint', () => {
+  const refusing: EtaFailure = {
+    stopId: POLE_A,
+    error: { code: 'upstream_unavailable', message: 'KMB stop-ETA 502', retryable: true },
+  }
+
+  it("carries the round's failure set onto the right card, and clears it on recovery", async () => {
+    // **The acceptance of WP5-14** (ADR-081). This shipped the other way for one wave: the merge was
+    // called with no failure set, so the marker a rider got from `/v1/nearby` cleared on the first live
+    // round and a card at a refusing place read as a quiet stop. The frames carry `failed` now, so the
+    // hook has something to pass.
+    const fake = recordingSource()
+    const host = await mount(fake.source)
+
+    // An outage: the kerb's own readings are retained by `retainFailedPoles` upstream of here, and the
+    // round names the kerb. Attributed through `memberStopIds`, so a **pole** id lands on the card for the
+    // merged place it belongs to — and on that card only.
+    await fake.deliver([reading(POLE_A, '10:04')], [refusing])
+    expect(visibleText(host)).toEqual([
+      'now=set',
+      `${PLACE_A}|42|9|${POLE_A}|${POLE_A}`,
+      `${PLACE_B}|130|3||`,
+    ])
+
+    // Recovery, within one round. The set is replaced and never merged, so an absent argument clears it —
+    // the direction ADR-077 chose precisely so a stale claim cannot survive its own outage.
+    await fake.deliver([reading(POLE_A, '10:06')])
+    expect(visibleText(host)).toEqual([
+      'now=set',
+      `${PLACE_A}|42|9|${POLE_A}|`,
+      `${PLACE_B}|130|3||`,
+    ])
+  })
+
+  it('marks a card whose kerb refused before any reading ever arrived', async () => {
+    // The narrow case that made this a row of its own rather than a nicety: `retainFailedPoles` cannot
+    // resurrect, so a kerb refusing on the very first round contributes no readings at all. Without the
+    // failure set on the frame that card is empty and silent — indistinguishable from a stop with no buses
+    // due, which is the exact defect ADR-073 exists to prevent, one screen over.
+    const fake = recordingSource()
+    const host = await mount(fake.source)
+    await fake.deliver([], [refusing])
+    expect(visibleText(host)).toEqual([
+      'now=set',
+      `${PLACE_A}|42|9||${POLE_A}`,
+      `${PLACE_B}|130|3||`,
+    ])
+  })
+
+  it('an empty failure set and an absent one are the same thing', async () => {
+    // On the wire the field is omitted when empty; a fake transport, a generated client or a JSON
+    // round-trip may materialise `[]`. A card that flipped on the difference would light up every place in
+    // the app the day some producer stopped omitting it — `StopCardView.incomplete` reads length, never
+    // presence, for exactly this reason (ADR-077 decision 4).
+    const fake = recordingSource()
+    const host = await mount(fake.source)
+    await fake.deliver([reading(POLE_A, '10:04')], [])
+    const withEmpty = visibleText(host)
+    await fake.deliver([reading(POLE_A, '10:04')], undefined)
+    expect(visibleText(host)).toEqual(withEmpty)
   })
 })

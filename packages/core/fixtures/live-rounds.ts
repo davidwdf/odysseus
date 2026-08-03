@@ -87,10 +87,22 @@ export interface LiveRoundsScenario {
    * `"silent"` means the round produced **no update at all**, which is rule 2 and is the only line
    * that is not a state. Otherwise:
    *
-   *     <state>[!<errorCode>] etas=[<pole>/<route>@<+m>,<+m> …] watching=[<place> …]
+   *     <state>[!<errorCode>] etas=[<pole>/<route>@<+m>,<+m> …] watching=[<place> …] failed=[<pole> …]
    *
    * Readings are in the kernel's canonical `(stopId, routeId)` order (D1), so the line is a total
    * function of the data and not of the order frames happened to arrive in.
+   *
+   * **`failed` is WP5-14's column** (ADR-081) and it is why the grammar moved. Until the frames carried
+   * the failure set, a line could show a *retained* reading but not why it was retained — so a row could
+   * not distinguish "this kerb is refusing and we are keeping its last bus" from "this kerb is quiet",
+   * which is the very distinction rule 1 is about. It is the complete current set, in canonical `stopId`
+   * order, and it names **poles** rather than places: a whole target that could not be answered is a
+   * `status` frame, so it shows up in `<state>` instead.
+   *
+   * It also gives the corpus a fourth rule to bind: **a round whose failure set moved is news even when
+   * no reading did.** Look for the rows where a line is *not* `silent` despite identical readings — a
+   * kerb that started or stopped refusing — and for the recovery, where `failed=[]` has to arrive within
+   * one round of the board answering again.
    */
   settles: string[]
 }

@@ -1688,6 +1688,7 @@
               "seq": 0,
               "etas": [],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -1743,6 +1744,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -1791,6 +1793,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1844,6 +1847,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1860,6 +1864,7 @@
               "seq": 0,
               "etas": [],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -1967,6 +1972,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2002,6 +2008,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2055,6 +2062,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2075,6 +2083,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -2135,6 +2144,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -2191,6 +2201,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2246,6 +2257,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2294,6 +2306,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2358,6 +2371,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2406,6 +2420,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2446,6 +2461,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2510,6 +2526,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2582,6 +2599,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2617,6 +2635,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2668,6 +2687,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2684,6 +2704,7 @@
               "seq": 0,
               "etas": [],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -2731,6 +2752,7 @@
                 }
               ],
               "targets": [],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -2766,6 +2788,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2816,6 +2839,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2851,6 +2875,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2901,6 +2926,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2936,6 +2962,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -2977,6 +3004,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3012,6 +3040,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "connecting"
               }
@@ -3046,6 +3075,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3081,6 +3111,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3120,6 +3151,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -3160,6 +3192,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "retrying",
                 "error": {
@@ -3199,6 +3232,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3234,6 +3268,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3273,6 +3308,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live",
                 "error": {
@@ -3313,6 +3349,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3345,6 +3382,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3380,6 +3418,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -3413,6 +3452,7 @@
                   "stopId": "KMB:548DAB3A4F71EB68"
                 }
               ],
+              "failed": [],
               "status": {
                 "state": "live"
               }
@@ -8654,6 +8694,353 @@
             ]
           },
           "expect": "P:KMB:A+KMB:B|*"
+        }
+      ]
+    },
+    "sameFailures": {
+      "doc": "Is this round's failure set news? The predicate that lets a frame carry `failed` without making every round a repaint (WP5-14, ADR-081). The failure set moves independently of the readings — a kerb can start refusing, or recover, while every reading a subscriber holds stays byte-identical — so \"an unchanged round is silent\" needs this to know whether the round was unchanged. Both engines ask it, so a disagreement here is two engines sending a different number of frames for one outage. `stopId`, `error.code` and `error.retryable` are compared; **`error.message` is NOT**, because it is prose that embeds whatever the upstream said and a wording that varied between two rounds describing one outage would make every round news. Both lists are canonically ordered by `stopId`, so the comparison is element-wise.",
+      "cases": [
+        {
+          "name": "two-empty-sets-are-the-same",
+          "why": "THE CONTROL, and the state almost every round is in. An implementation that returned false here would send a data frame every single round and undo the delta protocol.",
+          "args": {
+            "a": [],
+            "b": []
+          },
+          "expect": true
+        },
+        {
+          "name": "the-same-pole-failing-the-same-way-is-not-news",
+          "why": "The round-two-of-an-outage case, and the one this predicate exists for: the kerb is still refusing and no reading changed, so the round must stay silent and the client must keep the marker it already has.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": true
+        },
+        {
+          "name": "a-pole-that-started-refusing-is-news",
+          "why": "Round one of an outage. Without this the card could not say \"we could not ask\" until some *reading* happened to change, which during an outage is exactly what stops happening.",
+          "args": {
+            "a": [],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "a-pole-that-recovered-is-news",
+          "why": "THE ROW THE ACCEPTANCE NAMES: \"a recovered kerb's marker clears within one round\". A recovery often changes no reading a client can see — the fresh board can repeat what `retainFailedPoles` was already holding — so if this returned true the marker would outlive the recovery by a whole cadence.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": []
+          },
+          "expect": false
+        },
+        {
+          "name": "a-different-pole-failing-is-news",
+          "why": "Same count, different kerb. A predicate that compared only lengths would call this unchanged and the card would name the wrong kerb — or, on Nearby, attribute the outage to the wrong card entirely.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:9F0D1B0B21D0C0A6",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "the-same-pole-with-a-different-code-is-news",
+          "why": "A timeout becoming an outright refusal is a different fact about the same kerb, and `code` is what a caller branches on. It costs one frame and buys an accurate error.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_timeout",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "the-same-pole-turning-permanent-is-news",
+          "why": "`retryable` is the field that decides whether a background client keeps asking (ADR-064), so a change in it must reach the client even though nothing else about the failure moved.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": false
+                }
+              }
+            ]
+          },
+          "expect": false
+        },
+        {
+          "name": "a-message-that-changed-is-not-news",
+          "why": "THE SECOND CONTROL, and the one that keeps the predicate useful. The message embeds the upstream's own words; if it carried a timestamp or a retry count it would differ every round, every round would be news, and the delta protocol would be pointless. Same argument as `COMPARED_FIELDS` excluding `observedAt`.",
+          "args": {
+            "a": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 502",
+                  "retryable": true
+                }
+              }
+            ],
+            "b": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "KMB stop-ETA 503 (attempt 2)",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": true
+        }
+      ]
+    },
+    "unionFailures": {
+      "doc": "One round's failure set from the per-target lists it came back with: deduplicated by pole, sorted by `stopId` in code-point order (WP5-14, ADR-081). A round is N targets and each answers with its own `failed`, so the frame needs the union — and it has to be built identically on both engines or the two send different bytes for identical upstream behaviour, which is the property ADR-074's corpus asserts. First occurrence wins on a duplicate, and the lists arrive in accepted-target order, so \"first\" is the earliest target that reported the pole. `sameFailures` relies on the ordering, so the two rules are only correct together.",
+      "cases": [
+        {
+          "name": "no-failures-anywhere-is-an-empty-set",
+          "why": "THE CONTROL, and the shape of every healthy round. Note the input is a list per target, so this is three targets that all answered — not an empty round.",
+          "args": {
+            "lists": [[], [], []]
+          },
+          "expect": []
+        },
+        {
+          "name": "one-target-with-two-refusing-kerbs",
+          "why": "A place is N boarding points (ADR-042) and an upstream board call is per point, so one target can contribute two entries. The result is sorted, which is what makes the frame byte-identical on both engines.",
+          "args": {
+            "lists": [
+              [
+                {
+                  "stopId": "KMB:9F0D1B0B21D0C0A6",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
+            },
+            {
+              "stopId": "KMB:9F0D1B0B21D0C0A6",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "two-targets-sharing-a-pole-collapse-to-one-entry",
+          "why": "THE ROW THAT MATTERS, and it is reachable rather than theoretical: a rider can watch a merged place AND one of its own member kerbs at once — a Nearby card is keyed on the place, a favourite on the kerb (ADR-062) — and the batch endpoint answers about both. Two entries for one kerb would make the wire claim two outages, and `sameFailures` would then see a length change where nothing changed.",
+          "args": {
+            "lists": [
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ],
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "the-first-target-to-report-a-pole-wins",
+          "why": "The dedupe keeps the EARLIEST entry, not the last, and the difference is observable when two targets describe one kerb differently — a place-level fan-out that timed out and a pole-level one that got a 502. Both engines walk their targets in accepted order, so \"earliest\" is the same entry on each; last-wins would also be deterministic but would depend on target order in the opposite direction, which is the sort of thing two hand-ports get differently.",
+          "args": {
+            "lists": [
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_timeout",
+                    "message": "timed out",
+                    "retryable": true
+                  }
+                }
+              ],
+              [
+                {
+                  "stopId": "KMB:548DAB3A4F71EB68",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "error": {
+                "code": "upstream_timeout",
+                "message": "timed out",
+                "retryable": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "a-target-that-answered-contributes-nothing",
+          "why": "THE SECOND CONTROL. The common mixed round: one place refusing, one fine. An implementation that emitted a placeholder for the healthy target would mark every card on the screen incomplete.",
+          "args": {
+            "lists": [
+              [],
+              [
+                {
+                  "stopId": "KMB:9F0D1B0B21D0C0A6",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "KMB stop-ETA 502",
+                    "retryable": true
+                  }
+                }
+              ]
+            ]
+          },
+          "expect": [
+            {
+              "stopId": "KMB:9F0D1B0B21D0C0A6",
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "KMB stop-ETA 502",
+                "retryable": true
+              }
+            }
+          ]
         }
       ]
     }

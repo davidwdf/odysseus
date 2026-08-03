@@ -128,7 +128,12 @@ function settled(update: LiveEtaUpdate, labelOf: (id: string) => string): string
     (e) => `${labelOf(e.stopId)}/${labelOf(e.routeId)}@${e.arrivals.map(minutesFromNow).join(',')}`,
   )
   const watching = update.targets.map((t) => labelOf(t.stopId))
-  return `${state} etas=[${etas.join(' ')}] watching=[${watching.join(' ')}]`
+  // The `failed` column is WP5-14's (ADR-081) and it is the reason the grammar moved: until the frames
+  // carried the failure set, this line could show a retained reading but not *why* it was retained, so a
+  // row could not distinguish "the kerb is refusing and we are keeping its last bus" from "the kerb is
+  // quiet". Pole labels only — the set is per boarding point, never per place.
+  const failed = update.failed.map((f) => labelOf(f.stopId))
+  return `${state} etas=[${etas.join(' ')}] watching=[${watching.join(' ')}] failed=[${failed.join(' ')}]`
 }
 
 /** Concrete id → the fixture's label, for every id a row can produce. Built once per scenario. */
@@ -259,7 +264,31 @@ describe('the live rounds corpus, through the poll emulator', () => {
     for (const scenario of LIVE_ROUNDS) {
       expect(scenario.settles.length, scenario.name).toBe(scenario.rounds.length)
       expect(scenario.why.length, scenario.name).toBeGreaterThan(40)
+      // Every line must carry the `failed` column (WP5-14), or a row written before it existed would
+      // compare a shorter string and quietly assert nothing about the failure set.
+      for (const line of scenario.settles) {
+        if (line === 'silent') continue
+        expect(line, `${scenario.name}: ${line}`).toMatch(/ failed=\[[^\]]*\]$/)
+      }
     }
+    // **The anti-vacuous control for the new column.** A fixture in which no line ever named a refusing
+    // kerb, or in which none ever recovered, would satisfy every assertion above while proving nothing
+    // about the rule WP5-14 added — and that is the exact failure shape this repo has hit eight times.
+    const namesAKerb = LIVE_ROUNDS.filter((s) =>
+      s.settles.some((line) => / failed=\[[^\]]+\]$/.test(line)),
+    )
+    expect(namesAKerb.length).toBeGreaterThanOrEqual(5)
+    // …and at least one row must go from naming a kerb to naming none, which is "a recovered kerb's
+    // marker clears within one round" — the half of the acceptance a still-refusing row cannot show.
+    const recovers = LIVE_ROUNDS.filter((s) =>
+      s.settles.some(
+        (line, i) =>
+          i > 0 &&
+          / failed=\[\]$/.test(line) &&
+          / failed=\[[^\]]+\]$/.test(s.settles[i - 1] as string),
+      ),
+    )
+    expect(recovers.length).toBeGreaterThanOrEqual(2)
   })
 
   for (const scenario of LIVE_ROUNDS) {

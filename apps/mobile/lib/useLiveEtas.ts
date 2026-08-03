@@ -112,9 +112,13 @@ export function useLiveEtas(
     if (!stopId || !enabled) return
     const subscription = source.watch(
       [{ stopId }],
-      (etas) => {
+      (etas, failed) => {
         queryClient.setQueryData<StopDetail>(['stop', stopId], (previous) =>
-          previous === undefined ? previous : applyLiveEtasToStopDetail(previous, etas),
+          // `failed` arrives from the frames since WP5-14 (ADR-081), so a Place screen keeps saying "we
+          // could not reach this kerb" for as long as that is true and stops within one round of it
+          // becoming false. Replaced rather than merged — an absent argument clears the field, which is
+          // the direction ADR-077 chose and the reason a recovery cannot leave a stale claim behind.
+          previous === undefined ? previous : applyLiveEtasToStopDetail(previous, etas, failed),
         )
       },
       { refreshAfterMs },

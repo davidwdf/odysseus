@@ -3,6 +3,7 @@ import type {
   DataSource,
   Eta,
   EtaBatch,
+  EtaFailure,
   EtaListener,
   EtaReport,
   LatLng,
@@ -14,7 +15,7 @@ import type {
   WatchOptions,
   WatchTarget,
 } from '@nextbus/core'
-import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
+import { CLIENT_POLICY_DEFAULTS, sameFailures } from '@nextbus/core'
 import type { Clock } from '@nextbus/ports'
 import { type Endpoints, resolveEndpoints } from './endpoint'
 import { classifyFailure } from './errors'
@@ -170,6 +171,8 @@ export class EdgeClient implements DataSource {
      * Favourites adopts it (WP5-0 watches one target per screen, so there is nothing to diff yet).
      */
     let last: readonly Eta[] | null = null
+    /** The failure set already handed over. See the guard below for why `etas` alone is not enough. */
+    let lastFailed: readonly EtaFailure[] = []
     const controller = createLiveEtaController({
       transport: this.transport({
         endpoints: this.endpoints,
@@ -183,10 +186,19 @@ export class EdgeClient implements DataSource {
         clock: this.clock,
       }),
       targets,
-      emit: ({ etas }) => {
-        if (etas === last) return
+      emit: ({ etas, failed }) => {
+        // **Two things can be news, and the second one was being swallowed here** (WP5-14, ADR-081).
+        // `applyLiveFrame`'s `status` case passes `etas` through by reference, so identity is exactly the
+        // right test for "the readings did not move" — but the failure set moves independently, and the
+        // round that matters most is a kerb starting to refuse while every reading stands still. Until
+        // `EtaListener` could carry `failed`, that round carried no information through this door and the
+        // guard was right to drop it; now it carries the one thing a card needs to stop reading as a quiet
+        // stop. `sameFailures` is the kernel's predicate, so the door and the producers agree about what
+        // counts as a change.
+        if (etas === last && sameFailures(lastFailed, failed)) return
         last = etas
-        onUpdate([...etas])
+        lastFailed = failed
+        onUpdate([...etas], [...failed])
       },
     })
     controller.start()

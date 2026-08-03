@@ -5424,3 +5424,124 @@ pre-existing and unaddressed; it earned its keep here.
     `poleFlagCode`, and *not* widened here: doing so would shift what every heading prints in Chinese, which
     wants its own measurement.
   - **Test totals:** core 839 (+23), corpus 94 groups / 790 cases, 26 named boundary rows.
+
+## ADR-081 — The frames carry `failed`, and a round whose failure set moved is news
+- **Status:** **Decided and implemented 2026-08-03** (WP5-14). Implementation:
+  `packages/contract/src/wire/live.ts` (`failed?` on `SnapshotFrame` and `DeltaFrame`),
+  `packages/core/src/live.ts` (`sameFailures`, `unionFailures`, `LiveSession.failed`, the three reducer
+  cases), `packages/core/src/datasource.ts` (`EtaListener` gains a trailing `failed?`),
+  `packages/api-client/src/live/controller.ts` (`LiveEtaUpdate.failed`), `src/live/poll.ts` (`sentFailed`
+  and the new news clause), `src/index.ts` (the identity guard), `apps/edge/src/eta-hub.ts`
+  (`Session.failed`, `sessionChanged`, `sendRound`, and the carry-forward on `subscribe`),
+  `apps/mobile/lib/useLiveNearby.ts`, `apps/mobile/lib/useLiveEtas.ts`,
+  `apps/web/src/hooks/useLiveNearby.ts`. Pinned by **13 new corpus rows** in two groups, all **11
+  cross-runtime rows re-declared with a `failed=[…]` column** (ADR-074's grammar), an anti-vacuous control
+  on each of the two drivers, 3 new cases in `apps/mobile/test/live-nearby.test.tsx` and 1 in
+  `apps/edge/test/eta-hub.test.ts`.
+- **Context.** ADR-073 put per-pole failure on `/v1/etas/:id` and deliberately left it **off the frames**,
+  with a reason that was true at the time: the shard applies `retainFailedPoles` itself, so a client
+  learns from the retained readings plus a `retrying` status, and the field existed on the wire only so the
+  poll emulator could apply the identical rule. ADR-077 then gave a card a marker fed by the HTTP
+  payload's `failed`, recorded the cost in one sentence, and named the trigger: *"the fix is frames that
+  carry `failed`, which is a wire change to make **when a screen renders per-kerb failure**, because that
+  is when the extra precision has a reader."* WP5-7 made Nearby a live adopter and its card renders
+  exactly that, so `StopCardView.incomplete` became **first-paint-only**: the marker cleared on the first
+  live round and a card at a refusing place read as a quiet stop again. That is the reader arriving.
+- **Decisions:**
+  1. **A frame's `failed` is the complete current set, restated in full, and an absent field means
+     empty.** It is the one field on a `delta` that is not a patch, and the asymmetry is forced rather
+     than chosen: an optional field cannot distinguish *unchanged* from *none*, so one of the two has to be
+     the meaning — and only *none* fails safe, which is the same direction ADR-077 decision 1 chose for the
+     merge helpers' argument. Clearing loses information; keeping would invent it.
+  2. **Therefore a round whose failure set moved is *news*, even when no reading did.** This is the
+     producers' half of decision 1 and the part that makes it correct rather than merely cheap. Without it
+     the delta branch stays silent for exactly the round an outage produces — a kerb stops answering,
+     `retainFailedPoles` keeps its previous readings, so nothing changed and nothing is gone — and the card
+     could not speak until some *other* bus happened to move. The recovery direction is worse: the marker
+     would outlive the recovery by a whole cadence, which the row's acceptance rules out in as many words.
+     `sameFailures` in the kernel is the predicate, and **both engines call it**, so a disagreement about
+     what counts as a change would be a disagreement about how many frames one outage produces.
+  3. **`sameFailures` compares `stopId`, `error.code` and `error.retryable`, and *not* `error.message`.**
+     The message is prose that embeds whatever the upstream said, so a wording that varied between two
+     rounds describing one outage would make every round news and undo decision 2 entirely. The three
+     compared fields are the three a caller branches on: which kerb, what kind of failure, and whether to
+     keep asking. Exactly `COMPARED_FIELDS`' argument for excluding `observedAt`, and exactly the same risk
+     if it is got wrong in the other direction.
+  4. **`unionFailures` is a kernel rule, not a `flatMap().sort()` written twice.** A round is N targets and
+     each answers with its own list, so the frame needs the union — and if the two engines built it
+     differently they would put different bytes on the wire for identical upstream behaviour, which is the
+     one property ADR-074's corpus exists to assert. It **deduplicates by pole**, which is reachable rather
+     than theoretical: a rider can watch a merged place *and* one of its own member kerbs at once (a Nearby
+     card is keyed on the place, a favourite on the kerb — ADR-062) and the batch endpoint answers about
+     both. First occurrence wins, and since the lists arrive in accepted-target order that is deterministic
+     on both engines.
+  5. **Pole failures only; a whole-target failure stays a `status` frame.** `EtaFailure.stopId` is a
+     boarding point (ADR-073 decision 2) while a target may be a merged place, so putting a place id in
+     this list would produce an entry that matches no reading and — through `memberStopIds` — no card
+     either: safe by luck rather than by design. A target that could not be answered at all is already
+     covered, and better: `retryable: true` retains its readings (so the card ages honestly) and
+     `retryable: false` re-echoes a corrected snapshot, which is the accepted-set mechanism ADR-008 asks
+     for.
+  6. **A `status` frame leaves `failed` alone.** `state` describes the **connection** and `failed`
+     describes the **upstream**; they are different facts. A `retrying` that cleared the per-kerb marker
+     would be strictly less honest than the frame it arrived on, and a reconnect must not erase what we
+     know about the kerbs.
+  7. **`EtaListener` gains a trailing optional parameter, which is why this is not a change to the seam.**
+     ADR-004 fixes `watch()` as `(targets, onUpdate) => Subscription`, and every listener already written
+     stays assignable — a one-parameter function is a valid two-parameter one in TypeScript, in Swift with
+     a default, and in Kotlin. `watch()`'s own comment previously argued that widening the signature was
+     *not* the fix and that a caller needing more should hold a `createLiveEtaController`; that argument
+     was about the **accepted target set**, which is a fact about the subscription and needs a product
+     decision to render, and it still stands. A failure set is a fact about the data the listener is
+     already being handed.
+  8. **The identity guard at `EdgeClient.watch` now asks about failures too.** It skipped any update whose
+     `etas` array was the same object — correct, because `applyLiveFrame`'s `status` case passes `etas`
+     through by reference, so a status-only transition carried no information through a door that could
+     only pass readings. The round that matters most is now exactly that shape (unchanged readings, moved
+     failure set), so the guard would have swallowed it. It compares with `sameFailures`, so the door and
+     the producers agree.
+  9. **The shard stores the set per socket and carries it forward on a re-`subscribe`.** Per socket
+     because each connection watches its own subset and hears only about its own kerbs; stored because "is
+     this round news?" can only be answered against the previous *frame*. The carry-forward was **found on
+     a real socket rather than reasoned about**: a `subscribe` is answered from stored *readings*, so
+     sending `failed: []` alongside them paired six real readings with a claim that nothing was refusing,
+     and a card that had been saying "we could not ask" went quiet for a cadence before saying it again.
+     Filtered through `memberStopIds`, so a target the caller has just dropped takes its kerbs with it.
+     `sessionOf` **tolerates the field's absence**, which is what lets a socket opened by the previous
+     deploy keep working rather than being dropped by an attachment it does not carry.
+- **Verified against live Hong Kong data, with the KMB upstream pointed at an unroutable host and then
+  reverted** — the same technique ADR-077 used, one layer up:
+  - The batch endpoint: three Citybus places kept all their readings and reported nothing, while the three
+    KMB places came back with **zero readings and every refusing kerb named** (3, 4 and 5 of them).
+  - On a real socket to the real `EtaHub`: `snapshot seq=1 etas=0` → `status live` →
+    **`delta seq=2 changed=6 gone=0 failed=[3 kerbs]`** → three `retrying` → and on a re-`subscribe`,
+    `snapshot seq=4 etas=6 failed=[3 kerbs]`. An earlier trace, before decision 9, showed the same
+    subscribe answering with **no** `failed` field, which is the defect that line fixes.
+  - The frame that did not exist before this row, observed: **`delta changed=0 gone=0 failed=[…]`** — a
+    round that learned nothing about readings and everything about which kerbs had stopped answering.
+    Before WP5-14 that round was completely silent.
+- **Consequences, including what we are accepting:**
+  - **ADR-074's corpus grammar gained a column, and that is the cross-runtime proof.** All 11 `settles`
+    lines now end `failed=[…]`, and the **real Durable Object over a real WebSocket in workerd reproduces
+    every one of them independently** — neither driver imports the other, and `layers.json` forbids it. Two
+    rows show the recovery direction (`failed=[A]` → `failed=[]` within one round), which is the half of
+    the acceptance a still-refusing row cannot demonstrate; an anti-vacuous control on **each** driver
+    requires at least five rows to name a kerb and at least two to recover, because the two read one
+    fixture and a row that went quiet would go quiet on both at once.
+  - **`CONTRACT_VERSION` does not move.** An optional field added to two frame schemas is additive per
+    ADR-052 §5. Measured: `asyncapi.json` stays at 49 component schemas (it already registered
+    `EtaFailure` for `EtaReport`) and only the two frame payloads and the version differ; `openapi.json` is
+    untouched at 8 paths / 38 schemas.
+  - **An extra frame per outage transition, and no more than that.** A continuing outage is still silent —
+    asserted by the corpus row `a-board-that-keeps-refusing-keeps-saying-so`, whose two failing rounds
+    produce their `retrying` status frames and **no** second delta. The cost is one data frame when a kerb
+    starts refusing and one when it stops.
+  - **Open — a reconnect starts with no failure set.** A new WebSocket has no attachment, so its first
+    snapshot carries none whatever the shard knows. The stored readings are equally invisible to that
+    socket, so the two are consistent rather than contradictory, and the next round tells it everything
+    within one cadence. Recorded rather than fixed: fixing it means the shard storing a failure set
+    *outside* any socket's attachment, which is a different lifetime and a different decision.
+  - **Open — `/v1/route/:id` still says nothing**, unchanged from ADR-073 and ADR-077. Its ETAs come from
+    one bulk call, so the failure is all-or-nothing.
+  - **Test totals:** core 853 (+14), edge 149 (+2), api-client 71, mobile 56 (+3), web 32. Corpus 96 groups
+    / 803 cases.

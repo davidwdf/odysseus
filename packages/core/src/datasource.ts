@@ -3,6 +3,7 @@ import type {
   ClientPolicy,
   Eta,
   EtaBatch,
+  EtaFailure,
   EtaReport,
   LatLng,
   NearbyStop,
@@ -22,7 +23,27 @@ export interface Subscription {
 // Two declarations of a shape that travels are two declarations that can disagree (ADR-052).
 // `Subscription` and `EtaListener` stay here: they are function types, which no schema describes.
 
-export type EtaListener = (etas: Eta[]) => void
+/**
+ * What a subscription hands a screen: every current reading, and the boarding points it could not ask
+ * about (WP5-14, ADR-081).
+ *
+ * **`failed` is a trailing optional parameter, which is what makes it not a change to the seam.** ADR-004
+ * fixes `watch()` as `(targets, onUpdate) => Subscription`, and every listener already written stays
+ * assignable — a one-parameter function is a valid two-parameter one in TypeScript, in Swift with a
+ * default, and in Kotlin. So no caller *had* to change, and the two that wanted to (the Nearby and Place
+ * hooks) pass it straight into the kernel's merge helpers, which have taken a failure set since ADR-077.
+ *
+ * Absent and empty mean the same thing here, deliberately: a listener that received `undefined` and one
+ * that received `[]` must render identically, because on the wire the field is omitted when empty and a
+ * fake transport is free to materialise it. `StopCardView.incomplete` reads length, never presence, for
+ * exactly that reason (ADR-077 decision 4).
+ *
+ * **A round can call this with unchanged readings and a changed failure set**, which is new. The
+ * identity guard in `EdgeClient.watch` used to skip any update whose `etas` array was the same object;
+ * it now also asks whether the failure set moved, or the one round that matters most — a kerb starting to
+ * refuse while every other reading stands still — would be swallowed at the door.
+ */
+export type EtaListener = (etas: Eta[], failed?: EtaFailure[]) => void
 
 /**
  * What a caller may tell `watch()` about how to run, as opposed to what to watch.

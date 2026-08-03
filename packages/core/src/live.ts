@@ -192,6 +192,7 @@ export const LIVE_SESSION_START: LiveSession = {
   seq: 0,
   etas: [],
   targets: [],
+  failed: [],
   status: { state: 'connecting' },
 }
 
@@ -233,6 +234,25 @@ export interface LiveSession {
    * set, which is why a round that *changes* the accepted set has to send one (the shard does).
    */
   targets: readonly WatchTarget[]
+  /**
+   * The boarding points this round could not be asked about (WP5-14, ADR-081).
+   *
+   * **Replaced wholesale by every data frame, and an absent field on one means empty.** A frame carries
+   * the complete current set rather than a patch, because the alternative needs an optional field to
+   * distinguish "unchanged" from "none" and it cannot: absent would have to mean both. Clearing is the
+   * direction that loses information rather than inventing it, which is the same choice ADR-077 made for
+   * the merge helpers' argument — and it is why a producer whose failure set *moved* must send a frame
+   * even when no reading changed. Without that, a recovered kerb's marker outlives the recovery by a
+   * whole cadence, which the row's acceptance rules out.
+   *
+   * `status` frames leave it alone: the connection's state and the upstream's are different facts, and a
+   * reconnect must not erase what we know about the kerbs.
+   *
+   * Pole ids only, so it pairs directly with the `stopId` of a reading. A whole *target* that could not
+   * be answered arrives as a `status` frame — and, if permanent, as a re-echoed snapshot — because
+   * `EtaFailure.stopId` is a boarding point and a target may be a merged place (ADR-073 decision 2).
+   */
+  failed: readonly EtaFailure[]
   status: LiveStatus
 }
 
@@ -492,6 +512,74 @@ export function narrowEtasToRoutes(
   return etas.filter((eta) => wanted.has(eta.routeId))
 }
 
+/**
+ * Are these two failure sets the same — i.e. is the second one *not news*?
+ *
+ * **This is the predicate that makes a frame's `failed` cheap enough to carry** (WP5-14, ADR-081). The
+ * protocol's second rule is that an unchanged round sends nothing at all, and the failure set moves
+ * independently of the readings: a pole can start refusing, or recover, while every reading a subscriber
+ * holds stays byte-identical. Without this predicate a producer has two bad options — send a data frame
+ * every round so the set is never stale (the repaint the delta protocol exists to avoid), or send one
+ * only when a reading changed, in which case a recovered kerb's marker outlives the recovery by a whole
+ * cadence, which the row's acceptance rules out. With it, "the failure set moved" is simply part of *is
+ * this round news*, and both engines ask it the same way.
+ *
+ * **`message` is deliberately not compared; `stopId`, `code` and `retryable` are.** The message is prose
+ * for a human and embeds whatever the upstream said, so a wording that varied between two rounds
+ * describing one outage would make every round news and undo the point of the predicate. The three
+ * compared fields are the three a caller *branches* on: which kerb, what kind of failure, and whether to
+ * keep asking. Same reasoning as `COMPARED_FIELDS` excluding `observedAt`, and the same risk if it is got
+ * wrong.
+ *
+ * Both lists are expected in canonical `stopId` order — every producer of one sorts (`unionFailures`
+ * below, and the wire's own ordering rule) — so this compares element-wise rather than building a set,
+ * which keeps it a total function of the data rather than of insertion order.
+ *
+ * @spec live#sameFailures
+ */
+export function sameFailures(a: readonly EtaFailure[], b: readonly EtaFailure[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((entry, i) => {
+    const other = b[i]
+    return (
+      other !== undefined &&
+      entry.stopId === other.stopId &&
+      entry.error.code === other.error.code &&
+      entry.error.retryable === other.error.retryable
+    )
+  })
+}
+
+/**
+ * One round's failure set, from the per-target lists it came back with: **deduplicated by pole and
+ * canonically ordered**.
+ *
+ * A round is N targets and each answers with its own `failed`, so a frame needs the union — and the union
+ * has to be built the same way on both engines or the two produce different bytes for identical upstream
+ * behaviour, which is the one property ADR-074's corpus exists to assert. Hence a kernel rule rather than
+ * a `flatMap().sort()` written twice.
+ *
+ * **Deduplicated because two targets can share a pole, and that is reachable rather than theoretical:** a
+ * rider can watch a merged place *and* one of its own member poles at once — a Nearby card is keyed on the
+ * place and a favourite on the kerb (ADR-062) — and the batch endpoint answers about both. First occurrence
+ * wins, which is a choice rather than an accident: the lists arrive in accepted-target order, so "first" is
+ * the earliest target that reported the pole, and both engines walk their targets in that same order.
+ *
+ * Sorted by `stopId` in code-point order like every other list in this module (see the header), and
+ * `sameFailures` above relies on that, so the two rules are only correct together.
+ *
+ * @spec live#unionFailures
+ */
+export function unionFailures(lists: ReadonlyArray<readonly EtaFailure[]>): EtaFailure[] {
+  const byPole = new Map<string, EtaFailure>()
+  for (const list of lists) {
+    for (const entry of list) {
+      if (!byPole.has(entry.stopId)) byPole.set(entry.stopId, entry)
+    }
+  }
+  return [...byPole.values()].sort((a, b) => compareCodePoints(a.stopId, b.stopId))
+}
+
 // ── The reducer ─────────────────────────────────────────────────────────────────────────────
 
 /** A snapshot: the server's whole truth replaces ours, whatever `seq` it carries. See `applyLiveFrame`. */
@@ -505,6 +593,11 @@ function applySnapshot(frame: SnapshotFrame, state: LiveSession): LiveApplyResul
       // send `acceptTargets(...).accepted`, which is canonical, so the two engines still agree byte for
       // byte (D1) without this line asserting it.
       targets: frame.targets,
+      // **Replaced from the frame, and an absent field means empty** (ADR-081). A snapshot is the
+      // server's whole truth, so anything it does not name is not failing — the same direction the merge
+      // helpers take for an absent argument (ADR-077 decision 1), and for the same reason: clearing
+      // loses information, keeping would invent it.
+      failed: frame.failed ?? [],
       status: state.status,
     },
     applied: true,
@@ -525,6 +618,12 @@ function applyDelta(frame: DeltaFrame, state: LiveSession): LiveApplyResult {
       // shard that drops a target mid-round sends one instead of a delta — otherwise the echo the rider's
       // screen is comparing against would go on naming a stop nobody polls.
       targets: state.targets,
+      // **A delta restates the failure set in full, unlike everything else about it** (ADR-081). It is
+      // the one field on this frame that is not a patch, and the asymmetry is forced: an optional field
+      // cannot distinguish "unchanged" from "none", so one of the two has to be the meaning and only
+      // "none" fails safe. The producers' side of the bargain is that a round whose failure set moved is
+      // *news* even when no reading did — otherwise this line would clear a marker that is still true.
+      failed: frame.failed ?? [],
       status: state.status,
     },
     applied: true,
@@ -588,6 +687,11 @@ export function applyLiveFrame(state: LiveSession, frame: ServerFrame): LiveAppl
           // one frame after it arrived, leaving the rider's five working stops and no way to name the
           // sixth.
           targets: state.targets,
+          // Kept for the same reason, and it is a different fact from this frame's: `state` describes the
+          // **connection**, `failed` describes the **upstream**. A reconnect must not erase what we know
+          // about which kerbs were refusing, and a `retrying` that cleared the per-kerb marker would be
+          // strictly less honest than the frame it arrived on.
+          failed: state.failed,
           status:
             frame.error === undefined
               ? { state: frame.state }

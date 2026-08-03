@@ -13,6 +13,14 @@
 //
 // **What these frames deliberately do not carry.** Two omissions, both load-bearing:
 //
+//  0. **They *did* deliberately not carry `failed`, and that changed in WP5-14 (ADR-081).** ADR-073 left the
+//     failure set off the frames because the shard applies the retention itself, so a client could learn
+//     from the retained readings plus `retrying` — and ADR-077 recorded the cost in one sentence: *"the fix
+//     is frames that carry `failed`, which is a wire change to make when a screen renders per-kerb
+//     failure."* WP5-7 made Nearby a live adopter, and its card renders exactly that, so the reader now
+//     exists. What that costs is stated at the field: a frame restates the **complete** set, an absent
+//     field means empty, and a round whose failure set moved is therefore *news* even when no reading did —
+//     otherwise a recovered kerb's marker would outlive the recovery by a cadence.
 //  1. **No engine or transport label.** WP5-1's acceptance is byte-identical listener output from the
 //     poll emulator and a socket fake. A `transport: 'poll' | 'socket'` field would make the two
 //     differ *by construction* — the criterion could not be met by any implementation, and the one
@@ -28,7 +36,7 @@
 //     design is arranged to avoid (ADR-058).
 
 import { z } from 'zod'
-import { WireErrorSchema } from './errors'
+import { EtaFailureSchema, WireErrorSchema } from './errors'
 import { EtaSchema } from './eta'
 import type { WireParam } from './responses'
 
@@ -194,6 +202,12 @@ export const SnapshotFrameSchema = z
       .describe(
         'Every reading the server currently holds for the accepted targets, in canonical (stopId, routeId) code-point order. A route with no reading right now is simply absent, exactly as in `/v1/etas/{id}`.',
       ),
+    failed: z
+      .array(EtaFailureSchema)
+      .optional()
+      .describe(
+        'Boarding points whose upstream board did not answer this round, ordered by `stopId` in code-point order — the complete current set, **restated in full on every data frame that carries it**, never a patch. **Absent means there are none**, so a client clears what it was holding: an absent optional cannot say both "unchanged" and "empty", and clearing is the direction that loses information rather than inventing it (ADR-077 decision 1, ADR-081). A reading missing from the readings for a pole named here has NOT departed — we could not ask — and `retainFailedPoles` in `@nextbus/core` is what a stateful client does about that. Pole ids only: a whole *target* that could not be answered is a `status` frame, and a permanent one is a re-echoed snapshot, because `EtaFailure.stopId` is a boarding point and a target may be a merged place (ADR-073 decision 2).',
+      ),
   })
   .meta({ id: 'SnapshotFrame' })
 
@@ -233,6 +247,12 @@ export const DeltaFrameSchema = z
       .array(EtaRefSchema)
       .describe(
         'Readings the server no longer has — the bus departed, or the target was dropped. Remove them; do not leave the last value on screen.',
+      ),
+    failed: z
+      .array(EtaFailureSchema)
+      .optional()
+      .describe(
+        'Boarding points whose upstream board did not answer this round, ordered by `stopId` in code-point order — the complete current set, **restated in full on every data frame that carries it**, never a patch. **Absent means there are none**, so a client clears what it was holding: an absent optional cannot say both "unchanged" and "empty", and clearing is the direction that loses information rather than inventing it (ADR-077 decision 1, ADR-081). A reading missing from the readings for a pole named here has NOT departed — we could not ask — and `retainFailedPoles` in `@nextbus/core` is what a stateful client does about that. Pole ids only: a whole *target* that could not be answered is a `status` frame, and a permanent one is a re-echoed snapshot, because `EtaFailure.stopId` is a boarding point and a target may be a merged place (ADR-073 decision 2).',
       ),
   })
   .meta({ id: 'DeltaFrame' })
@@ -338,12 +358,14 @@ export const LIVE_CHANNEL = {
   serverFrames: [
     {
       name: 'Snapshot',
-      summary: 'The accepted target set and every reading held for it.',
+      summary:
+        'The accepted target set, every reading held for it, and the kerbs that would not answer.',
       payload: SnapshotFrameSchema,
     },
     {
       name: 'Delta',
-      summary: 'Readings that changed, and readings that are gone.',
+      summary:
+        'Readings that changed, readings that are gone, and the kerbs that would not answer.',
       payload: DeltaFrameSchema,
     },
     {

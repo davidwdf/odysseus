@@ -53,18 +53,21 @@ import { dataSource as appDataSource } from '../adapters/datasource'
  * reorders as a rider walks a few metres is one subscription, and an empty string means there is nothing
  * watchable — the condition for not opening anything at all.
  *
- * ## What a card can and cannot say during an outage, stated rather than discovered
+ * ## What a card says during an outage, on the live path as well as the first paint
  *
- * `applyLiveEtasToNearby` is called with **no failure set**, so the "Live times unavailable" marker a card
- * got from `/v1/nearby`'s own `failed` (ADR-077) clears as soon as the first live round lands. That is
- * ADR-077 decision 2's rule, not an oversight: the frames carry no failure list (ADR-073), so once a
- * subscription takes over its `status` is the authority and the HTTP-era list must go rather than outlive
- * the outage it describes. What covers the rider instead is `retainFailedPoles` keeping a refusing kerb's
- * previous readings with their own `dataTimestamp`, so they visibly go stale on the operator's clock —
- * which is why the tick below matters more here than it looks. The residual is narrow and real: a pole
- * that has never produced a reading contributes nothing to retain, so during an outage that was already
- * running at first paint its card reads as a quiet stop. Closing that means frames that carry `failed`,
- * which is a wire change to both engines and a row of its own.
+ * `applyLiveEtasToNearby` is called **with the round's own failure set** (WP5-14, ADR-081), so the "Live
+ * times unavailable" marker survives the handover from the HTTP fetch to the subscription instead of
+ * clearing on the first round. It shipped the other way for one wave, and the reason was recorded rather
+ * than hidden: the frames carried no failure list (ADR-073), so ADR-077 decision 2 chose the direction
+ * that loses information over the one that keeps a stale claim — *"the fix is frames that carry `failed`,
+ * which is a wire change to make when a screen renders per-kerb failure."* This hook is that screen, so
+ * the wire changed.
+ *
+ * Three things about it are worth knowing at this call site. The set is **replaced, never merged** — an
+ * absent argument still clears the field, which is what keeps a recovered kerb's marker from outliving
+ * the recovery. A round whose failure set moved is **news even when no reading did**, which is why this
+ * listener now fires on rounds it used to sleep through. And the marker is **per card**, attributed
+ * through `memberStopIds`, so an outage at one kerb of one place does not mark the whole screen.
  *
  * @param at the fix the list was fetched for — already snapped to a 25 m cell by the shared controller,
  * which is what makes the query key stable enough to cache (ADR-058). `null` before a fix arrives.
@@ -123,9 +126,9 @@ export function useLiveNearby(
     if (!enabled || lat === undefined || lng === undefined || key === '') return
     const subscription = source.watch(
       targets,
-      (etas) => {
+      (etas, failed) => {
         queryClient.setQueryData<NearbyStop[]>(['nearby', lat, lng], (previous) =>
-          previous === undefined ? previous : applyLiveEtasToNearby(previous, etas),
+          previous === undefined ? previous : applyLiveEtasToNearby(previous, etas, failed),
         )
       },
       { refreshAfterMs },

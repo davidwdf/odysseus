@@ -55,6 +55,8 @@ import {
   ETAS_BATCH_MAX_IDS,
   narrowEtasToRoutes,
   retainFailedPoles,
+  sameFailures,
+  unionFailures,
 } from '@nextbus/core'
 import type { Clock, LiveTransportSink } from '@nextbus/ports'
 import { wireErrorOf } from '../errors'
@@ -136,6 +138,14 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
   let readings = new Map<string, readonly Eta[]>()
   /** What the client has already been told, flattened. `diffEtas`' left-hand side. */
   let sent: readonly Eta[] = []
+  /**
+   * The failure set the client has already been told about — `sameFailures`' left-hand side (WP5-14).
+   *
+   * Held separately from `readings` because it is a property of the *last frame sent*, not of the last
+   * round polled: the two diverge on a silent round, which is the case the whole field exists for. The
+   * shard holds the same thing in its per-socket attachment, for the same reason.
+   */
+  let sentFailed: readonly EtaFailure[] = []
   /** The wire's counter. 0 until the first `snapshot` goes out, which is the sentinel the kernel uses. */
   let seq = 0
   /** True once a whole round has succeeded; false again after any failure, so recovery re-announces. */
@@ -307,15 +317,41 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
     )
     const answered = results.some((result) => 'etas' in result)
     const dropped = failed.some(({ error }) => !error.retryable)
+    /**
+     * This round's failure set, as one canonical list — the kernel's union, so the shard building the
+     * same thing from the same `EtaReport`s produces the identical bytes (D1).
+     *
+     * **Pole failures only.** A whole *target* that could not be answered is reported as a `status` frame
+     * below (and, if permanent, by the re-echoed snapshot), because `EtaFailure.stopId` is a boarding
+     * point while a target may be a merged place — feeding a place id into this list would make it match
+     * no reading and no card, which is safe by luck rather than by design (ADR-073 decision 2).
+     */
+    const nextFailed = unionFailures(
+      results.map((result) => ('etas' in result ? result.failed : [])),
+    )
+    /**
+     * **The failure set moving is news, even when no reading did** (ADR-081).
+     *
+     * Without this clause the round below stays silent whenever the readings are unchanged — which is
+     * exactly what an outage looks like — so a card could not say "we could not ask" until some *other*
+     * bus happened to move, and a recovered kerb's marker would outlive the recovery by a whole cadence.
+     * `sameFailures` deliberately ignores the error *message* so an upstream that reworded itself does not
+     * make every round news; see the kernel.
+     */
+    const failuresAreNews = !sameFailures(sentFailed, nextFailed)
+    /** `failed` is omitted when empty, on the wire and here — see `EtaReportSchema` for why. */
+    const failedField = nextFailed.length > 0 ? { failed: nextFailed } : {}
     if (seq === 0 && (answered || dropped)) {
       seq = 1
       sent = next
+      sentFailed = nextFailed
       emit({
         type: 'snapshot',
         seq,
         at: frameAt(deps.clock.now()),
         targets: watching,
         etas: next,
+        ...failedField,
       })
     } else if (seq > 0 && dropped) {
       // **A mid-stream drop re-echoes the accepted set, and it takes a snapshot to do it.** A `delta`
@@ -332,17 +368,23 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
       // against a script rather than against each other.
       seq += 1
       sent = next
+      sentFailed = nextFailed
       emit({
         type: 'snapshot',
         seq,
         at: frameAt(deps.clock.now()),
         targets: watching,
         etas: next,
+        ...failedField,
       })
-    } else if (seq > 0 && (changed.length > 0 || gone.length > 0)) {
+    } else if (seq > 0 && (changed.length > 0 || gone.length > 0 || failuresAreNews)) {
       seq += 1
       sent = next
-      emit({ type: 'delta', seq, at: frameAt(deps.clock.now()), changed, gone })
+      sentFailed = nextFailed
+      // A delta with two empty lists and a `failed` is a legal frame and a new one: it is how a round
+      // that only learned "this kerb has started refusing" — or "has stopped" — reaches a screen. The
+      // module header's "an unchanged round sends nothing" is unchanged; what counts as unchanged is.
+      emit({ type: 'delta', seq, at: frameAt(deps.clock.now()), changed, gone, ...failedField })
     }
     // else: nothing changed, so nothing is sent. See the header.
 
@@ -378,6 +420,7 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
     watching = acceptTargets(targets).accepted
     readings = new Map()
     sent = []
+    sentFailed = []
     seq = 0
     announcedLive = false
 

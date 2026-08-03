@@ -370,7 +370,12 @@ function settled(session: LiveSession, labelOf: (id: string) => string): string 
     (e) => `${labelOf(e.stopId)}/${labelOf(e.routeId)}@${e.arrivals.map(minutesFromNow).join(',')}`,
   )
   const watching = session.targets.map((t) => labelOf(t.stopId))
-  return `${state} etas=[${etas.join(' ')}] watching=[${watching.join(' ')}]`
+  // The `failed` column is WP5-14's (ADR-081) and it is the reason the grammar moved: until the frames
+  // carried the failure set, this line could show a retained reading but not *why* it was retained, so a
+  // row could not distinguish "the kerb is refusing and we are keeping its last bus" from "the kerb is
+  // quiet". Pole labels only — the set is per boarding point, never per place.
+  const failed = session.failed.map((f) => labelOf(f.stopId))
+  return `${state} etas=[${etas.join(' ')}] watching=[${watching.join(' ')}] failed=[${failed.join(' ')}]`
 }
 
 /** Concrete id → the fixture's label, for every id a row can produce. */
@@ -479,6 +484,29 @@ describe('the live rounds corpus, through the real EtaHub over a real socket', (
       'ETA_HUB is unbound — this suite would be measuring the fallback',
     ).toBeDefined()
     expect(LIVE_ROUNDS.length).toBeGreaterThanOrEqual(10)
+  })
+
+  it('exercises the failure column, in both directions', () => {
+    // **The anti-vacuous control for WP5-14's column** (ADR-081), asserted on *this* side too and not
+    // only on the client's: the two drivers read one fixture, so a row that stopped naming a refusing
+    // kerb would go quiet on both at once and neither would notice. A fixture in which no line ever named
+    // a kerb, or in which none ever recovered, would satisfy every row assertion below while proving
+    // nothing about the rule this shard now implements.
+    const namesAKerb = LIVE_ROUNDS.filter((s) =>
+      s.settles.some((line) => / failed=\[[^\]]+\]$/.test(line)),
+    )
+    expect(namesAKerb.length).toBeGreaterThanOrEqual(5)
+    // "A recovered kerb's marker clears within one round" is the half a still-refusing row cannot show,
+    // and on this side it is also the half that needs the stored per-socket set to be written back.
+    const recovers = LIVE_ROUNDS.filter((s) =>
+      s.settles.some(
+        (line, i) =>
+          i > 0 &&
+          / failed=\[\]$/.test(line) &&
+          / failed=\[[^\]]+\]$/.test(s.settles[i - 1] as string),
+      ),
+    )
+    expect(recovers.length).toBeGreaterThanOrEqual(2)
   })
 
   it('follows every silent round with one that speaks, through the same reader', () => {

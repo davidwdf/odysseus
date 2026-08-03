@@ -20,7 +20,9 @@ import {
   narrowEtasToRoutes,
   nextLiveCadenceMs,
   retainFailedPoles,
+  sameFailures,
   sameReading,
+  unionFailures,
 } from '../src/live'
 import type {
   Eta,
@@ -127,6 +129,44 @@ describe('live#liveTargetsKey', () => {
     ]
     const keys = sets.map(liveTargetsKey)
     expect(new Set(keys).size).toBe(sets.length)
+  })
+})
+
+describe('live#sameFailures', () => {
+  for (const c of specCases<{ a: EtaFailure[]; b: EtaFailure[] }, boolean>(
+    corpus,
+    'sameFailures',
+  )) {
+    it(c.name, () => {
+      expect(sameFailures(c.args.a, c.args.b)).toBe(c.expect)
+      // Symmetry, over every row rather than as a row of its own — same argument as `sameReading`'s: an
+      // asymmetric "is this news?" would make a frame depend on which side happened to be the previous
+      // set, and the two engines assign those sides in opposite orders (the emulator holds `sent`, the
+      // shard holds the attachment).
+      expect(sameFailures(c.args.b, c.args.a)).toBe(c.expect)
+    })
+  }
+})
+
+describe('live#unionFailures', () => {
+  for (const c of specCases<{ lists: EtaFailure[][] }, EtaFailure[]>(corpus, 'unionFailures')) {
+    it(c.name, () => {
+      const before = JSON.stringify(c.args.lists)
+      expect(unionFailures(c.args.lists)).toEqual(c.expect)
+      // The caller holds these lists as the round's own per-target answers and diffs against them
+      // afterwards, so a union that sorted an input in place would corrupt the next round's comparison.
+      expect(JSON.stringify(c.args.lists)).toBe(before)
+    })
+  }
+
+  it('is idempotent over its own output', () => {
+    // The output is itself a valid single-element input, and both engines pass one to `sameFailures`
+    // against a previous *output*. A union that was not stable under a second pass would make two rounds
+    // with identical failures compare unequal, which is a frame per round for no news.
+    for (const c of specCases<{ lists: EtaFailure[][] }, EtaFailure[]>(corpus, 'unionFailures')) {
+      const once = unionFailures(c.args.lists)
+      expect(unionFailures([once]), c.name).toEqual(once)
+    }
   })
 })
 
@@ -355,6 +395,11 @@ describe('live — properties a corpus row cannot express', () => {
       seq: 0,
       etas: [],
       targets: [],
+      // Empty rather than absent, and the two are not interchangeable here: `failed` is a required field
+      // on a session precisely so a reader never has to ask whether "we know of no failures" and "we have
+      // not been told" are the same state. On the *wire* the field is optional and absent means empty
+      // (ADR-081); the session is where that ambiguity is resolved, once.
+      failed: [],
       status: { state: 'connecting' },
     })
     expect(applyLiveFrame(LIVE_SESSION_START, { type: 'pong' }).state).toBe(LIVE_SESSION_START)
