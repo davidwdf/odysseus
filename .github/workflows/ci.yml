@@ -13,20 +13,17 @@ name: ci
 # The deploy half (a real `wrangler deploy`, a custom domain, Pages) is blocked on a domain and a
 # Cloudflare account, neither of which exists. It is the second job below, deliberately inert.
 #
-# WHAT IS DELIBERATELY NOT HERE — the docs-freshness gate
-# CLAUDE.md rule 7 describes a pre-commit hook that blocks a commit staging code without docs. **That hook
-# is not installed anywhere**: `git config --get core.hooksPath` is unset and the repo's `hooks/` directory
-# holds only samples, so the rule has been convention-only for the whole project — which is why CI looks
-# like the one place it could finally be enforced. It cannot be, not as written:
-# `scripts/precommit-docs-check.mjs` is a **Claude Code `PreToolUse` hook**, not a git hook. It reads a JSON
-# tool-call payload on stdin, extracts the `git commit` command line from it, checks that line for a
-# `[docs-ok]` bypass, and diffs the **index** (`git diff --cached --name-only`). In CI stdin is empty and
-# nothing is staged, so both of its early exits fire and it returns 0 without examining anything. Wiring it
-# here would add a step that passes for ever while checking nothing — this repo's own recurring failure
-# (five instances recorded in `docs/11`), and worse than having no step, because a green tick is a claim.
-# The honest fix is a `--range <base>..<head>` mode in that script, so the one declaration of the rule can
-# be applied per commit over a PR's range, with a selftest of its own. That is WP5-8 in
-# `docs/proposals/03`, not a two-line addition here.
+# THE DOCS-FRESHNESS GATE IS HERE NOW (WP5-8, ADR-078)
+# CLAUDE.md rule 7 — a commit that changes code changes the docs, or says `[docs-ok]` and why — was
+# enforced by nothing for the whole project. The git hook is not installed (`core.hooksPath` is unset and
+# `hooks/` holds only samples), and `scripts/precommit-docs-check.mjs` was a **Claude Code `PreToolUse`
+# hook**: it reads a tool-call payload on stdin and diffs the *index*, so in CI both of its early exits
+# fired and it returned 0 having examined nothing. That is why this file used to carry a paragraph
+# explaining why the step could not exist — a step passing for ever while checking nothing is this repo's
+# own recurring failure, and worse than no step, because a green tick is a claim.
+# That script now has a `--range <base>..<head>` mode over the *same* predicate, applied per commit, and
+# it fails when the range names no commits. Both halves of it run below: the selftest inside `pnpm test`
+# (via the `pnpm boundaries` chain) and the live range in its own step.
 
 on:
   pull_request:
@@ -45,7 +42,14 @@ jobs:
     # The suites are seconds; `pnpm install` and the Expo/workerd postinstalls are the long pole.
     timeout-minutes: 20
     steps:
+      # `fetch-depth: 0` — the whole history, and it is **required** rather than convenient (WP5-8).
+      # `actions/checkout` fetches one commit by default, and two things below read history: the docs
+      # freshness step needs `<base sha>..HEAD` to resolve at all, and that script's `--selftest` control
+      # reads the last 20 commits and **fails on a shallow clone** rather than quietly examining one. The
+      # cost is a full fetch of a repository with ~50 commits, which is noise next to `pnpm install`.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Node **22**, matching `.nvmrc` and `dataset.yml`. Root `engines` says `>=20`, which is the floor
       # this tree is *allowed* to run on rather than the version it is developed and tested against; CI
@@ -71,6 +75,33 @@ jobs:
       # committed corpora, and the two renderers assert against fixtures. Nothing here reaches HK open
       # data or Cloudflare. A step that needs the network is a decision to state, not a default.
       - run: pnpm test
+
+      # CLAUDE.md rule 7, per commit, over this PR's range (WP5-8, ADR-078). The rule and its `[docs-ok]`
+      # bypass are the ones the `PreToolUse` hook applies; only the source of the inputs differs — a
+      # commit's own diff and its message, instead of the index and a command line.
+      #
+      # **The range, and why it is computed here rather than hard-coded.** On `pull_request` the checkout
+      # is a synthetic merge of the head into the base, so `<base sha>..HEAD` is exactly the PR's own
+      # commits (`--no-merges` inside the script drops the synthetic one). On `push` the range is
+      # `before..after` — except that `before` is the 40-zero sentinel when the ref is new, which resolves
+      # to nothing; the fallback is the pushed commit's parent, and `--max-parents=0` covers the case of a
+      # repository whose whole history is one commit. A range naming no commits is a **failure** in that
+      # script, deliberately, so none of these branches can quietly check nothing.
+      - name: Docs freshness (CLAUDE.md rule 7, per commit)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            range="${{ github.event.pull_request.base.sha }}..HEAD"
+          else
+            before="${{ github.event.before }}"
+            case "$before" in
+              0000000000000000000000000000000000000000|"")
+                before="$(git rev-parse HEAD~1 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+                ;;
+            esac
+            range="$before..HEAD"
+          fi
+          echo "range: $range"
+          node scripts/precommit-docs-check.mjs --range "$range"
 
       # Does the Worker bundle — including the `EtaHub` Durable Object and its migration — still build?
       # `--dry-run` short-circuits `requireAuth` in the installed wrangler, so this needs no token and no

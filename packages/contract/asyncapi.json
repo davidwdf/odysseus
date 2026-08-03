@@ -1118,6 +1118,53 @@
           "etas"
         ]
       },
+      "EtaBatchEntry": {
+        "type": "object",
+        "properties": {
+          "etas": {
+            "$ref": "#/components/schemas/EtaList"
+          },
+          "failed": {
+            "description": "Boarding points whose upstream board did not answer, ordered by `stopId`. **Absent when every board answered.** A reading missing from `etas` for a pole named here has NOT departed — we could not ask; a client holding previous readings keeps them and labels them, and must not report them `gone`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "The canonical stop or place id **as the request spelled it**, echoed verbatim so a caller can index its own per-target state by it. There is one entry per distinct requested id, always — a missing entry would be unattributable, and a caller would keep that target’s previous readings with nothing to explain why."
+          },
+          "error": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WireError"
+              },
+              {
+                "description": "Present when this id could not be answered at all — the failure a single `/v1/etas/{id}` would have returned as its status. `etas` is then empty and means nothing: branch on this field, never on the empty list. Absent means the id was answered, possibly partially — that is what `failed` is for."
+              }
+            ]
+          }
+        },
+        "required": [
+          "etas",
+          "id"
+        ]
+      },
+      "EtaBatch": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaBatchEntry"
+            }
+          }
+        },
+        "required": [
+          "reports"
+        ]
+      },
       "WatchTarget": {
         "type": "object",
         "properties": {

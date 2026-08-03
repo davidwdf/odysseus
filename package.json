@@ -17,7 +17,7 @@
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test && pnpm run boundaries",
-    "boundaries": "pnpm run boundaries:check && pnpm run boundaries:selftest && pnpm run check:no-adhoc-id-parsing && pnpm run check:vm-no-styling:selftest && pnpm run check:vm-no-styling && pnpm run check:no-raw-colours && pnpm run check:view-transport-free:selftest && pnpm run check:view-transport-free && pnpm run check:one-endpoint:selftest && pnpm run check:one-endpoint",
+    "boundaries": "pnpm run boundaries:check && pnpm run boundaries:selftest && pnpm run check:no-adhoc-id-parsing && pnpm run check:vm-no-styling:selftest && pnpm run check:vm-no-styling && pnpm run check:no-raw-colours && pnpm run check:view-transport-free:selftest && pnpm run check:view-transport-free && pnpm run check:one-endpoint:selftest && pnpm run check:one-endpoint && pnpm run check:docs-freshness:selftest",
     "boundaries:gen": "node scripts/boundaries/generate.mjs",
     "boundaries:check": "node scripts/boundaries/check.mjs",
     "boundaries:selftest": "node scripts/boundaries/selftest.mjs",
@@ -32,7 +32,9 @@
     "check:view-transport-free": "node scripts/check-view-transport-free.mjs",
     "check:view-transport-free:selftest": "node scripts/check-view-transport-free.mjs --selftest",
     "check:one-endpoint": "node scripts/check-one-endpoint-declaration.mjs",
-    "check:one-endpoint:selftest": "node scripts/check-one-endpoint-declaration.mjs --selftest"
+    "check:one-endpoint:selftest": "node scripts/check-one-endpoint-declaration.mjs --selftest",
+    "check:docs-freshness": "node scripts/precommit-docs-check.mjs --range origin/main..HEAD",
+    "check:docs-freshness:selftest": "node scripts/precommit-docs-check.mjs --selftest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

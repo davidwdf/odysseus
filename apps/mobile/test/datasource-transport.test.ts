@@ -41,7 +41,10 @@ async function probe(value: string | undefined): Promise<Probe> {
   const realWebSocket = globalThis.WebSocket
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     fetched.push(String(input))
-    return new Response('{"etas":[]}', { headers: { 'content-type': 'application/json' } })
+    // An `EtaBatch`, because the poll emulator asks `/v1/etas?ids=…` since WP5-7. An `EtaReport` body
+    // would still parse — the transport reads `.reports`, finds `undefined` and reports every target as
+    // unanswered — so the URL assertion below is what actually pins the shape.
+    return new Response('{"reports":[]}', { headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   // biome-ignore lint/suspicious/noExplicitAny: a minimal stand-in for the platform global
   ;(globalThis as any).WebSocket = class {
@@ -84,8 +87,9 @@ describe('apps/mobile selects its live engine from the environment', () => {
     const { engine, fetched } = await probe(undefined)
     expect(engine).toBe('poll')
     // The endpoint, not just "something was fetched": this is also the assertion that the default engine
-    // is the poll *emulator* rather than the pre-Wave-5 shim, which fetched `/v1/stop/:id`.
-    expect(fetched[0]).toContain('/v1/etas/')
+    // is the poll *emulator* rather than the pre-Wave-5 shim (which fetched `/v1/stop/:id`) and that it
+    // asks the **batch** endpoint, which since WP5-7 is one request per round rather than one per target.
+    expect(fetched[0]).toContain('/v1/etas?ids=')
   })
 
   it('opens the socket when EXPO_PUBLIC_LIVE_TRANSPORT=socket', async () => {

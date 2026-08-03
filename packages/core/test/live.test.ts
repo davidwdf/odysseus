@@ -16,6 +16,8 @@ import {
   liveReconnectDelayMs,
   liveShardFor,
   liveSocketUrl,
+  liveTargetsKey,
+  narrowEtasToRoutes,
   nextLiveCadenceMs,
   retainFailedPoles,
   sameReading,
@@ -79,6 +81,53 @@ describe('live#retainFailedPoles', () => {
       expect(JSON.stringify(c.args.prev)).toBe(before)
     })
   }
+})
+
+describe('live#narrowEtasToRoutes', () => {
+  for (const c of specCases<{ etas: Eta[]; routeIds: string[] | null }, Eta[]>(
+    corpus,
+    'narrowEtasToRoutes',
+  )) {
+    it(c.name, () => {
+      // JSON `null` is the language's absent value at this boundary — see `test/corpus.ts`. Translated
+      // here rather than typed as `undefined`, because `null` must not leak into a parameter declared
+      // `string[] | undefined`: the function's absent branch is the one every healthy round takes.
+      const routeIds = c.args.routeIds ?? undefined
+      const before = JSON.stringify(c.args.etas)
+      expect(narrowEtasToRoutes(c.args.etas, routeIds)).toEqual(c.expect)
+      // A filter that returned its input array would let a caller's `.sort()` reorder somebody else's
+      // list. The edge hands this `stopArrivals`' output, which `coalesce` shares by reference across
+      // every concurrent request for 30 s, so an aliased return is a real hazard rather than a purist
+      // one — and the absent/empty branches are exactly where a `return etas` is tempting.
+      expect(narrowEtasToRoutes(c.args.etas, routeIds)).not.toBe(c.args.etas)
+      expect(JSON.stringify(c.args.etas)).toBe(before)
+    })
+  }
+})
+
+describe('live#liveTargetsKey', () => {
+  for (const c of specCases<{ targets: WatchTarget[] }, string>(corpus, 'liveTargetsKey')) {
+    it(c.name, () => {
+      expect(liveTargetsKey(c.args.targets)).toBe(c.expect)
+    })
+  }
+
+  it('two accepted sets that differ at all produce different keys', () => {
+    // The property the rows cannot state one at a time, and the one a collision would silently break:
+    // a key that repeated for a *different* subscription is a hook that never resubscribes. Every
+    // distinct set below must produce a distinct string.
+    const sets: WatchTarget[][] = [
+      [{ stopId: 'KMB:A' }],
+      [{ stopId: 'KMB:B' }],
+      [{ stopId: 'KMB:A' }, { stopId: 'KMB:B' }],
+      [{ stopId: 'P:KMB:A+KMB:B' }],
+      [{ stopId: 'KMB:A', routeIds: ['KMB:B'] }],
+      [{ stopId: 'KMB:A', routeIds: ['KMB:1:outbound:1'] }],
+      [{ stopId: 'KMB:A', routeIds: ['KMB:1:outbound:1', 'KMB:6:outbound:1'] }],
+    ]
+    const keys = sets.map(liveTargetsKey)
+    expect(new Set(keys).size).toBe(sets.length)
+  })
 })
 
 describe('live#applyLiveFrame', () => {

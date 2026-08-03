@@ -2,7 +2,7 @@
   "module": "stop-detail",
   "source": "src/stop-detail.ts",
   "version": 1,
-  "doc": "The five list rules the Place (stop-detail) screen is assembled from. A place is N member poles at one kerb (ADR-042) — a lone stop is a place with one — and each pole carries its own routes, its own live readings and its own walk. `boardingPoleId` decides which member pole a route row belongs to, which matters only where upstream published one physical pole under two stop ids and the build folded them onto one member (WP5-11) — the wire keeps both ids so that nothing a rider saved stops resolving, and this is the map back. `dedupeRoutes` decides which route rows a rider sees, by collapsing the operators' service-type variants to one row per rider line (operator + number + direction, at one pole) and keeping the one carrying a reading. `dedupeRoutes` takes the member list too, so the same three rows state what the fold does and does not change: two ids of one pole collapse to one row, and the surviving row keeps the id upstream gave it — because that id is the key a favourite is saved under. `operatorsOf` names the operators for the 'served by' line, in first-seen order. `orderPoles` decides what order the pole groups (and their map dots) appear in, in three tiers: the pole the rider arrived from, then nearest, then the dataset's own member order. `poleSideOctants` decides whether a pole's heading needs a compass side to tell it apart from a sibling's, and which side that is. Every row below is built from a real dataset build — real canonical ids, real names in all three locales, real service-type variants — because the shapes that break these rules (a number run by two operators, a loop whose two directions share a destination, one minibus number covering two different services, one stop code printed on two poles a metre apart) are ones nobody invents; the first three groups are from the build of 2026-07-27, `poleSideOctants` and `boardingPoleId` from `d598893de6add2e4` of 2026-07-31, and `dedupeRoutes`' three folded-pole rows from `1ccad7436a8df480` — the first build the fold shipped in. Live readings are the one synthetic part: they are stated against a fixed `nowIso` of 2026-07-27T12:00:00+08:00, since a fixture that read a clock would be worthless to a second platform. ONE ROW IS `knownDefect` — read it before changing the dedupe key.",
+  "doc": "The six list rules the Place (stop-detail) screen is assembled from. A place is N member poles at one kerb (ADR-042) — a lone stop is a place with one — and each pole carries its own routes, its own live readings and its own walk. `boardingPoleId` decides which member pole a route row belongs to, which matters only where upstream published one physical pole under two stop ids and the build folded them onto one member (WP5-11) — the wire keeps both ids so that nothing a rider saved stops resolving, and this is the map back. `dedupeRoutes` decides which route rows a rider sees, by collapsing the operators' service-type variants to one row per rider line (operator + number + direction, at one pole) and keeping the one carrying a reading. `dedupeRoutes` takes the member list too, so the same three rows state what the fold does and does not change: two ids of one pole collapse to one row, and the surviving row keeps the id upstream gave it — because that id is the key a favourite is saved under. `operatorsOf` names the operators for the 'served by' line, in first-seen order. `orderPoles` decides what order the pole groups (and their map dots) appear in, in three tiers: the pole the rider arrived from, then nearest, then the dataset's own member order. `poleSideOctants` decides whether a pole's heading needs a compass side to tell it apart from a sibling's, and which side that is. Every row below is built from a real dataset build — real canonical ids, real names in all three locales, real service-type variants — because the shapes that break these rules (a number run by two operators, a loop whose two directions share a destination, one minibus number covering two different services, one stop code printed on two poles a metre apart) are ones nobody invents; the first three groups are from the build of 2026-07-27, `poleSideOctants` and `boardingPoleId` from `d598893de6add2e4` of 2026-07-31, and `dedupeRoutes`' three folded-pole rows from `1ccad7436a8df480` — the first build the fold shipped in. Live readings are the one synthetic part: they are stated against a fixed `nowIso` of 2026-07-27T12:00:00+08:00, since a fixture that read a clock would be worthless to a second platform. ONE ROW IS `knownDefect` — read it before changing the dedupe key.",
   "groups": {
     "boardingPoleId": {
       "doc": "Which boarding point a pole id belongs to, given the place's members. `args.poleId` is the id a route row departs from (or the one a `?pole=` deep link names), `args.members` is the place's member list exactly as `/v1/stop/:id` sends it, and `expect` is the pole id to group that row under. A member answers with itself; an id listed in some member's `aliasIds` answers with that member; anything else comes back unchanged, so an id from an older build degrades to 'not one of these poles' rather than to nothing. Every row is Tin Shui Wai Park or its neighbour Tin Shui Estate, because between them they hold both answers: the park's `KMB:DC5B5F4350685442` and `KMB:AFB9321F7CD2C2E4` are 1.11 m apart — one grid step of latitude — with the same operator, the same name in all three locales and the same printed code TN510, so the build folds the second onto the first; the estate's two TN507 poles are 22.88 m apart and identical in every other field, and are deliberately NOT folded. Distance is not the rule on its own: TN511 shares a coordinate exactly with the surviving TN510 pole and is not folded either, because its printed code differs and a rider can read it.",
@@ -2151,6 +2151,376 @@
             "KMB:75767448DA6FA081": 0,
             "KMB:F754AED08F0B6B97": 4
           }
+        }
+      ]
+    },
+    "poleDistinctions": {
+      "doc": "What each pole of a place is told apart by, in the order the data can support it (WP5-12) — the answer for the band BETWEEN the two refusals ADR-071 requires to stay different: `foldDuplicatePoles` will not merge two poles more than 2 m apart, and `poleSideOctants` will not name a compass side under 10 m, so 141 pairs across 115 places print an identical heading today. Neither threshold moves. `args.poles` is each member's canonical id, its own coordinate, the heading text a renderer already prints (which is why the flag code is already in it — `poleFlagCode` runs first) and the pole's OWN printed name. `expect` is the map as entries, and a pole with nothing to say is ABSENT from it rather than present with every field unset. The tiers: a compass side, byte-identical to `poleSideOctants`; else the pole's own name where the folded keys are pairwise distinct (`poleNameKey`, never bytes); else the group is partitioned into units by complete linkage at the same 10 m and the compass question is asked about the UNITS, with every pole of a multi-pole unit additionally `crowded`; else nothing. The invariant every row here must satisfy: two poles under one heading share an `octant` only if both are `crowded`, and every pole in a multi-pole unit is `crowded`. Every row is verbatim from build `ceb33eed99461e04`.",
+      "cases": [
+        {
+          "name": "a-lone-pole-is-told-nothing",
+          "why": "THE CONTROL for the whole rule. A lone stop is a place with one member (ADR-042) and there is nothing to distinguish it from — an implementation that answered here would put a cue on every stop in Hong Kong.",
+          "args": {
+            "poles": [
+              {
+                "id": "KMB:A8CD8C1198907526",
+                "location": {
+                  "lat": 22.28647,
+                  "lng": 114.15402
+                },
+                "heading": "KMB",
+                "name": "Rumsey Street"
+              }
+            ]
+          },
+          "expect": []
+        },
+        {
+          "name": "city-hall-two-poles-get-a-compass-side-exactly-as-today",
+          "why": "THE ZERO-DIFF PROOF, and the reason the side tier comes first. City Hall, Connaught Road Central: the Citybus pole and the KMB pole whose Chinese name carries CW114 already print unique headings and get nothing; the other two are 18.35 m apart and get exactly the octants `poleSideOctants` gives them. 226 groups in this build reach this tier, and a port that reordered the tiers would change what all 226 print — a two-word compass cue replaced by a ~35-character name.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001031",
+                "location": {
+                  "lat": 22.28187,
+                  "lng": 114.16153
+                },
+                "heading": "Citybus",
+                "name": "City Hall, Connaught Road Central"
+              },
+              {
+                "id": "KMB:CDA6257743B1D479",
+                "location": {
+                  "lat": 22.28188,
+                  "lng": 114.16165
+                },
+                "heading": "KMB",
+                "name": "City Hall"
+              },
+              {
+                "id": "KMB:E499DA804188827F",
+                "location": {
+                  "lat": 22.28193,
+                  "lng": 114.16148
+                },
+                "heading": "KMB",
+                "name": "City Hall"
+              },
+              {
+                "id": "KMB:EFFD42714E298795",
+                "location": {
+                  "lat": 22.28194,
+                  "lng": 114.1612
+                },
+                "heading": "KMB · CW114",
+                "name": "City Hall"
+              }
+            ]
+          },
+          "expect": [
+            [
+              "KMB:CDA6257743B1D479",
+              {
+                "octant": 2
+              }
+            ],
+            [
+              "KMB:E499DA804188827F",
+              {
+                "octant": 6
+              }
+            ]
+          ]
+        },
+        {
+          "name": "queen-mary-hospital-the-poles-own-names-differ-so-the-name-is-the-answer",
+          "why": "The biggest win, and the shape the row that filed WP5-12 did not list: 143 declined groups have member names that DIFFER. Both minibus poles here print bare \"GMB\" / \"專線小巴\" 7.35 m apart, and the wire has carried `Queen Mary Hospital, Pok Fu Lam Road` and `POK FU LAM ROAD, near Queen Mary Hospital Wing H` all along. The Citybus pole is alone under its heading and stays silent.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:002236",
+                "location": {
+                  "lat": 22.26987,
+                  "lng": 114.13046
+                },
+                "heading": "Citybus",
+                "name": "Queen Mary Hospital, Pok Fu Lam Road"
+              },
+              {
+                "id": "GMB:20004547",
+                "location": {
+                  "lat": 22.26969,
+                  "lng": 114.13057
+                },
+                "heading": "GMB",
+                "name": "Queen Mary Hospital, Pok Fu Lam Road"
+              },
+              {
+                "id": "GMB:20014891",
+                "location": {
+                  "lat": 22.26963,
+                  "lng": 114.1306
+                },
+                "heading": "GMB",
+                "name": "POK FU LAM ROAD, near Queen Mary Hospital Wing H"
+              }
+            ]
+          },
+          "expect": [
+            [
+              "GMB:20004547",
+              {
+                "name": "Queen Mary Hospital, Pok Fu Lam Road"
+              }
+            ],
+            [
+              "GMB:20014891",
+              {
+                "name": "POK FU LAM ROAD, near Queen Mary Hospital Wing H"
+              }
+            ]
+          ]
+        },
+        {
+          "name": "a-case-only-name-difference-is-not-a-difference",
+          "why": "THE ROW THAT STOPS A PORT USING `!=`. Bonham Road: the two names differ by exactly one comma, so a byte comparison would take the name tier, print the same words twice, and claim the ambiguity resolved — which is precisely what `poleSideOctants` refuses to do with a compass word it cannot support. 21 groups in this build are this shape. Folded through `poleNameKey` they are equal, so the rule falls through and says plainly that there is nothing to choose between.",
+          "args": {
+            "poles": [
+              {
+                "id": "GMB:20000173",
+                "location": {
+                  "lat": 22.28368,
+                  "lng": 114.1474
+                },
+                "heading": "GMB",
+                "name": "Bonham Road, near Hospital Road"
+              },
+              {
+                "id": "GMB:20014537",
+                "location": {
+                  "lat": 22.28363,
+                  "lng": 114.14747
+                },
+                "heading": "GMB",
+                "name": "Bonham Road near Hospital Road"
+              }
+            ]
+          },
+          "expect": [
+            [
+              "GMB:20000173",
+              {
+                "crowded": true
+              }
+            ],
+            [
+              "GMB:20014537",
+              {
+                "crowded": true
+              }
+            ]
+          ]
+        },
+        {
+          "name": "rumsey-street-two-poles-4-7-m-apart-say-so-plainly",
+          "why": "The acceptance's second branch, and the case WP5-12 is named for: two KMB poles 4.68 m apart with the same name and no code — too far apart to be one pole, too close for a compass word. `crowded` and no octant, because the group is ONE unit and there is no second unit to take a bearing from. The Citybus pole prints a different heading and is untouched.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001037",
+                "location": {
+                  "lat": 22.28648,
+                  "lng": 114.15404
+                },
+                "heading": "Citybus",
+                "name": "Rumsey Street, Connaught Road Central"
+              },
+              {
+                "id": "KMB:A8CD8C1198907526",
+                "location": {
+                  "lat": 22.28647,
+                  "lng": 114.15402
+                },
+                "heading": "KMB",
+                "name": "Rumsey Street"
+              },
+              {
+                "id": "KMB:F0B6112380784741",
+                "location": {
+                  "lat": 22.28645,
+                  "lng": 114.15406
+                },
+                "heading": "KMB",
+                "name": "Rumsey Street"
+              }
+            ]
+          },
+          "expect": [
+            [
+              "KMB:A8CD8C1198907526",
+              {
+                "crowded": true
+              }
+            ],
+            [
+              "KMB:F0B6112380784741",
+              {
+                "crowded": true
+              }
+            ]
+          ]
+        },
+        {
+          "name": "lok-hin-terrace-a-crowded-unit-and-a-far-pole-each-get-a-side",
+          "why": "THE MIXED PLACE, and the row that fails a port which kept `poleSideOctants`' distinctness invariant. Three poles print bare \"KMB\": two at the SAME coordinate and one 47–54 m away. Today all three get nothing, because the distinctness guard trips on the coincident pair. Now the pair is one unit and the far pole another, so both units get a side — the pair shares octant 5 and is `crowded`, the far pole gets octant 1 and is NOT, because calling a pole 50 m from its siblings \"adjacent\" would be a plain falsehood. Note the fourth KMB pole: its Chinese name carries ED516, so `poleFlagCode` lifted it out of the collision before this rule ran.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001227",
+                "location": {
+                  "lat": 22.26488,
+                  "lng": 114.24157
+                },
+                "heading": "Citybus",
+                "name": "Lok Hin Terrace, Chai Wan Road"
+              },
+              {
+                "id": "KMB:0E616BB1DFB33C5B",
+                "location": {
+                  "lat": 22.26467,
+                  "lng": 114.24133
+                },
+                "heading": "KMB · ED516",
+                "name": "Lok Hin Terrace"
+              },
+              {
+                "id": "KMB:34F421B30D4CBFF5",
+                "location": {
+                  "lat": 22.2647,
+                  "lng": 114.24138
+                },
+                "heading": "KMB",
+                "name": "Lok Hin Terrace"
+              },
+              {
+                "id": "KMB:3D5712E812B2A644",
+                "location": {
+                  "lat": 22.26497,
+                  "lng": 114.24174
+                },
+                "heading": "KMB",
+                "name": "Lok Hin Terrace"
+              },
+              {
+                "id": "KMB:EDBB5387A44E2C4D",
+                "location": {
+                  "lat": 22.26467,
+                  "lng": 114.24133
+                },
+                "heading": "KMB",
+                "name": "Lok Hin Terrace"
+              }
+            ]
+          },
+          "expect": [
+            [
+              "KMB:34F421B30D4CBFF5",
+              {
+                "octant": 5,
+                "crowded": true
+              }
+            ],
+            [
+              "KMB:EDBB5387A44E2C4D",
+              {
+                "octant": 5,
+                "crowded": true
+              }
+            ],
+            [
+              "KMB:3D5712E812B2A644",
+              {
+                "octant": 1
+              }
+            ]
+          ]
+        },
+        {
+          "name": "statue-square-the-units-octants-collide-so-only-the-crowded-pair-speaks",
+          "why": "The last tier, and the honest floor: four KMB poles print bare \"Statue Square\" across 41 m, and once partitioned the units' bearings are not pairwise distinct, so no unit gets a side. The 3.49 m pair still says it is adjacent; the two poles alone in their units are told nothing, which is the 54 poles this rule leaves silent territory-wide. A row is needed for this branch precisely because it is unreachable from a two-pole fixture.",
+          "args": {
+            "poles": [
+              {
+                "id": "CTB:001051",
+                "location": {
+                  "lat": 22.28075,
+                  "lng": 114.15964
+                },
+                "heading": "Citybus",
+                "name": "Statue Square, Des Voeux Road Central"
+              },
+              {
+                "id": "KMB:31DAC3984E4C18EA",
+                "location": {
+                  "lat": 22.28074,
+                  "lng": 114.15981
+                },
+                "heading": "KMB",
+                "name": "Statue Square"
+              },
+              {
+                "id": "KMB:50C82DFB0AC97FC8",
+                "location": {
+                  "lat": 22.28077,
+                  "lng": 114.15969
+                },
+                "heading": "KMB",
+                "name": "Statue Square"
+              },
+              {
+                "id": "KMB:A9069A17B1474D76",
+                "location": {
+                  "lat": 22.28085,
+                  "lng": 114.15943
+                },
+                "heading": "KMB",
+                "name": "Statue Square"
+              },
+              {
+                "id": "KMB:C0B0B597A9C896F7",
+                "location": {
+                  "lat": 22.28078,
+                  "lng": 114.15963
+                },
+                "heading": "KMB",
+                "name": "Statue Square"
+              },
+              {
+                "id": "KMB:D5FEF340EE98A7E8",
+                "location": {
+                  "lat": 22.2807,
+                  "lng": 114.15991
+                },
+                "heading": "KMB · CW145",
+                "name": "Statue Square"
+              }
+            ]
+          },
+          "expect": [
+            [
+              "KMB:50C82DFB0AC97FC8",
+              {
+                "crowded": true
+              }
+            ],
+            [
+              "KMB:C0B0B597A9C896F7",
+              {
+                "crowded": true
+              }
+            ]
+          ]
         }
       ]
     }

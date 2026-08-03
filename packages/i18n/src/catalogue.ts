@@ -550,6 +550,30 @@ export const CATALOGUE = {
     'zh-Hant': '西北面',
     'zh-Hans': '西北面',
   },
+  /**
+   * Stop detail: two poles of one place that nothing in the data can tell apart (WP5-12, ADR-080).
+   *
+   * **What it claims, and it is the whole of what it claims:** there is more than one boarding point
+   * here, they are closer together than the app's own direction floor, and we cannot say which is which.
+   * All three are true. It is vaguer than the data, which ADR-008 permits — over-precision is what that
+   * rule forbids — and it is the acceptance's own second branch: *"the app states plainly that there is
+   * nothing to choose between."*
+   *
+   * **What it deliberately does not say.** No count, on `StopCardView.incomplete`'s reasoning (ADR-077):
+   * a rider cannot act on the difference between two and three. No ordinal — `poleSideOctants` already
+   * refuses "1 of 2", because a number manufactures a distinction between poles that are, on the ground,
+   * one pole. No distance: `formatDistance` rounds to the nearest 10 m under ADR-008, so printing "3 m
+   * apart" would assert precision the same repo refuses one function away. And not *"either stop will
+   * do"* — that is advice we cannot support, since one may be a shelter and the other a flag.
+   *
+   * "Check the sign" is the one actionable thing left, and it is honest: the operator's own flag carries
+   * a code that the app has just told the rider it does not have.
+   */
+  poleTooCloseToTell: {
+    en: 'Another stop a few steps away — check the sign',
+    'zh-Hant': '數步之內另有站柱 — 請看站牌',
+    'zh-Hans': '数步之内另有站柱 — 请看站牌',
+  },
   /** Stop detail: accessible label for the map tap target. */
   openInMaps: {
     en: 'Open in Maps',

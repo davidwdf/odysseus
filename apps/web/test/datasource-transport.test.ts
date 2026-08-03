@@ -5,11 +5,11 @@
 // about one renderer. Two waves running, the asymmetries this app has caught have all been of exactly
 // this shape — something wired in one shell and merely *documented* in the other.
 //
-// **What this app cannot assert, stated rather than implied:** no screen here calls
-// `DataSource.watch()` — `Nearby` fetches `getNearby` on an interval — so selecting the socket is real
-// configuration that changes nothing a rider of this app sees until WP5-7 makes Nearby a live adopter.
-// What is testable today is that the seam is wired identically, which is the part that would otherwise
-// be discovered to be missing on the day it is needed.
+// **Since WP5-7 the configuration is no longer inert here.** `Nearby` holds a subscription
+// (`src/hooks/useLiveNearby.ts`), so `VITE_LIVE_TRANSPORT=socket` changes which engine feeds the arrivals
+// a rider of *this* app reads — where until then it was real configuration that changed nothing visible.
+// The paragraph this replaces said so, and the correction matters because that sentence was the reason
+// nobody looked here.
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -25,7 +25,10 @@ async function probe(
   // installed later is invisible to the poll emulator. Same trap the mobile twin documents.
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     fetched.push(String(input))
-    return new Response('{"etas":[]}', { headers: { 'content-type': 'application/json' } })
+    // An `EtaBatch`, because the poll emulator asks `/v1/etas?ids=…` since WP5-7. An `EtaReport` body
+    // would still parse — the transport reads `.reports`, finds `undefined` and reports every target as
+    // unanswered — so the URL assertion below is what actually pins the shape.
+    return new Response('{"reports":[]}', { headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   // biome-ignore lint/suspicious/noExplicitAny: a minimal stand-in for the platform global
   ;(globalThis as any).WebSocket = class {
@@ -64,7 +67,7 @@ describe('apps/web selects its live engine from the environment', () => {
   it('polls when nothing is configured — the same default as apps/mobile', async () => {
     const { engine, urls } = await probe(undefined)
     expect(engine).toBe('poll')
-    expect(urls[0]).toContain('/v1/etas/')
+    expect(urls[0]).toContain('/v1/etas?ids=')
   })
 
   it('opens the socket when VITE_LIVE_TRANSPORT=socket', async () => {

@@ -273,9 +273,16 @@ retention rule to it ([ADR-073](./08-decision-log.md#adr-073--a-failed-board-is-
 socket ([ADR-074](./08-decision-log.md#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)), and the socket is selectable from the environment
 ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)). **WP5-13** then closed the last rider-facing hole those three left: `/v1/nearby` and `/v1/stop` can say
 *"we could not ask"* now, so a card during an outage no longer reads as an empty stop
-([ADR-077](./08-decision-log.md#adr-077--a-card-can-say-we-could-not-ask-and-a-failure-list-must-not-outlive-its-round)). That leaves **WP5-7** (batch `/v1/etas?ids=…`, then Nearby adopts live), **WP5-8** (the
-docs-freshness rule, which nothing enforces) and **WP5-12**, the 2–10 m residual the clustering rules
-deliberately leave between them. **Before writing a test or a gate here, read
+([ADR-077](./08-decision-log.md#adr-077--a-card-can-say-we-could-not-ask-and-a-failure-list-must-not-outlive-its-round)). **WP5-8** followed the same day
+([ADR-078](./08-decision-log.md#adr-078--rule-7-is-enforced-per-commit-over-a-range-and-an-empty-range-is-a-failure)):
+CLAUDE.md rule 7 is enforced per commit over a PR's range in CI, by the same predicate the `PreToolUse`
+hook applies, and a range naming no commits fails rather than passing. **WP5-7** followed
+([ADR-079](./08-decision-log.md#adr-079--one-request-per-round-the-batch-eta-endpoint-and-nearby-as-a-live-adopter)):
+`/v1/etas?ids=…` answers a whole round in one request, so both Nearby renderers subscribe, and the two
+frozen-clock/permanent-error defects that had been sitting on mobile Nearby are fixed with it. That leaves
+**WP5-12**, the 2–10 m residual the clustering rules deliberately leave between them, plus the new
+**WP5-14** WP5-7 opened (a live card cannot yet say *"we could not ask"*, because the frames carry no
+`failed`). **Before writing a test or a gate here, read
 [`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
 gate chain's shared shape, which script polices which directory, the two `layers.json` facts that decide
 where a test can live, and the five things about the workerd suite that will bite (chiefly: `coalesce`
@@ -702,8 +709,12 @@ than any in its own row.
   `applyLiveEtasToNearby` sorts, Favourites sorts. The `maxRows` cap already had this dependency, so the
   collapse adds no new risk — but a producer that stopped sorting used to merely reorder rows and would now
   silently show the **later** bus of a line. A comparator in `soonestPerLine` or a gate on the producers would
-  fix it. Owner: unassigned, and it belongs to whoever adds the next producer — **WP5-7**'s batch
-  `/v1/etas?ids=…` is the next one.
+  fix it. Owner: unassigned, and **WP5-7 has now added that next producer without closing it** — honestly
+  rather than by claiming otherwise: `stopEtasBatch` delegates to `stopArrivals`, the one producer that
+  sorts, and `apps/edge/test/etas-batch.test.ts` asserts both that an entry is byte-identical to
+  `/v1/etas/:id` and that its readings are soonest-first. So the new producer cannot disagree by
+  construction, and the *general* rule — a comparator in `soonestPerLine`, or a gate over the producers —
+  is still nobody's.
 - ✅ **Already closed, and this bullet was stale** — noticed while WP5-4 edited the file. The claim was that
   `apps/edge/test/wire-conformance.test.ts`'s `fetch` stub ended `return realFetch(input, init)` and so could
   leave the sandbox. It does not: the stub **throws** on an unrecognised URL, with a paragraph naming all
@@ -1084,14 +1095,33 @@ than any in its own row.
        legal ones. `_LIVE_URL` is wired too. **This is the line that un-latches the review's five
        `eta-hub.ts` findings** — ADR-076 lists the three things that stand behind them now rather than
        asserting the shard is sound, and the default staying `poll` means nobody is exposed by upgrading.
-     - 🟠 **WP5-7 — Nearby is not a live adopter**, and the reason is a request-count regression (≤6 places
-       ⇒ 6 requests per window where the screen issues 1). `applyLiveEtasToNearby` is written and
-       corpus-pinned with **no consumer** until a batch `/v1/etas?ids=…` exists.
-     - 🟠 **WP5-8 — the docs-freshness rule has never been enforced anywhere.** The hook CLAUDE.md rule 7
-       describes is **not installed** (`core.hooksPath` unset; `hooks/` holds only samples), and
-       `scripts/precommit-docs-check.mjs` cannot run in CI unmodified: it is a Claude Code `PreToolUse` hook
-       that reads a tool-call payload on stdin and diffs the *index*, so in CI both of its early exits fire
-       and it returns 0 having checked nothing. `ci.yml` says exactly that instead of shipping a green no-op.
+     - ✅ **WP5-7 done 2026-08-03**
+       ([ADR-079](./08-decision-log.md#adr-079--one-request-per-round-the-batch-eta-endpoint-and-nearby-as-a-live-adopter))
+       — `/v1/etas?ids=…` answers about a whole round, so the poll emulator makes **one** request per
+       cadence for a set instead of one per target, and both Nearby renderers now subscribe. The **id
+       parameter repeats rather than carrying a delimiter**, because `,` is a legal `idchar` and a query
+       string decodes `%2C` before anything could split on it (verified, not assumed); the answer is
+       enveloped per id because a flat list is *undecodable* — the target→pole map lives in the dataset;
+       a per-id failure is an entry with a `200`; the cap is 12 on the wire with a `400` over it and the
+       client chunks. `narrowEtasToRoutes` became a kernel rule the edge and the transport both call, and
+       `liveTargetsKey` is in the kernel because an array in a hook's dependency list is a **request
+       storm**. **Two live defects on mobile Nearby fell out of it:** its `Date.now()` could never advance
+       (no `refetchInterval` had ever existed in that file) so the staleness cue could not fire *and* the
+       arrivals never refreshed at all — 0 requests per window, not 1 — and a failed first load was
+       permanent. Both fixed. `CONTRACT_VERSION` unmoved: 7 → 8 paths, 36 → 38 schemas, additive.
+     - ✅ **WP5-8 done 2026-08-03**
+       ([ADR-078](./08-decision-log.md#adr-078--rule-7-is-enforced-per-commit-over-a-range-and-an-empty-range-is-a-failure))
+       — rule 7 is enforced per commit over a PR's range in `ci.yml`. The rule is one function,
+       `docsVerdict({ files, bypass })`, and both modes call it: the `PreToolUse` hook over the *index* with
+       the bypass off the command line, `--range <base>..<head>` over each commit's `diff-tree` with the
+       bypass off its *message* (so `--no-verify` skips a hook, never a review). **An empty range is a
+       failure**, `--no-merges` keeps a merge from passing vacuously and drops `pull_request`'s synthetic
+       one, `--root` is what makes an initial commit examinable at all, and a **shallow clone fails the
+       selftest's live control by name** — `actions/checkout`'s default depth would have had it examine one
+       commit and report success, so `fetch-depth: 0` is now load-bearing for two steps. Turned on with no
+       grandfathering because it was measured first: **all 51 non-merge commits in this history pass** (44
+       touch code, 12 claim `[docs-ok]`). Still **not** a git hook — a `git commit` outside Claude Code gets
+       no warning, it gets a red PR, which is the honest division of labour.
      - ✅ **WP5-9 done 2026-07-31** on `wave5-followups-v1`
        ([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)) — the
        model's unit of *an arrival* was (line, place) while its unit of *a row* had become (line, pole), and
@@ -1119,25 +1149,39 @@ than any in its own row.
        pole rather than a spelling to be replaced, and the collapse lives in `dedupeRoutes`' **key** — the
        first design stamped readings with the boarding point and blanked every arrival at a folded pole on
        all three engines. The build hash moved to **`1ccad7436a8df480`**, so production needs a publish.
-     - 🟠 **WP5-12 — the 2–10 m residual: two poles a rider can be told nothing about.** Filed by WP5-11's
-       measurement and **unstarted**: **141 member pairs across 115 places** share an operator and a name in
-       every locale and sit 2–10 m apart (43 at 2–5 m, 98 at 5–10 m; **0 remain at or under 2 m**). Too far
-       to fold — 2 m is one grid step, 3 m is two, and two poles 3 m apart may genuinely be two poles — and
-       too close for a compass side, which at 3 m would be fake precision. Both rules are right and the gap
-       between them is real, so it needs a **third kind of answer, not a wider threshold on either.** The
-       lead to start from is unexpected: the **14 pairs excluded at ≤ 2 m for differing in one locale all
-       print the code in *Chinese* and omit it in *English*** (Prince Edward Station's two poles read
-       `PRINCE EDWARD STATION, MONG KOK POLICE STATION` in English at the same coordinate while the Chinese
-       reads `(MK356)`/`(MK357)`) — so the code **exists upstream** and only the English label lacks it,
-       which is a true answer rather than a threshold nudge.
+     - ✅ **WP5-12 done 2026-08-03**
+       ([ADR-080](./08-decision-log.md#adr-080--what-tells-two-boarding-points-apart-in-the-order-the-data-can-support-it))
+       — and **the row was wrong about its own population, which is the finding.** The band reproduces
+       exactly (141 pairs / 115 places over build `ceb33eed99461e04`), and its acceptance's prohibition is
+       now a number: one latitude grid step flips the octant in **27 of 141 pairs (19 %)**. Two of its
+       three leads are dead, measured — *a code in one locale only* resolves **0 of 141 by construction**
+       (the band's own predicate is "identical name in every locale"), and *which pole you are closer to*
+       is **34.4 % wrong for a rider standing at one of them**, because `SNAP_GRID_M` is 25 and the snap
+       displaces the fix by a mean of 10.07 m, deterministically. The answer was the shape the row did not
+       list: **the heading throws away the pole's own name**, and 143 of the 258 declined groups have names
+       that differ. `poleDistinctions` answers with at most one of a compass side (byte-identical to
+       `poleSideOctants`, asserted as a property), the pole's own name (folded through `poleNameKey` —
+       **never bytes**; 21 groups differ only by case or punctuation), or *"Another stop a few steps away —
+       check the sign"*. **Units** at the same 10 m — no third threshold — are what make the mixed place
+       honest: at Lok Hin Terrace two coincident poles now share a side *and* say they are adjacent while
+       the pole 50 m away gets its own side and is not called adjacent, where today all three are told
+       nothing. `poleFlagCode` borrows a flag-shaped code across locales (Prince Edward's MK356/MK357),
+       gated because 12 of 63 candidates are translated phrases. **No dataset rebuild, no favourite
+       moves.** Cost: places carrying a cue 226 → 464 of 10 115. Still open: **54 poles in 22 groups are
+       told nothing**, and ADR-072's both-kerbs favourite is explicitly declined here rather than
+       smuggled in.
      - 🟡 **A favourite with no current arrival renders an empty card** — pre-existing, found by WP5-11, and
        **unowned**: `FavoritePlaceRow` drops rows without an `eta`, so an empty card cannot be told from a
        broken favourite key by eye. Wants a row of its own beside WP5-4; see *Not done yet* above.
      - 🟡 **A rider who stars one line at *both* kerbs sees one Favourites row** — left by WP5-9 (ADR-072) and
        verified in a browser. The card's collapse-to-one-row-per-line merges them, which is right for a card
-       with no kerb heading and wrong for an explicit choice. **Owner: WP5-12**, from the favourites side; the
+       with no kerb heading and wrong for an explicit choice. **WP5-12 owned this and declined it explicitly**
+       ([ADR-080](./08-decision-log.md#adr-080--what-tells-two-boarding-points-apart-in-the-order-the-data-can-support-it)):
+       it needs a per-row kerb label on a compact card, which `soonestPerLine` and `StopCardView` refuse
+       for the same reason they refuse a per-kerb failure count — so it is **unowned again** rather than
+       closed over. The
        alternative is ADR-072's rejected collapse on what the row *prints* (26 of 43 cross-pole lines show
-       different destinations at their two kerbs). WP5-12 also gained a cheaper lead from WP5-9: at Fu Kin
+       different destinations at their two kerbs). WP5-12's other cheaper lead from WP5-9 **is** built: at Fu Kin
        Street the two kerbs' **names** differ ("outside" vs "opposite" Sin Sam House, 1.51 m apart) while
        `poleHeading` prints a bare "GMB" for both, because GMB names carry no stop code.
      - 🟡 **`stopCardView`'s "keep the first" relies on producers sorting soonest-first** — pre-existing (the

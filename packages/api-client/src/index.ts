@@ -2,6 +2,7 @@ import type {
   ClientPolicy,
   DataSource,
   Eta,
+  EtaBatch,
   EtaListener,
   EtaReport,
   LatLng,
@@ -42,9 +43,11 @@ export interface EdgeClientOptions {
   clock?: Clock
   /**
    * How `watch()` gets its frames. **Absent means the poll emulator**, so today's behaviour is the
-   * default and a socket is opt-in: one HTTP request per target per cadence, every target independent, a
-   * failure on one leaving the others alone. Supply `createSocketTransport` (or a `MemoryTransport`) to
-   * change engines without touching a screen — which is the property ADR-004 has claimed since v1 and
+   * default and a socket is opt-in: **one HTTP request per cadence** for the whole target set since
+   * WP5-7 (it was one per target, which is why a six-place screen could not adopt it), a target whose id
+   * stops resolving dropped without disturbing the others, and a failed round that is not a departure.
+   * Supply `createSocketTransport` (or a `MemoryTransport`) to change engines without touching a screen —
+   * which is the property ADR-004 has claimed since v1 and
    * `apps/mobile/test/seam-substitution.test.tsx` now actually tests.
    */
   transport?: (ctx: LiveTransportContext) => LiveEtaEngine
@@ -107,6 +110,16 @@ export class EdgeClient implements DataSource {
     return this.getJson<EtaReport>(`/v1/etas/${encodeURIComponent(stopId)}${q}`)
   }
 
+  getEtasBatch(ids: readonly string[]): Promise<EtaBatch> {
+    // **The parameter repeats; it is not a delimited list**, because `,` is a legal `idchar` and a query
+    // string decodes `%2C` before anything could split on it — see the `ids` parameter in
+    // `packages/contract/src/wire/responses.ts`. `encodeURIComponent` per id is therefore load-bearing
+    // twice over: it escapes the `+` in a place id, which would otherwise arrive as a space and be
+    // rejected, and it escapes a `&` or an `=` that the grammar permits inside a raw operator id.
+    const q = ids.map((id) => `ids=${encodeURIComponent(id)}`).join('&')
+    return this.getJson<EtaBatch>(`/v1/etas?${q}`)
+  }
+
   getSearchIndex(): Promise<SearchIndex> {
     return this.getJson<SearchIndex>('/v1/index')
   }
@@ -160,7 +173,7 @@ export class EdgeClient implements DataSource {
     const controller = createLiveEtaController({
       transport: this.transport({
         endpoints: this.endpoints,
-        getEtas: (stopId, routeIds) => this.getEtas(stopId, routeIds),
+        getEtasBatch: (ids) => this.getEtasBatch(ids),
         // A caller that has the *served* policy wins over this client's construction-time default.
         // `EdgeClient` is built at module scope, before any policy has been fetched, so `this.pollMs` is
         // `CLIENT_POLICY_DEFAULTS.refreshAfterMs` unless someone passed one — which meant a served

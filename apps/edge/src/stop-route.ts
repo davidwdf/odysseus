@@ -4,9 +4,12 @@ import {
   classifyRemark,
   dedupeEtas,
   type Eta,
+  type EtaBatch,
+  type EtaBatchEntry,
   type EtaFailure,
   type EtaReport,
   etaBoardingKey,
+  narrowEtasToRoutes,
   parseRouteId,
   parseStopId,
   parseStopOrPlaceId,
@@ -33,6 +36,24 @@ import { coalesce } from './eta-cache'
 // pathological interchange. Routes beyond it are still counted (static) and shown on the
 // Place page. The default is generous (≈ "all" in practice); Nearby passes a smaller one.
 const DEFAULT_CTB_BUDGET = 24
+
+/**
+ * The CTB fan-out budget for an endpoint that answers about **several places at once**.
+ *
+ * Half the default, and the reason is arithmetic rather than caution. `DEFAULT_CTB_BUDGET` is generous
+ * because a single-place request happens once; a multi-place one multiplies it. Over build
+ * `d598893de6add2e4` the heaviest real place costs 32 upstream calls at budget 24 and **20 at budget
+ * 12** (measured for `EtaHub`'s own cap — see `LIVE_CTB_BUDGET` there), so twelve places at 12 is
+ * ≤240 calls ≈ 40 batches at the runtime's 6 simultaneous outgoing connections, well inside the
+ * subrequest limit and well inside a client's own network timeout. At 24 the same request is ≤384.
+ *
+ * **One declaration for every multi-place reader**, which is why it is here and not in `nearby.ts`: it
+ * was `NEARBY_CTB_BUDGET`, module-private, and the batch endpoint (WP5-7) would have been the second
+ * copy of `12`. The shard keeps its own (`LIVE_CTB_BUDGET`) deliberately — a round that repeats every
+ * 45 s for as long as a socket is open has a different reason for the same number, and ADR-073 records
+ * what happened the last time this parameter was dropped silently on the live path.
+ */
+export const LIST_CTB_BUDGET = 12
 
 /** A place's members as a canonical `Stop` — one id carrying every member operator's source id.
  *  `name`/`location` are the place's chosen name + anchor, picked once by the build so every
@@ -477,8 +498,60 @@ export async function stopEtas(
 
   const report = await stopArrivals(place, ctbBudget)
   if (!routeIds?.length) return report
-  const wanted = new Set(routeIds)
-  return { ...report, etas: report.etas.filter((e) => wanted.has(e.routeId)) }
+  // **The kernel's rule, not a `Set` and a `.filter` here** (WP5-7). It used to be three lines in this
+  // function, which was fine while the edge was the only narrower. The batch endpoint carries no
+  // per-id `routes=` — there is no safe delimiter for a nested list, since `,` is a legal `idchar` —
+  // so the poll emulator narrows a target's readings *after* the batch answers, while the `EtaHub`
+  // shard goes on narrowing here by passing `routeIds` through. Two narrowings, one declaration:
+  // written twice they would eventually disagree, and the two engines' listener output is exactly
+  // what ADR-074's corpus asserts is identical.
+  return { ...report, etas: narrowEtasToRoutes(report.etas, routeIds) }
+}
+
+/**
+ * GET /v1/etas?ids=… — `stopEtas` for each id, concurrently, over one dataset handle and one
+ * coalescer (WP5-7).
+ *
+ * **This is not a second read path, and it must never become one.** Every id goes through the same
+ * `stopEtas` a single-id request goes through, so an entry is byte-identical to `/v1/etas/<that id>`
+ * — asserted, not assumed — and `coalesce` (ADR-057) turns a pole shared by two ids into one upstream
+ * call rather than two. That sharing is the reason a batch is cheaper than the fan-out it replaces,
+ * rather than merely fewer HTTP requests: the six places `/v1/nearby` serves overlap constantly at an
+ * interchange.
+ *
+ * **A per-id failure is an entry, never a status.** `requirePlace` throws for a malformed id and for a
+ * pole that has left the dataset, and `Promise.all` propagates the first rejection — so without a
+ * `catch` per task one rider's stale favourite would take the other five ids' readings down with it.
+ * That is the identical lesson `memberEtaLists` learned one level down ("a `catch` per task, never one
+ * around `Promise.all`") and the identical lesson `coalesce` learned about deciding failure semantics
+ * on a caller's behalf. The batch's own request is well formed, so the honest answer is a `200` whose
+ * entry names the code — `wireErrorOf` is the same classifier the shard uses, so a malformed id is
+ * `bad_request` with `retryable: false`, which is the signal the poll emulator already reads to stop
+ * asking about a target.
+ *
+ * `ids` arrives deduplicated and sorted from the router and this function preserves that order, because
+ * two engines producing one round must serialize it identically (D1).
+ */
+export async function stopEtasBatch(
+  ds: DatasetSource,
+  ids: readonly string[],
+  ctbBudget?: number,
+): Promise<EtaBatch> {
+  const reports = await Promise.all(
+    ids.map(async (id): Promise<EtaBatchEntry> => {
+      try {
+        // No `routes=`: the batch answers every route at every id, and a caller that wants fewer
+        // applies `narrowEtasToRoutes` itself — see `stopEtas` above for why that is one rule.
+        return { id, ...(await stopEtas(ds, id, undefined, ctbBudget)) }
+      } catch (err) {
+        // `etas: []` rather than an omitted field, because `EtaReport.etas` is required and making it
+        // optional would be a change to `/v1/etas/{id}`'s own shape. The empty list carries no meaning
+        // when `error` is set, and the schema says so at the field.
+        return { id, etas: [], error: wireErrorOf(err) }
+      }
+    }),
+  )
+  return { reports }
 }
 
 /** GET /v1/route/:id — a route and its ordered stop list, each stop carrying the route's

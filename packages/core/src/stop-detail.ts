@@ -15,6 +15,7 @@
 // word** — the rule is the kernel's, the word is `@nextbus/i18n`'s (ADR-054).
 
 import { bearingOctant, haversineMeters, initialBearingDeg } from './geo'
+import { poleNameKey } from './stop-name'
 import type { LatLng, OperatorId, StopDetail } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
@@ -325,9 +326,14 @@ const POLE_SIDE_MIN_SEPARATION_M = 10
  * boarding points the fold leaves: colliding places fall **567 → 496** and colliding heading groups
  * **571 → 498**, so 73 groups stop colliding because there is now only one pole to name. The number
  * this function resolves barely moves (226 → 227), which is the point — the fold removes cases rather
- * than making them nameable. The rest still collide, and this is still the right answer for them: a
- * pair 2–10 m apart is too far to call one pole and too close to give a side, which is honest rather
- * than solved (WP5-12 owns that residual — 141 pairs in 115 places).
+ * than making them nameable. The rest still collide, and this is still the right answer for *this*
+ * function: a pair 2–10 m apart is too far to call one pole and too close to give a side.
+ *
+ * **What now happens to the poles this declines: see `poleDistinctions`** (WP5-12, ADR-080). It calls
+ * this rule's guards first, so the 226 groups that get a side here are byte-identical — and for the ones
+ * declined it goes on to the pole's own *name* where the names differ (143 groups), and to saying plainly
+ * that two kerbs are adjacent where nothing else can (103). This function is unchanged and its refusal
+ * is that rule's input rather than its problem.
  *
  * Order-independent, and it never reorders or mutates the input: the caller holds `members` off the
  * query cache and draws the map pins from it.
@@ -335,32 +341,245 @@ const POLE_SIDE_MIN_SEPARATION_M = 10
  * @spec stop-detail#poleSideOctants
  */
 export function poleSideOctants(poles: readonly PoleHeading[]): Map<string, number> {
-  const byHeading = new Map<string, PoleHeading[]>()
-  for (const pole of poles) {
-    const group = byHeading.get(pole.heading)
-    if (group) group.push(pole)
-    else byHeading.set(pole.heading, [pole])
-  }
-
   const sides = new Map<string, number>()
-  for (const group of byHeading.values()) {
+  for (const group of byHeading(poles)) {
     // A heading that is already unique gets nothing — the overwhelmingly common case.
     if (group.length < 2) continue
-    // A planar mean of the group's coordinates. Over the tens of metres ADR-042 clustering allows,
-    // the difference from a spherical centroid is far below the ~1.1 m the source data is quantised
-    // to; it is also exactly how the pipeline places a `Place`'s own lat/lng, so the two agree.
-    const centre: LatLng = {
-      lat: group.reduce((sum, p) => sum + p.location.lat, 0) / group.length,
-      lng: group.reduce((sum, p) => sum + p.location.lng, 0) / group.length,
-    }
-    if (group.some((p) => haversineMeters(centre, p.location) < POLE_SIDE_MIN_SEPARATION_M / 2))
-      continue
-    const sided = group.map((pole) => ({
-      pole,
-      octant: bearingOctant(initialBearingDeg(centre, pole.location)),
-    }))
-    if (new Set(sided.map((s) => s.octant)).size !== sided.length) continue
-    for (const s of sided) sides.set(s.pole.id, s.octant)
+    const octants = sidedOctants(group.map((p) => p.location))
+    if (octants === undefined) continue
+    for (const [i, pole] of group.entries()) sides.set(pole.id, octants[i] as number)
   }
   return sides
+}
+
+/** Poles grouped by the heading a renderer prints, in first-seen order. */
+function byHeading<T extends { heading: string }>(poles: readonly T[]): T[][] {
+  const groups = new Map<string, T[]>()
+  for (const pole of poles) {
+    const group = groups.get(pole.heading)
+    if (group) group.push(pole)
+    else groups.set(pole.heading, [pole])
+  }
+  return [...groups.values()]
+}
+
+/** A planar mean. Over the tens of metres ADR-042 clustering allows, the difference from a spherical
+ *  centroid is far below the ~1.1 m the source data is quantised to; it is also exactly how the pipeline
+ *  places a `Place`'s own lat/lng, so the two agree. */
+function centroid(points: readonly LatLng[]): LatLng {
+  return {
+    lat: points.reduce((sum, p) => sum + p.lat, 0) / points.length,
+    lng: points.reduce((sum, p) => sum + p.lng, 0) / points.length,
+  }
+}
+
+/**
+ * A compass octant per point, **or `undefined` when the geometry cannot support one** — the two guards
+ * that are the whole of `poleSideOctants`' restraint, extracted so a *second* caller can ask the same
+ * question about different points.
+ *
+ * Extracted rather than reached through `poleSideOctants`' returned `Map`, and that is the point:
+ * `poleDistinctions`' unit tier has to ask this about **unit centroids**, which have no pole id and no
+ * heading, and synthesising fake `PoleHeading` records with invented ids to read an answer back out of a
+ * map keyed by id is the laundering that produces two spellings of one thing. Private, so it adds no
+ * export and no corpus group; `poleSideOctants`' existing rows going green untouched is the proof the
+ * extraction changed nothing.
+ *
+ * The bearings are taken from the **centroid of the points themselves**, not of the whole place. See
+ * `poleSideOctants` for why that was measured rather than assumed.
+ */
+function sidedOctants(points: readonly LatLng[]): number[] | undefined {
+  const centre = centroid(points)
+  if (points.some((p) => haversineMeters(centre, p) < POLE_SIDE_MIN_SEPARATION_M / 2))
+    return undefined
+  const octants = points.map((p) => bearingOctant(initialBearingDeg(centre, p)))
+  // Reciprocity only helps a pair; three colliding points can put two of them in one octant, and
+  // printing that would make two headings longer and still identical.
+  if (new Set(octants).size !== octants.length) return undefined
+  return octants
+}
+
+/**
+ * Poles partitioned into groups no compass word can separate: **complete linkage** at `maxM`.
+ *
+ * Complete rather than single linkage, matching ADR-071's own reasoning about the fold: single linkage
+ * would chain 0 / 9 / 18 m into one 18 m "indistinguishable" unit and suppress a compass word that is
+ * perfectly honest at 18 m. The load-bearing property — and it holds whatever order the scan happens to
+ * merge in — is that **no unit ever contains two poles more than `maxM` apart**, because a merge is
+ * tested against *every* cross pair.
+ */
+function poleUnits<T extends { location: LatLng }>(poles: readonly T[], maxM: number): T[][] {
+  const units: T[][] = poles.map((pole) => [pole])
+  for (let i = 0; i < units.length; i++) {
+    // `j` is not incremented on a merge: the unit that was at `j` is gone, and whatever slid into its
+    // place must be tested against the now-larger unit `i`.
+    for (let j = i + 1; j < units.length; ) {
+      const a = units[i] as T[]
+      const b = units[j] as T[]
+      if (a.every((p) => b.every((q) => haversineMeters(p.location, q.location) <= maxM))) {
+        units[i] = [...a, ...b]
+        units.splice(j, 1)
+      } else {
+        j++
+      }
+    }
+  }
+  return units
+}
+
+/**
+ * One pole as the labelling rule sees it: `PoleHeading` plus **the pole's own name**, exactly as a
+ * renderer would print it in the active locale.
+ *
+ * Passed in for the same reason `heading` is (see `PoleHeading`): whether two poles are
+ * distinguishable is locale-dependent, and a rule that rebuilt the string from `name.en` would answer
+ * the wrong question in two of the three locales we ship. It is compared through `poleNameKey`, never
+ * by bytes — 16 groups differ only by case or punctuation width.
+ */
+export interface PoleDistinctionInput extends PoleHeading {
+  /** `titleCaseName(splitStopCode(member.name[locale]).label)` — what the renderer would show. */
+  name: string
+}
+
+/**
+ * What tells this pole apart from a sibling printing the same heading.
+ *
+ * A record with optional fields rather than a discriminated union, following `StopCardView`'s precedent
+ * (ADR-077): `crowded` and `octant` are genuinely orthogonal — a *unit* of two poles can have a compass
+ * side while the two poles inside it cannot be separated — so a union would need a
+ * `side-and-crowded` member, which reads as an enum whose author knew the states were a product. The
+ * invariant is written down instead and asserted over every corpus row:
+ *
+ * > **Two poles under one heading carry the same `octant` only if both are `crowded`, and every pole in
+ * > a multi-pole unit is `crowded`.**
+ *
+ * A pole with nothing to say is **absent from the map**, never present with every field unset.
+ */
+export interface PoleDistinction {
+  /** Print this under the heading. The pole's own name, which differs from its siblings'. */
+  name?: string
+  /** 0–7, `geo#bearingOctant`'s scale. The word is i18n's (`poleSideLabel`), ADR-054. */
+  octant?: number
+  /** True when this pole shares a unit with another: closer together than a compass word can resolve. */
+  crowded?: boolean
+}
+
+/**
+ * What each pole of a place is told apart by — in the order the data can support it (WP5-12).
+ *
+ * ## The gap this closes, and why it needed a third kind of answer
+ *
+ * `foldDuplicatePoles` refuses to merge two poles more than 2 m apart (one coordinate grid step) and
+ * `poleSideOctants` refuses to name a compass side under 10 m. Both refusals are right and ADR-071
+ * requires the two numbers to stay different — *"declining to name a side is a weaker act than asserting
+ * two poles are one"* — so the band between them is real: measured over build `ceb33eed99461e04`,
+ * **141 member pairs across 115 places** share an operator and a byte-identical name in all three
+ * locales and sit 2–10 m apart, and every one of them prints an identical heading today. The row that
+ * filed it said not to widen either threshold, and this does not.
+ *
+ * **Two of the row's own three candidate leads were measured and do not work.**
+ *
+ *  · *A printed code that upstream carries in one locale only* resolves **0 of the 141 — by
+ *    construction**, because the band's membership predicate is "identical name in *every* locale", so
+ *    any printed code is necessarily identical on both poles. The row conflated two disjoint
+ *    populations. The one it was actually describing is 52 pairs whose `en` matches while the Chinese
+ *    differs, 28 of them by a code, and that *is* worth having — it is `poleFlagCode`, one function
+ *    away in `stop-name.ts`, and it operates on the heading before this rule ever sees a collision.
+ *  · *Which pole a rider is closer to* cannot be honest at this range and the app does not even hold a
+ *    position good enough to try: `SNAP_GRID_M` is 25 and the snap is mandatory, so simulating a rider
+ *    standing **exactly at** one of the two poles, the snapped fix names the **wrong one nearer in
+ *    97 of 282 cases (34.4 %)** — mean displacement 10.07 m, and it exceeds the whole pair separation in
+ *    224 of 282. That is before any GPS error, and the snap makes the error *deterministic*: every rider
+ *    in one 25 m cell gets the same wrong answer, so it is a stable lie rather than a flickering one.
+ *
+ * ## The shape the data does support, and it was hiding in plain sight
+ *
+ * **The heading throws away the pole's own name.** Of the 258 heading groups `poleSideOctants` declines
+ * on its floor guard, **143 have member names that differ in some locale** — at Bonham Road one pole is
+ * *Centre Street, Bonham Road* and the other *BONHAM ROAD, near Golden Phoenix Court*, and both print
+ * bare `GMB` / `專線小巴`. Telling a rider "we cannot tell these apart" there is not restraint, it is a
+ * false claim about our own data. The remaining 115 groups are WP5-12's set proper, and for them the
+ * app **says so plainly**, which is the second branch the row's acceptance explicitly permits.
+ *
+ * ## The order, and every tier's cost measured
+ *
+ *  1. **A compass side, byte-identical to today.** Tier 1 *is* one call to the same private helper
+ *     `poleSideOctants` uses, so the 226 groups that speak today are unaffected by construction. Side
+ *     before name deliberately: name-first would replace a two-word compass cue with a ~35-character
+ *     name in 97 groups, and in every name-distinct group one pole's name simply repeats the screen
+ *     title. ADR-071's measured restraint — *a cue on 2 % of places means something when it appears* —
+ *     is preserved rather than diluted.
+ *  2. **The pole's own name**, when the group's folded name keys are pairwise distinct. 143 groups.
+ *  3. **Units.** The group is partitioned by complete linkage at the same 10 m the compass rule already
+ *     refuses below — no third threshold, so ADR-071's "exactly two numbers" holds — and the compass
+ *     question is asked again about the *units'* centroids. A unit gets a side; a unit holding more than
+ *     one pole additionally marks each of its poles `crowded`. This is what makes the **mixed place**
+ *     honest, and it is the case a simpler rule gets wrong: three poles under one heading, A and B 3 m
+ *     apart and C 40 m away, today get *nothing at all* (the distinctness guard trips). Now A and B
+ *     share a side **and** say they are adjacent, while C gets its own side — and marking C `crowded`
+ *     would have been a plain falsehood.
+ *  4. **`crowded` alone**, when the units' octants still collide or there is only one unit. 103 groups.
+ *  5. **Nothing**, for a pole alone in its unit inside a group the compass rule still refuses.
+ *
+ * Poles told nothing fall from every pole in 271 declined groups to **54**. Places carrying any cue go
+ * 226 → 464 of 10 115 (2.2 % → 4.6 %) — a doubling, which is the honest cost of this change.
+ *
+ * ## Two things this deliberately is not
+ *
+ * **It is not a boarding-point remapping.** `dedupeRoutes` keys a row on `boardingPoleId`, and feeding it
+ * a wider mapping would collapse one line boarding at both poles into a single row — discarding the
+ * sibling kerb's arrival, which is exactly the defect WP5-9 fixed. A unit is a *display* fact; rows keep
+ * their own raw pole ids, which is also what `SaveStar` persists, so no favourite key moves.
+ *
+ * **It is not an ordinal.** "1 of 2" tells a rider nothing they can walk on and manufactures a
+ * distinction between two poles that are, on the ground, one pole. `poleSideOctants` already refuses it
+ * and the reason still holds.
+ *
+ * Order-independent, and it neither reorders nor mutates the input: the caller holds `members` off the
+ * query cache and draws map pins from the same array.
+ *
+ * @spec stop-detail#poleDistinctions
+ */
+export function poleDistinctions(
+  poles: readonly PoleDistinctionInput[],
+): Map<string, PoleDistinction> {
+  const out = new Map<string, PoleDistinction>()
+  for (const group of byHeading(poles)) {
+    // A heading already unique needs nothing said about it — the overwhelmingly common case.
+    if (group.length < 2) continue
+
+    const octants = sidedOctants(group.map((p) => p.location))
+    if (octants !== undefined) {
+      for (const [i, pole] of group.entries()) out.set(pole.id, { octant: octants[i] as number })
+      continue
+    }
+
+    const keys = group.map((p) => poleNameKey(p.name))
+    if (new Set(keys).size === group.length) {
+      for (const pole of group) out.set(pole.id, { name: pole.name })
+      continue
+    }
+
+    const units = poleUnits(group, POLE_SIDE_MIN_SEPARATION_M)
+    // One unit means every pole is within the floor of every other, so there is no side to ask about;
+    // `sidedOctants` would refuse a single centroid anyway, and asking is the clearer statement.
+    const unitOctants =
+      units.length > 1
+        ? sidedOctants(units.map((u) => centroid(u.map((p) => p.location))))
+        : undefined
+    for (const [i, unit] of units.entries()) {
+      const octant = unitOctants?.[i]
+      const crowded = unit.length > 1
+      // Nothing to say: a pole alone in its unit inside a group the compass rule still refuses. Absent
+      // from the map rather than present with every field unset — see `PoleDistinction`.
+      if (octant === undefined && !crowded) continue
+      for (const pole of unit) {
+        out.set(pole.id, {
+          ...(octant === undefined ? {} : { octant }),
+          ...(crowded ? { crowded: true } : {}),
+        })
+      }
+    }
+  }
+  return out
 }

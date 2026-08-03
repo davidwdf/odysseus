@@ -5,7 +5,10 @@ import {
   dedupeRoutes,
   operatorsOf,
   orderPoles,
+  type PoleDistinction,
+  type PoleDistinctionInput,
   type PoleHeading,
+  poleDistinctions,
   poleSideOctants,
   type StopDetailPole,
   type StopDetailRoute,
@@ -157,6 +160,87 @@ describe('stop-detail#poleSideOctants', () => {
       }
       for (const octants of byHeading.values())
         expect(new Set(octants).size, `${c.name}: two poles share a side`).toBe(octants.length)
+    }
+  })
+})
+
+describe('stop-detail#poleDistinctions', () => {
+  type Args = { poles: PoleDistinctionInput[] }
+  /** The corpus states the map as ENTRIES, because a pole with nothing to say must be absent from it
+   *  and an object cannot express "absent" distinguishably from "present and empty". */
+  const entries = (poles: PoleDistinctionInput[]) => [...poleDistinctions(poles).entries()]
+
+  for (const c of cases<Args, Array<[string, PoleDistinction]>>('poleDistinctions')) {
+    it(c.name, () => {
+      expect(entries(c.args.poles)).toEqual(c.expect)
+    })
+  }
+
+  it('never returns an answer with nothing in it', () => {
+    // The shape rule the record form makes possible to get wrong: `{}` in the map would render as an
+    // empty caption line under a heading, which is worse than silence because it looks like a bug.
+    for (const c of cases<Args, unknown>('poleDistinctions')) {
+      for (const [id, d] of poleDistinctions(c.args.poles)) {
+        expect(Object.keys(d).length, `${c.name} / ${id}`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('two poles under one heading share an octant only if both are crowded', () => {
+    // **The replacement for `poleSideOctants`' "never labels two poles with the same side".** That
+    // invariant must NOT be extended over this group: the unit tier deliberately gives two poles of one
+    // unit the same compass word, because the unit is what is being placed. The weaker rule is the
+    // correct one, and a reviewer who "fixes" the unit tier out of existence fails here.
+    for (const c of cases<Args, unknown>('poleDistinctions')) {
+      const got = poleDistinctions(c.args.poles)
+      const byHeading = new Map<string, PoleDistinctionInput[]>()
+      for (const pole of c.args.poles) {
+        const group = byHeading.get(pole.heading) ?? []
+        group.push(pole)
+        byHeading.set(pole.heading, group)
+      }
+      for (const group of byHeading.values()) {
+        const seen = new Map<number, string>()
+        for (const pole of group) {
+          const octant = got.get(pole.id)?.octant
+          if (octant === undefined) continue
+          const twin = seen.get(octant)
+          if (twin !== undefined) {
+            expect(got.get(pole.id)?.crowded, `${c.name} / ${pole.id}`).toBe(true)
+            expect(got.get(twin)?.crowded, `${c.name} / ${twin}`).toBe(true)
+          }
+          seen.set(octant, pole.id)
+        }
+      }
+    }
+  })
+
+  it('agrees with poleSideOctants on every pole that function speaks about', () => {
+    // The zero-regression assertion in executable form: the side tier *is* one call to the same private
+    // helper, so a pole `poleSideOctants` gives a side must get the identical octant here. Written as a
+    // property over every row rather than as one row, because it is the claim the whole tier ordering
+    // rests on and a single fixture could satisfy it by luck.
+    for (const c of cases<Args, unknown>('poleDistinctions')) {
+      const got = poleDistinctions(c.args.poles)
+      for (const [id, octant] of poleSideOctants(c.args.poles)) {
+        expect(got.get(id)?.octant, `${c.name} / ${id}`).toBe(octant)
+      }
+    }
+  })
+
+  it('is order-independent, and leaves the caller’s array alone', () => {
+    // Same two properties `poleSideOctants` carries, and for the same reason: the screen hands this
+    // `orderPoles`' output — which moves a pole when a location fix lands — and draws its map pins from
+    // the very array it passes in.
+    for (const c of cases<Args, unknown>('poleDistinctions')) {
+      const before = c.args.poles.map((p) => p.id)
+      const forward = poleDistinctions(c.args.poles)
+      const reversed = poleDistinctions([...c.args.poles].reverse())
+      expect([...reversed.entries()].sort(), c.name).toEqual([...forward.entries()].sort())
+      expect(
+        c.args.poles.map((p) => p.id),
+        c.name,
+      ).toEqual(before)
     }
   })
 })

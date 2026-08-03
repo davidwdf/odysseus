@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/stop-name.spec.json'
-import { isCircular, splitStopCode, stripCircular, titleCaseName } from '../src/stop-name'
+import {
+  isCircular,
+  poleFlagCode,
+  poleNameKey,
+  splitStopCode,
+  stripCircular,
+  titleCaseName,
+} from '../src/stop-name'
+import type { I18nText, Locale } from '../src/types'
 import { specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/stop-name.spec.json.
@@ -62,4 +70,32 @@ describe('stop-name#stripCircular', () => {
       if (!isCircular(c.args.name)) expect(isCircular(stripCircular(c.args.name))).toBe(false)
     }
   })
+})
+
+describe('stop-name#poleNameKey', () => {
+  for (const c of specCases<{ label: string }, string>(corpus, 'poleNameKey')) {
+    it(c.name, () => {
+      expect(poleNameKey(c.args.label)).toBe(c.expect)
+    })
+  }
+
+  it('is idempotent, so a key can safely be folded twice', () => {
+    // The caller folds names it took off the wire, and a second fold happens the moment somebody
+    // memoizes one. A fold that removed a character it also emits would be silently non-idempotent.
+    for (const c of specCases<{ label: string }, string>(corpus, 'poleNameKey')) {
+      expect(poleNameKey(poleNameKey(c.args.label)), c.name).toBe(c.expect)
+    }
+  })
+})
+
+describe('stop-name#poleFlagCode', () => {
+  for (const c of specCases<{ name: I18nText; locale: Locale }, string | null>(
+    corpus,
+    'poleFlagCode',
+  )) {
+    it(c.name, () => {
+      // JSON `null` is the language's absent value at this boundary — see `test/corpus.ts`.
+      expect(poleFlagCode(c.args.name, c.args.locale) ?? null).toBe(c.expect)
+    })
+  }
 })

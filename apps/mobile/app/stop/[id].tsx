@@ -1,4 +1,5 @@
 import type {
+  I18nText,
   Locale,
   OperatorId,
   ResolvedClientPolicy,
@@ -18,7 +19,8 @@ import {
   operatorsOf,
   orderPoles,
   parseStopId,
-  poleSideOctants,
+  poleDistinctions,
+  poleFlagCode,
   remarkView,
   splitStopCode,
   titleCaseName,
@@ -79,12 +81,19 @@ function poleOperatorLabel(poleId: string, locale: Locale): LocalizedString {
  * in the name, if any — "KMB · TN510", "Citybus".
  *
  * Hoisted out of the JSX because it is now needed **twice**: once to render, and once to hand
- * `poleSideOctants` the very text it must compare (see the render site). Two inline copies of this
+ * `poleDistinctions` the very text it must compare (see the render site). Two inline copies of this
  * expression is precisely how the rule would come to be told about a heading the screen no longer
  * prints, and then quietly stop disambiguating.
+ *
+ * **It takes the whole `I18nText`, not the active locale's string** (WP5-12). The code comes from
+ * `poleFlagCode`, which prefers this locale's own trailing parenthetical and otherwise **borrows a
+ * flag-shaped one from another locale** — at Prince Edward Station two KMB poles share a coordinate and
+ * read identically in English while the Chinese carries `(MK356)` and `(MK357)`, so the only thing that
+ * can tell them apart was on the wire and being discarded. A code is Latin letters and digits, so it is
+ * the same string in every locale by construction.
  */
-function poleHeading(poleId: string, name: string, locale: Locale): string {
-  const code = splitStopCode(name).code
+function poleHeading(poleId: string, name: I18nText, locale: Locale): string {
+  const code = poleFlagCode(name, locale)
   return `${poleOperatorLabel(poleId, locale)}${code ? ` · ${code}` : ''}`
 }
 
@@ -173,7 +182,7 @@ export default function StopDetail() {
     byPole.set(key, [...(byPole.get(key) ?? []), r])
   }
   // A pole with no rows left after `dedupeRoutes` is not rendered at all, so it is not part of the
-  // list a rider is choosing between. Hoisted out of the JSX because `poleSideOctants` below must be
+  // list a rider is choosing between. Hoisted out of the JSX because `poleDistinctions` below must be
   // asked about exactly these poles: a side printed to tell a heading apart from one that is not on
   // screen is noise, and the whole rule is about not adding any.
   // `?pole=` goes through `boardingPoleId` for the same reason the grouping does: a route schematic
@@ -187,14 +196,21 @@ export default function StopDetail() {
   // A compass side for the poles whose heading would otherwise be indistinguishable from a sibling's
   // — 567 of the 10 118 places in the shipped build print a duplicate one (WP5-10). The screen
   // contributes the heading text and the layout; every decision about *whether* a side is warranted
-  // and *which* it is belongs to `poleSideOctants`, including its refusal where two poles sit too
+  // and *which* it is belongs to the kernel, including its refusal where two poles sit too
   // close together for a compass word to mean anything. There is deliberately no fallback here for
   // the poles it declines: read that function's last section before adding one.
-  const poleSides = poleSideOctants(
+  // Since WP5-12 this is `poleDistinctions`, which answers with **at most one of** a compass side, the
+  // pole's own name, or "these two are adjacent" — in that order, because the side tier is byte-identical
+  // to `poleSideOctants` and 226 groups already speak through it. The screen still contributes only the
+  // heading text, the pole's printed name and the layout.
+  const poleCues = poleDistinctions(
     shownPoles.map((m) => ({
       id: m.id,
       location: m.location,
-      heading: poleHeading(m.id, m.name[locale], locale),
+      heading: poleHeading(m.id, m.name, locale),
+      // The pole's own name, exactly as a renderer would print it — which is what makes comparing them
+      // the right question in this locale. `poleNameKey` does the comparing; this is the display string.
+      name: titleCaseName(splitStopCode(m.name[locale]).label),
     })),
   )
 
@@ -346,9 +362,11 @@ export default function StopDetail() {
                           lat: m.location.lat,
                           lng: m.location.lng,
                           operator: pole?.operator,
-                          // The stop code from the name if the operator published one, else the
-                          // raw operator stop id — short enough to label a dot.
-                          label: splitStopCode(m.name[locale]).code ?? pole?.rawId,
+                          // The stop code if the operator published one **in any locale** (WP5-12),
+                          // else the raw operator stop id — short enough to label a dot. The same
+                          // helper the heading uses, deliberately: change one and at Prince Edward
+                          // the heading would read `KMB · MK356` while the dot read the raw id.
+                          label: poleFlagCode(m.name, locale) ?? pole?.rawId,
                         }
                       })
                     : undefined
@@ -368,7 +386,7 @@ export default function StopDetail() {
               shownPoles.map((m, i, shown) => {
                 const rs = byPole.get(m.id) ?? []
                 const isLast = i === shown.length - 1
-                const side = poleSides.get(m.id)
+                const cue = poleCues.get(m.id)
                 const d = poleDist.get(m.id)
                 return (
                   <View
@@ -388,15 +406,40 @@ export default function StopDetail() {
                       onPress={() => scrollToPole(m.id)}
                       className="flex-row items-end justify-between px-4 pt-4 pb-1 active:opacity-60"
                     >
-                      {/* The side is appended, never substituted: it earns its place only where
-                            two poles print the same heading, so the operator and code stay put and
-                            most places read exactly as they always have. `undefined` = the kernel
-                            declined, which is the answer for a place whose poles sit a metre apart
-                            — there is no fallback to reach for here. */}
-                      <Text variant="label" className="text-subtle">
-                        {poleHeading(m.id, m.name[locale], locale)}
-                        {side !== undefined ? ` · ${poleSideLabel(side, locale)}` : ''}
-                      </Text>
+                      {/* A column, because the heading can now carry a second line: the walk time stays
+                            on the right of the row and everything the kernel says about this kerb
+                            stacks under the heading. `shrink` so a long pole name wraps rather than
+                            pushing the walk time off the row. */}
+                      <View className="shrink pr-3">
+                        {/* The side is appended, never substituted: it earns its place only where
+                              two poles print the same heading, so the operator and code stay put and
+                              most places read exactly as they always have. */}
+                        <Text variant="label" className="text-subtle">
+                          {poleHeading(m.id, m.name, locale)}
+                          {cue?.octant !== undefined
+                            ? ` · ${poleSideLabel(cue.octant, locale)}`
+                            : ''}
+                        </Text>
+                        {/* The pole's own name, where that is what tells this kerb from its sibling —
+                              143 of the declined groups in the shipped build (ADR-080). A plain string
+                              and not a `LocalizedString`: the kernel has already picked the locale and
+                              title-cased it, so `dataText` would be laundering it through the wrong
+                              door. */}
+                        {cue?.name !== undefined ? (
+                          <Text variant="label" className="text-muted">
+                            {cue.name}
+                          </Text>
+                        ) : null}
+                        {/* …and where nothing can, the app says so rather than leaving a rider to work
+                              out for themselves that two identical headings are two different kerbs.
+                              Same variant and token as ADR-077's `etasUnavailable` on a Nearby card —
+                              deliberately not `caption`, which is reserved for timestamps. */}
+                        {cue?.crowded === true ? (
+                          <Text variant="label" className="text-muted">
+                            {t(locale, 'poleTooCloseToTell')}
+                          </Text>
+                        ) : null}
+                      </View>
                       {d != null ? (
                         <Text variant="caption" className="text-subtle">
                           {formatWalk(d, locale)}

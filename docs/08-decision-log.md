@@ -5014,3 +5014,413 @@ pre-existing and unaddressed; it earned its keep here.
   - **Open — `/v1/route/:id` still says nothing.** Its ETAs come from one bulk call, so the failure is
     all-or-nothing and the view degrades to static; giving it a per-stop failure field means deciding
     what a route screen says about a whole feed being down, which no row owns yet.
+
+## ADR-078 — Rule 7 is enforced per commit over a range, and an empty range is a failure
+- **Status:** **Decided and implemented 2026-08-03** (WP5-8). Implementation:
+  `scripts/precommit-docs-check.mjs` (the rule extracted as `docsVerdict`, plus a `--range` mode and a
+  `--selftest`), `package.json` (`check:docs-freshness`, `check:docs-freshness:selftest`, the latter
+  appended to the `boundaries` chain), `.github/workflows/ci.yml` (`fetch-depth: 0` and the per-commit
+  step, replacing the paragraph that explained why the step could not exist), `CLAUDE.md` rule 7,
+  `docs/05`.
+- **Context.** Rule 7 — *a commit that changes code changes the docs, or says `[docs-ok]` and why* — was
+  the only golden rule in this repo enforced by **nothing**, and both CLAUDE.md and `ci.yml` said so at
+  length. The reason was mechanical rather than neglect. `scripts/precommit-docs-check.mjs` is a Claude
+  Code `PreToolUse(Bash)` hook: it reads a tool-call payload on **stdin**, extracts the `git commit`
+  command line from it, and diffs the **index**. In CI stdin is empty and nothing is staged, so both of
+  its early exits fire and it returns 0 having examined nothing. Wiring *that* into CI would have shipped
+  a step that passes for ever while checking nothing — the failure this repo has now hit eight times, and
+  worse than no step, because a green tick is a claim. It is also not a git hook: `core.hooksPath` is
+  unset and `hooks/` holds only samples, so a `git commit` typed outside a Claude Code session never saw
+  it either.
+- **Decisions:**
+  1. **The rule is one function and the modes only differ in their inputs.** `docsVerdict({ files,
+     bypass })` is the whole of rule 7; hook mode hands it the index and a bypass read from the *command
+     line*, `--range` mode hands it one commit's `diff-tree` and a bypass read from that commit's
+     *message*. Computing `bypass` in the caller rather than sniffing for it inside is what keeps the
+     predicate pure — it is tested with neither a git repository nor a stdin payload — and it is why there
+     is one copy of the rule rather than two. Two copies of a rule that must agree is the defect
+     [ADR-073](#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire) is about,
+     one layer down.
+  2. **`--no-verify` is honoured in hook mode and nowhere else.** It means "skip the hooks for this
+     invocation", which is a statement about a hook rather than about the documentation, and a commit that
+     already exists has no invocation to skip. So in `--range` mode the only bypass is `[docs-ok]` in the
+     message — which is per commit, permanent, and visible in `git log` for ever. That is also why this
+     gate has **no allowlist**, unlike every `check-*.mjs`: the escape hatch is already in the history and
+     needs no second file to rot.
+  3. **An empty range is a FAILURE.** A range naming no commits has told us nothing about the tree, and a
+     gate answering "fine" to that is exactly this repo's recurring failure in the one shape a commit-range
+     check can take. It exits 1 and names the two ways a range goes empty (a shallow clone; the 40-zero
+     `before` sha on a new ref).
+  4. **`--no-merges`, with the limitation stated rather than discovered.** A merge's `diff-tree` against
+     its first parent is empty — verified against both merges in this history — so a merge would read as
+     "no files" and pass vacuously; and on `pull_request` the checkout is a *synthetic* merge of head into
+     base, which without the flag would be examined as one extra commit containing the whole PR squashed,
+     passing whenever any commit in it touched a doc and defeating the per-commit granularity. **What
+     therefore escapes:** content that exists only in a merge commit (an "evil merge", a conflict resolved
+     by editing code). Checking it means diffing a merge against each parent and deciding which difference
+     is the merge's own — a real problem, not worth solving for a repository whose merges are all
+     PR merges.
+  5. **`--root` on `diff-tree`, which is the easy thing to get wrong.** Without it `diff-tree` prints
+     *nothing* for a commit with no parent, so the initial commit of any repository passes unexamined.
+     Measured against this repo's own root commit: 1 file with the flag, 0 without.
+  6. **The selftest builds a real repository, in `os.tmpdir()`, and never touches this one.** A commit
+     range cannot be faked, so the range half of the selftest runs `git init` in a temp directory and
+     commits fixtures into it — asserting that three commits produce exactly one offender **and that it is
+     the right one**, that a merge is skipped while the merged branch's own commits are not, that the root
+     commit is examined, and that an empty commit passes. Every git call passes an explicit `cwd`, which is
+     not fussiness: this workspace shares its checkout and its branch with other sessions, so a mutating
+     git command that inherited the process cwd would be reaching into somebody else's tree.
+  7. **The live tree is the last control, and a shallow clone fails it.** The selftest applies the real
+     rule to the last 20 commits of the current branch. `actions/checkout` fetches one commit by default,
+     so without `fetch-depth: 0` that control would examine the head commit, report "1 commit examined",
+     and pass — a control reading a twentieth of what it claims is the same defect as one reading nothing,
+     arriving silently. It now refuses a shallow clone by name.
+  8. **The chain runs the selftest; CI runs the range.** There is no canonical range locally (on `main`,
+     `origin/main..HEAD` is empty, which is decision 3's failure), so `pnpm boundaries` ends with
+     `check:docs-freshness:selftest` and `ci.yml` computes the range from the event:
+     `<base sha>..HEAD` on `pull_request`, `before..HEAD` on `push` with the zero sha resolved to the
+     pushed commit's parent. `pnpm check:docs-freshness` is the by-hand equivalent for a branch.
+- **Measured before turning it on:** the rule was run over **all 51 non-merge commits in this repository's
+  history** and **every one passes** — 44 of them touch code, 12 claim `[docs-ok]`. So the gate needed no
+  grandfathering, no `since:` date and no allowlist of historical shas, which is the outcome that made it
+  an S rather than an M. That measurement is also what the live-tree control preserves: if a later commit
+  breaks the rule, `pnpm test` goes red on the branch before CI does.
+- **Consequences, including what we are accepting:**
+  - **Two exit codes, deliberately.** `2` in hook mode, because that is the code a `PreToolUse` hook must
+    use for its stderr to reach the agent; `1` in `--range`/`--selftest`, the ordinary failure code every
+    other gate in the chain uses. It looks like a slip, so the header says why.
+  - **`fetch-depth: 0` in CI** — a full fetch of a ~50-commit repository, which is noise next to
+    `pnpm install`, and load-bearing for two steps rather than one.
+  - **This is still not a git hook.** A human typing `git commit` outside a Claude Code session gets no
+    warning; they get a red PR. That is the honest division: a hook is advice at the keyboard, and CI is
+    the thing that actually holds the line. Installing a real `core.hooksPath` hook would be a third
+    caller of the same `docsVerdict` and is a follow-up, not a gap in this one.
+  - **The `check-docs` skill is unchanged** and is still what a blocked commit should reach for. This ADR
+    added the enforcement, not the remedy.
+
+## ADR-079 — One request per round: the batch ETA endpoint, and Nearby as a live adopter
+- **Status:** **Decided and implemented 2026-08-03** (WP5-7). Implementation:
+  `packages/contract/src/wire/responses.ts` (`ETAS_BATCH_MAX_IDS`, `EtaBatchEntry`, `EtaBatch`, the
+  `getStopEtasBatch` endpoint, `WireParam.type` gains `'string[]'`), `packages/contract/src/openapi.ts`
+  (the repeated-parameter emit), `packages/core/src/live.ts` (`narrowEtasToRoutes`, `liveTargetsKey`,
+  the `ETAS_BATCH_MAX_IDS` restatement), `packages/core/src/types.ts`,
+  `packages/core/src/datasource.ts` (`getEtasBatch` on the seam), `apps/edge/src/stop-route.ts`
+  (`stopEtasBatch`, `LIST_CTB_BUDGET`), `apps/edge/src/index.ts`, `apps/edge/src/nearby.ts`,
+  `packages/api-client/src/index.ts`, `src/live/engine.ts`, `src/live/poll.ts`,
+  `apps/mobile/lib/useLiveNearby.ts`, `apps/web/src/hooks/useLiveNearby.ts`,
+  `apps/mobile/app/(tabs)/index.tsx`, `apps/web/src/screens/Nearby.tsx`. Pinned by **11 new corpus
+  rows** in two groups, `apps/edge/test/etas-batch.test.ts` (8 cases in workerd),
+  `apps/mobile/test/live-nearby.test.tsx` (8), `apps/web/test/live-nearby.test.tsx` (4), and the
+  request-count assertions in `packages/api-client/test/edge-client-watch.test.ts` and
+  `live-matrix.test.ts`.
+- **Context.** `applyLiveEtasToNearby` was written and corpus-pinned in WP5-1 and had **no consumer for a
+  whole wave**, for a reason recorded at the time: the poll emulator issued one `/v1/etas/:id` per target
+  per cadence, Nearby watches up to six places, and the screen already fetched `/v1/nearby` once per
+  window. Adopting a subscription would have taken one request per window to six — a regression a rider
+  pays for a feature they cannot see. So the row's own sequencing was *endpoint first, adopter second*.
+- **Decisions:**
+  1. **The batch is enveloped and per id: `{ reports: [{ id, etas, failed?, error? }] }`.** A flat
+     `{ etas, failed }` across all ids is not merely awkward, it is **undecodable**: an `Eta.stopId` is a
+     *pole*, a requested id may be a `P:` place spanning several, and a bare pole id is promoted to its
+     place by the dataset's alias table — so the map from "the id I asked about" to "the poles that
+     answered" lives in the dataset and no client holds a copy. The poll emulator keys its `readings` and
+     applies `retainFailedPoles` **per target**, so a flat list would retain another target's readings. A
+     `Record<id, EtaReport>` was rejected for losing order (D1's canonical serialization) and for having
+     nowhere to put a per-id failure without a union value.
+  2. **An entry is `EtaReportSchema.extend({ id, error })`, so it is assignable to `EtaReport`.** That is
+     the property that keeps the batch from becoming a second read path: everything that consumes an
+     `EtaReport` takes an entry unchanged, and `apps/edge/test/etas-batch.test.ts` asserts an entry is
+     **byte-identical** (`JSON.stringify`, so key order too) to `/v1/etas/<that id>`. `.extend()` also
+     emits a flat component rather than an `allOf`, per the `ErrorResponseSchema` precedent.
+  3. **The parameter repeats; it is not delimited — and this is a grammar fact, not a preference.** `,`
+     **is** a legal `idchar` (`ids/id-grammar.abnf`: only `:`, `+` and `|` are structural), and
+     `URLSearchParams` decodes `%2C` *before* any split could run, so `?ids=A%2CB,C` and `?ids=A,B%2CC`
+     arrive identical. Verified in node rather than assumed. Repetition is the only separator not drawn
+     from the id alphabet. `WireParam.type` therefore gains `'string[]'` and the OpenAPI emit adds
+     `style: form, explode: true` — both spelled out even though `explode` is form's default, so a
+     generator reading only one cannot emit a CSV. **`/v1/live?targets=` stays comma-separated**: real ids
+     contain no commas, and changing a socket's URL grammar is a wire change with no defect behind it. The
+     inconsistency is recorded rather than propagated.
+  4. **A per-id failure is an `error` on its entry and the batch is a `200`.** Failing the request would
+     throw away the ids that answered — the identical judgement ADR-073 made one level down for a place
+     whose second kerb refused. `wireErrorOf` is the same classifier, so a stale favourite is
+     `not_found`/`retryable: false` and the emulator's existing drop rule prunes it with no new mechanism.
+     The residual accepted knowingly: an entry with `error` set carries `etas: []`, which is the very
+     ambiguity ADR-073 removed one level down — mitigated by the field's own description telling a reader
+     to branch on `error` and never on the empty list, and by `etas` staying required so `/v1/etas/{id}`'s
+     shape does not change.
+  5. **12 ids, and over it is a `400` rather than a truncation.** Twelve is `EtaHub`'s
+     `LIVE_MAX_TARGETS_PER_CONNECTION`, because it answers the same question. `/v1/nearby` may clamp its
+     `radius` because a clamped radius still answers the question asked; a silently shortened id list does
+     not — the caller would hold that target's previous readings for ever with no `status` frame to say
+     they had stopped being refreshed, which reads exactly like the outage this endpoint makes visible.
+     **The cap is on the wire** (`ETAS_BATCH_MAX_IDS`) because the *client* has to chunk at it, and the
+     client chunks rather than truncating for the same reason.
+  6. **`CONTRACT_VERSION` does not move.** A new path with new components, with `/v1/etas/{id}`,
+     `EtaReport`, `EtaFailure` and `Eta` untouched, is additive per ADR-052 §5 — whose own restatement at
+     the constant says additive changes "must not touch this". Measured: `openapi.json` 7 → **8 paths**,
+     36 → **38 schemas**; `asyncapi.json` 47 → 49 (it registers the shared components); the native guide's
+     figures move with them, which is why `native:emit` is mandatory here and is a step CLAUDE.md's emit
+     block did not list.
+  7. **`cached()` is kept, with the key normalized.** The id list is deduplicated and sorted before the
+     colo-cache key is rebuilt, so `?ids=b&ids=a` is one entry with `?ids=a&ids=b`. The combinatorial-key
+     worry is real in general and largely answered by a fact already in the tree: the fix is snapped to a
+     25 m grid *before it leaves the device* (`snapFix`, mandatory in `location.ts`), so two riders at one
+     stop produce the same six place ids and the same key. What does the heavy lifting is not the response
+     cache at all but `coalesce`'s per-pole 30 s TTL — asserted here: a batch over the six places
+     `/v1/nearby` just served costs **zero** upstream calls, and cold it costs one per distinct pole
+     (twelve), not one per id.
+  8. **No `routes=` on the batch, and the narrowing became a kernel rule.** Per-id narrowing needs a
+     nested delimiter and decision 3 has just established there is no safe character for one. So the batch
+     answers every route and `narrowEtasToRoutes` — the same function `/v1/etas/:id?routes=` now calls —
+     runs client-side one hop later, while the shard goes on narrowing server-side by passing `routeIds`
+     into the same producer. One declaration, two call sites; written twice they would eventually disagree
+     about a route id that no longer parses or about the empty list, and identical listener output on both
+     engines is precisely what ADR-074's corpus asserts. Cost: a narrowed target's un-narrowed readings
+     cross the wire. No caller narrows today.
+  9. **`getEtas` was replaced in the transport, not supplemented.** `PollTransportDeps` and
+     `LiveTransportContext` take `getEtasBatch` and nothing else. Keeping both would put the round's rules
+     — retention, the permanent drop, the failure ordering — on two paths, one of them unreachable in
+     production and therefore exercised only by a test, which is this repo's recurring failure shape.
+     `DataSource.getEtas` and `/v1/etas/{id}` both stay: the endpoint has eight callers in `apps/edge/test`
+     and the seam is a published declaration.
+  10. **A *request*-level failure is fanned out to one failure per target of that request.** This is the
+      one failure shape only the polling engine can have — the phone is offline, the Worker 502s — and the
+      shard cannot produce it at all, because it calls the read path per target inside the object. So
+      collapsing it to a single `status` frame would make the two engines emit a different number of frames
+      for identical circumstances, which is the byte-identity WP5-1 exists to assert. A missing entry for
+      an id we *did* ask about, with no request failure to explain it, is `internal`/retryable and never an
+      empty reading list.
+  11. **`liveTargetsKey` is in the kernel because an array dependency is a request storm.** A live hook
+      subscribes inside an effect that must depend on the target set; a `WatchTarget[]` is a fresh array
+      every render, the subscription's own readings are written to the query cache, that re-renders the
+      screen, and `subscribe` fires a round *immediately* — so an array dependency resubscribes on its own
+      output, unboundedly, one HTTP request per turn. The key is over the **accepted** set, so two
+      orderings of one set (what a Nearby list produces as a rider walks a few metres) are one
+      subscription, and an empty string means "nothing here is watchable". `|` is the only separator,
+      because `:` is inside every id and `+` separates the members of a place id — either would make
+      `{P:KMB:A+KMB:B}` and `{P:KMB:A, routes:[KMB:B]}` spell one key — and each target carries an arity
+      field so it stays self-delimiting. In the kernel rather than in a hook because two renderers must
+      resubscribe at the *same* moments, which is drift on the spec rather than on the pixels (ADR-075).
+  12. **The hook is hand-copied per renderer, and tested per renderer.** `packages/api-client` may not
+      import React (`layers.json` gives the `client` layer `"npm": []`), so a shared hook is not available
+      without a new package and a new layer entry. The rules are shared and the wiring is not — the same
+      split `useLocation` and `useClientPolicy` already have. Both copies have their own suite, because
+      every asymmetry `apps/web` has caught has been of one shape: wired in one shell, documented in the
+      other.
+- **Two defects found on `apps/mobile` Nearby while doing this, both live before it:**
+  - **The clock was frozen.** `const now = Date.now()` in the render body only advances when something
+    re-renders, and this screen had **no** `refetchInterval` at all — `git log -S` finds the string has
+    never existed in that file — no interval in `useClientPolicy`, and a one-shot `useLocation`. So the
+    minutes never aged and `etaReadout`'s `stale` cue could never fire. It is the defect
+    `useLiveEtas` documents for the Place screen, present here already and worse, because the *data* was
+    frozen too: 0 requests per window, not 1. Adopting the subscription fixes both, and the hook returns
+    `{ now }` so the pairing cannot be half-adopted.
+  - **A failed first load was permanent.** `retry: 1`, `refetchOnWindowFocus: false`, no interval, and an
+    error branch with no pull-to-refresh: a rider whose first request lost a network race sat on a dead
+    screen. Both renderers now carry the Place screen's conditional
+    `refetchInterval: (q) => q.state.status === 'error' ? … : false`.
+- **Measured, before and after, per renderer** (window = `refreshAfterMs`, 30 s):
+
+  | | before | after |
+  |---|---|---|
+  | `apps/web` Nearby | 1 (`/v1/nearby` on an interval) | 1 (`/v1/etas?ids=…` per round) |
+  | `apps/mobile` Nearby | **0** — nothing refreshed at all | 1 |
+  | the same screen on the per-target engine | would have been 6 | — |
+
+  So the row's acceptance — *"request count per window does not increase"* — needed restating, and this is
+  the honest version: **≤ 1 request per window per Nearby screen, and the same number on both
+  renderers.** Mobile going 0 → 1 is a fix, not a regression, and stating it that way is the point:
+  against the old mobile baseline *any* subscription "increases" the count.
+- **Consequences, including what we are accepting:**
+  - **`StopCardView.incomplete` is first-paint-only on Nearby.** The live merge is called with no failure
+    set, so the "Live times unavailable" marker a card got from `/v1/nearby`'s own `failed` clears when
+    the first round lands. That is ADR-077 decision 2's rule and its own words: *"the frames carry no
+    failure list, deliberately — so once a subscription takes over, its `status: retrying` is the
+    authority and the HTTP-era list must go … the fix is frames that carry `failed`, which is a wire
+    change to make when a screen renders per-kerb failure."* What covers the rider instead is
+    `retainFailedPoles` keeping a refusing kerb's readings with their own `dataTimestamp`, so they visibly
+    age — which is exactly why the restored clock matters more than it looks. **The residual, stated
+    narrowly:** a pole that has never produced a reading retains nothing, so a card at a place whose
+    outage was already running at first paint reads as a quiet stop. Owner: **WP5-14** (new row).
+  - **`VITE_LIVE_TRANSPORT=socket` is no longer inert in `apps/web`.** ADR-076 recorded that it was real
+    configuration changing nothing visible, because no screen there called `watch()`. One does now, and
+    three code comments plus `docs/10` that said otherwise were corrected rather than deleted.
+  - **`/v1/etas/` (trailing slash) is now a 400 with a usage line** where it used to fall through to the
+    router's 404. Better, and still a behaviour change on an existing path.
+  - **`NEARBY_CTB_BUDGET` became `LIST_CTB_BUDGET` in `stop-route.ts`** — one declaration for every reader
+    that answers about several places at once, rather than a second copy of `12` in the new branch. The
+    shard keeps its own, deliberately: a round that repeats every 45 s for as long as a socket is open has
+    a different reason for the same number.
+  - **The `?routes=` parameter's description was a lie and is corrected.** It said "to restrict the
+    fan-out to"; it has never reached `memberEtaLists` and filters the response only. Fixed in the
+    contract, so the published document stops making a claim about cost that the code does not make.
+  - **Test totals:** core 816 (+12), edge 147 (+10), api-client 71 (+2), mobile 53 (+8), web 32 (+4).
+    Corpus 91 groups / 772 cases.
+
+## ADR-080 — What tells two boarding points apart, in the order the data can support it
+- **Status:** **Decided and implemented 2026-08-03** (WP5-12). Implementation:
+  `packages/core/src/stop-name.ts` (`poleNameKey`, `poleFlagCode`),
+  `packages/core/src/stop-detail.ts` (`poleDistinctions`, plus the private `sidedOctants` / `poleUnits` /
+  `centroid` / `byHeading` extracted out of `poleSideOctants`, which is otherwise unchanged),
+  `packages/i18n/src/catalogue.ts` (`poleTooCloseToTell` ×3 locales + the 9 regenerated native artefacts),
+  `apps/mobile/app/stop/[id].tsx`, `packages/data-normalize/src/dataset.ts` (a prose correction — see
+  below). Pinned by **18 new corpus rows** in three groups (`stop-detail#poleDistinctions` 7,
+  `stop-name#poleNameKey` 6, `stop-name#poleFlagCode` 5), **4 new `REQUIRED_ROWS` entries**, and four
+  cross-cutting properties in `packages/core/test/stop-detail.test.ts`.
+- **Context — the gap, and why it needed a third kind of answer.**
+  [ADR-071](#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two) built two
+  refusals and required their thresholds to stay different: `foldDuplicatePoles` will not merge two poles
+  more than **2 m** apart (one coordinate grid step), and `poleSideOctants` will not name a compass side
+  under **10 m** — *"declining to name a side is a weaker act than asserting two poles are one."* Both are
+  right, so the band between them is real. Re-measured here over build `ceb33eed99461e04`: **141 member
+  pairs across 115 places** share an operator and a byte-identical name in all three locales and sit
+  2–10 m apart (43 in 2–5 m, 98 in 5–10 m, **0** at or under 2 m — the fold's window is genuinely empty),
+  and **all 141 print a character-for-character identical heading today**. The row that filed it said not
+  to widen either threshold. This does not.
+- **Two of the row's own three leads were measured and do not work. Recording that is half of this ADR.**
+  1. **"A printed code that upstream carries in one locale only" resolves 0 of the 141 — by
+     construction.** The band's membership predicate is *"identical name in every locale"*, so any printed
+     code is necessarily identical on both poles. The row conflated two disjoint populations. The one it
+     was *describing* is different and real: **52 pairs whose `en` matches while the Chinese differs, 28 of
+     them by a code**, all of the shape "the English label lacks a code that both Chinese names carry".
+     That is worth having, and it is `poleFlagCode` below — a **display** rule, not the dataset change the
+     row assumed.
+  2. **"Which pole the rider is closer to" cannot be honest at this range, and the app does not hold a
+     position good enough to try.** `SNAP_GRID_M` is 25 and the snap is mandatory before a fix leaves the
+     device, so simulating a rider standing **exactly at** one of the two poles: the snapped fix names the
+     **wrong pole nearer in 97 of 282 cases (34.4 %)**, mean displacement **10.07 m**, max 17.32 m, and it
+     exceeds the *entire pair separation* in **224 of 282**. That is before any GPS error — and the snap
+     makes the error deterministic, so every rider in one 25 m cell gets the same wrong answer. A stable
+     lie is worse than a flickering one.
+  3. **"The route sets as a tie-break" was confirmed useless, not refuted.** 136 of the 141 pairs have
+     disjoint line sets — the same as at 0–0.5 m and at 25–31 m, so it does not sort by distance and is not
+     evidence. And as a *tie-break* it accomplishes nothing a rider can use: the route rows are already
+     printed under each heading, so a heading that repeated them adds no information.
+  Also quantified, because the row's acceptance names it: **nudging one pole by one latitude grid step
+  flips the compass octant in 27 of the 141 pairs (19 %)**. "A word that flips on a one-grid-step
+  coordinate nudge" is not hypothetical, which is why the 10 m floor is not widened.
+- **The shape that does work was hiding in plain sight: the heading throws away the pole's own name.** Of
+  the **258** heading groups `poleSideOctants` declines on its floor guard, **143 have member names that
+  differ in some locale** — at Queen Mary Hospital two minibus poles 7.35 m apart both print bare
+  `GMB` / `專線小巴` while the wire has carried *"Queen Mary Hospital, Pok Fu Lam Road"* and *"POK FU LAM
+  ROAD, near Queen Mary Hospital Wing H"* all along. Saying *"we cannot tell these apart"* there is not
+  restraint, it is a false claim about our own data. The other **115** groups are WP5-12's set proper, and
+  for those the app **says so plainly** — which is the second branch the row's acceptance explicitly
+  permits, and a shippable outcome rather than a cop-off.
+- **Decisions:**
+  1. **A new export, and `poleSideOctants` is untouched.** Its return type is `Map<string, number>` with 7
+     corpus rows including 3 named refusals, hand-ported under ADR-060, and the mixed case below *requires*
+     two poles to share a side — which violates that function's own asserted invariant. Widening it would
+     mean rewriting the invariant and the ports for a rule that is correct. Its two guards are extracted as
+     a **private** `sidedOctants(points)` so a second caller can ask the same question about points that
+     have no pole id; its existing rows going green untouched is the proof the extraction changed nothing.
+  2. **The order is side → name → units → nothing, and side comes first deliberately.** Tier 1 *is* one
+     call to `sidedOctants`, so the **226** groups that speak today are byte-identical by construction —
+     asserted as a property over every corpus row, not hoped for. Name-first would replace a two-word
+     compass cue with a ~35-character name in 97 groups, and in every name-distinct group one pole's name
+     partly repeats the screen title. ADR-071's measured restraint — *a cue on 2 % of places means
+     something when it appears* — is preserved rather than diluted.
+  3. **Names are compared through a folded key, never by bytes, and this is the finding that would
+     otherwise have shipped a lie.** **21 colliding groups** in this build differ *only* by case,
+     punctuation width or an ideographic space: `Bonham Road, near Hospital Road` /
+     `Bonham Road near Hospital Road`; `KENT ROAD, near Kowloon Tong Station` / `Kent Road, near …`;
+     `昭信路, 近煜明苑煒明閣` / `昭信路，近煜明苑煒明閣`. A byte test calls those distinct, prints the same
+     words twice, and claims the ambiguity resolved — exactly what `poleSideOctants` refuses to do with a
+     compass word it cannot support. `poleNameKey` folds with an **explicit character list** rather than
+     `NFKC`, because NFKC makes the hand-port depend on a whole Unicode table agreeing across three
+     languages while a list is inspectable and corpus-pinnable. (`Intl` is a denied global in the kernel,
+     so a collator was never available.)
+  4. **Units, at the same 10 m — no third threshold.** A group the compass rule declines is partitioned by
+     **complete linkage** at `POLE_SIDE_MIN_SEPARATION_M`, and the compass question is asked again about
+     the *units'* centroids. Complete rather than single linkage on ADR-071's own reasoning: single linkage
+     would chain 0 / 9 / 18 m into one 18 m "indistinguishable" unit and suppress a word that is honest at
+     18 m. Reusing the existing constant keeps ADR-071's "exactly two numbers" intact — the unit *is*
+     "closer than a compass word can resolve", which is what that number already means.
+     **This is what makes the mixed place honest, and it is the case a simpler rule gets wrong.** At Lok Hin
+     Terrace three poles print bare `KMB`: two at the *same* coordinate and one 47–54 m away. Today all
+     three get **nothing**, because the distinctness guard trips on the coincident pair. Now the pair is one
+     unit and the far pole another, both units get a side, the pair additionally says it is adjacent — and
+     the far pole is **not** marked adjacent, because calling a pole 50 m from its siblings "a few steps
+     away" would be a plain falsehood. 29 groups are this shape.
+  5. **A record with optional fields, not a discriminated union.** `crowded` and `octant` are genuinely
+     orthogonal — a *unit* can have a side while the poles inside it cannot be separated — so a union would
+     need a `side-and-crowded` member, which reads as an enum whose author knew the states were a product.
+     `StopCardView`'s precedent (ADR-077): fields with docblocks, one written-down invariant, renderers read
+     fields. The invariant is **"two poles under one heading share an `octant` only if both are `crowded`,
+     and every pole in a multi-pole unit is `crowded`"**, and it replaces `poleSideOctants`' stronger one
+     *for the new group only* — the old assertion stays, pointed at the old function, or a reviewer will
+     "fix" the unit tier out of existence. A pole with nothing to say is **absent from the map**, never
+     present with every field unset.
+  6. **`poleFlagCode` borrows a code across locales, and the shape gate is the discriminator.** The active
+     locale's own trailing parenthetical is used **verbatim whatever its shape** — that is today's
+     behaviour, and a rider reading `(Macao Ferry)` is reading what upstream wrote for them. Only the
+     *borrow* is gated on Latin-letters-then-digits, and that gate was measured: of the **63** poles whose
+     `en` carries no parenthetical while a Chinese name does, **51 are flag-shaped and 12 are not**, the 12
+     being translated place phrases (`黃泥涌道55-57號(近翠景樓)`), and **167** poles carry trailing
+     parentheticals that *disagree* across locales for exactly that reason. A code is what is printed on the
+     physical flag, so showing the Chinese one to an English reader is the same string rather than a
+     translation. **Measured before shipping: zero new colliding groups in any locale, no sided group loses
+     its side, and 12 groups in `en` stop colliding entirely** — visible in the corpus rows, where
+     `KMB · CW114`, `KMB · CW145` and `KMB · ED516` are poles lifted out of a collision before the labelling
+     rule ever sees them. Two of those lose a compass suffix they had: a strict improvement (a code on the
+     flag beats a compass word) that will read as a regression to anyone diffing screenshots without this
+     paragraph.
+  7. **What it says: `poleTooCloseToTell` — "Another stop a few steps away — check the sign".** Claims only
+     what is true: there is more than one boarding point, they are closer than the app's own direction
+     floor, and we cannot say which is which. Vaguer than the data, which ADR-008 permits — over-precision
+     is what it forbids. **No count** (ADR-077's argument, one screen over: a rider cannot act on the
+     difference between two and three), **no ordinal** (`poleSideOctants` already refuses "1 of 2", and the
+     reason holds), **no distance** (`formatDistance` rounds to 10 m under ADR-008, so "3 m apart" asserts
+     precision the same repo refuses one function away), and **not "either stop will do"** — that is advice
+     we cannot support, since one may be a shelter and the other a flag. "Check the sign" is the one
+     actionable thing left, and it is honest: the flag carries a code the app has just admitted it lacks.
+- **No dataset rebuild, and here are the fields it reads.** `StopDetailPole.id`, `.name` (all three
+  locales) and `.location`, plus the operator from the id via `parseStopId`. Every one is already on
+  `StopDetailSchema`, nothing in `packages/data-normalize` changes, so the content hash cannot move and no
+  `dataset:publish` is required — the contrast with ADR-071, which moved the build hash and needed one.
+  Deliberately **not** done: writing the borrowed code into `name.en` in the pipeline. That is a dataset
+  change, a new hash and its own ADR, and it would rewrite a name a rider reads to solve a display problem
+  the client can solve.
+- **No favourite moves, and the proof is by call site.** `SaveStar` persists
+  `formatFavoriteRouteKey(row.stopId, routeId)` off an untouched `dedupeRoutes` result;
+  `dedupeRoutes`' key is `${operator}|${routeNo}|${bound}|${boardingPoleId(r.stopId, members)}` and
+  `poleDistinctions` appears nowhere in it. **A unit is a display concept only.** Expressing it as a wider
+  boarding-point mapping would collapse one line boarding at both poles into a single row and discard the
+  sibling kerb's arrival — the exact defect WP5-9 fixed, protected by the `REQUIRED_ROWS` entry
+  `eta#dedupeEtas:one-line-at-two-poles-keeps-a-reading-for-each`. That is the single most likely way to
+  get this wrong.
+- **A prose correction in `packages/data-normalize/src/dataset.ts`, because its own data contradicts it.**
+  The joint-route signal's comment called an index-aligned KMB/CTB pair *"the same physical pole under each
+  operator's id"*. Measured: the 1 520 pairs that loop produces are **p50 16.4 m apart, p90 49.2 m, p99
+  110.7 m, max 354.4 m, 403 of them (26.5 %) over 30 m**. Index alignment means "the same stand on this
+  route", not "one pole". It is used only to rescue an already-close, already-same-named pair, which is
+  legitimate — but anyone who read the old sentence and built a merge on it would fuse berths 350 m apart.
+  Corrected in place rather than deleted, with the distribution.
+- **Consequences, including what we are accepting:**
+  - **The honest cost is a doubling of how often the app says anything.** Places carrying a pole cue go
+    **226 → 464** of 10 115 (2.2 % → 4.6 %); poles told nothing fall from every pole in 271 declined groups
+    to **54**. Whether 4.6 % still counts as restraint is a judgement, and it is stated here rather than
+    buried: the *strongest true* answer wins in every group, so nothing is said that the data cannot
+    support, but there is now more of it on screen.
+  - **`apps/web` cannot demonstrate this**, and the ADR does not claim "both renderers". There is no Place
+    screen there — its one screen is Nearby, and a Nearby card prints no kerb heading by design
+    (`stopCardView`), so a "these two are adjacent" note there would describe a distinction the card does
+    not draw. ADR-075 defines drift on the *spec* rather than on the pixels, so the corpus is the proof.
+    The design is already gate-shaped for the day a web Place view exists: the 10 m comparison and the unit
+    partition are fields on a returned record, so `check-no-derivation.mjs`'s `threshold` and `selecting`
+    rules have nothing to fire on.
+  - **Open — 54 poles across 22 groups are still told nothing.** Each is alone in its unit inside a group
+    whose unit octants still collide (Statue Square: four KMB poles across 41 m). They are ≥10 m from their
+    siblings, so the map genuinely answers them — the heading is already a tap target that highlights a
+    labelled dot. A caption saying so is *discoverability*, not disambiguation, and is deferred with that
+    reason rather than improvised.
+  - **Open — ADR-072's both-kerbs favourite is untouched.** A rider who stars one line at both kerbs still
+    sees one Favourites row. It needs a per-row kerb label on a compact card, which `soonestPerLine` and
+    `StopCardView` deliberately refuse. It stays open under its own row rather than being smuggled in here;
+    WP5-12 was named as its owner and this ADR declines that half explicitly.
+  - **Open, and adjacent — `splitStopCode` only matches ASCII parentheses**, so 24 names per Chinese locale
+    ending in a full-width parenthetical are not split at all today. Pre-existing, one line away from
+    `poleFlagCode`, and *not* widened here: doing so would shift what every heading prints in Chinese, which
+    wants its own measurement.
+  - **Test totals:** core 839 (+23), corpus 94 groups / 790 cases, 26 named boundary rows.

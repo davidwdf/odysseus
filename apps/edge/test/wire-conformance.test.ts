@@ -1,5 +1,10 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
-import { ERROR_CODES, ErrorResponseSchema, WIRE_ENDPOINTS } from '@nextbus/contract'
+import {
+  ERROR_CODES,
+  ErrorResponseSchema,
+  ETAS_BATCH_MAX_IDS,
+  WIRE_ENDPOINTS,
+} from '@nextbus/contract'
 import type { ErrorCode, Eta, EtaReport, I18nText, RouteDetail, StopDetail } from '@nextbus/core'
 import { classifyRemark } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -104,6 +109,9 @@ async function resolvePaths(): Promise<Map<string, string>> {
   }>
   const placeId = nearby[0]?.stop.id
   if (!placeId) throw new Error('fixture produced no nearby places — cannot resolve paths')
+  const secondId = nearby[1]?.stop.id
+  if (!secondId) throw new Error('fixture produced one nearby place — cannot resolve a batch path')
+  const memberId = secondId
 
   const detail = (await (await get(`/v1/stop/${encodeURIComponent(placeId)}`)).json()) as {
     routes: Array<{ route: { id: string } }>
@@ -117,6 +125,14 @@ async function resolvePaths(): Promise<Map<string, string>> {
     ['getStop', `/v1/stop/${encodeURIComponent(placeId)}`],
     ['getRoute', `/v1/route/${encodeURIComponent(routeId)}`],
     ['getStopEtas', `/v1/etas/${encodeURIComponent(placeId)}`],
+    // Two ids, so the batch is exercised as a batch rather than as a one-element list — and one of them
+    // is a **member pole** of the place, which the dataset's alias table promotes back to it. That is
+    // the case a client actually produces (a favourite is keyed on a pole, a Nearby card on a place),
+    // and it proves the two entries stay two: one question each, one answer each.
+    [
+      'getStopEtasBatch',
+      `/v1/etas?ids=${encodeURIComponent(placeId)}&ids=${encodeURIComponent(memberId)}`,
+    ],
     ['getSearchIndex', '/v1/index'],
     ['getClientPolicy', '/v1/policy'],
   ])
@@ -286,6 +302,21 @@ const ABSENT_ROUTE = 'KMB:ZZZZ:outbound:1'
 
 const ERROR_CASES: ErrorCase[] = [
   { name: 'a path that is not an endpoint', code: 'not_found', endpoint: null, path: '/v1/nope' },
+  {
+    // The batch's own two refusals. Both are `bad_request` because the caller must change the request:
+    // an empty `ids` asks about nothing, and over the cap is refused rather than truncated, because a
+    // silently shortened list leaves the caller holding stale readings with nothing to explain them.
+    name: 'a batch with no ids',
+    code: 'bad_request',
+    endpoint: 'getStopEtasBatch',
+    path: '/v1/etas?case=no-ids',
+  },
+  {
+    name: 'a batch over the id cap',
+    code: 'bad_request',
+    endpoint: 'getStopEtasBatch',
+    path: `/v1/etas?${Array.from({ length: ETAS_BATCH_MAX_IDS + 1 }, (_, i) => `ids=KMB%3AOVER${i}`).join('&')}`,
+  },
   {
     name: 'nearby with no coordinates at all',
     code: 'bad_request',

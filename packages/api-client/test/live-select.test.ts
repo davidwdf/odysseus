@@ -22,7 +22,7 @@ import {
 /** Enough of a context to build either engine. Neither connects nor fetches until `subscribe`. */
 const ctx: LiveTransportContext = {
   endpoints: { apiUrl: 'https://api.example.test', socketUrl: 'wss://api.example.test/v1/live' },
-  getEtas: async () => ({ etas: [] }),
+  getEtasBatch: async () => ({ reports: [] }),
   pollMs: 30_000,
   clock: { now: () => Date.parse('2026-07-30T02:00:00.000Z') },
 }

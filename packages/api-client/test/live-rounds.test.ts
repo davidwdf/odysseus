@@ -182,18 +182,32 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
  * emitted nothing" is decidable rather than a claim about a window. The edge driver cannot do that and
  * says so.
  */
-async function throughPolling(scenario: LiveRoundsScenario): Promise<string[]> {
+async function throughPolling(
+  scenario: LiveRoundsScenario,
+): Promise<{ lines: string[]; batchCalls: string[][] }> {
   const { timers, tick } = manualTimers()
   const labelOf = labeller(scenario)
   let round = 0
+  /** The id set of every `/v1/etas?ids=…` request this run made, in order. */
+  const batchCalls: string[][] = []
   const transport = createPollTransport({
     clock,
     pollMs: 30_000,
     timers,
-    getEtas: async (stopId) => {
-      const place = scenario.targets.find((label) => placeId(label) === stopId)
-      if (place === undefined) throw new Error(`${scenario.name}: polled an unwatched id ${stopId}`)
-      return reportFor(scenario, round, place)
+    // One request for the whole round since WP5-7. The **unwatched-id throw stays** — it is what would
+    // catch a transport polling something nobody asked for — and `batchCalls` counts requests rather
+    // than targets, which is the property the fixture cannot state and this driver now can.
+    getEtasBatch: async (ids) => {
+      batchCalls.push([...ids])
+      return {
+        reports: ids.map((stopId) => {
+          const place = scenario.targets.find((label) => placeId(label) === stopId)
+          if (place === undefined) {
+            throw new Error(`${scenario.name}: polled an unwatched id ${stopId}`)
+          }
+          return { id: stopId, ...reportFor(scenario, round, place) }
+        }),
+      }
     },
   })
 
@@ -218,7 +232,7 @@ async function throughPolling(scenario: LiveRoundsScenario): Promise<string[]> {
     lines.push(last === undefined ? 'silent' : settled(last, labelOf))
   }
   controller.stop()
-  return lines
+  return { lines, batchCalls }
 }
 
 // ── The assertions ─────────────────────────────────────────────────────────────────────────────
@@ -250,7 +264,15 @@ describe('the live rounds corpus, through the poll emulator', () => {
 
   for (const scenario of LIVE_ROUNDS) {
     it(scenario.name, async () => {
-      expect(await throughPolling(scenario)).toEqual(scenario.settles)
+      const { lines, batchCalls } = await throughPolling(scenario)
+      expect(lines).toEqual(scenario.settles)
+      // **One request per round, not one per target** (WP5-7) — the property the corpus cannot state,
+      // because a row describes what a listener holds when a round settles and says nothing about how
+      // many times the transport asked. Asserted here so a regression to the per-target fan-out fails
+      // on every row rather than on none: a scenario stops polling once every target has been dropped
+      // as permanently unresolvable, so the count is `≤ rounds` and never `targets × rounds`.
+      expect(batchCalls.length).toBeLessThanOrEqual(scenario.rounds.length)
+      for (const ids of batchCalls) expect(ids.length).toBeLessThanOrEqual(scenario.targets.length)
     })
   }
 })

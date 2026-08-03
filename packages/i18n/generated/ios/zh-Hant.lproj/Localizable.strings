@@ -93,6 +93,7 @@
 "poleSideSouthwest" = "西南面";
 "poleSideWest" = "西面";
 "poleSideNorthwest" = "西北面";
+"poleTooCloseToTell" = "數步之內另有站柱 — 請看站牌";
 "openInMaps" = "在地圖開啟";
 "arrivalsHere" = "本站即將到站";
 "save" = "收藏";

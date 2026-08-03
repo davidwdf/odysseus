@@ -97,6 +97,7 @@
 	<string name="poleSideSouthwest">西南面</string>
 	<string name="poleSideWest">西面</string>
 	<string name="poleSideNorthwest">西北面</string>
+	<string name="poleTooCloseToTell">数步之内另有站柱 — 请看站牌</string>
 	<string name="openInMaps">在地图打开</string>
 	<string name="arrivalsHere">本站即将到站</string>
 	<string name="save">收藏</string>

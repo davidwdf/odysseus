@@ -99,6 +99,7 @@
 	<string name="poleSideSouthwest">Southwest side</string>
 	<string name="poleSideWest">West side</string>
 	<string name="poleSideNorthwest">Northwest side</string>
+	<string name="poleTooCloseToTell">Another stop a few steps away — check the sign</string>
 	<string name="openInMaps">Open in Maps</string>
 	<string name="arrivalsHere">Next buses at this stop</string>
 	<string name="save">Save</string>

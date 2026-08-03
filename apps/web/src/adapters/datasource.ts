@@ -11,11 +11,12 @@ const API_URL = import.meta.env.VITE_API_URL ?? DEFAULT_API_URL
 // `poll` (the shipped default) | `socket`. See `apps/mobile/lib/datasource.ts` for why the read stays
 // per-renderer while the decision does not, and `live/select.ts` for why there is no `auto`.
 //
-// **Selecting `socket` here is real configuration that changes nothing a rider sees yet**, and saying so
-// is better than implying parity: no screen in `apps/web` calls `DataSource.watch()` — Nearby fetches
-// `getNearby` on an interval — so this app has no live subscription to run over either engine until
-// WP5-7 makes Nearby a live adopter. The plumbing is symmetrical with `apps/mobile` on purpose, because
-// the asymmetry that costs is the one nobody notices until the second renderer needs it.
+// **Since WP5-7 this is no longer inert.** It used to be real configuration that changed nothing a rider
+// of this app could see, because no screen here called `DataSource.watch()` — Nearby fetched `getNearby`
+// on an interval. `Nearby` now holds a subscription (`src/hooks/useLiveNearby.ts`), so this variable
+// decides which engine feeds its arrivals, exactly as it does in `apps/mobile`. The plumbing was kept
+// symmetrical before it was needed on purpose, because the asymmetry that costs is the one nobody notices
+// until the second renderer needs it.
 const LIVE_TRANSPORT = import.meta.env.VITE_LIVE_TRANSPORT
 // A socket tier on a different host; unset means derived from `API_URL` (ADR-056 decision 8).
 const LIVE_URL = import.meta.env.VITE_LIVE_URL

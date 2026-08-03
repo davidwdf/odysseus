@@ -337,8 +337,27 @@ keeps the rendering and the hooks.
   identical one, and *nothing* where a side would be fake precision: no side under 10 m apart, and none
   at all for a group where two poles fall in the same octant. It labels 226 places and declines the
   rest on purpose (WP5-10).
+- **`poleDistinctions`** — **what the Place screen actually calls** since WP5-12
+  ([ADR-080](./08-decision-log.md#adr-080--what-tells-two-boarding-points-apart-in-the-order-the-data-can-support-it)).
+  It answers with **at most one** of three things per pole, strongest-true-answer first, and the order
+  *is* the design: a **compass side** (tier 1 is one call to `poleSideOctants`' own guards, so the 226
+  places that speak today are byte-identical); else the pole's **own name**, where the group's names
+  differ once folded through `poleNameKey` — 143 groups, and the biggest win, because the heading throws
+  the name away; else **`poleTooCloseToTell`**, *"Another stop a few steps away — check the sign"*, for
+  the 103 groups where nothing in the data can separate two kerbs. The middle case that matters is the
+  *mixed* place: a group is partitioned into units by complete linkage at the same 10 m and the compass
+  question re-asked about the units, so two coincident poles share a side **and** say they are adjacent
+  while a third 50 m away gets its own side and is **not** called adjacent — where today all three get
+  nothing. A pole with nothing to say is absent from the map, never present-and-empty. Poles told nothing
+  fall from every pole in 271 declined groups to **54**; places carrying any cue go 226 → 464 of 10 115,
+  which is the honest cost.
+- **`poleFlagCode`** (in `stop-name.ts`) — the code a heading prints, **borrowed across locales when this
+  one has none and the other's is flag-shaped** (Latin letters then digits). At Prince Edward Station two
+  KMB poles share a coordinate and read identically in English while the Chinese carries `(MK356)` and
+  `(MK357)`; the code was on the wire and being discarded. The map dot label reads the same helper — change
+  one and the heading would say `KMB · MK356` while the dot said the raw upstream id.
 
-`packages/core/spec/stop-detail.spec.json` pins all five against the shipped dataset. **One row is
+`packages/core/spec/stop-detail.spec.json` pins all six against the shipped dataset. **One row is
 `knownDefect`**: a later service-type variant with a *sooner* bus loses to the first one that merely
 has a reading, so Nearby and Place detail can disagree about the next 269D. Read it before touching
 the dedupe key.

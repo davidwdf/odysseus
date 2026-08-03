@@ -349,7 +349,7 @@
             "name": "routes",
             "in": "query",
             "required": false,
-            "description": "Comma-separated canonical route ids to restrict the fan-out to.",
+            "description": "Comma-separated canonical route ids to restrict the **readings** to. It filters the response and never the upstream fan-out — a KMB board is one call for every route at the pole, so there is nothing per-route to narrow — and it never filters `failed` (ADR-073). The description here used to say \"restrict the fan-out to\", which was a claim about cost that the code does not make.",
             "schema": {
               "type": "string"
             }
@@ -362,6 +362,90 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EtaReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/etas": {
+      "get": {
+        "operationId": "getStopEtasBatch",
+        "summary": "Live arrivals for up to 12 stops or places in one request — the same answer `/v1/etas/{id}` gives each of them, in one round trip (WP5-7). It exists because a screen watching six places through the polling live engine issued six requests per window where the screen itself issued one, which is a regression no rider would accept for a feature they cannot see. Every id goes through the same producer, so an entry is byte-identical to the single-id response, and the edge coalescer makes a pole shared by two ids one upstream call rather than two (ADR-057).",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "description": "Canonical stop or place ids, **repeated** (`?ids=a&ids=b`), each percent-encoded. Repeated and not comma-separated, and that is a grammar constraint rather than a preference: `,` is a legal `idchar` (`ids/id-grammar.abnf`) and a query string decodes `%2C` before any delimiter could be split on, so a comma list cannot be parsed back unambiguously — the parameter repetition is the only separator not drawn from the id alphabet. A `+` in a place id must be `%2B` or it arrives as a space and the id is rejected. At most 12 ids (`ETAS_BATCH_MAX_IDS`); more is a 400. Duplicates collapse to one entry.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Live arrivals for up to 12 stops or places in one request — the same answer `/v1/etas/{id}` gives each of them, in one round trip (WP5-7). It exists because a screen watching six places through the polling live engine issued six requests per window where the screen itself issued one, which is a regression no rider would accept for a feature they cannot see. Every id goes through the same producer, so an entry is byte-identical to the single-id response, and the edge coalescer makes a pole shared by two ids one upstream call rather than two (ADR-057).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtaBatch"
                 }
               }
             }
@@ -1538,6 +1622,49 @@
         },
         "required": [
           "etas"
+        ]
+      },
+      "EtaBatchEntry": {
+        "$id": "#/components/schemas/EtaBatchEntry",
+        "type": "object",
+        "properties": {
+          "etas": {
+            "$ref": "#/components/schemas/EtaList"
+          },
+          "failed": {
+            "description": "Boarding points whose upstream board did not answer, ordered by `stopId`. **Absent when every board answered.** A reading missing from `etas` for a pole named here has NOT departed — we could not ask; a client holding previous readings keeps them and labels them, and must not report them `gone`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "The canonical stop or place id **as the request spelled it**, echoed verbatim so a caller can index its own per-target state by it. There is one entry per distinct requested id, always — a missing entry would be unattributable, and a caller would keep that target’s previous readings with nothing to explain why."
+          },
+          "error": {
+            "description": "Present when this id could not be answered at all — the failure a single `/v1/etas/{id}` would have returned as its status. `etas` is then empty and means nothing: branch on this field, never on the empty list. Absent means the id was answered, possibly partially — that is what `failed` is for.",
+            "$ref": "#/components/schemas/WireError"
+          }
+        },
+        "required": [
+          "etas",
+          "id"
+        ]
+      },
+      "EtaBatch": {
+        "$id": "#/components/schemas/EtaBatch",
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaBatchEntry"
+            }
+          }
+        },
+        "required": [
+          "reports"
         ]
       }
     }

@@ -30,7 +30,10 @@
 // The path is declared in the contract (`LIVE_PATH`) because it is part of the wire, and imported here
 // **as a type** so the kernel keeps its empty runtime dependency list (ADR-052 decision 2). See the
 // note on the constant below for why a restated literal is not a second declaration.
-import type { LIVE_PATH as WireLivePath } from '@nextbus/contract'
+import type {
+  ETAS_BATCH_MAX_IDS as WireBatchMaxIds,
+  LIVE_PATH as WireLivePath,
+} from '@nextbus/contract'
 import { dedupeEtas, etaBoardingKey } from './eta'
 import { formatFavoriteRouteKey, memberStopIds, parseRouteId, parseStopOrPlaceId } from './ids'
 import type {
@@ -73,6 +76,22 @@ import type {
  * Not exported: one public declaration of the path is enough, and it is the contract's.
  */
 const LIVE_PATH: typeof WireLivePath = '/v1/live'
+
+/**
+ * How many ids one `/v1/etas?ids=…` request may name — **restated from the contract and pinned to it by
+ * the type system**, exactly as `LIVE_PATH` is above and for the same reason.
+ *
+ * Exported, unlike `LIVE_PATH`, because a *client* has to chunk at it: the poll emulator splits a
+ * subscription into batches of this size, and `packages/api-client` depends on `@nextbus/core` and
+ * `@nextbus/ports` only — adding a contract dependency to reach one integer would be a package edge
+ * bought for nothing, and hard-coding `12` there would be the second declaration this idiom exists to
+ * prevent. `typeof WireBatchMaxIds` is the literal type `12`, so changing the contract's constant makes
+ * **this line a typecheck error**.
+ *
+ * The number's own justification — why twelve, and why exceeding it is a `400` rather than a truncation
+ * — is at the contract's declaration, which is where a native porter reads it.
+ */
+export const ETAS_BATCH_MAX_IDS: typeof WireBatchMaxIds = 12
 
 /**
  * The fastest cadence a shard will poll upstream, and the slowest.
@@ -431,6 +450,48 @@ export function retainFailedPoles(
   return [...merged.values()].sort(compareRefs)
 }
 
+/**
+ * Keep only the readings for these routes — the `routes=` narrowing, as a rule rather than as two
+ * filters.
+ *
+ * **Why this is in the kernel and not left as the three lines it replaces.** `/v1/etas/:id?routes=` was
+ * a `Set` and a `.filter` inside `stopEtas`, which was fine while the edge was the only narrower. WP5-7
+ * makes the batch endpoint carry no per-id narrowing at all — there is no safe delimiter for a nested
+ * list, since `,` is a legal `idchar` (`ids.ts`) — so a target that asks for three routes is narrowed by
+ * the **client** after the batch answers, while the `EtaHub` shard goes on narrowing server-side by
+ * passing `routeIds` into the same producer. Two narrowings, one rule: written twice they would
+ * eventually disagree about a route id that no longer parses or about the empty list, and the two
+ * engines' listener output is precisely what ADR-074's corpus asserts is identical.
+ *
+ * Two decisions, both of which the three lines made implicitly and neither of which was written down:
+ *
+ *  · **An empty or absent list narrows nothing.** "I named no routes" is *not* "I want no readings" —
+ *    the caller that means the latter unsubscribes. `acceptTargets` rejects a `routeIds: []` target
+ *    outright for the same reason, so this branch is reachable only from the HTTP query parameter,
+ *    where `?routes=` with nothing after it is a caller mistake and serving the whole board is the
+ *    harmless direction.
+ *  · **It narrows readings and never failures.** A caller narrowing to three routes is saying which
+ *    arrivals it wants, not which outages it is willing to hear about — and a KMB board is one call for
+ *    every route at the pole, so "did this pole answer" has no per-route truth to filter by (ADR-073
+ *    decision 8). That is why this function takes and returns `Eta[]` rather than an `EtaReport`: the
+ *    shape it must not touch is not in its signature.
+ *
+ * Order is preserved, not canonicalised. This is a filter, and its caller has already decided the
+ * order — `stopArrivals` serves soonest-first and the poll emulator's per-target list feeds
+ * `retainFailedPoles`, which canonicalises. Re-sorting here would silently overwrite the one ordering
+ * in this system that is a rider-facing decision (see `applyLiveEtasToNearby`).
+ *
+ * @spec live#narrowEtasToRoutes
+ */
+export function narrowEtasToRoutes(
+  etas: readonly Eta[],
+  routeIds: readonly string[] | undefined,
+): Eta[] {
+  if (routeIds === undefined || routeIds.length === 0) return [...etas]
+  const wanted = new Set(routeIds)
+  return etas.filter((eta) => wanted.has(eta.routeId))
+}
+
 // ── The reducer ─────────────────────────────────────────────────────────────────────────────
 
 /** A snapshot: the server's whole truth replaces ours, whatever `seq` it carries. See `applyLiveFrame`. */
@@ -632,6 +693,46 @@ export function acceptTargets(targets: readonly WatchTarget[]): {
     )
 
   return { accepted, rejected }
+}
+
+/**
+ * A stable string identifying *which subscription this is* — one declaration, because two renderers
+ * each hold a hook that has to decide when to resubscribe.
+ *
+ * **This exists because of a request storm, not for tidiness.** A live hook subscribes inside an effect
+ * whose dependency list has to name the target set. A `WatchTarget[]` is a fresh array on every render;
+ * the subscription's own delivered readings re-render the screen; so an array dependency makes a
+ * subscription resubscribe *on its own output* — and `subscribe` fires a round immediately, so the loop
+ * is unbounded and each turn of it is an HTTP request. Measured as the first thing that goes wrong when
+ * `applyLiveEtasToNearby`'s result is written back to a query cache.
+ *
+ * A string dependency fixes it, and the string has to be built by a rule both renderers share: if one
+ * keyed on the set and the other on the ordered list they would resubscribe at different moments for
+ * the same rider action, which is drift on the spec rather than on the pixels (ADR-075).
+ *
+ * **The key is over the *accepted* set**, not over what was handed in, and that is what makes it useful:
+ * `watch()` canonicalises with `acceptTargets` anyway, so two orderings of one set — which is exactly
+ * what a Nearby list produces as a rider walks a few metres — are the *same subscription* and must not
+ * cost a reconnect. A duplicate id and an unwatchable one fall out for free. An **empty string
+ * therefore means "nothing here can be watched"**, which is the condition a hook needs before it opens
+ * anything at all.
+ *
+ * `|` is the only separator, because it is the one structural character that appears in **no** stop or
+ * route id: `:` is inside both and `+` separates the members of a place id, so either would collide —
+ * `{P:KMB:A+KMB:B}` and `{P:KMB:A, routes:[KMB:B]}` are different subscriptions that a `+` would spell
+ * identically. Each target contributes its id, then an **arity field** (`*` for all routes, otherwise
+ * the count), then its route ids; the arity is what keeps each target self-delimiting under one
+ * separator, so no two distinct accepted sets can produce one key. Opaque: nothing parses it back.
+ *
+ * @spec live#liveTargetsKey
+ */
+export function liveTargetsKey(targets: readonly WatchTarget[]): string {
+  const fields: string[] = []
+  for (const target of acceptTargets(targets).accepted) {
+    fields.push(target.stopId, target.routeIds === undefined ? '*' : String(target.routeIds.length))
+    if (target.routeIds !== undefined) fields.push(...target.routeIds)
+  }
+  return fields.join('|')
 }
 
 // ── Cadence and routing ─────────────────────────────────────────────────────────────────────

@@ -117,13 +117,19 @@ const LIVE_ETAS: Eta[] = [
 function pollingDataSource(): DataSource {
   const fetchImpl = (async (input: string | URL | Request) => {
     const url = String(input)
-    // `/v1/etas/:id` answers an `EtaReport` since ADR-073 — `{ etas }`, with `failed` **absent**, which
-    // is the shape the Worker serves when every board answered. Spelled here rather than wrapped in a
-    // helper because this fixture's whole job is to be what the real endpoint returns: a stub still
-    // serving a bare array would keep this suite green against a client that had stopped reading `.etas`,
-    // and the symptom would be every row rendering "—" on the real app.
-    const body = url.includes('/v1/etas/') ? { etas: LIVE_ETAS } : STOP_DETAIL
-    if (!url.includes('/v1/etas/') && !url.includes('/v1/stop/')) {
+    // `/v1/etas?ids=…` answers an `EtaBatch` since WP5-7 — one entry per requested id, each an
+    // `EtaReport` (`{ etas }` with `failed` **absent**, the shape the Worker serves when every board
+    // answered, ADR-073) plus the id it answers for. Spelled here rather than wrapped in a helper because
+    // this fixture's whole job is to be what the real endpoint returns: a stub still serving a bare array,
+    // or one that omitted `id`, would keep this suite green against a client that had stopped reading the
+    // field, and the symptom would be every row rendering "—" on the real app.
+    const isBatch = url.includes('/v1/etas?ids=')
+    const body = isBatch
+      ? {
+          reports: new URL(url).searchParams.getAll('ids').map((id) => ({ id, etas: LIVE_ETAS })),
+        }
+      : STOP_DETAIL
+    if (!isBatch && !url.includes('/v1/stop/')) {
       // A fixture that answered an endpoint the screen does not use would hide a screen that started
       // using one. Same discipline as the edge suites, which throw on an unexpected URL.
       throw new Error(`unexpected request: ${url}`)
@@ -176,6 +182,10 @@ function fakeSocketDataSource(): DataSource {
     getNearby: unsupported('getNearby'),
     getRoute: unsupported('getRoute'),
     getEtas: unsupported('getEtas'),
+    // Unsupported on purpose, and it is the *proof* rather than a stub: this fake drives the screen from
+    // a scripted socket, so if the seam were leaking an HTTP call the batch endpoint would be reached and
+    // this would throw. The poll emulator is the only thing that calls it.
+    getEtasBatch: unsupported('getEtasBatch'),
     getSearchIndex: unsupported('getSearchIndex'),
     getClientPolicy: unsupported('getClientPolicy'),
   }

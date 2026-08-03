@@ -93,6 +93,7 @@
 "poleSideSouthwest" = "Southwest side";
 "poleSideWest" = "West side";
 "poleSideNorthwest" = "Northwest side";
+"poleTooCloseToTell" = "Another stop a few steps away — check the sign";
 "openInMaps" = "Open in Maps";
 "arrivalsHere" = "Next buses at this stop";
 "save" = "Save";

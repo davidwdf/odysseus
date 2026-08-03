@@ -79,8 +79,15 @@ handoff note because it is a property of the tooling, not of any one wave.
 order: `boundaries:check` → `boundaries:selftest` → `check:no-adhoc-id-parsing` →
 `check:vm-no-styling:selftest` → `check:vm-no-styling` → `check:no-raw-colours` →
 `check:view-transport-free:selftest` → `check:view-transport-free` → `check:one-endpoint:selftest` →
-`check:one-endpoint`. Several packages' own `test` scripts *are* gates too (above), and `packages/core`'s
-runs `check-spec-coverage.mjs` twice — `--selftest` first, then live.
+`check:one-endpoint` → `check:docs-freshness:selftest`. Several packages' own `test` scripts *are* gates
+too (above), and `packages/core`'s runs `check-spec-coverage.mjs` twice — `--selftest` first, then live.
+
+**One gate in that chain runs only its selftest, and that is not an omission.**
+`check:docs-freshness` (ADR-078) needs a *commit range*, and there is no canonical one locally — on `main`
+`origin/main..HEAD` is empty, and an empty range is a failure by design. So the chain runs the selftest
+(whose last control applies the real rule to the last 20 commits of the current branch, and which **fails
+on a shallow clone** rather than quietly examining one), while the live range runs in `ci.yml` with the
+range computed from the event. Check a branch by hand with `pnpm check:docs-freshness`.
 
 **Every `scripts/check-*.mjs` shares one shape, and a new one should copy it.** A `POLICED` list of
 directories, a `PATTERNS` list of `{ id, re, hint }`, an `ALLOWLIST` whose entries name the **one rule**
@@ -99,6 +106,12 @@ nothing (the repo has hit that eight times):
   a file in `packages/core` cannot even *spell* `Date.now(` or `Math.random(` in a comment. That is why
   `live.ts` and `policy.ts` describe those forms in circumlocutions.
 
+One gate departs from the shape on purpose. `precommit-docs-check.mjs` (ADR-078) polices **commits**
+rather than files, so it has no `POLICED` list, no `PATTERNS` and — deliberately — **no `ALLOWLIST`**: its
+escape hatch is `[docs-ok]` in a commit message, which is per commit, permanent, and visible in `git log`
+without a second file to rot. It keeps the two properties that matter: controls that must produce no
+findings (four of its eight rule scenarios), and a hard failure when it examined nothing.
+
 | Script | Polices | Bans |
 |---|---|---|
 | `scripts/boundaries/check.mjs` | every layer's `dirs` in `layers.json` | cross-layer imports (via dependency-cruiser + biome), plus each layer's `deniedGlobals` / `bannedSyntax` |
@@ -108,6 +121,7 @@ nothing (the repo has hit that eight times):
 | `check-no-adhoc-id-parsing.mjs` | the whole repo | `.split(':')`, `.split('+')`, `.split('\|')`, `.startsWith('P:')` |
 | `check-spec-coverage.mjs` | `packages/core/{src,spec}` | a `@spec` tag with no corpus group and a corpus group with no tag, **both directions**, plus `REQUIRED_ROWS` |
 | `apps/web/scripts/check-no-derivation.mjs` | `apps/web/src/{components,screens}/` only — `adapters/` is exempt | the renderer computing anything the kernel should |
+| `precommit-docs-check.mjs` | **commits, not files** — the index in hook mode, each commit in `--range` mode | a commit changing `apps`/`packages`/`scripts` or any `.ts`/`.js` file with no `docs/`, `*.md` or `README` change and no `[docs-ok]` |
 
 **Two layer facts that decide where a test can live.** `layers.json` gives `server` the dirs
 `["apps/edge"]` — **including `apps/edge/test/`** — and `use: [contract, kernel, ports, adapters]`, so an
@@ -170,8 +184,13 @@ don't work around it per package.
   the KV namespace yet, and a cron that fails every night is a cron everyone learns to ignore. A
   manual `workflow_dispatch` always runs, and a preflight step names whatever is missing rather than
   letting it surface as a wrangler error mid-publish. Full inventory: `docs/10`.
-- **PR checks (still to build — WP0-5):** `turbo run typecheck lint test build` (cached, only
-  affected packages).
+- **`ci.yml` (the one that gates every PR):** `pnpm typecheck` · `pnpm lint` · `pnpm test` ·
+  **docs freshness per commit** (`precommit-docs-check.mjs --range`, ADR-078) · `wrangler deploy
+  --dry-run` · `git diff --exit-code`, all on a **clean checkout** with `fetch-depth: 0` — which is
+  required rather than convenient, because the docs step needs `<base sha>..HEAD` to resolve and its
+  selftest's live control refuses a shallow clone. It is deliberately *not* `turbo run … ` over only the
+  affected packages: `origin/main` was merged red once because turbo replayed a cached pass from another
+  worktree (ADR-070), which is the whole reason this file runs the root scripts on a fresh clone.
 - **Web/PWA deploy (still to build):** `pnpm --filter @nextbus/mobile build:web` → deploy `dist/` to
   **Cloudflare Pages** on merge to `main`. `EXPO_PUBLIC_API_URL` must be the deployed Worker: it is
   baked into the bundle *and* into the service worker's runtime-caching routes.

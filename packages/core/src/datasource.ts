@@ -2,6 +2,7 @@ import type { SearchIndex } from './search'
 import type {
   ClientPolicy,
   Eta,
+  EtaBatch,
   EtaReport,
   LatLng,
   NearbyStop,
@@ -81,6 +82,31 @@ export interface DataSource {
    * `failed` is absent when every board answered, which is the common case and the cheap one.
    */
   getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport>
+  /**
+   * The same answer as `getEtas`, for up to `ETAS_BATCH_MAX_IDS` ids, in **one** request (WP5-7).
+   *
+   * **Why the seam grew a second read of the same data.** A polling live engine issues one request per
+   * target per cadence. That is invisible while a screen watches one stop, and it is a regression the
+   * moment one watches six: Nearby fetched `/v1/nearby` once per window and would have fetched
+   * `/v1/etas/:id` six times, which is why `applyLiveEtasToNearby` sat corpus-pinned with no consumer
+   * for a whole wave. One request per round is what makes Nearby a live adopter at all.
+   *
+   * On the seam rather than private to `EdgeClient` for the reason `getEtas` is: **no screen calls
+   * either.** Both exist for the poll emulator, and an iOS or Android port that reimplements that
+   * emulator needs this call declared where it reads the rest of the seam (ADR-051). Its readers are
+   * `EdgeClient` itself and `createPollTransport`.
+   *
+   * **No route narrowing, deliberately.** A per-id route list would need a nested delimiter and there
+   * is no safe character for one (`,` is a legal `idchar`), so the batch answers every route at every
+   * id and a caller that wants fewer applies `narrowEtasToRoutes` — the same kernel rule the edge
+   * applies to `?routes=`. One declaration, two call sites, and the socket engine goes on narrowing
+   * server-side without the two engines' output diverging.
+   *
+   * There is **one entry per distinct id**, in code-point order, and an entry whose `error` is set
+   * carries an empty `etas` that means nothing. Branch on `error`, never on the empty list — that is
+   * the same distinction ADR-073 exists to preserve, one level up.
+   */
+  getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
   /** Subscribe to live updates for the given targets. */
   watch(targets: WatchTarget[], onUpdate: EtaListener, opts?: WatchOptions): Subscription
   /**

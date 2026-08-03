@@ -13,8 +13,12 @@ import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useClientPolicy } from '../../lib/useClientPolicy'
+import { useLiveNearby } from '../../lib/useLiveNearby'
 import { useLocation } from '../../lib/useLocation'
 import { useLocale } from '../../providers/LocaleProvider'
+
+/** One array, so "no cards yet" has a stable identity — see `useLiveNearby`'s note on the storm. */
+const EMPTY_IDS: readonly string[] = []
 
 export default function Nearby() {
   const locale = useLocale()
@@ -32,13 +36,27 @@ export default function Nearby() {
     queryFn: ready
       ? () => dataSource.getNearby({ lat: ready.lat, lng: ready.lng }, 500)
       : skipToken,
+    // **Only on error**, and that is the same shape the Place screen uses (`app/stop/[id].tsx`). The
+    // arrivals come from the subscription below, so a healthy list needs no refetch — but a *failed*
+    // first load had no way back at all before WP5-7: `retry: 1`, `refetchOnWindowFocus: false`, no
+    // interval, and an error branch with no pull-to-refresh, so a rider whose first request lost a
+    // network race sat on a dead screen until they killed the app.
+    refetchInterval: (q) => (q.state.status === 'error' ? policy.refreshAfterMs : false),
   })
 
   const onRefresh = useCallback(() => {
     void query.refetch()
   }, [query])
 
-  const now = Date.now()
+  // The arrivals arrive by subscription (WP5-7), and the clock comes back out of the same hook —
+  // deliberately inseparable, for the reason `useLiveEtas` gives at length: `refetchInterval` was a
+  // screen's clock as much as its fetch, and `const now = Date.now()` only advances when something
+  // re-renders. This screen had **neither** before now: no interval anywhere, so its minutes never aged
+  // and `etaReadout`'s staleness cue could not fire. One request per window feeds up to six cards.
+  const { now } = useLiveNearby(ready, query.data?.map((stop) => stop.stop.id) ?? EMPTY_IDS, {
+    enabled: query.isSuccess,
+    refreshAfterMs: policy.refreshAfterMs,
+  })
   // The whole screen's content, derived in one call by the kernel (WP4-0). The order, the row cap, the
   // captions and the "+N more" counts are all `nearbyView`'s — pinned by
   // `packages/core/spec/stop-card.spec.json` and shared byte-for-byte with any other renderer. This

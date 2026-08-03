@@ -1,14 +1,14 @@
 import type { NearbyStop } from '@nextbus/core'
 import { nearbyFromCells } from '@nextbus/data-normalize'
 import type { DatasetSource } from './dataset'
-import { stopArrivals, toMergedStop } from './stop-route'
+import { LIST_CTB_BUDGET, stopArrivals, toMergedStop } from './stop-route'
 
 // Bounds so a cold nearby request stays cheap (all edge-cached). KMB and GMB poles cost one
 // stop-board call each regardless of route count (ADR-042), so the fan-out is dominated by
-// CTB; `NEARBY_CTB_BUDGET` caps CTB per place. The v2 push engine (ADR-004) replaces this
-// fan-out later.
+// CTB; `LIST_CTB_BUDGET` caps CTB per place and is shared with the batch ETA endpoint, which is
+// the other reader that answers about several places at once (WP5-7). The v2 push engine
+// (ADR-004) replaces this fan-out later.
 const MAX_STOPS = 6
-const NEARBY_CTB_BUDGET = 12
 
 /**
  * GET /v1/nearby — the closest places, each with its soonest de-duplicated arrivals.
@@ -44,7 +44,7 @@ export async function nearby(
       // Already per-card: `stopArrivals` is called per place, so its failures name this place's own
       // poles and need no attribution. The kernel does attribute, for the live path, where one round's
       // failures span every card.
-      const { etas, failed } = await stopArrivals(place, NEARBY_CTB_BUDGET)
+      const { etas, failed } = await stopArrivals(place, LIST_CTB_BUDGET)
       return {
         stop: toMergedStop(place),
         distanceM,

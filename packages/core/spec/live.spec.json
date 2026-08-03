@@ -8369,6 +8369,293 @@
           ]
         }
       ]
+    },
+    "narrowEtasToRoutes": {
+      "doc": "The `routes=` narrowing, as one rule rather than as two filters (WP5-7). It runs in the edge's `stopEtas` for `/v1/etas/:id?routes=` and in the poll emulator for a target that named routes — the batch endpoint carries no per-id route list, because `,` is a legal `idchar` and there is no safe delimiter for a nested one, so the client narrows one hop after the batch answers while the `EtaHub` shard goes on narrowing server-side. Written twice the two would eventually disagree about a route id that no longer parses or about the empty list, and identical listener output on both engines is exactly what the live-rounds corpus asserts. It narrows READINGS and never failures, and it preserves the caller's order rather than canonicalising.",
+      "cases": [
+        {
+          "name": "absent-routes-narrows-nothing",
+          "why": "THE CONTROL, and the branch every healthy round takes. `undefined` means \"every route at this stop\" — the ordinary case — so an implementation that treated it as an empty allow-list would blank every arrival in the app while satisfying every other row here.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": null
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "an-empty-list-narrows-nothing-rather-than-everything",
+          "why": "\"I named no routes\" is not \"I want no readings\" — the caller that means the latter unsubscribes. `acceptTargets` rejects a `routeIds: []` target outright, so this branch is reachable only from `?routes=` with nothing after it, which is a caller mistake; serving the whole board is the harmless direction and blanking the screen is not.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": []
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "keeps-only-the-named-routes-in-the-order-given",
+          "why": "The ordinary narrowing, and the order matters: this is a filter over a list whose caller has already decided the order — `stopArrivals` serves soonest-first and that ordering is a rider-facing decision. Re-sorting here would silently overwrite it.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": ["KMB:86K:outbound:1"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "narrows-by-route-across-every-pole-of-a-place",
+          "why": "A place is N boarding poles (ADR-042) and one line can board at two of them (WP5-9), so narrowing to a route must keep BOTH of that route's readings. An implementation keyed on the (pole, route) pair would drop the sibling kerb, which is the defect WP5-9 exists to prevent arriving from a new direction.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:9F0D1B0B21D0C0A6",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:57:10+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": ["KMB:86K:outbound:1"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:9F0D1B0B21D0C0A6",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:57:10+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "a-route-nobody-lists-narrows-to-nothing",
+          "why": "An empty result is the honest answer to \"show me a route that is not here\", and it is NOT the same as the empty-list case above. A rider watching one route at a stop that has stopped running it should see no arrivals rather than every arrival.",
+          "args": {
+            "etas": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "routeIds": ["KMB:999X:outbound:1"]
+          },
+          "expect": []
+        }
+      ]
+    },
+    "liveTargetsKey": {
+      "doc": "A stable string identifying WHICH SUBSCRIPTION THIS IS, so a live hook's effect can depend on a string instead of on an array (WP5-7). It exists because of a request storm rather than for tidiness: a `WatchTarget[]` is a fresh array on every render, the subscription's own readings re-render the screen, and `subscribe` fires a round immediately — so an array dependency makes a subscription resubscribe on its own output, unboundedly, one HTTP request per turn. The key is over the ACCEPTED set, so two orderings of one set are the same subscription (which is what a Nearby list produces as a rider walks a few metres) and an unwatchable id falls out for free; an EMPTY STRING therefore means \"nothing here can be watched\". `|` is the only separator because it is the one structural character absent from every stop and route id, and each target contributes an arity field (`*` for all routes, else the count) so that no two distinct accepted sets can spell one key.",
+      "cases": [
+        {
+          "name": "one-target-all-routes",
+          "why": "THE CONTROL and the ordinary case: absent `routeIds` means every route, spelled `*`, so the key of the commonest subscription in the app is stable and short.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:548DAB3A4F71EB68"
+              }
+            ]
+          },
+          "expect": "KMB:548DAB3A4F71EB68|*"
+        },
+        {
+          "name": "nothing-watchable-is-the-empty-string",
+          "why": "The condition a hook needs before it opens anything at all. `acceptTargets` rejects an id that does not parse, so a screen holding only stale favourites must not subscribe — and a key that was non-empty for a set with nothing in it would have it open a connection watching nothing.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "not-an-id"
+              }
+            ]
+          },
+          "expect": ""
+        },
+        {
+          "name": "two-orderings-of-one-set-are-one-key",
+          "why": "THE SECOND CONTROL, and the whole reason the key runs over the accepted set. A Nearby list reorders as a rider walks a few metres; keyed on the array as given, every such reorder would tear down the subscription and fire an extra round inside the same window — which breaks the request-count property WP5-7 exists for.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:B"
+              },
+              {
+                "stopId": "KMB:A"
+              }
+            ]
+          },
+          "expect": "KMB:A|*|KMB:B|*"
+        },
+        {
+          "name": "a-duplicate-id-does-not-change-the-key",
+          "why": "`acceptTargets` merges two targets for one stop by union, so asking twice is one subscription. A key built from the input would resubscribe when a caller deduplicated its own list.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:A"
+              },
+              {
+                "stopId": "KMB:A"
+              }
+            ]
+          },
+          "expect": "KMB:A|*"
+        },
+        {
+          "name": "a-narrowed-target-carries-its-arity-and-its-routes",
+          "why": "The count is what keeps each target self-delimiting under one separator. Without it `{P:KMB:A+KMB:B}` and `{P:KMB:A, routes:[KMB:B]}` — two different subscriptions — would spell the same key, because `+` separates the members of a place id and `:` is inside every id. That collision is a failure to resubscribe, which is silent.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "KMB:A",
+                "routeIds": ["KMB:6:outbound:1", "KMB:1:outbound:1"]
+              }
+            ]
+          },
+          "expect": "KMB:A|2|KMB:1:outbound:1|KMB:6:outbound:1"
+        },
+        {
+          "name": "a-place-id-with-a-plus-is-not-mistaken-for-a-route-list",
+          "why": "The collision the arity field prevents, from the other side: a merged place id contains `+`, and this key must be different from the narrowed single-pole target above. Both rows are needed — either alone passes an implementation that used `+` as its route separator.",
+          "args": {
+            "targets": [
+              {
+                "stopId": "P:KMB:A+KMB:B"
+              }
+            ]
+          },
+          "expect": "P:KMB:A+KMB:B|*"
+        }
+      ]
     }
   }
 }

@@ -135,9 +135,14 @@ const gone = new EdgeRequestError(404, 'not_found', false, 'no such stop')
  * What one target answered in one round.
  *
  * `Eta[]` rather than an `EtaReport`, and the driver wraps it: these rows are about *whole-target*
- * failure — the `/v1/etas/:id` call itself throwing — which is what `{ throws }` says. Per-pole failure
- * (`EtaReport.failed`, ADR-073) is a property of a round rather than of a frame, so its rows live in the
- * shared corpus this file's header points at, where the shard is measured against them too.
+ * failure, which since WP5-7 arrives as the batch entry's own `error` rather than as a thrown request.
+ * That substitution is deliberate and it keeps every transcript below byte-identical: a target-level
+ * failure is a fact about one id, the batch has a field for exactly that, and the shard produces the
+ * same thing by calling the read path per target inside the object. A **request**-level failure — the
+ * one shape only this engine can have — is a different scenario and has its own row at the bottom of
+ * this file. Per-pole failure (`EtaReport.failed`, ADR-073) is a property of a round rather than of a
+ * frame, so its rows live in the shared corpus this file's header points at, where the shard is
+ * measured against them too.
  */
 type Answer = Eta[] | { throws: EdgeRequestError }
 type Round = Record<string, Answer>
@@ -207,15 +212,26 @@ async function throughPolling(scenario: Scenario): Promise<{ updates: string[]; 
     clock,
     pollMs: 30_000,
     timers,
-    getEtas: async (stopId) => {
-      calls.push(`${round}:${stopId}`)
-      const answer = scenario.rounds[round]?.[stopId]
-      if (answer === undefined)
-        throw new Error(`scenario "${scenario.name}": no round ${round} answer for ${stopId}`)
-      if ('throws' in answer) throw answer.throws
-      // `failed` absent, not `[]`: every board answered in these rows, and that is the shape the Worker
-      // serves for it (`EtaReportSchema`) — so the transport takes the same branch it takes in production.
-      return { etas: answer }
+    // **One request per round, so `calls` counts requests** (WP5-7). The entry a target's `{ throws }`
+    // becomes is the batch's own `error` field, which is the wire form of what the single-id endpoint
+    // answered with as its status — so the emulator reaches the identical `RoundFailure` branch and every
+    // transcript in the table below is unchanged.
+    getEtasBatch: async (ids) => {
+      calls.push(`${round}:${ids.join(',')}`)
+      return {
+        reports: ids.map((stopId) => {
+          const answer = scenario.rounds[round]?.[stopId]
+          if (answer === undefined)
+            throw new Error(`scenario "${scenario.name}": no round ${round} answer for ${stopId}`)
+          if ('throws' in answer) {
+            const { code, message, retryable } = answer.throws
+            return { id: stopId, etas: [], error: { code, message, retryable } }
+          }
+          // `failed` absent, not `[]`: every board answered in these rows, and that is the shape the
+          // Worker serves (`EtaReportSchema`) — so the transport takes its production branch.
+          return { id: stopId, etas: answer }
+        }),
+      }
     },
   })
   const updates: string[] = []
@@ -501,9 +517,11 @@ describe('properties the matrix table cannot state', () => {
     if (!scenario)
       throw new Error('the scenario was renamed — this assertion is now measuring nothing')
     const { calls } = await throughPolling(scenario)
-    // Round 2 asks about A only. Without honouring `retryable: false` there would be a `2:KMB:B`, and
-    // the poll would keep issuing one every cadence for as long as the screen stayed open.
-    expect(calls).toEqual(['0:KMB:A', '0:KMB:B', '1:KMB:A', '1:KMB:B', '2:KMB:A'])
+    // Round 2 asks about A only. Without honouring `retryable: false` the third entry would read
+    // `2:KMB:A,KMB:B`, and the poll would keep asking every cadence for as long as the screen stayed
+    // open. **This is also the request-count assertion** (WP5-7): three rounds over two targets is three
+    // requests, where the per-target fan-out this replaced made five.
+    expect(calls).toEqual(['0:KMB:A,KMB:B', '1:KMB:A,KMB:B', '2:KMB:A'])
   })
 
   it('never polls at all when every target is rejected', async () => {
@@ -513,9 +531,9 @@ describe('properties the matrix table cannot state', () => {
       clock,
       pollMs: 30_000,
       timers,
-      getEtas: async (stopId) => {
-        calls.push(stopId)
-        return { etas: [] }
+      getEtasBatch: async (ids) => {
+        calls.push(...ids)
+        return { reports: ids.map((id) => ({ id, etas: [] })) }
       },
     })
     const updates: string[] = []
@@ -558,7 +576,9 @@ describe('properties the matrix table cannot state', () => {
       clock,
       pollMs: 30_000,
       timers,
-      getEtas: async () => ({ etas: [eta(STOP_A, ROUTE_1, '10:02')] }),
+      getEtasBatch: async (ids) => ({
+        reports: ids.map((id) => ({ id, etas: [eta(STOP_A, ROUTE_1, '10:02')] })),
+      }),
     })
     const polled: LiveEtaUpdate[] = []
     const pollController = createLiveEtaController({
@@ -626,11 +646,23 @@ describe('properties the matrix table cannot state', () => {
       clock,
       pollMs: 30_000,
       timers,
-      getEtas: async (stopId) => {
-        // Round 0 answers for both; from round 1 STOP_B is permanently gone.
-        if (stopId === STOP_B && round > 0) throw gone
-        return { etas: [eta(stopId, stopId === STOP_A ? ROUTE_1 : ROUTE_6, '10:02')] }
-      },
+      getEtasBatch: async (ids) => ({
+        reports: ids.map((stopId) => {
+          // Round 0 answers for both; from round 1 STOP_B is permanently gone — as an entry-level
+          // `error`, which is where a target-level failure lives on the batch.
+          if (stopId === STOP_B && round > 0) {
+            return {
+              id: stopId,
+              etas: [],
+              error: { code: gone.code, message: gone.message, retryable: gone.retryable },
+            }
+          }
+          return {
+            id: stopId,
+            etas: [eta(stopId, stopId === STOP_A ? ROUTE_1 : ROUTE_6, '10:02')],
+          }
+        }),
+      }),
     })
     const polled: LiveEtaUpdate[] = []
     const pollController = createLiveEtaController({
@@ -707,7 +739,12 @@ describe('properties the matrix table cannot state', () => {
       clock,
       pollMs: 30_000,
       timers,
-      getEtas: async () => ({ etas: [eta(STOP_A, ROUTE_1, round === 0 ? '10:02' : '10:09')] }),
+      getEtasBatch: async (ids) => ({
+        reports: ids.map((id) => ({
+          id,
+          etas: [eta(STOP_A, ROUTE_1, round === 0 ? '10:02' : '10:09')],
+        })),
+      }),
     })
     const updates: string[] = []
     const controller = createLiveEtaController({
@@ -733,7 +770,7 @@ describe('properties the matrix table cannot state', () => {
       transport: createPollTransport({
         clock,
         pollMs: 30_000,
-        getEtas: async () => ({ etas: [] }),
+        getEtasBatch: async () => ({ reports: [] }),
       }),
       targets: ONE_TARGET,
       emit: () => {},

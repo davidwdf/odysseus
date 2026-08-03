@@ -64,7 +64,18 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           in: p.in,
           required: p.required,
           description: p.description,
-          schema: { type: p.type },
+          // A repeated parameter (`?ids=a&ids=b`) is a different *serialization*, not just a different
+          // type, so it needs `style`/`explode` and not only an array schema. Both are spelled out
+          // even though `explode: true` is already the default for `style: form`: a generator that
+          // reads only one of the two must not be able to emit a comma-joined string, which for
+          // `/v1/etas?ids=` would be unparseable by construction (see that parameter's description).
+          ...(p.type === 'string[]'
+            ? {
+                schema: { type: 'array', items: { type: 'string' } },
+                style: 'form',
+                explode: true,
+              }
+            : { schema: { type: p.type } }),
         })),
         responses: {
           '200': {

@@ -11,7 +11,7 @@
 // around `vi.useFakeTimers`, which patches globals for the whole file and cannot express "advance this
 // transport but not that one". Two named methods a test can implement in six lines can.
 
-import type { ClientFrame, EtaReport, ServerFrame } from '@nextbus/core'
+import type { ClientFrame, EtaBatch, ServerFrame } from '@nextbus/core'
 import type { Clock, LiveTransport } from '@nextbus/ports'
 import type { Endpoints } from '../endpoint'
 
@@ -58,13 +58,20 @@ export interface LiveEtaEngine extends LiveEtaTransport {
 export interface LiveTransportContext {
   endpoints: Endpoints
   /**
-   * The client's own `/v1/etas/:id` call — what the poll emulator polls.
+   * The client's own `/v1/etas?ids=…` call — **one request for a whole round** (WP5-7).
    *
-   * An `EtaReport`, not an `Eta[]` (ADR-073). The transport needs the `failed` half: without it an
-   * empty list from an outage is indistinguishable from a stop with no buses, and the diff it feeds
-   * reports every reading departed.
+   * It replaced a per-target `getEtas` rather than joining it, and the replacement is the point: two
+   * fan-out shapes for one round would mean the rules below it — retention, the drop, the failure
+   * ordering — were implemented twice, with a test able to exercise the branch production never takes.
+   * A single-target round asks for one id, which is a stable, shareable colo-cache key just as
+   * `/v1/etas/:id` was.
+   *
+   * An `EtaBatch` and not `Eta[][]` (ADR-073, one level up). The transport needs the `failed` half per
+   * id: without it an empty list from an outage is indistinguishable from a stop with no buses, and the
+   * diff it feeds reports every reading departed. It needs the per-entry `error` half for the same
+   * reason at the target level — a stale favourite must not look like a stop that went quiet.
    */
-  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport>
+  getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
   /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
   pollMs: number
   clock: Clock

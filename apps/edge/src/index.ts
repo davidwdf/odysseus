@@ -1,5 +1,5 @@
 import type { ErrorCode } from '@nextbus/core'
-import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
+import { CLIENT_POLICY_DEFAULTS, ETAS_BATCH_MAX_IDS } from '@nextbus/core'
 import { fetchEta } from '@nextbus/data-normalize'
 import { type DatasetSource, datasetBuildCount, getDataset } from './dataset'
 import type { Env } from './env'
@@ -7,7 +7,7 @@ import { errorResponse, fail as failWith } from './errors'
 import { ETA_TTL_SEC } from './eta-cache'
 import { LIVE_PATH, liveUpgrade } from './live'
 import { nearby } from './nearby'
-import { routeDetail, stopDetail, stopEtas } from './stop-route'
+import { LIST_CTB_BUDGET, routeDetail, stopDetail, stopEtas, stopEtasBatch } from './stop-route'
 import { fetchTile, parseTilePath } from './tiles'
 
 /**
@@ -372,7 +372,65 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     )
   }
 
-  // GET /v1/etas/:id[?routes=a,b]  → Eta[] for a stop (canonical id). The app-facing
+  // GET /v1/etas?ids=a&ids=b  → EtaBatch. One round trip for a screen watching N places (WP5-7).
+  //
+  // **Matched before the `/v1/etas/:id` branch below and on the absence of a third segment**, which
+  // `parts`' `filter(Boolean)` makes true for `/v1/etas` and for `/v1/etas/` alike. Note the behaviour
+  // change that comes with it: `/v1/etas/` used to fall through to the 404 at the end of this function
+  // and is now a 400 with a usage line, which is better and is still a change.
+  //
+  // **`getAll`, because the parameter repeats rather than carrying a delimiter.** `,` is a legal
+  // `idchar` (`packages/contract/src/ids/id-grammar.abnf` — only `:`, `+` and `|` are structural), and
+  // `URLSearchParams` decodes `%2C` *before* anything could split on it, so a comma-separated single
+  // value is irreversibly ambiguous: `?ids=A%2CB,C` and `?ids=A,B%2CC` arrive identical. Repetition is
+  // the one separator not drawn from the id alphabet. (`/v1/live?targets=` is comma-separated and stays
+  // that way — changing a socket's URL grammar is a wire change with no defect behind it, and real ids
+  // contain no commas. The inconsistency is deliberate and recorded rather than propagated.)
+  //
+  // No `decodeId` here: `getAll` has already percent-decoded each value, and a value it could not
+  // decode never reaches this handler as a distinguishable case — `new URL()` is tolerant where
+  // `decodeURIComponent` throws. The asymmetry with `/v1/etas/{id}` is real and worth knowing.
+  if (parts[0] === 'v1' && parts[1] === 'etas' && !parts[2]) {
+    const asked = url.searchParams.getAll('ids').filter((id) => id.length > 0)
+    if (asked.length === 0) {
+      return fail(
+        'bad_request',
+        'usage: /v1/etas?ids=<canonical id>&ids=<canonical id>… (repeated, percent-encoded)',
+      )
+    }
+    // Deduplicated by string equality and sorted in code-point order — the same total order
+    // `acceptTargets` puts its accepted set in — so the colo-cache key below is a property of the
+    // **set** rather than of the order a client happened to list it in. Two ids that resolve to one
+    // place stay two entries: the caller asked two questions and indexes its state by both.
+    const ids = [...new Set(asked)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    if (ids.length > ETAS_BATCH_MAX_IDS) {
+      // A 400 and never a truncation. `radius` may clamp because a clamped radius still answers the
+      // question asked; a shortened id list does not — the caller would hold that target's previous
+      // readings for ever with no `status` frame to say they had stopped being refreshed, which reads
+      // exactly like the outage this endpoint exists to make visible.
+      return fail(
+        'bad_request',
+        `at most ${ETAS_BATCH_MAX_IDS} ids per request; got ${ids.length} — send them in chunks`,
+      )
+    }
+    // The cache key is rebuilt from the normalized list, so `?ids=b&ids=a` and `?ids=a&ids=b` are one
+    // entry. `delete` then `append` touches only `ids`, so any other parameter a caller sent (a test's
+    // `?case=`, since `caches.default` is reset between neither tests nor files) still keys the entry.
+    const keyUrl = new URL(url.toString())
+    keyUrl.searchParams.delete('ids')
+    for (const id of ids) keyUrl.searchParams.append('ids', id)
+    return cached(
+      request,
+      keyUrl,
+      ctx,
+      env,
+      ETA_TTL_SEC,
+      (dataset) => stopEtasBatch(dataset, ids, LIST_CTB_BUDGET),
+      'etas error',
+    )
+  }
+
+  // GET /v1/etas/:id[?routes=a,b]  → EtaReport for a stop (canonical id). The app-facing
   // ETA endpoint; the lower-level /v1/eta/:co/:stop/:route stays for debugging.
   if (parts[0] === 'v1' && parts[1] === 'etas' && parts[2]) {
     const id = decodeId(parts[2])

@@ -86,7 +86,11 @@ curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694&radius=500"
 # Slice 2 — canonical-id endpoints (ids are URL-encoded, e.g. KMB%3A<stopId>)
 curl "http://localhost:8787/v1/stop/KMB%3A<stopId>"            # → StopDetail (routes + next ETA)
 curl "http://localhost:8787/v1/route/KMB%3A6%3Aoutbound%3A1"   # → RouteDetail (ordered stops)
-curl "http://localhost:8787/v1/etas/KMB%3A<stopId>"            # → Eta[] (canonical; what getEtas calls)
+curl "http://localhost:8787/v1/etas/KMB%3A<stopId>"            # → { etas, failed? } — what getEtas calls
+# …and the batch (WP5-7): the parameter REPEATS, and each id is percent-encoded. A place id contains
+# `+`, which a query string decodes as a space — so `%2B` or the id is rejected. `,` would be ambiguous:
+# it is a legal `idchar`, and `%2C` is decoded before any delimiter could be split on.
+curl "http://localhost:8787/v1/etas?ids=KMB%3A<stopId>&ids=P%3AKMB%3A<a>%2BCTB%3A<b>"   # → { reports: […] }
 
 # /v1/index → SearchIndex (compact routes + stops for on-device search and the keypad)
 curl -s "http://localhost:8787/v1/index" | head -c 200
@@ -205,7 +209,7 @@ than four scattered ones. The files that *are* loaded sit next to the thing that
 | `VITE_API_URL` | **no, and cannot be** | `apps/web`, at build time (`src/adapters/datasource.ts`) | `apps/web/.env.local` (see `.env.example`) or the build env |
 | `LIVE_ALLOWED_ORIGINS` | no | the Worker, on a `/v1/live` upgrade | optional `[vars]` in `wrangler.toml`, or `apps/edge/.dev.vars` locally. Unset ⇒ **no origin filtering**, which is today's state (ADR-056 decision 9) |
 | `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` | no | both app shells, at build time (`lib/datasource.ts` · `src/adapters/datasource.ts`) | the escape hatch for a socket tier on a different host, passed to `EdgeClientOptions.liveUrl`. **Unset is the normal case** and means `wss://<same host>/v1/live`, derived by `liveSocketUrl` ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)) |
-| `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` | no | both app shells, at build time | `poll` (**the shipped default**) \| `socket`. One declaration of the mapping, in `@nextbus/api-client`'s `live/select.ts`; there is deliberately no `auto`, and an unrecognised value falls back to `poll` with a `console.warn` naming it. **`socket` in `apps/web` is real configuration that changes nothing yet** — no screen there calls `watch()` until WP5-7 ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)) |
+| `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` | no | both app shells, at build time | `poll` (**the shipped default**) \| `socket`. One declaration of the mapping, in `@nextbus/api-client`'s `live/select.ts`; there is deliberately no `auto`, and an unrecognised value falls back to `poll` with a `console.warn` naming it. Since WP5-7 it is **not** inert in `apps/web` either — `Nearby` holds a subscription there, so this variable decides which engine feeds its arrivals in both renderers ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll), [ADR-079](./08-decision-log.md#adr-079--one-request-per-round-the-batch-eta-endpoint-and-nearby-as-a-live-adopter)) |
 
 **One variable per renderer, and the socket URL is not one of them.** `EXPO_PUBLIC_API_URL` and
 `VITE_API_URL` are the *only* endpoint configuration; `wss://<same host>/v1/live` is **derived** from each

@@ -104,12 +104,21 @@ working perfectly on defaults, which is the design *and* the failure nobody woul
 
 ### Phase 1 — Edge proxy + cache (ship this first)
 ```
-Client ──poll every ~20–30s──▶ Worker /v1/etas/:id
+Client ──poll every ~30s──▶ Worker /v1/etas?ids=<a>&ids=<b>…   ← ONE request per round (ADR-079)
+                                  │  (or /v1/etas/:id for a single stop; same producer, same answer)
                                   │  Cache API hit (max-age 30s) → return cached
                                   └─ miss → coalesce(pole) ──┬─ in-flight? await it
                                                              └─ else fetch upstream (KMB/CTB/GMB)
                                             → normalize → cache → return
 ```
+- **A round is one request, not one per target** (WP5-7, ADR-079). `/v1/etas?ids=…` answers `{ reports:
+  [{ id, etas, failed?, error? }] }` — one entry per **distinct** id, in code-point order, each entry
+  byte-identical to what `/v1/etas/<that id>` serves, because it goes through the same producer. The
+  parameter **repeats** rather than carrying a delimiter: `,` is a legal `idchar` and a query string
+  decodes `%2C` before anything could split on it. Cap 12; over it is a `400` and the client chunks. A
+  per-id failure is that entry's own `error` with the request still a `200`, so one stale favourite cannot
+  take five working stops down with it. This is what let Nearby adopt a live subscription at all — the
+  per-target fan-out would have taken its six places from one request per window to six.
 - **Coalescing happens in two layers, and both are needed** (ADR-057, `apps/edge/src/eta-cache.ts`):
   the edge **Cache API** only helps once a response exists, so a burst of concurrent first-callers
   all miss it; an isolate-level map keyed per *upstream call* shares the **in-flight promise**, so a

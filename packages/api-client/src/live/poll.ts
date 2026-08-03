@@ -1,5 +1,16 @@
 // The poll emulator: HTTP polling, wearing the socket protocol.
 //
+// ONE REQUEST PER ROUND, NOT ONE PER TARGET (WP5-7)
+// It was one per target, and that is the single fact that kept this engine off the busiest screen in the
+// app: Nearby watches up to six places and fetches its own list once per window, so adopting a
+// subscription would have taken it from one request per window to six. `/v1/etas?ids=…` answers about a
+// whole round, `chunkIds` splits a set larger than the wire's cap, and everything below the fetch is
+// unchanged — the per-target bookkeeping, the retention, the drop and the failure ordering all still work
+// on one `RoundResult` per accepted target, because that is the unit the *rules* are written in. What
+// genuinely changed shape is failure: a **request** can now fail for several targets at once, which a
+// per-target fan-out could not express and which the shard can never produce, so it is fanned back out to
+// one failure per target of that request. See `runRound`.
+//
 // WHY EMULATE A SERVER RATHER THAN JUST CALL BACK WITH A LIST
 // Because `watch()` is the seam the whole v2 plan turns on (ADR-004), and until now it was a *shim* —
 // it fanned out `getEtas`, concatenated the results and handed the caller a flat `Eta[]` every 30
@@ -31,13 +42,20 @@
 import type {
   ClientFrame,
   Eta,
+  EtaBatch,
+  EtaBatchEntry,
   EtaFailure,
-  EtaReport,
   ServerFrame,
   WatchTarget,
   WireError,
 } from '@nextbus/core'
-import { acceptTargets, diffEtas, retainFailedPoles } from '@nextbus/core'
+import {
+  acceptTargets,
+  diffEtas,
+  ETAS_BATCH_MAX_IDS,
+  narrowEtasToRoutes,
+  retainFailedPoles,
+} from '@nextbus/core'
 import type { Clock, LiveTransportSink } from '@nextbus/ports'
 import { wireErrorOf } from '../errors'
 import { frameAt, type LiveEtaEngine, systemTimers, type Timers } from './engine'
@@ -60,11 +78,18 @@ type RoundResult = RoundOk | RoundFailure
 
 export interface PollTransportDeps {
   /**
-   * What to poll. `EdgeClient.getEtas` in production — taken as a function rather than the whole
-   * client so this module cannot reach for a second endpoint, and so a test can hand it four scripted
-   * rounds without a fetch stub.
+   * What to poll: `/v1/etas?ids=…`, **one request for the whole round** (WP5-7).
+   *
+   * `EdgeClient.getEtasBatch` in production — taken as a function rather than the whole client so this
+   * module cannot reach for a second endpoint, and so a test can hand it four scripted rounds without a
+   * fetch stub.
+   *
+   * It replaced a per-target `getEtas` rather than joining it. Six targets meant six requests per
+   * cadence, which is why Nearby could not adopt this engine at all; and keeping both shapes would put
+   * the round's rules — retention, the permanent drop, the failure ordering — on two paths, one of them
+   * unreachable in production and therefore only ever exercised by a test.
    */
-  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport>
+  getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
   /** Stamps each frame's `at`. The kernel may not read a clock; this layer may, through the port. */
   clock: Clock
   /** Cadence, ms. `EdgeClient` defaults it to the served `refreshAfterMs` (ADR-053). */
@@ -73,14 +98,31 @@ export interface PollTransportDeps {
 }
 
 /**
+ * Split a round's ids into requests the endpoint will accept.
+ *
+ * The cap is the contract's (`ETAS_BATCH_MAX_IDS`, restated in `@nextbus/core` and pinned to it by the
+ * type system), and the client **chunks** rather than truncating: over the cap the endpoint answers a
+ * `400`, and a subscription that silently dropped its thirteenth target would hold that target's
+ * previous readings for ever with no `status` frame to explain it. A screen watching ≤ 12 places — every
+ * screen in this app — makes exactly one request per cadence, which is the acceptance criterion.
+ */
+function chunkIds(ids: readonly string[]): string[][] {
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += ETAS_BATCH_MAX_IDS) {
+    chunks.push([...ids.slice(i, i + ETAS_BATCH_MAX_IDS)])
+  }
+  return chunks
+}
+
+/**
  * A `LiveTransport` that polls `/v1/etas/:id` per target and synthesizes the frames a server would
  * send: a `snapshot` on the first round, a `delta` computed by the kernel's `diffEtas` afterwards, and
  * a `status` frame per failure.
  *
  * **This is the default engine**, and that is the point of it: with no transport configured,
- * `EdgeClient.watch()` builds one of these, so today's behaviour — one request per target per
- * `refreshAfterMs`, every target independent, a failure on one leaving the others alone — is what a
- * screen gets, and a socket is opt-in.
+ * `EdgeClient.watch()` builds one of these, so what a screen gets is one request per `refreshAfterMs`
+ * for its whole target set, a target dropped only when its id stops resolving, and a failure that never
+ * reads as a departure — and a socket is opt-in.
  */
 export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
   const timers = deps.timers ?? systemTimers
@@ -129,19 +171,67 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
 
   const runRound = async () => {
     const round = generation
-    const results: RoundResult[] = await Promise.all(
-      watching.map(async (target): Promise<RoundResult> => {
+    const asked = watching
+    /** Every entry the round came back with, by the id it answers for. */
+    const entries = new Map<string, EtaBatchEntry>()
+    /**
+     * The failure of a *request*, as opposed to of an id.
+     *
+     * A request can fail for the whole chunk — the phone is offline, the Worker 502s — where before
+     * there were N independent requests and N independent failures.
+     */
+    let requestError: WireError | null = null
+    await Promise.all(
+      chunkIds(asked.map((t) => t.stopId)).map(async (ids) => {
         try {
-          const report = await deps.getEtas(target.stopId, target.routeIds)
-          return { target, etas: report.etas, failed: report.failed ?? [] }
+          for (const entry of (await deps.getEtasBatch(ids)).reports) entries.set(entry.id, entry)
         } catch (thrown) {
-          return { target, error: wireErrorOf(thrown) }
+          // First one wins, and only the ids in this chunk are affected — the loop below decides that
+          // per target by looking for its entry, so a chunk that answered is not lost to one that did
+          // not. Recorded rather than thrown so the round still publishes what it learned.
+          requestError ??= wireErrorOf(thrown)
         }
       }),
     )
     // Two ways this round is no longer wanted: the subscription was released, or the target set moved
     // while the requests were in flight.
     if (closed || round !== generation) return
+
+    // **Walked in accepted-target order, never in the response's order**, and narrowed here rather than
+    // by the server. Two things depend on it: `reportable` below publishes failures in exactly this
+    // order and `eta-hub.ts` builds the identical sequence from `session.targets`, so trusting the
+    // server's array would make the two engines order one round's `status` frames differently the moment
+    // a round carried two failures.
+    //
+    // **A request failure is fanned out to one `RoundFailure` per target of that request, not collapsed
+    // to one.** The shard cannot produce a request-level failure at all — it calls the read path per
+    // target inside the object — so collapsing would make this engine emit a different number of
+    // `status` frames than the socket for an offline client, which is the byte-identity WP5-1 exists to
+    // assert. A missing entry for an id we *did* ask about, with no request failure to explain it, is a
+    // bug of ours rather than an empty board: `internal`, retryable, and never an empty reading list,
+    // because "nothing came back" and "this stop has no buses" being the same value is the whole defect
+    // ADR-073 is about.
+    const results: RoundResult[] = asked.map((target): RoundResult => {
+      const entry = entries.get(target.stopId)
+      if (entry === undefined) {
+        return {
+          target,
+          error:
+            requestError ??
+            wireErrorOf(new Error(`no report for ${target.stopId} in a round that answered`)),
+        }
+      }
+      if (entry.error !== undefined) return { target, error: entry.error }
+      return {
+        target,
+        // `narrowEtasToRoutes` is the kernel's rule and the *same* one `/v1/etas/:id?routes=` applies
+        // server-side, so a narrowed target sees the identical list on either engine. The batch carries
+        // no per-id route list — there is no delimiter safe under the id grammar — so the narrowing
+        // happens here, one hop later, over a few more bytes on the wire.
+        etas: narrowEtasToRoutes(entry.etas, target.routeIds),
+        failed: entry.failed ?? [],
+      }
+    })
 
     // **The data frame goes out before the status frames**, and this ordering is load-bearing rather
     // than tidy. A `status` frame changes only the status, so with the statuses first the very first

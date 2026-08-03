@@ -6,7 +6,11 @@ import type { ReactNode } from 'react'
 import { dataSource } from '../adapters/datasource'
 import { StopCard } from '../components/StopCard'
 import { useClientPolicy } from '../hooks/useClientPolicy'
+import { useLiveNearby } from '../hooks/useLiveNearby'
 import { useLocation } from '../hooks/useLocation'
+
+/** One array, so "no cards yet" has a stable identity — see `useLiveNearby`'s note on the storm. */
+const EMPTY_IDS: readonly string[] = []
 
 /**
  * Nearby, rendered by React DOM from the identical kernel functions the React Native screen uses
@@ -31,10 +35,21 @@ export function Nearby({ locale }: { locale: Locale }) {
     // cache at all (ADR-058).
     queryKey: ['nearby', ready?.lat, ready?.lng],
     queryFn: ready ? () => dataSourceGetNearby(ready.lat, ready.lng) : skipToken,
-    refetchInterval: policy.refreshAfterMs,
+    // **Only on error since WP5-7.** The arrivals arrive by subscription now, so a healthy list needs no
+    // refetch — but a *failed* first load must still find its way back, and nothing else here would let
+    // it: `staleTime` is 15 s, `refetchOnWindowFocus` is false, and this screen has no pull-to-refresh.
+    // Same shape as the RN Place screen's, which is where the pattern came from.
+    refetchInterval: (q) => (q.state.status === 'error' ? policy.refreshAfterMs : false),
   })
 
-  const now = Date.now()
+  // The clock comes out of the subscription hook, and the pairing is the point: deleting
+  // `refetchInterval` deletes a screen's clock as well as its fetch, and `const now = Date.now()` only
+  // advances when something re-renders. Without this, `etaReadout`'s staleness cue could never fire —
+  // which `apps/mobile/test/live-clock.test.tsx` exists to catch on the other renderer.
+  const { now } = useLiveNearby(ready, query.data?.map((stop) => stop.stop.id) ?? EMPTY_IDS, {
+    enabled: query.isSuccess,
+    refreshAfterMs: policy.refreshAfterMs,
+  })
   // The whole screen's content, in one call. Nothing below this line decides anything.
   const cards = nearbyView(query.data ?? [], { locale, now, policy })
 
