@@ -8,7 +8,7 @@ import {
   waitOnExecutionContext,
 } from 'cloudflare:test'
 import { LIVE_PATH, ServerFrameSchema } from '@nextbus/contract'
-import type { Eta, ServerFrame, WatchTarget } from '@nextbus/core'
+import type { Eta, EtaReport, ServerFrame, WatchTarget } from '@nextbus/core'
 import { LIVE_SHARD_COUNT, liveShardFor } from '@nextbus/core'
 import {
   allAliases,
@@ -1151,7 +1151,9 @@ describe('frame conformance', () => {
     const delta = only(first, 'delta')[0]
 
     resetEtaCache()
-    const http = (await (await get(`/v1/etas/${encodeURIComponent(POLE_A.id)}`)).json()) as Eta[]
+    const { etas: http } = (await (
+      await get(`/v1/etas/${encodeURIComponent(POLE_A.id)}`)
+    ).json()) as EtaReport
     const key = (eta: Eta) => `${eta.stopId}|${eta.routeId}`
     expect((delta?.changed ?? []).map(key).sort()).toEqual(http.map(key).sort())
     expect(http.length).toBeGreaterThan(0)

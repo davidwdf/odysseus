@@ -17,6 +17,7 @@ import {
   liveShardFor,
   liveSocketUrl,
   nextLiveCadenceMs,
+  retainFailedPoles,
   sameReading,
 } from '../src/live'
 import type { Eta, EtaRef, NearbyStop, ServerFrame, StopDetail, WatchTarget } from '../src/types'
@@ -51,6 +52,23 @@ describe('live#diffEtas', () => {
   )) {
     it(c.name, () => {
       expect(diffEtas(c.args.prev, c.args.next)).toEqual(c.expect)
+    })
+  }
+})
+
+describe('live#retainFailedPoles', () => {
+  for (const c of specCases<{ prev: Eta[]; next: Eta[]; failedStopIds: string[] }, Eta[]>(
+    corpus,
+    'retainFailedPoles',
+  )) {
+    it(c.name, () => {
+      const before = JSON.stringify(c.args.prev)
+      expect(retainFailedPoles(c.args.prev, c.args.next, c.args.failedStopIds)).toEqual(c.expect)
+      // The retained readings come out of `prev`, and both callers hold `prev` as the state they are
+      // about to diff against — the poll emulator's `readings` map and the shard's `before`. Returning
+      // the same objects is fine and intended; mutating them is not, and an in-place merge would look
+      // identical on the first round and quietly corrupt the second.
+      expect(JSON.stringify(c.args.prev)).toBe(before)
     })
   }
 })

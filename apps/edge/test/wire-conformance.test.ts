@@ -1,6 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import { ERROR_CODES, ErrorResponseSchema, WIRE_ENDPOINTS } from '@nextbus/contract'
-import type { ErrorCode, Eta, I18nText, RouteDetail, StopDetail } from '@nextbus/core'
+import type { ErrorCode, Eta, EtaReport, I18nText, RouteDetail, StopDetail } from '@nextbus/core'
 import { classifyRemark } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetDatasetState } from '../src/dataset'
@@ -211,7 +211,7 @@ describe('the two service-fidelity tiers are the ones each endpoint serves', () 
 describe('served fields the schema cannot make mandatory', () => {
   it('/v1/etas/:id classifies its remarks with the kernel rule, not a copy of it', async () => {
     const paths = await resolvePaths()
-    const etas = (await (await get(paths.get('getStopEtas') as string)).json()) as Eta[]
+    const { etas } = (await (await get(paths.get('getStopEtas') as string)).json()) as EtaReport
     const withRemark = etas.filter((e) => e.remark)
     expect(
       withRemark.length,

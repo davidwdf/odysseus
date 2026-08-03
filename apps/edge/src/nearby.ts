@@ -34,7 +34,14 @@ export async function nearby(
       // Canonical, de-duplicated arrivals via the shared server seam. We fetch ALL routes at
       // the place (KMB cheap, CTB to budget) so the soonest are genuinely soonest; the card
       // shows the true `routeCount` (free, precomputed) + "+N more" rather than a silent filter.
-      const etas = await stopArrivals(place, NEARBY_CTB_BUDGET)
+      //
+      // **`report.failed` is dropped here, and the card therefore still cannot tell an outage from
+      // an empty stop** (ADR-073, WP5-13). Stated rather than left as a silent `.etas`: the reason is
+      // the same one `stopDetail` gives — `applyLiveEtasToNearby` spreads each card, so a `failed`
+      // list from an HTTP fetch would outlive the outage it describes once Nearby adopts the live
+      // merge. Nearby is not a live adopter yet (WP5-7), so the honest sequence is WP5-7 then WP5-13,
+      // not a wire field with no reader and a staleness bug waiting behind it.
+      const { etas } = await stopArrivals(place, NEARBY_CTB_BUDGET)
       return { stop: toMergedStop(place), distanceM, etas, routeCount: place.routeCount }
     }),
   )

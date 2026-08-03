@@ -30,14 +30,21 @@ function eta(stopId: string, hhmm: string): Eta {
   }
 }
 
-/** A `fetch` that records what was asked for and answers from a per-stop table. */
+/**
+ * A `fetch` that records what was asked for and answers from a per-stop table.
+ *
+ * The body is an `EtaReport` — `{ etas }`, with `failed` **absent** — which is what `/v1/etas/:id`
+ * serves when every board answered (ADR-073). Spelled out here rather than hidden in a helper because
+ * this file's whole subject is the *default* engine talking to the real endpoint shape: a stub that
+ * still answered a bare array would keep passing against a client that had stopped reading `.etas`.
+ */
 function stubFetch(answers: Map<string, Eta[]>) {
   const urls: string[] = []
   const fetchImpl = (async (input: string | URL | Request) => {
     const url = String(input)
     urls.push(url)
     const stopId = [...answers.keys()].find((id) => url.includes(encodeURIComponent(id)))
-    return new Response(JSON.stringify(stopId ? (answers.get(stopId) ?? []) : []), {
+    return new Response(JSON.stringify({ etas: stopId ? (answers.get(stopId) ?? []) : [] }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     })
@@ -180,7 +187,7 @@ describe('EdgeClient.watch() with no transport configured', () => {
           },
         )
       }
-      return new Response(JSON.stringify([eta(STOP_A, '10:02')]), {
+      return new Response(JSON.stringify({ etas: [eta(STOP_A, '10:02')] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })

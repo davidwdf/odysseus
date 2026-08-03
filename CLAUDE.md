@@ -146,10 +146,15 @@ renderer (ADR-068/069) and — as of 2026-07-30 — the **live protocol** (ADR-0
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before
-changing live behaviour. Three caveats worth knowing before you touch any of it: the socket cannot
-yet be *selected* without a source edit (WP5-6, which is what makes five shard fixes latent), an
-upstream outage still reads as "no buses" (WP5-4), and a pole's row can read "no reading" while a bus
-is due there (WP5-9). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
+changing live behaviour. **WP5-4, WP5-5 and WP5-6 are done as of 2026-08-03** (ADR-073/074/076):
+`coalesce` no longer takes a `fallback`, so an upstream outage is no longer "no buses" on the arrivals
+path — `/v1/etas/:id` answers `{ etas, failed }` (**breaking**, `CONTRACT_VERSION` 2.0.0) and one kernel
+rule, `retainFailedPoles`, is what both engines apply to it; a shared corpus
+(`packages/core/fixtures/live-rounds.json`) drives those rules through the **real** `EtaHub` over a real
+socket as well as through the poll emulator; and the socket is selected by
+`EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`, **default still `poll`**. Two caveats remain: a
+Nearby card and a Place screen's *first paint* still cannot say "we could not ask" (WP5-13), and a rider
+who stars one line at both kerbs sees one Favourites row (WP5-12). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
 Cloudflare credentials — though CI now runs on every PR. Roadmap/backlog: `docs/06`, `docs/07`.
 Cloudflare agent skills are installed — prefer the `cloudflare` / `wrangler` / `durable-objects`
 skills for edge work.

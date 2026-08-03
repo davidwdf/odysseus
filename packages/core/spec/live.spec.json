@@ -1228,6 +1228,455 @@
         }
       ]
     },
+    "retainFailedPoles": {
+      "doc": "This round's readings, with the poles we could not ask about kept rather than dropped (ADR-073). The second rule in this module that runs in TWO runtimes: the poll emulator applies it to what `/v1/etas/:id` answered, and the `EtaHub` Durable Object applies it to what its own round read, so a hand-port that gets it wrong on one side produces a screen that blanks during an upstream outage on that platform only. The rule it completes is *a failed round is not a departure*, which both engines already held per **target** and neither held per **pole** — a place is N boarding points (ADR-042) and an upstream board call is per point, so an outage at one kerb of a two-kerb place arrived as a successful, partially empty answer. `next` always wins over a retained reading, a retained reading keeps its own timestamps so `isStale` can age it, and nothing is resurrected: only what `prev` already held can survive.",
+      "cases": [
+        {
+          "name": "no-failure-is-this-rounds-truth",
+          "why": "THE CONTROL. With nothing in `failedStopIds` the answer is exactly `next`, canonically ordered — no retention, no carry-over. Without this row an implementation that retained unconditionally would satisfy every other case here, and it would freeze a screen on the last reading it ever saw.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": []
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-pole-that-answered-reports-its-departure",
+          "why": "THE SECOND CONTROL, and the one that keeps the rule honest in the other direction. Identical to the row above and to the row below in every respect except which list the pole is in: the pole answered, it no longer lists 49X, so 49X has genuinely departed and must NOT be retained. `gone` exists for exactly this and ADR-008 forbids leaving a stale time on screen.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["KMB:SOME-OTHER-POLE"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-failed-poles-readings-survive-the-round",
+          "why": "The rule itself: *a failed round is not a departure*. The board refused, so `next` carries nothing from this pole — and reporting that as a departure would tell the rider the bus had left when all that happened is that we could not ask. Before ADR-073 the edge could not even say this had happened: `coalesce` resolved a rejected board to `[]` and the call succeeded empty.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:55:31+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "a-fresh-reading-beats-a-retained-one",
+          "why": "A pole can fail *partway*: Citybus has no stop board, so a place is one upstream call per (pole, route), and one route can refuse while its neighbours answer. The pole is therefore named in `failedStopIds` while `next` still carries some of its readings — and the fresh 86K must win over the retained one. An implementation that indexed `prev` last would show a rider the older of two times it holds.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:55:31+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-retained-reading-keeps-its-own-timestamps",
+          "why": "Retention is not a refresh. `dataTimestamp` stays at the operator clock it was published with, so `isStale` ages it honestly (ADR-008) and the screen labels it rather than presenting a two-minute-old time as new. Stated as its own row because the tempting implementation — rebuild the reading with this round’s `observedAt` — passes every other case and defeats the one honesty cue a rider has.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "KMB:49X:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:56:52+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": [
+            {
+              "routeId": "KMB:49X:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:56:52+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        },
+        {
+          "name": "a-first-round-failure-retains-nothing",
+          "why": "There is nothing to keep. A subscription whose very first round met an outage has no previous readings, so this returns empty rather than inventing a state — which is what lets both engines suppress the snapshot entirely for that round (ADR-056 decision 14) instead of publishing `snapshot { etas: [] }`, the frame that means *this stop has no arrivals*.",
+          "args": {
+            "prev": [],
+            "next": [],
+            "failedStopIds": ["KMB:548DAB3A4F71EB68"]
+          },
+          "expect": []
+        },
+        {
+          "name": "a-failed-pole-we-never-had-a-reading-for-adds-nothing",
+          "why": "The pole is in `failedStopIds` and `prev` holds nothing from it — a route that had no bus due before the outage started. Nothing is fabricated. The neighbouring pole’s reading is untouched, which is what makes this different from the first-round row above.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "failedStopIds": ["GMB:20009421"]
+          },
+          "expect": [
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20001114",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:54:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "a-place-id-in-the-failed-list-matches-no-reading",
+          "why": "BOUNDARY. `failedStopIds` names *poles*, because a pole is what an upstream board call is for. A caller that passed a merged `P:` place id gets no retention rather than a parse error or a wildcard match — the safe direction, and one an implementation that tried to be clever about place membership would get wrong. `Eta.stopId` is never a place id (the schema says so), so equality is the whole rule.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [],
+            "failedStopIds": ["P:GMB:20001114+GMB:20009421"]
+          },
+          "expect": []
+        },
+        {
+          "name": "one-line-at-two-poles-one-kerb-fails",
+          "why": "THE NAMED BOUNDARY ROW, and it is where WP5-9 and ADR-073 meet. Since ADR-072 an arrival is a line at a *kerb*, so 68K at Fu Kin Street is two readings under one place and a rider sees a row per kerb. When one kerb’s board refuses and the other answers, the two rules have to point in opposite directions in a single round: the answering kerb’s 68K genuinely departed and must go, the refusing kerb’s must stay. Collapse this to one reading per line — the model this repo had until 2026-07-31 — and there is no answer that is right for both kerbs.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:59:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "GMB:68S:outbound:2002401",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T11:07:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "failedStopIds": ["GMB:20009421"]
+          },
+          "expect": [
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20001114",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:54:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:59:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68S:outbound:2002401",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T11:07:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            }
+          ]
+        },
+        {
+          "name": "the-result-is-canonically-ordered",
+          "why": "D1: every list this module returns is sorted by `(stopId, routeId)` in code-point order, and this one is a union of two sources that arrive in different orders. Both engines feed the result straight into `diffEtas` and into a `snapshot`, so an order that depended on which readings happened to be retained would make the poll emulator and the shard emit different frames for identical data — the one property the scenario corpus exists to assert.",
+          "args": {
+            "prev": [
+              {
+                "routeId": "GMB:68S:outbound:2002401",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T11:07:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20009421",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:59:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              }
+            ],
+            "next": [
+              {
+                "routeId": "GMB:68K:outbound:2002355",
+                "stopId": "GMB:20001114",
+                "operator": "GMB",
+                "arrivals": ["2026-07-30T10:54:00+08:00"],
+                "dataTimestamp": "2026-07-30T10:50:19+08:00",
+                "observedAt": "2026-07-30T02:50:29.601Z"
+              },
+              {
+                "routeId": "KMB:86K:outbound:1",
+                "stopId": "KMB:548DAB3A4F71EB68",
+                "operator": "KMB",
+                "arrivals": ["2026-07-30T10:58:02+08:00"],
+                "dataTimestamp": "2026-07-30T10:51:04+08:00",
+                "observedAt": "2026-07-30T02:51:14.220Z"
+              }
+            ],
+            "failedStopIds": ["GMB:20009421"]
+          },
+          "expect": [
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20001114",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:54:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68K:outbound:2002355",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T10:59:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "GMB:68S:outbound:2002401",
+              "stopId": "GMB:20009421",
+              "operator": "GMB",
+              "arrivals": ["2026-07-30T11:07:00+08:00"],
+              "dataTimestamp": "2026-07-30T10:50:19+08:00",
+              "observedAt": "2026-07-30T02:50:29.601Z"
+            },
+            {
+              "routeId": "KMB:86K:outbound:1",
+              "stopId": "KMB:548DAB3A4F71EB68",
+              "operator": "KMB",
+              "arrivals": ["2026-07-30T10:58:02+08:00"],
+              "dataTimestamp": "2026-07-30T10:51:04+08:00",
+              "observedAt": "2026-07-30T02:51:14.220Z"
+            }
+          ]
+        }
+      ]
+    },
     "applyLiveFrame": {
       "doc": "The whole client half of the protocol, as one pure reducer over `{ seq, etas, status }`. Two asymmetries are the substance of it and both are deliberate: a `snapshot` applies whatever `seq` it carries (it is the recovery path — refusing an 'old' one would make recovery unreachable exactly when a shard has restarted), while a `delta` at or below the current `seq` is ignored *and* asks for a resync (on an ordered transport a repeated counter means a different producer, not a late frame). Everything the reducer returns is canonically ordered, which is what makes a socket and the poll emulator produce identical listener output. `resyncNeeded` is reported, never thrown: a frame that arrives out of order still carries real data, and discarding it would leave the screen further behind than the data just handed to us. A third asymmetry, no less deliberate: **only a `snapshot` restates the accepted target set**, and every other frame carries the session's own through untouched. That field is the sole signal either producer sends for a target it refused, so a port that drops it shows a rider 'no buses due' for a stop nobody is watching — see `a-snapshot-echoes-the-accepted-target-set`.",
       "cases": [

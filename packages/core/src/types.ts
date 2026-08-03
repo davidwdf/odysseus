@@ -26,7 +26,9 @@ import type {
   DeltaFrameSchema,
   ErrorCodeSchema,
   ErrorResponseSchema,
+  EtaFailureSchema,
   EtaRefSchema,
+  EtaReportSchema,
   EtaSchema,
   FreqBandSchema,
   FreqPatternSchema,
@@ -122,6 +124,15 @@ export type RouteStop = z.infer<typeof RouteStopSchema>
 
 /** A normalized estimated-arrival reading. ETAs are approximations — see eta.ts. */
 export type Eta = z.infer<typeof EtaSchema>
+
+/** One boarding point whose upstream board did not answer, and why (ADR-073). `stopId` is the pole,
+ *  spelled exactly as `Eta.stopId` spells it, so a client can pair the two. */
+export type EtaFailure = z.infer<typeof EtaFailureSchema>
+
+/** What `/v1/etas/:id` answers and what `DataSource.getEtas` returns: the readings we have, plus the
+ *  poles we could not ask about (ADR-073). A reading absent for a pole in `failed` has **not**
+ *  departed — see `retainFailedPoles` in `./live.ts`, which is the rule both engines apply to it. */
+export type EtaReport = z.infer<typeof EtaReportSchema>
 
 /** The coarse class of an operator ETA remark. Served as `Eta.remarkKind` (ADR-053) and still
  *  derivable offline with `classifyRemark`. Treat it as open — the vocabulary will grow. */

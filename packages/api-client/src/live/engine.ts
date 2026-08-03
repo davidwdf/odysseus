@@ -11,8 +11,9 @@
 // around `vi.useFakeTimers`, which patches globals for the whole file and cannot express "advance this
 // transport but not that one". Two named methods a test can implement in six lines can.
 
-import type { ClientFrame, ServerFrame } from '@nextbus/core'
-import type { LiveTransport } from '@nextbus/ports'
+import type { ClientFrame, EtaReport, ServerFrame } from '@nextbus/core'
+import type { Clock, LiveTransport } from '@nextbus/ports'
+import type { Endpoints } from '../endpoint'
 
 /**
  * Which engine is producing the frames a screen is being fed.
@@ -41,6 +42,32 @@ export type LiveEtaTransport = LiveTransport<ServerFrame, ClientFrame>
  */
 export interface LiveEtaEngine extends LiveEtaTransport {
   readonly engine: LiveEngine
+}
+
+/**
+ * Everything a transport factory could need to build itself, so the option is one function.
+ *
+ * The poll emulator needs `getEtas` and a cadence; the socket needs a URL; both need a clock. Handing
+ * over the whole `EdgeClient` instead would let a transport reach for a second endpoint, which is how a
+ * "transport" grows into a second data layer.
+ *
+ * Declared here rather than beside `EdgeClientOptions` since WP5-6: `./select.ts` builds a transport
+ * from this shape and `index.ts` imports `./select`, so leaving the declaration in `index.ts` would
+ * make the two modules import each other. Re-exported from the package root, where it always was.
+ */
+export interface LiveTransportContext {
+  endpoints: Endpoints
+  /**
+   * The client's own `/v1/etas/:id` call — what the poll emulator polls.
+   *
+   * An `EtaReport`, not an `Eta[]` (ADR-073). The transport needs the `failed` half: without it an
+   * empty list from an outage is indistinguishable from a stop with no buses, and the diff it feeds
+   * reports every reading departed.
+   */
+  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport>
+  /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
+  pollMs: number
+  clock: Clock
 }
 
 /**

@@ -1,0 +1,165 @@
+[
+  {
+    "name": "the-first-round-publishes-what-it-found",
+    "why": "THE CONTROL, and it is not decorative: two engines that emitted nothing would agree perfectly on every other row here. It also pins the ordinary case both drivers must get right before any failure row means anything — one round, two lines at one kerb, canonically ordered by (stopId, routeId) rather than by the order upstream answered.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": [{ "route": "R6", "at": ["+7"] }, { "route": "R1", "at": ["+2"] }] } }
+    ],
+    "settles": ["live etas=[A/R1@+2 A/R6@+7] watching=[A]"]
+  },
+  {
+    "name": "an-unchanged-round-says-nothing-at-all",
+    "why": "Rule 2. Round two re-observes the identical operator reading, so neither engine emits: no empty delta, no heartbeat. `sameReading` excludes `observedAt` precisely so a re-fetch of the same board is not news (ADR-008 — the value changes when the data does), and on the socket every needless frame is a repaint plus a billed message at 20:1. Round three moves the arrival, which is the control for the silence: a driver whose reader had simply stopped listening would report `silent` twice and this row would go red on the third line.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": [{ "route": "R1", "at": ["+2"] }] } },
+      { "boards": { "A": [{ "route": "R1", "at": ["+2"] }] } },
+      { "boards": { "A": [{ "route": "R1", "at": ["+4"] }] } }
+    ],
+    "settles": ["live etas=[A/R1@+2] watching=[A]", "silent", "live etas=[A/R1@+4] watching=[A]"]
+  },
+  {
+    "name": "a-departure-on-an-answering-board-is-reported",
+    "why": "THE SECOND CONTROL, and the one that keeps rule 1 from becoming 'never drop anything'. The board answered and no longer lists R1, so R1 has genuinely gone: the socket says so with `gone`, polling gets it for free by replacing the payload, and both must leave the same list behind. Without this row the retention rows below would all pass against an engine that never removed a reading at all — which is the dishonesty `gone` was added to prevent (ADR-008, D2), and it ages silently on screen.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": [{ "route": "R1", "at": ["+2"] }, { "route": "R6", "at": ["+7"] }] } },
+      { "boards": { "A": [{ "route": "R6", "at": ["+7"] }] } }
+    ],
+    "settles": ["live etas=[A/R1@+2 A/R6@+7] watching=[A]", "live etas=[A/R6@+7] watching=[A]"]
+  },
+  {
+    "name": "a-line-that-appears-lands-in-canonical-order",
+    "why": "R1 sorts before R6 and arrives second. D1's total order is what makes the two engines comparable at all: polling re-fetches a whole list and inherits the server's order, while a socket applies a delta in place and would append — same data, two orders, and the byte-identity criterion unreachable by any implementation.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": [{ "route": "R6", "at": ["+7"] }] } },
+      { "boards": { "A": [{ "route": "R6", "at": ["+7"] }, { "route": "R1", "at": ["+11"] }] } }
+    ],
+    "settles": ["live etas=[A/R6@+7] watching=[A]", "live etas=[A/R1@+11 A/R6@+7] watching=[A]"]
+  },
+  {
+    "name": "a-refusing-board-is-not-a-departure",
+    "why": "Rule 1, in the shape ADR-073 exists for. The board refuses, so nothing comes back for that pole — and reporting the readings we hold as `gone` would tell the rider the bus had left when all that happened is that we could not ask. Until ADR-073 the edge's coalescing cache resolved a refused board to `[]`, so this round arrived at both engines as an ordinary successful answer with the readings missing, and both did the only thing available to them with readings that are no longer there. The status is `retrying` and not `live`, so the screen can say the times have stopped arriving rather than showing an ageing number with no hint.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": [{ "route": "R1", "at": ["+2"] }, { "route": "R6", "at": ["+7"] }] } },
+      { "boards": { "A": "refused" } },
+      { "boards": { "A": [{ "route": "R1", "at": ["+5"] }, { "route": "R6", "at": ["+7"] }] } }
+    ],
+    "settles": [
+      "live etas=[A/R1@+2 A/R6@+7] watching=[A]",
+      "retrying!upstream_unavailable etas=[A/R1@+2 A/R6@+7] watching=[A]",
+      "live etas=[A/R1@+5 A/R6@+7] watching=[A]"
+    ]
+  },
+  {
+    "name": "a-board-that-keeps-refusing-keeps-saying-so",
+    "why": "The label must not go stale in the other direction either. A `status` frame is a transition and not a heartbeat — `live` goes out once and stays — but a *failure* recurs every round, so a second refused round is NOT silent even though the readings are identical to the round before. An engine that treated the unchanged readings as 'nothing to report' would drop back to whatever label was standing and leave a rider watching a frozen number under a `live` badge. That is the ADR-008 failure introduced by removing a line, which is the species ADR-056 correction (10) names.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": [{ "route": "R1", "at": ["+2"] }] } },
+      { "boards": { "A": "refused" } },
+      { "boards": { "A": "refused" } }
+    ],
+    "settles": [
+      "live etas=[A/R1@+2] watching=[A]",
+      "retrying!upstream_unavailable etas=[A/R1@+2] watching=[A]",
+      "retrying!upstream_unavailable etas=[A/R1@+2] watching=[A]"
+    ]
+  },
+  {
+    "name": "one-kerb-of-a-place-refuses-and-the-other-answers",
+    "why": "THE ROW THIS CORPUS WAS BUILT FOR. Since ADR-072 an arrival is a line at a kerb, so place C publishes one reading per pole and a rider sees a row per pole. When one kerb's board refuses and the other answers *and has lost a bus*, the two halves of rule 1 point in opposite directions inside a single round: C2's departure must be reported, C1's reading must be kept. A target-level rule cannot express that — both engines had one, and both got this wrong — because the unit of an upstream call is the pole while the unit of a subscription is the place. `retainFailedPoles` in the kernel is the one declaration both engines call, and this row is what would go red if either stopped calling it.",
+    "targets": ["C"],
+    "rounds": [
+      {
+        "boards": {
+          "C1": [{ "route": "R1", "at": ["+3"] }, { "route": "R9", "at": ["+8"] }],
+          "C2": [{ "route": "R1", "at": ["+6"] }, { "route": "R9", "at": ["+12"] }]
+        }
+      },
+      {
+        "boards": {
+          "C1": "refused",
+          "C2": [{ "route": "R1", "at": ["+6"] }]
+        }
+      }
+    ],
+    "settles": [
+      "live etas=[C1/R1@+3 C1/R9@+8 C2/R1@+6 C2/R9@+12] watching=[C]",
+      "retrying!upstream_unavailable etas=[C1/R1@+3 C1/R9@+8 C2/R1@+6] watching=[C]"
+    ]
+  },
+  {
+    "name": "a-kerb-that-refuses-is-kept-while-its-neighbour-moves",
+    "why": "The other half of the per-pole rule, in the same round: retention must not freeze the *place*. C1 refuses and keeps both its readings while C2 answers with a later bus, so one round both retains and updates inside a single target. An engine that reached for the whole target's previous readings on any failure — the tempting simplification, and the shape of the target-level rule that already existed — would show C2's old time too, and nothing else here would catch it: the row above has the answering kerb losing a line rather than changing one. **Not covered here, deliberately:** a pole that refuses *partway*, which only Citybus can do (no stop board, so one place is one call per (pole, route), and the pole is named in `failed` while some of its readings are fresh). The edge's seeded dataset is KMB-only and a KMB board is one call, so neither driver can produce it — the property is pinned instead where it lives, at `live#retainFailedPoles:a-fresh-reading-beats-a-retained-one`, which both engines call.",
+    "targets": ["C"],
+    "rounds": [
+      {
+        "boards": {
+          "C1": [{ "route": "R1", "at": ["+3"] }, { "route": "R9", "at": ["+8"] }],
+          "C2": [{ "route": "R1", "at": ["+6"] }]
+        }
+      },
+      {
+        "boards": {
+          "C1": "refused",
+          "C2": [{ "route": "R1", "at": ["+9"] }]
+        }
+      }
+    ],
+    "settles": [
+      "live etas=[C1/R1@+3 C1/R9@+8 C2/R1@+6] watching=[C]",
+      "retrying!upstream_unavailable etas=[C1/R1@+3 C1/R9@+8 C2/R1@+9] watching=[C]"
+    ]
+  },
+  {
+    "name": "two-targets-one-refuses",
+    "why": "Isolation, which is what `watch()` has always promised and what a delta protocol makes visible: one refusing place must not take the other's updates with it, and the refusing one keeps its readings under a `retrying` label rather than blanking. Both targets stay in the accepted echo — a board that would not answer says nothing about whether the stop exists, which is what `retryable: true` means and why a pole failure never prunes a target.",
+    "targets": ["A", "B"],
+    "rounds": [
+      {
+        "boards": {
+          "A": [{ "route": "R1", "at": ["+2"] }],
+          "B": [{ "route": "R6", "at": ["+9"] }]
+        }
+      },
+      {
+        "boards": {
+          "A": [{ "route": "R1", "at": ["+4"] }],
+          "B": "refused"
+        }
+      }
+    ],
+    "settles": [
+      "live etas=[A/R1@+2 B/R6@+9] watching=[A B]",
+      "retrying!upstream_unavailable etas=[A/R1@+4 B/R6@+9] watching=[A B]"
+    ]
+  },
+  {
+    "name": "every-board-refuses-on-the-first-round",
+    "why": "The first round is the one that has nothing to keep, and ADR-056 decision 14 is about exactly this: the poll emulator used to publish `snapshot { etas: [] }` for it, which is the frame that means *this stop has no arrivals*. The Place screen paints minutes from its own HTTP fetch and then blanks one frame later, the blanked document is still `status: 'success'` so ADR-058's persister dehydrates it, and an offline start replays the blank. A round that learned nothing publishes no readings — and then recovery has to work from that state, which is the second line's job.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": "refused" } },
+      { "boards": { "A": [{ "route": "R1", "at": ["+2"] }] } }
+    ],
+    "settles": [
+      "retrying!upstream_unavailable etas=[] watching=[A]",
+      "live etas=[A/R1@+2] watching=[A]"
+    ]
+  },
+  {
+    "name": "an-empty-board-is-not-a-refusal",
+    "why": "BOUNDARY, and it is the whole point of ADR-073 stated from the other side: a board that answers with no buses is a fact about the world, and it must read as `live` with an empty list — not as `retrying`. Round two is the same emptiness observed again and is therefore silent. An implementation that reported an empty answer as a failure would put every stop with no late-night service permanently under a 'not updating' label, which is the mirror image of the defect and just as dishonest.",
+    "targets": ["A"],
+    "rounds": [
+      { "boards": { "A": [{ "route": "R1", "at": ["+2"] }] } },
+      { "boards": { "A": [] } },
+      { "boards": { "A": [] } }
+    ],
+    "settles": ["live etas=[A/R1@+2] watching=[A]", "live etas=[] watching=[A]", "silent"]
+  }
+]

@@ -3,6 +3,7 @@ import type {
   DataSource,
   Eta,
   EtaListener,
+  EtaReport,
   LatLng,
   NearbyStop,
   RouteDetail,
@@ -16,23 +17,12 @@ import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
 import type { Clock } from '@nextbus/ports'
 import { type Endpoints, resolveEndpoints } from './endpoint'
 import { classifyFailure } from './errors'
-import { createLiveEtaController, createPollTransport, type LiveEtaEngine } from './live'
-
-/**
- * Everything a transport factory could need to build itself, so the option is one function.
- *
- * The poll emulator needs `getEtas` and a cadence; the socket needs a URL; both need a clock. Handing
- * over the whole `EdgeClient` instead would let a transport reach for a second endpoint, which is how a
- * "transport" grows into a second data layer.
- */
-export interface LiveTransportContext {
-  endpoints: Endpoints
-  /** The client's own `/v1/etas/:id` call — what the poll emulator polls. */
-  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]>
-  /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
-  pollMs: number
-  clock: Clock
-}
+import {
+  createLiveEtaController,
+  createPollTransport,
+  type LiveEtaEngine,
+  type LiveTransportContext,
+} from './live'
 
 export interface EdgeClientOptions {
   /** Base URL of the edge API, e.g. https://api.nextbus.hk */
@@ -111,10 +101,10 @@ export class EdgeClient implements DataSource {
     return this.getJson<StopDetail>(`/v1/stop/${encodeURIComponent(stopId)}`)
   }
 
-  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]> {
+  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport> {
     // Canonical stop id → /v1/etas/:id (not the lower-level /v1/eta/:co/:stop/:route).
     const q = routeIds?.length ? `?routes=${encodeURIComponent(routeIds.join(','))}` : ''
-    return this.getJson<Eta[]>(`/v1/etas/${encodeURIComponent(stopId)}${q}`)
+    return this.getJson<EtaReport>(`/v1/etas/${encodeURIComponent(stopId)}${q}`)
   }
 
   getSearchIndex(): Promise<SearchIndex> {

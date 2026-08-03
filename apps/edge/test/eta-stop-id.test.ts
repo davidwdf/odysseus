@@ -1,5 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
-import type { Eta, NearbyStop, StopDetail } from '@nextbus/core'
+import type { Eta, EtaReport, NearbyStop, StopDetail } from '@nextbus/core'
 import { applyLiveEtasToStopDetail, memberStopIds } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
@@ -67,7 +67,7 @@ describe('Eta.stopId', () => {
     const detail = await get<StopDetail>(`/v1/stop/${encodeURIComponent(pole.id)}`)
     const members = new Set(detail.members.map((m) => m.id))
     const raws = new Set(poles.map((p) => p.rawId))
-    const etas = await get<Eta[]>(`/v1/etas/${encodeURIComponent(pole.id)}`)
+    const etas = (await get<EtaReport>(`/v1/etas/${encodeURIComponent(pole.id)}`)).etas
     expect(etas.length).toBeGreaterThan(0)
     for (const eta of etas) {
       expect(members.has(eta.stopId)).toBe(true)
@@ -105,13 +105,13 @@ describe('Eta.stopId', () => {
     // ETA list would now be silently absent — a field quietly disappearing, which no shape check would see.
     // (`/v1/stop` is not the endpoint to ask: its rows carry their own `fare`, and its embedded readings
     // never went through the stamping tables at all.)
-    const etas = await get<Eta[]>(`/v1/etas/${encodeURIComponent(pole.id)}`)
+    const etas = (await get<EtaReport>(`/v1/etas/${encodeURIComponent(pole.id)}`)).etas
     expect(etas.filter((e) => e.fare !== undefined).length).toBeGreaterThan(0)
   })
 
   it('lets the kernel merge actually match — the comparison nothing did before', async () => {
     const detail = await get<StopDetail>(`/v1/stop/${encodeURIComponent(pole.id)}`)
-    const etas = await get<Eta[]>(`/v1/etas/${encodeURIComponent(pole.id)}`)
+    const etas = (await get<EtaReport>(`/v1/etas/${encodeURIComponent(pole.id)}`)).etas
     const merged = applyLiveEtasToStopDetail(detail, etas)
     const matched = merged.routes.filter((r) => r.eta !== null)
     // With the raw spelling this was 0 of N — the Place screen's arrivals all blanked. The number is

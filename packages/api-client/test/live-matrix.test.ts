@@ -19,6 +19,28 @@
 // scripting the poll side to fake a gap, i.e. comparing a transport with itself. They are asserted
 // against their hand-written expectation only, and marked `socketOnly` so the count of compared rows
 // stays honest.
+//
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// ITS SIBLING, AND WHICH FILE A NEW ROW BELONGS IN (WP5-5, ADR-074)
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// This file compares the poll emulator with a **hand-written server script**, per repaint. That is what
+// pins the reducer and the frame *ordering* — data frame before status frames, a gap applied rather than
+// dropped, a reconnect replacing rather than merging — and none of it needs a server.
+//
+// What it cannot do is compare the emulator with the **real** `EtaHub`, and the reason is structural
+// rather than a gap: the shard is a stateful server, so it answers a `subscribe` immediately from stored
+// readings — an empty snapshot plus `live` on a cold shard — and only then polls, while this engine has
+// nothing to answer with until its first fetch returns. Two correct engines, two different transcripts.
+// (`seq` differs too: monotonic across a re-subscription on the server, reset here.)
+//
+// So the cross-runtime half lives in `@nextbus/core/fixtures/live-rounds.json`, driven by
+// `test/live-rounds.test.ts` here and by `apps/edge/test/live-rounds.test.ts` against the real Durable
+// Object over a real socket. It asserts what a listener *holds when each round settles*, which is
+// engine-independent and is where the three twice-implemented rules live.
+//
+//   · A rule about what a **frame** means, or the order frames arrive in → a row here.
+//   · A rule about what a **round** does — retention, silence, a shrunken accepted set → a row in the
+//     shared corpus, so both implementations are measured against it.
 
 import type { Eta, LiveState, ServerFrame, WatchTarget } from '@nextbus/core'
 import { parseRouteId } from '@nextbus/core'
@@ -109,7 +131,14 @@ function eta(stopId: string, routeId: string, hhmm: string, observedAtSec = '00'
 const unavailable = new EdgeRequestError(502, 'upstream_unavailable', true, 'upstream said no')
 const gone = new EdgeRequestError(404, 'not_found', false, 'no such stop')
 
-/** What one target answered in one round. */
+/**
+ * What one target answered in one round.
+ *
+ * `Eta[]` rather than an `EtaReport`, and the driver wraps it: these rows are about *whole-target*
+ * failure — the `/v1/etas/:id` call itself throwing — which is what `{ throws }` says. Per-pole failure
+ * (`EtaReport.failed`, ADR-073) is a property of a round rather than of a frame, so its rows live in the
+ * shared corpus this file's header points at, where the shard is measured against them too.
+ */
 type Answer = Eta[] | { throws: EdgeRequestError }
 type Round = Record<string, Answer>
 
@@ -184,7 +213,9 @@ async function throughPolling(scenario: Scenario): Promise<{ updates: string[]; 
       if (answer === undefined)
         throw new Error(`scenario "${scenario.name}": no round ${round} answer for ${stopId}`)
       if ('throws' in answer) throw answer.throws
-      return answer
+      // `failed` absent, not `[]`: every board answered in these rows, and that is the shape the Worker
+      // serves for it (`EtaReportSchema`) — so the transport takes the same branch it takes in production.
+      return { etas: answer }
     },
   })
   const updates: string[] = []
@@ -484,7 +515,7 @@ describe('properties the matrix table cannot state', () => {
       timers,
       getEtas: async (stopId) => {
         calls.push(stopId)
-        return []
+        return { etas: [] }
       },
     })
     const updates: string[] = []
@@ -527,7 +558,7 @@ describe('properties the matrix table cannot state', () => {
       clock,
       pollMs: 30_000,
       timers,
-      getEtas: async () => [eta(STOP_A, ROUTE_1, '10:02')],
+      getEtas: async () => ({ etas: [eta(STOP_A, ROUTE_1, '10:02')] }),
     })
     const polled: LiveEtaUpdate[] = []
     const pollController = createLiveEtaController({
@@ -598,7 +629,7 @@ describe('properties the matrix table cannot state', () => {
       getEtas: async (stopId) => {
         // Round 0 answers for both; from round 1 STOP_B is permanently gone.
         if (stopId === STOP_B && round > 0) throw gone
-        return [eta(stopId, stopId === STOP_A ? ROUTE_1 : ROUTE_6, '10:02')]
+        return { etas: [eta(stopId, stopId === STOP_A ? ROUTE_1 : ROUTE_6, '10:02')] }
       },
     })
     const polled: LiveEtaUpdate[] = []
@@ -676,7 +707,7 @@ describe('properties the matrix table cannot state', () => {
       clock,
       pollMs: 30_000,
       timers,
-      getEtas: async () => [eta(STOP_A, ROUTE_1, round === 0 ? '10:02' : '10:09')],
+      getEtas: async () => ({ etas: [eta(STOP_A, ROUTE_1, round === 0 ? '10:02' : '10:09')] }),
     })
     const updates: string[] = []
     const controller = createLiveEtaController({
@@ -699,7 +730,11 @@ describe('properties the matrix table cannot state', () => {
 
   it('reports which engine is driving, without it ever being on the wire', () => {
     const polling = createLiveEtaController({
-      transport: createPollTransport({ clock, pollMs: 30_000, getEtas: async () => [] }),
+      transport: createPollTransport({
+        clock,
+        pollMs: 30_000,
+        getEtas: async () => ({ etas: [] }),
+      }),
       targets: ONE_TARGET,
       emit: () => {},
     })

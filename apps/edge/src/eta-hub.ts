@@ -69,8 +69,10 @@ import {
   acceptTargets,
   diffEtas,
   type Eta,
+  type EtaFailure,
   LIVE_CADENCE_RAMP_ROUNDS,
   nextLiveCadenceMs,
+  retainFailedPoles,
   type ServerFrame,
   type WatchTarget,
   type WireError,
@@ -314,8 +316,18 @@ function readingsFor(
  */
 const canonicalEtas = (etas: readonly Eta[]): Eta[] => diffEtas([], etas).changed
 
-/** One target's answer for one round: readings, or the failure that came instead. */
-type RoundResult = { target: WatchTarget; etas: Eta[] } | { target: WatchTarget; error: WireError }
+/**
+ * One target's answer for one round.
+ *
+ * Three outcomes, not two, since ADR-073. A target can now answer *partially*: `stopEtas` resolves with
+ * the readings it got plus `failed`, the boarding points whose upstream board refused. That is a
+ * different thing from `error`, which means the target itself could not be read at all — an unparseable
+ * id, a place that has left the dataset, a KV read that threw — and only that kind can drop a target
+ * from a subscription. A pole failure is advisory: it suppresses `gone` and it reports `retrying`.
+ */
+type RoundResult =
+  | { target: WatchTarget; etas: Eta[]; failed: readonly EtaFailure[] }
+  | { target: WatchTarget; error: WireError }
 
 /**
  * `Z`-suffixed UTC, which is what every frame's `at` is declared to be.
@@ -761,10 +773,8 @@ export class EtaHub extends DurableObject<Env> {
           // …with **this object's own CTB budget**, not the read path's default. That default is sized
           // for one HTTP request; a round repeats at the cadence, and at 24 the 48 heaviest real places
           // cost 1,342 calls a round (see `LIVE_MAX_TARGETS_PER_SHARD`).
-          return {
-            target,
-            etas: await stopEtas(dataset, target.stopId, target.routeIds, LIVE_CTB_BUDGET),
-          }
+          const report = await stopEtas(dataset, target.stopId, target.routeIds, LIVE_CTB_BUDGET)
+          return { target, etas: report.etas, failed: report.failed ?? [] }
         } catch (err) {
           return { target, error: wireErrorOf(err) }
         }
@@ -772,10 +782,29 @@ export class EtaHub extends DurableObject<Env> {
     )
 
     const failures = new Map<string, WireError>()
+    /** Per target, the boarding points inside it that refused — ordered as the wire ordered them. */
+    const poleFailures = new Map<string, readonly EtaFailure[]>()
     const after = new Map<string, readonly Eta[]>()
     for (const result of results) {
       if ('etas' in result) {
-        after.set(result.target.stopId, result.etas)
+        // **A failed round is not a departure, one level below where this object used to enforce it**
+        // (ADR-073). `stopEtas` can answer partially: a place is N boarding points and an upstream
+        // board call is per point, so one kerb can refuse while the others answer. Until the wire
+        // could say so, that arrived here as a perfectly ordinary successful list with readings
+        // missing from it, and `diffEtas` reported the missing ones `gone` — the same dishonesty the
+        // target-level branch below exists to prevent, reached by a route this object could not see.
+        // `retainFailedPoles` is the kernel's rule and the poll emulator applies the identical call.
+        after.set(
+          result.target.stopId,
+          result.failed.length === 0
+            ? result.etas
+            : retainFailedPoles(
+                before.get(result.target.stopId) ?? [],
+                result.etas,
+                result.failed.map((f) => f.stopId),
+              ),
+        )
+        if (result.failed.length > 0) poleFailures.set(result.target.stopId, result.failed)
         continue
       }
       failures.set(result.target.stopId, result.error)
@@ -798,7 +827,7 @@ export class EtaHub extends DurableObject<Env> {
     const quiet = shardDiff.changed.length === 0 && shardDiff.gone.length === 0
 
     for (const { ws, session } of entries) {
-      this.sendRound(ws, session, before, after, failures)
+      this.sendRound(ws, session, before, after, failures, poleFailures)
     }
 
     this.writeReadings(before, after)
@@ -820,6 +849,7 @@ export class EtaHub extends DurableObject<Env> {
     before: ReadonlyMap<string, readonly Eta[]>,
     after: ReadonlyMap<string, readonly Eta[]>,
     failures: ReadonlyMap<string, WireError>,
+    poleFailures: ReadonlyMap<string, readonly EtaFailure[]>,
   ): void {
     const current = sessionOf(ws)
     // **It re-declared itself during this round's awaits, so its own snapshot is authoritative.** Both
@@ -845,10 +875,25 @@ export class EtaHub extends DurableObject<Env> {
       readingsFor(kept, after),
     )
 
-    const mine = session.targets
+    // Every failure this connection should hear about, in accepted-target order and — within a target
+    // — in the order the wire listed its poles. One flat list rather than two, because the client
+    // receives one `status` frame per entry and the poll emulator builds the identical sequence from
+    // the identical `EtaReport`; two lists emitted in two loops would order them differently the
+    // moment a round had both kinds, and that difference is exactly what the scenario corpus asserts
+    // against. A target either failed outright or answered (possibly partially) — never both.
+    const mine = session.targets.flatMap((target): WireError[] => {
+      const whole = failures.get(target.stopId)
+      if (whole !== undefined) return [whole]
+      return (poleFailures.get(target.stopId) ?? []).map((f) => f.error)
+    })
+    // **Only a *target*-level failure can be permanent here**, and that is a rule rather than an
+    // observation about today's codes. `retryable: false` is the wire's instruction to prune, and a
+    // refusing board says nothing about whether the rider's stop exists — so a pole failure must never
+    // remove a target from a subscription, whatever code it happens to carry. `kept` above filters on
+    // `failures` alone for the same reason.
+    const permanent = session.targets
       .map((target) => failures.get(target.stopId))
-      .filter((error): error is WireError => error !== undefined)
-    const permanent = mine.filter((error) => !error.retryable)
+      .filter((error): error is WireError => error !== undefined && !error.retryable)
 
     let seq = session.seq
     if (permanent.length > 0) {

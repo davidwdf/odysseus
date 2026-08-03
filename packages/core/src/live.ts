@@ -377,6 +377,59 @@ export function diffEtas(
   return { changed: changed.sort(compareRefs), gone: gone.sort(compareRefs) }
 }
 
+/**
+ * This round's readings, with the ones we could not ask about kept rather than dropped.
+ *
+ * **The rule is *"a failed round is not a departure"*, and this is the layer it was missing at**
+ * (ADR-073). Both engines already held it per *target*: if a whole `/v1/etas/:id` call failed, the poll
+ * emulator kept that target's previous readings and the shard did the same, so nothing landed in
+ * `gone`. Underneath a target is a *place*, and underneath a place are its boarding poles — and there
+ * the edge's coalescing cache resolved a rejected upstream board to an empty list, so the call
+ * *succeeded* carrying nothing. `diffEtas` then did exactly what it is supposed to do with readings
+ * that are no longer there: it reported every one of them departed. A rider watching a stop through a
+ * KMB outage saw the buses vanish one by one, on both engines, with the connection reading `live`.
+ *
+ * So the wire names the poles it could not read (`EtaReport.failed`) and this function is what a
+ * stateful consumer does with that: a previous reading whose pole is in `failed` **and which this
+ * round did not replace** survives into the result. Everything else is this round's truth, including
+ * an absence — a pole that *did* answer and no longer lists a route has genuinely lost that bus, and
+ * `gone` is the honest frame for it.
+ *
+ * Three consequences worth stating rather than discovering:
+ *
+ *  · **`next` always wins.** A pole can fail partway — Citybus is one upstream call per (pole, route),
+ *    so one route can refuse while its neighbours answer — and a retained reading must never displace
+ *    a fresh one. The retention is a *union*, not a merge, and `next` is indexed first.
+ *  · **A retained reading is not refreshed, and that is the point.** Its `dataTimestamp` stays where
+ *    it was, so `isStale` ages it by the operator's clock exactly as ADR-008 requires and the screen
+ *    labels it. A pole that refuses for ever therefore keeps showing an ageing, labelled reading rather
+ *    than blanking — which is the same thing the per-target rule has always done for a target that
+ *    keeps failing, deliberately, and consistency between the two is what makes one rule.
+ *  · **It cannot resurrect.** Only readings present in `prev` survive; a pole that failed on the very
+ *    first round contributes nothing, because there is nothing to keep.
+ *
+ * `failedStopIds` is a list of *pole* ids and is compared by equality, not parsed: a place id would
+ * simply match no reading, which is the safe direction, and the caller that has the list took it off
+ * the wire where it is already canonical.
+ *
+ * @spec live#retainFailedPoles
+ */
+export function retainFailedPoles(
+  prev: readonly Eta[],
+  next: readonly Eta[],
+  failedStopIds: readonly string[],
+): Eta[] {
+  if (failedStopIds.length === 0) return canonicalEtas(next)
+  const failed = new Set(failedStopIds)
+  const merged = indexByRef(next)
+  for (const eta of prev) {
+    if (!failed.has(eta.stopId)) continue
+    const key = formatFavoriteRouteKey(eta.stopId, eta.routeId)
+    if (!merged.has(key)) merged.set(key, eta)
+  }
+  return [...merged.values()].sort(compareRefs)
+}
+
 // ── The reducer ─────────────────────────────────────────────────────────────────────────────
 
 /** A snapshot: the server's whole truth replaces ours, whatever `seq` it carries. See `applyLiveFrame`. */

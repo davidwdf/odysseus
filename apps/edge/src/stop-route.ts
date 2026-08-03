@@ -4,6 +4,8 @@ import {
   classifyRemark,
   dedupeEtas,
   type Eta,
+  type EtaFailure,
+  type EtaReport,
   etaBoardingKey,
   parseRouteId,
   parseStopId,
@@ -23,7 +25,7 @@ import {
   toRouteSummary,
 } from '@nextbus/data-normalize'
 import type { DatasetSource } from './dataset'
-import { badRequest, notFound } from './errors'
+import { badRequest, notFound, wireErrorOf } from './errors'
 import { coalesce } from './eta-cache'
 
 // Per-place CTB fan-out budget (ADR-042). KMB poles cost ONE call each (`stop-eta` returns
@@ -123,20 +125,55 @@ function boardCalls(place: PlaceDoc): BoardCall[] {
   return calls
 }
 
+/** One board call's answer: the pole's readings, or the failure that came instead. */
+type BoardResult = { poleId: string; etas: Eta[] } | { poleId: string; error: EtaFailure['error'] }
+
 /**
  * Raw (call-deduped, not yet rider-deduped) ETAs across every upstream pole of a place
- * (ADR-042, WP5-11). Each KMB or GMB pole is ONE stop-board call (all its routes); CTB is per-route,
- * bounded by a per-place budget. Poles and CTB routes are fetched concurrently.
+ * (ADR-042, WP5-11), **and the poles that would not answer** (ADR-073). Each KMB or GMB pole is ONE
+ * stop-board call (all its routes); CTB is per-route, bounded by a per-place budget. Poles and CTB
+ * routes are fetched concurrently.
  *
  * Every upstream call goes through `coalesce` (WP0-4), so a pole is fetched **once per 30 s
  * per isolate** no matter how many places, requests or concurrent callers want it: the
  * distinct call keys below are exactly the upstream calls this function can issue.
  * The GMB *raw* board is what's cached — the mapping to canonical ids uses the place's own
  * resolution table, so a cached board can't outlive the build that resolved it.
+ *
+ * ## Why the failures come back rather than being swallowed here
+ *
+ * `coalesce` used to take a `fallback` and every one of these call sites passed `[]`, so this
+ * function could not tell a refused board from an empty one and neither could anything above it.
+ * The consequence was not a missing diagnostic, it was a wrong answer: `/v1/etas/:id` served
+ * `200 []` during an outage and both live engines reported every reading `gone`. See `eta-cache.ts`.
+ *
+ * **The unit of failure is the pole, and the aggregation is deliberate.** CTB has no stop board
+ * (ADR-021), so one pole is N calls; if any of them refuses, the pole is named once — the routes that
+ * *did* answer are in `etas` as usual, and the kernel's `retainFailedPoles` keeps only the previous
+ * readings this round did not replace. Reporting per (pole, route) would emit a dozen `status` frames
+ * for one outage; reporting per place would claim we could not ask about kerbs we did ask about.
+ *
+ * **A `catch` per task, never one around `Promise.all`.** One refusing pole must not take the place's
+ * other poles with it — that is the same isolation the poll emulator gives one target among several,
+ * one level down.
  */
-async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): Promise<Eta[]> {
-  const tasks: Array<Promise<Eta[]>> = []
+async function memberEtaLists(
+  place: PlaceDoc,
+  ctbBudget = DEFAULT_CTB_BUDGET,
+): Promise<{ etas: Eta[]; failed: EtaFailure[] }> {
+  const tasks: Array<Promise<BoardResult>> = []
   let ctbRemaining = ctbBudget
+  /** Every board call's answer, tagged with the pole, so a rejection cannot look like an empty board. */
+  const board = (poleId: string, etas: Promise<Eta[]>): Promise<BoardResult> =>
+    atPole(poleId, etas).then(
+      (list): BoardResult => ({ poleId, etas: list }),
+      // `wireErrorOf` is the edge's own classifier (ADR-064): a `TimeoutError`/`AbortError` becomes
+      // `upstream_timeout`, everything else here defaults to `upstream_unavailable`. Both are
+      // `retryable: true`, which is what the readers below rely on — a board that refused says nothing
+      // about whether the stop exists, so a pole failure never drops a target from a subscription.
+      (err): BoardResult => ({ poleId, error: wireErrorOf(err) }),
+    )
+
   // `boardCalls` already drops a pole named twice (an overlapping caller, a malformed doc), so the
   // CTB budget isn't spent on a repeat we'd only coalesce away.
   for (const call of boardCalls(place)) {
@@ -147,9 +184,9 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
         // CTB has no per-stop board (ADR-021), so the call key is per (pole, route).
         const key = `CTB-eta|${call.rawStopId}|${routeNo}|1`
         tasks.push(
-          atPole(
+          board(
             call.poleId,
-            coalesce(key, () => fetchEta('CTB', call.rawStopId, routeNo, '1'), []),
+            coalesce(key, () => fetchEta('CTB', call.rawStopId, routeNo, '1')),
           ),
         )
       }
@@ -157,13 +194,11 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
       // GMB: one stop-board call returns every route at this pole (like KMB); the edge
       // resolves its raw route_id/seq to our canonical ids (ADR-047).
       const gmbLive = place.gmbLive ?? {}
-      const raw = coalesce<GmbEtaEntry[]>(
-        `gmb-board|${call.rawStopId}`,
-        () => fetchGmbStopEta(call.rawStopId),
-        [],
+      const raw = coalesce<GmbEtaEntry[]>(`gmb-board|${call.rawStopId}`, () =>
+        fetchGmbStopEta(call.rawStopId),
       )
       tasks.push(
-        atPole(
+        board(
           call.poleId,
           raw.then((entries) => gmbEtasFrom(entries, gmbLive)),
         ),
@@ -172,15 +207,31 @@ async function memberEtaLists(place: PlaceDoc, ctbBudget = DEFAULT_CTB_BUDGET): 
       // KMB/LWB: one call returns every route at this pole. Both operators read the same
       // KMB `stop-eta` board, so the pole id alone is the call key.
       tasks.push(
-        atPole(
+        board(
           call.poleId,
-          coalesce<Eta[]>(`kmb-board|${call.rawStopId}`, () => fetchKmbStopEta(call.rawStopId), []),
+          coalesce<Eta[]>(`kmb-board|${call.rawStopId}`, () => fetchKmbStopEta(call.rawStopId)),
         ),
       )
     }
   }
-  const lists = await Promise.all(tasks)
-  return lists.flat().filter((e) => e.arrivals.length > 0)
+
+  const results = await Promise.all(tasks)
+  const etas: Eta[] = []
+  /** First failure per pole wins; `Promise.all` preserves task order, so "first" is deterministic. */
+  const failedByPole = new Map<string, EtaFailure['error']>()
+  for (const result of results) {
+    if ('etas' in result) {
+      for (const e of result.etas) if (e.arrivals.length > 0) etas.push(e)
+    } else if (!failedByPole.has(result.poleId)) {
+      failedByPole.set(result.poleId, result.error)
+    }
+  }
+  // Sorted by pole id, because both engines turn each entry into one `status` frame and D1's canonical
+  // order is what keeps their frame sequences byte-identical for identical upstream behaviour.
+  const failed = [...failedByPole.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([stopId, error]): EtaFailure => ({ stopId, error }))
+  return { etas, failed }
 }
 
 /**
@@ -289,21 +340,26 @@ function withRemarkKind(eta: Eta): Eta {
 /**
  * THE canonical live arrivals for a stop or merged place: upstream calls deduped by
  * (route, serviceType), then collapsed to **one rider line per route+direction**
- * (`dedupeEtas`), soonest first. The single source every `Eta[]`-returning endpoint
- * (`/v1/nearby`, `/v1/etas`) flows through — so the API is consistently de-duplicated
- * and the frontend never re-dedupes. (`/v1/stop` returns the full route *list* with
- * per-route ETAs; its list-level collapse is the client's `dedupeRoutes`.)
+ * (`dedupeEtas`), soonest first — **plus the boarding points that would not answer** (ADR-073).
+ * The single source every reading-bearing endpoint (`/v1/nearby`, `/v1/etas`) flows through — so the
+ * API is consistently de-duplicated and the frontend never re-dedupes. (`/v1/stop` returns the full
+ * route *list* with per-route ETAs; its list-level collapse is the client's `dedupeRoutes`.)
+ *
+ * `failed` rides alongside `etas` rather than being folded into it because the two answer different
+ * questions and a rider needs both: `etas` is what is coming, `failed` is which kerbs we could not ask
+ * about — and *"nothing is coming"* and *"we could not ask"* are the two states that used to be one.
  */
 export async function stopArrivals(
   place: PlaceDoc,
   ctbBudget = DEFAULT_CTB_BUDGET,
-): Promise<Eta[]> {
-  const all = dedupeEtas(await memberEtaLists(place, ctbBudget))
+): Promise<EtaReport> {
+  const { etas: raw, failed } = await memberEtaLists(place, ctbBudget)
+  const all = dedupeEtas(raw)
   const { fareByRouteAndPole, destinationByRoute, destinationByBoardingLine } = stampTables(place)
   // Stamp each reading with its route's destination + boarding fare so flat ETA lists can show
   // "→ dest · $6.7" without the full Route object (ADR-036). Readings arrive carrying their canonical
   // pole id (`atPole`), which is the id both tables above are keyed on.
-  return all
+  const etas = all
     .map((e) => {
       const destination =
         destinationByRoute.get(e.routeId) ?? destinationByBoardingLine.get(etaBoardingKey(e))
@@ -313,6 +369,10 @@ export async function stopArrivals(
       return { ...stamped, ...(destination ? { destination } : {}), ...(fare ? { fare } : {}) }
     })
     .sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
+  // Absent, not `[]`, when every board answered — see `EtaReportSchema`. The common case is then
+  // byte-identical to what it always was, which matters for the payload the poll emulator fetches
+  // once per target per cadence.
+  return failed.length === 0 ? { etas } : { etas, failed }
 }
 
 /**
@@ -343,7 +403,15 @@ async function requirePlace(ds: DatasetSource, id: string): Promise<PlaceDoc> {
  *  inheriting whatever is in the namespace. */
 export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDetail> {
   const place = await requirePlace(ds, id)
-  const readings = (await memberEtaLists(place)).map(withRemarkKind)
+  // **`failed` is deliberately dropped here and NOT put on `StopDetail`** (ADR-073). Not an oversight
+  // and not free: `applyLiveEtasToStopDetail` spreads the document it is handed, so a `failed` list
+  // fetched once over HTTP would survive every subsequent live merge unchanged — a screen would keep
+  // saying "we could not reach this kerb" for as long as it stayed open, long after the socket had
+  // recovered. Making it correct means teaching the merge helpers about failures, which is a kernel
+  // change with corpus rows of its own. The Place screen learns about an outage the way the ADR
+  // intends anyway: through its live subscription's `retrying` status, one cadence later. WP5-13 owns
+  // the first-paint gap for this endpoint and for `/v1/nearby`.
+  const readings = (await memberEtaLists(place)).etas.map(withRemarkKind)
 
   const detail: StopDetail = {
     stop: toMergedStop(place),
@@ -385,26 +453,34 @@ export async function stopDetail(ds: DatasetSource, id: string): Promise<StopDet
 }
 
 /**
- * GET /v1/etas/:id — flat ETA list for a stop or merged place (optionally route-filtered).
+ * GET /v1/etas/:id — the arrivals for a stop or merged place, and the kerbs we could not ask about
+ * (optionally route-filtered).
  *
  * `ctbBudget` is threaded rather than left to `stopArrivals`' default for the same reason `/v1/nearby`
  * passes its own: the default is generous because one HTTP request happens once, and the `EtaHub` round
  * that also reads through here happens every 45 s for as long as a socket is open. Dropping the parameter
  * silently — which this function did — meant the live fan-out was double what the shard's own cap
  * documented, and the number the cap published was wrong by an order of magnitude.
+ *
+ * **`routes=` filters the readings and never the failures**, and the asymmetry is the honest one. A
+ * caller narrowing to three routes is saying which arrivals it wants, not which outages it is willing
+ * to hear about — and a KMB board is one call for every route at the pole, so "did this pole answer"
+ * has no per-route truth to filter by in the first place. Filtering `failed` too would mean a screen
+ * watching one route at a refusing pole received an empty list with nothing to explain it, which is
+ * precisely the state this endpoint's shape exists to make impossible.
  */
 export async function stopEtas(
   ds: DatasetSource,
   id: string,
   routeIds?: string[],
   ctbBudget?: number,
-): Promise<Eta[]> {
+): Promise<EtaReport> {
   const place = await requirePlace(ds, id)
 
-  const all = await stopArrivals(place, ctbBudget)
-  if (!routeIds?.length) return all
+  const report = await stopArrivals(place, ctbBudget)
+  if (!routeIds?.length) return report
   const wanted = new Set(routeIds)
-  return all.filter((e) => wanted.has(e.routeId))
+  return { ...report, etas: report.etas.filter((e) => wanted.has(e.routeId)) }
 }
 
 /** GET /v1/route/:id — a route and its ordered stop list, each stop carrying the route's
@@ -421,15 +497,20 @@ export async function routeDetail(ds: DatasetSource, id: string): Promise<RouteD
   // Live arrivals along the whole route, keyed by sequence (the route-eta feed identifies
   // stops only by `seq`). Coalesced like the stop boards (WP0-4): every direction and
   // service-type variant of a number reads the same upstream feed, so opening two route
-  // screens for one number costs one call. A failure degrades to a static-only route view —
-  // `coalesce` resolves to `[]` and doesn't cache the failure — rather than erroring the screen.
+  // screens for one number costs one call.
+  //
+  // **The degrade-to-static decision is at this call site now, not inside the cache** (ADR-073).
+  // `coalesce` rejects; this one caller catches, because a route view without live times is still a
+  // route view — the stop list, the geometry and the fares are all static — whereas erroring the
+  // screen would lose them. That is a genuinely different answer from `/v1/etas`', which is why the
+  // cache is no longer the one deciding it for both. The failure is still not cached, so the next
+  // request retries. Route detail has no per-stop failure field of its own; whoever gives it one is
+  // WP5-13, and it should come from here.
   const etaBySeq = new Map<number, Eta>()
   if (route.operator === 'KMB' || route.operator === 'LWB') {
-    const entries = await coalesce(
-      `kmb-route-eta|${route.routeNo}|${route.serviceType}`,
-      () => fetchKmbRouteEta(route.routeNo, route.serviceType),
-      [],
-    )
+    const entries = await coalesce(`kmb-route-eta|${route.routeNo}|${route.serviceType}`, () =>
+      fetchKmbRouteEta(route.routeNo, route.serviceType),
+    ).catch(() => [])
     for (const entry of entries) {
       if (entry.eta.routeId === id && entry.eta.arrivals.length > 0) {
         etaBySeq.set(entry.seq, entry.eta)

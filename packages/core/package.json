@@ -7,7 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./spec/*": "./spec/*"
+    "./spec/*": "./spec/*",
+    "./fixtures/live-rounds": "./fixtures/live-rounds.ts",
+    "./fixtures/*": "./fixtures/*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -9,6 +9,7 @@ import {
   applyLiveEtasToStopDetail,
   dedupeRoutes,
   type Eta,
+  type EtaReport,
   LIVE_SHARD_COUNT,
   type ServerFrame,
   type StopDetail,
@@ -327,8 +328,10 @@ const estatePlace = () => {
 
 const stopDetail = async (id: string): Promise<StopDetail> =>
   (await (await get(`/v1/stop/${encodeURIComponent(id)}`)).json()) as StopDetail
+// `/v1/etas/:id` answers an `EtaReport` since ADR-073, and this helper takes the `etas` half — every
+// assertion below is about which readings are published, and none of these fixtures refuses a board.
 const flatEtas = async (id: string): Promise<Eta[]> =>
-  (await (await get(`/v1/etas/${encodeURIComponent(id)}`)).json()) as Eta[]
+  ((await (await get(`/v1/etas/${encodeURIComponent(id)}`)).json()) as EtaReport).etas
 
 describe('the fixture is the shape the rule is about', () => {
   it('is one place of two members, with 269D boarding at both', () => {

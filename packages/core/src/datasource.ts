@@ -2,6 +2,7 @@ import type { SearchIndex } from './search'
 import type {
   ClientPolicy,
   Eta,
+  EtaReport,
   LatLng,
   NearbyStop,
   RouteDetail,
@@ -67,8 +68,19 @@ export interface DataSource {
   getRoute(routeId: string): Promise<RouteDetail>
   /** A stop and every route serving it, each with its next arrival. */
   getStop(stopId: string): Promise<StopDetail>
-  /** Live ETAs for a stop (optionally filtered to specific routes). */
-  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]>
+  /**
+   * Live ETAs for a stop (optionally filtered to specific routes), **and the boarding points whose
+   * upstream board would not answer** (ADR-073).
+   *
+   * It returns an `EtaReport` rather than a bare `Eta[]`, and the extra field is not a diagnostic:
+   * it is what makes the list interpretable. An empty `etas` used to mean two different things — no
+   * buses due, or nobody would tell us — and a stateful caller has to tell them apart, because
+   * treating the second as the first reports every reading it holds as departed. `retainFailedPoles`
+   * in `@nextbus/core` is the rule for that, and both live engines apply it.
+   *
+   * `failed` is absent when every board answered, which is the common case and the cheap one.
+   */
+  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport>
   /** Subscribe to live updates for the given targets. */
   watch(targets: WatchTarget[], onUpdate: EtaListener, opts?: WatchOptions): Subscription
   /**

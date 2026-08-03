@@ -117,7 +117,12 @@ const LIVE_ETAS: Eta[] = [
 function pollingDataSource(): DataSource {
   const fetchImpl = (async (input: string | URL | Request) => {
     const url = String(input)
-    const body = url.includes('/v1/etas/') ? LIVE_ETAS : STOP_DETAIL
+    // `/v1/etas/:id` answers an `EtaReport` since ADR-073 — `{ etas }`, with `failed` **absent**, which
+    // is the shape the Worker serves when every board answered. Spelled here rather than wrapped in a
+    // helper because this fixture's whole job is to be what the real endpoint returns: a stub still
+    // serving a bare array would keep this suite green against a client that had stopped reading `.etas`,
+    // and the symptom would be every row rendering "—" on the real app.
+    const body = url.includes('/v1/etas/') ? { etas: LIVE_ETAS } : STOP_DETAIL
     if (!url.includes('/v1/etas/') && !url.includes('/v1/stop/')) {
       // A fixture that answered an endpoint the screen does not use would hide a screen that started
       // using one. Same discipline as the edge suites, which throw on an unexpected URL.

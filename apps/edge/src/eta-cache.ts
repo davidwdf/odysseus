@@ -56,20 +56,40 @@ function sweep(now: number): void {
  * Run `produce()` at most once per `key` per TTL for this isolate, sharing the in-flight
  * promise with every concurrent caller.
  *
- * A rejection is **not** cached: the entry is evicted so the next caller retries, and this
- * call resolves to `fallback` (upstream ETA failures degrade a card, they don't error a
- * screen). Resolved values are shared by reference across callers, so **treat the result as
- * immutable** — every consumer here maps into fresh objects rather than mutating in place.
+ * A rejection is **not** cached: the entry is evicted so the next caller retries, and the returned
+ * promise **rejects**. Resolved values are shared by reference across callers, so **treat the result
+ * as immutable** — every consumer here maps into fresh objects rather than mutating in place.
+ *
+ * ## It used to take a `fallback`, and that parameter was the bug (ADR-073)
+ *
+ * The signature was `coalesce(key, produce, fallback)` and every ETA call site passed `[]`, so a
+ * refused upstream board resolved to an empty list and the caller could not tell the difference
+ * between *this pole has no buses* and *this pole would not answer*. That is not a cosmetic loss.
+ * `stopEtas` returned `[]` **successfully**, `/v1/etas/:id` served `200 []`, and `diffEtas` — one
+ * layer up, in both engines — did the only correct thing available to it with readings that are no
+ * longer present: it reported every one of them `gone`. The rule *"a failed round is not a
+ * departure"* was written down twice, enforced twice, and defeated one layer below both copies,
+ * because a **cache** had decided what a failure meant on its callers' behalf.
+ *
+ * So there is no fallback here any more. A caller that genuinely wants to degrade says so at the
+ * call site, where a reader can see it and where the decision belongs — `routeDetail` still does,
+ * with its reason on the line. `memberEtaLists` does the opposite and records which pole refused,
+ * which is what the wire now carries.
+ *
+ * **The stored promise carries its own rejection handler**, and that is required rather than tidy:
+ * without it a round in which nobody happened to await a failed key would surface as an unhandled
+ * rejection, which workerd logs and which is indistinguishable from a bug of ours. Attaching a
+ * handler does not consume the rejection for the callers — each `await` sees it.
  */
-export function coalesce<T>(key: string, produce: () => Promise<T>, fallback: T): Promise<T> {
+export function coalesce<T>(key: string, produce: () => Promise<T>): Promise<T> {
   const now = Date.now()
   const hit = entries.get(key)
   if (hit && now - hit.at < TTL_MS) return hit.value as Promise<T>
 
-  const value = produce().catch((err) => {
+  const value = produce()
+  value.catch((err) => {
     if (entries.get(key)?.value === value) entries.delete(key)
     console.warn(`[eta] ${key} failed: ${(err as Error).message}`)
-    return fallback
   })
   entries.set(key, { at: now, value })
   if (entries.size > MAX_ENTRIES) sweep(now)

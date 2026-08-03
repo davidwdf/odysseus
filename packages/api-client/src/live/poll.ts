@@ -17,22 +17,37 @@
 //  1. **A failed round is not a departure.** If a target's fetch fails, its previous readings stay in
 //     this transport's state. Reporting them as `gone` would tell the rider the bus has left when all
 //     that happened is that we could not ask — the exact dishonesty `gone` was added to prevent
-//     (ADR-008, D2), pointed the other way.
+//     (ADR-008, D2), pointed the other way. Since ADR-073 the same rule runs one level down as well:
+//     a target can answer *partially*, because a place is several boarding poles and an upstream board
+//     call is per pole, so `EtaReport.failed` names the kerbs that refused and `retainFailedPoles` —
+//     the kernel's rule, called identically by the shard — keeps their readings. Before that field
+//     existed the edge's cache resolved a refused board to an empty list, so this rule was enforced
+//     here, enforced again in `eta-hub.ts`, and defeated below both of them.
 //  2. **An unchanged round sends nothing at all.** No empty `delta`, no heartbeat. A shard pushing a
 //     frame every 45 s per subscriber for no news is the cost model's 20:1 message meter being spent on
 //     nothing, and a repaint on every round would defeat `sameReading`'s whole purpose (see
 //     `COMPARED_FIELDS` in `@nextbus/core`). The listener hears from us when something has changed.
 
-import type { ClientFrame, Eta, ServerFrame, WatchTarget, WireError } from '@nextbus/core'
-import { acceptTargets, diffEtas } from '@nextbus/core'
+import type {
+  ClientFrame,
+  Eta,
+  EtaFailure,
+  EtaReport,
+  ServerFrame,
+  WatchTarget,
+  WireError,
+} from '@nextbus/core'
+import { acceptTargets, diffEtas, retainFailedPoles } from '@nextbus/core'
 import type { Clock, LiveTransportSink } from '@nextbus/ports'
 import { wireErrorOf } from '../errors'
 import { frameAt, type LiveEtaEngine, systemTimers, type Timers } from './engine'
 
-/** One target's answer for one round: readings, or the failure that came instead. */
+/** One target's answer for one round: readings (possibly partial), or the failure that came instead. */
 interface RoundOk {
   target: WatchTarget
   etas: readonly Eta[]
+  /** The boarding points inside this target that refused. Empty when the whole place answered. */
+  failed: readonly EtaFailure[]
 }
 interface RoundFailure {
   target: WatchTarget
@@ -49,7 +64,7 @@ export interface PollTransportDeps {
    * client so this module cannot reach for a second endpoint, and so a test can hand it four scripted
    * rounds without a fetch stub.
    */
-  getEtas(stopId: string, routeIds?: string[]): Promise<Eta[]>
+  getEtas(stopId: string, routeIds?: string[]): Promise<EtaReport>
   /** Stamps each frame's `at`. The kernel may not read a clock; this layer may, through the port. */
   clock: Clock
   /** Cadence, ms. `EdgeClient` defaults it to the served `refreshAfterMs` (ADR-053). */
@@ -117,7 +132,8 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
     const results: RoundResult[] = await Promise.all(
       watching.map(async (target): Promise<RoundResult> => {
         try {
-          return { target, etas: await deps.getEtas(target.stopId, target.routeIds) }
+          const report = await deps.getEtas(target.stopId, target.routeIds)
+          return { target, etas: report.etas, failed: report.failed ?? [] }
         } catch (thrown) {
           return { target, error: wireErrorOf(thrown) }
         }
@@ -149,7 +165,22 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
     }
 
     for (const result of results) {
-      if ('etas' in result) readings.set(result.target.stopId, result.etas)
+      if (!('etas' in result)) continue
+      // **The same rule as the whole-target one above, one level down** (ADR-073). A place is N
+      // boarding poles and an upstream board call is per pole, so a target can come back partially:
+      // some kerbs answered, one refused. `retainFailedPoles` keeps the refusing kerb's previous
+      // readings — the ones this round did not replace — so they never reach `gone`, and it is the
+      // kernel's function rather than this file's, called with the identical arguments by `eta-hub.ts`.
+      readings.set(
+        result.target.stopId,
+        result.failed.length === 0
+          ? result.etas
+          : retainFailedPoles(
+              readings.get(result.target.stopId) ?? [],
+              result.etas,
+              result.failed.map((f) => f.stopId),
+            ),
+      )
     }
 
     const next = flatten()
@@ -176,6 +207,14 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
     // stopped resolving (ADR-008's no-silent-filter rule, and `SnapshotFrame.targets`' whole purpose).
     // Caught by the `nothing left to watch closes the subscription` row going red, which is the row that
     // exists for precisely this shape.
+    // Every failure this round should be reported for, in `watching` order and — inside one target —
+    // in the order the wire listed its poles. One flat list rather than two loops, because `eta-hub.ts`
+    // builds the identical sequence from the identical `EtaReport` and a round carrying both kinds
+    // would otherwise order them differently on the two engines. A target either failed outright or
+    // answered (possibly partially), never both, so nothing is reported twice.
+    const reportable: WireError[] = results.flatMap((result) =>
+      'error' in result ? [result.error] : result.failed.map((f) => f.error),
+    )
     const answered = results.some((result) => 'etas' in result)
     const dropped = failed.some(({ error }) => !error.retryable)
     if (seq === 0 && (answered || dropped)) {
@@ -217,13 +256,15 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
     }
     // else: nothing changed, so nothing is sent. See the header.
 
-    for (const { error } of failed) status('retrying', error)
+    for (const error of reportable) status('retrying', error)
     // A `status` frame is a **transition, not a heartbeat**. `live` goes out on the first complete round
     // and again after a recovery, and nothing in between: a frame every round saying "still fine" would
     // repaint every screen every cadence, which is the cost the delta protocol exists to avoid. The flag
-    // is reset by any failure, which is what makes the recovery observable — without it a screen labelled
-    // "reconnecting" keeps that label for ever while data flows in behind it.
-    if (failed.length > 0) announcedLive = false
+    // is reset by any failure — including a *partial* one, because a place whose second kerb refused is
+    // not a place we are fully live on, and a rider whose row has stopped moving should not be told
+    // otherwise. Without the reset a screen labelled "reconnecting" keeps that label for ever while
+    // data flows in behind it.
+    if (reportable.length > 0) announcedLive = false
     else if (!announcedLive) {
       announcedLive = true
       status('live')

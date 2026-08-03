@@ -10,6 +10,7 @@ import {
   boardingPoleId,
   dedupeRoutes,
   type Eta,
+  type EtaReport,
   LIVE_SHARD_COUNT,
   memberStopIds,
   type ServerFrame,
@@ -409,9 +410,9 @@ describe('a favourite saved at the folded pole still loads its route', () => {
     // member. `stampTables` keys the fare table on the row's own `stopId`; if a reading were stamped
     // with anything else, this row would silently lose its fare — a field quietly disappearing,
     // which no shape check would see. (The spelling itself is asserted in the merge suite below.)
-    const etas = (await (
+    const { etas } = (await (
       await get(`/v1/etas/${encodeURIComponent(parkPlace().id)}`)
-    ).json()) as Eta[]
+    ).json()) as EtaReport
     const row = etas.find((e) => e.routeId === 'KMB:N269:outbound:1')
     expect(row?.fare).toBe('5.8')
   })
@@ -444,8 +445,9 @@ describe('the live merge matches the rows it is merged into', () => {
 
   const stopDetail = async (id: string): Promise<StopDetail> =>
     (await (await get(`/v1/stop/${encodeURIComponent(id)}`)).json()) as StopDetail
+  // The `etas` half of the `EtaReport` ADR-073 made this endpoint answer with; no board here refuses.
   const flatEtas = async (id: string): Promise<Eta[]> =>
-    (await (await get(`/v1/etas/${encodeURIComponent(id)}`)).json()) as Eta[]
+    ((await (await get(`/v1/etas/${encodeURIComponent(id)}`)).json()) as EtaReport).etas
 
   it('stamps /v1/stop’s embedded readings with the id their own row names', async () => {
     // The invariant `eta-stop-id.test.ts` already asserts for a place with no aliases, asked here of

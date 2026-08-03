@@ -21,9 +21,15 @@
       // *"the declaration is per-package and can go stale … nothing enforces that it does"*. It is declared
       // here rather than switched off with `cache: false`, for the reason `packages/contract/turbo.json`
       // gives: telling the next reader what a task reads is worth more than losing the cache.
+      //  · `test/live-rounds.test.ts` drives the shard against the **shared** scenario corpus at
+      //    `packages/core/fixtures/live-rounds.json` (WP5-5) — the file whose entire reason for existing
+      //    is that `packages/api-client` reads the identical bytes. A row edited here replaying a cached
+      //    pass would stop the two engines being compared while the build stayed green, which is the one
+      //    stale hash in this list with a rider-visible consequence.
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/packages/core/src/*.ts",
+        "$TURBO_ROOT$/packages/core/fixtures/*",
         "$TURBO_ROOT$/packages/contract/src/**/*.ts"
       ]
     }
