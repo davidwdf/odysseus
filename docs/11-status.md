@@ -275,7 +275,13 @@ socket ([ADR-074](./08-decision-log.md#adr-074--the-live-rounds-corpus-one-table
 *"we could not ask"* now, so a card during an outage no longer reads as an empty stop
 ([ADR-077](./08-decision-log.md#adr-077--a-card-can-say-we-could-not-ask-and-a-failure-list-must-not-outlive-its-round)). That leaves **WP5-7** (batch `/v1/etas?ids=…`, then Nearby adopts live), **WP5-8** (the
 docs-freshness rule, which nothing enforces) and **WP5-12**, the 2–10 m residual the clustering rules
-deliberately leave between them. WP5-12 now owns two things it did
+deliberately leave between them. **Before writing a test or a gate here, read
+[`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
+gate chain's shared shape, which script polices which directory, the two `layers.json` facts that decide
+where a test can live, and the five things about the workerd suite that will bite (chiefly: `coalesce`
+holds a pole for 30 s so a round needs `resetEtaCache()`, and `caches.default` is reset between neither
+tests nor files). All of it was established by reading the scripts and watching them fail, twice, because
+none of it was written down. WP5-12 now owns two things it did
 not: a rider who stars one line at **both** kerbs still sees one Favourites row, and at Fu Kin Street the two
 kerbs' *names* differ ("outside" vs "opposite" Sin Sam House) where the printed code does not — a cheaper lead
 than any in its own row.

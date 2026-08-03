@@ -59,12 +59,95 @@ so the API can never drift from what the app expects.
   below), and `packages/i18n`'s runs `check-i18n.mts` (locale parity, the ICU
   subset, and drift of the generated `.strings`/`.stringsdict`/`strings.xml`, plus a `--selftest`
   that watches each of them fail). Both are plain Node under `tsx`, adding no dependency. This is
-  deliberate: **there is no PR/push CI workflow in this repo** (`.github/workflows/` holds only
-  `dataset.yml`; authoring `ci.yml` is WP0-5), so `turbo run test` is the only thing that actually
-  runs, and a generator's drift gate belongs where it will be executed. Until Wave 3, `packages/i18n`
+  deliberate: a generator's drift gate belongs where it will be executed, which is `turbo run test`.
+  (This bullet used to say *"there is no PR/push CI workflow in this repo"* — that stopped being true in
+  Wave 5. `.github/workflows/ci.yml` runs typecheck · lint · test · `wrangler deploy --dry-run` ·
+  `git diff --exit-code` on a clean checkout for every PR; its **deploy job** is the part still inert,
+  behind `DEPLOY_ARMED`. The reasoning above is unaffected and the fact was wrong, so the fact is
+  corrected rather than the conclusion.) Until Wave 3, `packages/i18n`
   had no `test` script at all and was therefore in no turbo target.
 - **Zod** for runtime validation of upstream API responses → fail loudly when an operator
   changes their schema.
+
+### Writing a test or a gate here: what the harnesses require
+
+Everything in this section was established by reading the scripts and by watching them fail, and none of
+it was written down before — so a session that needs it re-derives it. It is here rather than in a
+handoff note because it is a property of the tooling, not of any one wave.
+
+**The gate chain.** `pnpm test` is `turbo run test && pnpm run boundaries`, and `boundaries` runs, in
+order: `boundaries:check` → `boundaries:selftest` → `check:no-adhoc-id-parsing` →
+`check:vm-no-styling:selftest` → `check:vm-no-styling` → `check:no-raw-colours` →
+`check:view-transport-free:selftest` → `check:view-transport-free` → `check:one-endpoint:selftest` →
+`check:one-endpoint`. Several packages' own `test` scripts *are* gates too (above), and `packages/core`'s
+runs `check-spec-coverage.mjs` twice — `--selftest` first, then live.
+
+**Every `scripts/check-*.mjs` shares one shape, and a new one should copy it.** A `POLICED` list of
+directories, a `PATTERNS` list of `{ id, re, hint }`, an `ALLOWLIST` whose entries name the **one rule**
+they exempt, a `--selftest` that runs each pattern against a synthetic fixture *plus at least one
+control that must produce no findings*, and a guard that fails when the check matched **no files at all**.
+Four properties are load-bearing and each was learned from a gate that had passed while looking at
+nothing (the repo has hit that eight times):
+
+- **A stale allowlist entry fails as loudly as a violation.** That is what keeps the list shrinking.
+- **An allowlist entry must name its `pattern.id`.** Before Wave 5's review the matcher compared file and
+  snippet only, so an entry granted for a URL template exempted a `fetch(` sharing that line.
+- **Comments are stripped; string literals are not.** A path or a host inside a string *is* the
+  violation, so blanking literals would leave nothing to find — but a gate that flagged its own
+  documentation gets switched off within a week, so prose is exempt.
+- **`pnpm boundaries`' own `bannedSyntax` half has no comment stripper.** It matches raw source lines, so
+  a file in `packages/core` cannot even *spell* `Date.now(` or `Math.random(` in a comment. That is why
+  `live.ts` and `policy.ts` describe those forms in circumlocutions.
+
+| Script | Polices | Bans |
+|---|---|---|
+| `scripts/boundaries/check.mjs` | every layer's `dirs` in `layers.json` | cross-layer imports (via dependency-cruiser + biome), plus each layer's `deniedGlobals` / `bannedSyntax` |
+| `check-view-transport-free.mjs` | `apps/mobile/{app,components,lib,providers}/`, `apps/web/src/` — **test files included** | `new WebSocket`, `WebSocket(`, `wss?://`, `fetch(`, `/v1/` |
+| `check-one-endpoint-declaration.mjs` | `apps/`, `packages/` — test files excluded | the literal `localhost:8787`; an env read of `*_API_URL` on a line that does not reach `DEFAULT_API_URL` |
+| `check-no-raw-colours.mjs` | `apps/mobile/{app,components,lib,providers}/`, `apps/web/src/`, `packages/ui/src/` | hex literals, `rgb(`/`hsl(` with digits |
+| `check-no-adhoc-id-parsing.mjs` | the whole repo | `.split(':')`, `.split('+')`, `.split('\|')`, `.startsWith('P:')` |
+| `check-spec-coverage.mjs` | `packages/core/{src,spec}` | a `@spec` tag with no corpus group and a corpus group with no tag, **both directions**, plus `REQUIRED_ROWS` |
+| `apps/web/scripts/check-no-derivation.mjs` | `apps/web/src/{components,screens}/` only — `adapters/` is exempt | the renderer computing anything the kernel should |
+
+**Two layer facts that decide where a test can live.** `layers.json` gives `server` the dirs
+`["apps/edge"]` — **including `apps/edge/test/`** — and `use: [contract, kernel, ports, adapters]`, so an
+edge test may not import `@nextbus/api-client` (it is not even a dependency of `@nextbus/edge`, so `tsc`
+refuses first). By contrast `client`'s dir is `packages/api-client/src` only, so
+`packages/api-client/test/**` is the `from` of no rule at all. And a directory absent from `layers.json`
+is the `from` of **no** rule — the `view` layer's own comment warns about this, which is why `apps/web`
+was listed before it held a file.
+
+**Sharing a fixture across packages** goes through `@nextbus/core`'s export map — `./spec/*` for the
+`@spec` corpora, `./fixtures/*` for anything else (ADR-074) — and then **must** be declared as a turbo
+`inputs` glob in every package whose `test` reads it (ADR-070), or that suite replays a stale pass when
+the fixture changes. `packages/api-client/turbo.json` and `apps/edge/turbo.json` show the shape.
+
+**`apps/edge`'s suite runs in real workerd, and five things will bite.**
+1. **`resetEtaCache()` before every round.** `coalesce` holds a pole for 30 s per isolate, so without it
+   round two re-reads round one's board and every change assertion reports silence.
+2. **`caches.default` is not reset between tests *or* files.** Two cases asking the same URL have the
+   second answered from the first, so give each one a distinguishing query parameter (`?case=…`) or an
+   odd `radius`. The Worker reads only the parameters it declares, so this changes the cache key alone.
+3. **`resetShards()` between rows.** A Durable Object's name is a function of the target set (D4), so two
+   cases watching one stop deliberately land on the same object, and the pool resets neither instances
+   nor their storage between `it()` blocks.
+4. **`runDurableObjectAlarm` ignores the scheduled time** — it fires whatever is armed, immediately. So
+   it proves what a round *does*, never *when*; assert cadence by reading the alarm the round installed.
+   And the **first** round self-fires, because `subscribe()` pulls the alarm forward to now for a target
+   the shard has never polled.
+5. **A socket comes off a 101 as `res.webSocket`, and the listener must be attached before
+   `ws.accept()`** — the shard sends its snapshot inside the same `fetch` that produced the response.
+
+Two more, cheap to know and expensive to discover: the upstream `fetch` stub must **throw** on an
+unrecognised URL (every suite here does, and the one that did not could reach the live internet); and
+`/v1/stop/:id` builds its rows from the place's **static** route list, so a stubbed board serving a route
+number the dataset does not list at that pole lands on no row — unlike `/v1/etas/:id`, which publishes
+whatever the board says.
+
+**`packages/core` holds 100% coverage on statements, branches, functions and lines**, and the threshold
+really does catch things: a comparator reached only by sorting two or more elements is invisible to a
+corpus of one-element cases, which is how ADR-077's failure ordering came to need a row. Reach for a new
+row before reaching for the threshold.
 
 ### Dependency overrides
 `.npmrc` sets `node-linker=hoisted` (Metro expects a flat, npm-like `node_modules`). One
