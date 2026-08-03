@@ -204,8 +204,8 @@ than four scattered ones. The files that *are* loaded sit next to the thing that
 | `EXPO_PUBLIC_API_URL` | **no, and cannot be** | `apps/mobile`, at build time — the data source, the tile source **and** `build:web`, which bakes it into `dist/sw.js` | `apps/mobile/.env.local` (see `.env.example`) or the build env |
 | `VITE_API_URL` | **no, and cannot be** | `apps/web`, at build time (`src/adapters/datasource.ts`) | `apps/web/.env.local` (see `.env.example`) or the build env |
 | `LIVE_ALLOWED_ORIGINS` | no | the Worker, on a `/v1/live` upgrade | optional `[vars]` in `wrangler.toml`, or `apps/edge/.dev.vars` locally. Unset ⇒ **no origin filtering**, which is today's state (ADR-056 decision 9) |
-| `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` | no | **nothing yet** — reserved | the escape hatch for a socket tier on a different host. `EdgeClientOptions.liveUrl` is the plumbing and it is unwired; see WP5-6 |
-| `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` | no | **nothing yet** — reserved | `poll` \| `socket`. Selecting the socket engine is a source edit today, which is why `/v1/live` ships unreachable from a real build (WP5-6) |
+| `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` | no | both app shells, at build time (`lib/datasource.ts` · `src/adapters/datasource.ts`) | the escape hatch for a socket tier on a different host, passed to `EdgeClientOptions.liveUrl`. **Unset is the normal case** and means `wss://<same host>/v1/live`, derived by `liveSocketUrl` ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)) |
+| `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` | no | both app shells, at build time | `poll` (**the shipped default**) \| `socket`. One declaration of the mapping, in `@nextbus/api-client`'s `live/select.ts`; there is deliberately no `auto`, and an unrecognised value falls back to `poll` with a `console.warn` naming it. **`socket` in `apps/web` is real configuration that changes nothing yet** — no screen there calls `watch()` until WP5-7 ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)) |
 
 **One variable per renderer, and the socket URL is not one of them.** `EXPO_PUBLIC_API_URL` and
 `VITE_API_URL` are the *only* endpoint configuration; `wss://<same host>/v1/live` is **derived** from each
@@ -293,7 +293,10 @@ when the `DEPLOY_ARMED` variable is `true`, so arming it is a settings change ra
   back to the slow inline build and says so.
 - **Web/PWA:** `pnpm --filter @nextbus/mobile build:web` → deploy `apps/mobile/dist/` to
   Cloudflare Pages (with `EXPO_PUBLIC_API_URL` pointing at the deployed Worker).
-- **Native:** EAS Build/Submit (Phase 3 — see [roadmap](./06-roadmap.md)).
+- **Native:** hand-written Swift / Kotlin apps in **separate repos**, each with its own store pipeline
+  — **no EAS, no OTA** ([ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels),
+  Phase 3 — see [roadmap](./06-roadmap.md)). They start from
+  [`packages/contract/README.md`](../packages/contract/README.md).
 
 ## Status / next steps
 - **Slice 1 (Nearby) is live** — KMB only, computed **server-side** in the Worker (ADR-016).

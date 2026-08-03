@@ -94,8 +94,12 @@ don't work around it per package.
   baked into the bundle *and* into the service worker's runtime-caching routes.
 - **Edge deploy (still to build):** **Wrangler** deploy of `apps/edge` Workers + DOs on merge to
   `main` (preview deployments per PR). No cron trigger — the dataset job replaced it.
-- **Native builds:** **EAS Build** + **EAS Submit** (Phase 3); **EAS Update** for OTA.
-- **Env/secrets:** Cloudflare + EAS secrets via GitHub OIDC; no keys needed for the *public*
+- **Native builds:** ~~EAS Build + EAS Submit; EAS Update for OTA~~ — **superseded by
+  [ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)**
+  (2026-08-03). iOS and Android are hand-written in **separate repos** with their own store pipelines,
+  consuming this repo's published contract; there is no EAS and no OTA. This monorepo's build surface
+  is the Worker plus the web app. See [roadmap](./06-roadmap.md) Phase 3.
+- **Env/secrets:** Cloudflare secrets via GitHub OIDC; no keys needed for the *public*
   HK data APIs, which keeps secrets minimal.
 
 ## Publishing for a native repo (WP3-3, ADR-067)

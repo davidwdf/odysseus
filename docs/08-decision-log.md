@@ -4468,3 +4468,454 @@ pre-existing and unaddressed; it earned its keep here.
     lead than any in WP5-12's row: the name already distinguishes what the code does not. Owner: **WP5-12**.
   - **No `dataset:publish` is needed** — the build hash did not move, which is also the proof that this changed
     no derivation in the offline pipeline.
+
+## ADR-073 — A failed board is not an empty board: per-pole ETA failure on the wire
+- **Status:** **Decided and implemented 2026-08-03** (WP5-4). Implementation: `apps/edge/src/eta-cache.ts`
+  (`coalesce` loses its `fallback`), `apps/edge/src/stop-route.ts` (`memberEtaLists` → `{ etas, failed }`,
+  `stopArrivals`/`stopEtas` → `EtaReport`), `apps/edge/src/nearby.ts`, `apps/edge/src/eta-hub.ts`
+  (`round`/`sendRound`), `packages/contract/src/wire/responses.ts` (`EtaFailure`, `EtaReport`),
+  `packages/contract/src/openapi.ts` (`CONTRACT_VERSION` → `2.0.0`), `packages/core/src/live.ts`
+  (`retainFailedPoles`), `packages/core/src/datasource.ts`, `packages/api-client/src/live/poll.ts`.
+  Pinned by `packages/core/spec/live.spec.json` (**10 new corpus rows, 3 of them named boundary rows in
+  `scripts/check-spec-coverage.mjs`**), `apps/edge/test/eta-cache.test.ts` (2 rows, one of them the
+  inverse of the assertion it replaces), `apps/edge/test/live-rounds.test.ts` (the HTTP block, 4 rows) and
+  the cross-runtime corpus of [ADR-074](#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)
+  (11 rows, run against both engines).
+- **Context — the defect, and where it actually was.** `stopEtas` → `stopArrivals` → `memberEtaLists`
+  routes every upstream board through `coalesce`, and `coalesce`'s signature was
+  `coalesce(key, produce, fallback)` with every ETA call site passing `[]`. So a *rejected* upstream call
+  resolved to an empty list and the call **succeeded**. Downstream, nothing could tell the difference
+  between *this pole has no buses* and *this pole would not answer*:
+  - `/v1/etas/:id` served `200 []` for a stop whose operator was refusing, and edge-cached it for 30 s.
+  - The live engines then did the only correct thing available to them with readings that are no longer
+    present: `diffEtas` reported every one of them `gone`. A rider watching a stop through a KMB outage
+    saw the buses vanish one by one, with the connection reading `live`.
+  - The rule *"a failed round is not a departure"* ([ADR-056](#adr-056--the-live-protocol-frames-a-sharded-hibernating-etahub-and-what-we-could-not-verify)
+    decision 5) was written down twice, enforced twice — in `live/poll.ts` and in `eta-hub.ts` — and
+    **defeated one layer below both copies**, because a *cache* had decided what a failure meant on its
+    callers' behalf. Both engines held the rule per **target**; a target is a place, a place is N boarding
+    poles (ADR-042), and an upstream board call is per pole.
+  Pre-existing and identical on HTTP; the socket only made it visible, because a screen blanks where a
+  card was merely empty.
+- **Decisions:**
+  1. **`coalesce` no longer takes a `fallback`, and that parameter was the bug.** It rejects; the caller
+     decides what a failure means, at the call site, where a reader can see it. `routeDetail` still
+     degrades to a static-only route view and now says so on its own line — which is a genuinely
+     different answer from `/v1/etas`', and having one cache make it for both is what went wrong. The
+     rejection is still not cached (the entry is evicted, so the next caller retries), and the stored
+     promise carries its own handler so a round nobody awaited cannot surface as an unhandled rejection.
+  2. **The unit of failure is the pole.** `EtaFailure { stopId, error }`, where `stopId` is the same
+     canonical pole id an `Eta` carries — so a client pairs a failure with readings it already holds
+     without a second id vocabulary — and `error` is the ADR-064 taxonomy rather than a string, because
+     `retryable` is the field a background client needs. Citybus has no stop board, so one pole is N
+     calls: if any refuses, the pole is named **once** and the routes that did answer are in `etas` as
+     usual. Aggregating to the place would claim we could not ask about kerbs we did ask about; splitting
+     to the route would emit a dozen `status` frames for one outage.
+  3. **`/v1/etas/{id}` answers an object where it answered an array, and that is a breaking change taken
+     because it is free today.** ADR-052 §5 classifies a type change as breaking and pairs it with "a
+     deprecation window in which both shapes are served". The window here is **empty, and the reason is a
+     fact rather than an exemption**: WP0-5 has not happened, so `openapi.json` has never been published
+     anywhere a generator could read it and nothing outside this repo consumes `/v1/etas`. Serving both
+     shapes would leave a dead array form for a native generator to emit against nobody. `CONTRACT_VERSION`
+     is `2.0.0`. §5's `oasdiff` gate still does not exist — recorded again rather than quietly relied on;
+     what stands in for it is the constant, this ADR, and `wire-conformance.test.ts`. **The window stops
+     being free the day the Worker is deployed, which is the argument for doing this now rather than later.**
+  4. **`failed` is omitted when empty, not sent as `[]`.** Same rule as `Eta.remarkKind` being absent
+     rather than `info`: "every board answered" and "we have nothing to say about failures" must not be
+     the same bytes. The common case therefore costs nothing, which matters for the one payload the poll
+     emulator fetches once per target per cadence. Asserted as a control — a producer that always sent
+     `failed: []` would make the field unreadable and the test red.
+  5. **The retention rule is one kernel function, called identically by both engines.**
+     `retainFailedPoles(prev, next, failedStopIds)` in `packages/core/src/live.ts`: a previous reading
+     whose pole is in `failed` **and which this round did not replace** survives; everything else is this
+     round's truth, including an absence. `next` always wins (a pole can fail partway); a retained reading
+     keeps its own `dataTimestamp` so `isStale` ages it honestly and the screen labels it (ADR-008);
+     nothing is resurrected, so a first-round outage retains nothing. Put in the kernel rather than
+     written twice because writing it twice is the defect this ADR is about, one layer up.
+  6. **A pole failure never drops a target from a subscription, whatever code it carries.**
+     `retryable: false` is the wire's instruction to *prune a favourite*, and a refusing board says
+     nothing about whether the rider's stop exists. Only a target-level failure can be permanent. Stated
+     as a rule rather than as an observation about today's codes, because the codes reachable there are
+     all retryable and a future one might not be.
+  7. **A partial answer is a `200`, not a `502`.** Failing the request would throw away the kerbs that did
+     answer in order to report that one was down — strictly less honest than saying both things.
+  8. **`routes=` filters the readings and never the failures.** A caller narrowing to three routes is
+     saying which arrivals it wants, not which outages it will hear about — and a KMB board is one call
+     for every route at the pole, so "did this pole answer" has no per-route truth to filter by. Filtering
+     both would hand a screen watching one route at a refusing pole an empty list with nothing to explain
+     it, which is the state this shape exists to make impossible.
+  9. **`retrying`, not a new `degraded` state.** `LiveStateSchema`'s own comment names `degraded`
+     ("connected but the shard cannot reach upstream") as its obvious next member, and it is more honest
+     about a healthy socket over a sick upstream. Deferred deliberately: WP5-4's acceptance names
+     `retrying`; ADR-056 decision 6 already draws the line (`state` describes the connection, `error`
+     describes the thing the message names) and decision 5's note records the `retrying`-for-a-permanent-
+     failure choice as a divergence kept on purpose so the two engines match; and a new rider-facing state
+     is a label decision with an i18n key attached. Whoever adds it must change both engines in one commit
+     and add rows to ADR-074's corpus, which is now the thing that would catch them not doing so.
+  10. **A round that reports *any* failure, including a partial one, resets `announcedLive`.** A place
+      whose second kerb refused is not a place we are fully live on, and a rider whose row has stopped
+      moving must not be told otherwise. Both engines build one flat, ordered failure list per round — by
+      accepted-target order, then by the wire's pole order — so a round carrying both kinds of failure
+      produces the same `status` sequence on both.
+- **What is deliberately NOT propagated, and the reason is technical:**
+  - **`/v1/stop/:id` and `/v1/nearby` do not carry `failed`.** Both embed readings from the same producer,
+    so the information exists; adding an optional field is one line. It is not one line to make it
+    *correct*: `applyLiveEtasToStopDetail` and `applyLiveEtasToNearby` spread the document they are handed,
+    so a `failed` list fetched once over HTTP would survive every subsequent live merge unchanged — a
+    screen would go on saying "we could not reach this kerb" for as long as it stayed open, long after the
+    socket had recovered. Fixing that means teaching the merge helpers about failures, which is a kernel
+    change with corpus rows of its own. **Consequence, stated plainly: a Nearby card whose upstream is
+    refusing still reads as "no buses", and so does the Place screen's first paint.** The Place screen
+    learns within one cadence from its subscription's `retrying`; Nearby has no subscription until WP5-7.
+    Owner: **WP5-13** (new row), sequenced after WP5-7 so the field lands with a reader.
+  - **`/v1/route/:id` has no per-stop failure field either**, for the same reason plus a smaller stake: it
+    is one bulk call for the whole route, so the failure is all-or-nothing and the view degrades to static.
+- **Consequences, including what we are accepting:**
+  - **A pole that refuses for ever keeps showing an ageing, labelled reading rather than blanking.** That
+    is the same thing the per-target rule has always done for a target that keeps failing, deliberately,
+    and consistency between the two levels is what makes it one rule. The honesty cue is `isStale` on the
+    operator's own clock plus a `retrying` status that recurs every round.
+  - **`DataSource.getEtas` returns an `EtaReport`.** The seam changes shape, which is only cheap because
+    **no screen calls it**: its readers are `EdgeClient` itself and the poll transport. `watch()`'s
+    signature is untouched, which is the part ADR-004 fixes.
+  - **The frames do not change, and `asyncapi.json`'s only diff is the version.** The shard applies
+    `retainFailedPoles` itself and simply never sends `gone` for a pole it could not read, so a client
+    learns from the retained readings plus `retrying`. `failed` exists on the wire so the *poll emulator*
+    can apply the identical rule. That is what keeps the two engines' frame output comparable at all.
+  - **Measured, not assumed:** `openapi.json` 34 → 36 component schemas, one path's response type changed;
+    `asyncapi.json` 45 → 47 schemas (it registers `EtaFailure`/`EtaReport` through the shared component
+    pass) with no channel or message change. Test totals: core 785 → 795, edge 130 → 134, api-client 59 →
+    69 (the last two counts include ADR-074's and ADR-076's rows).
+  - **Open — the `/v1/eta/:co/:stop/:route` debug endpoint is unchanged**, and was already right: it
+    deliberately does not route through `coalesce` and fails loudly, with a comment saying why. It is now
+    the *only* ETA path that answers a non-2xx for an upstream refusal, which is correct for a debug
+    endpoint and worth knowing when comparing the two by hand.
+
+## ADR-074 — The live rounds corpus: one table, two runtimes, and the rule that binds two engines
+- **Status:** **Decided and implemented 2026-08-03** (WP5-5). Implementation:
+  `packages/core/fixtures/live-rounds.json` (11 rows) + `live-rounds.ts` (the row type and the fixed
+  topology), a `"./fixtures/*"` export in `packages/core/package.json`, and two drivers —
+  `packages/api-client/test/live-rounds.test.ts` (the poll emulator) and
+  `apps/edge/test/live-rounds.test.ts` (the **real** `EtaHub` over a **real** WebSocket inside workerd).
+  `packages/api-client/turbo.json` and `apps/edge/turbo.json` declare the fixture as an `inputs` glob
+  (ADR-070). All 11 rows pass through both engines.
+- **Context.** Three rules are implemented twice — *"a failed round is not a departure"*, *"an unchanged
+  round is silent"* (ADR-056 decision 5) and *"a mid-stream drop is re-echoed as a snapshot"* (decision
+  17) — once in `packages/api-client/src/live/poll.ts` and once in `apps/edge/src/eta-hub.ts`. **Every
+  defect Wave 5 found in its own live code survived because no test spanned both implementations. Three
+  for three**, and ADR-056 says so in its own "what is not done". The scenario matrix drove the poll
+  emulator against a *hand-written script*, so a rule the emulator got wrong was a rule the script had
+  been written to describe; decision 17's divergence was found by an agent's judgement, not by anything
+  mechanical. ADR-073 then added a fourth twice-implemented rule (`retainFailedPoles`' call sites), which
+  is what made this the moment.
+- **Decisions:**
+  1. **The rows are data in `packages/core/fixtures/`, not a shared module — and that is a layer fact.**
+     `layers.json` gives `server` the dirs `["apps/edge"]`, **tests included**, and
+     `use: [contract, kernel, ports, adapters]`. `@nextbus/api-client` is not on that list and is not even
+     a dependency of `@nextbus/edge`, so an edge test cannot import `createPollTransport`,
+     `createSocketTransport` or `createLiveEtaController`, and `pnpm boundaries` is right to forbid it. The
+     alternatives were measured and rejected: adding `client` to `server`'s `use` legalises
+     `apps/edge/src` importing `EdgeClient` for the whole layer; a workers-pool project inside
+     `packages/api-client` makes the client package build the server. What both sides may import is
+     `@nextbus/core`, so the rows are a corpus, exactly as ADR-060 already argues for domain rules.
+  2. **Not in `packages/core/spec/`.** That directory is the `@spec`-tagged corpus and
+     `check-spec-coverage.mjs` enforces a two-way tag↔group relationship over it. These rows pin an
+     *interaction between two runtimes*, not one exported function, so a new directory with its own
+     package export is honest and a file smuggled into `spec/` under a name the gate's glob misses is not.
+  3. **The assertion is what a listener holds when each round settles, not the frame transcript.** The
+     shard **cannot** be compared on a transcript, and the reason is structural rather than a defect: it is
+     a stateful server, so it answers a `subscribe` immediately from stored readings — an empty snapshot
+     plus `live` on a cold shard — and only then polls, while the poll emulator has nothing to answer with
+     until its first fetch returns. Two correct engines, two different transcripts, and no implementation
+     of either could make them equal. (`seq` differs too: monotonic across a re-subscription on the server,
+     reset on the client — ADR-056 records both as divergences the matrix does not cover.) So a row
+     declares one line per round: `<state>[!<code>] etas=[…] watching=[…]`, or `silent` when the round
+     emitted nothing. That is engine-independent and it is precisely where the four rules live.
+  4. **The line carries the accepted target set, which `summarize()` in the matrix deliberately does not.**
+     Decision 17 records why adding it *there* would have been worse than useless: it would have turned the
+     row green while asserting the **stale** echo, because the scripts are hand-written to describe one
+     engine. With two real engines measured against one hand-written list, that trap is gone.
+  5. **The vocabulary is logical and each driver substitutes its own ids.** A row names places, poles,
+     routes and arrival offsets abstractly (`A`, `C1`, `R9`, `+7`) against one fixed three-place topology —
+     two single-kerb places and one two-kerb place, because since ADR-072 an arrival is a line at a *kerb*
+     and a one-pole fixture would make the per-pole rows prove nothing. The edge driver maps them onto ids
+     that exist in its seeded dataset and **asserts the mapping**: `A`/`B` are one member, `C` is two, read
+     out of `/v1/stop` rather than hard-coded, so a clustering change cannot silently degrade the per-pole
+     rows into per-place ones.
+  6. **The client driver simulates the edge, and that is the mechanism rather than a weakness.** A row
+     describes what an upstream *board* did; the client side has no edge, so its `getEtas` synthesizes the
+     `EtaReport` the edge would have produced. If that simulation disagrees with what the real Worker
+     produces, the shard driver's lines will not match the same declared list and the row goes red on that
+     side. The binding runs through the fixture, not through shared code.
+  7. **`silent` is a count on the client and a bounded window on the server, and the difference is stated
+     where it is asserted.** The client driver advances its own cadence, so "the round emitted nothing" is
+     decidable. The edge driver waits until the frame count has stopped moving for 150 ms, so a slow round
+     is never mistaken for a silent one — only a frame arriving *after* that window could mislead, and
+     nothing in the object defers a send. Its control is structural: the fixture requires every row that
+     declares `silent` to declare a non-silent line as well, and a test asserts that requirement over the
+     table, so a reader that had died reports `silent` for the rest of the row and goes red.
+  8. **The two 8-line summarizers are duplicated on purpose.** A shared one would have to live in
+     `packages/core`, i.e. a test formatter shipped in the hand-ported kernel — and the two transcriptions
+     being *independent* is the point: a formatter that drifted makes a row red rather than making two
+     engines agree with each other. The same argument `live-socket.test.ts` gives for keeping its own copy
+     of `manualTimers`.
+  9. **The existing scenario matrix stays, with a stated division of labour.** It asserts the per-repaint
+     transcript against a hand-written script, which is what pins frame *ordering* (data frame before
+     status frames), a `seq` gap and a reconnect — none of which a real engine can be asked to produce on
+     demand. A rule about what a **frame** means, or about the order frames arrive in, gets a row there; a
+     rule about what a **round** does gets a row in the shared corpus. Both file headers say so.
+- **Driven, not only tested.** The corpus found a defect in its own first draft rather than in the code:
+  a row asserting "a fresh reading at a refusing pole still wins" declared that a line the *answering*
+  kerb had stopped listing should survive. It should not — that kerb answered, so the bus has departed —
+  and both engines said so. The row was rewritten to the property it could actually express at this level
+  (retention at one kerb while the other *changes*), and the partial-pole case it was reaching for is
+  recorded as **not covered here, with the reason**: only Citybus can refuse a pole partway, the edge's
+  seeded dataset is KMB-only and a KMB board is one call, so neither driver can produce it. That property
+  is pinned where it lives instead — `live#retainFailedPoles:a-fresh-reading-beats-a-retained-one`.
+- **Consequences, including what we are accepting:**
+  - **Two tables, and a reader has to be told which one to add a row to.** Mitigated by both headers and
+    by this ADR; not eliminated. The alternative — moving all twelve matrix rows into the shared fixture —
+    would have meant expressing hand-written `ServerFrame[]` scripts in logical ids so the shard could be
+    driven from the same table, for rows the shard cannot produce at all.
+  - **The edge driver depends on `runDurableObjectAlarm` and on `resetEtaCache()` between rounds.** The
+    first fires whatever is armed, immediately, so it proves what a round *does* and never *when* — the
+    cadence is asserted separately in `eta-hub.test.ts`. The second is mandatory rather than hygiene:
+    `coalesce` holds a pole for 30 s per isolate, so without it round two re-reads round one's board and
+    every change row reports silence.
+  - **A shard is wiped between rows**, because a Durable Object's name is a function of the target set
+    (ADR-056 decision 7) and the pool resets neither instances nor their storage between `it()` blocks. A
+    row that inherited the previous row's readings would see a `delta` where the fixture declares a
+    snapshot, and the first round of every row would be wrong in a way that depended on file order.
+  - **`resyncNeeded` is asserted false on every frame of every row**, which is a free check that the
+    shard's counter stays coherent across a handshake plus N rounds — a sequence nothing else drives end
+    to end.
+  - **Open — the corpus is TypeScript-driven only.** It is language-neutral JSON on purpose, so a Swift or
+    Kotlin client could read the same rows, but there is no native driver and ADR-067's honesty rule
+    applies: this is portable, not ported.
+
+## ADR-075 — Three renderers, one executable spec, and drift defined on the spec rather than the pixels
+> **Numbering note (resolved):** this was written concurrently with the WP5-4/5/6 work and deliberately
+> took **075**, leaving **073–074** free for it. Both were used —
+> [ADR-073](#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire) (WP5-4) and
+> [ADR-074](#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)
+> (WP5-5) — so **no renumbering is needed** and WP5-6 took
+> [076](#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll). Kept as the
+> record of how two branches numbered against each other without a collision.
+
+- **Status:** **Decided 2026-08-03, not implemented.** Owner's decision. **Supersedes
+  [ADR-002](#adr-002--expo-rn--rn-for-web-pwa-first-native-later-ota)** and replaces
+  [`docs/06`](./06-roadmap.md) Phase 3. The work plan is
+  [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md) (Wave 6). **Launch is not blocked:**
+  WP0-5 ships the Expo PWA first, unchanged.
+- **Context — two incompatible futures were both on `main`, and nobody had reconciled them.**
+  `docs/06` Phase 3 said *"Native apps (**same codebase**) … real iOS + Android, **no rewrite**"* via EAS
+  Build. `packages/contract/README.md` — shipped by WP3-3 — opens *"This document is for someone starting
+  a **native repo tomorrow**"* and tells that reader they *"will hand-write \[the domain rules] a third
+  time"*. Waves 1–5 served the second one almost exclusively: `packages/ports` is described in `CLAUDE.md`
+  as *"the iOS/Android porting checklist"*, the corpus exists so a hand-written port can be measured, and
+  [ADR-069](#adr-069--a-second-renderer-and-what-it-caught-in-the-first)'s justification for `apps/web` was
+  that everything else in Wave 4 *"makes unfalsifiable claims about what Swift will need"*. **If native is
+  hand-written, ADR-002's entire basis — one codebase, three platforms — is already gone in practice**, and
+  `react-native-web`'s only remaining job is rendering the web app.
+  **What that job has cost, itemised, all of it paid for the only platform that ships today:** reanimated
+  v4's `scrollTo()` is a silent no-op on web (needed a `scrollToY` DOM helper); the JS stack broke
+  `Animated.ScrollView` scrolling so ADR-043's slide/reveal was **tried and reverted** and web gets an
+  instant cut; RN's array `filter` form silently no-op'd on RN-web and needed a platform-split CSS string;
+  `hitSlop` is ignored, so dots needed fixed 32 px boxes; a `backdrop-filter` isolation bug meant opacity on
+  a wrapper killed the blur mid-scroll; nested interactive elements are invalid HTML; the
+  two-tap-while-focused quirk on Search; `lucide-react-native` cannot load outside Metro so tests alias it
+  to `lucide-react`, and `react-native` had to be aliased to `react-native-web` to test an RN card at all.
+  `GlassView`'s liquid glass is a **web** library ported *into* RN and is Chromium-only.
+  **A correction to this repo's own record, since ADR-002's reasoning was quoted at the owner and was
+  wrong in this context:** *"pure PWA forever loses iOS push + background location"* compared Expo against
+  **PWA-only-forever**. Under this decision iOS is a native Swift app, so push, background location and
+  haptics come from it and React Native is irrelevant to all three. ADR-002's premise is also partly stale
+  on its own terms — iOS 16.4 (2023) added Web Push for home-screen-installed web apps. Background location
+  genuinely has no web equivalent, which is a limit of the web, not an argument for RN.
+- **Decision:**
+  1. **The shared artefact is the spec, not the component tree.** Web is **plain React**
+     (`apps/web` — Vite + React DOM + Tailwind 3.4); iOS is **hand-written Swift**; Android is
+     **hand-written Kotlin**; each is idiomatic for its platform. `apps/edge` and every `packages/*`
+     are untouched — this is a renderer decision, and the kernel was built for it.
+  2. **The design is platform-idiomatic within a bounded line**, declared as a table in
+     `proposals/04`: content, semantic colour, the type scale, spacing and touch targets, the ADR-008
+     honesty rules, the *existence* and distinguishability of all five states, interaction targets and
+     destinations, and a11y roles and label content are **shared and are identity**. Material,
+     elevation, shape, motion, gesture idiom, navigation chrome and the icon set are **idiom**.
+     **The token layer already works this way**, which is the evidence the line will hold:
+     `elevation` is one declaration consumed as `elevationStyle(level, Platform.OS)` — a shadow geometry
+     plus Android's Material dp where the platform wants one — and `glassShadow` is declared web-only
+     (*"native glass lifts via its container's `e3`"*). WP3-1 made `ELEVATION` platform-neutral at
+     source; this generalises that shape rather than inventing one.
+  3. **A component spec is data validated by a schema, never prose.** `docs/09` §6 is already titled
+     *"ETA display spec (the signature component)"*, is already prose, and the imminence band it
+     describes was written down **four times with two different values** until WP4-0 hoisted it. Prose
+     rots here, and so do gates that look at nothing —
+     [ADR-070](#adr-070--a-turbo-tasks-hash-must-include-everything-it-reads-and-says-so)'s cache key,
+     the rules that fired on a stale `dist/`, and the field-reference gate that was built, tested against
+     the failure it was for, and **deleted** because *"referenced" is not "rendered"*. The format is
+     `packages/core/spec/*.spec.json`'s: a module doc, named groups, and every case carrying a `why`.
+     **The schema and the conformance walker go in a new `packages/ui-spec` with no domain vocabulary;
+     NextBus's own specs go in `packages/contract/ui/`** beside `openapi.json` and `asyncapi.json`,
+     because a native reader already starts at `packages/contract/README.md`. Both need a `layers.json`
+     entry before they have a file, the way `apps/web` did.
+  4. **"No drift" is redefined from visual to functional, deliberately.** It becomes *every renderer
+     satisfies the same executable spec*, enforced by a conformance suite per renderer, replacing *all
+     platforms look and behave the same* — which nothing enforces and `react-native-web` already fails
+     (see the list above). This is recorded as a decision rather than left to be discovered, because
+     drift is the owner's stated top priority and this changes what the word means.
+  5. **Every spec is extracted from the working RN renderer while it still exists, and both renderers
+     must pass before the RN one is retired — screen by screen.** WP4-0 → WP4-1 ("hoist, then render")
+     generalised. Deleting first would make the spec *what somebody remembers the app did*, and an
+     incomplete spec is worse than none because it reads as complete. **Nearby is retrofitted first**,
+     where two renderers already agree, so the *format* is validated in an afternoon rather than at
+     screen five: if it cannot express a screen that demonstrably works, it is the wrong format.
+  6. **`apps/mobile` changes role rather than being deleted.** Until WP6-8 it is the **reference
+     implementation** the specs are extracted from and measured against — which is why shipping the
+     Expo PWA at WP0-5 is not a contradiction.
+  7. **The portable system is designed for and extracted on demand (the rule of two).** The second
+     motivation is a portfolio of HK open-data apps over the same substrate — a weather app over the
+     HKO feeds is the named next one — and the method, the ADR-008 honesty principles, the token and
+     i18n pipelines, the gate chain and the `TileSource`/LandsD proxy are what travel. But extracting a
+     framework with one consumer is a guess, so WP6-10 waits for a real second consumer and the interim
+     acceptance is **a named seam, not a package**. A `ui-spec` that has grown a `stopId` is the early
+     warning.
+- **Why the alternatives lose:**
+  - **Keep React Native.** Only defensible if native comes from Expo. It does not, per the artefacts
+    five waves actually built — so the one-codebase premise is already spent and the RN-web tax buys
+    nothing that ships.
+  - **A big-bang switch.** The spec would be written from memory of a deleted app; decision 5 exists
+    against exactly this.
+  - **Prose specs in `docs/09`.** Tried, in §6, and it is one of the four places the imminence band
+    disagreed with itself.
+  - **One shared component library across platforms** (the RN premise, restated). It is what forces
+    the visual lowest common denominator this decision is trading away, and it is why the glass is
+    Chromium-only and the transitions are an instant cut.
+- **Consequences, including what we are accepting:**
+  - 🔴 **Three visual designs means design review and QA triple, forever** — the recurring price of
+    platform-idiomatic, paid per change rather than once.
+  - 🔴 **Corpus vendoring is still unsolved and this enlarges it.** `docs/11` already carries it as the
+    one hole in the corpus-rot story: nothing here can enforce that a native repo's copy is current, and
+    a stale copy yields a **green** suite pinning a moved rule. Adding `contract/ui/` to what a native
+    repo vendors grows the unenforced surface. WP6-9 must not start before it is answered.
+  - 🟠 **A shared spec is a shared bug** — this fixes divergence, not wrongness. Same trade Wave 2 made
+    pinning four `knownDefect` rows: identical and visible beats different and hidden.
+  - 🟠 **Between WP6-8 and WP6-9 there is exactly one renderer measured against the spec**, which is
+    weaker than today. `apps/web` stops being an *independent* second renderer the moment it is the only
+    web one, and `apps/mobile/test/stoprow-projection.test.tsx` retires with `apps/mobile`. The corpus
+    survives as the specification; WP6-9 restores independence, and pulling it earlier is the mitigation.
+  - 🟠 **WP6-0 — the `apps/web` shell (router, persisted query cache, locale provider, service worker) —
+    buys nothing a rider can see** and is the largest package before any screen moves. Porting a screen
+    first and bolting the shell on after would make every screen's spec provisional.
+  - 🟡 **Two open items become spec work rather than patches:** a favourite whose route has no current
+    arrival renders an **empty card**, and WP5-4's outage **blanks a screen**. Neither is a rendering
+    bug; both are states nothing ever declared. They are `mustNot` entries with citations.
+  - 🟡 **`docs/09` needs a pass** to mark §5 (motion, Reanimated-shaped) and §6 (the prose ETA spec) as
+    superseded by the component specs, and to say which of its rules are identity and which are idiom.
+    Not done here — it wants the format to exist first.
+  - ⚪ **`apps/mobile`'s TypeScript 6.0.3 divergence from 5.9.3 resolves itself** when the Expo SDK
+    leaves the tree. An incidental win, not a reason.
+  - ⚪ **WP0-5 is barely affected.** Worker, domain, KV/R2 and the publish pipeline are identical either
+    way; the app-hosting half is `expo export -p web` → Pages versus `vite build` → Pages, a small
+    contained swap. Migrating before there are riders is how a project does not launch.
+
+## ADR-076 — The live engine is selected by the environment, and the default stays `poll`
+> **Numbering note:** **073–074** were reserved for WP5-4/5-5 and are used;
+> [ADR-075](#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+> was written concurrently on another branch and is left where it is, so WP5-6 takes **076** rather than
+> renumbering somebody else's anchor out from under nine files that reference it.
+
+- **Status:** **Decided and implemented 2026-08-03** (WP5-6). Implementation:
+  `packages/api-client/src/live/select.ts` (new — `liveEngineFrom`, `liveTransportFor`,
+  `liveTransportFromEnv`, `LIVE_ENGINES`, `DEFAULT_LIVE_ENGINE`), `apps/mobile/lib/datasource.ts`,
+  `apps/web/src/adapters/datasource.ts`, and `LiveTransportContext` moved from
+  `packages/api-client/src/index.ts` into `live/engine.ts` so `select.ts` can read it without a cycle.
+  Pinned by `packages/api-client/test/live-select.test.ts` (9 rows),
+  `apps/mobile/test/datasource-transport.test.ts` (4) and `apps/web/test/datasource-transport.test.ts` (3).
+  Docs: `docs/10`'s configuration table loses its two "nothing yet" rows; all three `.env.example` files
+  lose their "nothing reads these" block.
+- **Context.** `EdgeClientOptions.liveUrl` and `.transport` were the plumbing;
+  `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` and `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` were
+  the documented spellings — in `docs/10`, in three `.env.example` files, and in ADR-056 — and **nothing
+  read any of them**. So `/v1/live` shipped *unreachable from a real build*: the server, the transport and
+  its reconnect policy all existed and were tested, and no build could select them. That is also the
+  bounding fact for every shard defect Wave 5's review found: five of the thirteen were in `eta-hub.ts`,
+  no rider was affected by any of them because nothing could reach the object, and that is equally why
+  five of them shipped green.
+- **Decisions:**
+  1. **The read stays per-renderer; the decision does not.** `process.env.EXPO_PUBLIC_*` and
+     `import.meta.env.VITE_*` are inlined by two different bundlers, and babel-preset-expo's inliner
+     visits **only** a literal `process.env.X` member expression — so a destructure, a computed key, or a
+     helper taking the variable's *name* compiles, runs in dev, and bakes in `undefined` in a production
+     bundle. `endpoint.ts` already argues this for the API URL. Each shell therefore keeps one literal read
+     per variable and hands the string to `liveTransportFromEnv`, which is the only part with a rule in it.
+     Not a second `=== 'socket'` per app: that is exactly the drift the one-declaration discipline exists
+     for, and the two renderers would eventually disagree about a spelling.
+  2. **The default stays `poll`, and `liveTransportFromEnv` returns `undefined` for it.** Both `undefined`
+     and `createPollTransport` produce the poll emulator — `EdgeClient` is
+     `opts.transport ?? createPollTransport` — but only `undefined` leaves *the client* holding the answer
+     to "what is the default", instead of two app shells each restating it.
+  3. **No `auto`, and it is now asserted rather than only argued.** An automatic choice implies a
+     socket→poll fallback and none exists: `createSocketTransport` reconnects for ever rather than
+     degrading, so `auto` would be a promise the code does not keep, and a transport that quietly became a
+     different transport would make "which engine is driving" unanswerable. `liveEngineFrom('auto')` is a
+     test row.
+  4. **An unrecognised spelling falls back to `poll` and warns once, naming the value and the two legal
+     ones.** Both alternatives are real and neither is free. Throwing breaks first paint over a
+     misconfigured *optional* knob, on a data layer constructed at module scope. Silently polling is this
+     repo's recurring failure shape — somebody sets the variable, sees ordinary behaviour, and concludes
+     the socket works. Case-sensitive on purpose: `SOCKET` is a typo, not a synonym, and normalising case
+     would make the accepted set larger than the documented one.
+  5. **The socket factory reads `ctx.endpoints.socketUrl` *inside* the factory.** `EdgeClient.watch()`
+     calls the factory once per **subscription**, and the connect URL carries `?targets=` because the
+     Worker derives the shard from it (ADR-056 decision 7). A closure capturing a URL built at module scope
+     would be wrong the moment a second screen watched a different place — and wrong invisibly, because one
+     screen would still work. Asserted by stubbing the platform `WebSocket` and reading back two different
+     connect URLs from two subscriptions.
+  6. **`EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` are wired too**, for the one case derivation cannot cover:
+     a socket tier on a different host. Unset — the normal case — still means `wss://<same host>/v1/live`
+     derived by the corpus-pinned `liveSocketUrl`, so ADR-056 decision 8's "one variable per renderer"
+     is unchanged.
+  7. **Nothing needs to change in `build-web.mjs`.** A WebSocket handshake is never dispatched to a service
+     worker's `fetch` handler, so no Workbox route could match `/v1/live` and there is nothing cacheable
+     about a socket. The script already spreads `...process.env` into the `expo export` child, so an ambient
+     value reaches the build without an edit. Checked rather than assumed.
+- **What flipping the variable un-latches, and what we did about it.** Selecting `socket` makes five
+  confirmed `eta-hub.ts` findings reachable for the first time (ADR-056 decisions 14, 15, 17 and the
+  `Eta.stopId` correction of decision 3). Three things stand behind them now, and none of them existed
+  when the findings were written:
+  - **[ADR-074](#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)
+    drives the real Durable Object over a real socket** for 11 scenarios, including four that refuse an
+    upstream board, and asserts `resyncNeeded === false` on every frame — so the shard's counter, its
+    retention, its silence and its accepted-set echo are exercised end to end rather than reviewed.
+  - **[ADR-073](#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire) closed the
+    one defect that was rider-visible on both engines**, which was the largest of the latent five in
+    consequence.
+  - **The default is still `poll`**, so this is a change to what is *possible*, not to what ships. Nobody
+    is exposed to the shard by upgrading; they are exposed by setting a variable, and that is now a
+    decision somebody makes rather than a source edit somebody forgets.
+  **What still has not happened, stated plainly:** the socket has never spoken to a *deployed* Worker
+  (WP0-5), `/v1/live` is unprotected and the `Origin` check is browser-only and off by default (ADR-056
+  decision 9), and hibernation's *policy* remains locally unobservable.
+- **Consequences, including what we are accepting:**
+  - **`apps/web` can select the socket and it changes nothing a rider of that app sees.** No screen there
+    calls `DataSource.watch()` — Nearby fetches `getNearby` on an interval — so there is no subscription to
+    run over either engine until WP5-7. The plumbing is symmetrical anyway, because the asymmetry that
+    costs is the one nobody notices until the second renderer needs it. `docs/10`'s row says so rather than
+    implying parity.
+  - **With the socket selected, each subscription opens its own connection**, since the factory is
+    per-`watch()` call. Today that is one screen watching one place; when Favourites or Nearby adopt live,
+    it is worth revisiting whether a client should multiplex.
+  - **The default engine now has a test.** Before this it was pinned only behaviourally, by
+    `edge-client-watch.test.ts` observing `/v1/etas/:id` requests — a good test of the poll path that says
+    nothing about what happens the day somebody changes a `??`. Both app-shell suites now assert the pair
+    (fetched-and-not-socketed, or socketed-and-not-fetched) rather than "did it fetch", so a socket with a
+    polling fallback could not pass either.
+  - **The module-scope read makes the selection awkward to test, and the test says so.** `vi.resetModules()`
+    plus a dynamic import, with the platform globals stubbed **before** the import because `EdgeClient`
+    binds `globalThis.fetch` in its constructor. That is the price of a singleton built at import time; the
+    alternative — a factory a screen calls — would move the env read out of the position the Expo inliner
+    requires.
+  - **Turbo needs no change**, measured with `--dry=json`: framework inference already covers `VITE_*` and
+    `EXPO_PUBLIC_*` for both app packages' `build`, `dev` and `test` tasks, so the new variables
+    participate in the cache hash. A redundant `env` array would be one more thing to keep in sync.

@@ -257,17 +257,24 @@ opens offline** ([ADR-058](./08-decision-log.md#adr-058--offline-is-a-service-wo
 **Waves 1–5 of [`proposals/03`](./proposals/03-clean-separation-and-phase2-plan.md) are all complete**, so
 the contract, the kernel, the native artefacts, the second renderer and the live protocol are in. Live ETAs
 now arrive through `DataSource.watch()` on Place detail, from a poll emulator by default and from a sharded
-`EtaHub` Durable Object over `/v1/live` when the socket engine is selected — which today needs a source edit
-(WP5-6). Pick up at **WP0-5**: it is now genuinely the next job rather than a deferral, because the cheap half
-(CI on every PR) has landed and the rest is a domain, a Cloudflare account and the settings that follow — plus
-the Wave 5 follow-ups (WP5-4 … WP5-12), of which **WP5-9**, **WP5-10** and **WP5-11** are ✅ **done on
-`wave5-followups-v1`** — one pole published twice is now one boarding point, two real poles get a compass
+`EtaHub` Durable Object over `/v1/live` when the socket engine is selected — which is now a single
+environment variable, `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`, with the default still `poll`
+([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll), WP5-6). Pick up at **WP0-5**: it is now genuinely the next job rather than a deferral, because
+the cheap half (CI on every PR) has landed and the rest is a domain, a Cloudflare account and the settings
+that follow — plus the Wave 5 follow-ups (WP5-4 … WP5-13), of which **WP5-4**, **WP5-5**, **WP5-6**,
+**WP5-9**, **WP5-10** and **WP5-11** are ✅ **done** — one pole published twice is now one boarding point, two real poles get a compass
 side ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two);
 the build hash moved to `1ccad7436a8df480`, so production needs a publish), and **an arrival is now identified
 by a line at a kerb rather than a line at a place**, so both kerbs' rows carry their own bus
-([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)) — leaving
-**WP5-4** (an upstream outage still reads as "no buses") as the heaviest open item a rider can feel, plus
-**WP5-12**, the 2–10 m residual those rules deliberately leave between them. WP5-12 now owns two things it did
+([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)), and — as of
+2026-08-03 — **an upstream outage no longer reads as "no buses" on the arrivals path**: `coalesce` has lost
+the `fallback` that caused it, `/v1/etas/:id` answers `{ etas, failed }` and both engines apply one kernel
+retention rule to it ([ADR-073](./08-decision-log.md#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire)), bound by a corpus that drives the real Durable Object over a real
+socket ([ADR-074](./08-decision-log.md#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)), and the socket is selectable from the environment
+([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)). That leaves **WP5-7** (batch `/v1/etas?ids=…`, then Nearby adopts live), **WP5-12**, the
+2–10 m residual those clustering rules deliberately leave between them, and the new **WP5-13** — `/v1/nearby`
+and `/v1/stop` still cannot say "we could not ask", which is why a Nearby card during an outage still reads
+as an empty stop. WP5-12 now owns two things it did
 not: a rider who stars one line at **both** kerbs still sees one Favourites row, and at Fu Kin Street the two
 kerbs' *names* differ ("outside" vs "opposite" Sin Sam House) where the printed code does not — a cheaper lead
 than any in its own row.
@@ -656,14 +663,17 @@ than any in its own row.
   commented `[[routes]]` block beside it, and the fact that `dataset:publish` has only ever been exercised
   against Miniflare-local KV/R2. The workflow's deploy job is written out in full and **inert** until the
   `DEPLOY_ARMED` variable is set, so arming it is a settings change rather than a new file.
-- **`/v1/live` is unreachable from a real build** (WP5-6). The socket server, the socket transport and its
-  reconnect policy all exist and are tested; what does not exist is a way to *choose* the socket engine
-  without editing source, because `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` are documented and
-  **unread**. The shipped default is the poll emulator, so no rider is affected — but nothing outside a test
-  or a `wrangler dev` session has ever spoken to the Durable Object. **This is what makes the review's five
-  shard findings latent**, and the sentence a new session needs before it flips the variable: it is a
-  one-variable change that un-latches five fixes at once, so read
-  `.context/wave5/review/VERDICTS-do.md` first rather than assuming the shard is now sound.
+- ✅ **Closed 2026-08-03 by WP5-6** ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)), kept for the history:
+  *"`/v1/live` is unreachable from a real build"* — the server, the transport and its reconnect policy all
+  existed and were tested, and `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT` were documented in four
+  places and read by **nothing**. Both app shells now select `poll` | `socket` from the environment through
+  one shared declaration (`live/select.ts`), with `_LIVE_URL` wired alongside it; **the default is still the
+  poll emulator**, so this changes what is *possible* rather than what ships. Two things worth carrying
+  forward: selecting `socket` is what un-latches the review's five `eta-hub.ts` findings, and what stands
+  behind them now is WP5-5's corpus driving the real Durable Object over a real socket (ADR-076 lists all
+  three mitigations); and **`socket` in `apps/web` is inert until WP5-7**, because no screen there
+  subscribes. The `.context/wave5/review/VERDICTS-do.md` this bullet used to point at **is not in this
+  workspace** — it was written in another worktree — so the durable record is ADR-056 decisions 13–19.
 - ✅ **Closed 2026-07-31 by WP5-9** ([ADR-072](./08-decision-log.md#adr-072--an-arrival-is-a-line-at-a-kerb-not-a-line-at-a-place)),
   kept for the history: *"a place publishes at most one reading per line, but now renders a row per pole"* — so
   the second kerb's row read "no reading right now" while a bus was genuinely due there (at Fu Kin Street it
@@ -687,12 +697,13 @@ than any in its own row.
   silently show the **later** bus of a line. A comparator in `soonestPerLine` or a gate on the producers would
   fix it. Owner: unassigned, and it belongs to whoever adds the next producer — **WP5-7**'s batch
   `/v1/etas?ids=…` is the next one.
-- 🟡 **`apps/edge/test/wire-conformance.test.ts` can reach the live internet, which is a hole in a gate CI
-  runs.** Its `fetch` stub ends `return realFetch(input, init)`, so any URL it does not recognise leaves the
-  sandbox. It flaked **once** during WP5-9 on *"returns a payload that satisfies the schema, with no
-  undocumented fields"* and has not reproduced in ~10 runs since — but one of ADR-052's three gates having a
-  live escape hatch is a red build that a re-run turns green, which teaches a reader to re-run. Fix: fail the
-  stub on an unrecognised URL. Owner: unassigned.
+- ✅ **Already closed, and this bullet was stale** — noticed while WP5-4 edited the file. The claim was that
+  `apps/edge/test/wire-conformance.test.ts`'s `fetch` stub ended `return realFetch(input, init)` and so could
+  leave the sandbox. It does not: the stub **throws** on an unrecognised URL, with a paragraph naming all
+  three consequences (the WP5-9 flake, an upstream that answers *plausibly* making the fixtures stop being
+  the thing under test, and CI having no HK network path at all). Kept as a correction rather than deleted,
+  because a status doc that carried a fixed item for a wave is the same failure as one that omits a broken
+  one.
 - ✅ **Closed 2026-07-31 by WP5-10 + WP5-11** ([ADR-071](./08-decision-log.md#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)),
   kept for the history: *"two poles of one place can wear identical headings"* — Tin Shui Wai Park's two
   members both printed the stop code TN510, so 269D rendered twice under labels that looked the same. Both
@@ -714,15 +725,36 @@ than any in its own row.
   selftest scenario. Its allowlist matcher was itself one of the review's findings, so the selftest now has
   four allowlist cases including the over-match. Still open in the same family: `packages/ui/preset.js` and
   `global.css` sit outside the policed `src` directories.
-- 🔴 **An upstream outage currently reads as "no buses", on both the socket and HTTP** (WP5-4). `coalesce`
-  resolves a rejected upstream call to `[]`, so `/v1/etas/:id` answers `200 []` and the shard's diff reports
-  every reading `gone` — the *"a failed round is not a departure"* rule defeated one layer below where it is
-  enforced. Pre-existing; the socket only makes it visible (a screen blanks where a card was merely empty).
-  The fix changes what the wire can *say*, so it wants an ADR of its own.
-- **Nothing binds the two engines' failure semantics** (WP5-5). "A failed round is not a departure" and "an
-  unchanged round is silent" are implemented in `live/poll.ts` **and** in `eta-hub.ts`, and the scenario matrix
-  compares the poll emulator against a hand-written script, never against the shard. Both of Wave 5's own
-  defects survived exactly this gap.
+- ✅ **Closed 2026-08-03 by WP5-4** ([ADR-073](./08-decision-log.md#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire)), kept for the history:
+  *"an upstream outage reads as 'no buses', on both the socket and HTTP"* — `coalesce` took a `fallback` and
+  every ETA call site passed `[]`, so a **rejected** upstream board resolved to an empty list and the call
+  succeeded. `/v1/etas/:id` served `200 []`, and both engines then did the only thing available to them with
+  readings that are no longer there: reported every one `gone`. The rule was written down twice, enforced
+  twice, and defeated one layer below both copies. `coalesce` has no `fallback` any more; `/v1/etas/:id`
+  answers `{ etas, failed }` (a **breaking** wire change, `CONTRACT_VERSION` 2.0.0, taken now because the
+  deprecation window is free until WP0-5); and `retainFailedPoles` in the kernel is the one rule both
+  engines apply to it. **Residual, and it is real:** `/v1/nearby` and `/v1/stop` still cannot say it, so a
+  Nearby card and a Place screen's *first paint* still read as "no buses" during an outage — see the
+  🟡 bullet below and **WP5-13**.
+- 🟡 **`/v1/nearby` and `/v1/stop/:id` still cannot say "we could not ask"** (left by WP5-4,
+  [ADR-073](./08-decision-log.md#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire), owner **WP5-13**). Both embed readings from the same producer, so
+  the information exists and the field is one line — but it is **not** one line to make it correct:
+  `applyLiveEtasToNearby` and `applyLiveEtasToStopDetail` spread the document they are handed, so a `failed`
+  list fetched once over HTTP would outlive the outage it describes and a screen would keep saying "we could
+  not reach this kerb" long after the socket recovered. Fixing it means teaching the merge helpers about
+  failures — a kernel change with corpus rows. Sequenced **after WP5-7**, so the field lands with a reader
+  rather than being drift with a staleness bug behind it. Until then: Place detail learns within one cadence
+  from its subscription's `retrying`; Nearby has no subscription at all.
+- ✅ **Closed 2026-08-03 by WP5-5** ([ADR-074](./08-decision-log.md#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)), kept for the history:
+  *"nothing binds the two engines' failure semantics"* — the rules were implemented in `live/poll.ts` **and**
+  in `eta-hub.ts`, and the scenario matrix compared the poll emulator against a hand-written script, never
+  against the shard. Every defect Wave 5 found in its own live code survived exactly this gap, three for
+  three. There is now one table of rounds — `packages/core/fixtures/live-rounds.json`, 11 rows — driven by a
+  client driver and by an edge driver that opens a **real socket to the real `EtaHub`** inside workerd and
+  reduces its frames with the kernel's own `applyLiveFrame`. It asserts what a listener *holds when each
+  round settles* rather than a frame transcript, because a stateful server and a poll emulator cannot have
+  equal transcripts (ADR-074 decision 3 says why). The corpus found a defect in its own first draft, which
+  is the honest way round.
 - **`/v1/live` is unprotected**, and the `Origin` check does not change that: a WebSocket upgrade does not
   honour CORS, a missing `Origin` must be allowed (that is what native clients send), so the check is
   browser-only, advisory, and **off by default** because there is no production origin to allowlist yet. What
@@ -796,6 +828,25 @@ than any in its own row.
    and will meet both.
 
 ## 🔜 Next steps (priority order)
+
+> **New, 2026-08-03 — the renderer decision, and it changes what Phase 3 is.**
+> [**ADR-075**](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+> supersedes ADR-002: **web becomes plain React**, iOS and Android become **hand-written** and
+> platform-idiomatic, and all three are held to **one executable spec** — so "nothing drifts" changes
+> from *the UIs match* (which nothing enforced, and `react-native-web` already failed) to *every
+> renderer satisfies the same spec* (a conformance suite). It resolves a contradiction that had been on
+> `main` for several waves: `docs/06` Phase 3 said native came from the *same Expo codebase*, while
+> `packages/contract/README.md` was addressed to *"someone starting a native repo tomorrow"* and every
+> generated native artefact served that second reader.
+> **The work plan is [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md) — Wave 6, WP6-0 … WP6-10 —
+> and it is written to be walked component by component**; the specs themselves are not written yet.
+> **Nothing is built and nothing is blocked by it: WP0-5 still ships the Expo PWA first**, and
+> `apps/mobile` stays the reference implementation until each screen's spec passes on both renderers.
+> Docs updated with it: `docs/01` (principles 4–5), `docs/04` (superseded banner), `docs/05` (no EAS),
+> `docs/06` (Phase 3 rewritten), `docs/10` (deploy targets), `docs/README`. **`docs/09` still needs a
+> pass** to mark §5 (motion) and §6 (the prose ETA spec) as superseded by component specs and to label
+> its rules identity-vs-idiom — deliberately deferred until the spec format exists.
+
 0. **Favourite routes-at-a-stop** ([ADR-032](./08-decision-log.md#adr-032--favourites-are-route-at-stop-pairs-not-bare-routes) + [ADR-042](./08-decision-log.md#adr-042--direction-aware-same-kerb-clustering-n-member-places-supersedes-adr-022s-pair-merge--invariant), **✅ done 2026-06-15**) —
    the store + tab are on the route-at-stop model (stop-only favourites **removed**, 2026-06-10):
    `favoriteRoutes: string[]` keyed `"${memberStopId}|${routeId}"` with `toggleFavoriteRoute`. **Save UI =
@@ -994,20 +1045,35 @@ than any in its own row.
      first** — each is also a numbered row in `docs/proposals/03` now, because this repo has twice had a
      day-one requirement sit in prose that no work package owned (WP2-8, WP2-9) and get done only because
      somebody noticed:
-     - 🔴 **WP5-4 — an upstream outage reads as "no buses".** `coalesce` resolves a rejected upstream call to
-       `[]`, so `/v1/etas/:id` answers `200 []` and the shard's `diffEtas` reports every reading `gone`. The
-       *"a failed round is not a departure"* rule the whole design is built around, defeated one layer below
-       where it is enforced. **Pre-existing and identical on HTTP**; the socket only makes it visible, because
-       a screen blanks where a card was merely empty. The fix changes what `/v1/etas` and `/v1/nearby` can
-       *say* (per-pole failure, e.g. `{ etas, failed }`), so it needs an ADR and must not ride along in a
-       socket commit.
-     - 🟠 **WP5-5 — nothing binds the two engines' failure semantics.** Two implementations, agreeing by
-       review. Both of Wave 5's own defects survived that gap; the follow-up is driving the scenario-matrix
-       rows against `EtaHub` through a real socket.
-     - 🟠 **WP5-6 — the socket cannot be selected without a source edit**, so `/v1/live` ships unreachable
-       from a real build. `EXPO_PUBLIC_LIVE_URL` / `VITE_LIVE_URL` and `…_LIVE_TRANSPORT` are documented in
-       `.env.example` and docs/10 as **reserved and unread** — deliberately, rather than documented as
-       working. No `auto` value is planned: it would imply a socket→poll fallback that does not exist.
+     - ✅ **WP5-4 done 2026-08-03** ([ADR-073](./08-decision-log.md#adr-073--a-failed-board-is-not-an-empty-board-per-pole-eta-failure-on-the-wire)) — the heaviest item a rider
+       could feel, and the diagnosis moved one layer from where the row put it. The bug was not that
+       `coalesce` *swallowed* a rejection; it was that `coalesce` **took a `fallback` at all**, so a cache
+       decided what a failure meant for every one of its callers — one layer below the two places that
+       enforce *"a failed round is not a departure"*, which is why the rule was written down twice and
+       defeated anyway. The parameter is gone; `/v1/etas/:id` answers `{ etas, failed }` keyed on the
+       **pole** (a place is N boarding points and an upstream board call is per point);
+       `retainFailedPoles` in `packages/core` is the one rule both engines apply, with 10 corpus rows and
+       3 named boundary rows. A **breaking** wire change — `CONTRACT_VERSION` 2.0.0 — taken now because
+       ADR-052 §5's deprecation window is genuinely empty until WP0-5 and will not be afterwards.
+       **`routes=` filters readings and never failures**, and a partial answer is a 200 rather than a 502.
+       Residual: WP5-13 below.
+     - ✅ **WP5-5 done 2026-08-03** ([ADR-074](./08-decision-log.md#adr-074--the-live-rounds-corpus-one-table-two-runtimes-and-the-rule-that-binds-two-engines)) — `packages/core/fixtures/live-rounds.json`, 11 rows,
+       driven by the poll emulator on one side and by the **real `EtaHub` over a real WebSocket** on the
+       other. It could not be a shared module (`layers.json` forbids `server → client`, tests included, and
+       `@nextbus/api-client` is not even a dependency of `@nextbus/edge`), so it is a corpus, exactly as
+       ADR-060 argues for domain rules. It asserts what a listener holds *when each round settles* — not the
+       frame transcript, because a stateful server answers a `subscribe` before it has polled and a poll
+       emulator cannot, so no implementation of either could make the two transcripts equal. It carries the
+       accepted target set, which the old matrix deliberately did not (ADR-056 decision 17 explains why
+       adding it *there* would have asserted the stale echo). The existing matrix stays, with a stated
+       division of labour: frame rules there, round rules here.
+     - ✅ **WP5-6 done 2026-08-03** ([ADR-076](./08-decision-log.md#adr-076--the-live-engine-is-selected-by-the-environment-and-the-default-stays-poll)) — both app shells select `poll` | `socket` from the
+       environment, the read staying per-renderer (the Expo inliner visits only a literal
+       `process.env.X`) while the decision is one declaration in `live/select.ts`. The default is still
+       `poll`; there is no `auto`; an unrecognised value falls back and warns, naming the value and the two
+       legal ones. `_LIVE_URL` is wired too. **This is the line that un-latches the review's five
+       `eta-hub.ts` findings** — ADR-076 lists the three things that stand behind them now rather than
+       asserting the shard is sound, and the default staying `poll` means nobody is exposed by upgrading.
      - 🟠 **WP5-7 — Nearby is not a live adopter**, and the reason is a request-count regression (≤6 places
        ⇒ 6 requests per window where the screen issues 1). `applyLiveEtasToNearby` is written and
        corpus-pinned with **no consumer** until a batch `/v1/etas?ids=…` exists.

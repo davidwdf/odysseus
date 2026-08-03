@@ -55,14 +55,43 @@ verified end-to-end. Citybus, on-device index, and the other screens are next.
 
 **Exit:** watched stops update by push; the app holds up when upstream is flaky.
 
-## Phase 3 — Native apps (same codebase)
-**Goal:** real iOS + Android, no rewrite.
-- Enable EAS Build/Submit for iOS/Android from the existing Expo app.
-- **EAS Update (OTA)** pipeline so installed apps stay current without store review.
-- Native-only wins: **push notifications** ("bus approaching"), background location, haptics polish.
-- App Store / Play Store launch.
+## Phase 3 — Native apps (**hand-written, against one spec**)
+> **Rewritten 2026-08-03 by [ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels),
+> which supersedes [ADR-002](./08-decision-log.md#adr-002--expo-rn--rn-for-web-pwa-first-native-later-ota).**
+> This phase used to read *"Native apps (same codebase) — real iOS + Android, no rewrite"* via EAS Build.
+> That is **no longer the plan**, and it had in truth stopped being the plan several waves earlier: every
+> native artefact this repo generates (`packages/contract/native/`, the Swift/Kotlin token and string
+> emitters, the corpus, `packages/ports` as *"the porting checklist"*) exists to serve a **hand-written**
+> client, and `packages/contract/README.md` is addressed to *"someone starting a native repo tomorrow"*.
+> The two statements contradicted each other on `main` until ADR-075 picked one.
 
-**Exit:** shipped to both stores; OTA updates flowing.
+**Goal:** real iOS + Android, each idiomatic for its platform, none of them diverging.
+- **Web is plain React** (`apps/web`), not `react-native-web`. `apps/mobile` (Expo) is the reference
+  implementation until its last screen's spec passes on both renderers, then it retires.
+  Work plan: [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md) — **Wave 6**.
+- **iOS in Swift, Android in Kotlin**, separate repos, consuming the published contract:
+  `openapi.json` · `asyncapi.json` · the id-grammar ABNF · `packages/core/spec/*` (742 corpus cases) ·
+  the generated tokens and string catalogues · and the new `packages/contract/ui/` component specs.
+  Start at [`packages/contract/README.md`](../packages/contract/README.md), which is written for that reader.
+- **The design is platform-idiomatic within a bounded line** (Material 3 on Android, the iOS material of
+  the day, a web middle ground). Content, semantic colour, type scale, spacing, the
+  [ADR-008](./08-decision-log.md) honesty rules, the five states, interaction destinations and a11y
+  labels are **shared and are identity**; material, elevation, shape, motion, gesture idiom and the icon
+  set are **idiom**. The table is in `proposals/04`.
+- **"No drift" means every renderer satisfies the same executable spec** — a conformance suite per
+  renderer, not three screenshots compared by eye.
+- Native-only wins, which are the native app's to deliver and never React Native's: **push
+  notifications** ("bus approaching"), background location, haptics polish. *(Web Push does work for an
+  installed PWA since iOS 16.4; background location has no web equivalent.)*
+- App Store / Play Store launch. **No EAS Build, no EAS Update, no OTA** — the web app is always-latest
+  by being the web, and each native app ships through its own store pipeline.
+- **First real test of the thesis:** WP6-9 — one SwiftUI screen passing the same specs, and the first
+  time the four generated Swift/Kotlin artefacts are **compiled at all**
+  ([ADR-067](./08-decision-log.md)). **Blocked on corpus vendoring**, which is still unsolved: nothing
+  here can enforce that a native repo's copy of the corpus is current, and a stale copy produces a
+  *green* suite pinning a rule that has moved.
+
+**Exit:** shipped to both stores; every screen's spec green on all three renderers.
 
 ## Phase 4 — Expand coverage (from the [backlog](./07-backlog.md))
 - Add operators: **NLB, MTR Bus/Feeder, Green Minibus**, then Light Rail.
