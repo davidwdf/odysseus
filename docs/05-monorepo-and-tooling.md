@@ -158,6 +158,12 @@ unrecognised URL (every suite here does, and the one that did not could reach th
 number the dataset does not list at that pole lands on no row — unlike `/v1/etas/:id`, which publishes
 whatever the board says.
 
+Two facts about the **dev loop** rather than the test harnesses, recorded in
+[`docs/10`](./10-scaffold-and-running.md) because that is where running-it lives, and pointed at from here
+because this is the section a resuming session reads: a `/v1/live` socket opened against a cold
+`wrangler dev` never sees a round until the inline dataset has been warmed by one HTTP request, and Metro
+tends to die outright if a file changes while `pnpm dev:web` is running.
+
 **`packages/core` holds 100% coverage on statements, branches, functions and lines**, and the threshold
 really does catch things: a comparator reached only by sorting two or more elements is invisible to a
 corpus of one-element cases, which is how ADR-077's failure ordering came to need a row. Reach for a new

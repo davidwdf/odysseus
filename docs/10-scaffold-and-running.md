@@ -114,6 +114,25 @@ tiles, and no caching at all for `/v1/health`. 30 s rather than the old 8 s beca
 refreshes about once a minute: at 8 s the cache almost never hit, so it wasn't saving an upstream
 call — and staleness is still surfaced honestly from each reading's own `observedAt` (ADR-008).
 
+### Two things about the dev loop that will waste a cycle if you do not know them
+
+Both were established by hitting them, and neither is guessable from the code.
+
+**Warm the dataset before you open a `/v1/live` socket.** In `wrangler dev` there is no KV, so the
+Worker falls back to building the 8.3 MB index in-isolate (ADR-055's degrade-to-slow path — `/v1/health`
+says `"dataset":"inline"`). The `EtaHub` shard reads the dataset **inside its alarm**, and on a cold
+isolate that build does not finish inside the alarm's window: the round never completes, so a socket
+opened first sits there answering `snapshot etas=0` + `status live` for ever and looks like a broken
+shard. One `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"` first memoizes it and the
+next round fires within seconds. Symptom to recognise: `wrangler dev`'s log shows the `101 Switching
+Protocols` and then nothing at all.
+
+**Metro dies if you edit a file while `pnpm dev:web` is running.** Not always, but often enough to plan
+around: `TypeError: Cannot read properties of undefined (reading 'addedFiles')` out of
+`metro/src/node-haste/DependencyGraph.js`, via NativeWind's Tailwind watcher. It kills the process
+rather than recovering, so the port goes dead mid-verification. Make the edit, *then* start Metro; if it
+does die, just restart it — nothing is corrupted.
+
 ### Point the app at the edge
 The **Nearby** screen is wired to live data: it requests location permission, geolocates, and calls
 `dataSource.getNearby(...)` → the Worker's `/v1/nearby`. Run both together and grant location:
