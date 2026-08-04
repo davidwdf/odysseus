@@ -14,7 +14,7 @@ import {
   searchStops,
   titleCaseName,
 } from '@nextbus/core'
-import { type LocalizedString, type PlainMessageKey, t } from '@nextbus/i18n'
+import { type LocalizedString, operatorName, type PlainMessageKey, t } from '@nextbus/i18n'
 import { useRouter } from 'expo-router'
 import {
   ChevronRight,
@@ -42,7 +42,6 @@ import { RouteKeypad } from '../components/RouteKeypad'
 import { Skeleton } from '../components/Skeleton'
 import { StopName } from '../components/StopName'
 import { Text } from '../components/Text'
-import { operatorName } from '../lib/operatorName'
 import { usePreferences } from '../lib/preferences'
 import { useSearchIndex } from '../lib/searchIndex'
 import { useTheme } from '../lib/useTheme'

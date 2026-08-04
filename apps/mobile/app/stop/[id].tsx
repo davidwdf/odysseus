@@ -1,6 +1,6 @@
 import type { PlaceRouteRow } from '@nextbus/core'
 import { placeDetailView } from '@nextbus/core'
-import { poleSideLabel, t } from '@nextbus/i18n'
+import { operatorName, poleSideLabel, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { type ReactNode, useRef, useState } from 'react'
@@ -34,7 +34,6 @@ import { Skeleton } from '../../components/Skeleton'
 import { StopHeader } from '../../components/StopHeader'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
-import { operatorName } from '../../lib/operatorName'
 import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLiveEtas } from '../../lib/useLiveEtas'
 import { useLocation } from '../../lib/useLocation'
@@ -231,17 +230,20 @@ export default function StopDetail() {
         }}
       >
         <View style={{ height: topSpacer }} />
-        {query.isLoading ? (
-          <View className="gap-3 px-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </View>
-        ) : query.isError ? (
-          <Text variant="body" className="px-4 text-danger">
-            {(query.error as Error).message}
-          </Text>
-        ) : stop && view ? (
+        {/*
+          **The skeleton is the fallback arm, and that is a bug fix (WP6-3b).** It used to read
+          `isLoading ? skeleton : isError ? message : stop && view ? content : null`, and that trailing
+          `null` is reachable: `isLoading` is `isPending && isFetching`, so a query that is pending and
+          **not fetching** — a paused retry — matched none of the three arms and this screen rendered
+          *nothing at all*, for ever. Measured on 2026-08-05 against a 404 on both renderers: no skeleton,
+          no error text, no name. ADR-079 already fixed the permanently-dead screen for the `error` case;
+          this is the same failure arriving through a state that never reaches `error`, so that fix's
+          `refetchInterval` predicate never fires either. Ordering the arms so "we have no answer" is the
+          **default** makes every query state draw something, which is what `place-detail.spec.json`'s
+          `failed.mustNot` — *"a blank screen"* — asks for. Why the retry pauses is undiagnosed and is in
+          `docs/07` with the reproduction.
+        */}
+        {stop && view ? (
           <>
             {/* Sub-details sit **above** the map so they tuck up behind the header as you scroll
                 (rather than wedged between the map and the list). */}
@@ -363,7 +365,17 @@ export default function StopDetail() {
               </>
             )}
           </>
-        ) : null}
+        ) : query.isError ? (
+          <Text variant="body" className="px-4 text-danger">
+            {(query.error as Error).message}
+          </Text>
+        ) : (
+          <View className="gap-3 px-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </View>
+        )}
       </Animated.ScrollView>
 
       {/* Floating collapsing chrome — rendered last so it sits above the scroll content. The

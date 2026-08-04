@@ -1,0 +1,393 @@
+import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
+
+/**
+ * **The Place screen** (WP6-3b) — a place, its boarding points, and the thirteen states it can be in.
+ *
+ * ## What this screen needed that Nearby did not
+ *
+ * Nearby's states are branches over an **async status** (ADR-084). Place detail has those too, and it adds
+ * a second axis the format had not met: branches over the **shape of the data**. A place is either one kerb
+ * or several; where it is several, ADR-080 defines three tiers of telling two of them apart — a compass
+ * side, the pole's own name, or *"check the sign"* — and each tier exists only for a payload that has it.
+ * A renderer forgets a tier the way it forgets a readout arm, silently and for the population that needs it
+ * most, so each is a state here and each is driven from the corpus case it was written for. **The corpus
+ * cases and the states line up one to one**, which is the best evidence that the states are the data's and
+ * not invented: `a-lone-stop-is-one-flat-list`, `a-merged-place-groups-its-rows-under-each-kerb`,
+ * `two-kerbs-that-print-the-same-heading-get-a-compass-side`,
+ * `where-the-kerbs-own-names-differ-the-name-is-the-answer`,
+ * `where-nothing-can-tell-two-kerbs-apart-the-app-says-so`, `a-refusing-kerb-marks-the-place-incomplete`,
+ * `a-place-with-nothing-at-all-still-has-a-name-and-a-count`.
+ *
+ * ## The one thing `slots` can hold, and why it is conditional
+ *
+ * Nearby's title is a catalogue string, so it survives every branch and sits in `slots` unconditionally.
+ * A place's title is **bus data**: it does not exist until the fetch resolves, and the chrome deliberately
+ * renders its back control before it does — *"the back lens is always available, even mid-load"*. So the
+ * name is `slots`' only entry and it is gated on itself, which is the format's `when` doing exactly what it
+ * was for: a path tested for truthiness, no expression language.
+ *
+ * ## Three declared states that no renderer satisfies, and one nothing can observe
+ *
+ * Writing this spec is the first time anything asked the Place screen what it shows, and it found three
+ * things it does **not** — each kept as the sentence it deserves and marked `knownDefect` with an owner,
+ * per ADR-083's rule that a softened `mustNot` is worse than an unmet one:
+ *
+ *  · **`incomplete`** — `PlaceDetailView.incomplete` has existed since ADR-077 and this screen has never
+ *    read it, so a Nearby card says *"Live times unavailable"* and the place it links to says nothing.
+ *  · **`stale`** — the distance and the walk are measured against the rider's position, which may be a
+ *    *remembered* fix, and this screen says so nowhere. Nearby does. ADR-008's honesty rule about the
+ *    rider's position is being applied by one screen out of two.
+ *  · **`codedPlace`** — the place's own printed code is split off by `displayName` and then dropped: a lone
+ *    KMB stop named *"NELSON STREET MONG KOK (MK514)"* shows no `MK514` anywhere, and that code is the one
+ *    thing printed on the pole a rider is looking for.
+ *
+ * And `mappedKerbs` is `unenforced` for a reason worth stating rather than hiding: **neither harness lays
+ * anything out**, so the map's own labels are not in either tree at all.
+ */
+
+/**
+ * One boarding point's heading block and its rows — declared once and used by all four grouped states.
+ *
+ * The four differ only in the payload they are driven with, never in what they must show, so a copy per
+ * state would be four chances to disagree about one thing. The emitted JSON denormalises it; the
+ * *declaration* is here, which is the line ADR-083 draws.
+ */
+const KERB_GROUPS: SlotNode = {
+  name: 'groups',
+  each: 'groups',
+  of: [
+    {
+      name: 'kerbHeading',
+      text: { field: 'heading' },
+      invariant:
+        'Printed **verbatim**, separators and all. `placeDetailView` composes the operator, the published code and — only where two kerbs would otherwise read the same — the compass side, because the `·` between them *is* the composition and two renderers joining their own get a plausible heading with the wrong rhythm and nothing fails (ADR-080, ADR-069’s first finding).',
+    },
+    {
+      name: 'kerbName',
+      text: { field: 'distinctName' },
+      when: 'distinctName',
+      why: 'Only where the kerbs’ **own names** are what tells them apart — ADR-080’s second tier, and 143 of the declined groups in the shipped build. Most kerbs are already distinguished by their code.',
+      invariant:
+        'A plain string, already reduced to this locale and title-cased by the kernel: `dataText` here would be laundering it through the wrong door.',
+    },
+    {
+      name: 'kerbTooClose',
+      text: { message: 'poleTooCloseToTell' },
+      when: 'crowded',
+      why: 'Only where **nothing** can tell two adjacent kerbs apart — ADR-080’s third tier.',
+      invariant:
+        'The app says so rather than leaving a rider to work out for themselves that two identical headings are two different kerbs. Same variant and token as ADR-077’s `etasUnavailable`, deliberately not `caption`, which is reserved for timestamps.',
+    },
+    {
+      name: 'kerbWalk',
+      text: { field: 'walk' },
+      when: 'walk',
+      why: 'The rider’s position is unknown, so there is no walk to state — and a distance we cannot measure is not one to estimate (ADR-008).',
+      invariant:
+        'This kerb’s **own** walk, not the place’s: a rider standing outside a four-kerb interchange is 0 m from one and 90 m from another, which is also why the summary above carries a *range*.',
+    },
+    {
+      name: 'kerbRows',
+      each: 'rows',
+      of: [{ name: 'row', component: 'PlaceRow' }],
+      invariant:
+        'One row per surviving line at this kerb, in `dedupeRoutes`’ order. A kerb with no rows left is **absent from `groups` entirely** — a heading with nothing under it is not a boarding point a rider is choosing between.',
+    },
+  ],
+}
+
+/** The chrome above the list: the summary sentence and the basemap credit. Every loaded state shows both. */
+const LOADED_CHROME: SlotNode[] = [
+  {
+    name: 'summary',
+    text: { field: 'summary' },
+    invariant:
+      'One string from the kernel, **two separator widths and all** — `" · "` binds a distance to its own walk time, the wider `"  ·  "` separates the parts. HTML collapses consecutive whitespace, so a DOM renderer needs `white-space: pre-wrap` for this to be true rather than nearly true (ADR-069).',
+  },
+  {
+    name: 'mapAttribution',
+    text: { message: 'mapAttribution' },
+    invariant:
+      'A **licence obligation, not decoration**: the Lands Department require the credit on the map face wherever their tiles are drawn (ADR-049), which is why it is a required member of the `TileSource` port and an asserted slot here rather than something a view layer decides to include. It must stay on the visible map at every collapse point, which is why the clipping container renders it and not the map canvas.',
+  },
+]
+
+export const PLACE_DETAIL_SPEC: ComponentSpec = {
+  component: 'PlaceDetail',
+  version: 1,
+  doc: 'A place, its boarding points and the lines that leave from each — grouped for a merged place, one flat list for a lone stop.',
+  viewModel: {
+    module: 'stop-detail',
+    type: 'PlaceDetailView',
+    corpus: 'stop-detail.spec.json',
+    group: 'placeDetailView',
+  },
+
+  slots: [
+    {
+      name: 'name',
+      text: { field: 'name.label' },
+      when: 'name.label',
+      why: 'Nothing has loaded yet. The chrome renders its back control before the place has a name — deliberately, so a rider can leave a screen that is still loading — and borrowing a name from anywhere else would be inventing one.',
+      invariant:
+        'Title-cased and split by `displayName`, never by the renderer (ADR-034). **Where it appears in the tree is idiom and where it appears on screen is not:** `apps/mobile` floats a collapsing header *over* the scroll content and therefore renders it last, and renders its label twice — an expanded slot and a collapsed marquee it cross-fades between. Each driver reads its own chrome first for that reason, and says so.',
+    },
+  ],
+
+  states: {
+    /** A lone stop: one flat list under "Routes", and most of Hong Kong. */
+    content: {
+      must: 'The name, the summary, the basemap credit, the word "Routes", and one row per line.',
+      mustNot:
+        'Kerb headings for a place with one boarding point — there is nothing to tell apart, and a heading per row would read as several.',
+      why: 'The overwhelmingly common shape, and the one a renderer that only implemented `groups` would draw nothing at all for.',
+      enforcement: {
+        shows: [
+          ...LOADED_CHROME,
+          {
+            name: 'routesLabel',
+            text: { message: 'routesAtStop' },
+            invariant:
+              'The flat list’s only heading. `grouped` decides which shape is drawn and it is a field of the view, never `members.length > 1` recomputed by a renderer.',
+          },
+          {
+            name: 'rows',
+            each: 'rows',
+            of: [{ name: 'row', component: 'PlaceRow' }],
+            invariant:
+              '`rows` is populated only when the place is **not** grouped, and `groups` only when it is. A renderer that read both would draw every row twice; one that read only `groups` would draw nothing for a lone stop. Both are pinned by a corpus property.',
+          },
+        ],
+      },
+    },
+
+    /** A merged place: rows grouped under each kerb. */
+    groupedKerbs: {
+      must: 'A heading per boarding point, each with its own walk time, and that kerb’s rows beneath it.',
+      mustNot:
+        'One flat list for a place with several kerbs, which would put a rider on the wrong side of the road.',
+      why: 'ADR-042: a place is N poles. Which kerb a line leaves from is the single most consequential thing on this screen — it is the difference between catching a bus and watching it go past on the other carriageway.',
+      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+    },
+
+    /** Two kerbs whose headings would otherwise be identical — ADR-080 tier 1. */
+    sidedKerbs: {
+      must: 'The compass side appended to each of the colliding headings, in the heading itself.',
+      mustNot:
+        'Two identical headings, or a side printed on a heading that was already unique — a side that distinguishes nothing is noise.',
+      why: 'ADR-080. The side is **appended, never substituted**, so the operator and the code stay put and every place that never needed one reads exactly as it always has.',
+      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+    },
+
+    /** The kerbs' own names are what tells them apart — ADR-080 tier 2. */
+    namedKerbs: {
+      must: 'The pole’s own name on a second line under its heading.',
+      mustNot: 'A compass side where the names already differ — the name is the better answer.',
+      why: 'ADR-080’s tiers are ordered by what a rider can act on: a printed code beats a name, a name beats a compass bearing, and a bearing beats silence.',
+      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+    },
+
+    /** Nothing can tell them apart — ADR-080 tier 3. */
+    crowdedKerbs: {
+      must: 'An explicit "check the sign" line under the affected headings.',
+      mustNot:
+        'Silence, leaving a rider to work out for themselves that two identical headings are two different kerbs.',
+      why: 'Two poles within the separation floor, with the same code and the same name. The compass rule refuses a single centroid and there is no third fact, so the honest answer is to say that the app cannot tell either.',
+      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+    },
+
+    /** A route with no live reading but a published timetable — the readout's middle arm. */
+    timetabledRows: {
+      must: 'The published frequency on the right of the row, where there is no live reading.',
+      mustNot:
+        'A blank right-hand side, or a dash — a route with a timetable is not a route with nothing to say.',
+      why: 'It has its own state because it has to be *driven*: the arm only exists for a payload with a headway and no arrival, and an injected defect that deleted this text left both suites **green** until this state existed. That is the repo’s recurring failure — a check looking at nothing — caught here by injection rather than by reading.',
+      enforcement: {
+        shows: [
+          ...LOADED_CHROME,
+          { name: 'routesLabel', text: { message: 'routesAtStop' } },
+          { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
+        ],
+      },
+    },
+
+    /** A live reading a few minutes out — the readout's number-and-unit arm. */
+    imminentRows: {
+      must: 'A number and its unit on the right of the row, in tabular figures.',
+      mustNot:
+        'A client-side countdown. The value changes only when fresh data arrives (ADR-008), and the band that colours it is the **served** `ClientPolicy`’s, not a literal in a component.',
+      why: 'Driven from the corpus case that moves the imminence band with a served policy, so the arm is exercised against the thing that decides its tone rather than against a default.',
+      enforcement: {
+        shows: [
+          ...LOADED_CHROME,
+          { name: 'routesLabel', text: { message: 'routesAtStop' } },
+          { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
+        ],
+      },
+    },
+
+    /** A reading inside the minute — the word rather than a number. */
+    dueRows: {
+      must: 'The word for "arriving", not "0 min".',
+      mustNot:
+        'A zero. Under a minute the estimate cannot carry that precision, and a rider reading "0" would think they had missed it (ADR-008).',
+      why: 'The arm nothing reached: **every** other live reading in the corpus group is already departed or a whole number of minutes, so deleting this word from a component left both suites green. A corpus case was added for it rather than the assertion softened.',
+      enforcement: {
+        shows: [
+          ...LOADED_CHROME,
+          { name: 'routesLabel', text: { message: 'routesAtStop' } },
+          { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
+        ],
+      },
+    },
+
+    /** An operator remark riding a row. */
+    remarkedRows: {
+      must: 'The remark, verbatim, under the destination.',
+      mustNot:
+        'A colour standing in for the words — "Scheduled" is the honesty cue and ADR-036 gives every class one tone.',
+      why: 'Same reason as the state above: the slot is `when`-gated, so only a payload that carries a remark drives it.',
+      enforcement: {
+        shows: [
+          ...LOADED_CHROME,
+          { name: 'routesLabel', text: { message: 'routesAtStop' } },
+          { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
+        ],
+      },
+    },
+
+    /** No location fix: the distance and every walk time stay silent. */
+    unlocated: {
+      must: 'The summary without a distance or a walk, and no walk beside any kerb heading.',
+      mustNot:
+        'An estimated distance — a distance we cannot measure is not one to guess (ADR-008).',
+      why: 'The state a rider who has refused location is in, and the one that proves the `when` gates on `kerbWalk` and inside the summary are real rather than incidentally true.',
+      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+    },
+
+    loading: {
+      must: 'A skeleton in the shape of the list, and the back control.',
+      mustNot:
+        'A borrowed name, an invented word, or a heading with a spinner where the list will be.',
+      why: 'What this state asserts is that **nothing is claimed while nothing is known** — no name carried over from the card that was tapped, no "Loading…" in a language the catalogue has no word for. ADR-008 applied to a screen rather than to a reading.',
+      enforcement: { shows: [] },
+    },
+
+    empty: {
+      must: 'The name, the summary with its honest count, the credit, and the list’s heading.',
+      mustNot:
+        'A name with nothing under it, which cannot be told from a screen that failed to load.',
+      why: 'A real state: a place all of whose lines have stopped for the night still exists, and its summary says "0 routes" rather than nothing. `docs/11`’s open empty-card bug is this shape one level down.',
+      enforcement: {
+        shows: [...LOADED_CHROME, { name: 'routesLabel', text: { message: 'routesAtStop' } }],
+      },
+    },
+
+    failed: {
+      must: 'The reason the place could not be fetched, verbatim.',
+      mustNot:
+        'A blank screen — the two states ADR-073 spent a wave separating, arriving here as "nothing at all".',
+      why: 'Recovery is automatic rather than a control: `refetchInterval` fires **only** on error (the shape ADR-079 settled), which is what closed the permanently-dead screen a lost first packet used to cause. So the state owes the rider an explanation, not a button.',
+      enforcement: {
+        shows: [
+          {
+            name: 'fetchError',
+            text: { field: 'error' },
+            invariant:
+              'The error’s own message, not a catalogue string: it names which request failed and with what code, and inventing a friendlier sentence would discard the only diagnostic a rider could read out. Same decision as Nearby’s.',
+          },
+        ],
+      },
+    },
+
+    stale: {
+      must: 'The distance and the walk, with the position labelled as the last known one.',
+      mustNot: 'A remembered fix presented as a current one.',
+      why: 'ADR-008’s honesty rule applies to the rider’s **position**, not only to the arrival times — which is the finding WP6-2 turned into Nearby’s per-state subtitle. This screen measures its distance and its per-kerb walks against exactly the same possibly-remembered fix.',
+      enforcement: {
+        knownDefect:
+          'Neither renderer satisfies it: the screen reads the location silently (`useLocation`, never prompting) and uses `loc.lat/lng` without consulting `loc.stale`, so a cold start shows "150m · 2 min walk" against a fix from yesterday and says nothing. Nearby says "Last known location" for the same input. Owner: the `docs/07` row — the fix is one sentence in the summary, and it belongs to the kernel because the summary is composed there.',
+      },
+    },
+
+    offline: {
+      must: 'The last known place, its rows aged and marked stale, on the remembered position.',
+      mustNot: 'A blank screen, and never a fresh-looking arrival time.',
+      why: 'ADR-058: a service worker plus a persisted query cache. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it.',
+      enforcement: {
+        unenforced:
+          'Textually identical to `groupedKerbs` at this level, and deliberately so: offline *is* a remembered fix plus replayed readings, and which network failed is not something this screen says. What distinguishes it is the readings’ age and the dimming, which are inside the row and are opacity rather than text. The cache-replay half is asserted where a cold start is measurable — `apps/web/test/shell.test.tsx`.',
+      },
+    },
+
+    /** A boarding point that would not answer (ADR-077). */
+    incomplete: {
+      must: 'An explicit "live times unavailable" line, so an empty list is not a claim that nothing is due.',
+      mustNot: 'Reading as "no buses" when an upstream board refused us.',
+      why: 'ADR-073 separated "refused" from "empty" and ADR-077 gave the view a boolean to say it with. A Nearby **card** says it; the place that card links to must not be where the fact disappears.',
+      enforcement: {
+        knownDefect:
+          '`PlaceDetailView.incomplete` has existed since ADR-077 and this screen has never read it — `grep incomplete apps/mobile/app/stop/[id].tsx` finds only a comment pointing at the card that does. So a rider who taps a card marked "Live times unavailable" lands on a screen that has quietly dropped the warning. Owner: the `docs/07` row. The line, its tone and its position are already decided by `StopCard` — below the rows, `text-muted`, never a warning colour, because nothing is wrong with the rider’s stop.',
+      },
+    },
+
+    /** The place's own printed code. */
+    codedPlace: {
+      must: 'The code printed on the pole, beside the place’s name.',
+      mustNot:
+        'Dropping it — for a lone stop it is the only code on the screen, and it is the one thing a rider standing at the kerb can compare against.',
+      why: 'ADR-034 splits a name into `label` + `code` precisely so a renderer can show the code smaller and muted rather than shouting it inside the name. `StopRow` does. This screen takes `name.label` and throws `name.code` away.',
+      enforcement: {
+        knownDefect:
+          'Neither renderer shows it: the chrome takes `stopName={view.name.label}` and `StopHeader`’s prop is a single string. A merged place gets away with it — every kerb’s code is in its own heading — but a lone stop named "NELSON STREET MONG KOK (MK514)" shows no `MK514` anywhere. Owner: the `docs/07` row; the fix is a second prop on the collapsing header, which is why it is not a one-liner and is not being done in the row that first noticed.',
+      },
+    },
+
+    /** The map's own dots. */
+    mappedKerbs: {
+      must: 'A dot per physical spot, labelled with the printed code its heading uses, highlighting the kerb the list is scrolled to.',
+      mustNot:
+        'A dot per published pole id — two poles at one coordinate then stack invisibly and scrolling appears to *swap* a label rather than highlight it (ADR-086).',
+      why: 'The map is the only place a rider can see that two kerbs are on opposite sides of a road. It is also the surface that structurally cannot tell apart the poles the list can, which is the whole reason ADR-080’s tiers exist.',
+      enforcement: {
+        unenforced:
+          '**Neither harness lays anything out.** The map measures its own width before it can place a dot, and jsdom reports none, so the labels are not in either tree at all — a projection naming them would fail on both renderers for a reason that has nothing to do with either. What *is* enforced is one layer down: the pins are `placeDetailView`’s output, `mergeCoincidentPins` carries 8 corpus cases and a property that every pole appears exactly once, and ADR-087 added a property that a pin’s label is the code its heading prints. The unobservable part is only whether a renderer draws them, and that is what the browser pass in ADR-088 is for.',
+      },
+    },
+  },
+
+  interactions: [
+    {
+      target: 'kerbHeading',
+      goes: 'this kerb’s section, scrolled to the top of the list, with its map dot highlighted',
+      note: 'The list-side twin of tapping the dot. It is **not** navigation: everything it does is on this screen, which is why `goes` names a position rather than a destination.',
+    },
+    {
+      target: 'row',
+      goes: 'route-detail-at-this-kerb',
+      note: 'Declared once, in `PlaceRow`’s spec. A screen that named the destination again would be a second declaration of it.',
+    },
+    {
+      target: 'mapAttribution',
+      goes: 'the tile provider’s copyright and disclaimer page, outside the app',
+      note: 'A real link, not plain text — the mistake the old OSM attribution made (ADR-049). It opens through the `LinkOpener` port, so no renderer composes the URL.',
+    },
+  ],
+
+  a11y: {
+    role: 'scrollable page, whose kerb headings and rows are buttons',
+    name: { fromSlot: 'name' },
+    reducedMotion:
+      'The header collapse, the map’s shrink into a picture-in-picture and the scroll-to-kerb animation are all motion over content that is identical without them. `useScrollToY` already honours the OS setting; the collapse is driven by scroll position rather than by a timeline, so there is nothing to disable.',
+  },
+
+  idiom: [
+    'the collapsing header: whether the name morphs into a pill on scroll at all, and its glass or surface treatment (ADR-033)',
+    'the map’s behaviour on scroll — a full-width hero that crops into a floating picture-in-picture on native, a plain sticky panel on the web (ADR-045). The **pins** are not idiom; where the map goes is',
+    'pull-to-refresh: absent on both, and for the same reason as Nearby — since WP5-7 the arrivals arrive by subscription at the served cadence, so a manual refresh is reassurance rather than how a rider gets fresh data',
+    'the saved-state star beside a row, and whether favouriting happens here or on the route screen',
+    'the section divider under each kerb heading, and whether it is inset to the content margin or full-bleed',
+    'the skeleton’s shape and whether it shimmers',
+    'how far the list can scroll past its last group — the tail padding that lets the last kerb reach the top',
+  ],
+}

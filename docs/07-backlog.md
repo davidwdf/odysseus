@@ -92,6 +92,27 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
+- [ ] 🟠 **The Place screen never says "live times unavailable"** — `PlaceDetailView.incomplete` has existed
+      since [ADR-077](./08-decision-log.md) and this screen has never read it, so a rider who taps a Nearby
+      card marked *"Live times unavailable"* lands on a screen that has quietly dropped the warning, where an
+      empty list then reads as *"no buses"* — the exact conflation ADR-073 spent a wave separating. Declared
+      as a `knownDefect` state (`incomplete`) in `packages/contract/ui/place-detail.spec.json`, so it is
+      visible and cannot be forgotten. The line, its tone and its position are already decided by `StopCard`:
+      below the rows, `text-muted`, never a warning colour, because nothing is wrong with the rider's stop.
+      Three lines in each renderer, plus flipping the state's `knownDefect` to a projection.
+- [ ] 🟠 **The Place screen does not say when the distance is measured from a remembered fix.** Nearby says
+      *"Last known location"* for exactly the same input ([ADR-084](./08-decision-log.md)); this screen reads
+      the location silently and uses `loc.lat/lng` without consulting `loc.stale`, so a cold start shows
+      "150m · 2 min walk" against yesterday's position and says nothing. ADR-008's honesty rule about the
+      rider's **position** is being applied by one screen out of two. Declared as the `stale` `knownDefect`
+      state in the Place spec. The fix belongs in the kernel, because the summary is composed there.
+- [ ] 🟡 **The Place screen drops the place's own printed code.** `displayName` splits a name into `label` +
+      `code` (ADR-034) precisely so a renderer can show the code smaller and muted; `StopRow` does, and this
+      screen takes `name.label` and throws `name.code` away. A merged place gets away with it — every kerb's
+      code is in its own heading — but a lone stop named *"NELSON STREET MONG KOK (MK514)"* shows no `MK514`
+      anywhere, and that is the one thing printed on the pole the rider is looking for. Declared as the
+      `codedPlace` `knownDefect` state. Needs a second prop on the collapsing header, which is why it was not
+      done in the row that noticed it.
 - [x] ✅ **A walk of hours reads as hours** (2026-08-04, `formatWalk`/`formatWalkRange`, ADR-086). A
       location fix outside Hong Kong put **"270 min walk"** under a place name — honest arithmetic that a
       rider has to do in their head. Past an hour it is now `4.5 hr walk` / `4.5 小時路程`, one decimal, and a
@@ -162,6 +183,13 @@ Place/Stop detail with `hideWhenEmpty`, and the only way to *add* one is the rou
 - [ ] Journey history / frequent trips.
 
 ## Localization & reach
+- [ ] 🟡 **The English GMB label is an acronym where the Chinese is a phrase.** `operatorGmb` reads
+      `專線小巴` / `专线小巴` — a phrase a rider recognises — and plain `GMB` in English, which a rider has to
+      already know. It is the heading above a whole kerb's routes on Place detail, seen on screen at Queen
+      Mary Hospital. The corpus's own `placeDetailView` fixture calls it *"Minibus"*, which is probably the
+      word the English catalogue wants, and a driver assertion in both conformance suites pins that this is
+      the **only** place the catalogue and that fixture disagree — so changing it is a one-line catalogue edit
+      plus that expectation. Found by WP6-3b ([ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers)).
 - [x] ~~**简体中文** (Simplified Chinese)~~ — **promoted to v1** (upstream data already carries it;
       see [ADR-014](./08-decision-log.md)).
 - [ ] Additional tourist-facing UI languages (e.g. 日本語 / 한국어) — app chrome only; bus data stays EN/中文.
@@ -312,6 +340,25 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 - [ ] **Shareable arrival card** — a "boarding-pass"-style card of a stop + next arrivals to send to friends.
 
 ## Infra / hardening
+- [ ] 🔴 **Why does a failed `getStop` leave the query pending-and-idle rather than `error`?** Found by
+      WP6-3b ([ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers))
+      and **half fixed**: the screen no longer renders nothing (the skeleton is the fallback arm on both
+      renderers, so no query state draws a blank), but the underlying state is still wrong. Reproduction, on
+      either app: open `/stop/CTB:999999`. The Worker answers **404 once**, `EdgeRequestError` is thrown, and
+      the query settles at `status: 'pending'`, `fetchStatus: 'idle'` — so `isError` is false, the rider never
+      sees *why*, and `refetchInterval`'s `status === 'error'` predicate (ADR-079's fix for the permanently
+      dead screen) never fires, so nothing ever retries either. **It is environmental, not a render bug**: the
+      identical rejection in `test/place-detail-states.test.tsx` lands on `error` and shows the message, and a
+      probe with `retry: 1` and a real delay does too. Candidates, in order: `retry: 1` with a retry that is
+      *paused* rather than run; `PersistQueryClientProvider`'s restore interacting with a first-load failure;
+      the service worker turning a cross-origin 404 into something `classifyFailure` cannot read. Worth an
+      afternoon — every screen in the app shares this shape.
+- [ ] 🟠 **`MiniMap`'s `onLayout` does not fire on first mount** on the RN Place screen, so the map renders
+      with `w === 0` — no tiles, no dots — until something else triggers a layout. Measured 2026-08-05 by
+      dispatching a `resize` event by hand, which made the whole map appear at once. The DOM twin does not
+      inherit it: `apps/web/src/components/MiniMap.tsx` takes its first measurement in a layout effect and
+      keeps a `ResizeObserver` only for later changes. The RN fix is the same shape — measure once on mount
+      rather than waiting to be told.
 - [ ] **Route auto-scroll doesn't land on web** — `app/route/[id].tsx` should scroll to the originating stop
       (the two-step reveal's second beat, [ADR-043](./08-decision-log.md#adr-043--a-core-navigation-animation-system-cross-fade-tabs-slide-and-reveal-stack-web-swipe-back)),
       but the `scrollTo` no-ops on react-native-web (reproduced with the ADR-043 reveal-gate **and** `animated` flag

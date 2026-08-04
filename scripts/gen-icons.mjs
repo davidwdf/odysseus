@@ -14,6 +14,9 @@
 //   icon-192.png           192, opaque — PWA manifest icon (purpose "any")
 //   icon-512.png           512, opaque — PWA manifest icon (purpose "any")
 //   icon-maskable-512.png  512, mark in the ~66% safe zone on ink — manifest "maskable" (Android)
+//   landsd-logo.png        the Lands Department credit mark — COPIED, not generated: it is a licence
+//                          obligation on the map face (ADR-049) and it is not ours to redraw. Only
+//                          apps/web needs it as a file; apps/mobile bundles it through Metro.
 //   manifest.webmanifest   the install manifest, whose two colours are the ink TOKEN rather than a
 //                          hand-copied hex — it was hand-maintained beside the icons until WP6-0,
 //                          which needed a second copy of it and would have made the hex a third
@@ -21,7 +24,7 @@
 // And docs/social-preview.png (1280x640) — the GitHub repo social card (upload manually at
 // repo Settings → Social preview; GitHub has no API for it).
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -169,6 +172,16 @@ async function run() {
     mkdirSync(dir, { recursive: true })
     for (const [name, bytes] of Object.entries(web)) writeFileSync(join(dir, name), bytes)
   }
+
+  // The **Lands Department credit logo** — not generated, and not ours. `apps/mobile` reads it through
+  // Metro (`require('../assets/landsd-logo.png')` in `lib/tileSource.ts`); a Vite app has to be handed a
+  // URL, so the same bytes are copied into `apps/web/public/` from the one source rather than committed
+  // twice by hand. It is a **licence** asset (ADR-049 requires the logo on the map face), so "the same
+  // bytes by construction" matters here for the same reason it does for the icons.
+  copyFileSync(
+    join(ASSETS, 'landsd-logo.png'),
+    join(ROOT, 'apps', 'web', 'public', 'landsd-logo.png'),
+  )
 
   // GitHub social-preview card: ink field, centred mark (no text — name TBD).
   const social = await sharp(MARK).resize(440, 440).png().toBuffer()

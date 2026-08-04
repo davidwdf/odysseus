@@ -56,6 +56,9 @@ export const NEARBY_PATH = '/'
 /** The destination whose placeholder carries the shell's own locale + appearance controls. */
 export const SETTINGS_PATH = '/settings'
 
+/** Place detail's path — the second ported screen (WP6-3b), and the one a Nearby card heading opens. */
+export const PLACE_PATH = '/stop/:id'
+
 /**
  * Search is reachable from the tab row but is **not a tab** — it is its own page with no tab bar
  * (ADR-037), launched from a button sharing the row at the far right. That is a navigation decision,
@@ -71,7 +74,7 @@ export const SEARCH: ChromeDestination = {
 /** Everything reached by a push rather than by the tab row. */
 export const PUSHED: readonly Destination[] = [
   SEARCH,
-  { path: '/stop/:id', owner: 'WP6-3' },
+  { path: '/stop/:id' },
   { path: '/route/:id', owner: 'WP6-6' },
   { path: '/about-data', titleKey: 'aboutData', owner: 'WP6-7' },
   { path: '/faq', titleKey: 'settingsFaq', owner: 'WP6-7' },
@@ -79,7 +82,7 @@ export const PUSHED: readonly Destination[] = [
 
 /**
  * Every destination the router serves. A spread rather than a `.filter` over one flat list: which
- * destinations are tabs is a decision, and `apps/web/scripts/check-no-derivation.mjs` is right to ban a
+ * destinations are tabs is a decision, and `scripts/check-no-derivation.mjs` is right to ban a
  * renderer from computing one.
  */
 export const DESTINATIONS: readonly Destination[] = [...TABS, ...PUSHED]

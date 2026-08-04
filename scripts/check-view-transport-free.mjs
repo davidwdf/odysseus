@@ -121,6 +121,21 @@ const ALLOWLIST = [
       'tiles, or moving the LandsD template into `packages/api-client`, where a `require()`d logo asset and an ' +
       'Expo env read cannot follow it (see the note in `packages/ports/src/tile-source.ts`).',
   },
+  {
+    file: 'apps/web/src/adapters/tileSource.ts',
+    pattern: 'api-path',
+    snippet: '/v1/tiles/',
+    why:
+      'The DOM renderer’s copy of the entry above (WP6-3b), and it earns its exception for the identical ' +
+      'reason: a `TileSource` **is** a URL template — the port’s whole contract is `basemap(z, x, y) => ' +
+      'string` — and the view (`components/MiniMap.tsx`) consumes the port, never the path. These two ' +
+      'lines compose a path on **our own Worker** (`apps/edge/src/tiles.ts` proxies LandsD, ADR-049) from ' +
+      'the same `DEFAULT_API_URL` this app’s DataSource uses, so there is no upstream host here and no ' +
+      'second base URL. Two entries rather than one shared implementation is the correct shape: the port ' +
+      'is generic over its image asset because React Native wants a `require()`d `ImageSourcePropType` ' +
+      'and a browser wants a URL string, which is the one genuinely per-platform part. It dies with ' +
+      '`apps/mobile`’s at WP6-8, leaving one.',
+  },
 ]
 
 /** Whitespace-insensitive form of a source line, for stable snippet matching. */
@@ -153,7 +168,7 @@ function allows(entry, finding) {
  * Every gate in this repo carries this exemption and the same argument for it: a check that flagged its own
  * documentation would be deleted within a week — and this one would flag a *lot*, because the interesting
  * comments in `apps/mobile/lib/` are precisely the ones explaining which endpoint a seam reaches and why.
- * String literals are **not** blanked, unlike `apps/web/scripts/check-no-derivation.mjs`: a path literal
+ * String literals are **not** blanked, unlike `scripts/check-no-derivation.mjs`: a path literal
  * inside a string is the violation, so blanking strings would make the `api-path` rule find nothing.
  * Deliberately lexical rather than a real parse — the alternative is a JS parser in a 120-line check.
  *

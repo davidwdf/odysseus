@@ -5249,6 +5249,103 @@
             ],
             "incomplete": false
           }
+        },
+        {
+          "name": "an-arrival-inside-the-minute-reads-due",
+          "why": "The `due` arm of the readout, which nothing else in this group reaches — every other live reading here is already `departed` or a whole number of minutes. It exists because a renderer's `due` branch is otherwise declared and never drawn: deleting the word from a component left both conformance suites green until a case produced it (WP6-3b). The arrival is 20 s after `now`, inside `etaUrgency`'s due band.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road (TS311)",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001992"
+                  }
+                ]
+              },
+              "members": [],
+              "routes": [
+                {
+                  "route": {
+                    "id": "CTB:969:outbound:2",
+                    "operator": "CTB",
+                    "routeNo": "969",
+                    "bound": "outbound",
+                    "serviceType": "2",
+                    "origin": {
+                      "en": "Tin Shui Wai Town Centre",
+                      "zh-Hant": "天水圍市中心",
+                      "zh-Hans": "天水圍市中心"
+                    },
+                    "destination": {
+                      "en": "Causeway Bay (Moreton Terrace)",
+                      "zh-Hant": "銅鑼灣 (摩頓台)",
+                      "zh-Hans": "銅鑼灣 (摩頓台)"
+                    }
+                  },
+                  "eta": {
+                    "routeId": "CTB:969:outbound:2",
+                    "stopId": "CTB:001992",
+                    "operator": "CTB",
+                    "arrivals": ["2026-07-29T03:50:50Z"],
+                    "dataTimestamp": "2026-07-29T03:50:15Z",
+                    "observedAt": "2026-07-29T03:50:25Z"
+                  },
+                  "stopId": "CTB:001992"
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "name": {
+              "label": "Tin Shui Wai Park, Tin Shui Road",
+              "code": "TS311"
+            },
+            "summary": "Served by Citybus  ·  1 routes",
+            "grouped": false,
+            "groups": [],
+            "rows": [
+              {
+                "routeId": "CTB:969:outbound:2",
+                "stopId": "CTB:001992",
+                "operator": "CTB",
+                "routeNo": "969",
+                "destination": "Causeway Bay",
+                "readout": {
+                  "kind": "eta",
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                }
+              }
+            ],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB"
+              }
+            ],
+            "incomplete": false
+          }
         }
       ]
     },

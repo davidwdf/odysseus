@@ -182,7 +182,15 @@ list of these cards" is checked, not restated). `apps/web`'s Nearby is now the s
 all. **WP6-3a is done too** (ADR-085): Place detail's composition — nine decisions that lived in the RN screen
 as loose expressions — is one kernel function, `placeDetailView`, with 15 corpus cases, and the words it joins
 are **injected** rather than imported (ADR-054). **WP6-3b is next:** the spec, the `apps/web` port, and
-extending `check-no-derivation` to `apps/mobile`'s Place detail. `watch()` is a real
+extending `check-no-derivation` to `apps/mobile`'s Place detail. **WP6-3b is done too** (ADR-087/088),
+which closes WP6-3: Place detail has an 18-state spec (plus `place-row.spec.json`), `apps/web` has a real
+Place screen **with its own DOM map**, and `check-no-derivation` moved to `scripts/` and polices the RN
+screen too — the ADR-069 asymmetry, closed for this screen. The spec-writing found more than it declared:
+**a failed fetch rendered nothing at all on both renderers** (`isLoading` is `isPending && isFetching`, so a
+paused retry matched no arm — the skeleton is the fallback arm now), and **two arms of the row's three-way
+readout were declared and never projected**, which an injected defect proved by passing. Both suites carry a
+coverage control now. Three declared states remain `knownDefect` with owners in `docs/07`. **WP6-4
+(Favourites) is next.** `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

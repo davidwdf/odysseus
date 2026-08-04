@@ -1,11 +1,55 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-08-03**. **Waves 0–5 are all merged to `main`** (PRs #11–**#21**; `main` is `0c97e17`),
-> and **Wave 6 has started: WP6-0, WP6-1, WP6-2 and WP6-3a are done** on `design-language-reuse-v2`
+> Snapshot: **2026-08-05**. **Waves 0–5 and Wave 6's first four rows are merged to `main`** (PRs #11–**#23**;
+> `main` is `a19066e`), and **WP6-3 is now complete** on `wp6-3b-place-detail-spec-and-port`
+> ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code),
+> [ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers)),
+> so `apps/web` has **two ported screens** and `apps/mobile`'s Place detail is policed by
+> `check-no-derivation` for the first time — the asymmetry ADR-069 recorded, closed for this screen.
+> **What WP6-3b is, and the honest summary is that the spec was the measurement.** Place detail is the first
+> screen whose spec was extracted from a surface *nothing had ever rendered in a test*, and writing it found
+> more than it declared:
+> 🔴 **a failed fetch rendered nothing at all, on both renderers, for ever** — `isLoading` is
+> `isPending && isFetching`, so a query that is pending and **not fetching** matched no arm and the trailing
+> `null` won. Measured against a 404 in a real browser on `:8081` and `:8082` alike; fixed by making the
+> skeleton the **fallback** arm so no query state can draw a blank, and pinned in both suites as an *element*
+> assertion, because "no text" is what a correct loading state and a blank screen have in common. Why the
+> retry pauses rather than erroring is **undiagnosed** and is the first row in `docs/07`'s hardening list.
+> 🔴 **an injected defect passed, twice** — deleting the published frequency and then the word "Due" from a
+> row left both suites green, because no fixture had a `headway` readout and **no corpus case produced a
+> `due` reading at all**. Two arms of a three-way `oneOf`, declared and never projected. Fixed with three
+> states, one new corpus case and a **coverage control** in both suites that asserts which arms the fixtures
+> exercise. Read that before writing the next spec: fixtures have to be audited against branches, not merely
+> written.
+> 🟠 **three declared states no renderer satisfies**, kept as the sentences they deserve and marked
+> `knownDefect` with owners in `docs/07`: the *"live times unavailable"* marker this screen has never drawn
+> (ADR-077 gave it the boolean a wave ago), the remembered-fix caveat Nearby prints and this one does not, and
+> the place's own printed code, which `displayName` splits off and the header throws away.
+> **Two hoists preceded it**, because the port made them unavoidable: the map's **pins** are
+> `placeDetailView`'s now — which dots exist, what each is labelled with, which fold together (ADR-087) — and
+> `operatorName` moved into `@nextbus/i18n` beside `poleSideLabel`, since the DOM screen needs the same words
+> and a second copy of that table is how the previous two came to disagree.
+> **`packages/ports`' `LinkOpener` has its first implementation anywhere** (`apps/web/src/adapters/links.ts`);
+> `apps/mobile/lib/openExternal.ts` still carries the `Platform.OS` switch its own comment says exists *"only
+> because the port did not exist yet"*.
+> **Verified in a browser on live Hong Kong data:** Tin Shui Wai Park on `apps/web` draws its folded
+> `TN511 · TN510` pin, 14 tiles, the licence credit, both kerb headings with their walks, all three readout
+> kinds, **28 interactive elements and 0 nested**, and a row tap resolving to
+> `/route/KMB%3A264X%3Aoutbound%3A1?stop=KMB%3AAFB9321F7CD2C2E4`. Rumsey Street shows two kerbs both reading
+> *"Another stop a few steps away — check the sign"* and Queen Mary Hospital shows a kerb named by its own
+> name: **ADR-080's tiers 3 and 2 on a second renderer for the first time.** Screenshot:
+> `.context/wave6-screenshots/6-web-place-detail-shipping.jpg`.
+> **Three harness traps, all one shape** — *a harness that looks at the wrong moment, or cannot supply the
+> input, is indistinguishable from a renderer that is wrong*: both drivers first mounted the screen without
+> its route (no id → disabled query → nothing rendered), the RN driver polled for a `data-testid` nothing
+> renders, and reanimated cannot load outside Metro while **its own shipped mock is broken in v4**, so the
+> suite died at *import* — which vitest counts as a failed file rather than failed tests.
+> **Wave 6's earlier rows, for context** — WP6-0, WP6-1, WP6-2 and WP6-3a
 > ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
 > [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),
-> [ADR-084](./08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)).
+> [ADR-084](./08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec),
+> [ADR-085](./08-decision-log.md#adr-085--the-place-screens-composition-is-a-kernel-function-and-the-words-it-joins-are-injected)):
 > **What WP6-3a is:** the **hoist** half of Place detail — the screen `proposals/04` picks third *"because it
 > has the most domain rules in the app"*, and it was the proof: **nine decisions lived in it as loose
 > expressions**, reachable only by rendering a React tree (the pole heading and its `·`, the per-kerb
@@ -29,17 +73,14 @@
 > plural rule is the catalogue's, and taking the noun instead of the phrase is how it happened), and an
 > unreadable pole id yields a heading of `" · Southwest side"` with a leading separator. Both are pinned by
 > corpus cases with owners; a hoist changes no behaviour (WP4-0's rule).
-> ⚠️ **The rewired RN Place screen has NOT been opened in a browser**, and that is the first thing to do
-> before this branch is pushed. The hoist is behaviour-preserving by construction and every *rule* in it is
-> corpus-pinned, but no suite renders that screen — `StopRow` and Nearby are the two surfaces with
-> conformance drivers — so a mistake in the ~90-line JSX rewire (a mis-bound `group.` field, a dropped
-> section) would show only on screen. `pnpm dev` and open a multi-pole place: Tin Shui Wai Park or City Hall.
-> **WP6-3 is not finished, and the split is deliberate:** the **spec**, the `apps/web` **port** and the row's
-> stated acceptance — `check-no-derivation` extended to `apps/mobile`'s Place detail — are **WP6-3b**. That
-> extension is not a one-liner: the screen has genuine *presentational* arithmetic (`Math.min`/`Math.max`
-> over viewport dimensions for the shrinking map, a `.filter` over a scroll-offset registry) that the gate's
-> shape rules would flag, so it needs the per-site `ALLOWLIST` mechanism `check-view-transport-free` already
-> uses. Rushing a gate is worth less than not having it.
+> ✅ **The rewired RN Place screen has been opened in a browser** (2026-08-04, Tin Shui Wai Park and Argyle
+> Centre) **and, since WP6-3b, a suite renders it** — `apps/mobile/test/place-detail-states.test.tsx` is the
+> first suite in the repo that mounts this screen at all, which is what the debt below was really about.
+> **WP6-3b finished it**, and the gate extension was the part that needed the care: the RN screen's
+> `Math.min`/`Math.max` over viewport dimensions, its `.filter`/`.find` over a scroll-offset registry and the
+> map's `Math.floor` over tile coordinates are all geometry, so `check-no-derivation` gained the per-site
+> `ALLOWLIST` `check-view-transport-free` already uses — each entry naming the **one rule** it exempts, on the
+> line every entry has to earn: *geometry is presentation, a list is a decision.*
 > **What WP6-2 is:** **Nearby has a screen spec, and `apps/web`'s Nearby is the shipping web Nearby.** Nine
 > states — the canonical five plus `content`, `undetermined`, `denied` and `locationError` — eight of them
 > with their own declared projection, and **both renderers are driven through every one**. That needed two
@@ -1152,8 +1193,10 @@ than any in its own row.
    - ✅ **WP4-1 done 2026-07-29 — Wave 4 is complete** ([ADR-069](./08-decision-log.md)).
      `apps/web` is a Vite 8 + React DOM + plain-Tailwind app rendering **one** screen (Nearby) from the
      identical `packages/core` functions: `pnpm dev:dom` → http://localhost:8082. It derives nothing, and
-     `apps/web/scripts/check-no-derivation.mjs` enforces that by policing *shapes* — ordering, capping,
-     selecting, string-joining, arithmetic, thresholds — with 8 selftest scenarios. The equivalence
+     `scripts/check-no-derivation.mjs` enforces that by policing *shapes* — ordering, capping, selecting,
+     string-joining, arithmetic, thresholds — with 8 selftest scenarios and, since WP6-3b, 4 allowlist cases.
+     **It sat in `apps/web/scripts/` and policed one renderer until WP6-3b**, which moved it to the repo root
+     and pointed it at `apps/mobile`'s Place screen, its map and its five leaf projections. The equivalence
      assertion (`apps/web/test/nearby-projection.test.tsx`) renders **every `stopCardView` corpus case**
      and compares its visible text against a projection of the same view, so the golden is the corpus a
      Swift or Kotlin suite would read.
@@ -1195,7 +1238,7 @@ than any in its own row.
      says 5.9 for shared packages). Found incidentally: 6.0 rejected a cast 5.9 had accepted in the web
      suite, where the corpus's JSON `null` was being asserted into `string | undefined`. Both suites now
      convert rather than cast. The version divergence is pre-existing and unaddressed.
-     🟡 **`check-no-derivation` polices `apps/web` only** — `apps/mobile`'s route, search and workbench
+     🟡 **`check-no-derivation` policed `apps/web` only until WP6-3b** — `apps/mobile`'s route, search and workbench
      screens still hold rules WP4-0 did not hoist, so the same rules would fire on legitimate code.
      Closes when Place and Route detail get their own WP4-0.
      🟡 **Nothing deploys `apps/web`** (`vite build` → `dist/`, 260 kB JS / 84 kB gzipped). ✅ **CI landed

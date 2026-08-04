@@ -6173,3 +6173,127 @@ pre-existing and unaddressed; it earned its keep here.
     what makes a DOM twin a rendering exercise rather than a second derivation.
   - **Test totals:** core **869** (+2), edge 149, api-client 71, ui-spec 30, web 83, mobile 65 — 1 267.
     Corpus unchanged at 98 groups / 833 cases: **a field was added to 15 existing cases, not a rule.**
+
+## ADR-088 — Place detail's spec, its DOM port, and the gate that finally reads both renderers
+
+- **Status:** **Decided and implemented 2026-08-05** — **WP6-3b**, which closes WP6-3. Implementation:
+  `packages/contract/ui/place-detail.spec.json` (18 states, 13 projected) and `ui/place-row.spec.json`,
+  `apps/web/src/screens/PlaceDetail.tsx` + `components/{MiniMap,PlaceRow}.tsx` +
+  `adapters/{tileSource,links}.ts` + `hooks/useLiveEtas.ts`, two conformance drivers, and
+  `scripts/check-no-derivation.mjs` — **moved to the repo root and extended to `apps/mobile`**, which is the
+  row's stated acceptance and closes the asymmetry
+  [ADR-069](#adr-069--two-renderers-one-kernel-and-the-four-bugs-only-the-second-one-could-find) recorded.
+- **Context.** Place detail is the screen `proposals/04` picks third *"because it has the most domain rules
+  in the app"*. WP6-3a hoisted them ([ADR-085](#adr-085--the-place-screens-composition-is-a-kernel-function-and-the-words-it-joins-are-injected))
+  and WP6-3b is the half that holds a renderer to them. It is the first screen whose spec was written from a
+  surface **nothing had ever rendered in a test** — `StopRow` and Nearby both had suites first — so the
+  spec-writing itself was the measurement, and most of what follows is what it measured.
+- **Decisions:**
+  1. **A screen's states have a second axis: the shape of the data.** Nearby's nine states are branches over
+     an async status (ADR-084). Place detail has those *and* branches over the payload — one kerb or several,
+     and where several, which of ADR-080's three tiers tells two of them apart. Each tier exists only for a
+     payload that has it, so each is a **state** driven from the corpus case it was written for. The states
+     and the cases line up one to one, which is the evidence they are the data's rather than invented.
+  2. **A leaf row gets its own spec**, referenced twice. Place detail draws its rows grouped and flat; writing
+     the row's slots out twice inside the screen's spec would be two declarations of one thing — the failure
+     this format exists to prevent, reproduced inside it. `place-row.spec.json` is referenced by both shapes
+     through ADR-084's `component` word, so a slot added there appears in both with no edit here.
+  3. **The reading order is shared; where the chrome sits in the *tree* is idiom.** `apps/mobile` floats a
+     collapsing header over its scroll content and therefore renders it **last**, and renders its label
+     **twice** (an expanded slot and a collapsed marquee it cross-fades between). `apps/web` puts its header
+     in flow, first, which is better for a keyboard and a screen reader. Both put the name at the top of the
+     screen. So each driver reads its own chrome first, de-duplicated where it has to be, and the cost is
+     stated on the spec's `name` slot rather than discovered: **neither driver can see a name drawn in the
+     wrong place on screen** — only one that is missing or wrong.
+  4. **Three states are `knownDefect` and the sentences were kept, not softened** (ADR-083's rule). Writing
+     the spec is the first time anything asked this screen what it shows, and it does **not** show: the
+     "live times unavailable" marker (`PlaceDetailView.incomplete` has existed since ADR-077 and this screen
+     has never read it, so a Nearby card says it and the place that card links to does not); that the
+     distance and walk may be measured against a **remembered** fix (Nearby says so, this screen does not —
+     ADR-008's position rule applied by one screen out of two); and the place's own printed code, which
+     `displayName` splits off and the header drops, so a lone stop named *"NELSON STREET MONG KOK (MK514)"*
+     shows no `MK514` anywhere. All three are in `docs/07` with their fixes described.
+  5. **The gate moved to the repo root and needed a per-site `ALLOWLIST` to get there.** The RN screen has
+     genuine presentational arithmetic — `Math.min`/`Math.max` over viewport dimensions for the map's crop
+     and dock, a `.filter`/`.find` over a scroll-offset registry, `Math.floor` over tile coordinates — and
+     the shape rules cannot tell it from a domain rule. The line every entry has to earn: **geometry is
+     presentation, a list is a decision.** Each names the one rule it exempts, so a `.slice()` over rows in
+     the same file is still caught, and the four allowlist selftest cases are ported from the defect an
+     adversarial review found in `check-view-transport-free`'s matcher rather than waiting to repeat it.
+  6. **`apps/mobile` is policed per surface, not wholesale.** Route detail, search, the workbench and
+     favourites still hold rules WP4-0 has not hoisted, and so do `CollapsingHeader`, `StopHeader` and
+     `GlassView`, which are chrome and motion. Each joins `POLICED` in the commit that hoists it. The
+     asymmetry ADR-069 recorded is closed **for this screen** and stated as open for the others.
+  7. **`operatorName` moved into `@nextbus/i18n`.** `placeDetailView` takes its words as injected `labels`
+     (ADR-054), so the DOM screen needed the same operator names — and a second copy of the
+     `OperatorId` → catalogue-key table is how the previous two copies came to disagree. It is `poleSideLabel`'s
+     neighbour now, for `poleSideLabel`'s reason. Its third home; the first was a map inside the RN screen.
+  8. **The `LinkOpener` port has its first implementation.** Declared since WP1-3 and implemented by nothing —
+     `apps/mobile/lib/openExternal.ts` still carries the `Platform.OS` switch its own comment says exists
+     *"only because the port did not exist yet"*. The DOM map needed both members, so this app implements
+     the port rather than growing a second copy of the switch.
+- **What the spec-writing measured, in the order it hurt.**
+  - 🔴 **A failed fetch rendered *nothing at all*, on both renderers, for ever.** The branch read
+    `isLoading ? skeleton : isError ? message : view ? content : null`, and `isLoading` is
+    `isPending && isFetching` — so a query that is **pending and not fetching** matched no arm and the
+    trailing `null` won. Measured against a 404 in a real browser: `main` had exactly one child, no skeleton
+    and no error text, on `:8081` and `:8082` alike. ADR-079 had already fixed the permanently-dead screen
+    for the `error` case, and this is the same failure arriving through a state that never *reaches* `error`,
+    so that fix's `refetchInterval` predicate never fires either. **Fixed in both renderers by making the
+    skeleton the fallback arm**, so no query state can render nothing, and pinned in both suites as an
+    element assertion — because "no text" is what a correct `loading` state and a blank screen have in
+    common. *Why* the retry pauses is not diagnosed and is in `docs/07` with the reproduction.
+  - 🔴 **An injected defect passed.** Deleting the published-frequency text from the row component left
+    **both** suites green: no fixture had a row with a `headway` readout, so the middle arm of the
+    three-way readout was declared and never projected. Two more arms were in the same position — no corpus
+    case produced a `due` reading at all. Three states and **one new corpus case**
+    (`an-arrival-inside-the-minute-reads-due`) later, both injections go red, and the suites now carry a
+    **coverage control** that asserts which arms the fixture set exercises. A `oneOf` case nothing drives is
+    a specification looking at nothing, which is this repo's most-repeated failure.
+  - 🟠 **`onLayout` does not fire on first mount** for the RN map on this screen: it renders with `w === 0`,
+    drawing no tiles and no dots, until something else triggers a layout — measured by dispatching a
+    `resize` by hand, which made the whole map appear. The DOM twin takes its first measurement in a layout
+    effect and keeps a `ResizeObserver` for later changes, so it does not inherit it. In `docs/07`.
+  - 🟠 **`ResizeObserver` does not exist in jsdom**, so the effect threw and React dropped the whole screen —
+    reported as an empty tree for every state. Feature-detecting it is also simply correct: the first
+    measurement is what a map needs to draw at all, and tracking a later resize is the enhancement.
+  - 🟡 **The English GMB label is an acronym where the Chinese is a phrase** (`GMB` versus `專線小巴`), which
+    the driver now pins as the **only** place the app's catalogue and the corpus's own fixture labels
+    disagree — 14 of 15 cases identical. Confirmed on screen at Queen Mary Hospital.
+- **Three harness traps, all of them the same shape as WP6-2's and worth the pattern.** *A harness that
+  looks at the wrong moment — or cannot supply the input — is indistinguishable from a renderer that is
+  wrong.* (a) Both drivers first mounted the screen **without its route**, so `useParams` gave no id, the
+  query was disabled, and every state reported *"did not render at index 0"*. (b) The RN driver polled for a
+  `[data-testid]` nothing renders, so it always returned before the query resolved. (c) Reanimated cannot
+  load outside Metro and its **own shipped mock is broken in v4**, so the suite died at *import*, which
+  vitest counts as a failed file rather than failed tests — WP6-0's parity suite hit that exact shape. The
+  hand-written shim is the API the app measurably imports, and everything in it is motion, which ADR-075
+  puts on the idiom side. `nativewind` needed mocking for a reason worth writing down: it re-exports
+  `react-native-css-interop`, whose `main` is `"dist/index"` with **no extension**, so the resolver hands
+  node a `.d.ts` and the run dies with `SyntaxError: Unexpected token 'typeof'` — no stack, no file, no
+  package name. Found by bisecting the screen's imports one at a time.
+- **Watched failing, eight ways.** The "check the sign" slot deleted from the **spec** (both suites red) ·
+  the same line deleted from **only** `apps/web` (web red, **RN green** — the ADR-069 deletion, now caught by
+  a shared declaration) · the licence credit removed from the web map (6 states red) · the published
+  frequency dropped from the row (red **only after** the fixtures covered it) · the "Due" word replaced
+  (same) · the kerb's own name dropped from the RN screen (red) · the committed JSON hand-edited (the drift
+  gate) · a `.slice()` and a `.filter()` injected into the RN Place screen (the extended gate, which is the
+  first time it has ever read that file).
+- **Verified in a browser on live Hong Kong data**, on `apps/web`: Tin Shui Wai Park draws its folded
+  `TN511 · TN510` pin and `001992`, 14 tiles, the credit, both kerb headings with their walks, all three
+  readout kinds, **28 interactive elements and 0 nested** — the DOM half of `sibling-not-nested` measured
+  outside jsdom — and a row tap resolving to
+  `/route/KMB%3A264X%3Aoutbound%3A1?stop=KMB%3AAFB9321F7CD2C2E4`, the raw boarding pole in `?stop=` as
+  ADR-062 requires. Rumsey Street shows two kerbs both reading *"Another stop a few steps away — check the
+  sign"* and Queen Mary Hospital shows a kerb named by its own name: ADR-080's tiers 3 and 2, on a second
+  renderer, for the first time. Screenshot: `.context/wave6-screenshots/6-web-place-detail-shipping.jpg`.
+- **Consequences:**
+  - ⚪ **`apps/web` has two ported screens**, and `/stop/:id` has left the placeholder table. Six
+    destinations still name the work package that ports them.
+  - 🟡 **The map's own text is `unenforced` in both suites** and says so: neither harness lays anything out,
+    so the pin labels are in neither tree. What *is* enforced is one layer down — `mergeCoincidentPins`'s
+    corpus and ADR-087's property that a pin's label is the code its heading prints.
+  - 🟡 **`ui/*.spec.json` grew from two files to four**, which enlarges the unsolved corpus-vendoring
+    surface `proposals/04` flags. WP6-9 still must not start before that is answered.
+  - **Test totals:** core **869**, edge 149, api-client 71, ui-spec 30, web **105** (+22), mobile **86**
+    (+21) — **1 310**. Corpus 98 groups / **834** cases (+1). `packages/core` stays at 100 % on all four axes.
