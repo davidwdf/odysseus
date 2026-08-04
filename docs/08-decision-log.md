@@ -6114,3 +6114,62 @@ pre-existing and unaddressed; it earned its keep here.
     by corpus cases so neither can be fixed by accident and unnoticed.
   - **Test totals:** core **867** (+10; corpus 97 groups / 818 cases → **98 / 833**), edge 149,
     api-client 71, ui-spec 30, web 83, mobile 65 — 1 265.
+
+## ADR-087 — The map's pins are content, and the dot's label is the heading's own code
+
+- **Status:** **Decided and implemented 2026-08-04** as the first half of **WP6-3b**. Implementation:
+  `PlaceDetailView.pins` + `placePins` in `packages/core/src/stop-detail.ts` (all 15 `placeDetailView`
+  corpus cases gain the field, +2 property tests), `apps/mobile/components/MiniMap.tsx` reduced to
+  drawing them, and ~20 lines of derivation gone from `apps/mobile/app/stop/[id].tsx`. A hoist, so
+  **no behaviour changes**; `packages/core` stays at **100 % on all four axes**.
+- **Context.** [ADR-086](#adr-086--two-readings-that-were-honest-and-useless-a-walk-in-hours-and-poles-at-one-coordinate)
+  decision 7 put the *fold* in the kernel *"because a second renderer's map must reach the same answer on
+  it"*, and then left the three decisions **around** the fold in the renderer: the Place screen built a
+  `MapPoint[]` from its member poles — `poleFlagCode(m.name, locale) ?? pole?.rawId` for the dot's label,
+  `parseStopId(m.id)?.operator` for its colour, `parseStopId(stop.id)?.operator` for the lone-stop pin —
+  and `MiniMap` called `mergeCoincidentPins` on the result. So the rule was shared and its **inputs** were
+  not, which is the shape WP4-0 exists to catch: `apps/web`'s map, days away, would have had to arrive at
+  the same three answers independently, and a re-implementation looks right on the day it is written.
+  The screen's own comment already said so — *"the same helper the heading uses, deliberately: change one
+  and at Prince Edward the heading would read `KMB · MK356` while the dot read the raw id"* — a comment
+  being the only thing holding two expressions together.
+- **Decisions:**
+  1. **`PlaceDetailView` carries `pins`**, one per physical spot, already folded, labelled and coloured.
+     A map's *identity* is which spots exist, what each is called and which poles each stands for; how a
+     pin is **drawn** — a dot, a teardrop, an `MKAnnotationView` — stays idiom. `MiniMap` now takes
+     `pins` and `grouped` and decides neither.
+  2. **A dot is labelled with the printed code its heading uses**, because it is the same `poleFlagCode`
+     call — which borrows a flag-shaped code from *another locale* when this one has none (ADR-080), so
+     it is exactly the kind of answer two renderers get subtly differently.
+  3. **`grouped` is passed, never derived from `pins.length > 1`.** A place whose every pole shares one
+     coordinate folds to a **single** pin and still needs its code chip, its smaller dot and its tap
+     target — and "is this place grouped" is already a field of the view. A renderer computing it would be
+     a second declaration of it, and a wrong one for exactly the population ADR-086 was written about.
+  4. **Every member gets a pin, including one with no rows left**, and the asymmetry with the list is
+     deliberate: the list is what a rider is choosing between, the map is a picture of where they are
+     standing, and a kerb whose lines all folded away under `dedupeRoutes` is still a kerb. See the
+     consequence below for the one live cost of that.
+  5. **One code path through the fold, a lone stop included.** Written with its own `return [{ ids: … }]`
+     arm it carried a conditional spread for the operator that **no payload can reach** — a place with one
+     member always has a readable id — and the 100 % branch threshold refused it, exactly as it refused
+     WP6-3a's `?? []`. Handing every case to `mergeCoincidentPins` leaves the "absent stays absent"
+     branches in the one place whose corpus exercises both sides of them. **Twice now the threshold has
+     found dead code in this file that review did not**, which is the argument for keeping it at 100 %.
+- **The finding, and it came from writing the property down rather than from reading the code.** The
+  assertion *"a pin is labelled with the code its heading prints"* went red on the first run, on the real
+  Tin Shui Wai Park payload: the Citybus dot reads **`001992`** while its heading reads **`Citybus`**. The
+  label falls back to the raw pole id and the heading has nothing to fall back to, so the two genuinely
+  disagree — a rider matching the dot to the list has to do it by elimination. It has been true since
+  ADR-042 shipped the labels. A hoist changes no behaviour (WP4-0's rule), so the property now asserts the
+  disagreement **in both directions** — the raw id is on the dot and is *not* in the heading — and the row
+  is in `docs/07` with its options. Three anti-vacuous counters, one per branch, because a single total
+  would have let the middle branch never run, which is how this would have stayed invisible.
+- **Consequences:**
+  - 🟡 **A dot for a kerb with no rows scrolls nowhere.** Tapping it asks the list for a group that does
+    not exist, and does so silently. Pre-existing, now visible in the corpus, in `docs/07`.
+  - 🟡 **A dot labelled with a raw operator stop id names something no sign shows** — see the finding
+    above. In `docs/07` with three options, none of them taken here.
+  - ⚪ **`MiniMap`'s props no longer mention a coordinate.** It is handed the pins and the flag, which is
+    what makes a DOM twin a rendering exercise rather than a second derivation.
+  - **Test totals:** core **869** (+2), edge 149, api-client 71, ui-spec 30, web 83, mobile 65 — 1 267.
+    Corpus unchanged at 98 groups / 833 cases: **a field was added to 15 existing cases, not a rule.**

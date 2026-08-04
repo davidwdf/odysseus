@@ -201,6 +201,23 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       guess: a tap scrolls to the first, and the list is where the rider reads which is which. If the map
       ever becomes interactive (below), the honest treatment is a small fan or a two-row callout rather
       than picking one.
+- [ ] **A dot labelled with a raw operator stop id names something no sign shows** — and it disagrees with
+      the heading beside it. `PlaceDetailView.pins` labels a dot with `poleFlagCode(name, locale) ?? rawId`
+      while the heading prints the operator *and* the code only when there is one, so at Tin Shui Wai Park
+      the Citybus dot reads **`001992`** and its heading reads **`Citybus`**, and a rider matching one to
+      the other does it by elimination. True since ADR-042 shipped the labels; found by writing the
+      property down in WP6-3b ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code)),
+      which now asserts the disagreement in both directions so it cannot be fixed unnoticed. Three
+      options, none taken: drop the fallback and leave such a dot unlabelled (honest, loses the only thing
+      telling two Citybus dots apart); put the raw id in the heading too (consistent, prints an id at
+      size); or label the dot with the **operator's name** where there is no code, which is what the
+      heading already says. The third is probably right and is a one-line change plus corpus rows.
+- [ ] **A dot for a kerb with no rows left scrolls nowhere.** `pins` covers every member pole while
+      `groups` covers only the poles that still have rows after `dedupeRoutes`, so a place can draw a dot
+      whose tap asks the list for a section that does not exist — and it fails silently. Deliberate as far
+      as the *map* goes (a kerb with nothing due is still a kerb standing there); what is wrong is the dead
+      tap. Either make such a dot inert and say why, or give it a one-line "nothing due here" section.
+      Pinned by the corpus since [ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code).
 - [ ] **Build out the stop/place map from a static image into a real feature** — today `MiniMap`
       ([`apps/mobile/components/MiniMap.tsx`](../apps/mobile/components/MiniMap.tsx), ADR-041) is a
       **static** raster — LandsD basemap + per-locale label overlay via the `TileSource` seam

@@ -1093,7 +1093,13 @@ than any in its own row.
 > the most domain rules in the app — **and its hoist half (WP6-3a) is done**, so what is left is **WP6-3b**:
 > the spec, the `apps/web` port, and the gate extension that closes ADR-069's recorded asymmetry. Start with
 > the gate's per-site `ALLOWLIST`, because the Place screen has presentational arithmetic the shape rules
-> would flag and the exemptions must each name the one rule they exempt. Read WP6-0's and WP6-1's
+> would flag and the exemptions must each name the one rule they exempt. **WP6-3b opened with a second
+> hoist that the port made unavoidable** ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code)):
+> ADR-086 put the pin *fold* in the kernel and left the three decisions **around** it in the renderer — the
+> dot's label, its colour, and the lone-stop pin — so `PlaceDetailView` carries `pins` now and `MiniMap`
+> draws them. Writing the property down found that a Citybus dot reads **`001992`** while its heading reads
+> **`Citybus`**: the label falls back to the raw pole id and the heading has nothing to fall back to. Read
+> WP6-0's and WP6-1's
 > unanticipated findings in `proposals/04`'s work-package note first; two of them (the destination set as
 > identity, the storage-key hazard) change what a later row has to do.
 > **WP0-5 still ships the Expo PWA first**, and
