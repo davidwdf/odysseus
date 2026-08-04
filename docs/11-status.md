@@ -1,7 +1,49 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-07-31**. **Waves 0–5 are on `main`** (PRs #11–**#19**); **Wave 5 was complete bar the
+> Snapshot: **2026-08-03**. **Waves 0–5 are all merged to `main`** (PRs #11–**#21**; `main` is `0c97e17`),
+> and **Wave 6 has started: WP6-0 is done** on `design-language-reuse-v2`
+> ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
+> **What WP6-0 is:** `apps/web` — the plain-React renderer that replaces the Expo PWA under
+> [ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels) —
+> stopped being a one-screen proof and became an app **shell**: a react-router 7 router over a declared
+> destination set, `PersistQueryClientProvider` on a synchronous localStorage persister, a `LocaleProvider`
+> with a persisted override, an appearance store applied to `<html>` *before* the first render, a Workbox
+> service worker, an installable manifest, and `build:web`. **One screen is ported (Nearby)**; the other
+> seven destinations render a placeholder that names the work package porting it, because a router listing
+> only Nearby would make every other destination read as *broken* rather than *not yet here* — and would
+> leave the destination set, which ADR-075 calls identity, undeclared and therefore uncomparable.
+> **Three things the plan's row did not anticipate, and they are the useful part.** (a) The acceptance's own
+> two halves pull against each other — *"opens offline and switches locale"* versus *"with zero screens
+> ported"* — so the shell carries a deliberately minimal locale + appearance control, and **WP6-7 deletes
+> that file**. (b) The web preferences store owns a **different storage key** from the RN one, because
+> zustand's `persist` writes `partialize`'s output as the *whole* blob: a two-field shell store on
+> `nextbus.preferences` would have erased every favourite a rider curated, silently, the first time
+> `apps/web` was served from the origin the Expo PWA was installed from. WP6-4 inherits the hoist of
+> ADR-062's migration. (c) `react-router` is pinned to **7.18.2, not 8.3.0**, because router 8 wants
+> `react >= 19.2.7` and this repo pins React to 19.2.3 to follow the Expo SDK — **the Expo SDK still
+> constrains the plain-React app's dependencies until WP6-8**, which is a new, concrete instance of the tax
+> ADR-075 itemised.
+> **Also: one PWA policy for two apps.** `workbox.config.mjs` moved from `apps/mobile/` to `scripts/pwa/`
+> with the five assertions over the emitted `sw.js`, because for the rest of Wave 6 two PWAs ship at once
+> and two copies of ADR-058 could disagree about what a rider sees with no network. `apps/web`'s new
+> `test/pwa-policy.test.mjs` asserts the policy's shape on every `pnpm test`. The icons and
+> `manifest.webmanifest` are emitted from one `gen-icons.mjs` run into both web roots, with the manifest's
+> two colours now read from the ink **token** instead of a hand-copied hex.
+> **Verified by running:** built `apps/web`'s PWA, served it, chose 繁體中文 and Light, then **killed the
+> static server** (nothing on 4173, nothing on 8787) and cold-loaded — `/settings`, `/` and
+> `/stop/KMB%3A18492CD3D2C1A6D0` all opened, in Chinese, in light mode, with the id decoded and a working
+> back control, and `performance.getEntriesByType('navigation')[0].deliveryType` read **`cache-storage`**
+> while a probe to an unknown path threw *Failed to fetch*. `pnpm --filter @nextbus/mobile build:web` still
+> emits its worker from the moved config (59 files precached). Screenshots:
+> `.context/wave6-screenshots/`.
+> **Every one of the 41 new tests was watched failing on an injected defect, and that pass caught two
+> assertions that were passing vacuously** — the parity suite resolved `apps/mobile` from
+> `import.meta.url`, which is an `http://localhost/…` URL under jsdom, so the file failed at *import* and
+> vitest reported a failed **file** rather than failed **tests**; and `remount()` did not reset the
+> preference store (module state), so both persistence assertions passed with `partialize` gutted. Neither
+> was findable by reading the tests.
+> Previously: **Wave 5 was complete bar the
 > deployment** on `turbo-cache-inputs-v2` — 25 commits, and the branch was larger than a wave should be
 > because an adversarial review and its thirteen fixes landed on the same branch as the feature.
 > **Three of Wave 5's own follow-ups are now built on `wave5-followups-v1`** (16 commits above `origin/main`;
@@ -284,7 +326,14 @@ frozen-clock/permanent-error defects that had been sitting on mobile Nearby are 
 both now done as well
 ([ADR-080](./08-decision-log.md#adr-080--what-tells-two-boarding-points-apart-in-the-order-the-data-can-support-it),
 [ADR-081](./08-decision-log.md#adr-081--the-frames-carry-failed-and-a-round-whose-failure-set-moved-is-news)),
-so **every numbered row of Wave 5 is closed**. WP0-5 (deploy) is Wave 0 and still needs a domain and
+so **every numbered row of Wave 5 is closed**. **Wave 6 has begun** — [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md),
+the three-renderers plan — and its first row **WP6-0** is done: `apps/web` now has a shell (router,
+persisted query cache, locale override, appearance, service worker, installable manifest) with **one ported
+screen** and a named owner for each of the other seven destinations
+([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
+`pnpm dev:dom` is that app; `pnpm dev:web` is still the Expo PWA, and **WP0-5 still ships the Expo PWA**.
+**No spec exists yet** — WP6-1 writes the first one, retrofitted to `StopRow` on both renderers.
+WP0-5 (deploy) is Wave 0 and still needs a domain and
 Cloudflare credentials from a human; it remains the launch blocker. **Before writing a test or a gate here, read
 [`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
 gate chain's shared shape, which script polices which directory, the two `layers.json` facts that decide
@@ -672,6 +721,33 @@ than any in its own row.
   pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
+- 🟠 **`apps/web` renders seven "coming soon" placeholders, and that is the honest state of Wave 6** (WP6-0,
+  [ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
+  Nearby is the **only** ported screen; `/favorites` (WP6-4), `/settings` (WP6-7), `/search` (WP6-5),
+  `/stop/:id` (WP6-3), `/route/:id` (WP6-6), `/about-data` and `/faq` (WP6-7) are placeholders that name their
+  owner, and a test requires every unported destination to have one. `pnpm dev:web` — the Expo PWA — is
+  still the complete app and is still what WP0-5 ships. **A screenshot of `apps/web` will misrepresent the
+  project unless it is Nearby.**
+- 🟠 **`apps/web/src/shell/ShellPreferences.tsx` is scaffolding held to no spec, and only a name keeps it
+  honest.** It exists because WP6-0's acceptance requires *"switches locale"* to be something that was run,
+  and the Settings screen belongs to WP6-7. **WP6-7 must delete this file**, not extend it. If WP6-7 slips,
+  an unspecified rider-facing surface ships. There is no gate; this row is the mechanism.
+- 🟡 **Two of WP6-0's tests read `apps/mobile`'s source, and both die at WP6-8.**
+  `apps/web/test/shell-parity.test.ts` is what binds the destination set and ADR-058's four cache numbers
+  across the two shells, and it is deliberately temporary — after `apps/mobile` retires, the destination set
+  is declared in one place and compared against nothing until WP6-9 gives it a second reader. That is
+  ADR-075's own *"between WP6-8 and WP6-9 there is exactly one renderer measured against the spec"* risk,
+  arriving early and in the shell rather than in a screen.
+- 🟡 **WP6-4 inherits a hoist it does not currently own in the plan:** ADR-062's versioned favourite-key
+  migration lives in `apps/mobile/lib/preferences.ts`, and the web shell deliberately does **not** model
+  favourites so that it cannot be a second implementation of it. Porting Favourites means moving that
+  migration to a home both renderers call — a WP4-0-shaped hoist, its own commit, and the one part of Wave 6
+  where getting it wrong loses a rider's curated data rather than a rendering.
+- 🟡 **A brief light flash before `apps/web`'s bundle parses.** The appearance class is applied by
+  `main.tsx` before the first render, but the stylesheet paints `bg-bg`'s light value while the module is
+  still loading. The usual fix — an inline `<script>` in `index.html` reading localStorage — would be a
+  second declaration of the storage key and of what `auto` means, in a file no gate reads. Accepted; the
+  service worker reduces the window to a frame or two once installed.
 - **Not deployed** (WP0-5). **CI now exists** — `.github/workflows/ci.yml` runs typecheck · lint · test ·
   `wrangler deploy --dry-run` · `git diff --exit-code` on a clean checkout for every PR and every push to
   `main`, needing no credentials — but there is still **no Cloudflare Pages deploy and no domain**, so nothing
@@ -833,13 +909,16 @@ than any in its own row.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**934 tests** on `main`: core 738 · edge 93 · api-client 47 · mobile 36 · web 20; **1 008 on
-   `wave5-followups-v1`**: core 785 · edge 116 · api-client 47 · mobile 38 · web 22, plus the whole
-   `pnpm boundaries` chain) and `curl localhost:8787/v1/health` — locally that reports
+3. `pnpm test` (**1 202 tests** on `design-language-reuse-v2`: core 853 · edge 149 · api-client 71 ·
+   mobile 56 · web 73, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has 1 161, the
+   difference being WP6-0's 41) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with
    `datasetBuildsThisIsolate: 0`.
-4. For the PWA specifically: `pnpm --filter @nextbus/mobile build:web`, serve `apps/mobile/dist`, then kill
-   both the static server and the Worker to check the offline path.
+4. For the PWA specifically: `pnpm --filter @nextbus/{mobile,web} build:web`, serve that app's `dist/`, then
+   kill both the static server and the Worker to check the offline path. **Use different ports for the two
+   apps** — a service worker's scope is the origin, so the first navigation after switching apps on one port
+   is answered from the *other* app's precache and looks like your build did nothing (one reload fixes it;
+   `docs/10`'s third dev-loop trap has the tell and the cleanup).
 5. **If you touch `apps/edge/test/eta-hub*.test.ts`, two harness facts cost real time before they were
    understood, and both are in comments where you will hit them.** (a) A promise resolved *inside* the shard's
    I/O context resumes the test in that context, so the next `ws.send` dies with *"Cannot perform I/O on behalf
@@ -864,7 +943,14 @@ than any in its own row.
 > generated native artefact served that second reader.
 > **The work plan is [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md) — Wave 6, WP6-0 … WP6-10 —
 > and it is written to be walked component by component**; the specs themselves are not written yet.
-> **Nothing is built and nothing is blocked by it: WP0-5 still ships the Expo PWA first**, and
+> **WP6-0 is done as of 2026-08-03** ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)):
+> `apps/web` has the shell and one ported screen. **WP6-1 is next** — `packages/ui-spec` (the schema + the
+> conformance walker, no domain vocabulary, in `layers.json` before it has a file) and
+> `packages/contract/ui/stop-row.spec.json`, retrofitted to the **existing** two renderers so both pass it
+> unmodified, with the gate watched failing on an injected slot deletion. Read WP6-0's three unanticipated
+> findings in `proposals/04`'s work-package note first; two of them (the destination set as identity, the
+> storage-key hazard) change what a later row has to do.
+> **WP0-5 still ships the Expo PWA first**, and
 > `apps/mobile` stays the reference implementation until each screen's spec passes on both renderers.
 > Docs updated with it: `docs/01` (principles 4–5), `docs/04` (superseded banner), `docs/05` (no EAS),
 > `docs/06` (Phase 3 rewritten), `docs/10` (deploy targets), `docs/README`. **`docs/09` still needs a

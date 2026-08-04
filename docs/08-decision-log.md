@@ -5545,3 +5545,168 @@ pre-existing and unaddressed; it earned its keep here.
     one bulk call, so the failure is all-or-nothing.
   - **Test totals:** core 853 (+14), edge 149 (+2), api-client 71, mobile 56 (+3), web 32. Corpus 96 groups
     / 803 cases.
+
+## ADR-082 — The web shell before the web screens: a router over a declared destination set, and one PWA policy for two apps
+- **Status:** **Decided and implemented 2026-08-03** (WP6-0, the first row of Wave 6 —
+  [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md)). Implementation: `apps/web/src/shell/`
+  (`App.tsx`, `destinations.ts`, `TabBar.tsx`, `Placeholder.tsx`, `BackButton.tsx`,
+  `ShellPreferences.tsx`, `layout.ts`), `apps/web/src/providers/` (`QueryProvider`, `LocaleProvider`),
+  `apps/web/src/lib/` (`preferences`, `appearance`, `serviceWorker`), `apps/web/src/main.tsx`,
+  `apps/web/index.html`, `apps/web/scripts/build-web.mjs`, `apps/web/public/` (generated), and — shared —
+  `scripts/pwa/workbox.config.mjs` moved out of `apps/mobile/` plus `scripts/gen-icons.mjs` emitting into
+  both web roots. **No kernel, contract, edge or dataset change.** Pinned by 41 new tests in
+  `apps/web/test/{shell,shell-parity}.test.ts{x,}` and `test/pwa-policy.test.mjs`, each watched failing on
+  an injected defect.
+- **Context.** [ADR-075](#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+  makes `apps/web` the web renderer and `apps/mobile` the reference implementation until WP6-8. It also
+  names WP6-0's own risk: *"the `apps/web` shell buys nothing a rider can see, and it is the largest package
+  before any screen moves. Porting a screen first and bolting the shell on after would make every screen's
+  spec provisional."* What `apps/web` had after Wave 4 was one screen and no shell at all — no router, no
+  persisted query cache, no locale override, no appearance store, no service worker, no manifest. Its own
+  `Nearby` said so in a comment listing four things *"deliberately absent"*.
+  **The two halves of the acceptance pull against each other**, and that tension is what most of this ADR
+  is about: *"opens offline and switches locale, with **zero screens ported**"*. A locale override nothing
+  can operate is a claim about plumbing rather than a thing that was run, and this repo's standard is that
+  a claim is exactly as large as what has been measured.
+- **Decisions:**
+  1. **The destination set is declared as data, and a test binds it to expo-router's.** ADR-075's
+     invariant/idiom table puts *the destination set and back semantics* on the **identity** side and the
+     chrome that expresses them on the idiom side, so `src/shell/destinations.ts` holds the paths, the
+     names' catalogue keys, and the tab order — and `test/shell-parity.test.ts` derives the same set from
+     `apps/mobile/app/**`, the file-based routes expo-router actually serves, and fails on a disagreement.
+     The paths are **byte-identical**, including `/favorites` with its American spelling (CLAUDE.md rule 5
+     exempts route names, and a shared destination set means a bookmarked deep link resolves the same on
+     either renderer — a URL is not a label).
+     The exclusion list has one entry, `/workbench`, with a reason, and a second assertion requires every
+     entry in it to still name a real route — so the list cannot quietly grow into "the sets match because
+     we stopped comparing".
+  2. **An unported destination renders a `Placeholder`, not a 404 and not a silent redirect.** The router
+     serves all eight paths from day one. ADR-075's own state rule is that each of loading / empty / error /
+     stale / offline must be distinguishable and non-blank; *"not built yet"* is a state of the same kind,
+     and the alternative — a table listing only Nearby — makes every other destination read as **broken**
+     rather than as not yet here. Each unported destination names the work package that ports it, and a
+     test requires that: a route whose placeholder nobody has agreed to replace is a promise, not a plan.
+     **No new catalogue string was needed** — `comingSoon` was already there in all three locales — and that
+     was a constraint rather than luck. Scaffolding that adds keys to `@nextbus/i18n` leaves them behind in
+     the generated Swift `.strings` and Kotlin `strings.xml` long after the scaffolding is gone.
+  3. **The tabs are a layout route, so the pushed destinations have no tab bar and do have a way back.**
+     expo-router expresses that as the `(tabs)` group with its own `_layout`; `<Route element={<TabsLayout/>}>`
+     is the identical shape. Getting it right is what preserves [ADR-037](#adr-037--search-is-its-own-page-launched-from-a-glass-button-that-shares-the-tab-bars-row)'s
+     decision that search is its own page rather than a fourth tab. It also forces the question a stack
+     answers for free: **back is a history pop *except* on a cold arrival**, where `navigate(-1)` would leave
+     the site — or, in an installed PWA's standalone window, do nothing at all and strand the rider with no
+     browser chrome to escape by. `useNavigationType() === 'PUSH'` distinguishes the two; a cold arrival goes
+     *up* to Nearby instead.
+  4. **The shell carries the smallest possible locale + appearance control, and it is named as a deletion.**
+     `ShellPreferences` is what makes *"switches locale"* something that was run. It deliberately is **not**
+     the Settings screen — no sections, no glass, no `Text` primitive, no spec — and WP6-7 replaces it with
+     the spec'd screen and deletes the file. It shares with the RN screen everything that is identity: the
+     same catalogue keys, the same option order, `null` for *follow the device*, and language names as
+     **endonyms**, because a reader whose UI is in the wrong language must still be able to find their own.
+  5. **The web preferences store owns a different storage key from the RN one, and that is data safety
+     rather than tidiness.** zustand's `persist` writes `partialize`'s output as the **whole** blob, so a
+     store modelling two fields does not preserve the other four — it erases them. A shell store writing
+     `nextbus.preferences` would therefore delete every favourite a rider had curated: not in dev, where
+     Expo is on :8081 and Vite on :8082 and localStorage is per-origin, but at **WP6-8**, the moment
+     `apps/web` is served from the domain the Expo PWA was installed from. Silently, with no error anywhere.
+     So the shell writes `nextbus.shell.v1`, a test asserts the two keys differ *and* that the RN store
+     really does still hold favourites under its own, and **WP6-4 hoists ADR-062's versioned favourite-key
+     migration to a home both renderers call** when it ports the screen that needs it. Modelling favourites
+     here instead would have meant a second implementation of that migration, which is the shape of every
+     defect Wave 5 found in its own live code.
+     The **query persister key is deliberately the same** in both apps, which is safe for the opposite
+     reason: both write the library-owned `PersistedClient` shape over identical query keys, so a rider
+     whose Expo PWA is replaced by this build keeps their cache instead of cold-starting.
+  6. **The appearance is applied before the first render, which is what makes the storage choice
+     load-bearing.** `apps/mobile` holds its splash screen until AsyncStorage has rehydrated; there is no
+     splash screen here, so `main.tsx` calls `applyMode(currentMode())` *before* `createRoot().render`, and
+     that is only honest because the preference is read through a **synchronous** `localStorage` wrapper
+     rather than through the async `KeyValueStore` port. One try/catch serves all three sync consumers
+     (`persist`, the query persister, and the port itself), because `localStorage` throws rather than
+     returning null in Safari private browsing and in a partitioned context.
+     The rule is shared: `resolveMode(appearance, systemIsDark)` from `@nextbus/ui`, the same call the RN
+     `useTheme` makes. Only the mechanism differs — a class on `<html>` here, NativeWind's `vars()` there.
+     `theme-color` is **created from the token** rather than declared in `index.html`, so the browser chrome
+     tracks a light/dark switch instead of being pinned to one, and there is no fourth copy of the ink hex.
+  7. **One Workbox policy, two consumers.** `apps/mobile/workbox.config.mjs` moved to `scripts/pwa/`, along
+     with the five assertions over the emitted `sw.js`. The caching policy *is* [ADR-058](#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier) —
+     live ETAs network-first and never cache-first (ADR-008), tiles cached only once seen and never
+     precached (LandsD's terms), the shell precached or nothing else is reachable — and for the rest of
+     Wave 6 two PWAs ship at once, so two copies of it could disagree about what a rider sees with no
+     network. Sharing removes that drift and introduces a different risk in its place, which is why
+     `test/pwa-policy.test.mjs` now asserts the policy's shape on every `pnpm test`: one edit here changes
+     what both apps do offline, and every way it could break is silent. The manifest and its icons are
+     likewise emitted from **one** generator run into both web roots, with `theme_color` read from the ink
+     token instead of hand-copied (it had been a hand-maintained hex; WP6-0 would have made it a third copy).
+  8. **`react-router` is pinned to 7.18.2, not the current 8.3.0, and the reason is worth recording.**
+     Router 8 requires `react >= 19.2.7`; this repo pins React to **19.2.3** because that is what the Expo
+     SDK aligns to (golden rule 6). So **the Expo SDK still constrains the plain-React app's dependency
+     choices until WP6-8**, which is a small, concrete instance of the tax ADR-075 itemised — and the first
+     one to arrive *after* the decision rather than before it. Router 7's `<Link>`/`<NavLink>` also do two
+     jobs a hand-rolled router would have to redo: they render real `<a href>` elements (middle-click, open
+     in new tab, a screen reader's link list) and set `aria-current="page"`, which is the DOM's way of
+     saying `accessibilityState: { selected }`.
+  9. **An unknown path redirects to Nearby rather than rendering a "not found" page.** A content decision,
+     not a lazy one: every string comes from the catalogue, the catalogue has no such message, and inventing
+     one in three locales to describe a URL a rider cannot have typed on purpose is the wrong trade.
+     `replace` keeps the bad URL out of history so back does not bounce off it.
+- **Why the alternatives lose:**
+  - **Port a screen first, add the shell after.** ADR-075's named risk. Every screen's spec would be
+    provisional: navigation, the locale, the appearance and offline all change what a screen must declare.
+  - **Only route the one screen that exists.** Then a deep link or a tap to any other destination 404s or
+    silently bounces, which reads as broken. It also leaves the destination set — an identity — undeclared,
+    so nothing could compare it.
+  - **A hand-rolled router.** Cheaper by one dependency, and it owes back/forward, real anchors, focus and
+    nested layouts. The shell is also the part ADR-075 decision 7 expects to travel to a second app; the
+    boring standard travels better than a bespoke one.
+  - **Share the RN preferences store, or its storage key.** Data loss, per decision 5.
+  - **Hoist the cache constants into `packages/core`.** Tempting, and wrong in the same way ADR-075 warns
+    about in reverse: the kernel is hand-ported to Swift and Kotlin, and a TanStack storage key means
+    nothing to either. *"A `ui-spec` that has grown a `stopId` is the early warning"* — a kernel that has
+    grown a `PERSIST_KEY` is the same mistake pointed the other way. A test binds the two copies instead,
+    and the duplication is **deleted** rather than resolved when `apps/mobile` retires.
+  - **An inline `<script>` in `index.html` to kill the pre-bundle theme flash.** It would be a second
+    declaration of both the storage key and the meaning of `auto`, in a file no gate reads. The residual —
+    a light flash for as long as the module takes to parse, which the service worker reduces to a frame or
+    two once installed — is accepted and written down instead.
+- **Verified by running, not by reasoning:**
+  - `pnpm --filter @nextbus/web build:web`, then the ADR-058 measurement: served `dist/`, loaded the app,
+    then **killed the static server** and cold-loaded — the shell opened, the tab bar worked, `/settings`
+    resolved through `navigateFallback`, and the language and appearance chosen before the kill were still
+    in force. The full trace is in [`docs/11`](./11-status.md).
+  - `pnpm --filter @nextbus/mobile build:web` still produces its service worker from the moved config, so
+    the shared home did not break the renderer that ships today.
+  - **Every new assertion was watched failing on an injected defect**, which is this repo's standing rule
+    and the only reason the numbers below mean anything: a dropped destination, the shell store taking over
+    the favourites blob, `staleTime` drifting from the RN provider's, live ETAs turned cache-first, and the
+    locale override and the appearance each dropped from `partialize` in turn.
+- **Consequences, including what we are accepting:**
+  - **The first draft of the parity harness passed while asserting nothing, and the injection pass is what
+    caught it** — twice over, which is the useful part. It resolved `apps/mobile` from `import.meta.url`,
+    which under the jsdom environment is an `http://localhost/…` URL that `fileURLToPath` rejects, so the
+    file failed at *import*: vitest reported a failed **file** rather than failed **tests**, the totals
+    still looked plausible, and its own anti-vacuous control could not run. Then `remount()` did not reset
+    the preference store — module state, so a value set by a click was still in memory — and both
+    persistence assertions passed with `partialize` gutted. Neither would have been found by reading the
+    tests, and neither was found by them passing.
+  - 🟠 **`ShellPreferences` is scaffolding with an owner, which is the best available version of a bad
+    thing.** It is real UI, held to no spec, and the mechanism keeping it honest is a name in `docs/11` and
+    in WP6-7's row rather than a gate. If WP6-7 slips, an unspecified surface ships.
+  - 🟠 **`apps/web` now has two ways to be wrong that it did not have as a one-screen proof:** a route table
+    and a persisted store. Both are covered by tests that read `apps/mobile`, and **both of those tests die
+    at WP6-8** — after which the destination set is declared in one place and compared against nothing until
+    WP6-9 gives it a second reader. That is ADR-075's own "exactly one renderer measured against the spec"
+    risk arriving early, in the shell rather than in a screen.
+  - 🟡 **The placeholder is a *rendered* claim about work that has not happened.** Anyone reading the app
+    at any point in Wave 6 sees seven "coming soon" pages, and that is the honest state — but it is also a
+    thing a screenshot can misrepresent. `docs/11` says which single screen is real.
+  - 🟡 **A light flash before the bundle parses**, per the alternatives above. Bounded, understood, not
+    fixed.
+  - 🟡 **`check-no-derivation` grew a policed directory in the same commit that created it**, which is the
+    rule `check-no-raw-colours` states at length and the reason the shell's tab list is two arrays spread
+    together rather than one array filtered: a `.filter()` over the destination table is exactly the
+    derivation the gate exists to stop, and the declaration is the cheaper answer anyway.
+  - ⚪ **`pnpm dev:dom` and `pnpm --filter @nextbus/web build:web` are the two commands that change**;
+    `docs/10` carries both. `pnpm dev:web` still means the Expo PWA, which is still what WP0-5 ships.
+  - **Test totals:** core 853, edge 149, api-client 71, mobile 56, **web 73 (+41)**. Corpus unchanged at 96
+    groups / 803 cases — WP6-0 added no kernel rule, which is the point.

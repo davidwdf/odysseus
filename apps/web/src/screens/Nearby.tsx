@@ -1,4 +1,4 @@
-import { type Locale, nearbyView } from '@nextbus/core'
+import { nearbyView } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
@@ -8,6 +8,7 @@ import { StopCard } from '../components/StopCard'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveNearby } from '../hooks/useLiveNearby'
 import { useLocation } from '../hooks/useLocation'
+import { useLocale } from '../providers/LocaleProvider'
 
 /** One array, so "no cards yet" has a stable identity — see `useLiveNearby`'s note on the storm. */
 const EMPTY_IDS: readonly string[] = []
@@ -18,13 +19,19 @@ const EMPTY_IDS: readonly string[] = []
  * elements and classes: `nearbyView` produces the list, its order, every caption, every row and every
  * "+N more" count, once, for both.
  *
- * **What is deliberately absent.** Navigation (there is one screen, so a tap has nowhere to go yet),
- * a manual locale override, pull-to-refresh, and the persisted query cache. Each is real work and none
- * of it is what this package is testing; adding any of them would grow the diff a reviewer has to read
- * to check the claim. `Nearby` therefore takes no router — the RN screen's `router.push` calls are its
- * only structural difference from this one.
+ * **What WP6-0 supplied and what is still absent.** The shell now provides the router, the persisted
+ * query cache, the locale override and the appearance store, so three of the four things this comment used
+ * to list as deliberately missing are here — which is why the locale arrives through `useLocale()` now, as
+ * CLAUDE.md rule 5 requires of every screen, rather than as a prop from the entry point.
+ *
+ * Still absent, and each with an owner: **the taps go nowhere.** The RN screen's `router.push` calls to
+ * `/stop/:id` and `/route/:id` are this file's one remaining structural difference from it, and wiring
+ * them belongs to **WP6-2**, which writes Nearby's spec — the destinations are declared in
+ * `src/shell/destinations.ts` and both are placeholders until WP6-3/WP6-6 port them. Pull-to-refresh is
+ * likewise WP6-2's, against a declared state rather than by feel.
  */
-export function Nearby({ locale }: { locale: Locale }) {
+export function Nearby() {
+  const locale = useLocale()
   const { policy } = useClientPolicy()
   const { state: loc, request } = useLocation()
   const ready = loc.status === 'ready' ? loc : null

@@ -17,14 +17,19 @@
  * fell back to a *different* default than the bundle did would produce a service worker that
  * caches nothing and no error anywhere. `packages/contract` and `packages/i18n` already run their
  * scripts this way.
+ *
+ * The Workbox config and the assertions over the emitted worker moved to `scripts/pwa/` in WP6-0,
+ * when `apps/web` grew a service worker too: the caching policy is ADR-058 and one wave with two
+ * copies of it is one wave in which they can disagree. Everything app-specific — which exporter runs,
+ * which env var names the API — stays here.
  */
 import { execFileSync } from 'node:child_process'
-import { readFileSync, rmSync, statSync } from 'node:fs'
+import { rmSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_API_URL } from '@nextbus/api-client'
 import { generateSW } from 'workbox-build'
-import { workboxConfig } from '../workbox.config.mjs'
+import { assertServiceWorker, workboxConfig } from '../../../scripts/pwa/workbox.config.mjs'
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const distDir = join(appDir, 'dist')
@@ -53,24 +58,8 @@ console.log(
   `✓ precached ${count} files (${kb(size)}) → dist/sw.js ${kb(statSync(join(distDir, 'sw.js')).size)}`,
 )
 
-// `registerServiceWorker()` asks for `/sw.js`, and a worker that registers but precaches the
-// wrong thing fails silently — the app just never works offline. So assert on the emitted
-// bundle rather than trusting the return value: the runtime really is inlined (no CDN
-// `importScripts`, which would need the network on first run), and the shell really is in the
-// manifest. The file is minified, so match the version banner, not identifier names.
-const sw = readFileSync(join(distDir, 'sw.js'), 'utf8')
-// The host, not the whole origin: a serialised RegExp escapes its slashes (`http:\/\/…`).
-const apiHost = new URL(apiUrl).host
-for (const [what, ok] of [
-  ['inlined Workbox runtime', sw.includes('workbox:precaching')],
-  ['no CDN importScripts', !sw.includes('storage.googleapis.com')],
-  ['app shell precached', sw.includes('index.html')],
-  // `generateSW` serialises `urlPattern` with `.toString()`, so a matcher that closes over a
-  // build-time variable compiles to source referencing an undefined identifier: the route
-  // silently never fires and nothing is cached at runtime. Both halves of that are checked —
-  // the API origin must be baked in, and `apiOrigin` must not survive as a bare identifier.
-  ['API origin baked into the routes', sw.includes(apiHost)],
-  ['no unresolved build-time identifiers', !/\bapiOrigin\b/.test(sw)],
-]) {
-  if (!ok) throw new Error(`dist/sw.js failed its sanity check: ${what}`)
-}
+// `registerServiceWorker()` asks for `/sw.js`, and a worker that registers but precaches the wrong
+// thing fails silently — the app just never works offline. So the emitted bundle is asserted on rather
+// than `generateSW`'s return value trusted; the five checks are in `scripts/pwa/` beside the config
+// that makes the claims.
+assertServiceWorker(join(distDir, 'sw.js'), { apiUrl })

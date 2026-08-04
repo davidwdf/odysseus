@@ -30,7 +30,10 @@ order, or jump to what you need:
   first**; iOS and Android are **hand-written** (Swift / Kotlin), idiomatic for their platform, and all
   three renderers are measured against the same executable spec — the wire contract, the corpus, the
   generated tokens and strings, and the component specs. Web is moving from Expo/`react-native-web` to
-  **plain React**; the plan is [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md).
+  **plain React**; the plan is [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md), and it has
+  started — **WP6-0 gave `apps/web` its shell** (router, offline, locale, appearance) with one ported screen
+  ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
+  **No component spec exists yet**; WP6-1 writes the first, and the Expo PWA is still what ships.
 - **Open data, no API keys.** Every HK bus operator publishes free real-time arrival APIs.
   We normalize them into one canonical model.
 - **Cloudflare edge stack.** Compute runs close to Hong Kong and to the upstream APIs, which

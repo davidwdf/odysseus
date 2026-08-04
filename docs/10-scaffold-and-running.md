@@ -53,7 +53,15 @@ cleanly, run mobile on its own):
 pnpm dev:edge                       # Cloudflare Worker on http://localhost:8787
 pnpm dev:mobile                     # Expo (press w = web/PWA, i = iOS, a = Android)
 pnpm dev:web                        # Expo straight to web/PWA
+pnpm dev:dom                        # apps/web — the plain React (Vite) renderer on http://localhost:8082
 ```
+`dev:web` and `dev:dom` are **two different apps serving the same screens**, which is the whole of Wave 6:
+`dev:web` is the Expo/`react-native-web` PWA that WP0-5 ships, `dev:dom` is the plain-React app that
+replaces it ([ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)).
+Since **WP6-0** the latter has the whole shell — router, persisted query cache, locale override,
+appearance, service worker — but only **one ported screen**; every other destination renders a "coming
+soon" placeholder that names the work package porting it
+([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
 
 Checks (one-shot, not part of "running"):
 ```bash
@@ -114,9 +122,9 @@ tiles, and no caching at all for `/v1/health`. 30 s rather than the old 8 s beca
 refreshes about once a minute: at 8 s the cache almost never hit, so it wasn't saving an upstream
 call — and staleness is still surfaced honestly from each reading's own `observedAt` (ADR-008).
 
-### Two things about the dev loop that will waste a cycle if you do not know them
+### Three things about the dev loop that will waste a cycle if you do not know them
 
-Both were established by hitting them, and neither is guessable from the code.
+All three were established by hitting them, and none is guessable from the code.
 
 **Warm the dataset before you open a `/v1/live` socket.** In `wrangler dev` there is no KV, so the
 Worker falls back to building the 8.3 MB index in-isolate (ADR-055's degrade-to-slow path — `/v1/health`
@@ -132,6 +140,17 @@ around: `TypeError: Cannot read properties of undefined (reading 'addedFiles')` 
 `metro/src/node-haste/DependencyGraph.js`, via NativeWind's Tailwind watcher. It kills the process
 rather than recovering, so the port goes dead mid-verification. Make the edit, *then* start Metro; if it
 does die, just restart it — nothing is corrupted.
+
+**Two PWAs on one port means the first page you see is the other app.** A service worker's scope is the
+**origin**, not the build — so if you verified `apps/mobile/dist` on `localhost:4173` last week and serve
+`apps/web/dist` there today, the worker still registered for that origin answers your first navigation
+from *its* precache. It looks like your new build silently did nothing: the header and the tab bar are the
+other app's. The new worker does install and claim (both configs set `skipWaiting` + `clientsClaim`), so
+**one reload fixes it** — the tell is the script tag, `/_expo/static/js/web/entry-*.js` versus
+`/assets/index-*.js`. This is the same class of trap `lib/serviceWorker.ts` refuses to register in dev for,
+one level up. Belt and braces: serve the two on **different ports**, and unregister when you are done —
+DevTools → Application → Service workers → Unregister, or in the console
+`navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()))`.
 
 ### Point the app at the edge
 The **Nearby** screen is wired to live data: it requests location permission, geolocates, and calls
@@ -185,22 +204,36 @@ curl "http://localhost:8787/v1/health"
   counter stays 0 across a full endpoint sweep.
 
 ## Build the PWA ([ADR-058](./08-decision-log.md))
+
+**Two apps, one command each, one policy.**
 ```bash
-pnpm --filter @nextbus/mobile build:web       # → apps/mobile/dist/ (incl. dist/sw.js)
+pnpm --filter @nextbus/mobile build:web       # expo export -p web → apps/mobile/dist/ (incl. dist/sw.js)
+pnpm --filter @nextbus/web    build:web       # vite build         → apps/web/dist/    (incl. dist/sw.js)
 ```
-This is `expo export -p web` **plus** a Workbox `generateSW` pass over that output, in one command
-so the precache manifest can't drift from the bundle it describes. The Workbox runtime is inlined
-into `dist/sw.js`, so the offline service worker doesn't need a CDN on its first run. **A bare
-`expo export -p web` produces no service worker** — always go through `build:web`.
+Each is its exporter **plus** a Workbox `generateSW` pass over that output, in one command so the
+precache manifest can't drift from the bundle it describes. The Workbox runtime is inlined into
+`dist/sw.js`, so the offline service worker doesn't need a CDN on its first run. **A bare
+`expo export -p web` or `vite build` produces no service worker** — always go through `build:web`.
 
-Set `EXPO_PUBLIC_API_URL` to the deployed Worker when you build a real one: it is baked into the
-bundle *and* into the service worker's runtime-caching routes (app shell precached; `/v1/index`
-stale-while-revalidate; live endpoints network-first with an offline fallback; tiles cached only
-once actually seen).
+The **caching policy is one declaration** for both, in
+[`scripts/pwa/workbox.config.mjs`](../scripts/pwa/workbox.config.mjs) since WP6-0
+([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)) —
+it is ADR-058's decisions in data, so two copies could disagree about what a rider sees with no network.
+`apps/web/test/pwa-policy.test.mjs` asserts its shape on every `pnpm test`; `assertServiceWorker` (same
+file) asserts the emitted `sw.js` at build time. Both apps' PWA icons and `manifest.webmanifest` come from
+one run of `node scripts/gen-icons.mjs`, whose two colours are read from the ink **token**.
 
-To check offline behaviour: serve `dist/` over any static server (e.g. `npx serve dist`), load the
-app once, then kill **both** that server and the Worker and reload. Verified this way — a cold load
-of `/search` still opens the app and searches from cache.
+Set `EXPO_PUBLIC_API_URL` / `VITE_API_URL` to the deployed Worker when you build a real one: it is baked
+into the bundle *and* into the service worker's runtime-caching routes (app shell precached; `/v1/index`
+stale-while-revalidate; live endpoints network-first with an offline fallback; tiles cached only once
+actually seen).
+
+To check offline behaviour: serve `dist/` over any static server (`npx serve dist`, or `npx vite preview`
+for `apps/web` — it does the SPA fallback online that the service worker does offline), load the app once,
+then kill **both** that server and the Worker and reload. Verified this way for `apps/mobile` — a cold load
+of `/search` still opens the app and searches from cache — and for `apps/web` at WP6-0, where the tell that
+it is genuinely the worker answering is `performance.getEntriesByType('navigation')[0].deliveryType ===
+'cache-storage'`. **Read the third dev-loop trap above before you serve both apps on one port.**
 
 ## Configuration & secrets
 *The reasoning behind all of this — including why there is no staging tier — is

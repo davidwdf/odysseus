@@ -1,11 +1,13 @@
 # 04 — Platform-idiomatic renderers: one spec, three UIs
 
-> **Status:** proposal / work plan. Drafted **2026-08-03**, owner's decision, recorded as
+> **Status:** work plan, **in progress — WP6-0 is done (2026-08-03,
+> [ADR-082](../08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).**
+> Drafted **2026-08-03**, owner's decision, recorded as
 > [ADR-075](../08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels).
 > It **supersedes [ADR-002](../08-decision-log.md#adr-002--expo-rn--rn-for-web-pwa-first-native-later-ota)**
-> and replaces [`docs/06`](../06-roadmap.md) Phase 3. Nothing here is built; this document defines the
-> **format** of the specs and the **order** we write them, and it is deliberately the agenda for a
-> component-by-component walkthrough rather than the specs themselves.
+> and replaces [`docs/06`](../06-roadmap.md) Phase 3. This document defines the **format** of the specs and
+> the **order** we write them, and it is deliberately the agenda for a component-by-component walkthrough
+> rather than the specs themselves — **no spec is written yet**; WP6-1 is the first one.
 > **Launch is not blocked by any of it** — WP0-5 ships the Expo PWA first, unchanged.
 
 ## Thesis
@@ -247,7 +249,7 @@ rewrite with extra steps.
 
 | # | Screen | Why here | The interesting question it settles |
 |---|---|---|---|
-| 0 | *(none)* — the shell | `apps/web` has no router, no persisted query cache, no locale provider, no service worker | Nothing. It is invisible progress and it is unavoidable. |
+| 0 ✅ | *(none)* — the shell | `apps/web` had no router, no persisted query cache, no locale provider, no service worker | *"Nothing. It is invisible progress and it is unavoidable."* — **and that was wrong twice.** It settled where the destination set is declared and who may compare it, and it settled that a shell that persists anything must not share a storage key with a store that models more fields (ADR-082 decisions 1 and 5). Neither is invisible: one is an identity, the other is a rider's favourites. |
 | 1 | **Nearby** | already two renderers, already agreeing | Does the spec format hold? |
 | 2 | **Place detail** | the most domain rules in the app — `orderPoles`, `dedupeRoutes`, the kerb keying, `poleSideOctants`, the live merge | Can a spec carry a *multi-level* screen, and does it close ADR-069's asymmetry (`check-no-derivation` is web-only until Place and Route detail get their own WP4-0)? |
 | 3 | **Favourites** | reuses the card; owns the empty-state bug and the one-line-two-kerbs residual (WP5-12) | Do declared states actually close known bugs? |
@@ -285,9 +287,28 @@ appears above:
 
 Waves 0–5 are spent; this is **Wave 6**.
 
+> **WP6-0 landed 2026-08-03** —
+> [ADR-082](../08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps).
+> Three things it settled that this table did not anticipate, each because the acceptance's *"zero screens
+> ported"* and *"switches locale"* halves pull against each other:
+> **(a)** the router serves **all eight** destinations from day one, each unported one rendering a
+> placeholder that names the work package owning it — a table listing only Nearby would make every other
+> destination read as broken, and would leave the destination set (an *identity* per the table above)
+> undeclared and therefore uncomparable. `apps/web/test/shell-parity.test.ts` derives the same set from
+> `apps/mobile/app/**` and fails on a disagreement; it dies with `apps/mobile` at WP6-8.
+> **(b)** the shell carries a deliberately minimal locale + appearance control (`ShellPreferences`) so
+> *"switches locale"* is something that was run rather than wired. **WP6-7 deletes that file** and replaces
+> it with the spec'd screen — it is scaffolding with an owner, and the only thing keeping it honest is that
+> name.
+> **(c)** the web preferences store owns a **different storage key** from the RN one. zustand's `persist`
+> writes `partialize`'s output as the whole blob, so a two-field shell store on `nextbus.preferences` would
+> erase every favourite a rider had the first time `apps/web` was served from the origin the Expo PWA was
+> installed from. **WP6-4 therefore inherits a hoist**: ADR-062's versioned favourite-key migration moves to
+> a home both renderers call, when it ports the screen that reads favourites.
+
 | ID | What | Acceptance | Size |
 |---|---|---|---|
-| **WP6-0** | The `apps/web` shell: router, `PersistQueryClientProvider` + storage persister, `LocaleProvider` + override, theme store, Workbox service worker, `build:web` | The PWA opens offline on `apps/web` and switches locale, with **zero screens ported** — measured the way ADR-058 was (kill the static server *and* the Worker, cold-load) | L |
+| **WP6-0** ✅ | The `apps/web` shell: router, `PersistQueryClientProvider` + storage persister, `LocaleProvider` + override, theme store, Workbox service worker, `build:web` | The PWA opens offline on `apps/web` and switches locale, with **zero screens ported** — measured the way ADR-058 was (kill the static server *and* the Worker, cold-load) | L |
 | **WP6-1** | The spec format: `packages/ui-spec` (schema + conformance walker, no domain vocabulary, in `layers.json` before it has a file), `contract/ui/*.spec.json` emitted + drift-gated, and both renderers driving the walker | `StopRow`'s spec is retrofitted to the **existing** two renderers and both pass unmodified; the gate fails on an injected slot deletion, **watched**; `tsc --outDir /tmp` proves `ui-spec` names nothing bus-shaped | M |
 | **WP6-2** | Nearby: complete spec + both suites green | Every ADR-069 finding is a declared invariant with a case; `apps/web`'s Nearby is the shipping web Nearby | M |
 | **WP6-3** | Place detail: WP4-0-style hoist of anything left deriving, then spec, then port | `check-no-derivation` extends to `apps/mobile`'s Place detail — closing ADR-069's recorded asymmetry | L |

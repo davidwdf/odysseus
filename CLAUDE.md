@@ -38,15 +38,24 @@ pnpm dataset:build      # fetch + normalize + cluster the static dataset → app
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
 pnpm --filter @nextbus/mobile build:web   # expo export + Workbox service worker → apps/mobile/dist
+pnpm --filter @nextbus/web build:web      # vite build  + the SAME service-worker policy → apps/web/dist
+                        # …one declaration of it, in scripts/pwa/ (ADR-082). Serve the two apps on
+                        # DIFFERENT ports — a service worker's scope is the origin, so the first
+                        # navigation after switching apps on one port comes from the other app's cache
 ```
 Full guide incl. deploy: [`docs/10`](./docs/10-scaffold-and-running.md).
 
 ## Repo map
 ```
 apps/mobile          Expo app (iOS/Android/Web-PWA)
-apps/web             Vite + React DOM — ONE screen (Nearby), rendered from the identical
-                     `packages/core` functions. The proof that the kernel is renderer-agnostic
-                     (ADR-068/069); it derives nothing, and a gate enforces that
+apps/web             Vite + plain React DOM — the renderer that REPLACES the Expo PWA (ADR-075).
+                     Since WP6-0 it is a whole shell: react-router over a declared destination set
+                     (`src/shell/destinations.ts`), a persisted query cache, a locale override, an
+                     appearance store, a service worker and an installable manifest (ADR-082) —
+                     with exactly ONE ported screen, Nearby, rendered from the identical
+                     `packages/core` functions. The other seven destinations render a placeholder
+                     naming the work package that ports them. It derives nothing, and a gate
+                     enforces that (ADR-068/069)
 apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/etas/:id and /v1/etas?ids=… — the
                      batch one round of a live subscription is fetched in, ADR-079 — /v1/tiles,
                      /v1/health; reads precomputed dataset shards from KV/R2 — ADR-055; and /v1/live,
@@ -67,6 +76,9 @@ packages/ports       the 7 type-only platform interfaces — `KeyValueStore` · 
 packages/i18n        en / zh-Hant / zh-Hans UI strings
 packages/ui          NativeWind preset + themes + tokens
 packages/tsconfig    shared TS configs
+scripts/pwa          the Workbox caching policy + the assertions over the emitted `sw.js` — ONE
+                     declaration, read by both apps' `build:web` (ADR-082). It is ADR-058 in data,
+                     so a second copy could disagree about what a rider sees with no network
 ```
 
 ## Golden rules (don't break these)
@@ -147,7 +159,11 @@ are done** — the static dataset is precomputed daily into KV/R2 and the Worker
 service worker and a persisted query cache (ADR-058), and live ETAs are coalesced per pole at a 30 s
 TTL (ADR-057). **Waves 1–5 are done**: the wire contract and the id grammar (ADR-051/052/059/060),
 the kernel's domain rules under corpus (ADR-062…066), the native artefacts (ADR-067), the second
-renderer (ADR-068/069) and — as of 2026-07-30 — the **live protocol** (ADR-056): `watch()` is a real
+renderer (ADR-068/069) and — as of 2026-07-30 — the **live protocol** (ADR-056), and **Wave 6 has
+started**: its first row **WP6-0 is done** (ADR-082) — `apps/web` is now a plain-React *shell* (router over
+a declared destination set, persisted query cache, locale override, appearance, service worker, manifest)
+with **one ported screen**, and the Workbox policy is one declaration serving both PWAs. **No component
+spec exists yet — WP6-1 writes the first.** `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before
@@ -160,9 +176,12 @@ socket as well as through the poll emulator; and the socket is selected by
 `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`, **default still `poll`**. **WP5-13 followed**
 (ADR-077): `/v1/nearby` and `/v1/stop` carry `failed` too, the two kernel merge helpers now *take* the
 failure set so a stale list cannot outlive its round, and a card says *"Live times unavailable"* from
-`StopCardView.incomplete` in both renderers. Wave 5's remaining rows are **WP5-7** (batch
-`/v1/etas?ids=…`, then Nearby adopts live), **WP5-8** (nothing enforces the docs rule in rule 7 below)
-and **WP5-12** (the 2–10 m pole residual, which also owns the rider who stars one line at both kerbs). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
+`StopCardView.incomplete` in both renderers. **Wave 5 is now closed — all 15 rows, ADRs 073–081, merged as
+PR #21:** WP5-7 added the batch `/v1/etas?ids=…` and made both Nearby renderers live subscribers (ADR-079),
+WP5-8 made CI enforce rule 7 **per commit over a PR's range** (ADR-078), WP5-12 tells two poles a metre
+apart apart — by side, then by the pole's own name, then *"check the sign"* (ADR-080) — and WP5-14 put
+`failed` on the frames, so an outage marker survives a live round and a recovery clears it within one
+(ADR-081). **WP0-5 (deploy + custom domain) is not done** and needs a real domain plus
 Cloudflare credentials — though CI now runs on every PR. Roadmap/backlog: `docs/06`, `docs/07`.
 Cloudflare agent skills are installed — prefer the `cloudflare` / `wrangler` / `durable-objects`
 skills for edge work.
