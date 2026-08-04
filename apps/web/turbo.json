@@ -3,12 +3,20 @@
   "extends": ["//"],
   "tasks": {
     "test": {
-      // The projection suite reads `packages/core/spec/stop-card.spec.json` directly — the corpus is
-      // its golden (ADR-069). This package *does* depend on `@nextbus/core`, but the root `test` task
-      // declares no `dependsOn`, so its hash does not include the dependency's files and a corpus
-      // change would replay a stale pass. Stated explicitly rather than fixed by making `test`
-      // topological, which would serialise every suite behind the kernel's for no gain here.
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/spec/*.spec.json"]
+      // The conformance suite reads two artefacts that live outside this package's hash, and neither is
+      // reachable through the dependency graph the way turbo computes it (the root `test` task declares no
+      // `dependsOn`, so a package's hash does not include its dependencies' files). ADR-070's failure —
+      // a gate replaying a stale pass because its input lay outside the hash — is one edit away otherwise.
+      //
+      //  · `packages/core/spec/*.spec.json` is the corpus this suite replays: its golden (ADR-069).
+      //  · `packages/contract/ui/*.spec.json` is the component spec it is measured against (WP6-1). A
+      //    slot removed there must not be able to replay a green run here — that is the whole point of
+      //    the spec being the shared declaration.
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/core/spec/*.spec.json",
+        "$TURBO_ROOT$/packages/contract/ui/*.spec.json"
+      ]
     }
   }
 }

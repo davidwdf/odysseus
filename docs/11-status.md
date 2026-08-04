@@ -2,8 +2,43 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 > Snapshot: **2026-08-03**. **Waves 0–5 are all merged to `main`** (PRs #11–**#21**; `main` is `0c97e17`),
-> and **Wave 6 has started: WP6-0 is done** on `design-language-reuse-v2`
-> ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
+> and **Wave 6 has started: WP6-0 and WP6-1 are done** on `design-language-reuse-v2`
+> ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
+> [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)).
+> **What WP6-1 is:** the **first component spec exists**, and it is data. `packages/ui-spec` holds the
+> format — a Zod schema plus a conformance walker, with **no NextBus vocabulary** — and
+> `packages/contract/ui/stop-row.spec.json` is emitted from a typed declaration, validated, committed and
+> drift-gated beside `openapi.json` and `asyncapi.json`. **Both renderers now drive it, and neither
+> component changed**: `StopRow.tsx` and `StopCard.tsx` are untouched, which is the whole acceptance.
+> **The format is five words** — `field` · `message` · `literal` · `each` · `oneOf` — plus `when` as a *path
+> tested for truthiness*, and there is deliberately **no expression language**: a spec that needs `> 0` is a
+> kernel rule leaking out. Each of the five is there because `StopRow` could not be expressed without it,
+> which is the point of retrofitting the format to a component that demonstrably works rather than designing
+> it first.
+> **Three things it settled that the plan left open.** (a) The check is **exact equality**, and that is what
+> makes one shared declaration safe where ADR-069 decision 7 forbade a shared *helper*: the spec is pinned
+> from both sides, so an under- or over-specified spec turns both suites red rather than quietly relaxing
+> them. The refinement is *the declaration is shared, the reading is not* — each renderer still owns how it
+> builds a tree and reads text out of it, and those genuinely differ (`<button>` versus
+> `div[role="button"]`). (b) **Every state must declare what enforces it** — `by` a slot, `knownDefect`, or
+> `unenforced` with a reason — because a spec full of `mustNot` sentences that nothing checks reads exactly
+> like an enforced one. (c) `proposals/04`'s own worked example contained a sentence that **would have failed
+> both renderers on day one**: *"a card with a name and nothing under it"*. It is kept as the target and
+> marked a `knownDefect` owned by **WP6-4**, rather than softened into something true.
+> **ADR-069's bug is now caught mechanically for the first time.** `content-not-affordance` — the same text
+> with every handler withheld — is that finding promoted to a universal law, and re-injecting
+> `remaining > 0 && onPress` into `StopRow.tsx` fails 18 of 23 cases. Before this it took a second renderer
+> and a human noticing.
+> **Watched failing, six ways:** the `caption` slot deleted from the spec (19/24 red on web, 20/23 on
+> mobile), a slot added that nobody draws (21 and 22 red), the caption line deleted from **only**
+> `apps/web`'s component (web red, RN green — the ADR-069 deletion, now caught by a shared declaration), the
+> `&& onPress` bug re-injected, the committed JSON hand-edited, and an orphan spec file added. Plus: touching
+> `ui/stop-row.spec.json` turns `@nextbus/web:test` from a cache **hit** into a cache **miss**, so ADR-070's
+> hole was closed prospectively for once — three `turbo.json` files declare the new artefact as an input.
+> **The vocabulary gate found a real leak in its own package on its first working run**, and two earlier
+> drafts of it were silently matching nothing: `\bword(?![a-z])` with the `i` flag (which makes the character
+> class case-insensitive too, so the lookahead rejected every letter), then a de-pluraliser that *replaced*
+> tokens and turned `routes` into `rout`. Its selftest caught both.
 > **What WP6-0 is:** `apps/web` — the plain-React renderer that replaces the Expo PWA under
 > [ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels) —
 > stopped being a one-screen proof and became an app **shell**: a react-router 7 router over a declared
@@ -332,7 +367,11 @@ persisted query cache, locale override, appearance, service worker, installable 
 screen** and a named owner for each of the other seven destinations
 ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
 `pnpm dev:dom` is that app; `pnpm dev:web` is still the Expo PWA, and **WP0-5 still ships the Expo PWA**.
-**No spec exists yet** — WP6-1 writes the first one, retrofitted to `StopRow` on both renderers.
+**WP6-1 followed the same day** ([ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)):
+the **first component spec exists** — `packages/ui-spec` is the format (a schema + a conformance walker, no
+domain vocabulary) and `packages/contract/ui/stop-row.spec.json` is the instance, emitted and drift-gated
+beside `openapi.json`. **Both renderers drive it and neither component changed.** Next is **WP6-2**: Nearby's
+own spec, which owns the three states a card cannot show alone and wires the taps.
 WP0-5 (deploy) is Wave 0 and still needs a domain and
 Cloudflare credentials from a human; it remains the launch blocker. **Before writing a test or a gate here, read
 [`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
@@ -721,6 +760,29 @@ than any in its own row.
   pre-commit docs-check skill + hook.
 
 ## 🚧 Not done yet / known limitations
+- 🟠 **A defect in the conformance walker now relaxes both renderers at once** (WP6-1,
+  [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)).
+  `project()` in `packages/ui-spec` is one declaration of what a component must show, replacing an
+  `expectedText` that was duplicated on purpose. That trade is deliberate and ADR-069 decision 7's rule is
+  *refined, not reversed* — the declaration is shared, the reading is not — but the residual is real: exact
+  equality catches a wrong **spec**, and nothing but the walker's own 21 tests catches a wrong **walker**.
+  Its fixtures are abstract on purpose so it cannot quietly acquire this app's assumptions.
+- 🟡 **`ui/*.spec.json` is one more thing a native repo must vendor, and vendoring is still unsolved.** The
+  hole was already the one gap in the corpus-rot story; WP6-1 widens it rather than changing it, and a stale
+  copy still yields a **green** suite pinning a rule that has moved. `packages/contract/README.md` §7 says so
+  where the reader meets it, and adds the thing a porter would otherwise get wrong: **a state marked
+  `knownDefect` is a target neither renderer meets**, not behaviour to copy. **WP6-9 must not start before
+  this is answered** — unchanged from ADR-075, with more surface.
+- 🟡 **`StopRow`'s spec declares three of its five states `unenforced`, and one a `knownDefect`.** `loading`,
+  `stale` and `offline` cannot be observed from one card — a skeleton belongs to the list screen, staleness is
+  opacity rather than text, offline is indistinguishable from stale without knowing whose network failed — so
+  they carry a reason and an owner (**WP6-2**) instead of an assertion. `empty` is the target sentence both
+  renderers currently fail (**WP6-4**). The `a11y` block is declared and cross-referenced but nothing asserts
+  the rendered tree agrees; that too is WP6-2's.
+- 🟡 **`docs/09` §5 (motion) and §6 (the prose ETA display spec) still need their superseded banners.**
+  ADR-075 deferred it *"until the spec format exists"*, and it does now — but one component's spec is not
+  enough: `EtaBadge` lives inside `StopRow`'s spec as three `oneOf` branches rather than as a component of its
+  own, so §6 is not yet genuinely replaced. Owner: **WP6-2**.
 - 🟠 **`apps/web` renders seven "coming soon" placeholders, and that is the honest state of Wave 6** (WP6-0,
   [ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
   Nearby is the **only** ported screen; `/favorites` (WP6-4), `/settings` (WP6-7), `/search` (WP6-5),
@@ -909,9 +971,11 @@ than any in its own row.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**1 202 tests** on `design-language-reuse-v2`: core 853 · edge 149 · api-client 71 ·
-   mobile 56 · web 73, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has 1 161, the
-   difference being WP6-0's 41) and `curl localhost:8787/v1/health` — locally that reports
+3. `pnpm test` (**1 221 tests** on `design-language-reuse-v2`: core 853 · edge 149 · api-client 71 ·
+   **ui-spec 21** · mobile 55 · web 72, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has
+   1 161. WP6-1's totals went *down* by two in the apps and that is the intended direction: the bespoke
+   "+N more with nowhere to tap" case in each suite is now `content-not-affordance` running over **every**
+   corpus case) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with
    `datasetBuildsThisIsolate: 0`.
 4. For the PWA specifically: `pnpm --filter @nextbus/{mobile,web} build:web`, serve that app's `dist/`, then
@@ -944,12 +1008,14 @@ than any in its own row.
 > **The work plan is [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md) — Wave 6, WP6-0 … WP6-10 —
 > and it is written to be walked component by component**; the specs themselves are not written yet.
 > **WP6-0 is done as of 2026-08-03** ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)):
-> `apps/web` has the shell and one ported screen. **WP6-1 is next** — `packages/ui-spec` (the schema + the
-> conformance walker, no domain vocabulary, in `layers.json` before it has a file) and
-> `packages/contract/ui/stop-row.spec.json`, retrofitted to the **existing** two renderers so both pass it
-> unmodified, with the gate watched failing on an injected slot deletion. Read WP6-0's three unanticipated
-> findings in `proposals/04`'s work-package note first; two of them (the destination set as identity, the
-> storage-key hazard) change what a later row has to do.
+> `apps/web` has the shell and one ported screen, and **WP6-1 is done too**: `packages/ui-spec` is the format,
+> `packages/contract/ui/stop-row.spec.json` is the first instance, and both renderers pass it unmodified.
+> **WP6-2 is next** — Nearby's own spec. Three things are already waiting for it and are written down rather
+> than remembered: the three `StopRow` states declared `unenforced` because a card cannot show them alone
+> (loading, stale, offline), the `a11y` block that is declared but unasserted, and `docs/09` §5/§6's
+> superseded banners. It also wires the taps WP6-0's placeholders are waiting for. Read WP6-0's and WP6-1's
+> unanticipated findings in `proposals/04`'s work-package note first; two of them (the destination set as
+> identity, the storage-key hazard) change what a later row has to do.
 > **WP0-5 still ships the Expo PWA first**, and
 > `apps/mobile` stays the reference implementation until each screen's spec passes on both renderers.
 > Docs updated with it: `docs/01` (principles 4–5), `docs/04` (superseded banner), `docs/05` (no EAS),

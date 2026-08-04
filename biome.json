@@ -110,6 +110,7 @@
                   {
                     "group": [
                       "@nextbus/contract",
+                      "@nextbus/ui-spec",
                       "@nextbus/core",
                       "@nextbus/ui",
                       "@nextbus/i18n",
@@ -136,6 +137,44 @@
       }
     },
     {
+      "includes": ["packages/ui-spec/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@nextbus/contract",
+                      "@nextbus/ports",
+                      "@nextbus/core",
+                      "@nextbus/ui",
+                      "@nextbus/i18n",
+                      "@nextbus/api-client",
+                      "@nextbus/data-normalize",
+                      "@nextbus/edge",
+                      "@nextbus/mobile",
+                      "@nextbus/web",
+                      "react*",
+                      "expo*",
+                      "@expo/*",
+                      "nativewind*",
+                      "zustand",
+                      "@tanstack/*",
+                      "lucide-*"
+                    ],
+                    "message": "not importable from uiSpec — boundary declared in layers.json (ADR-051)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/core/src/**"],
       "linter": {
         "rules": {
@@ -147,6 +186,7 @@
                   {
                     "group": [
                       "@nextbus/ports",
+                      "@nextbus/ui-spec",
                       "@nextbus/ui",
                       "@nextbus/i18n",
                       "@nextbus/api-client",
@@ -204,6 +244,7 @@
                   {
                     "group": [
                       "@nextbus/ports",
+                      "@nextbus/ui-spec",
                       "@nextbus/api-client",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
@@ -237,6 +278,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "@nextbus/ui-spec",
                       "@nextbus/ui",
                       "@nextbus/i18n",
                       "@nextbus/data-normalize",
@@ -272,6 +314,7 @@
                   {
                     "group": [
                       "@nextbus/ports",
+                      "@nextbus/ui-spec",
                       "@nextbus/ui",
                       "@nextbus/i18n",
                       "@nextbus/api-client",
@@ -306,6 +349,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "@nextbus/ui-spec",
                       "@nextbus/ui",
                       "@nextbus/i18n",
                       "@nextbus/api-client",

@@ -1,0 +1,23 @@
+{
+  "name": "@nextbus/ui-spec",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/check-no-domain-vocabulary.mjs --selftest && node scripts/check-no-domain-vocabulary.mjs && vitest run"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@nextbus/tsconfig": "workspace:*",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.8"
+  }
+}

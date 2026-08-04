@@ -1,94 +1,53 @@
+// The DOM renderer's conformance suite: **it drives `StopRow`'s published spec** (WP6-1, ADR-083).
+//
+// WHAT CHANGED, AND WHAT DID NOT
+// This file used to carry a hand-written `expectedText(view)` — 20 lines listing which fields a card shows
+// and in what order — deliberately duplicated in `apps/mobile/test/stoprow-projection.test.tsx`, with
+// ADR-069 decision 7's reasoning that a shared helper would let one edit silently relax both renderers.
+// That reasoning was right about **helpers**, and ADR-075 changes what is shared: the declaration is now
+// `packages/contract/ui/stop-row.spec.json`, emitted from a typed source, validated by a schema and
+// drift-gated. What each renderer still owns is everything below `harness` — how it builds a tree and
+// reads text and roles back out of it — because that is where a renderer-specific mistake actually lives.
+//
+// WHY THE SPEC CANNOT QUIETLY BE WRONG
+// The check is **exact equality**, so the spec is pinned from both sides: drop a slot and the renderers
+// show text the projection does not; invent one and the projection expects text no renderer draws. Either
+// way this suite and the RN one go red together. The residual blind spot is stated rather than hidden — a
+// rule that *neither* renderer implements and the spec does not mention is invisible to all of this, and
+// an independent third renderer (WP6-9) is the only thing that closes it.
+//
+// THE COMPONENT DID NOT CHANGE. WP6-1's acceptance is that the spec is retrofitted to the renderers as
+// they already are; `src/components/StopCard.tsx` is untouched.
+
+import spec from '@nextbus/contract/ui/stop-row.spec.json'
 import type { Locale, StopCardView } from '@nextbus/core'
 import corpus from '@nextbus/core/spec/stop-card.spec.json'
-import { t } from '@nextbus/i18n'
+import { CATALOGUE, type MessageKey, t } from '@nextbus/i18n'
+import { type ConformanceHarness, conform, type RenderedTree } from '@nextbus/ui-spec'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { StopCard } from '../src/components/StopCard'
 
-// WP4-1's acceptance, as close as this repo can honestly get to it — and the gap is stated at the
-// bottom rather than papered over.
-//
-// THE CLAIM, IN THREE PARTS
-//   1. Both renderers consume the identical `StopCardView`. Guaranteed by the type, and by
-//      `scripts/check-no-derivation.mjs` — neither may compute one of its own.
-//   2. The view is produced by one corpus-pinned kernel function
-//      (`packages/core/spec/stop-card.spec.json`), so the *content* is byte-identical by construction:
-//      there is one declaration, not two that agree.
-//   3. **This file proves the third part: that the web renderer is a faithful projection of that view
-//      — it adds no text of its own and drops none.** That is the half a type cannot check, and the
-//      half where a renderer actually goes wrong.
-//
-// WHY THE CORPUS IS THE GOLDEN
-// Every `expect` in the `stopCardView` group is a real view, derived from the real dataset build, and
-// it is the *same* file a Swift or Kotlin conformance suite reads. Using it here rather than a fixture
-// invented for this test means the golden cannot drift from what the kernel actually produces, and a
-// rule change lands in one place and goes red in every suite at once.
+const LOCALE: Locale = 'en'
 
+/**
+ * The corpus is imported statically — vite resolves JSON at build time — and the spec's own pointer at it
+ * is then *asserted* rather than followed. A dynamic import driven by `spec.viewModel.corpus` would look
+ * more principled and would break the moment the path moved, silently, in a suite that then had no cases.
+ */
 const cases: Array<{ name: string; expect: StopCardView }> = corpus.groups.stopCardView.cases.map(
   (c) => ({ name: c.name, expect: fromCorpus(c.expect) }),
 )
 
 /**
- * The corpus states an absent optional as JSON `null` (the convention in
- * `packages/core/test/corpus.ts`); TypeScript's absent value is `undefined`. This is the inverse of the
- * `nulled` projection the corpus was written with, and it is a **conversion rather than a cast** on
- * purpose: casting compiled under TypeScript 5.9 and was rejected by 6.0, which is what surfaced the
- * looseness. A reviver returning `undefined` deletes the key, which is exactly what an optional wants.
+ * The corpus states an absent optional as JSON `null` (the convention in `packages/core/test/corpus.ts`);
+ * TypeScript's absent value is `undefined`. A **conversion rather than a cast** on purpose: casting
+ * compiled under TypeScript 5.9 and was rejected by 6.0, which is what surfaced the looseness. A reviver
+ * returning `undefined` deletes the key, which is exactly what an optional wants.
  */
 function fromCorpus(view: unknown): StopCardView {
   return JSON.parse(JSON.stringify(view), (_k, v) => (v === null ? undefined : v)) as StopCardView
-}
-
-/**
- * Every string the card is expected to show, in reading order.
- *
- * This is the one **presentational** declaration in the file: which fields are displayed and in what
- * order. It deliberately restates no *rule* — it never decides how many rows there are, what the
- * caption says, or which arrival is urgent; it only reads fields the kernel already filled in. So a
- * renderer that invents a string, drops one, or reorders them fails, while a rule change cannot make
- * this file wrong.
- */
-function expectedText(view: StopCardView, locale: Locale): string[] {
-  const out: string[] = [view.name.label]
-  if (view.name.code) out.push(view.name.code)
-  if (view.caption) out.push(view.caption)
-  for (const row of view.rows) {
-    out.push(row.routeNo)
-    if (row.headline) out.push('→', row.headline)
-    if (row.remark) out.push(row.remark.text)
-    if (row.label.kind === 'mins') out.push(String(row.label.value), row.label.unit)
-    else if (row.label.kind === 'due') out.push(row.label.label)
-    else out.push('—')
-  }
-  // The kernel decides *whether* the card is incomplete; the words are the ICU catalogue's (ADR-054).
-  // Below the rows and above the count, which is the order the component draws them in — the readings
-  // that arrived are true, and this is a statement about the ones that are missing.
-  if (view.incomplete) out.push(t(locale, 'etasUnavailable'))
-  // The count is the kernel's; the phrase and its plural rule are the ICU catalogue's (ADR-054).
-  if (view.remaining > 0) out.push(t(locale, 'moreRoutes', { n: view.remaining }))
-  return out
-}
-
-/**
- * The visible text of a rendered tree, in document order, with empty nodes dropped.
- *
- * **Trimmed at the ends only — interior whitespace is preserved verbatim.** The first cut collapsed
- * `\s+` to a single space, which quietly hid the one real divergence this file has found: the caption's
- * two separator widths are meaningful, and a normalising comparison cannot see the difference between
- * a renderer that keeps them and one that does not. A test that launders the thing it is checking is
- * worse than no test.
- */
-function renderedText(container: HTMLElement): string[] {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-  const out: string[] = []
-  let node = walker.nextNode()
-  while (node) {
-    const text = (node.textContent ?? '').trim()
-    if (text) out.push(text)
-    node = walker.nextNode()
-  }
-  return out
 }
 
 let container: HTMLElement
@@ -100,34 +59,91 @@ beforeEach(() => {
   container = host
 })
 
-function render(view: StopCardView, locale: Locale) {
-  const root = createRoot(container)
-  act(() => {
-    root.render(<StopCard view={view} locale={locale} onPress={() => {}} />)
-  })
-  return renderedText(container)
+/** Anything the DOM treats as a tap target. The RN suite's selector is different, which is the point. */
+const INTERACTIVE = 'button, a[href], [role="button"]'
+
+/** Visible text in document order, trimmed at the ends only — interior whitespace preserved, because the
+ *  caption's two separator widths are meaningful and a normalising comparison cannot see them. */
+function readTree(host: HTMLElement): RenderedTree {
+  const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
+  const text: string[] = []
+  let node = walker.nextNode()
+  while (node) {
+    const value = (node.textContent ?? '').trim()
+    if (value) text.push(value)
+    node = walker.nextNode()
+  }
+  const interactive = [...host.querySelectorAll(INTERACTIVE)]
+  return {
+    text,
+    interactive: interactive.length,
+    // `closest` includes the element itself, so the walk up starts at the parent.
+    nestedInteractive: interactive.filter((el) => el.parentElement?.closest(INTERACTIVE)).length,
+  }
 }
 
-describe('apps/web renders the kernel view and adds nothing', () => {
-  it('has cases at all', () => {
-    // The anti-vacuous control. A corpus path that resolved to an empty group would make every
-    // assertion below pass by never running — the exact shape of the four gates Wave 3 found looking
-    // at nothing.
+/**
+ * The one cast in this file, and what replaces the type safety it gives up.
+ *
+ * A spec is data, so its message keys are strings — `t`'s by-name argument checking cannot reach them.
+ * What stands in for it is stricter than it looks: the key's *existence* is asserted here (a clear failure
+ * rather than the word "undefined" turning up in a diff), the arguments are declared in the spec and
+ * validated at emit time, and the resulting text still has to match what the renderer drew.
+ */
+function translate(key: string, args?: Record<string, unknown>): string {
+  if (!(key in CATALOGUE)) {
+    throw new Error(`the spec names message \`${key}\`, which is not in @nextbus/i18n's catalogue`)
+  }
+  const read = t as unknown as (
+    locale: Locale,
+    key: MessageKey,
+    args?: Record<string, unknown>,
+  ) => string
+  return read(LOCALE, key as MessageKey, args)
+}
+
+const harness: ConformanceHarness = {
+  render(view, { interactive }) {
+    const root = createRoot(container)
+    act(() => {
+      // The whole difference between the two renders: with handlers, and without. A card with nowhere to
+      // navigate is not hypothetical — Nearby on this app is exactly that caller until WP6-2 wires the
+      // taps, which is how ADR-069's overflow bug was found in the first place.
+      root.render(
+        <StopCard
+          view={view as StopCardView}
+          locale={LOCALE}
+          onPress={interactive ? () => {} : undefined}
+          onRoutePress={interactive ? () => {} : undefined}
+        />,
+      )
+    })
+    return readTree(container)
+  },
+  translate,
+}
+
+describe('apps/web conforms to StopRow’s published spec', () => {
+  it('has cases at all, and they are the ones the spec points at', () => {
+    // The anti-vacuous control, in both directions: a corpus path resolving to an empty group would make
+    // every assertion below pass by never running, and a spec pointing at a *different* corpus would mean
+    // this suite proves nothing about the component the spec describes.
     expect(cases.length).toBeGreaterThan(10)
+    expect(spec.component).toBe('StopRow')
+    expect(spec.viewModel.corpus).toBe('stop-card.spec.json')
+    expect(spec.viewModel.group).toBe('stopCardView')
   })
 
   for (const c of cases) {
     it(c.name, () => {
-      // `en` for every row: the corpus states each view in the locale its own `args` used, and the
-      // strings inside it are already localised by the kernel. The only locale-sensitive thing left is
-      // the "+N more" phrase, and `moreRoutes` is asserted across locales in `@nextbus/i18n`'s suite.
-      expect(render(c.expect, 'en')).toEqual(expectedText(c.expect, 'en'))
+      expect(conform(spec, c.expect, harness)).toEqual([])
     })
   }
 
   it('renders a card with no rows and no caption without inventing either', () => {
-    // Favourites' shape, and the one most likely to grow a stray element: an empty rows array plus an
-    // empty caption should produce the name alone, not an empty caption line or a "+0 more".
+    // Favourites' shape, and the state the spec declares as a `knownDefect`: a name with nothing under it
+    // is what both renderers do today, and `states.empty.mustNot` says it should not be. Pinned here as
+    // the *current* behaviour, so closing it (WP6-4) is a deliberate, visible change to both renderers.
     const view: StopCardView = {
       stopId: 'KMB:X',
       name: { label: 'Somewhere' },
@@ -136,41 +152,22 @@ describe('apps/web renders the kernel view and adds nothing', () => {
       remaining: 0,
       incomplete: false,
     }
-    expect(render(view, 'en')).toEqual(['Somewhere'])
+    expect(conform(spec, view, harness)).toEqual([])
+    expect(readTree(container).text).toEqual(['Somewhere'])
   })
 
   it('does not let the DOM collapse the caption’s deliberate double separator', () => {
-    // The regression test for the divergence this file found. `stopCardCaption` uses `' · '` to bind a
-    // distance to its walk time and a WIDER `'  ·  '` to separate that pair from the compass direction —
-    // a rhythm, not a typo. HTML collapses consecutive whitespace by default, so the web card read
-    // "Southwest-bound · 0m · 1 min walk" against React Native's "Southwest-bound  ·  0m · 1 min walk".
-    // `textContent` cannot see the collapse (it is a layout behaviour), so the property is asserted
-    // where it actually lives: the class on the element that holds the caption.
+    // The divergence this file found at WP4-1, and the one property the shared projection *cannot* check:
+    // `textContent` reads the same either way, because collapsing is a layout behaviour. So the assertion
+    // is on the class that prevents it — renderer-specific, which is why it lives here rather than in the
+    // spec. The spec carries the *reason*, as `slots.caption.invariant`; this is its local enforcement.
     const view = cases.find((c) => c.expect.caption.includes('  ·  '))?.expect
     if (!view) throw new Error('no corpus case carries a two-part caption — the fixture set moved')
-    render(view, 'en')
+    harness.render(view, { interactive: true })
     const caption = [...container.querySelectorAll('span')].find(
       (el) => el.textContent === view.caption,
     )
     expect(caption?.className).toContain('whitespace-pre-wrap')
-  })
-
-  it('states the "+N more" count even when there is nowhere to tap', () => {
-    // THE SECOND DIVERGENCE THIS FILE FOUND, and it needed a *second renderer* to surface rather than a
-    // second test: both components guarded the count with `remaining > 0 && onPress`, so a caller with
-    // no navigation target showed 6 of 26 routes and said nothing. Every caller in `apps/mobile` passes
-    // `onPress`, which is why it went unnoticed; this app's single screen does not. Hiding an honest
-    // total because the affordance is unavailable is the silent filter ADR-008 forbids.
-    //
-    // Note the assertion renders WITHOUT `onPress` — the tests above all pass one, so they cannot see
-    // this path at all. A test that only exercises the configured case is how the bug survived.
-    const view = cases.find((c) => c.expect.remaining > 0)?.expect
-    if (!view) throw new Error('no corpus case has hidden routes — the fixture set moved')
-    const root = createRoot(container)
-    act(() => {
-      root.render(<StopCard view={view} locale="en" />)
-    })
-    expect(renderedText(container)).toContain(t('en', 'moreRoutes', { n: view.remaining }))
   })
 
   it('is deterministic across renders', () => {
@@ -178,21 +175,22 @@ describe('apps/web renders the kernel view and adds nothing', () => {
     // claiming to render a view — which would break byte-identity in a way no single render reveals.
     const view = cases[0]?.expect
     if (!view) throw new Error('unreachable: guarded by the control above')
-    expect(render(view, 'en')).toEqual(render(view, 'en'))
+    expect(harness.render(view, { interactive: true }).text).toEqual(
+      harness.render(view, { interactive: true }).text,
+    )
   })
 })
 
-// ── the honest gap ─────────────────────────────────────────────────────────────────────────────
+// ── what this suite does and does not prove ────────────────────────────────────────────────────
 //
-// **The React Native half of this comparison is not machine-checked, and nothing here should be read
-// as claiming otherwise.** `apps/mobile` has vitest but no React renderer: asserting the same property
-// there needs `react-test-renderer` (or @testing-library/react-native) plus a jsdom-free setup for
-// Reanimated, NativeWind and `react-native-svg` — a real piece of work with its own failure modes, and
-// it would have doubled this package.
+// **Proved here:** the text is exactly the spec's projection, in order; it does not change when every
+// handler is withheld; and no tap target is nested inside another. All three run over every corpus case,
+// and the same three run against the React Native card in `apps/mobile/test/stoprow-projection.test.tsx`
+// from the same spec file — so the two renderers are measured against one declaration rather than against
+// two copies of one.
 //
-// So the current guarantee is: **one declaration of the content (the kernel + its corpus), a gate that
-// stops either renderer deriving its own, and a projection test on one of the two.** What is missing is
-// the symmetric projection test on the RN side. Until it exists, an RN-only rendering mistake — a
-// dropped field, a duplicated remark — would be caught by review and by the eye, not by CI. That is a
-// narrower gap than it sounds (the content cannot differ; only its presentation can) but it is the
-// difference between "byte-identical" as measured and as argued, and WP4-1's row says measured.
+// **Not proved here, and each with an owner.** The `loading`, `stale` and `offline` states are declared
+// `unenforced` in the spec because a card cannot show them alone — they belong to the screen, so WP6-2
+// owns them. `empty` is a declared `knownDefect`: the sentence is the target and neither renderer meets it
+// (WP6-4). And no suite in this repo renders the *native* iOS or Android tree; `react-native-web` is a real
+// ship target but not that one, which is what WP6-9 is for.

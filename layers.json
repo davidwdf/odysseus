@@ -12,14 +12,36 @@
   "viewOnly": ["react*", "expo*", "@expo/*", "nativewind*", "zustand", "@tanstack/*", "lucide-*"],
   "layers": {
     "contract": {
+      "comment": [
+        "`useTypeOnly: [\"uiSpec\"]` and not `use`: NextBus's component specs live here as data (WP6-1),",
+        "and data needs the spec format's *type* to be checked against, never its runtime. Same shape,",
+        "and the same reason, as `kernel` importing this layer type-only (ADR-052 decision 2) — the",
+        "published `ui/*.spec.json` must not carry a validator into anyone's bundle."
+      ],
       "dirs": ["packages/contract/src"],
       "use": [],
+      "useTypeOnly": ["uiSpec"],
       "npm": ["zod"]
     },
     "ports": {
       "dirs": ["packages/ports/src"],
       "use": [],
       "npm": []
+    },
+    "uiSpec": {
+      "comment": [
+        "The component-spec FORMAT and the conformance walker (WP6-1, ADR-075 decision 3) — and, like",
+        "`apps/web` before it, this entry exists in the same commit that creates the package rather than",
+        "after it. `use: []` with `npm: [\"zod\"]` is the whole of its allowance, and it is the structural",
+        "half of the promise ADR-075 makes about it: it carries NO NextBus vocabulary, so it may not",
+        "import the contract, the kernel or the tokens. A `ui-spec` that has grown a `stopId` is that",
+        "ADR's own early warning that the abstraction is being built for one consumer; this list is what",
+        "makes the warning a build failure. `check-no-domain-vocabulary.mjs` polices the other half —",
+        "the words — because an import graph cannot see a type NAMED after a bus."
+      ],
+      "dirs": ["packages/ui-spec/src"],
+      "use": [],
+      "npm": ["zod"]
     },
     "kernel": {
       "dirs": ["packages/core/src"],
@@ -93,7 +115,7 @@
         "five times; the cheapest moment to close it is before the first file exists."
       ],
       "dirs": ["apps/mobile", "apps/web"],
-      "use": ["contract", "kernel", "ports", "tokens", "client"],
+      "use": ["contract", "kernel", "ports", "tokens", "client", "uiSpec"],
       "npm": "any",
       "bannedSyntax": [
         {

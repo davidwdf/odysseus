@@ -1,0 +1,11 @@
+{
+  "extends": "@nextbus/tsconfig/base.json",
+  "include": ["src", "test"],
+  "compilerOptions": {
+    // `types: []`, for the reason `packages/ports` gives at length: without it, whatever `@types/*` are
+    // hoisted into the repo root (node, react, react-native) are in scope *ambiently*, so a `process.env`
+    // or a DOM `Event` could be referenced here with nothing failing. This package is meant to be
+    // renderer-agnostic — it must not be able to name a DOM node even by accident.
+    "types": []
+  }
+}

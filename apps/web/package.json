@@ -27,7 +27,9 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@nextbus/contract": "workspace:*",
     "@nextbus/tsconfig": "workspace:*",
+    "@nextbus/ui-spec": "workspace:*",
     "@types/react": "~19.2.2",
     "@types/react-dom": "~19.2.2",
     "@vitejs/plugin-react": "6.0.4",

@@ -5710,3 +5710,153 @@ pre-existing and unaddressed; it earned its keep here.
     `docs/10` carries both. `pnpm dev:web` still means the Expo PWA, which is still what WP0-5 ships.
   - **Test totals:** core 853, edge 149, api-client 71, mobile 56, **web 73 (+41)**. Corpus unchanged at 96
     groups / 803 cases — WP6-0 added no kernel rule, which is the point.
+
+## ADR-083 — A component spec is data with five words, and the projection is what pins it
+- **Status:** **Decided and implemented 2026-08-03** (WP6-1, the second row of Wave 6 —
+  [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md)). Implementation: a new
+  **`packages/ui-spec`** (`src/schema.ts`, `src/project.ts`, `src/conform.ts`, and
+  `scripts/check-no-domain-vocabulary.mjs`), **`packages/contract/src/ui/stop-row.ts`** with
+  `scripts/emit-ui-specs.mts` + `scripts/check-ui-specs-current.mjs` emitting and gating
+  `packages/contract/ui/stop-row.spec.json`, both renderers' suites rewritten to drive the walker
+  (`apps/web/test/nearby-projection.test.tsx`, `apps/mobile/test/stoprow-projection.test.tsx`), a `uiSpec`
+  layer in `layers.json`, and declared turbo `inputs` for the three tasks that read the new artefact.
+  **Neither component changed** — `StopRow.tsx` and `StopCard.tsx` are untouched, which is the acceptance.
+  Pinned by 21 new tests over the format itself and 47 conformance runs across the two renderers, each
+  gate watched failing on an injected defect.
+- **Context.** [ADR-075](#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+  decision 3 says *"a component spec is data validated by a schema, never prose"*, names
+  `packages/ui-spec` and `packages/contract/ui/` as its two homes, and leaves the format itself to be
+  designed. `proposals/04` picks `StopRow` first for a reason worth restating: **two renderers already draw
+  it and already agree**, so writing its spec validates the format for free — *"if the format cannot
+  express a screen that demonstrably works, the format is wrong, and we learn that in an afternoon instead
+  of at screen five."*
+  What each renderer had instead was a hand-written `expectedText(view)` — 20 lines naming which fields a
+  card shows and in what order — **deliberately duplicated**, with
+  [ADR-069](#adr-069--a-second-renderer-and-what-it-caught-in-the-first) decision 7's reasoning that a
+  shared helper lets one edit silently relax every renderer at once.
+- **Decisions:**
+  1. **The format's vocabulary is five words, and it was validated by retrofitting rather than by design.**
+     `field` · `message` · `literal` · `each` · `oneOf`, plus `when` as a **path tested for truthiness**.
+     Every one is there because `StopRow` could not be expressed without it: a repeated row list needs
+     `each`, an ETA readout that is either number-plus-unit, a word, or a dash needs `oneOf`, and the arrow
+     before a destination is a `literal` the renderer supplies. **There is deliberately no expression
+     language.** `when` cannot say `> 0`, because the moment a spec needs a comparison the number belongs
+     in the view model — which is exactly the argument `check-no-derivation` already makes to a renderer.
+     One rule covers four conditionals (an empty caption, an absent code, a zero count, a false flag),
+     because JavaScript's falsiness covers all four.
+  2. **The check is exact equality, and that is what makes a shared spec safe.** ADR-075 accepts *"a shared
+     spec is a shared bug"* as a cost. Equality turns most of that cost back into a gate: the spec is
+     pinned **from both sides** — drop a slot and the renderers show text the projection does not; invent
+     one and the projection expects text nobody draws. Either way both suites go red together. Measured,
+     not argued: deleting the `caption` slot from the spec fails 19 of 24 cases on `apps/web` and 20 of 23
+     on `apps/mobile`; adding a slot no renderer draws fails 21 and 22.
+     **The residual is named rather than hidden:** a rule that *neither* renderer implements and the spec
+     does not mention is invisible to all of this. Only an independent third renderer closes it (WP6-9).
+  3. **The declaration is shared; the reading is not.** `project()` is one statement of what a component
+     shows. Building a tree and reading text and tap targets back out of it stays per renderer — and the
+     two are genuinely different: `apps/web` writes a real `<button>` where `react-native-web` renders a
+     `Pressable` as `div[role="button"]`, so the suites' selectors differ. That is where a
+     renderer-specific mistake lives, so ADR-069 decision 7 survives exactly where it applies. What retires
+     is `expectedText`, which was a *specification* written twice.
+  4. **Three universal checks, not per-component flags.** `slots` (the text is exactly the projection, in
+     order); **`content-not-affordance`** (the same text with every handler withheld); `sibling-not-nested`
+     (no interactive element inside another, with an anti-vacuous control that a spec declaring interaction
+     targets must produce interactive elements at all). The second is ADR-069's own finding promoted to a
+     law — *the visible text is a function of the view model alone* — and it is the first time that bug is
+     mechanically caught rather than found by eye: re-injecting `remaining > 0 && onPress` into
+     `StopRow.tsx` now fails 18 of 23 cases. Universal rules belong to the format; per-component facts
+     belong to the spec.
+  5. **Every state must declare what enforces it — `by`, `knownDefect`, or `unenforced` with a reason.**
+     This is the anti-vacuous rule of the whole format. A spec full of `mustNot` sentences that nothing
+     checks reads exactly like an enforced one, which is the failure this repo has now hit five times in
+     other guises (ADR-070's cache key, the rules that fired on a stale `dist/`, the field-reference gate
+     that was built and deleted, the native artefacts comparable only on the machine that made them, and
+     WP6-0's own parity suite failing at *import* while its totals looked plausible). `by` is resolved
+     against the slot list at emit time **and** on every conformance run, so a renamed slot cannot leave a
+     true-looking claim behind.
+  6. **`StopRow`'s `empty` state is a declared `knownDefect`, and the sentence was not softened to match
+     the code.** `proposals/04`'s worked example declares *"a card with a name and nothing under it"* as a
+     `mustNot`, citing `docs/11`'s open bug — and enforcing that would have failed both renderers on day
+     one, against an acceptance that says both pass unmodified. The alternative to a `knownDefect` was
+     rewriting the sentence into something true, which would have quietly deleted the target. Same trade
+     Wave 2 made pinning four `knownDefect` corpus rows, for the reason ADR-075 restates: identical and
+     visible beats different and hidden. Owner: **WP6-4**. Both suites additionally pin the *current*
+     behaviour, so closing it is a deliberate change to two renderers rather than an accident in one.
+  7. **The format knows nothing about buses, and two mechanisms hold that line.** `layers.json` gives the
+     `uiSpec` layer `use: []`, so it cannot import the contract or the kernel — the structural half.
+     `check-no-domain-vocabulary.mjs` scans identifiers and string literals in `src/` **and** `test/`, plus
+     the emitted `.d.ts` (where an *inferred* type would carry a name the source never writes), for twelve
+     domain words. ADR-075 decision 7's own early warning — *"a `ui-spec` that has grown a `stopId`"* — is
+     now a build failure rather than a thing nobody sees. **Comments are exempt, and the selftest is what
+     forced that:** scanning them made every ADR citation a violation, so a portable package could not
+     explain why it exists. `check-no-derivation.mjs` made the same call for the same reason.
+  8. **`packages/contract` depends on `ui-spec` type-only.** The specs are data; data needs the format's
+     *type* to be checked against, never its runtime. Same shape and reason as `kernel` importing
+     `contract` type-only (ADR-052 decision 2) — the published `ui/*.spec.json` must not carry a validator
+     into anyone's bundle. `src/ui` is deliberately **not** re-exported from the contract's barrel, so the
+     Worker's runtime graph is unchanged.
+  9. **The artefact is emitted, committed and drift-gated three ways.** Every committed file must match its
+     declaration, every declaration must have a file, and **every file must have a declaration** — the
+     third is the direction people forget, and an orphan spec that no suite is measured against would pass
+     for ever. The gate is stricter than `openapi.json`'s needs to be, because the failure is worse: a
+     stale wire document eventually produces a decode error, while a stale component spec produces a
+     **green** conformance run pinning a rule that has moved.
+- **Why the alternatives lose:**
+  - **Prose in `docs/09`.** Tried, in §6, and the imminence band it describes was written down four times
+    with two different values. ADR-075 decision 3 already settled this; WP6-1 is where the alternative
+    would have been re-adopted by accident, one `must` sentence at a time.
+  - **Keep the duplicated `expectedText`.** It is a specification written twice, so the two renderers agree
+    only until somebody edits one. The duplication also cannot be read by a Swift suite, which is the whole
+    point of the exercise.
+  - **An expression language for `when`.** Every conditional in the app is a presence test; a comparison in
+    a spec is a rule leaking out of the kernel. Code in data is how a specification becomes a second
+    implementation.
+  - **Enforce the states mechanically now.** Three of `StopRow`'s five cannot be observed from one card at
+    all — a skeleton belongs to the list screen, staleness is opacity rather than text, and offline is
+    indistinguishable from stale without knowing whose network failed. Declaring them `unenforced` *with the
+    reason and the owning work package* is honest; asserting them would have meant either weakening them to
+    what a card can show or inventing a harness that cannot see what it claims to.
+  - **Hoist the format into a shared repo now.** WP6-10, and the rule of two. The seam is named and free of
+    domain vocabulary; extraction waits for a second consumer.
+- **Verified by running, and the injection pass is the evidence:** the spec's `caption` slot deleted (both
+  suites red), a slot added that nobody draws (both red), the caption line deleted from **only** `apps/web`'s
+  component (web red, RN green — the ADR-069 deletion, now caught by a shared declaration), ADR-069's
+  original `&& onPress` bug re-injected into `StopRow.tsx` (RN red, via `content-not-affordance`), the
+  committed JSON hand-edited (drift gate red), and an orphan spec file added (gate red). Plus: touching
+  `ui/stop-row.spec.json` turns `@nextbus/web:test` from a **cache hit into a cache miss**, so ADR-070's
+  hole was closed before it could bite — `apps/{web,mobile}/turbo.json` and `packages/contract/turbo.json`
+  declare the artefact as an input.
+- **Consequences, including what we are accepting:**
+  - **The vocabulary gate found a real leak in its own package on its first working run** — an error
+    message in `conform.ts` naming what ADR-069's finding was about. Two drafts of the matcher were wrong
+    before that, and both failures are worth recording because they are the same failure: a check that
+    silently matches nothing. The first used `\bword(?![a-z])` with the `i` flag, and `/i` applies to the
+    character class too, so the lookahead rejected every following letter and only bare words ever matched.
+    The second *replaced* each token with its de-pluralised form, turning `routes` into `rout` and
+    `onPress` into `pres`. It now adds candidates instead of substituting, and the selftest is what caught
+    both.
+  - 🟠 **A defect in `project()` or `conform()` now relaxes both renderers at once.** That is the shape
+    ADR-069 decision 7 was written against, accepted here because the alternative is a specification
+    written twice. The mitigations are that the walker has 21 tests of its own, that its fixtures are
+    abstract (so the format cannot quietly acquire this app's assumptions), and that exact equality means
+    most spec errors fail rather than pass. A *walker* error is the residual.
+  - 🟠 **`ui/*.spec.json` is one more thing a native repo must vendor, and vendoring is still unsolved.**
+    ADR-075 named this and WP6-1 makes it concrete. `packages/contract/README.md` §7 now says so where the
+    reader meets it, and repeats that a `knownDefect` is a target rather than behaviour to copy. **WP6-9
+    must not start before vendoring is answered** — unchanged, and now with more surface.
+  - 🟡 **Two tests retired, and the totals went down.** The bespoke "+N more with nowhere to tap" case in
+    each suite is now `content-not-affordance` running over *every* corpus case rather than one — strictly
+    stronger, and it is why `web` reads 72 and `mobile` 55 rather than 73 and 56.
+  - 🟡 **The spec's `a11y` block is declared and unasserted.** `role` and `name.fromSlot` are resolved
+    against the slot list, so they cannot dangle, but nothing checks that the rendered tree agrees. The
+    honest reason is that the two renderers express the same accessible role by different means and the
+    third will again; WP6-2 is where a screen-level a11y assertion becomes worth building.
+  - 🟡 **`docs/09` §5 and §6 still need their superseded banners.** ADR-075 deferred that *"until the spec
+    format exists"*. It exists now, and one component's spec is not yet enough to supersede the prose ETA
+    spec — `EtaBadge` is inside `StopRow`'s spec as three `oneOf` branches, not as a component of its own.
+    Owner: WP6-2, which is the first screen-level spec and the first place the prose is genuinely replaced.
+  - ⚪ **`packages/ui-spec` has no `turbo.json` and needs none** — its test reads only its own files. The
+    three tasks that read the *artefact* declare it, which is the ADR-070 lesson applied prospectively for
+    once rather than after a stale replay.
+  - **Test totals:** core 853, edge 149, api-client 71, **ui-spec 21 (new)**, web 72, mobile 55 — 1 221.
+    Corpus unchanged at 96 groups / 803 cases: WP6-1 added no kernel rule, which is the point.

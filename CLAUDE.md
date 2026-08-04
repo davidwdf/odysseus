@@ -31,9 +31,11 @@ pnpm format             # Biome --write
 
 pnpm --filter @nextbus/contract openapi:emit   # regenerate packages/contract/openapi.json (ADR-052)
 pnpm --filter @nextbus/contract asyncapi:emit  # …and asyncapi.json — the /v1/live frames (ADR-056)
+pnpm --filter @nextbus/contract ui:emit        # …and ui/<component>.spec.json — the component specs
+                        # (ADR-083); each is validated on emit, and a stale copy is a red build
 pnpm --filter @nextbus/contract native:emit    # …and README.md + native/{ios,android} — it prints the
                         # path/schema/corpus COUNTS, so it goes stale on any wire or corpus change too
-                        # …all three are committed + gated: `pnpm test` fails if any is stale
+                        # …all FOUR are committed + gated: `pnpm test` fails if any is stale
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
@@ -62,6 +64,12 @@ apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/etas/:id and 
                      the ETA socket served by the sharded, hibernating `EtaHub` DO — ADR-056)
 packages/contract    Zod schemas = the ONE declaration of every wire shape → OpenAPI 3.1 (ADR-052)
                      + the /v1/live frames → AsyncAPI 3.0 (`asyncapi.json`, ADR-056)
+                     + `src/ui/` → `ui/<component>.spec.json`, the component specs both renderers are
+                     measured against (ADR-083). Emitted, committed, drift-gated like the other two
+packages/ui-spec     the component-spec FORMAT (a Zod schema) + the conformance walker. NO NextBus
+                     vocabulary — two gates enforce that (`layers.json` gives it `use: []`, and
+                     `check-no-domain-vocabulary.mjs` scans for the words an import graph cannot see).
+                     The first thing a second app would copy; extracted on demand, not now (ADR-075 d7)
 packages/core        canonical types (`z.infer` of contract, `import type` only) · DataSource · ETA helpers
                      · `live.ts` = the live-protocol rules (frame reducer, diff, cadence, shard, socket URL)
 packages/data-normalize  KMB + Citybus adapters (upstream → canonical)
@@ -162,8 +170,11 @@ the kernel's domain rules under corpus (ADR-062…066), the native artefacts (AD
 renderer (ADR-068/069) and — as of 2026-07-30 — the **live protocol** (ADR-056), and **Wave 6 has
 started**: its first row **WP6-0 is done** (ADR-082) — `apps/web` is now a plain-React *shell* (router over
 a declared destination set, persisted query cache, locale override, appearance, service worker, manifest)
-with **one ported screen**, and the Workbox policy is one declaration serving both PWAs. **No component
-spec exists yet — WP6-1 writes the first.** `watch()` is a real
+with **one ported screen**, and the Workbox policy is one declaration serving both PWAs. **WP6-1 is done
+too** (ADR-083): the first component spec exists as *data* — `packages/ui-spec` is the format and
+`packages/contract/ui/stop-row.spec.json` the instance — and **both renderers drive it with neither component
+changed**. Five words (`field`/`message`/`literal`/`each`/`oneOf`), `when` as a truthiness path, no expression
+language, and every state declaring what enforces it. **WP6-2 (Nearby's own spec) is next.** `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

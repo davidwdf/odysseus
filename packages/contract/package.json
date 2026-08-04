@@ -6,20 +6,23 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./ui/*": "./ui/*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "openapi:emit": "node --import tsx scripts/emit-openapi.mts",
     "asyncapi:emit": "node --import tsx scripts/emit-asyncapi.mts",
     "native:emit": "node scripts/emit-native-guide.mjs",
-    "test": "node scripts/check-openapi-current.mjs && node scripts/check-asyncapi-current.mjs --selftest && node scripts/check-asyncapi-current.mjs && node scripts/check-native-guide.mjs"
+    "ui:emit": "node --import tsx scripts/emit-ui-specs.mts",
+    "test": "node scripts/check-openapi-current.mjs && node scripts/check-asyncapi-current.mjs --selftest && node scripts/check-asyncapi-current.mjs && node scripts/check-ui-specs-current.mjs && node scripts/check-native-guide.mjs"
   },
   "dependencies": {
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@nextbus/tsconfig": "workspace:*",
+    "@nextbus/ui-spec": "workspace:*",
     "typescript": "5.9.3"
   }
 }

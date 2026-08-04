@@ -3,21 +3,14 @@
   "extends": ["//"],
   "tasks": {
     "test": {
-      // The projection suite reads `packages/core/spec/stop-card.spec.json` directly — the corpus is
-      // its golden (ADR-069). This package *does* depend on `@nextbus/core`, but the root `test` task
-      // declares no `dependsOn`, so its hash does not include the dependency's files and a corpus
-      // change would replay a stale pass. Stated explicitly rather than fixed by making `test`
-      // topological, which would serialise every suite behind the kernel's for no gain here.
-      //
-      // `src/*.ts` joined it after Wave 5: the corpus was the only cross-package *file* this suite read
-      // when the entry was written, but the components it renders reach runtime kernel code
-      // (`BearingArrow` → `bearingOctantDeg`, `EtaTimes` → `etaLabelParts`/`etaUrgency`), and
-      // `test/live-clock.test.tsx` now asserts `etaReadout`'s staleness band and `test/seam-substitution`
-      // the reduced frame ordering. A change to either would have replayed a stale pass.
+      // Same two out-of-hash inputs as `apps/web`, for the same reason and with the same consequence:
+      // `test/stoprow-projection.test.tsx` replays `packages/core/spec/stop-card.spec.json` against
+      // `packages/contract/ui/stop-row.spec.json`, and neither is inside this package. A gate that cannot
+      // see its own input passes for ever (ADR-070).
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/packages/core/spec/*.spec.json",
-        "$TURBO_ROOT$/packages/core/src/*.ts"
+        "$TURBO_ROOT$/packages/contract/ui/*.spec.json"
       ]
     }
   }

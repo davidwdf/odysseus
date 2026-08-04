@@ -61,6 +61,25 @@ export function figures() {
 
   const sum = (key) => corpora.reduce((n, c) => n + c[key], 0)
 
+  // The component specs (WP6-1). Counted the same way the corpora are, so the README's figure goes stale
+  // the moment one is added and `check-native-guide.mjs` says so — a native reader is told what to vendor,
+  // and a number nobody regenerates is how that instruction rots.
+  const uiDir = join(PKG_ROOT, 'ui')
+  const uiSpecs = readdirSync(uiDir)
+    .filter((f) => f.endsWith('.spec.json'))
+    .sort()
+    .map((file) => {
+      const parsed = JSON.parse(read(join(uiDir, file)))
+      const states = Object.values(parsed.states)
+      return {
+        file,
+        component: parsed.component,
+        slots: parsed.slots.length,
+        interactions: parsed.interactions.length,
+        knownDefect: states.filter((s) => 'knownDefect' in s.enforcement).length,
+      }
+    })
+
   const tokens = JSON.parse(read(join(REPO_ROOT, 'packages', 'ui', 'generated', 'tokens.json')))
   const i18nRoot = join(REPO_ROOT, 'packages', 'i18n', 'generated')
   const iosStrings = read(join(i18nRoot, 'ios', 'en.lproj', 'Localizable.strings'))
@@ -76,6 +95,10 @@ export function figures() {
     asyncApiVersion: live.asyncapi,
     liveMessages: Object.keys(live.components.messages).length,
     liveSchemas: Object.keys(live.components.schemas).length,
+    uiSpecs,
+    uiSpecFiles: uiSpecs.length,
+    uiSpecComponents: uiSpecs.map((s) => s.component).join(', '),
+    uiSpecDefects: uiSpecs.reduce((n, s) => n + s.knownDefect, 0),
     corpora,
     corpusFiles: corpora.length,
     corpusGroups: sum('groups'),
@@ -116,6 +139,11 @@ function artefactsBlock(f) {
       '`packages/core/spec/`',
       `**${f.corpusFiles} corpora, ${f.corpusGroups} groups, ${f.corpusCases} cases, ${f.corpusDefects} \`knownDefect\` rows**`,
       'Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port.',
+    ]),
+    row([
+      '`packages/contract/ui/`',
+      `**${f.uiSpecFiles} component spec(s)** — ${f.uiSpecComponents}; each declares its slots and their order, all five states with what each must *not* look like, its interaction targets and its a11y role (${f.uiSpecDefects} state(s) marked \`knownDefect\`)`,
+      'The **view** half of the port, and the newest thing here — read §7 before you rely on it. Two renderers drive these today; yours would be the third and the first independent one.',
     ]),
     row([
       '`packages/contract/native/ios/CorpusConformanceTests.swift`',

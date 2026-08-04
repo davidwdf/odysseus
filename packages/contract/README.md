@@ -28,6 +28,7 @@ One framing to start with, because it decides how you spend your first week:
 | `packages/contract/asyncapi.json` | AsyncAPI 3.0.0 for the `/v1/live` socket — **6 frames, 49 component schemas** | Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7. |
 | `packages/contract/src/ids/id-grammar.abnf` | ABNF (RFC 5234) for every id that crosses the wire | Hand-write a parser against it. The `ids` corpus below is what proves your parser agrees with ours. |
 | `packages/core/spec/` | **13 corpora, 96 groups, 803 cases, 3 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
+| `packages/contract/ui/` | **1 component spec(s)** — StopRow; each declares its slots and their order, all five states with what each must *not* look like, its interaction targets and its a11y role (1 state(s) marked `knownDefect`) | The **view** half of the port, and the newest thing here — read §7 before you rely on it. Two renderers drive these today; yours would be the third and the first independent one. |
 | `packages/contract/native/ios/CorpusConformanceTests.swift` | **Template — never compiled, never run** | Copy into your test target on day one and make it build. See §6. |
 | `packages/contract/native/android/CorpusConformanceTest.kt` | **Template — never compiled, never run** | Ditto, for `src/test/kotlin`. |
 | `packages/ui/generated/NextBusTokens.swift` | 122 design tokens — **never compiled** | Compile it. A compile error here is a bug in the emitter, not something to patch in place. |
@@ -297,6 +298,17 @@ Read this section twice; it is the honest half of the document.
 - **No native client exists.** Nothing in this document has been exercised end to end by a real app. It
   is a considered specification, not a tested integration, and the first port should expect to find
   mistakes in it — and to send them back.
+- **`ui/*.spec.json` is the newest artefact here and the least proven.** It is emitted, schema-validated
+  and drift-gated like the other two, and both of this repo's renderers pass it unmodified — but they are
+  a DOM renderer and `react-native-web`, which is to say two web renderers. Nothing has yet asked whether
+  a slot order that reads correctly in a flow layout reads correctly in a SwiftUI `VStack`, or whether
+  "the visible text is a function of the view model alone" survives a platform whose controls carry their
+  own labels. **A state marked `knownDefect` is a target neither renderer meets**, not a description of
+  behaviour to copy — check `enforcement` before you make your suite agree with it.
+- **Vendoring is unsolved, and these specs make the surface bigger.** Nothing in this repo can tell
+  whether your copy of `packages/core/spec/` or `packages/contract/ui/` is current, and a stale copy
+  yields a **green** suite pinning a rule that has moved. That was already the one hole in the corpus-rot
+  story; adding component specs widens it rather than changing it.
 - **`openapi.json` is generated and gated; the prose in §§1–7 is not, except where marked.** The three
   generated regions (the artefact table, the conventions list, the corpus table) are checked against a
   fresh count on every `pnpm test`. Everything else is judgement written by hand and can age.
