@@ -3,6 +3,8 @@ import corpus from '../spec/stop-detail.spec.json'
 import {
   boardingPoleId,
   dedupeRoutes,
+  type MapPin,
+  mergeCoincidentPins,
   operatorsOf,
   orderPoles,
   type PlaceDetailView,
@@ -15,7 +17,7 @@ import {
   type StopDetailPole,
   type StopDetailRoute,
 } from '../src/stop-detail'
-import type { Locale, OperatorId, ResolvedClientPolicy, StopDetail } from '../src/types'
+import type { LatLng, Locale, OperatorId, ResolvedClientPolicy, StopDetail } from '../src/types'
 import { specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/stop-detail.spec.json.
@@ -333,5 +335,41 @@ describe('placeDetailView', () => {
     const got = placeDetailView(c.args.detail, optionsFor(c.args))
     expect(got.summary).not.toMatch(/walk/)
     for (const group of got.groups) expect(group.walk, group.poleId).toBeUndefined()
+  })
+})
+
+describe('mergeCoincidentPins', () => {
+  interface Args {
+    points: Array<{ id: string; location: LatLng; operator?: OperatorId; label?: string }>
+  }
+
+  it('matches the corpus, case for case', () => {
+    const rows = cases<Args, MapPin[]>('mergeCoincidentPins')
+    expect(rows.length).toBeGreaterThanOrEqual(6)
+    for (const c of rows) {
+      expect(mergeCoincidentPins(c.args.points), c.name).toEqual(c.expect)
+    }
+  })
+
+  it('keeps every pole, exactly once', () => {
+    // The property that matters most: folding is about where a dot is drawn, never about which poles the
+    // map knows. A pole silently dropped here would vanish from the map while keeping its group in the
+    // list — and the scroll-spy would then have a group whose dot cannot be highlighted.
+    for (const c of cases<Args, MapPin[]>('mergeCoincidentPins')) {
+      const folded = mergeCoincidentPins(c.args.points).flatMap((pin) => pin.ids)
+      expect(folded.sort(), c.name).toEqual(c.args.points.map((p) => p.id).sort())
+    }
+  })
+
+  it('leaves the caller’s array alone', () => {
+    // The screen hands this the very array it draws its own list from, and `MiniMap` re-derives on every
+    // render — the same two reasons `poleSideOctants` and `poleDistinctions` carry this assertion.
+    const points = [
+      { id: 'A', location: { lat: 22.3, lng: 114.1 }, label: 'X' },
+      { id: 'B', location: { lat: 22.3, lng: 114.1 }, label: 'Y' },
+    ]
+    const before = JSON.stringify(points)
+    mergeCoincidentPins(points)
+    expect(JSON.stringify(points)).toBe(before)
   })
 })

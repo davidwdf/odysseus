@@ -3,6 +3,8 @@ import {
   fitZoom,
   latToWorldY,
   lngToWorldX,
+  type MapPin,
+  mergeCoincidentPins,
   type OperatorId,
   TILE_SIZE,
   worldScale,
@@ -115,16 +117,53 @@ export function MiniMap({
   const locale = useLocale()
   const [w, setW] = useState(0)
   const multi = !!points && points.length > 1
-  const pts: MapPoint[] = multi
-    ? (points as MapPoint[])
-    : [{ id: '__single__', lat, lng, operator }]
+  /**
+   * **Poles that publish the same coordinate are folded into one pin** (`mergeCoincidentPins`).
+   *
+   * Without it, two dots are drawn at the identical screen point with their labels invisibly stacked, and
+   * which one you can read depends on draw order and on which is dimmed — so scrolling the list appeared to
+   * *swap* a pole's label rather than highlight it. At Tin Shui Wai Park two of three members publish
+   * `22.45448, 114.00297` exactly, so this is not a rare shape. The label-above flip below handles poles a
+   * metre or two apart; a separation of zero is the case it cannot help with.
+   *
+   * The fold is the kernel's, not this component's: which pins collapse and how their codes join is a rule
+   * a second renderer's map must reach the same answer on.
+   */
+  const pts: MapPin[] = multi
+    ? mergeCoincidentPins(
+        (points as MapPoint[]).map((p) => ({
+          id: p.id,
+          location: { lat: p.lat, lng: p.lng },
+          ...(p.operator === undefined ? {} : { operator: p.operator }),
+          ...(p.label === undefined ? {} : { label: p.label }),
+        })),
+      )
+    : [
+        {
+          ids: ['__single__'],
+          location: { lat, lng },
+          ...(operator === undefined ? {} : { operator }),
+        },
+      ]
   // Centre on the points' centroid (so all pins are framed); zoom to fit them.
-  const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
-  const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
+  // Folded pins mean the centroid is no longer weighted by how many times upstream published one spot,
+  // which is the better framing: one physical place counts once.
+  const cLat = pts.reduce((s, p) => s + p.location.lat, 0) / pts.length
+  const cLng = pts.reduce((s, p) => s + p.location.lng, 0) / pts.length
   // One framing rule for one pin and for many (see `fitZoom`), clamped into the source's
   // supported range — outside it LandsD 404s and we'd render a hole. `tileSource` is passed
   // whole: it satisfies the `ZoomRange` the kernel asks for, which may not name a port type.
-  const z = clampZoom(zoom ?? fitZoom(pts, w, height, tileSource), tileSource)
+  const z = clampZoom(
+    zoom ??
+      fitZoom(
+        // `fitZoom` frames coordinates; a folded pin contributes its one coordinate, which is the point.
+        pts.map((p) => p.location),
+        w,
+        height,
+        tileSource,
+      ),
+    tileSource,
+  )
   const scale = worldScale(z)
   const n = 2 ** z
   // Viewport top-left in world pixels, so the centroid lands dead-centre.
@@ -150,8 +189,8 @@ export function MiniMap({
   // Screen position per pole (needed both to draw dots and to decide label placement).
   const placed = pts.map((p) => ({
     p,
-    cx: lngToWorldX(p.lng, scale) - left,
-    cy: latToWorldY(p.lat, scale) - top,
+    cx: lngToWorldX(p.location.lng, scale) - left,
+    cy: latToWorldY(p.location.lat, scale) - top,
   }))
 
   return (
@@ -215,22 +254,36 @@ export function MiniMap({
           common along-the-kerb stack — so the label doesn't cover the next dot. */}
       {w > 0
         ? placed.map(({ p, cx, cy }) => {
-            const isActive = multi && p.id === activeId
+            // Active when the scrolled-to pole is **any** of the poles folded into this pin — otherwise a
+            // folded dot would go dim exactly when the rider scrolled to one of the kerbs it stands for.
+            const isActive = multi && !!activeId && p.ids.includes(activeId)
+            const key = p.ids.join('+')
             const labelAbove = placed.some(
-              (o) => o.p.id !== p.id && o.cy > cy && o.cy - cy < 26 && Math.abs(o.cx - cx) < 44,
+              (o) =>
+                o.p.ids.join('+') !== key &&
+                o.cy > cy &&
+                o.cy - cy < 26 &&
+                Math.abs(o.cx - cx) < 44,
             )
             return (
               <Pin
-                key={p.id}
+                key={key}
                 cx={cx}
                 cy={cy}
                 size={multi ? 14 : 18}
-                color={(p.operator && OPERATOR_ACCENT[p.operator]) || MAP_COLOR.pin}
+                color={
+                  // A folded pin whose poles disagree about the operator has none, and takes the neutral
+                  // colour — see `MapPin.operator`.
+                  (p.operator !== undefined && OPERATOR_ACCENT[p.operator]) || MAP_COLOR.pin
+                }
                 active={isActive}
                 dim={hasActive && !isActive}
                 label={multi ? p.label : undefined}
                 labelAbove={labelAbove}
-                onPress={multi && onPointPress ? () => onPointPress(p.id) : undefined}
+                // A tap on a folded pin scrolls to the first of its poles. Ambiguous by construction —
+                // that is what "one spot, two published poles" means — and the list is where the rider
+                // then reads which is which.
+                onPress={multi && onPointPress ? () => onPointPress(p.ids[0] as string) : undefined}
                 pressLabel={p.label}
               />
             )

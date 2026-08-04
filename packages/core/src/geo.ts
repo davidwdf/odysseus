@@ -84,13 +84,47 @@ const WALK_LABEL: Record<Locale, string> = {
   'zh-Hans': '分钟路程',
 }
 
+const WALK_HOURS_LABEL: Record<Locale, string> = {
+  en: 'hr walk',
+  'zh-Hant': '小時路程',
+  'zh-Hans': '小时路程',
+}
+
 /**
- * Localized walk estimate, e.g. "2 min walk" / "2 分鐘路程".
+ * Where minutes stop being readable and become hours.
+ *
+ * An hour is the boundary because that is where the *unit* stops helping: "45 min walk" is a decision a
+ * rider can make and "270 min walk" is arithmetic they have to do. It came out of a real screen — a
+ * location fix outside Hong Kong put "270 min walk" under a place name, which is honest and useless.
+ *
+ * These readings are all degenerate by construction: nobody walks an hour to a bus stop, and every walk
+ * the app shows for a place a rider is actually at is under ten minutes. Which is the argument for
+ * formatting them *well* rather than for capping them — a capped value invents a claim ("more than an
+ * hour away" is not what we measured), while a badly-scaled one merely reads as a bug in the app.
+ */
+const WALK_HOURS_FROM_MIN = 60
+
+/**
+ * The figure for a walk in hours: one decimal, with a bare `.0` dropped.
+ *
+ * `4.5`, not `4 hr 30 min` — one number a rider can compare against another, which is the same reason
+ * `formatDistance` says "1.2km" rather than "1 km 200 m". `.replace()` rather than a conditional because
+ * the two cases ("4.5", "4") differ only in whether the tenth is zero.
+ */
+function walkHours(minutes: number): string {
+  return (minutes / 60).toFixed(1).replace(/\.0$/, '')
+}
+
+/**
+ * Localized walk estimate, e.g. "2 min walk" / "2 分鐘路程" — and "4.5 hr walk" past an hour.
  *
  * @spec geo#formatWalk
  */
 export function formatWalk(distanceM: number, locale: Locale): string {
-  return `${walkMinutes(distanceM)} ${WALK_LABEL[locale]}`
+  const minutes = walkMinutes(distanceM)
+  return minutes < WALK_HOURS_FROM_MIN
+    ? `${minutes} ${WALK_LABEL[locale]}`
+    : `${walkHours(minutes)} ${WALK_HOURS_LABEL[locale]}`
 }
 
 /** 8-point compass labels (N, NE, E, … NW) as localized "-bound" directions. The cue that
@@ -189,5 +223,19 @@ export function formatWalkRange(
 ): string {
   const lo = walkMinutes(Math.min(minDistanceM, maxDistanceM))
   const hi = walkMinutes(Math.max(minDistanceM, maxDistanceM))
-  return lo === hi ? `${lo} ${WALK_LABEL[locale]}` : `${lo}–${hi} ${WALK_LABEL[locale]}`
+  // **One unit for both ends, chosen by the larger.** A range that switched units mid-way — "45–1.5" —
+  // would be unreadable, and a rider comparing the two ends of a range is comparing numbers. The far end
+  // decides, because it is the one that needed hours. The case this makes ugly ("0.8–1.5 hr" for kerbs
+  // 45 and 90 minutes apart) cannot arise from a real place: a place's kerbs are metres apart.
+  const hours = hi >= WALK_HOURS_FROM_MIN
+  const label = hours ? WALK_HOURS_LABEL[locale] : WALK_LABEL[locale]
+  const figure = (minutes: number) => (hours ? walkHours(minutes) : String(minutes))
+  const low = figure(lo)
+  const high = figure(hi)
+  // **The never-"4–4" rule compares the printed figures, not the minutes**, and the difference is not
+  // cosmetic — it is a bug the hours path introduced and a corpus row caught. Two minute values that differ
+  // (270 and 271) round to the same tenth of an hour, so comparing minutes said "these are a range" while
+  // the figures said "4.5–4.5". On the minutes path the two comparisons are identical, which is why this
+  // was invisible until there was a second unit.
+  return low === high ? `${low} ${label}` : `${low}–${high} ${label}`
 }

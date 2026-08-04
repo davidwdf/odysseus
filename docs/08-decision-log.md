@@ -6055,3 +6055,62 @@ pre-existing and unaddressed; it earned its keep here.
     *string* left.
   - **Test totals:** core **857** (+4 tests, +15 corpus cases: 96 groups → 97, 803 cases → 818), edge 149,
     api-client 71, ui-spec 30, web 83, mobile 65 — 1 255.
+
+## ADR-086 — Two readings that were honest and useless: a walk in hours, and poles at one coordinate
+- **Status:** **Decided and implemented 2026-08-04.** Both found by opening the rewired Place screen at
+  Tin Shui Wai Park — the browser pass WP6-3a recorded as owing. Implementation:
+  `formatWalk`/`formatWalkRange` in `packages/core/src/geo.ts` (+7 corpus cases),
+  `mergeCoincidentPins` in `packages/core/src/stop-detail.ts` (+8 corpus cases, +2 property tests) and
+  `apps/mobile/components/MiniMap.tsx` consuming it. `packages/core` stays at **100 % on all four axes**.
+- **Context.** Neither is a regression, and that is the point of recording them: a location fix outside
+  Hong Kong put **"21.6km · 270 min walk"** under a place name, and the map drew **two dots at one screen
+  point** with their labels invisibly stacked. Both were true, both were useless, and both had been true
+  since the features shipped — the screen pass is simply the first time anyone stood in front of them.
+- **Decisions:**
+  1. **Past an hour, a walk is expressed in hours** — `4.5 hr walk`, one decimal with a bare `.0` dropped,
+     and its own word per locale (`小時路程` / `小时路程`). An hour is the boundary because that is where the
+     *unit* stops helping: "45 min walk" is a decision a rider can make, "270 min walk" is arithmetic they
+     have to do.
+  2. **Format the degenerate reading rather than cap it.** The alternative was "more than an hour away",
+     and it loses on honesty: that is not what we measured, while a badly-scaled number merely reads as a
+     bug in the app. Every such reading is degenerate by construction — nobody walks an hour to a bus stop
+     — which is the argument for formatting them *well*, not for hiding them.
+  3. **A range takes one unit for both ends, chosen by the larger.** A range that switched units mid-way
+     ("45–1.5") is unreadable, and a rider comparing the ends of a range is comparing numbers.
+  4. **Poles that publish the *same coordinate* are folded into one pin**, by exact equality rather than a
+     distance or pixel threshold. Whether two poles are published at one point is a fact every renderer
+     agrees on; "close enough at this zoom" is a different answer per viewport and per platform. Poles a
+     metre or two apart keep their own dots — `MiniMap` already flips a label above its own dot for that.
+     A separation of **zero** is the case nothing could help with.
+  5. **A folded pin keeps every id, and is active when *any* of them is.** Otherwise a folded dot would go
+     dim exactly when the rider scrolled to one of the kerbs it stands for — which is what made the label
+     appear to *swap* rather than highlight. A tap scrolls to the first of them and does not guess:
+     ambiguity is what "one spot, two published poles" means, and the list is where the rider reads which
+     is which.
+  6. **A folded pin whose poles disagree about the operator has none**, and takes the neutral colour. A
+     KMB and a Citybus pole sharing a coordinate have no single brand colour, and picking the first pole's
+     would state something the data does not — the same call `parseStopId` makes for a merged `P:` id.
+  7. **The fold is the kernel's, not `MiniMap`'s.** Which pins collapse and how their codes join is a rule
+     a second renderer's map must reach the same answer on, and `apps/web` has no map yet — so it lands in
+     `packages/core` with a corpus rather than in the one component that needs it today.
+- **The useful way to state what this exposes:** it is
+  [ADR-071](#adr-071--what-counts-as-one-boarding-point-and-what-a-rider-is-told-about-two)/[ADR-080](#adr-080--what-tells-two-boarding-points-apart-in-the-order-the-data-can-support-it)'s
+  population seen from the map instead of from the list — and **the list can tell those kerbs apart while
+  the map structurally cannot.** That asymmetry is the whole reason the compass-side / pole-name / "check
+  the sign" tiers exist: no map at any usable zoom was ever going to separate poles at zero metres.
+- **Verified, and one bug a corpus row caught before any renderer saw it.** The never-`"4–4"` rule compared
+  **minutes** while printing **hours**, so 270 and 271 minutes — two different values — both rounded to
+  `4.5` and produced `"4.5–4.5 hr walk"`. On the minutes path the two comparisons are identical, which is
+  why it was invisible until there was a second unit; it compares the **printed figures** now. The row that
+  caught it was written for exactly that shape.
+  On the real payload for Tin Shui Wai Park: 3 members → **2 pins**, `001992` and `TN511 · TN510`, and
+  21.6 km reads `4.5 hr walk` / `4.5 小時路程`.
+- **Consequences:**
+  - ⚪ **The map centroid is no longer weighted by duplicate publications** — one physical spot counts once,
+    which is the better framing and a free consequence of folding before `fitZoom`.
+  - 🟡 **Two live defects from WP6-3a stay open, now in `docs/07` with their fixes described**: the English
+    summary can print **"1 routes"** (an ICU plural key away, no kernel change), and an unparseable pole id
+    yields a heading with a leading `" · "` (unreachable by any real id, one line to fix). Both are pinned
+    by corpus cases so neither can be fixed by accident and unnoticed.
+  - **Test totals:** core **867** (+10; corpus 97 groups / 818 cases → **98 / 833**), edge 149,
+    api-client 71, ui-spec 30, web 83, mobile 65 — 1 265.

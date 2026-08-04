@@ -371,6 +371,51 @@
             "locale": "en"
           },
           "expect": "1 min walk"
+        },
+        {
+          "name": "just-under-an-hour-stays-in-minutes",
+          "why": "The boundary from below. 59 minutes is still a number a rider can act on, and switching to \"1 hr\" here would round away information the minutes carry.",
+          "args": {
+            "distanceM": 4720,
+            "locale": "en"
+          },
+          "expect": "59 min walk"
+        },
+        {
+          "name": "an-hour-exactly-becomes-one-hour",
+          "why": "The boundary itself, and the one a port is most likely to get wrong by an off-by-one — 60 minutes reads as \"1 hr walk\", not \"60 min walk\" and not \"1.0 hr\".",
+          "args": {
+            "distanceM": 4800,
+            "locale": "en"
+          },
+          "expect": "1 hr walk"
+        },
+        {
+          "name": "a-walk-of-hours-reads-as-hours",
+          "why": "The reading that prompted the rule: a location fix outside Hong Kong put \"270 min walk\" under a place name — honest arithmetic a rider has to do in their head. One decimal, so it stays one comparable number.",
+          "args": {
+            "distanceM": 21600,
+            "locale": "en"
+          },
+          "expect": "4.5 hr walk"
+        },
+        {
+          "name": "a-walk-of-hours-in-traditional-chinese",
+          "why": "The hours unit needs its own word in each locale; a port that reused the minutes label would say \"4.5 分鐘路程\", which is a different claim by a factor of sixty.",
+          "args": {
+            "distanceM": 21600,
+            "locale": "zh-Hant"
+          },
+          "expect": "4.5 小時路程"
+        },
+        {
+          "name": "a-walk-of-hours-in-simplified-chinese",
+          "why": "As above, and the two Chinese labels differ by one character — the kind of thing a hand-transcribed table gets wrong once and nobody notices.",
+          "args": {
+            "distanceM": 21600,
+            "locale": "zh-Hans"
+          },
+          "expect": "4.5 小时路程"
         }
       ]
     },
@@ -443,6 +488,26 @@
             "locale": "en"
           },
           "expect": "1 min walk"
+        },
+        {
+          "name": "a-range-whose-far-end-is-hours-puts-both-ends-in-hours",
+          "why": "One unit for both ends, chosen by the larger. A range that switched units mid-way — \"45–1.5\" — would be unreadable, and a rider comparing the ends of a range is comparing numbers.",
+          "args": {
+            "minDistanceM": 3600,
+            "maxDistanceM": 7200,
+            "locale": "en"
+          },
+          "expect": "0.8–1.5 hr walk"
+        },
+        {
+          "name": "a-range-that-collapses-in-hours-prints-one-figure",
+          "why": "The same never-\"4–4\" rule as the minutes path, on the hours path — where it is easier to lose, because the two ends can round to the same tenth from different minute values.",
+          "args": {
+            "minDistanceM": 21600,
+            "maxDistanceM": 21640,
+            "locale": "en"
+          },
+          "expect": "4.5 hr walk"
         }
       ]
     },
