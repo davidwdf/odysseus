@@ -174,7 +174,12 @@ with **one ported screen**, and the Workbox policy is one declaration serving bo
 too** (ADR-083): the first component spec exists as *data* — `packages/ui-spec` is the format and
 `packages/contract/ui/stop-row.spec.json` the instance — and **both renderers drive it with neither component
 changed**. Five words (`field`/`message`/`literal`/`each`/`oneOf`), `when` as a truthiness path, no expression
-language, and every state declaring what enforces it. **WP6-2 (Nearby's own spec) is next.** `watch()` is a real
+language, and every state declaring what enforces it. **WP6-2 is done too** (ADR-084): Nearby has a **screen
+spec** — nine states, eight of them with their own declared projection, both renderers driven through every
+one — which needed two more format words: a state that declares *what it shows* (a screen's states are
+branches over an async status, not fields of a view model) and a slot that *references another spec* (so "a
+list of these cards" is checked, not restated). `apps/web`'s Nearby is now the shipping web Nearby, taps and
+all. **WP6-3 (Place detail) is next.** `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

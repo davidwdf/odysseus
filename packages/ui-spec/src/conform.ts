@@ -1,4 +1,4 @@
-import { project } from './project'
+import { project, projectState, type SpecRegistry } from './project'
 import { type ComponentSpec, parseComponentSpec } from './schema'
 
 /**
@@ -57,8 +57,26 @@ export interface ConformanceHarness {
   translate(key: string, args?: Record<string, unknown>): string
 }
 
+/**
+ * A harness that can also put its surface into a **named state** — what `conformStates` needs.
+ *
+ * The asymmetry with `render` is the interesting part. A component's states are fields of one view model,
+ * so one render covers them. A *screen's* states are branches over an async status — no fix yet,
+ * permission refused, first fetch in flight, upstream failed — which no view model carries, and which
+ * only the renderer's own wiring can produce. So the driver owns *getting there*, and returns both the
+ * tree **and** the view it corresponds to, because a state like "the fetch failed" has content (an error
+ * message) that is not in any view model either.
+ *
+ * `null` means this renderer cannot reach that state. That is a finding rather than a skip: a state
+ * declared with a projection that nothing can render is the same vacuous pass as a gate matching no
+ * files.
+ */
+export interface StatefulHarness extends ConformanceHarness {
+  renderState(state: string): { view: unknown; tree: RenderedTree } | null
+}
+
 export interface Finding {
-  check: 'slots' | 'content-not-affordance' | 'sibling-not-nested'
+  check: 'slots' | 'content-not-affordance' | 'sibling-not-nested' | 'states'
   message: string
 }
 
@@ -75,9 +93,10 @@ export function conform(
   spec: ComponentSpec | unknown,
   view: unknown,
   harness: ConformanceHarness,
+  registry: SpecRegistry = {},
 ): Finding[] {
   const parsed = parseComponentSpec(spec)
-  const expected = project(parsed, view, harness.translate)
+  const expected = project(parsed, view, harness.translate, registry)
   const findings: Finding[] = []
 
   const interactive = harness.render(view, { interactive: true })
@@ -121,6 +140,78 @@ export function conform(
     })
   }
 
+  return findings
+}
+
+/**
+ * Hold a renderer to **every state that declares a projection**.
+ *
+ * This is the check a screen needs and a component does not, and it is where the five declared states stop
+ * being sentences. Each state with `enforcement.shows` is rendered by the driver and compared, exactly, to
+ * the always-present `slots` plus that state's own additions.
+ *
+ * Two findings a reader should expect and one they should not:
+ *  · a state whose text diverges — the ordinary failure;
+ *  · a state the renderer **cannot reach** (`renderState` returns `null`), which is a finding rather than a
+ *    skip: a declared projection nothing can render is the same vacuous pass as a gate that matches no
+ *    files, and this repo has hit that eight times;
+ *  · a state with no projection (`by` / `knownDefect` / `unenforced`) is silently not checked **here** —
+ *    it is checked, or explicitly not, by the mechanism its `enforcement` names. That is the whole reason
+ *    `enforcement` is mandatory.
+ *
+ * The **anti-vacuous control is that at least one state must be projected at all.** A spec whose every
+ * state was `unenforced` would pass this function while asserting nothing, which is exactly how a
+ * specification quietly becomes decoration.
+ */
+export function conformStates(
+  spec: ComponentSpec | unknown,
+  harness: StatefulHarness,
+  registry: SpecRegistry = {},
+): Finding[] {
+  const parsed = parseComponentSpec(spec)
+  const findings: Finding[] = []
+  let projected = 0
+
+  for (const state of Object.keys(parsed.states)) {
+    const rendered = harness.renderState(state)
+    const declared = parsed.states[state]
+    const hasProjection = declared !== undefined && 'shows' in declared.enforcement
+    if (!hasProjection) continue
+    projected += 1
+    if (rendered === null) {
+      findings.push({
+        check: 'states',
+        message:
+          `${parsed.component}: state \`${state}\` declares what it must show, and this renderer ` +
+          'cannot be put into it. Either the driver is missing a fixture or the surface has no such state.',
+      })
+      continue
+    }
+    const expected = projectState(parsed, state, rendered.view, harness.translate, registry)
+    if (expected === null) continue
+    const divergence = firstDivergence(rendered.tree.text, expected)
+    if (divergence !== null) {
+      findings.push({
+        check: 'states',
+        message: `${parsed.component} in \`${state}\`: ${divergence}`,
+      })
+    }
+    if (rendered.tree.nestedInteractive > 0) {
+      findings.push({
+        check: 'sibling-not-nested',
+        message: `${parsed.component} in \`${state}\`: ${rendered.tree.nestedInteractive} nested tap target(s).`,
+      })
+    }
+  }
+
+  if (projected === 0) {
+    findings.push({
+      check: 'states',
+      message:
+        `${parsed.component}: no state declares what it must show, so this check looked at nothing. ` +
+        'At least one state must be projected, or the states are decoration.',
+    })
+  }
   return findings
 }
 

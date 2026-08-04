@@ -1,8 +1,9 @@
 # 04 — Platform-idiomatic renderers: one spec, three UIs
 
-> **Status:** work plan, **in progress — WP6-0 and WP6-1 are done (2026-08-03,
+> **Status:** work plan, **in progress — WP6-0, WP6-1 and WP6-2 are done (2026-08-03,
 > [ADR-082](../08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)
-> and [ADR-083](../08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)).**
+> [ADR-083](../08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)
+> and [ADR-084](../08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)).**
 > Drafted **2026-08-03**, owner's decision, recorded as
 > [ADR-075](../08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels).
 > It **supersedes [ADR-002](../08-decision-log.md#adr-002--expo-rn--rn-for-web-pwa-first-native-later-ota)**
@@ -252,8 +253,8 @@ rewrite with extra steps.
 | # | Screen | Why here | The interesting question it settles |
 |---|---|---|---|
 | 0 ✅ | *(none)* — the shell | `apps/web` had no router, no persisted query cache, no locale provider, no service worker | *"Nothing. It is invisible progress and it is unavoidable."* — **and that was wrong twice.** It settled where the destination set is declared and who may compare it, and it settled that a shell that persists anything must not share a storage key with a store that models more fields (ADR-082 decisions 1 and 5). Neither is invisible: one is an identity, the other is a rider's favourites. |
-| 1 | **Nearby** | already two renderers, already agreeing | Does the spec format hold? — **`StopRow`'s half is answered: yes, with five words and no expression language** (WP6-1, ADR-083). What is left for WP6-2 is the *screen*: the states a card cannot show alone (loading, stale, offline), pull-to-refresh, and wiring the taps the placeholders are waiting for. |
-| 2 | **Place detail** | the most domain rules in the app — `orderPoles`, `dedupeRoutes`, the kerb keying, `poleSideOctants`, the live merge | Can a spec carry a *multi-level* screen, and does it close ADR-069's asymmetry (`check-no-derivation` is web-only until Place and Route detail get their own WP4-0)? |
+| 1 ✅ | **Nearby** | already two renderers, already agreeing | **Answered, in two halves.** `StopRow`: yes, with five words and no expression language (WP6-1, ADR-083). The *screen* needed two more things and got them (WP6-2, ADR-084): a state that declares **what it shows**, because a screen's states are branches over an async status rather than fields of a view model; and a slot that **references another spec**, so "a list of these cards" is checked rather than restated. Nine states, eight of them projected, both renderers green. |
+| 2 ⬅ next | **Place detail** | the most domain rules in the app — `orderPoles`, `dedupeRoutes`, the kerb keying, `poleSideOctants`, the live merge | Can a spec carry a *multi-level* screen, and does it close ADR-069's asymmetry (`check-no-derivation` is web-only until Place and Route detail get their own WP4-0)? |
 | 3 | **Favourites** | reuses the card; owns the empty-state bug and the one-line-two-kerbs residual (WP5-12) | Do declared states actually close known bugs? |
 | 4 | **Search** | the keypad, chips and recents are pure interaction over a spec'd index; never walked in a browser | Interaction-heavy specs. |
 | 5 | **Route detail** | the schematic, the bus tokens, the collapsing header, the auto-scroll | **The motion test** — the first screen where "motion is idiom" is a real claim rather than a slogan. |
@@ -328,7 +329,7 @@ Waves 0–5 are spent; this is **Wave 6**.
 |---|---|---|---|
 | **WP6-0** ✅ | The `apps/web` shell: router, `PersistQueryClientProvider` + storage persister, `LocaleProvider` + override, theme store, Workbox service worker, `build:web` | The PWA opens offline on `apps/web` and switches locale, with **zero screens ported** — measured the way ADR-058 was (kill the static server *and* the Worker, cold-load) | L |
 | **WP6-1** ✅ | The spec format: `packages/ui-spec` (schema + conformance walker, no domain vocabulary, in `layers.json` before it has a file), `contract/ui/*.spec.json` emitted + drift-gated, and both renderers driving the walker | `StopRow`'s spec is retrofitted to the **existing** two renderers and both pass unmodified; the gate fails on an injected slot deletion, **watched**; `tsc --outDir /tmp` proves `ui-spec` names nothing bus-shaped | M |
-| **WP6-2** | Nearby: complete spec + both suites green | Every ADR-069 finding is a declared invariant with a case; `apps/web`'s Nearby is the shipping web Nearby | M |
+| **WP6-2** ✅ | Nearby: complete spec + both suites green | Every ADR-069 finding is a declared invariant with a case; `apps/web`'s Nearby is the shipping web Nearby | M |
 | **WP6-3** | Place detail: WP4-0-style hoist of anything left deriving, then spec, then port | `check-no-derivation` extends to `apps/mobile`'s Place detail — closing ADR-069's recorded asymmetry | L |
 | **WP6-4** | Favourites: spec + port | The empty-card bug and WP5-12's one-row-for-two-kerbs are closed **by declared states**, not by a patch | M |
 | **WP6-5** | Search: spec + port | Walked in a browser for the first time — the visual pass `docs/11` has owed since ADR-037 | M |

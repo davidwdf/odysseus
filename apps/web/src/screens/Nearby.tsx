@@ -3,6 +3,7 @@ import { t } from '@nextbus/i18n'
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { StopCard } from '../components/StopCard'
 import { useClientPolicy } from '../hooks/useClientPolicy'
@@ -24,14 +25,22 @@ const EMPTY_IDS: readonly string[] = []
  * to list as deliberately missing are here — which is why the locale arrives through `useLocale()` now, as
  * CLAUDE.md rule 5 requires of every screen, rather than as a prop from the entry point.
  *
- * Still absent, and each with an owner: **the taps go nowhere.** The RN screen's `router.push` calls to
- * `/stop/:id` and `/route/:id` are this file's one remaining structural difference from it, and wiring
- * them belongs to **WP6-2**, which writes Nearby's spec — the destinations are declared in
- * `src/shell/destinations.ts` and both are placeholders until WP6-3/WP6-6 port them. Pull-to-refresh is
- * likewise WP6-2's, against a declared state rather than by feel.
+ * **WP6-2 wired the taps and gave this screen a spec.** `packages/contract/ui/nearby.spec.json` declares its
+ * nine states and what each must show, and `test/nearby-states.test.tsx` drives every one of them — as does
+ * `apps/mobile/test/nearby-states.test.tsx`, from the same file and the same corpus fixtures. The paths
+ * below are byte-identical to the RN screen's, so a deep link resolves the same on either renderer; both
+ * destinations are placeholders until WP6-3 and WP6-6 port them.
+ *
+ * **Still absent, deliberately: pull-to-refresh.** The RN screen has a `RefreshControl` and this one has
+ * nothing, and the spec declares that asymmetry as **idiom** rather than leaving it an oversight — since
+ * WP5-7 the arrivals arrive by subscription at the served cadence, so a manual refresh is reassurance rather
+ * than how a rider gets fresh data, and the platform with a natural gesture for it offers it. The `failed`
+ * state's recovery is *not* idiom and is not a control either: `refetchInterval` fires only on error
+ * (ADR-079), identically on both.
  */
 export function Nearby() {
   const locale = useLocale()
+  const navigate = useNavigate()
   const { policy } = useClientPolicy()
   const { state: loc, request } = useLocation()
   const ready = loc.status === 'ready' ? loc : null
@@ -128,7 +137,19 @@ export function Nearby() {
         <div>
           {cards.map((card, i) => (
             <div key={card.stopId} className={i === 0 ? '' : 'border-t border-border'}>
-              <StopCard view={card} locale={locale} />
+              {/* The same two destinations, spelled the same way, as `apps/mobile/app/(tabs)/index.tsx`:
+                  the heading opens the place, a row opens that route *at* this stop. Declared once, in
+                  `StopRow`'s spec — a screen that named them again would be a second declaration. */}
+              <StopCard
+                view={card}
+                locale={locale}
+                onPress={() => navigate(`/stop/${encodeURIComponent(card.stopId)}`)}
+                onRoutePress={(routeId) =>
+                  navigate(
+                    `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(card.stopId)}`,
+                  )
+                }
+              />
             </div>
           ))}
           {cards.length === 0 ? (

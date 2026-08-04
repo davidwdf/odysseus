@@ -35,11 +35,14 @@ for (const [stem, declared] of Object.entries(UI_SPECS)) {
   const path = join(outDir, `${stem}.spec.json`)
   writeFileSync(path, `${JSON.stringify(spec, null, 2)}\n`)
   const states = Object.values(spec.states)
-  const enforced = states.filter((state) => 'by' in state.enforcement).length
-  const defects = states.filter((state) => 'knownDefect' in state.enforcement).length
+  // Broken out by *how* each state is held to, because that is the number worth watching: a spec drifting
+  // toward `unenforced` is a specification quietly becoming decoration, and it would be invisible in a
+  // total.
+  const by = (kind: string) => states.filter((state) => kind in state.enforcement).length
   console.log(
     `  wrote ui/${stem}.spec.json — ${countSlots(spec.slots)} slots, ` +
-      `${states.length} states (${enforced} enforced, ${defects} known defect), ` +
+      `${states.length} states (${by('shows')} projected, ${by('by')} by a slot, ` +
+      `${by('knownDefect')} known defect, ${by('unenforced')} unenforced), ` +
       `${spec.interactions.length} interactions, ${spec.idiom.length} idiom entries`,
   )
 }

@@ -27,8 +27,38 @@ export function project(
   spec: ComponentSpec,
   view: unknown,
   translate: (key: string, args?: Record<string, unknown>) => string,
+  registry: SpecRegistry = {},
 ): string[] {
-  return projectNodes(spec.slots, view, translate, spec.component)
+  return projectNodes(spec.slots, view, translate, spec.component, registry)
+}
+
+/** Other specs a `component` node may reference, keyed by their `component` name. */
+export type SpecRegistry = Record<string, ComponentSpec>
+
+/**
+ * What a named state must show: the always-present `slots`, then what the state **adds**.
+ *
+ * The split is what keeps a screen spec readable. Chrome that survives every branch — a title — is
+ * declared once in `slots`; everything a branch introduces is that state's own. Repeating the chrome in
+ * all nine of a screen's states would be nine chances to disagree about it.
+ *
+ * Returns `null` for a state with no projection of its own (`by`, `knownDefect`, `unenforced`), which is
+ * the walker's signal that there is nothing here to render and compare.
+ */
+export function projectState(
+  spec: ComponentSpec,
+  state: string,
+  view: unknown,
+  translate: (key: string, args?: Record<string, unknown>) => string,
+  registry: SpecRegistry = {},
+): string[] | null {
+  const declared = spec.states[state]
+  if (!declared) throw new Error(`${spec.component}: no state \`${state}\` is declared`)
+  if (!('shows' in declared.enforcement)) return null
+  return [
+    ...projectNodes(spec.slots, view, translate, spec.component, registry),
+    ...projectNodes(declared.enforcement.shows, view, translate, spec.component, registry),
+  ]
 }
 
 function projectNodes(
@@ -36,6 +66,7 @@ function projectNodes(
   scope: unknown,
   translate: (key: string, args?: Record<string, unknown>) => string,
   component: string,
+  registry: SpecRegistry,
 ): string[] {
   const out: string[] = []
   for (const node of nodes) {
@@ -52,6 +83,20 @@ function projectNodes(
       continue
     }
 
+    if ('component' in node) {
+      // Composition. The referenced spec's projection, over this scope — so a slot added to a card's spec
+      // turns up in every screen that lists it, without the screen's spec repeating a word of it.
+      const referenced = registry[node.component]
+      if (!referenced) {
+        throw new Error(
+          `${component}: slot \`${node.name}\` references component \`${node.component}\`, ` +
+            `which is not in the registry. Known: ${Object.keys(registry).join(', ') || '(none)'}`,
+        )
+      }
+      out.push(...projectNodes(referenced.slots, scope, translate, referenced.component, registry))
+      continue
+    }
+
     if ('of' in node) {
       const items = read(scope, node.each)
       if (!Array.isArray(items)) {
@@ -59,7 +104,9 @@ function projectNodes(
           `${component}: slot \`${node.name}\` repeats over \`${node.each}\`, which is not an array.`,
         )
       }
-      for (const item of items) out.push(...projectNodes(node.of, item, translate, component))
+      for (const item of items) {
+        out.push(...projectNodes(node.of, item, translate, component, registry))
+      }
       continue
     }
 
@@ -75,7 +122,7 @@ function projectNodes(
           `${JSON.stringify(discriminant)}. Cases: ${Object.keys(node.cases).join(', ')}`,
       )
     }
-    out.push(...projectNodes(branch, scope, translate, component))
+    out.push(...projectNodes(branch, scope, translate, component, registry))
   }
   return out
 }

@@ -2,9 +2,40 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 > Snapshot: **2026-08-03**. **Waves 0–5 are all merged to `main`** (PRs #11–**#21**; `main` is `0c97e17`),
-> and **Wave 6 has started: WP6-0 and WP6-1 are done** on `design-language-reuse-v2`
+> and **Wave 6 has started: WP6-0, WP6-1 and WP6-2 are done** on `design-language-reuse-v2`
 > ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
-> [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)).
+> [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),
+> [ADR-084](./08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)).
+> **What WP6-2 is:** **Nearby has a screen spec, and `apps/web`'s Nearby is the shipping web Nearby.** Nine
+> states — the canonical five plus `content`, `undetermined`, `denied` and `locationError` — eight of them
+> with their own declared projection, and **both renderers are driven through every one**. That needed two
+> more words in the format, because a screen is not a component: a state may declare **what it shows** (a
+> screen's states are branches over an async status that no view model carries, so the driver is asked to
+> *enter* the state and the spec says what must be there), and a slot may **reference another spec**, so
+> *"this screen is a list of these cards"* is checked rather than restated — a slot added to `StopRow` now
+> turns up in Nearby's expected text with no edit to Nearby's spec.
+> **The best result fell out of the second decision.** `slots` is what every state shows and `shows` is what
+> a state adds — and only the title survives every branch. **The subtitle does not**, because the difference
+> between the ordinary content state and `stale` *is* the subtitle: ADR-008's honesty rule applies to the
+> rider's **position**, not only to the times, and declaring it per state is what turns *"say so when the fix
+> is remembered"* from a sentence into an assertion. Watched failing both ways.
+> **The seams are mocked and the query is not**, deliberately: `loading`, `failed` and `content` *are*
+> TanStack Query's states, so mocking `useQuery` would assert against a mock of the thing under test. The
+> fixtures come from the corpus's own `nearbyView` group, so both suites' goldens are the same bytes.
+> **Verified in a browser against live Hong Kong data:** six cards, a heading tap to `/stop/GMB%3A20001553`,
+> back to `/` with the tab bar restored, a row tap to `/route/GMB:804:outbound:2010275?stop=GMB:20001553` —
+> paths byte-identical to the RN screen's — and **zero nested interactive elements** across the whole
+> rendered list, which is the DOM half of `sibling-not-nested` measured outside jsdom. Screenshot:
+> `.context/wave6-screenshots/4-web-nearby-shipping-with-taps.jpg`.
+> **And `docs/09` §5 and §6 finally carry their superseded banners** — the pass ADR-075 deferred *"until the
+> spec format exists"*. §6 (the prose "ETA display spec" whose imminence band was written down four times
+> with two different values) points at `etaUrgency` and `stop-row.spec.json`; §5 is *partly* superseded,
+> because motion is **idiom** and its curves are `apps/mobile`'s recipe rather than a requirement.
+> **The row's cautionary tale is a harness that looked at the wrong moment.** Both drivers' first version
+> flushed a fixed number of microtasks after mounting, and two states read their tree while the screen still
+> showed "locating" — so the suite reported a divergence for `content` and `failed` rather than the state it
+> was asked about. Same class as WP6-0's `remount()` that did not reset the store: **a harness that looks at
+> the wrong moment is indistinguishable from a renderer that is wrong.**
 > **What WP6-1 is:** the **first component spec exists**, and it is data. `packages/ui-spec` holds the
 > format — a Zod schema plus a conformance walker, with **no NextBus vocabulary** — and
 > `packages/contract/ui/stop-row.spec.json` is emitted from a typed declaration, validated, committed and
@@ -367,11 +398,13 @@ persisted query cache, locale override, appearance, service worker, installable 
 screen** and a named owner for each of the other seven destinations
 ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
 `pnpm dev:dom` is that app; `pnpm dev:web` is still the Expo PWA, and **WP0-5 still ships the Expo PWA**.
-**WP6-1 followed the same day** ([ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)):
-the **first component spec exists** — `packages/ui-spec` is the format (a schema + a conformance walker, no
-domain vocabulary) and `packages/contract/ui/stop-row.spec.json` is the instance, emitted and drift-gated
-beside `openapi.json`. **Both renderers drive it and neither component changed.** Next is **WP6-2**: Nearby's
-own spec, which owns the three states a card cannot show alone and wires the taps.
+**WP6-1 and WP6-2 followed the same day** ([ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),
+[ADR-084](./08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)):
+`packages/ui-spec` is the spec **format** (a schema + a conformance walker, no domain vocabulary) and
+`packages/contract/ui/` holds the first two instances — `stop-row.spec.json` and a **screen** spec,
+`nearby.spec.json`, with nine states of which eight declare what they must show. **Both renderers drive both,
+and neither component changed.** `apps/web`'s Nearby is now the shipping web Nearby, taps and all.
+Next is **WP6-3**: Place detail, the screen with the most domain rules in the app.
 WP0-5 (deploy) is Wave 0 and still needs a domain and
 Cloudflare credentials from a human; it remains the launch blocker. **Before writing a test or a gate here, read
 [`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
@@ -775,14 +808,25 @@ than any in its own row.
   this is answered** — unchanged from ADR-075, with more surface.
 - 🟡 **`StopRow`'s spec declares three of its five states `unenforced`, and one a `knownDefect`.** `loading`,
   `stale` and `offline` cannot be observed from one card — a skeleton belongs to the list screen, staleness is
-  opacity rather than text, offline is indistinguishable from stale without knowing whose network failed — so
-  they carry a reason and an owner (**WP6-2**) instead of an assertion. `empty` is the target sentence both
-  renderers currently fail (**WP6-4**). The `a11y` block is declared and cross-referenced but nothing asserts
-  the rendered tree agrees; that too is WP6-2's.
-- 🟡 **`docs/09` §5 (motion) and §6 (the prose ETA display spec) still need their superseded banners.**
-  ADR-075 deferred it *"until the spec format exists"*, and it does now — but one component's spec is not
-  enough: `EtaBadge` lives inside `StopRow`'s spec as three `oneOf` branches rather than as a component of its
-  own, so §6 is not yet genuinely replaced. Owner: **WP6-2**.
+  opacity rather than text, offline is indistinguishable from stale without knowing whose network failed.
+  **WP6-2 closed the screen-level half of all three** (Nearby declares and drives `loading` and `stale`;
+  `offline` stays `unenforced` there too, honestly, because it is textually identical to `stale`). `empty` is
+  still the target sentence both renderers fail (**WP6-4**).
+- 🟠 **The RN screen suite needs six mocks, two of which are platform modules rather than seams** (WP6-2).
+  `expo-router` cannot load outside Metro, the safe-area context wants an irrelevant provider, and `useLocale`
+  reaches `expo-localization` → `expo-modules-core` → `__DEV__`, a Metro global jsdom does not have. Each is
+  the smallest replacement the screen uses, and the locale is *pinned* rather than defined away because the
+  corpus fixtures are `en`. The cost is real and worth restating: the more of a screen's environment a suite
+  replaces, the less of the real screen it measures.
+- 🟠 **The native `denied` variant is unobservable in both suites.** A native build offers *"open Settings"*
+  where the web offers *"retry"* when the OS will not prompt again, and `Platform.OS` is `web` under both
+  `react-native-web` and the DOM. Declared as an invariant on the spec's `retry` slot so it is visible rather
+  than discovered; the first suite that could assert it is **WP6-9**'s.
+- 🟡 **No spec asserts an a11y *role* per slot**, on either surface. The two renderers reach the same
+  accessible role by different means (`<button>` versus `div[role="button"]`), and associating an element with
+  a slot name is something the format cannot yet do. What *is* enforced is structural — no nested tap targets
+  — and since WP6-2 that is measured in a browser as well as in jsdom. Owner: unassigned, and it wants a
+  format change rather than a screen.
 - 🟠 **`apps/web` renders seven "coming soon" placeholders, and that is the honest state of Wave 6** (WP6-0,
   [ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)).
   Nearby is the **only** ported screen; `/favorites` (WP6-4), `/settings` (WP6-7), `/search` (WP6-5),
@@ -971,11 +1015,11 @@ than any in its own row.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**1 221 tests** on `design-language-reuse-v2`: core 853 · edge 149 · api-client 71 ·
-   **ui-spec 21** · mobile 55 · web 72, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has
-   1 161. WP6-1's totals went *down* by two in the apps and that is the intended direction: the bespoke
-   "+N more with nowhere to tap" case in each suite is now `content-not-affordance` running over **every**
-   corpus case) and `curl localhost:8787/v1/health` — locally that reports
+3. `pnpm test` (**1 251 tests** on `design-language-reuse-v2`: core 853 · edge 149 · api-client 71 ·
+   **ui-spec 30** · mobile 65 · web 83, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has
+   1 161. WP6-1's app totals went *down* by two and that was the intended direction — the bespoke "+N more
+   with nowhere to tap" case in each suite became `content-not-affordance` running over **every** corpus
+   case) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with
    `datasetBuildsThisIsolate: 0`.
 4. For the PWA specifically: `pnpm --filter @nextbus/{mobile,web} build:web`, serve that app's `dist/`, then
@@ -1008,12 +1052,13 @@ than any in its own row.
 > **The work plan is [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md) — Wave 6, WP6-0 … WP6-10 —
 > and it is written to be walked component by component**; the specs themselves are not written yet.
 > **WP6-0 is done as of 2026-08-03** ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)):
-> `apps/web` has the shell and one ported screen, and **WP6-1 is done too**: `packages/ui-spec` is the format,
-> `packages/contract/ui/stop-row.spec.json` is the first instance, and both renderers pass it unmodified.
-> **WP6-2 is next** — Nearby's own spec. Three things are already waiting for it and are written down rather
-> than remembered: the three `StopRow` states declared `unenforced` because a card cannot show them alone
-> (loading, stale, offline), the `a11y` block that is declared but unasserted, and `docs/09` §5/§6's
-> superseded banners. It also wires the taps WP6-0's placeholders are waiting for. Read WP6-0's and WP6-1's
+> `apps/web` has the shell, and **WP6-1 and WP6-2 are done too**: `packages/ui-spec` is the format,
+> `stop-row.spec.json` and `nearby.spec.json` are the first two instances, both renderers drive both, and
+> `apps/web`'s Nearby is the shipping web Nearby with its taps wired.
+> **WP6-3 (Place detail) is next**, and it is an **L** rather than an M for a reason its row states: it holds
+> the most domain rules in the app (`orderPoles`, `dedupeRoutes`, the kerb keying, `poleSideOctants`, the live
+> merge), so it starts with a WP4-0-style hoist of anything still deriving, and its acceptance is that
+> `check-no-derivation` finally extends to `apps/mobile` — closing the asymmetry ADR-069 recorded and named. Read WP6-0's and WP6-1's
 > unanticipated findings in `proposals/04`'s work-package note first; two of them (the destination set as
 > identity, the storage-key hazard) change what a later row has to do.
 > **WP0-5 still ships the Expo PWA first**, and

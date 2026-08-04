@@ -3,9 +3,12 @@ import {
   type ComponentSpec,
   type ConformanceHarness,
   conform,
+  conformStates,
   parseComponentSpec,
   project,
+  projectState,
   read,
+  type StatefulHarness,
 } from '../src/index'
 
 // The format's own suite. It exists because of an asymmetry ADR-075 accepts out loud: *"a shared spec is a
@@ -118,6 +121,13 @@ const VIEW = {
   hidden: 2,
 }
 
+/** Point the `failed` state at a slot that does not exist — the rot the parser must catch. */
+function breakFailedEnforcement(spec: ComponentSpec): void {
+  const failed = spec.states.failed
+  if (!failed) throw new Error('unreachable: baseSpec declares `failed`')
+  failed.enforcement = { by: 'moved' }
+}
+
 const EXPECTED = ['Panel', 'first', '4', 'min', 'second', 'Due', 'third', '—', 'more({"n":2})']
 
 describe('the projection', () => {
@@ -182,7 +192,7 @@ describe('the schema resolves the references a type cannot', () => {
     // The rot this format is most exposed to: a slot is renamed, and the claim that something enforces a
     // state survives as a true-looking string.
     const spec = baseSpec()
-    spec.states.failed.enforcement = { by: 'moved' }
+    breakFailedEnforcement(spec)
     expect(() => parseComponentSpec(spec)).toThrow(/enforced by slot `moved`, which does not exist/)
   })
 
@@ -297,9 +307,188 @@ describe('the conformance checks', () => {
     // A driver reads committed JSON, so the cross-references are resolved here too rather than trusted
     // from emit time — a spec file edited by hand is exactly the case that needs it.
     const spec = baseSpec()
-    spec.states.failed.enforcement = { by: 'moved' }
+    breakFailedEnforcement(spec)
     expect(() =>
       conform(spec, VIEW, harnessOf({ interactive: { text: [] }, inert: { text: [] } })),
     ).toThrow()
+  })
+})
+
+// ── the two extensions a SCREEN needed (WP6-2) ──────────────────────────────────────────────────
+//
+// A component's states are fields of one view model; a screen's are branches over an async status no view
+// model carries. So a state may declare its own projection and the driver is asked to enter it — and a
+// screen that lists a component must be able to *reference* that component's spec rather than restate it.
+
+/** A screen: chrome that survives every branch, plus states that each add their own text. */
+function screenSpec(overrides: Partial<ComponentSpec> = {}): ComponentSpec {
+  return {
+    ...baseSpec(),
+    component: 'Board',
+    doc: 'A titled board that lists panels.',
+    slots: [{ name: 'heading', text: { message: 'boardTitle' } }],
+    states: {
+      loading: {
+        must: 'A placeholder in the shape of the list.',
+        mustNot: 'A blank area.',
+        enforcement: { shows: [{ name: 'progress', text: { message: 'working' } }] },
+      },
+      empty: {
+        must: 'An explicit line saying there is nothing.',
+        mustNot: 'A heading alone.',
+        enforcement: { shows: [{ name: 'none', text: { message: 'nothingHere' } }] },
+      },
+      failed: {
+        must: 'The reason, verbatim.',
+        mustNot: 'Reading as empty.',
+        enforcement: { shows: [{ name: 'reason', text: { field: 'reason' } }] },
+      },
+      stale: {
+        must: 'The entries, marked old.',
+        mustNot: 'A fresh-looking value.',
+        enforcement: {
+          shows: [
+            { name: 'agedNote', text: { message: 'olderThanItLooks' } },
+            { name: 'entries', each: 'items', of: [{ name: 'entry', component: 'Chip' }] },
+          ],
+        },
+      },
+      offline: {
+        must: 'The entries, marked old.',
+        mustNot: 'A blank area.',
+        enforcement: { unenforced: 'Indistinguishable from stale at this level.' },
+      },
+    },
+    interactions: [{ target: 'heading', goes: 'detail' }],
+    a11y: { role: 'region', name: { fromSlot: 'heading' }, reducedMotion: 'No cascade.' },
+    ...overrides,
+  }
+}
+
+/**
+ * The thing a screen lists. Deliberately smaller than `Panel`: this fixture exists to test *composition*,
+ * and a referenced spec with its own mandatory repeat would make the failures about that instead — which
+ * is how the first draft of these two cases failed, on `Panel`'s `each: 'items'` finding no list on an
+ * entry. A referenced spec is projected over the item as its whole scope, so the item must satisfy it.
+ */
+function chipSpec(): ComponentSpec {
+  return {
+    ...baseSpec(),
+    component: 'Chip',
+    doc: 'One labelled chip.',
+    slots: [
+      { name: 'chipLabel', text: { field: 'label' } },
+      {
+        name: 'chipNote',
+        text: { field: 'note' },
+        when: 'note',
+        why: 'Most chips have nothing to add.',
+      },
+    ],
+    interactions: [{ target: 'chipLabel', goes: 'detail' }],
+    a11y: { role: 'button', name: { fromSlot: 'chipLabel' }, reducedMotion: 'None.' },
+  }
+}
+
+const REGISTRY = { Chip: chipSpec() }
+const translate = (key: string, args?: Record<string, unknown>) =>
+  args ? `${key}(${JSON.stringify(args)})` : key
+
+function statefulHarness(
+  byState: Record<string, { view: unknown; text: string[]; nested?: number } | null>,
+): StatefulHarness {
+  return {
+    render: () => ({ text: [], interactive: 1, nestedInteractive: 0 }),
+    translate,
+    renderState: (state) => {
+      const fixture = byState[state]
+      if (!fixture) return null
+      return {
+        view: fixture.view,
+        tree: { text: fixture.text, interactive: 1, nestedInteractive: fixture.nested ?? 0 },
+      }
+    },
+  }
+}
+
+describe('a state may declare its own projection', () => {
+  it('expects the always-present chrome plus what the state adds, in that order', () => {
+    expect(projectState(screenSpec(), 'empty', {}, translate)).toEqual([
+      'boardTitle',
+      'nothingHere',
+    ])
+  })
+
+  it('returns null for a state whose enforcement is not a projection', () => {
+    // `unenforced`, `knownDefect` and `by` are checked — or explicitly not — by the mechanism they name.
+    expect(projectState(screenSpec(), 'offline', {}, translate)).toBeNull()
+  })
+
+  it('throws on a state nobody declared, rather than projecting nothing', () => {
+    expect(() => projectState(screenSpec(), 'ghost', {}, translate)).toThrow(/no state `ghost`/)
+  })
+
+  it('holds a renderer to every projected state', () => {
+    const harness = statefulHarness({
+      loading: { view: {}, text: ['boardTitle', 'working'] },
+      empty: { view: {}, text: ['boardTitle', 'nothingHere'] },
+      failed: { view: { reason: 'upstream refused' }, text: ['boardTitle', 'upstream refused'] },
+      stale: { view: { items: [] }, text: ['boardTitle', 'olderThanItLooks'] },
+      offline: null,
+    })
+    expect(conformStates(screenSpec(), harness, REGISTRY)).toEqual([])
+  })
+
+  it('reports a state whose text diverges, naming the state', () => {
+    const harness = statefulHarness({
+      loading: { view: {}, text: ['boardTitle'] },
+      empty: { view: {}, text: ['boardTitle', 'nothingHere'] },
+      failed: { view: { reason: 'x' }, text: ['boardTitle', 'x'] },
+      stale: { view: { items: [] }, text: ['boardTitle', 'olderThanItLooks'] },
+    })
+    const findings = conformStates(screenSpec(), harness, REGISTRY)
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.message).toMatch(/in `loading`: did not render at index 1/)
+  })
+
+  it('reports a projected state the renderer cannot be put into', () => {
+    // A finding, not a skip. A declared projection nothing can render is the same vacuous pass as a gate
+    // that matches no files — and the driver silently lacking a fixture is the likeliest cause.
+    const harness = statefulHarness({
+      loading: null,
+      empty: { view: {}, text: ['boardTitle', 'nothingHere'] },
+      failed: { view: { reason: 'x' }, text: ['boardTitle', 'x'] },
+      stale: { view: { items: [] }, text: ['boardTitle', 'olderThanItLooks'] },
+    })
+    expect(conformStates(screenSpec(), harness, REGISTRY)[0]?.message).toMatch(
+      /cannot be put into it/,
+    )
+  })
+
+  it('reports a spec whose every state is unenforced, because it asserted nothing', () => {
+    // The anti-vacuous control for this whole check.
+    const findings = conformStates(baseSpec(), statefulHarness({}), REGISTRY)
+    expect(findings[0]?.message).toMatch(/looked at nothing/)
+  })
+})
+
+describe('composition: a screen references a component rather than restating it', () => {
+  it('projects the referenced spec over each item, including its own conditionals', () => {
+    const items = [{ label: 'first', note: 'and more' }, { label: 'second' }]
+    // `Chip`'s own slots, once per item — and its conditional `chipNote` obeys its own `when`. A slot added
+    // to Chip turns up here with no edit to the screen's spec, which is the whole point.
+    expect(projectState(screenSpec(), 'stale', { items }, translate, REGISTRY)).toEqual([
+      'boardTitle',
+      'olderThanItLooks',
+      'first',
+      'and more',
+      'second',
+    ])
+  })
+
+  it('fails loudly when the referenced component is not in the registry', () => {
+    expect(() =>
+      projectState(screenSpec(), 'stale', { items: [{ label: 'x' }] }, translate, {}),
+    ).toThrow(/references component `Chip`, which is not in the registry/)
   })
 })

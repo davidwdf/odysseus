@@ -5860,3 +5860,129 @@ pre-existing and unaddressed; it earned its keep here.
     once rather than after a stale replay.
   - **Test totals:** core 853, edge 149, api-client 71, **ui-spec 21 (new)**, web 72, mobile 55 — 1 221.
     Corpus unchanged at 96 groups / 803 cases: WP6-1 added no kernel rule, which is the point.
+
+## ADR-084 — A screen spec: a state that declares what it shows, and a slot that references another spec
+- **Status:** **Decided and implemented 2026-08-03** (WP6-2, the third row of Wave 6). Implementation:
+  `packages/ui-spec` gains a `ComponentNode` (`component`), an `enforcement.shows` variant,
+  `projectState()`, `conformStates()`, a `StatefulHarness`, and `states` as a **record with five required
+  keys** rather than a closed object of exactly five; `packages/contract/src/ui/nearby.ts` →
+  `packages/contract/ui/nearby.spec.json` (9 states, 8 of them projected) plus a `UI_SPEC_REGISTRY`;
+  `apps/web/test/nearby-states.test.tsx` and `apps/mobile/test/nearby-states.test.tsx` drive every state on
+  both renderers; `apps/web/src/screens/Nearby.tsx` gains the two taps that make it the shipping web Nearby;
+  and `docs/09` §5 and §6 finally get their superseded banners. 15 new tests over the format, 21 new
+  conformance runs across the two screens.
+- **Context.** `StopRow`'s spec (WP6-1, ADR-083) is a projection of one view model, and every one of its
+  states is a field of that model. **A screen is not**, and that is the whole of this row: Nearby's states
+  are branches over an async status — no fix yet, permission refused, a *remembered* position rather than a
+  live one, the first fetch in flight, the fetch failed, nothing due — and no view model carries any of it.
+  Three of `StopRow`'s five states were declared `unenforced` for exactly this reason and handed to WP6-2.
+- **Decisions:**
+  1. **A state may declare its own projection, and the driver is asked to enter it.**
+     `enforcement.shows` is the fourth variant, and it is what turns five sentences into five assertions.
+     The split of responsibility is the load-bearing part: **the driver owns getting there** — that is
+     per-renderer hook wiring, and it is where a renderer-specific mistake lives — while **the spec owns
+     what must be there.** `renderState(name)` returns the tree *and* the view it corresponds to, because a
+     state like "the fetch failed" has content (the error's own message) that no view model holds either.
+     Returning `null` is a **finding, not a skip**: a declared projection nothing can render is the same
+     vacuous pass as a gate matching no files.
+  2. **`slots` is what every state shows; `shows` is what a state adds.** Nine states repeating the
+     screen's chrome would be nine chances to disagree about it. What fell out of that split is the row's
+     best result: **only the title survives every branch — the subtitle does not**, because the difference
+     between the ordinary content state and the `stale` one *is* the subtitle. ADR-008's honesty rule
+     applies to the rider's **position** and not only to the times, and declaring the subtitle per state is
+     what makes *"say so when the fix is remembered"* an assertion instead of a sentence. It is watched
+     failing both ways: the spec claiming the live subtitle for `stale`, and the web screen dropping the
+     remembered one.
+  3. **A slot may reference another component's spec.** `{ component: 'StopRow' }` inside an `each` is how
+     *"this screen is a list of these cards"* becomes a checked claim: a slot added to `StopRow` turns up in
+     Nearby's expected text with no edit to Nearby's spec, and a screen that stopped drawing its cards goes
+     red. Writing the card's slots out again would have been two declarations of one thing — the failure
+     this format exists to prevent, reproduced inside it. Resolved through `UI_SPEC_REGISTRY`, which is
+     **derived from `UI_SPECS`** rather than written out, so a spec cannot be emitted and yet be
+     unreferenceable.
+  4. **`states` is a record with five required keys, not an object of exactly five.** Nearby has nine: the
+     canonical five plus `content` (a screen needs a name for "it worked"), `undetermined`, `denied` and
+     `locationError`. A schema that forbade the extras would have pushed them back into prose, which is the
+     one thing ADR-075 decision 3 rules out. The floor stays five.
+  5. **The seams are mocked; the query is not.** Both suites replace the four seams a screen reads the world
+     through (`useLocation`, `useLiveNearby`, `useClientPolicy`, the `DataSource`) and leave TanStack Query
+     real, because `loading`, `failed` and `content` **are** its states and mocking `useQuery` would mean
+     asserting against a mock of the thing under test. The fixtures come from the corpus —
+     `stop-card.spec.json`'s `nearbyView` group supplies both the `NearbyStop[]` the source returns and the
+     `StopCardView[]` the screen must draw, with `now` pinned to the case's own clock — so the two suites'
+     goldens are the same bytes.
+  6. **`apps/web`'s Nearby is the shipping web Nearby.** The two taps are wired, to paths **byte-identical**
+     to the RN screen's (`/stop/:id`, `/route/:id?stop=:id`), so a deep link resolves the same on either
+     renderer. Verified in a real browser against live Hong Kong data.
+  7. **Pull-to-refresh is declared `idiom`, and the asymmetry is deliberate rather than an oversight.** The
+     RN screen has a `RefreshControl`; the web screen has nothing. Since WP5-7 the arrivals arrive by
+     subscription at the served cadence, so a manual refresh is *reassurance* rather than how a rider gets
+     fresh data — and the platform with a natural gesture for it offers it. What is **not** idiom is
+     recovery from `failed`, and neither renderer makes it a control: `refetchInterval` fires only on error
+     (ADR-079), identically on both, which is why that state's `must` owes the rider an explanation rather
+     than a button.
+  8. **`docs/09` §5 and §6 are marked superseded, which ADR-075 deferred until the format existed.** §6 —
+     titled "ETA display spec" since Wave 1, prose, and the section whose imminence band was written down
+     four times with two different values — now points at `etaUrgency` for the rules and `stop-row.spec.json`
+     for what a renderer must draw. §5 is *partly* superseded: motion is **idiom**, so its durations and
+     curves are `apps/mobile`'s recipe rather than a cross-platform requirement, and what survives as
+     identity is that reduced motion must not change the content. Three of §6's bullets are in neither
+     place yet and now say so.
+- **Why the alternatives lose:**
+  - **Mock `useQuery` and assert the branches directly.** It would make the states deterministic and
+    meaningless: the states *are* the query's states.
+  - **Give the screens injectable props so a test can set their state.** That is changing the component to
+    suit the specification, and ADR-075 decision 5's whole point is that the spec is extracted from the
+    renderer as it is.
+  - **Restate `StopRow`'s slots inside Nearby's spec.** Two declarations of one component. The registry
+    costs one derived object.
+  - **Leave the screen states as prose in the `must`/`mustNot` sentences.** That is what WP6-1 left behind
+    for three of `StopRow`'s five, and it is only defensible when nothing *can* observe them. A screen can.
+  - **Add pull-to-refresh to the web screen for parity.** Parity of *mechanism* is what ADR-075 traded away.
+    The web has no natural gesture for it, and inventing a button would be a control the design never asked
+    for to satisfy a symmetry that stopped being the goal.
+- **Verified by running:** both suites green over all nine states, and **watched failing four ways** — the
+  spec claiming the live subtitle for `stale` (both renderers red), the card list dropped from `content`
+  (both red, which is composition being asserted), the web screen's remembered-position sentence removed
+  (web red, RN green), and the RN screen's "no service" line removed (RN red). In a real browser against
+  live Hong Kong data: six cards, a heading tap to `/stop/GMB%3A20001553`, back to `/` with the tab bar
+  restored, a row tap to `/route/GMB:804:outbound:2010275?stop=GMB:20001553`, and **zero nested interactive
+  elements** across the whole rendered list — the DOM half of `sibling-not-nested`, measured outside jsdom.
+- **Consequences, including what we are accepting:**
+  - **A test whose fixture was right and whose timing was wrong is the row's cautionary tale.** The first
+    draft of both drivers flushed a fixed number of microtasks after mounting, and two states read their
+    tree while the screen was still showing "locating" — so the suite reported a divergence at index 2 for
+    `content` and `failed` rather than the state it had been asked about. A bounded poll for the transition,
+    failing loudly with the text it actually found, is the difference between testing the state and testing
+    the scheduler. It is the same class as WP6-0's `remount()` that did not reset the store: **a harness
+    that looks at the wrong moment is indistinguishable from a renderer that is wrong.**
+  - 🟠 **The RN suite needs six mocks, and two of them are platform modules rather than seams.**
+    `expo-router` cannot load outside Metro and the safe-area context wants a provider irrelevant to what is
+    under test; `useLocale` reaches `expo-localization` → `expo-modules-core` → `__DEV__`, a Metro global
+    that does not exist in jsdom. Each is replaced with the smallest thing the screen uses, and the locale is
+    *pinned* rather than defined-away because the corpus fixtures are `en` and a locale the suite did not
+    control would compare an English projection against a Chinese render. The cost is real: the more of a
+    screen's environment a suite replaces, the less of the real screen it measures.
+  - 🟠 **The native `denied` variant is unobservable in both suites.** When the OS will not prompt again a
+    native build offers *"open Settings"* where the web offers *"retry"*, and under `react-native-web` and
+    the DOM alike `Platform.OS` is `web`. Declared as an invariant on the `retry` slot so the divergence is
+    visible rather than discovered; the first suite that could assert it is WP6-9's.
+  - 🟡 **`offline` is declared `unenforced` on the screen too, and honestly so.** It is textually identical
+    to `stale`: offline *is* a remembered fix plus replayed readings, and which network failed is not
+    something the screen says. What distinguishes it — the readings' age and dimming — is inside the card and
+    is opacity rather than text. The cache-replay half is asserted in `apps/web/test/shell.test.tsx`.
+  - 🟡 **Nearby's `a11y` block is still declared and unasserted**, unchanged from WP6-1: the two renderers
+    reach the same accessible role by different means (`<button>` versus `div[role="button"]`), and asserting
+    a role *per slot* needs a way to associate an element with a slot name that the format does not have.
+    The one a11y property that *is* enforced is structural — no nested tap targets — and it is now measured
+    in a browser as well as in jsdom.
+  - 🟡 **Every ADR-069 finding is a declared invariant with a case, and both were already closed by WP6-1** —
+    stated because WP6-2's row asks for it: the caption's collapsed double separator is
+    `slots.caption.invariant` plus the `whitespace-pre-wrap` assertion in the DOM suite, and the hidden
+    overflow count is the universal `content-not-affordance` check running over every corpus case.
+  - ⚪ **`apps/web` no longer has a screen with nowhere to go.** Its Nearby taps reach two placeholders, which
+    is the state WP6-0 designed for — and it means the `content-not-affordance` check's inert render is now
+    the *only* place either renderer exercises a card with no handlers. That is worth knowing rather than
+    fixing: it is exactly the configuration ADR-069's bug hid in.
+  - **Test totals:** core 853, edge 149, api-client 71, ui-spec 30, web 83, mobile 65 — 1 251.
+    Corpus unchanged at 96 groups / 803 cases: no kernel rule moved.

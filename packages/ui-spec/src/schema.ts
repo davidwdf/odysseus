@@ -118,7 +118,25 @@ export interface OneOfNode {
   oneOf: string
   cases: Record<string, SlotNode[]>
 }
-export type SlotNode = TextNode | EachNode | OneOfNode
+/**
+ * Another component's spec, projected over the current scope.
+ *
+ * The sixth word, and the one a **screen** cannot do without: a list screen is a list of a component
+ * whose spec already exists, and writing that component's slots out a second time would be two
+ * declarations of one thing — the failure this whole format exists to prevent, reproduced inside it.
+ * Combined with `each` it is how "this screen is a list of these cards" becomes a checked claim rather
+ * than a comment: a slot added to the card's spec appears in the screen's expected text automatically,
+ * and a screen that stopped drawing its cards goes red.
+ */
+export interface ComponentNode {
+  name: string
+  when?: string
+  why?: string
+  invariant?: string
+  /** The `component` field of another spec, resolved through the registry passed to `conform`. */
+  component: string
+}
+export type SlotNode = TextNode | EachNode | OneOfNode | ComponentNode
 
 export const SlotNodeSchema: z.ZodType<SlotNode> = z.lazy(() =>
   z.union([
@@ -129,6 +147,7 @@ export const SlotNodeSchema: z.ZodType<SlotNode> = z.lazy(() =>
       oneOf: PathSchema,
       cases: z.record(z.string().min(1), z.array(SlotNodeSchema)),
     }),
+    z.strictObject({ ...nodeCommon, component: z.string().min(1) }),
   ]),
 )
 
@@ -143,6 +162,11 @@ export const SlotNodeSchema: z.ZodType<SlotNode> = z.lazy(() =>
  *
  * - **`by`** — the slot that makes the state observable. The harness asserts the name resolves, so the
  *   claim cannot be made falsely.
+ * - **`shows`** — this state has its **own projection**, and the renderer can be asked to enter it. What
+ *   a *screen* needs: its states are not fields of one view model but branches over an async status, so
+ *   the only way to hold a renderer to them is to put it in the state and read the text back. The
+ *   driver owns *how* to get there (that is per-renderer hook wiring); the spec owns what must be there.
+ *   `shows` is what this state **adds** to the always-present `slots`, in order.
  * - **`knownDefect`** — no renderer satisfies it *yet*. Wave 2 pinned four of these in the corpus rather
  *   than fixing them, for the reason ADR-075 restates: identical and visible beats different and hidden.
  *   Needs the citation and the owner.
@@ -151,6 +175,7 @@ export const SlotNodeSchema: z.ZodType<SlotNode> = z.lazy(() =>
  */
 export const EnforcementSchema = z.union([
   z.strictObject({ by: z.string().min(1) }),
+  z.strictObject({ shows: z.array(SlotNodeSchema) }),
   z.strictObject({ knownDefect: z.string().min(1) }),
   z.strictObject({ unenforced: z.string().min(1) }),
 ])
@@ -164,22 +189,27 @@ export const StateSchema = z.strictObject({
 })
 
 /**
- * The five states, all mandatory.
+ * The five states every spec must declare — and it may declare more.
  *
  * ADR-075 puts *"that each of loading / empty / error / stale / offline is distinguishable and
  * non-blank"* on the identity side of the invariant line, and `proposals/04` traces two of `docs/11`'s
  * open bugs to states that *"nothing ever declared"* — a favourite with no arrival renders an empty
- * card, an upstream outage blanks a screen. Neither is a rendering bug. So the schema will not accept a
- * spec that has not thought about all five, and `failed` is spelled that way rather than `error` because
- * ADR-073's distinction — a board that refused is not a board that is empty — is the one the app makes.
+ * card, an upstream outage blanks a screen. Neither is a rendering bug. So a spec that has not thought
+ * about all five is rejected, and `failed` is spelled that way rather than `error` because ADR-073's
+ * distinction — a board that refused is not a board that is empty — is the one the app makes.
+ *
+ * **A record with five required keys rather than a closed object of exactly five**, and the difference
+ * matters for screens: a location gate has states the canonical five do not name (*not yet asked*,
+ * *refused*), and a schema that forbade them would push them back into prose, which is the one thing
+ * ADR-075 decision 3 rules out. The floor is five; the ceiling is what the surface actually has.
  */
-export const StatesSchema = z.strictObject({
-  loading: StateSchema,
-  empty: StateSchema,
-  failed: StateSchema,
-  stale: StateSchema,
-  offline: StateSchema,
-})
+export const CANONICAL_STATES = ['loading', 'empty', 'failed', 'stale', 'offline'] as const
+
+export const StatesSchema = z
+  .record(z.string().min(1), StateSchema)
+  .refine((states) => CANONICAL_STATES.every((name) => name in states), {
+    message: `every spec must declare all five of ${CANONICAL_STATES.join(', ')}`,
+  })
 
 export const InteractionSchema = z.strictObject({
   /** The slot the rider touches. Asserted to name a real one. */
@@ -265,6 +295,13 @@ export function parseComponentSpec(input: unknown): ComponentSpec {
     }
   }
   collect(spec.slots)
+  // A state's `shows` nodes are slots too — an interaction may target one of them, and an a11y name may
+  // come from one. Collected after `spec.slots` so a name defined in both places is not a conflict: the
+  // always-present chrome and a state's own additions share one namespace on purpose, because a reader
+  // asking "what is `subtitle`?" should not have to know which of the two it came from.
+  for (const state of Object.values(spec.states)) {
+    if ('shows' in state.enforcement) collect(state.enforcement.shows)
+  }
 
   for (const [state, declared] of Object.entries(spec.states)) {
     const by = 'by' in declared.enforcement ? declared.enforcement.by : null
