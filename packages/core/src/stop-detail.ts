@@ -14,9 +14,28 @@
 // `poleSideOctants` takes the heading *text* for the same reason and returns an **octant, not a
 // word** — the rule is the kernel's, the word is `@nextbus/i18n`'s (ADR-054).
 
-import { bearingOctant, haversineMeters, initialBearingDeg } from './geo'
-import { poleNameKey } from './stop-name'
-import type { LatLng, OperatorId, StopDetail } from './types'
+import { type EtaReadout, etaReadout, formatHeadway, type RemarkView, remarkView } from './eta'
+import {
+  bearingOctant,
+  formatBearing,
+  formatDistance,
+  formatWalk,
+  formatWalkRange,
+  haversineMeters,
+  initialBearingDeg,
+} from './geo'
+import { parseStopId } from './ids'
+import { CLIENT_POLICY_DEFAULTS } from './policy'
+import { displayName, type StopCardName } from './stop-card'
+import { poleFlagCode, poleNameKey } from './stop-name'
+import type {
+  I18nText,
+  LatLng,
+  Locale,
+  OperatorId,
+  ResolvedClientPolicy,
+  StopDetail,
+} from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
 // JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
@@ -582,4 +601,297 @@ export function poleDistinctions(
     }
   }
   return out
+}
+
+// ── The whole screen, in one call (WP6-3) ──────────────────────────────────────────────────────
+//
+// Everything above is a *rule*; `placeDetailView` is the **composition** of those rules into the thing a
+// renderer draws, and it exists for the reason WP4-0 built `stopCardView`: until now the composition lived
+// in `apps/mobile/app/stop/[id].tsx`, reachable only by rendering a React tree, so a second renderer could
+// only re-implement it — and a re-implementation looks right on the day it is written. Concretely, the
+// screen was deriving: the pole heading and its `·` separator, the per-pole distances, whether the walk is
+// a single time or a range across the poles, the summary line and *its* two separator widths, the grouping
+// of rows under boarding points, which poles are shown at all, what each row's readout falls back to, and
+// whether the place is grouped. Nine decisions, none of them presentation.
+//
+// **Words the kernel composes with are injected, never imported** (ADR-054: core owns the rule, i18n owns
+// the word). `labels` is five strings and one function, and the kernel does the joining — because the
+// joining is exactly what two renderers get subtly different. It is the same shape `StopCardRow` already
+// uses for its `unit`, and the same shape the conformance walker uses for `translate` (ADR-083).
+
+/** What a renderer needs to draw the Place screen, with nothing left to decide. */
+export interface PlaceDetailView {
+  /** The place's name, title-cased, with its printed code split off. */
+  name: StopCardName
+  /** The one-line summary: direction · served by … · N routes · distance · walk. Empty when silent. */
+  summary: string
+  /** Present for a merged place, so a renderer may draw a compass needle. Data presence, not styling. */
+  bearingDeg?: number
+  /** True when this place has more than one boarding point, so the rows are grouped under headings. */
+  grouped: boolean
+  /** The boarding points, in the order they are shown — never one with no rows left to show. */
+  groups: PlaceGroup[]
+  /** Every row, in server order, for the ungrouped case. Empty when `grouped`. */
+  rows: PlaceRouteRow[]
+  /**
+   * True when at least one of this place's boarding points would not answer (ADR-077), so the rows may be
+   * incomplete and an empty list is **not** a claim that nothing is due. Same fact, same reason and the
+   * same wire field as `StopCardView.incomplete`.
+   */
+  incomplete: boolean
+}
+
+/** One boarding point and the lines that depart from it. */
+export interface PlaceGroup {
+  /** The member pole id. What a renderer keys a section on, and what `?pole=` matches. */
+  poleId: string
+  /**
+   * What is printed above the group: the operator's name, the code the operator published if there is
+   * one, and — only where two poles would otherwise print the same thing — the compass side.
+   * Composed here rather than in a renderer because the separators are the composition (ADR-080).
+   */
+  heading: string
+  /** The pole's own name, where *that* is what tells this kerb from its sibling (ADR-080 tier 2). */
+  distinctName?: string
+  /** Set where nothing can tell two adjacent poles apart, so the app says so rather than staying silent. */
+  crowded: boolean
+  /** This kerb's own walk time, when the rider's position is known. */
+  walk?: string
+  rows: PlaceRouteRow[]
+}
+
+/** One line at one kerb. */
+export interface PlaceRouteRow {
+  routeId: string
+  /** The **raw** boarding pole this row departs from — what a favourite is keyed on (ADR-062). */
+  stopId: string
+  operator: OperatorId
+  routeNo: string
+  /** "Causeway Bay", title-cased. */
+  destination: string
+  remark?: RemarkView
+  /**
+   * What the right-hand side says, and it is a three-way choice rather than an optional reading: a live
+   * arrival, else the timetable's own frequency, else a dash. The middle case is the one a renderer would
+   * forget — a route with no reading but a published headway is not a route with nothing to say.
+   */
+  readout: PlaceRowReadout
+}
+
+export type PlaceRowReadout =
+  | ({ kind: 'eta' } & EtaReadout)
+  | { kind: 'headway'; text: string }
+  | { kind: 'none' }
+
+/** The words this view composes with, supplied by the caller's catalogue. */
+export interface PlaceDetailLabels {
+  /** An operator's name in the reader's language. Falls back to the raw code — that is the caller's rule. */
+  operator: (operator: OperatorId) => string
+  /** "Served by" — the lead-in, not the list. */
+  servedBy: string
+  /**
+   * The whole "N routes" phrase, not the noun.
+   *
+   * A function because the **plural rule is the catalogue's** (ADR-054), and taking only the noun is how
+   * the RN screen came to print *"1 routes"* — a real, live defect this hoist reproduces faithfully rather
+   * than silently fixing, per WP4-0's rule that a hoist changes no behaviour. The shape here is what lets a
+   * later row fix it with an ICU plural key and no change to the kernel.
+   */
+  routeCount: (n: number) => string
+  /** A compass side, by octant (0 = N, clockwise). Only asked for where a side is warranted. */
+  side: (octant: number) => string
+}
+
+export interface PlaceDetailOptions {
+  locale: Locale
+  /** The clock, as an explicit argument — every readout below is derived against it. */
+  now: number
+  policy?: ResolvedClientPolicy
+  labels: PlaceDetailLabels
+  /** The rider's position. Absent means the distance and walk halves stay silent rather than guess. */
+  here?: LatLng
+  /** The pole the rider arrived from, which sorts its group first. May be a folded id. */
+  arrivedFromPole?: string
+}
+
+/**
+ * The Place screen's content, derived once.
+ *
+ * @spec stop-detail#placeDetailView
+ */
+export function placeDetailView(detail: StopDetail, opts: PlaceDetailOptions): PlaceDetailView {
+  const { locale, now, labels } = opts
+  const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
+  const members = detail.members ?? []
+  // `members` is passed so a line boarding at one physical pole published under two ids is one row.
+  const routes = dedupeRoutes(detail.routes, members)
+
+  // Distance per pole, so the place's walk can be a *range* across its kerbs and each group can carry its
+  // own. Silent without a fix: a distance we cannot measure is not a distance we should estimate.
+  const poleDistance = new Map<string, number>()
+  if (opts.here)
+    for (const m of members) poleDistance.set(m.id, haversineMeters(opts.here, m.location))
+  const distances = [...poleDistance.values()]
+
+  const grouped = members.length > 1
+  const byPole = new Map<string, PlaceRouteRow[]>()
+  for (const route of routes) {
+    // Grouped by **boarding point**, not by raw pole: a row departing from a folded id belongs under the
+    // member it was folded onto, and has no heading of its own to sit under (ADR-071).
+    const key = boardingPoleId(route.stopId, members)
+    byPole.set(key, [...(byPole.get(key) ?? []), placeRouteRow(route, locale, now, policy)])
+  }
+
+  // Only the poles that still have rows, **carrying those rows with them**. A pole with nothing left after
+  // `dedupeRoutes` is not part of the list a rider is choosing between — and a compass side printed to tell
+  // a heading apart from one that is not on screen is noise, which is why `poleDistinctions` is asked about
+  // exactly this set.
+  //
+  // A `flatMap` rather than a `filter` and a second lookup, and the reason is a coverage threshold doing its
+  // job: `filter` left `byPole.get(m.id) ?? []` at the render site with an **unreachable** `??` arm, because
+  // the filter had already guaranteed the entry. This shape has no dead branch — a pole with no entry takes
+  // the empty arm and is dropped here.
+  const shown = orderPoles(
+    members,
+    opts.arrivedFromPole === undefined ? undefined : boardingPoleId(opts.arrivedFromPole, members),
+    poleDistance,
+  ).flatMap((member) => {
+    const rows = byPole.get(member.id) ?? []
+    return rows.length === 0 ? [] : [{ member, rows }]
+  })
+
+  const cues = poleDistinctions(
+    shown.map(({ member }) => ({
+      id: member.id,
+      location: member.location,
+      heading: poleHeading(member.id, member.name, locale, labels),
+      name: displayName(member.name[locale]).label,
+    })),
+  )
+
+  return {
+    name: displayName(detail.stop.name[locale]),
+    summary: placeSummary(
+      {
+        operators: operatorsOf(routes),
+        routeCount: routes.length,
+        distances,
+        bearingDeg: detail.stop.bearingDeg,
+      },
+      locale,
+      labels,
+      opts.here ? haversineMeters(opts.here, detail.stop.location) : undefined,
+    ),
+    ...(detail.stop.bearingDeg === undefined ? {} : { bearingDeg: detail.stop.bearingDeg }),
+    grouped,
+    groups: grouped
+      ? shown.map(({ member, rows }) => {
+          const cue = cues.get(member.id)
+          const side = cue?.octant === undefined ? '' : ` · ${labels.side(cue.octant)}`
+          const walk = poleDistance.get(member.id)
+          return {
+            poleId: member.id,
+            // The side is **appended, never substituted**: it earns its place only where two poles print
+            // the same heading, so most places read exactly as they always have.
+            heading: `${poleHeading(member.id, member.name, locale, labels)}${side}`,
+            ...(cue?.name === undefined ? {} : { distinctName: cue.name }),
+            crowded: cue?.crowded === true,
+            ...(walk === undefined ? {} : { walk: formatWalk(walk, locale) }),
+            rows,
+          }
+        })
+      : [],
+    rows: grouped ? [] : routes.map((route) => placeRouteRow(route, locale, now, policy)),
+    // Presence, not length — the same argument `stopCardView` makes: a rider cannot act on the difference
+    // between one refusing kerb and four.
+    incomplete: (detail.failed ?? []).length > 0,
+  }
+}
+
+/**
+ * The heading above a pole's routes: "KMB · TN510", "Citybus".
+ *
+ * It takes the whole `I18nText` rather than one locale's string, because `poleFlagCode` prefers this
+ * locale's own trailing parenthetical and otherwise **borrows a flag-shaped code from another locale** —
+ * at Prince Edward Station two KMB poles share a coordinate and read identically in English while the
+ * Chinese carries `(MK356)` and `(MK357)`, so the only thing that could tell them apart was on the wire
+ * and being discarded (ADR-080). A code is Latin letters and digits, so it is the same in every locale.
+ *
+ * One function, two callers, on purpose: it renders *and* it is what `poleDistinctions` compares. Two
+ * copies is precisely how the rule would come to be told about a heading the screen no longer prints, and
+ * then quietly stop disambiguating.
+ */
+function poleHeading(
+  poleId: string,
+  name: I18nText,
+  locale: Locale,
+  labels: PlaceDetailLabels,
+): string {
+  const operator = parseStopId(poleId)?.operator
+  const code = poleFlagCode(name, locale)
+  return `${operator ? labels.operator(operator) : ''}${code ? ` · ${code}` : ''}`
+}
+
+/**
+ * The one-line summary, with its **two separator widths**, which are the reason this is not a renderer's
+ * job: `' · '` binds a distance to its own walk time and the wider `'  ·  '` separates the parts —
+ * the same rhythm `stopCardCaption` uses, and the same thing HTML collapses if a renderer composes it
+ * itself (ADR-069's first finding).
+ *
+ * The walk is a **range across the poles** where there are several, because a rider standing outside a
+ * four-kerb interchange is 0 m from one and 90 m from another and a single number would be a lie about
+ * three of them.
+ */
+function placeSummary(
+  facts: {
+    operators: readonly OperatorId[]
+    routeCount: number
+    distances: readonly number[]
+    bearingDeg?: number
+  },
+  locale: Locale,
+  labels: PlaceDetailLabels,
+  placeDistanceM: number | undefined,
+): string {
+  const parts: string[] = []
+  if (facts.bearingDeg !== undefined) parts.push(formatBearing(facts.bearingDeg, locale))
+  if (facts.operators.length > 0) {
+    parts.push(`${labels.servedBy} ${facts.operators.map(labels.operator).join(', ')}`)
+  }
+  parts.push(labels.routeCount(facts.routeCount))
+  // The nearest kerb where the poles were measured, else the place's own centroid distance.
+  const nearest = facts.distances.length > 0 ? Math.min(...facts.distances) : placeDistanceM
+  const walk =
+    facts.distances.length > 1
+      ? formatWalkRange(Math.min(...facts.distances), Math.max(...facts.distances), locale)
+      : placeDistanceM === undefined
+        ? undefined
+        : formatWalk(placeDistanceM, locale)
+  if (nearest !== undefined && walk !== undefined) {
+    parts.push(`${formatDistance(nearest)} · ${walk}`)
+  }
+  return parts.join('  ·  ')
+}
+
+/** One row: the line, where it is headed, and the three-way readout. */
+function placeRouteRow(
+  route: StopDetailRoute,
+  locale: Locale,
+  now: number,
+  policy: ResolvedClientPolicy,
+): PlaceRouteRow {
+  const remark = remarkView(route.eta?.remark, locale, route.eta?.remarkKind)
+  return {
+    routeId: route.route.id,
+    stopId: route.stopId,
+    operator: route.route.operator,
+    routeNo: route.route.routeNo,
+    destination: displayName(route.route.destination[locale]).label,
+    ...(remark === undefined ? {} : { remark }),
+    readout: route.eta
+      ? { kind: 'eta', ...etaReadout(route.eta, locale, now, policy) }
+      : route.route.service?.headway
+        ? { kind: 'headway', text: formatHeadway(route.route.service.headway, locale) }
+        : { kind: 'none' },
+  }
 }

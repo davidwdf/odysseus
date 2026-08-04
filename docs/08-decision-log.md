@@ -5986,3 +5986,72 @@ pre-existing and unaddressed; it earned its keep here.
     fixing: it is exactly the configuration ADR-069's bug hid in.
   - **Test totals:** core 853, edge 149, api-client 71, ui-spec 30, web 83, mobile 65 — 1 251.
     Corpus unchanged at 96 groups / 803 cases: no kernel rule moved.
+
+## ADR-085 — The Place screen's composition is a kernel function, and the words it joins are injected
+- **Status:** **Decided and implemented 2026-08-03** (WP6-3a — the hoist half of WP6-3). Implementation:
+  `placeDetailView` and its `PlaceDetailView` / `PlaceGroup` / `PlaceRouteRow` / `PlaceDetailLabels` types in
+  `packages/core/src/stop-detail.ts`, **15 corpus cases** in `spec/stop-detail.spec.json` plus four property
+  tests, and `apps/mobile/app/stop/[id].tsx` rewired to consume it — ~90 lines of derivation deleted from the
+  screen, two local helpers deleted outright, and both leaf components (`RouteRowItem`, `StopMeta`) reduced
+  to projections. `packages/core` is back at **100 % on all four axes**.
+- **Context.** `proposals/04` puts Place detail third *"because it has the most domain rules in the app"*,
+  and the screen was the proof: nine decisions lived in it as loose expressions, reachable only by rendering
+  a React tree — the pole heading and its `·`, the per-kerb distances, whether the walk is a single time or a
+  range, the summary line and *its* two separator widths, the grouping under boarding points, which poles are
+  shown at all, each row's three-way readout, and whether the place is grouped. A second renderer could only
+  have re-implemented them from the JSX, and a re-implementation looks right on the day it is written
+  (ADR-068's argument, applied to the screen it was always going to matter most on).
+- **Decisions:**
+  1. **One composition function, not nine exports.** The four rules `stop-detail.ts` already held
+     (`dedupeRoutes`, `operatorsOf`, `orderPoles`, `poleDistinctions`) decide *what* a rider sees;
+     `placeDetailView` decides what they collapse to on screen. Splitting the composition into more exports
+     would leave the *order* of the calls — which is itself a rule — in the renderer.
+  2. **Words the kernel joins are injected, never imported.** `labels` is three strings and two functions.
+     The kernel may not import `@nextbus/i18n` (`layers.json` gives it `use: []`), and it should not: ADR-054
+     draws the line at *core owns the rule, the catalogue owns the word*. What is a rule is the joining —
+     which is exactly what two renderers get subtly different, and the reason `stopCardCaption` exists.
+  3. **`routeCount` is a function of `n`, not a noun.** Because the plural rule is the catalogue's — and
+     because taking the noun is how the RN screen came to print **"1 routes"**, which this hoist reproduces
+     faithfully rather than silently fixing (WP4-0's rule: a hoist changes no behaviour). The corpus pins the
+     defect; the shape lets a later row fix it with an ICU plural key and no kernel change.
+  4. **The three-way readout is in the type.** `PlaceRowReadout` is `eta | headway | none`, because the
+     middle case is the one a renderer forgets: a line with no live arrival but a published headway is not a
+     line with nothing to say. An optional `EtaReadout` would have made that invisible.
+  5. **Rows appear in exactly one place — `groups` or `rows`, never both.** A renderer reading `groups`
+     alone would draw nothing for most of Hong Kong, which is single-pole; one reading both would draw every
+     row twice. Asserted as a property over every corpus case.
+- **Verified, and three things the 100 % branch threshold and the property tests caught that review would
+  not have:**
+  - **An unreachable `?? []`.** `shown` was `orderPoles(...).filter(rows > 0)` and the render site then did
+    `byPole.get(m.id) ?? []` — an arm the filter had already made impossible. The threshold refused to go to
+    100 %, which is the threshold doing precisely the job it was set for. It is a `flatMap` carrying the rows
+    now, so there is no dead branch to cover or to explain.
+  - **A property test that was wrong about a real state.** "Every row is in exactly one place" was written
+    with a per-case *"and there is at least one row"*, which went red on the corpus row for a place with no
+    routes at all. A place with nothing due is a real state; what would have been vacuous is a corpus where
+    *no* case had rows — so the at-least-one check moved to the suite, where it belongs.
+  - **A corpus case that pinned nothing.** The served-policy case was recorded against a departed reading,
+    whose urgency is `none` under any band — so it passed while never exercising the branch, and the driver
+    silently dropping `policy` would not have been noticed either. It is a four-minute arrival now, `normal`
+    under the shipped 180 s band and `soon` under a served 600 s one, and the driver forwards **every**
+    optional argument a case can carry.
+- **Consequences, including what we are accepting:**
+  - 🟡 **"1 routes"** — a live English plural defect, now pinned by the corpus with `routeCount`'s doc naming
+    it. Fixing it is an ICU key in `@nextbus/i18n`, three locales and a re-emit; it is not this row's.
+  - 🟡 **An unreadable pole id yields a heading of `" · Southwest side"`** — a leading separator, because the
+    operator label is empty and the side is appended. Faithful to the RN screen, unreachable by any id in a
+    real build (every canonical id parses), pinned by a corpus case, and worth one line to fix in whichever
+    row next touches the heading.
+  - 🟠 **WP6-3 is not finished, and the split is deliberate.** This is the hoist; the **spec** and the
+    **`apps/web` port** remain, as does the row's stated acceptance — extending `check-no-derivation` to
+    `apps/mobile`'s Place detail. That extension is not a one-line change: the screen has genuine
+    *presentational* arithmetic (`Math.min`/`Math.max` over viewport dimensions for the shrinking map, a
+    `.filter` over a scroll-offset registry) that the gate's shape rules would flag, so it needs the
+    per-site `ALLOWLIST` mechanism `check-view-transport-free` already uses — each entry naming the one rule
+    it exempts, with a stale entry failing as loudly as a violation. Rushing a gate is the one thing worth
+    less than not having it, so it is the next thing rather than a hurried part of this one.
+  - ⚪ **The screen kept its geometry.** `poleDist` survives in the RN screen because `MiniMap` takes
+    coordinates and a group header takes a measured walk — geometry, not content. Everything that composes a
+    *string* left.
+  - **Test totals:** core **857** (+4 tests, +15 corpus cases: 96 groups → 97, 803 cases → 818), edge 149,
+    api-client 71, ui-spec 30, web 83, mobile 65 — 1 255.

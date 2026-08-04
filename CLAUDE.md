@@ -179,7 +179,10 @@ spec** — nine states, eight of them with their own declared projection, both r
 one — which needed two more format words: a state that declares *what it shows* (a screen's states are
 branches over an async status, not fields of a view model) and a slot that *references another spec* (so "a
 list of these cards" is checked, not restated). `apps/web`'s Nearby is now the shipping web Nearby, taps and
-all. **WP6-3 (Place detail) is next.** `watch()` is a real
+all. **WP6-3a is done too** (ADR-085): Place detail's composition — nine decisions that lived in the RN screen
+as loose expressions — is one kernel function, `placeDetailView`, with 15 corpus cases, and the words it joins
+are **injected** rather than imported (ADR-054). **WP6-3b is next:** the spec, the `apps/web` port, and
+extending `check-no-derivation` to `apps/mobile`'s Place detail. `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

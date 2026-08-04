@@ -5,15 +5,17 @@ import {
   dedupeRoutes,
   operatorsOf,
   orderPoles,
+  type PlaceDetailView,
   type PoleDistinction,
   type PoleDistinctionInput,
   type PoleHeading,
+  placeDetailView,
   poleDistinctions,
   poleSideOctants,
   type StopDetailPole,
   type StopDetailRoute,
 } from '../src/stop-detail'
-import type { OperatorId } from '../src/types'
+import type { Locale, OperatorId, ResolvedClientPolicy, StopDetail } from '../src/types'
 import { specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/stop-detail.spec.json.
@@ -242,5 +244,94 @@ describe('stop-detail#poleDistinctions', () => {
         c.name,
       ).toEqual(before)
     }
+  })
+})
+
+describe('placeDetailView', () => {
+  // The composition layer (WP6-3). Every case's `expect` is the whole view, so a change to any of the six
+  // decisions it makes — the heading, the walk, the summary, the grouping, which poles are shown, the
+  // readout fallback — is a corpus diff rather than something a renderer absorbs quietly.
+  //
+  // The `labels` a case is driven with are a *fixture*, not the app's catalogue: the corpus is
+  // language-neutral data, and a Swift suite reading these bytes will supply its own. What the corpus pins
+  // is the composition — where the separators go, what order the parts come in, and what is omitted.
+  const LABELS = {
+    operator: (o: string) => ({ KMB: 'KMB', LWB: 'LWB', CTB: 'Citybus', GMB: 'Minibus' })[o] ?? o,
+    servedBy: 'Served by',
+    routeCount: (n: number) => `${n} routes`,
+    side: (octant: number) =>
+      `${['North', 'Northeast', 'East', 'Southeast', 'South', 'Southwest', 'West', 'Northwest'][octant]} side`,
+  }
+
+  interface Args {
+    detail: StopDetail
+    locale: Locale
+    now: string
+    here?: { lat: number; lng: number }
+    arrivedFromPole?: string
+    policy?: ResolvedClientPolicy
+  }
+
+  /** Every optional argument a case may carry, forwarded — a case whose `policy` the driver dropped would
+   *  record one expectation and assert another, and would pass wherever the band happened not to matter. */
+  const optionsFor = (a: Args) => ({
+    locale: a.locale,
+    now: Date.parse(a.now),
+    labels: LABELS,
+    ...(a.here === undefined ? {} : { here: a.here }),
+    ...(a.arrivedFromPole === undefined ? {} : { arrivedFromPole: a.arrivedFromPole }),
+    ...(a.policy === undefined ? {} : { policy: a.policy }),
+  })
+
+  it('matches the corpus, case for case', () => {
+    const rows = cases<Args, PlaceDetailView>('placeDetailView')
+    // The anti-vacuous control: a group that resolved to nothing would make the loop assert nothing.
+    expect(rows.length).toBeGreaterThanOrEqual(6)
+    for (const c of rows) {
+      const got = placeDetailView(c.args.detail, optionsFor(c.args))
+      expect(got, c.name).toEqual(c.expect)
+    }
+  })
+
+  it('never shows a boarding point with no rows left', () => {
+    // A property over every case rather than one row, because it is what makes the compass side honest: a
+    // side printed to tell a heading apart from one that is not on screen is noise, and `poleDistinctions`
+    // is asked about exactly the set that ends up here.
+    for (const c of cases<Args, PlaceDetailView>('placeDetailView')) {
+      const got = placeDetailView(c.args.detail, optionsFor(c.args))
+      for (const group of got.groups)
+        expect(group.rows.length, `${c.name} / ${group.poleId}`).toBeGreaterThan(0)
+    }
+  })
+
+  it('puts every row in exactly one place — grouped or flat, never both', () => {
+    // The trap a renderer falls into: reading `groups` alone (and drawing nothing for most of Hong Kong,
+    // which is single-pole) or reading both and drawing every row twice.
+    //
+    // The **at-least-one-row check belongs to the suite, not to a case** — which the first draft of this
+    // test got wrong, asserting per case that something was there and then going red on the corpus row for
+    // a place with no routes at all. A place with nothing due is a real state; what would be vacuous is a
+    // corpus where *no* case had rows in either shape.
+    let groupedRows = 0
+    let flatRows = 0
+    for (const c of cases<Args, PlaceDetailView>('placeDetailView')) {
+      const got = placeDetailView(c.args.detail, optionsFor(c.args))
+      const inGroups = got.groups.flatMap((g) => g.rows).length
+      expect(got.grouped ? got.rows.length : inGroups, c.name).toBe(0)
+      groupedRows += inGroups
+      flatRows += got.rows.length
+    }
+    expect(groupedRows, 'no corpus case put rows under a kerb').toBeGreaterThan(0)
+    expect(flatRows, 'no corpus case put rows in a flat list').toBeGreaterThan(0)
+  })
+
+  it('says nothing about distance without a fix', () => {
+    // ADR-008 applied to the rider's position: a distance we cannot measure is not one to estimate. The
+    // summary keeps its direction, its operators and its count; no group carries a walk.
+    const c = cases<Args, PlaceDetailView>('placeDetailView').find((x) => x.args.here === undefined)
+    if (!c) throw new Error('no corpus case is unlocated — the fixture set moved')
+    const got = placeDetailView(c.args.detail, optionsFor(c.args))
+    expect(got.summary).not.toMatch(/walk/)
+    for (const group of got.groups) expect(group.walk, group.poleId).toBeUndefined()
   })
 })

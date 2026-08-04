@@ -2,10 +2,44 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 > Snapshot: **2026-08-03**. **Waves 0–5 are all merged to `main`** (PRs #11–**#21**; `main` is `0c97e17`),
-> and **Wave 6 has started: WP6-0, WP6-1 and WP6-2 are done** on `design-language-reuse-v2`
+> and **Wave 6 has started: WP6-0, WP6-1, WP6-2 and WP6-3a are done** on `design-language-reuse-v2`
 > ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
 > [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),
 > [ADR-084](./08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)).
+> **What WP6-3a is:** the **hoist** half of Place detail — the screen `proposals/04` picks third *"because it
+> has the most domain rules in the app"*, and it was the proof: **nine decisions lived in it as loose
+> expressions**, reachable only by rendering a React tree (the pole heading and its `·`, the per-kerb
+> distances, single walk versus a range, the summary line and *its* two separator widths, the grouping under
+> boarding points, which poles are shown at all, each row's three-way readout, and whether the place is
+> grouped). They are one kernel function now — `placeDetailView`, 15 corpus cases — and the RN screen
+> consumes it, ~90 lines of derivation lighter, with both leaf components reduced to projections
+> ([ADR-085](./08-decision-log.md#adr-085--the-place-screens-composition-is-a-kernel-function-and-the-words-it-joins-are-injected)).
+> **The words it joins are injected, never imported:** the kernel may not import `@nextbus/i18n`, and it
+> should not — ADR-054's line is *core owns the rule, the catalogue owns the word*, and what is a rule is the
+> **joining**, which is exactly what two renderers get subtly different.
+> **Three things the 100 % branch threshold and the property tests caught that review would not have.** An
+> **unreachable `?? []`** at the render site, which the threshold refused to let reach 100 % — a `filter` had
+> already made the arm impossible, and it is a `flatMap` carrying the rows now. A **property test that was
+> wrong about a real state**: "every row in exactly one place" carried a per-case *"and there is at least
+> one"*, which went red on a place with no routes — a place with nothing due is real, so the at-least-one
+> check moved to the suite. And a **corpus case that pinned nothing**: the served-policy row was recorded
+> against a departed reading, whose urgency is `none` under any band, so it passed while exercising nothing —
+> and the driver silently dropping `policy` would not have been noticed either. Both fixed.
+> **Two live defects found and pinned rather than smuggled:** the English summary prints **"1 routes"** (the
+> plural rule is the catalogue's, and taking the noun instead of the phrase is how it happened), and an
+> unreadable pole id yields a heading of `" · Southwest side"` with a leading separator. Both are pinned by
+> corpus cases with owners; a hoist changes no behaviour (WP4-0's rule).
+> ⚠️ **The rewired RN Place screen has NOT been opened in a browser**, and that is the first thing to do
+> before this branch is pushed. The hoist is behaviour-preserving by construction and every *rule* in it is
+> corpus-pinned, but no suite renders that screen — `StopRow` and Nearby are the two surfaces with
+> conformance drivers — so a mistake in the ~90-line JSX rewire (a mis-bound `group.` field, a dropped
+> section) would show only on screen. `pnpm dev` and open a multi-pole place: Tin Shui Wai Park or City Hall.
+> **WP6-3 is not finished, and the split is deliberate:** the **spec**, the `apps/web` **port** and the row's
+> stated acceptance — `check-no-derivation` extended to `apps/mobile`'s Place detail — are **WP6-3b**. That
+> extension is not a one-liner: the screen has genuine *presentational* arithmetic (`Math.min`/`Math.max`
+> over viewport dimensions for the shrinking map, a `.filter` over a scroll-offset registry) that the gate's
+> shape rules would flag, so it needs the per-site `ALLOWLIST` mechanism `check-view-transport-free` already
+> uses. Rushing a gate is worth less than not having it.
 > **What WP6-2 is:** **Nearby has a screen spec, and `apps/web`'s Nearby is the shipping web Nearby.** Nine
 > states — the canonical five plus `content`, `undetermined`, `denied` and `locationError` — eight of them
 > with their own declared projection, and **both renderers are driven through every one**. That needed two
@@ -1015,8 +1049,8 @@ than any in its own row.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**1 251 tests** on `design-language-reuse-v2`: core 853 · edge 149 · api-client 71 ·
-   **ui-spec 30** · mobile 65 · web 83, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has
+3. `pnpm test` (**1 255 tests** on `design-language-reuse-v2`: core 857 · edge 149 · api-client 71 ·
+   **ui-spec 30** · mobile 65 · web 83; corpus 97 groups / 818 cases, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has
    1 161. WP6-1's app totals went *down* by two and that was the intended direction — the bespoke "+N more
    with nowhere to tap" case in each suite became `content-not-affordance` running over **every** corpus
    case) and `curl localhost:8787/v1/health` — locally that reports
@@ -1056,9 +1090,10 @@ than any in its own row.
 > `stop-row.spec.json` and `nearby.spec.json` are the first two instances, both renderers drive both, and
 > `apps/web`'s Nearby is the shipping web Nearby with its taps wired.
 > **WP6-3 (Place detail) is next**, and it is an **L** rather than an M for a reason its row states: it holds
-> the most domain rules in the app (`orderPoles`, `dedupeRoutes`, the kerb keying, `poleSideOctants`, the live
-> merge), so it starts with a WP4-0-style hoist of anything still deriving, and its acceptance is that
-> `check-no-derivation` finally extends to `apps/mobile` — closing the asymmetry ADR-069 recorded and named. Read WP6-0's and WP6-1's
+> the most domain rules in the app — **and its hoist half (WP6-3a) is done**, so what is left is **WP6-3b**:
+> the spec, the `apps/web` port, and the gate extension that closes ADR-069's recorded asymmetry. Start with
+> the gate's per-site `ALLOWLIST`, because the Place screen has presentational arithmetic the shape rules
+> would flag and the exemptions must each name the one rule they exempt. Read WP6-0's and WP6-1's
 > unanticipated findings in `proposals/04`'s work-package note first; two of them (the destination set as
 > identity, the storage-key hazard) change what a later row has to do.
 > **WP0-5 still ships the Expo PWA first**, and
