@@ -895,3 +895,69 @@ function placeRouteRow(
         : { kind: 'none' },
   }
 }
+
+/**
+ * A map pin, after poles that publish the **same coordinate** have been folded into one.
+ *
+ * `ids` is plural because that is the fact: at Tin Shui Wai Park two of the three members publish
+ * `22.45448, 114.00297` — not "close", the identical point — so no zoom level can separate them and two
+ * dots drawn there are one dot with two labels stacked invisibly on top of each other. This is the same
+ * population ADR-071 and ADR-080 exist for, seen from the map instead of from the list, and it is worth
+ * being precise about what the two surfaces can do: **the list can tell those kerbs apart and the map
+ * structurally cannot.** So the map says "one spot, these poles" rather than pretending to place them.
+ */
+export interface MapPin {
+  /** Every pole at this coordinate, in the caller's order. One entry is the ordinary case. */
+  ids: string[]
+  location: LatLng
+  /**
+   * The operator, kept **only when every folded pole agrees**. A pin where a KMB and a Citybus pole share
+   * a coordinate has no single brand colour, and picking the first pole's would state something the data
+   * does not — the neutral pin is the honest answer, the same call `parseStopId` makes for a merged `P:` id.
+   */
+  operator?: OperatorId
+  /** The folded poles' labels, joined — "TN511 · TN510". Absent when none of them had one. */
+  label?: string
+}
+
+/**
+ * Fold pins that share a coordinate.
+ *
+ * Exact coordinate equality, deliberately, rather than a pixel or metre threshold: whether two poles are
+ * *published at the same point* is a fact about the data that every renderer will agree on, while "close
+ * enough at this zoom" is a different answer per viewport and per platform. Poles a metre or two apart
+ * still get their own dot — `MiniMap` already flips a label above its dot when another sits directly
+ * below, which handles that case; what it cannot handle is a separation of zero.
+ *
+ * @spec stop-detail#mergeCoincidentPins
+ */
+export function mergeCoincidentPins(
+  points: readonly { id: string; location: LatLng; operator?: OperatorId; label?: string }[],
+): MapPin[] {
+  const byCoordinate = new Map<string, MapPin>()
+  for (const point of points) {
+    const key = `${point.location.lat},${point.location.lng}`
+    const existing = byCoordinate.get(key)
+    if (existing === undefined) {
+      byCoordinate.set(key, {
+        ids: [point.id],
+        location: point.location,
+        ...(point.operator === undefined ? {} : { operator: point.operator }),
+        ...(point.label === undefined ? {} : { label: point.label }),
+      })
+      continue
+    }
+    existing.ids.push(point.id)
+    // Disagreeing operators leave the pin neutral; see `MapPin.operator`.
+    if (existing.operator !== point.operator) existing.operator = undefined
+    // A label already present is extended; a duplicate is not repeated, because two poles publishing the
+    // same code at the same point is one printed code as far as a rider standing there is concerned.
+    if (point.label !== undefined) {
+      const parts = existing.label === undefined ? [] : existing.label.split(' · ')
+      if (!parts.includes(point.label)) {
+        existing.label = [...parts, point.label].join(' · ')
+      }
+    }
+  }
+  return [...byCoordinate.values()]
+}
