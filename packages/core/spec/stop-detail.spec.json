@@ -4934,6 +4934,290 @@
           }
         }
       ]
+    },
+    "mergeCoincidentPins": {
+      "doc": "Poles that publish the SAME coordinate become one map pin. Exact equality rather than a distance threshold, because whether two poles are published at one point is a fact every renderer agrees on, while \"close enough at this zoom\" is a different answer per viewport. This is ADR-071/ADR-080's population seen from the map: the list can tell those kerbs apart and the map structurally cannot, so the pin says \"one spot, these poles\".",
+      "cases": [
+        {
+          "name": "a-lone-pin-is-untouched",
+          "why": "The answer for all but ~120 places in the build, and the case that must be free of this rule's effects — a single pole keeps its id in a one-element list, its operator and its label.",
+          "args": {
+            "points": [
+              {
+                "id": "CTB:001992",
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB",
+                "label": "001992"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "ids": ["CTB:001992"],
+              "location": {
+                "lat": 22.45453,
+                "lng": 114.00295
+              },
+              "operator": "CTB",
+              "label": "001992"
+            }
+          ]
+        },
+        {
+          "name": "two-poles-at-one-coordinate-fold-into-one-pin",
+          "why": "Tin Shui Wai Park, from a real build: two of three members publish 22.45448,114.00297 — identical, not close — so two dots drawn there are one dot with two labels invisibly stacked. Folded, the pin names both codes and keeps both ids so the list's scroll-spy can still highlight it.",
+          "args": {
+            "points": [
+              {
+                "id": "CTB:001992",
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB",
+                "label": "001992"
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511"
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "ids": ["CTB:001992"],
+              "location": {
+                "lat": 22.45453,
+                "lng": 114.00295
+              },
+              "operator": "CTB",
+              "label": "001992"
+            },
+            {
+              "ids": ["KMB:775642281FBFE336", "KMB:AFB9321F7CD2C2E4"],
+              "location": {
+                "lat": 22.45448,
+                "lng": 114.00297
+              },
+              "operator": "KMB",
+              "label": "TN511 · TN510"
+            }
+          ]
+        },
+        {
+          "name": "poles-a-metre-apart-keep-their-own-pins",
+          "why": "The rule's boundary, and why it is exact equality: a two-metre separation is still two dots, which MiniMap already handles by flipping one label above its own dot. What it cannot handle is a separation of zero.",
+          "args": {
+            "points": [
+              {
+                "id": "KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511"
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "ids": ["KMB:775642281FBFE336"],
+              "location": {
+                "lat": 22.45448,
+                "lng": 114.00297
+              },
+              "operator": "KMB",
+              "label": "TN511"
+            },
+            {
+              "ids": ["KMB:AFB9321F7CD2C2E4"],
+              "location": {
+                "lat": 22.45447,
+                "lng": 114.00297
+              },
+              "operator": "KMB",
+              "label": "TN510"
+            }
+          ]
+        },
+        {
+          "name": "two-operators-at-one-coordinate-leave-the-pin-neutral",
+          "why": "A pin where a KMB and a Citybus pole share a point has no single brand colour, and picking the first pole's would state something the data does not — the same call `parseStopId` makes for a merged `P:` id.",
+          "args": {
+            "points": [
+              {
+                "id": "KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511"
+              },
+              {
+                "id": "CTB:001992",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "CTB",
+                "label": "001992"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "ids": ["KMB:775642281FBFE336", "CTB:001992"],
+              "location": {
+                "lat": 22.45448,
+                "lng": 114.00297
+              },
+              "label": "TN511 · 001992"
+            }
+          ]
+        },
+        {
+          "name": "the-same-code-published-twice-is-printed-once",
+          "why": "The two poles at Tin Shui Wai Park that BOTH print TN510 (ADR-071's own example). \"TN510 · TN510\" would read as two different kerbs; one printed code is what a rider standing there actually sees.",
+          "args": {
+            "points": [
+              {
+                "id": "KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              },
+              {
+                "id": "KMB:AFB9321F7CD2C2E4",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "ids": ["KMB:775642281FBFE336", "KMB:AFB9321F7CD2C2E4"],
+              "location": {
+                "lat": 22.45448,
+                "lng": 114.00297
+              },
+              "operator": "KMB",
+              "label": "TN510"
+            }
+          ]
+        },
+        {
+          "name": "a-pole-with-no-printed-code-contributes-no-label",
+          "why": "A GMB pole rarely publishes a code. Folding it must not produce a stray separator, and folding two of them must leave the pin unlabelled rather than labelled with an empty string.",
+          "args": {
+            "points": [
+              {
+                "id": "GMB:1",
+                "location": {
+                  "lat": 22.3,
+                  "lng": 114.1
+                },
+                "operator": "GMB"
+              },
+              {
+                "id": "GMB:2",
+                "location": {
+                  "lat": 22.3,
+                  "lng": 114.1
+                },
+                "operator": "GMB"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "ids": ["GMB:1", "GMB:2"],
+              "location": {
+                "lat": 22.3,
+                "lng": 114.1
+              },
+              "operator": "GMB"
+            }
+          ]
+        },
+        {
+          "name": "no-pins-at-all",
+          "why": "An empty list in, an empty list out — the shape a place whose members have not loaded yet hands in, and one a port is likely to guard against with a null instead.",
+          "args": {
+            "points": []
+          },
+          "expect": []
+        },
+        {
+          "name": "an-unlabelled-pole-folded-first-does-not-eat-the-next-ones-code",
+          "why": "Order matters to the label and this is the arm a first draft got wrong: an unlabelled pole seen FIRST must leave the joined label as the second pole's code alone, with no leading separator. The reverse order is the guard that skips an absent label, so both directions need a row.",
+          "args": {
+            "points": [
+              {
+                "id": "GMB:20001553",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "GMB"
+              },
+              {
+                "id": "KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "ids": ["GMB:20001553", "KMB:775642281FBFE336"],
+              "location": {
+                "lat": 22.45448,
+                "lng": 114.00297
+              },
+              "label": "TN511"
+            }
+          ]
+        }
+      ]
     }
   }
 }

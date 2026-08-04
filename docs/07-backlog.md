@@ -92,6 +92,22 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
+- [x] ✅ **A walk of hours reads as hours** (2026-08-04, `formatWalk`/`formatWalkRange`, ADR-086). A
+      location fix outside Hong Kong put **"270 min walk"** under a place name — honest arithmetic that a
+      rider has to do in their head. Past an hour it is now `4.5 hr walk` / `4.5 小時路程`, one decimal, and a
+      range takes one unit for both ends chosen by the larger. Capping the value was the alternative and it
+      loses: "more than an hour away" is not what we measured, whereas a badly-scaled number merely reads as
+      a bug in the app. Every such reading is degenerate by construction — nobody walks an hour to a bus
+      stop — which is the argument for formatting them *well* rather than for hiding them.
+- [ ] **The English summary can print "1 routes"** — `routesLabel` is a bare noun, so the count and the
+      plural are decided in two places and only one of them knows about `n`. `placeDetailView` already
+      takes the whole phrase (`routeCount: (n) => string`), so the fix is an ICU plural key in
+      `@nextbus/i18n` and its three locales, then passing it — no kernel change. Pinned by a corpus case so
+      it cannot be fixed by accident and unnoticed.
+- [ ] **A pole id we cannot parse yields a heading of `" · Southwest side"`** — a leading separator,
+      because the operator label is empty and the side is appended. Unreachable by any id in a real build
+      (every canonical id parses) and pinned by a corpus case; one line to fix in whichever row next
+      touches `poleHeading`, by joining the present parts rather than concatenating.
 - [ ] Service-disruption / special-traffic-news surfacing (TD incident data).
 - [ ] Per-route remarks (e.g. "last bus departed", schedule-based vs GPS-based ETA labelling).
 - [ ] Crowding / occupancy data (if/when published).
@@ -171,6 +187,20 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 - [ ] **Vintage / paper-timetable mode** — skeuomorphic ticket-and-timetable aesthetic.
 
 ### Live map & motion
+- [x] ✅ **Poles that publish the same coordinate are folded into one pin** (2026-08-04,
+      `mergeCoincidentPins`, ADR-086). Found by opening Tin Shui Wai Park: two of its three members
+      publish `22.45448, 114.00297` — identical, not close — so two dots were drawn at the same screen
+      point with their labels invisibly stacked, and scrolling the list appeared to *swap* a pole's label
+      rather than highlight it. The pin now reads `TN511 · TN510`, keeps both ids so the scroll-spy can
+      still light it, and goes neutral where the folded poles disagree about the operator. The label-above
+      flip already handled poles a metre or two apart; a separation of **zero** is what it could not help
+      with. This is ADR-071/ADR-080's population seen from the map, and the useful way to put it is that
+      **the list can tell those kerbs apart and the map structurally cannot** — which is why the
+      compass-side / pole-name / "check the sign" tiers exist at all.
+- [ ] **A folded pin has no way to say *which* of its poles you tapped**, and it deliberately does not
+      guess: a tap scrolls to the first, and the list is where the rider reads which is which. If the map
+      ever becomes interactive (below), the honest treatment is a small fan or a two-row callout rather
+      than picking one.
 - [ ] **Build out the stop/place map from a static image into a real feature** — today `MiniMap`
       ([`apps/mobile/components/MiniMap.tsx`](../apps/mobile/components/MiniMap.tsx), ADR-041) is a
       **static** raster — LandsD basemap + per-locale label overlay via the `TileSource` seam
