@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:web": "node --import tsx scripts/build-web.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node ./scripts/check-no-derivation.mjs && vitest run"
@@ -16,13 +17,19 @@
     "@nextbus/i18n": "workspace:*",
     "@nextbus/ports": "workspace:*",
     "@nextbus/ui": "workspace:*",
+    "@tanstack/query-sync-storage-persister": "^5.101.4",
     "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-query-persist-client": "^5.101.4",
     "lucide-react": "^0.549.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-router": "7.18.2",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@nextbus/contract": "workspace:*",
     "@nextbus/tsconfig": "workspace:*",
+    "@nextbus/ui-spec": "workspace:*",
     "@types/react": "~19.2.2",
     "@types/react-dom": "~19.2.2",
     "@vitejs/plugin-react": "6.0.4",
@@ -32,6 +39,7 @@
     "tailwindcss": "3.4.17",
     "typescript": "5.9.3",
     "vite": "8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "workbox-build": "^7.4.1"
   }
 }

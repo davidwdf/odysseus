@@ -40,10 +40,19 @@ const REPO = join(APP, '..', '..')
  *
  * `src/adapters/` is **exempt by the acceptance criterion itself** — an adapter's whole job is to
  * reconcile a platform API with a port, which means branching on `navigator.permissions` and mapping
- * error codes. `src/hooks/` is exempt for the same reason: those are ten-line shims over
- * `createLocationController` and `useQuery`. Everything that renders is policed.
+ * error codes. `src/hooks/`, `src/lib/` and `src/providers/` are exempt for the same reason: those are
+ * ten-line shims over `createLocationController`, `useQuery`, `persist` and a React context, and the
+ * *rules* they wire (`resolveLocale`, `resolveMode`, `resolveClientPolicy`) all live outside this app
+ * already. Everything that renders is policed.
+ *
+ * **`src/shell/` was added in the commit that created it (WP6-0)**, which is this file's standing rule
+ * and the one that `check-no-raw-colours` states at length: a directory absent from this list is the
+ * `from` of no rule at all, so a whole new renderer surface would be silently unpoliced while the gate
+ * kept reporting ✓. The shell is exactly where a derivation is *tempting* — a tab bar wants to
+ * `.filter()` the destination table, a placeholder wants to `.slice()` an id — so the destination set is
+ * declared as two arrays and spread rather than as one array and filtered.
  */
-const POLICED = ['src/components/', 'src/screens/']
+const POLICED = ['src/components/', 'src/screens/', 'src/shell/']
 
 const RULES = [
   {

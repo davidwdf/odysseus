@@ -270,6 +270,22 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 ---
 
 ## 5. Motion tokens (Reanimated)
+
+> **Partly superseded by the component specs (2026-08-03, WP6-2 —
+> [ADR-075](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+> decision 2, [ADR-084](./08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)).**
+> Under the invariant/idiom line, **motion is idiom**: what is *shared* is the **intent** and the
+> **reduced-motion behaviour**, and the curve, the duration, the physics and *whether it moves at all* are
+> each renderer's. So the durations, easings and per-page transitions below are **`apps/mobile`'s recipe**,
+> not a cross-platform requirement — the web app cuts where the RN app slides, deliberately, and a native
+> iOS or Android client will choose its own.
+> What survives as identity, and is asserted rather than described: **reduced motion must not change the
+> content.** Each spec declares that as `a11y.reducedMotion`, and `packages/contract/ui/nearby.spec.json`
+> lists motion under `idiom` by name — because "flexible" only means something when it is enumerated.
+> The **ETA update** bullet at the end of this section is the one part still awaiting a home: it describes a
+> component (`EtaBadge`) that has no spec of its own yet, living inside `StopRow`'s as three `oneOf`
+> branches. Owner: the row that gives the readout its own spec.
+
 - **Durations:** `fast` 120ms · `base` 200ms · `slow` 320ms (micro-interactions 150–300ms).
 - **Easing:** ease-out entering, ease-in exiting; spring for playful toggles (favourite, sheet drag).
 - **Rules:** animate **1–2 elements per view**; transform/opacity only; no infinite decorative loops.
@@ -289,6 +305,20 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 ---
 
 ## 6. ETA display spec (the signature component)
+
+> **Superseded in kind, and kept as the design intent it always was (2026-08-03, WP6-2).** ADR-075 decision 3
+> is explicit that *"a component spec is data validated by a schema, never prose"* — and it names this section
+> as the reason: it has been titled "spec" since Wave 1, it is prose, and **the imminence band it describes was
+> written down four times with two different values** until WP4-0 hoisted it into `etaUrgency`. The executable
+> version of the parts below now lives in two places, both machine-checked:
+> the **rules** in `packages/core` (`etaUrgency`, `etaReadout`, `etaLabelParts`, `isStale`, `formatClock`),
+> pinned by `packages/core/spec/eta.spec.json`; and **what a renderer must draw** in
+> `packages/contract/ui/stop-row.spec.json`, where the readout is a `oneOf` over `label.kind` with `mins`,
+> `due` and `departed` branches, and ADR-008's no-countdown rule is its declared invariant.
+> Read this section for the *intent*; read the spec for what is enforced. Three of its bullets are **not yet
+> anywhere else** and are therefore still aspirations rather than requirements: the user-selectable clock
+> toggle, the "updated 12s ago" freshness chip as a *chip*, and the spelled-out screen-reader sentence.
+
 - Big **tabular** numeral + unit (`7 min`) **or** absolute clock (`3:42`); user-selectable, smart
   default (minutes when small, clock when large). Sub-minute → **"Arriving" / "Due"**.
 - Coloured by `eta-*` urgency token **and** an icon — never colour alone.

@@ -5545,3 +5545,513 @@ pre-existing and unaddressed; it earned its keep here.
     one bulk call, so the failure is all-or-nothing.
   - **Test totals:** core 853 (+14), edge 149 (+2), api-client 71, mobile 56 (+3), web 32. Corpus 96 groups
     / 803 cases.
+
+## ADR-082 — The web shell before the web screens: a router over a declared destination set, and one PWA policy for two apps
+- **Status:** **Decided and implemented 2026-08-03** (WP6-0, the first row of Wave 6 —
+  [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md)). Implementation: `apps/web/src/shell/`
+  (`App.tsx`, `destinations.ts`, `TabBar.tsx`, `Placeholder.tsx`, `BackButton.tsx`,
+  `ShellPreferences.tsx`, `layout.ts`), `apps/web/src/providers/` (`QueryProvider`, `LocaleProvider`),
+  `apps/web/src/lib/` (`preferences`, `appearance`, `serviceWorker`), `apps/web/src/main.tsx`,
+  `apps/web/index.html`, `apps/web/scripts/build-web.mjs`, `apps/web/public/` (generated), and — shared —
+  `scripts/pwa/workbox.config.mjs` moved out of `apps/mobile/` plus `scripts/gen-icons.mjs` emitting into
+  both web roots. **No kernel, contract, edge or dataset change.** Pinned by 41 new tests in
+  `apps/web/test/{shell,shell-parity}.test.ts{x,}` and `test/pwa-policy.test.mjs`, each watched failing on
+  an injected defect.
+- **Context.** [ADR-075](#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+  makes `apps/web` the web renderer and `apps/mobile` the reference implementation until WP6-8. It also
+  names WP6-0's own risk: *"the `apps/web` shell buys nothing a rider can see, and it is the largest package
+  before any screen moves. Porting a screen first and bolting the shell on after would make every screen's
+  spec provisional."* What `apps/web` had after Wave 4 was one screen and no shell at all — no router, no
+  persisted query cache, no locale override, no appearance store, no service worker, no manifest. Its own
+  `Nearby` said so in a comment listing four things *"deliberately absent"*.
+  **The two halves of the acceptance pull against each other**, and that tension is what most of this ADR
+  is about: *"opens offline and switches locale, with **zero screens ported**"*. A locale override nothing
+  can operate is a claim about plumbing rather than a thing that was run, and this repo's standard is that
+  a claim is exactly as large as what has been measured.
+- **Decisions:**
+  1. **The destination set is declared as data, and a test binds it to expo-router's.** ADR-075's
+     invariant/idiom table puts *the destination set and back semantics* on the **identity** side and the
+     chrome that expresses them on the idiom side, so `src/shell/destinations.ts` holds the paths, the
+     names' catalogue keys, and the tab order — and `test/shell-parity.test.ts` derives the same set from
+     `apps/mobile/app/**`, the file-based routes expo-router actually serves, and fails on a disagreement.
+     The paths are **byte-identical**, including `/favorites` with its American spelling (CLAUDE.md rule 5
+     exempts route names, and a shared destination set means a bookmarked deep link resolves the same on
+     either renderer — a URL is not a label).
+     The exclusion list has one entry, `/workbench`, with a reason, and a second assertion requires every
+     entry in it to still name a real route — so the list cannot quietly grow into "the sets match because
+     we stopped comparing".
+  2. **An unported destination renders a `Placeholder`, not a 404 and not a silent redirect.** The router
+     serves all eight paths from day one. ADR-075's own state rule is that each of loading / empty / error /
+     stale / offline must be distinguishable and non-blank; *"not built yet"* is a state of the same kind,
+     and the alternative — a table listing only Nearby — makes every other destination read as **broken**
+     rather than as not yet here. Each unported destination names the work package that ports it, and a
+     test requires that: a route whose placeholder nobody has agreed to replace is a promise, not a plan.
+     **No new catalogue string was needed** — `comingSoon` was already there in all three locales — and that
+     was a constraint rather than luck. Scaffolding that adds keys to `@nextbus/i18n` leaves them behind in
+     the generated Swift `.strings` and Kotlin `strings.xml` long after the scaffolding is gone.
+  3. **The tabs are a layout route, so the pushed destinations have no tab bar and do have a way back.**
+     expo-router expresses that as the `(tabs)` group with its own `_layout`; `<Route element={<TabsLayout/>}>`
+     is the identical shape. Getting it right is what preserves [ADR-037](#adr-037--search-is-its-own-page-launched-from-a-glass-button-that-shares-the-tab-bars-row)'s
+     decision that search is its own page rather than a fourth tab. It also forces the question a stack
+     answers for free: **back is a history pop *except* on a cold arrival**, where `navigate(-1)` would leave
+     the site — or, in an installed PWA's standalone window, do nothing at all and strand the rider with no
+     browser chrome to escape by. `useNavigationType() === 'PUSH'` distinguishes the two; a cold arrival goes
+     *up* to Nearby instead.
+  4. **The shell carries the smallest possible locale + appearance control, and it is named as a deletion.**
+     `ShellPreferences` is what makes *"switches locale"* something that was run. It deliberately is **not**
+     the Settings screen — no sections, no glass, no `Text` primitive, no spec — and WP6-7 replaces it with
+     the spec'd screen and deletes the file. It shares with the RN screen everything that is identity: the
+     same catalogue keys, the same option order, `null` for *follow the device*, and language names as
+     **endonyms**, because a reader whose UI is in the wrong language must still be able to find their own.
+  5. **The web preferences store owns a different storage key from the RN one, and that is data safety
+     rather than tidiness.** zustand's `persist` writes `partialize`'s output as the **whole** blob, so a
+     store modelling two fields does not preserve the other four — it erases them. A shell store writing
+     `nextbus.preferences` would therefore delete every favourite a rider had curated: not in dev, where
+     Expo is on :8081 and Vite on :8082 and localStorage is per-origin, but at **WP6-8**, the moment
+     `apps/web` is served from the domain the Expo PWA was installed from. Silently, with no error anywhere.
+     So the shell writes `nextbus.shell.v1`, a test asserts the two keys differ *and* that the RN store
+     really does still hold favourites under its own, and **WP6-4 hoists ADR-062's versioned favourite-key
+     migration to a home both renderers call** when it ports the screen that needs it. Modelling favourites
+     here instead would have meant a second implementation of that migration, which is the shape of every
+     defect Wave 5 found in its own live code.
+     The **query persister key is deliberately the same** in both apps, which is safe for the opposite
+     reason: both write the library-owned `PersistedClient` shape over identical query keys, so a rider
+     whose Expo PWA is replaced by this build keeps their cache instead of cold-starting.
+  6. **The appearance is applied before the first render, which is what makes the storage choice
+     load-bearing.** `apps/mobile` holds its splash screen until AsyncStorage has rehydrated; there is no
+     splash screen here, so `main.tsx` calls `applyMode(currentMode())` *before* `createRoot().render`, and
+     that is only honest because the preference is read through a **synchronous** `localStorage` wrapper
+     rather than through the async `KeyValueStore` port. One try/catch serves all three sync consumers
+     (`persist`, the query persister, and the port itself), because `localStorage` throws rather than
+     returning null in Safari private browsing and in a partitioned context.
+     The rule is shared: `resolveMode(appearance, systemIsDark)` from `@nextbus/ui`, the same call the RN
+     `useTheme` makes. Only the mechanism differs — a class on `<html>` here, NativeWind's `vars()` there.
+     `theme-color` is **created from the token** rather than declared in `index.html`, so the browser chrome
+     tracks a light/dark switch instead of being pinned to one, and there is no fourth copy of the ink hex.
+  7. **One Workbox policy, two consumers.** `apps/mobile/workbox.config.mjs` moved to `scripts/pwa/`, along
+     with the five assertions over the emitted `sw.js`. The caching policy *is* [ADR-058](#adr-058--offline-is-a-service-worker-a-persisted-query-cache-and-a-remembered-fix--not-a-new-data-tier) —
+     live ETAs network-first and never cache-first (ADR-008), tiles cached only once seen and never
+     precached (LandsD's terms), the shell precached or nothing else is reachable — and for the rest of
+     Wave 6 two PWAs ship at once, so two copies of it could disagree about what a rider sees with no
+     network. Sharing removes that drift and introduces a different risk in its place, which is why
+     `test/pwa-policy.test.mjs` now asserts the policy's shape on every `pnpm test`: one edit here changes
+     what both apps do offline, and every way it could break is silent. The manifest and its icons are
+     likewise emitted from **one** generator run into both web roots, with `theme_color` read from the ink
+     token instead of hand-copied (it had been a hand-maintained hex; WP6-0 would have made it a third copy).
+  8. **`react-router` is pinned to 7.18.2, not the current 8.3.0, and the reason is worth recording.**
+     Router 8 requires `react >= 19.2.7`; this repo pins React to **19.2.3** because that is what the Expo
+     SDK aligns to (golden rule 6). So **the Expo SDK still constrains the plain-React app's dependency
+     choices until WP6-8**, which is a small, concrete instance of the tax ADR-075 itemised — and the first
+     one to arrive *after* the decision rather than before it. Router 7's `<Link>`/`<NavLink>` also do two
+     jobs a hand-rolled router would have to redo: they render real `<a href>` elements (middle-click, open
+     in new tab, a screen reader's link list) and set `aria-current="page"`, which is the DOM's way of
+     saying `accessibilityState: { selected }`.
+  9. **An unknown path redirects to Nearby rather than rendering a "not found" page.** A content decision,
+     not a lazy one: every string comes from the catalogue, the catalogue has no such message, and inventing
+     one in three locales to describe a URL a rider cannot have typed on purpose is the wrong trade.
+     `replace` keeps the bad URL out of history so back does not bounce off it.
+- **Why the alternatives lose:**
+  - **Port a screen first, add the shell after.** ADR-075's named risk. Every screen's spec would be
+    provisional: navigation, the locale, the appearance and offline all change what a screen must declare.
+  - **Only route the one screen that exists.** Then a deep link or a tap to any other destination 404s or
+    silently bounces, which reads as broken. It also leaves the destination set — an identity — undeclared,
+    so nothing could compare it.
+  - **A hand-rolled router.** Cheaper by one dependency, and it owes back/forward, real anchors, focus and
+    nested layouts. The shell is also the part ADR-075 decision 7 expects to travel to a second app; the
+    boring standard travels better than a bespoke one.
+  - **Share the RN preferences store, or its storage key.** Data loss, per decision 5.
+  - **Hoist the cache constants into `packages/core`.** Tempting, and wrong in the same way ADR-075 warns
+    about in reverse: the kernel is hand-ported to Swift and Kotlin, and a TanStack storage key means
+    nothing to either. *"A `ui-spec` that has grown a `stopId` is the early warning"* — a kernel that has
+    grown a `PERSIST_KEY` is the same mistake pointed the other way. A test binds the two copies instead,
+    and the duplication is **deleted** rather than resolved when `apps/mobile` retires.
+  - **An inline `<script>` in `index.html` to kill the pre-bundle theme flash.** It would be a second
+    declaration of both the storage key and the meaning of `auto`, in a file no gate reads. The residual —
+    a light flash for as long as the module takes to parse, which the service worker reduces to a frame or
+    two once installed — is accepted and written down instead.
+- **Verified by running, not by reasoning:**
+  - `pnpm --filter @nextbus/web build:web`, then the ADR-058 measurement: served `dist/`, loaded the app,
+    then **killed the static server** and cold-loaded — the shell opened, the tab bar worked, `/settings`
+    resolved through `navigateFallback`, and the language and appearance chosen before the kill were still
+    in force. The full trace is in [`docs/11`](./11-status.md).
+  - `pnpm --filter @nextbus/mobile build:web` still produces its service worker from the moved config, so
+    the shared home did not break the renderer that ships today.
+  - **Every new assertion was watched failing on an injected defect**, which is this repo's standing rule
+    and the only reason the numbers below mean anything: a dropped destination, the shell store taking over
+    the favourites blob, `staleTime` drifting from the RN provider's, live ETAs turned cache-first, and the
+    locale override and the appearance each dropped from `partialize` in turn.
+- **Consequences, including what we are accepting:**
+  - **The first draft of the parity harness passed while asserting nothing, and the injection pass is what
+    caught it** — twice over, which is the useful part. It resolved `apps/mobile` from `import.meta.url`,
+    which under the jsdom environment is an `http://localhost/…` URL that `fileURLToPath` rejects, so the
+    file failed at *import*: vitest reported a failed **file** rather than failed **tests**, the totals
+    still looked plausible, and its own anti-vacuous control could not run. Then `remount()` did not reset
+    the preference store — module state, so a value set by a click was still in memory — and both
+    persistence assertions passed with `partialize` gutted. Neither would have been found by reading the
+    tests, and neither was found by them passing.
+  - 🟠 **`ShellPreferences` is scaffolding with an owner, which is the best available version of a bad
+    thing.** It is real UI, held to no spec, and the mechanism keeping it honest is a name in `docs/11` and
+    in WP6-7's row rather than a gate. If WP6-7 slips, an unspecified surface ships.
+  - 🟠 **`apps/web` now has two ways to be wrong that it did not have as a one-screen proof:** a route table
+    and a persisted store. Both are covered by tests that read `apps/mobile`, and **both of those tests die
+    at WP6-8** — after which the destination set is declared in one place and compared against nothing until
+    WP6-9 gives it a second reader. That is ADR-075's own "exactly one renderer measured against the spec"
+    risk arriving early, in the shell rather than in a screen.
+  - 🟡 **The placeholder is a *rendered* claim about work that has not happened.** Anyone reading the app
+    at any point in Wave 6 sees seven "coming soon" pages, and that is the honest state — but it is also a
+    thing a screenshot can misrepresent. `docs/11` says which single screen is real.
+  - 🟡 **A light flash before the bundle parses**, per the alternatives above. Bounded, understood, not
+    fixed.
+  - 🟡 **`check-no-derivation` grew a policed directory in the same commit that created it**, which is the
+    rule `check-no-raw-colours` states at length and the reason the shell's tab list is two arrays spread
+    together rather than one array filtered: a `.filter()` over the destination table is exactly the
+    derivation the gate exists to stop, and the declaration is the cheaper answer anyway.
+  - ⚪ **`pnpm dev:dom` and `pnpm --filter @nextbus/web build:web` are the two commands that change**;
+    `docs/10` carries both. `pnpm dev:web` still means the Expo PWA, which is still what WP0-5 ships.
+  - **Test totals:** core 853, edge 149, api-client 71, mobile 56, **web 73 (+41)**. Corpus unchanged at 96
+    groups / 803 cases — WP6-0 added no kernel rule, which is the point.
+
+## ADR-083 — A component spec is data with five words, and the projection is what pins it
+- **Status:** **Decided and implemented 2026-08-03** (WP6-1, the second row of Wave 6 —
+  [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md)). Implementation: a new
+  **`packages/ui-spec`** (`src/schema.ts`, `src/project.ts`, `src/conform.ts`, and
+  `scripts/check-no-domain-vocabulary.mjs`), **`packages/contract/src/ui/stop-row.ts`** with
+  `scripts/emit-ui-specs.mts` + `scripts/check-ui-specs-current.mjs` emitting and gating
+  `packages/contract/ui/stop-row.spec.json`, both renderers' suites rewritten to drive the walker
+  (`apps/web/test/nearby-projection.test.tsx`, `apps/mobile/test/stoprow-projection.test.tsx`), a `uiSpec`
+  layer in `layers.json`, and declared turbo `inputs` for the three tasks that read the new artefact.
+  **Neither component changed** — `StopRow.tsx` and `StopCard.tsx` are untouched, which is the acceptance.
+  Pinned by 21 new tests over the format itself and 47 conformance runs across the two renderers, each
+  gate watched failing on an injected defect.
+- **Context.** [ADR-075](#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
+  decision 3 says *"a component spec is data validated by a schema, never prose"*, names
+  `packages/ui-spec` and `packages/contract/ui/` as its two homes, and leaves the format itself to be
+  designed. `proposals/04` picks `StopRow` first for a reason worth restating: **two renderers already draw
+  it and already agree**, so writing its spec validates the format for free — *"if the format cannot
+  express a screen that demonstrably works, the format is wrong, and we learn that in an afternoon instead
+  of at screen five."*
+  What each renderer had instead was a hand-written `expectedText(view)` — 20 lines naming which fields a
+  card shows and in what order — **deliberately duplicated**, with
+  [ADR-069](#adr-069--a-second-renderer-and-what-it-caught-in-the-first) decision 7's reasoning that a
+  shared helper lets one edit silently relax every renderer at once.
+- **Decisions:**
+  1. **The format's vocabulary is five words, and it was validated by retrofitting rather than by design.**
+     `field` · `message` · `literal` · `each` · `oneOf`, plus `when` as a **path tested for truthiness**.
+     Every one is there because `StopRow` could not be expressed without it: a repeated row list needs
+     `each`, an ETA readout that is either number-plus-unit, a word, or a dash needs `oneOf`, and the arrow
+     before a destination is a `literal` the renderer supplies. **There is deliberately no expression
+     language.** `when` cannot say `> 0`, because the moment a spec needs a comparison the number belongs
+     in the view model — which is exactly the argument `check-no-derivation` already makes to a renderer.
+     One rule covers four conditionals (an empty caption, an absent code, a zero count, a false flag),
+     because JavaScript's falsiness covers all four.
+  2. **The check is exact equality, and that is what makes a shared spec safe.** ADR-075 accepts *"a shared
+     spec is a shared bug"* as a cost. Equality turns most of that cost back into a gate: the spec is
+     pinned **from both sides** — drop a slot and the renderers show text the projection does not; invent
+     one and the projection expects text nobody draws. Either way both suites go red together. Measured,
+     not argued: deleting the `caption` slot from the spec fails 19 of 24 cases on `apps/web` and 20 of 23
+     on `apps/mobile`; adding a slot no renderer draws fails 21 and 22.
+     **The residual is named rather than hidden:** a rule that *neither* renderer implements and the spec
+     does not mention is invisible to all of this. Only an independent third renderer closes it (WP6-9).
+  3. **The declaration is shared; the reading is not.** `project()` is one statement of what a component
+     shows. Building a tree and reading text and tap targets back out of it stays per renderer — and the
+     two are genuinely different: `apps/web` writes a real `<button>` where `react-native-web` renders a
+     `Pressable` as `div[role="button"]`, so the suites' selectors differ. That is where a
+     renderer-specific mistake lives, so ADR-069 decision 7 survives exactly where it applies. What retires
+     is `expectedText`, which was a *specification* written twice.
+  4. **Three universal checks, not per-component flags.** `slots` (the text is exactly the projection, in
+     order); **`content-not-affordance`** (the same text with every handler withheld); `sibling-not-nested`
+     (no interactive element inside another, with an anti-vacuous control that a spec declaring interaction
+     targets must produce interactive elements at all). The second is ADR-069's own finding promoted to a
+     law — *the visible text is a function of the view model alone* — and it is the first time that bug is
+     mechanically caught rather than found by eye: re-injecting `remaining > 0 && onPress` into
+     `StopRow.tsx` now fails 18 of 23 cases. Universal rules belong to the format; per-component facts
+     belong to the spec.
+  5. **Every state must declare what enforces it — `by`, `knownDefect`, or `unenforced` with a reason.**
+     This is the anti-vacuous rule of the whole format. A spec full of `mustNot` sentences that nothing
+     checks reads exactly like an enforced one, which is the failure this repo has now hit five times in
+     other guises (ADR-070's cache key, the rules that fired on a stale `dist/`, the field-reference gate
+     that was built and deleted, the native artefacts comparable only on the machine that made them, and
+     WP6-0's own parity suite failing at *import* while its totals looked plausible). `by` is resolved
+     against the slot list at emit time **and** on every conformance run, so a renamed slot cannot leave a
+     true-looking claim behind.
+  6. **`StopRow`'s `empty` state is a declared `knownDefect`, and the sentence was not softened to match
+     the code.** `proposals/04`'s worked example declares *"a card with a name and nothing under it"* as a
+     `mustNot`, citing `docs/11`'s open bug — and enforcing that would have failed both renderers on day
+     one, against an acceptance that says both pass unmodified. The alternative to a `knownDefect` was
+     rewriting the sentence into something true, which would have quietly deleted the target. Same trade
+     Wave 2 made pinning four `knownDefect` corpus rows, for the reason ADR-075 restates: identical and
+     visible beats different and hidden. Owner: **WP6-4**. Both suites additionally pin the *current*
+     behaviour, so closing it is a deliberate change to two renderers rather than an accident in one.
+  7. **The format knows nothing about buses, and two mechanisms hold that line.** `layers.json` gives the
+     `uiSpec` layer `use: []`, so it cannot import the contract or the kernel — the structural half.
+     `check-no-domain-vocabulary.mjs` scans identifiers and string literals in `src/` **and** `test/`, plus
+     the emitted `.d.ts` (where an *inferred* type would carry a name the source never writes), for twelve
+     domain words. ADR-075 decision 7's own early warning — *"a `ui-spec` that has grown a `stopId`"* — is
+     now a build failure rather than a thing nobody sees. **Comments are exempt, and the selftest is what
+     forced that:** scanning them made every ADR citation a violation, so a portable package could not
+     explain why it exists. `check-no-derivation.mjs` made the same call for the same reason.
+  8. **`packages/contract` depends on `ui-spec` type-only.** The specs are data; data needs the format's
+     *type* to be checked against, never its runtime. Same shape and reason as `kernel` importing
+     `contract` type-only (ADR-052 decision 2) — the published `ui/*.spec.json` must not carry a validator
+     into anyone's bundle. `src/ui` is deliberately **not** re-exported from the contract's barrel, so the
+     Worker's runtime graph is unchanged.
+  9. **The artefact is emitted, committed and drift-gated three ways.** Every committed file must match its
+     declaration, every declaration must have a file, and **every file must have a declaration** — the
+     third is the direction people forget, and an orphan spec that no suite is measured against would pass
+     for ever. The gate is stricter than `openapi.json`'s needs to be, because the failure is worse: a
+     stale wire document eventually produces a decode error, while a stale component spec produces a
+     **green** conformance run pinning a rule that has moved.
+- **Why the alternatives lose:**
+  - **Prose in `docs/09`.** Tried, in §6, and the imminence band it describes was written down four times
+    with two different values. ADR-075 decision 3 already settled this; WP6-1 is where the alternative
+    would have been re-adopted by accident, one `must` sentence at a time.
+  - **Keep the duplicated `expectedText`.** It is a specification written twice, so the two renderers agree
+    only until somebody edits one. The duplication also cannot be read by a Swift suite, which is the whole
+    point of the exercise.
+  - **An expression language for `when`.** Every conditional in the app is a presence test; a comparison in
+    a spec is a rule leaking out of the kernel. Code in data is how a specification becomes a second
+    implementation.
+  - **Enforce the states mechanically now.** Three of `StopRow`'s five cannot be observed from one card at
+    all — a skeleton belongs to the list screen, staleness is opacity rather than text, and offline is
+    indistinguishable from stale without knowing whose network failed. Declaring them `unenforced` *with the
+    reason and the owning work package* is honest; asserting them would have meant either weakening them to
+    what a card can show or inventing a harness that cannot see what it claims to.
+  - **Hoist the format into a shared repo now.** WP6-10, and the rule of two. The seam is named and free of
+    domain vocabulary; extraction waits for a second consumer.
+- **Verified by running, and the injection pass is the evidence:** the spec's `caption` slot deleted (both
+  suites red), a slot added that nobody draws (both red), the caption line deleted from **only** `apps/web`'s
+  component (web red, RN green — the ADR-069 deletion, now caught by a shared declaration), ADR-069's
+  original `&& onPress` bug re-injected into `StopRow.tsx` (RN red, via `content-not-affordance`), the
+  committed JSON hand-edited (drift gate red), and an orphan spec file added (gate red). Plus: touching
+  `ui/stop-row.spec.json` turns `@nextbus/web:test` from a **cache hit into a cache miss**, so ADR-070's
+  hole was closed before it could bite — `apps/{web,mobile}/turbo.json` and `packages/contract/turbo.json`
+  declare the artefact as an input.
+- **Consequences, including what we are accepting:**
+  - **The vocabulary gate found a real leak in its own package on its first working run** — an error
+    message in `conform.ts` naming what ADR-069's finding was about. Two drafts of the matcher were wrong
+    before that, and both failures are worth recording because they are the same failure: a check that
+    silently matches nothing. The first used `\bword(?![a-z])` with the `i` flag, and `/i` applies to the
+    character class too, so the lookahead rejected every following letter and only bare words ever matched.
+    The second *replaced* each token with its de-pluralised form, turning `routes` into `rout` and
+    `onPress` into `pres`. It now adds candidates instead of substituting, and the selftest is what caught
+    both.
+  - 🟠 **A defect in `project()` or `conform()` now relaxes both renderers at once.** That is the shape
+    ADR-069 decision 7 was written against, accepted here because the alternative is a specification
+    written twice. The mitigations are that the walker has 21 tests of its own, that its fixtures are
+    abstract (so the format cannot quietly acquire this app's assumptions), and that exact equality means
+    most spec errors fail rather than pass. A *walker* error is the residual.
+  - 🟠 **`ui/*.spec.json` is one more thing a native repo must vendor, and vendoring is still unsolved.**
+    ADR-075 named this and WP6-1 makes it concrete. `packages/contract/README.md` §7 now says so where the
+    reader meets it, and repeats that a `knownDefect` is a target rather than behaviour to copy. **WP6-9
+    must not start before vendoring is answered** — unchanged, and now with more surface.
+  - 🟡 **Two tests retired, and the totals went down.** The bespoke "+N more with nowhere to tap" case in
+    each suite is now `content-not-affordance` running over *every* corpus case rather than one — strictly
+    stronger, and it is why `web` reads 72 and `mobile` 55 rather than 73 and 56.
+  - 🟡 **The spec's `a11y` block is declared and unasserted.** `role` and `name.fromSlot` are resolved
+    against the slot list, so they cannot dangle, but nothing checks that the rendered tree agrees. The
+    honest reason is that the two renderers express the same accessible role by different means and the
+    third will again; WP6-2 is where a screen-level a11y assertion becomes worth building.
+  - 🟡 **`docs/09` §5 and §6 still need their superseded banners.** ADR-075 deferred that *"until the spec
+    format exists"*. It exists now, and one component's spec is not yet enough to supersede the prose ETA
+    spec — `EtaBadge` is inside `StopRow`'s spec as three `oneOf` branches, not as a component of its own.
+    Owner: WP6-2, which is the first screen-level spec and the first place the prose is genuinely replaced.
+  - ⚪ **`packages/ui-spec` has no `turbo.json` and needs none** — its test reads only its own files. The
+    three tasks that read the *artefact* declare it, which is the ADR-070 lesson applied prospectively for
+    once rather than after a stale replay.
+  - **Test totals:** core 853, edge 149, api-client 71, **ui-spec 21 (new)**, web 72, mobile 55 — 1 221.
+    Corpus unchanged at 96 groups / 803 cases: WP6-1 added no kernel rule, which is the point.
+
+## ADR-084 — A screen spec: a state that declares what it shows, and a slot that references another spec
+- **Status:** **Decided and implemented 2026-08-03** (WP6-2, the third row of Wave 6). Implementation:
+  `packages/ui-spec` gains a `ComponentNode` (`component`), an `enforcement.shows` variant,
+  `projectState()`, `conformStates()`, a `StatefulHarness`, and `states` as a **record with five required
+  keys** rather than a closed object of exactly five; `packages/contract/src/ui/nearby.ts` →
+  `packages/contract/ui/nearby.spec.json` (9 states, 8 of them projected) plus a `UI_SPEC_REGISTRY`;
+  `apps/web/test/nearby-states.test.tsx` and `apps/mobile/test/nearby-states.test.tsx` drive every state on
+  both renderers; `apps/web/src/screens/Nearby.tsx` gains the two taps that make it the shipping web Nearby;
+  and `docs/09` §5 and §6 finally get their superseded banners. 15 new tests over the format, 21 new
+  conformance runs across the two screens.
+- **Context.** `StopRow`'s spec (WP6-1, ADR-083) is a projection of one view model, and every one of its
+  states is a field of that model. **A screen is not**, and that is the whole of this row: Nearby's states
+  are branches over an async status — no fix yet, permission refused, a *remembered* position rather than a
+  live one, the first fetch in flight, the fetch failed, nothing due — and no view model carries any of it.
+  Three of `StopRow`'s five states were declared `unenforced` for exactly this reason and handed to WP6-2.
+- **Decisions:**
+  1. **A state may declare its own projection, and the driver is asked to enter it.**
+     `enforcement.shows` is the fourth variant, and it is what turns five sentences into five assertions.
+     The split of responsibility is the load-bearing part: **the driver owns getting there** — that is
+     per-renderer hook wiring, and it is where a renderer-specific mistake lives — while **the spec owns
+     what must be there.** `renderState(name)` returns the tree *and* the view it corresponds to, because a
+     state like "the fetch failed" has content (the error's own message) that no view model holds either.
+     Returning `null` is a **finding, not a skip**: a declared projection nothing can render is the same
+     vacuous pass as a gate matching no files.
+  2. **`slots` is what every state shows; `shows` is what a state adds.** Nine states repeating the
+     screen's chrome would be nine chances to disagree about it. What fell out of that split is the row's
+     best result: **only the title survives every branch — the subtitle does not**, because the difference
+     between the ordinary content state and the `stale` one *is* the subtitle. ADR-008's honesty rule
+     applies to the rider's **position** and not only to the times, and declaring the subtitle per state is
+     what makes *"say so when the fix is remembered"* an assertion instead of a sentence. It is watched
+     failing both ways: the spec claiming the live subtitle for `stale`, and the web screen dropping the
+     remembered one.
+  3. **A slot may reference another component's spec.** `{ component: 'StopRow' }` inside an `each` is how
+     *"this screen is a list of these cards"* becomes a checked claim: a slot added to `StopRow` turns up in
+     Nearby's expected text with no edit to Nearby's spec, and a screen that stopped drawing its cards goes
+     red. Writing the card's slots out again would have been two declarations of one thing — the failure
+     this format exists to prevent, reproduced inside it. Resolved through `UI_SPEC_REGISTRY`, which is
+     **derived from `UI_SPECS`** rather than written out, so a spec cannot be emitted and yet be
+     unreferenceable.
+  4. **`states` is a record with five required keys, not an object of exactly five.** Nearby has nine: the
+     canonical five plus `content` (a screen needs a name for "it worked"), `undetermined`, `denied` and
+     `locationError`. A schema that forbade the extras would have pushed them back into prose, which is the
+     one thing ADR-075 decision 3 rules out. The floor stays five.
+  5. **The seams are mocked; the query is not.** Both suites replace the four seams a screen reads the world
+     through (`useLocation`, `useLiveNearby`, `useClientPolicy`, the `DataSource`) and leave TanStack Query
+     real, because `loading`, `failed` and `content` **are** its states and mocking `useQuery` would mean
+     asserting against a mock of the thing under test. The fixtures come from the corpus —
+     `stop-card.spec.json`'s `nearbyView` group supplies both the `NearbyStop[]` the source returns and the
+     `StopCardView[]` the screen must draw, with `now` pinned to the case's own clock — so the two suites'
+     goldens are the same bytes.
+  6. **`apps/web`'s Nearby is the shipping web Nearby.** The two taps are wired, to paths **byte-identical**
+     to the RN screen's (`/stop/:id`, `/route/:id?stop=:id`), so a deep link resolves the same on either
+     renderer. Verified in a real browser against live Hong Kong data.
+  7. **Pull-to-refresh is declared `idiom`, and the asymmetry is deliberate rather than an oversight.** The
+     RN screen has a `RefreshControl`; the web screen has nothing. Since WP5-7 the arrivals arrive by
+     subscription at the served cadence, so a manual refresh is *reassurance* rather than how a rider gets
+     fresh data — and the platform with a natural gesture for it offers it. What is **not** idiom is
+     recovery from `failed`, and neither renderer makes it a control: `refetchInterval` fires only on error
+     (ADR-079), identically on both, which is why that state's `must` owes the rider an explanation rather
+     than a button.
+  8. **`docs/09` §5 and §6 are marked superseded, which ADR-075 deferred until the format existed.** §6 —
+     titled "ETA display spec" since Wave 1, prose, and the section whose imminence band was written down
+     four times with two different values — now points at `etaUrgency` for the rules and `stop-row.spec.json`
+     for what a renderer must draw. §5 is *partly* superseded: motion is **idiom**, so its durations and
+     curves are `apps/mobile`'s recipe rather than a cross-platform requirement, and what survives as
+     identity is that reduced motion must not change the content. Three of §6's bullets are in neither
+     place yet and now say so.
+- **Why the alternatives lose:**
+  - **Mock `useQuery` and assert the branches directly.** It would make the states deterministic and
+    meaningless: the states *are* the query's states.
+  - **Give the screens injectable props so a test can set their state.** That is changing the component to
+    suit the specification, and ADR-075 decision 5's whole point is that the spec is extracted from the
+    renderer as it is.
+  - **Restate `StopRow`'s slots inside Nearby's spec.** Two declarations of one component. The registry
+    costs one derived object.
+  - **Leave the screen states as prose in the `must`/`mustNot` sentences.** That is what WP6-1 left behind
+    for three of `StopRow`'s five, and it is only defensible when nothing *can* observe them. A screen can.
+  - **Add pull-to-refresh to the web screen for parity.** Parity of *mechanism* is what ADR-075 traded away.
+    The web has no natural gesture for it, and inventing a button would be a control the design never asked
+    for to satisfy a symmetry that stopped being the goal.
+- **Verified by running:** both suites green over all nine states, and **watched failing four ways** — the
+  spec claiming the live subtitle for `stale` (both renderers red), the card list dropped from `content`
+  (both red, which is composition being asserted), the web screen's remembered-position sentence removed
+  (web red, RN green), and the RN screen's "no service" line removed (RN red). In a real browser against
+  live Hong Kong data: six cards, a heading tap to `/stop/GMB%3A20001553`, back to `/` with the tab bar
+  restored, a row tap to `/route/GMB:804:outbound:2010275?stop=GMB:20001553`, and **zero nested interactive
+  elements** across the whole rendered list — the DOM half of `sibling-not-nested`, measured outside jsdom.
+- **Consequences, including what we are accepting:**
+  - **A test whose fixture was right and whose timing was wrong is the row's cautionary tale.** The first
+    draft of both drivers flushed a fixed number of microtasks after mounting, and two states read their
+    tree while the screen was still showing "locating" — so the suite reported a divergence at index 2 for
+    `content` and `failed` rather than the state it had been asked about. A bounded poll for the transition,
+    failing loudly with the text it actually found, is the difference between testing the state and testing
+    the scheduler. It is the same class as WP6-0's `remount()` that did not reset the store: **a harness
+    that looks at the wrong moment is indistinguishable from a renderer that is wrong.**
+  - 🟠 **The RN suite needs six mocks, and two of them are platform modules rather than seams.**
+    `expo-router` cannot load outside Metro and the safe-area context wants a provider irrelevant to what is
+    under test; `useLocale` reaches `expo-localization` → `expo-modules-core` → `__DEV__`, a Metro global
+    that does not exist in jsdom. Each is replaced with the smallest thing the screen uses, and the locale is
+    *pinned* rather than defined-away because the corpus fixtures are `en` and a locale the suite did not
+    control would compare an English projection against a Chinese render. The cost is real: the more of a
+    screen's environment a suite replaces, the less of the real screen it measures.
+  - 🟠 **The native `denied` variant is unobservable in both suites.** When the OS will not prompt again a
+    native build offers *"open Settings"* where the web offers *"retry"*, and under `react-native-web` and
+    the DOM alike `Platform.OS` is `web`. Declared as an invariant on the `retry` slot so the divergence is
+    visible rather than discovered; the first suite that could assert it is WP6-9's.
+  - 🟡 **`offline` is declared `unenforced` on the screen too, and honestly so.** It is textually identical
+    to `stale`: offline *is* a remembered fix plus replayed readings, and which network failed is not
+    something the screen says. What distinguishes it — the readings' age and dimming — is inside the card and
+    is opacity rather than text. The cache-replay half is asserted in `apps/web/test/shell.test.tsx`.
+  - 🟡 **Nearby's `a11y` block is still declared and unasserted**, unchanged from WP6-1: the two renderers
+    reach the same accessible role by different means (`<button>` versus `div[role="button"]`), and asserting
+    a role *per slot* needs a way to associate an element with a slot name that the format does not have.
+    The one a11y property that *is* enforced is structural — no nested tap targets — and it is now measured
+    in a browser as well as in jsdom.
+  - 🟡 **Every ADR-069 finding is a declared invariant with a case, and both were already closed by WP6-1** —
+    stated because WP6-2's row asks for it: the caption's collapsed double separator is
+    `slots.caption.invariant` plus the `whitespace-pre-wrap` assertion in the DOM suite, and the hidden
+    overflow count is the universal `content-not-affordance` check running over every corpus case.
+  - ⚪ **`apps/web` no longer has a screen with nowhere to go.** Its Nearby taps reach two placeholders, which
+    is the state WP6-0 designed for — and it means the `content-not-affordance` check's inert render is now
+    the *only* place either renderer exercises a card with no handlers. That is worth knowing rather than
+    fixing: it is exactly the configuration ADR-069's bug hid in.
+  - **Test totals:** core 853, edge 149, api-client 71, ui-spec 30, web 83, mobile 65 — 1 251.
+    Corpus unchanged at 96 groups / 803 cases: no kernel rule moved.
+
+## ADR-085 — The Place screen's composition is a kernel function, and the words it joins are injected
+- **Status:** **Decided and implemented 2026-08-03** (WP6-3a — the hoist half of WP6-3). Implementation:
+  `placeDetailView` and its `PlaceDetailView` / `PlaceGroup` / `PlaceRouteRow` / `PlaceDetailLabels` types in
+  `packages/core/src/stop-detail.ts`, **15 corpus cases** in `spec/stop-detail.spec.json` plus four property
+  tests, and `apps/mobile/app/stop/[id].tsx` rewired to consume it — ~90 lines of derivation deleted from the
+  screen, two local helpers deleted outright, and both leaf components (`RouteRowItem`, `StopMeta`) reduced
+  to projections. `packages/core` is back at **100 % on all four axes**.
+- **Context.** `proposals/04` puts Place detail third *"because it has the most domain rules in the app"*,
+  and the screen was the proof: nine decisions lived in it as loose expressions, reachable only by rendering
+  a React tree — the pole heading and its `·`, the per-kerb distances, whether the walk is a single time or a
+  range, the summary line and *its* two separator widths, the grouping under boarding points, which poles are
+  shown at all, each row's three-way readout, and whether the place is grouped. A second renderer could only
+  have re-implemented them from the JSX, and a re-implementation looks right on the day it is written
+  (ADR-068's argument, applied to the screen it was always going to matter most on).
+- **Decisions:**
+  1. **One composition function, not nine exports.** The four rules `stop-detail.ts` already held
+     (`dedupeRoutes`, `operatorsOf`, `orderPoles`, `poleDistinctions`) decide *what* a rider sees;
+     `placeDetailView` decides what they collapse to on screen. Splitting the composition into more exports
+     would leave the *order* of the calls — which is itself a rule — in the renderer.
+  2. **Words the kernel joins are injected, never imported.** `labels` is three strings and two functions.
+     The kernel may not import `@nextbus/i18n` (`layers.json` gives it `use: []`), and it should not: ADR-054
+     draws the line at *core owns the rule, the catalogue owns the word*. What is a rule is the joining —
+     which is exactly what two renderers get subtly different, and the reason `stopCardCaption` exists.
+  3. **`routeCount` is a function of `n`, not a noun.** Because the plural rule is the catalogue's — and
+     because taking the noun is how the RN screen came to print **"1 routes"**, which this hoist reproduces
+     faithfully rather than silently fixing (WP4-0's rule: a hoist changes no behaviour). The corpus pins the
+     defect; the shape lets a later row fix it with an ICU plural key and no kernel change.
+  4. **The three-way readout is in the type.** `PlaceRowReadout` is `eta | headway | none`, because the
+     middle case is the one a renderer forgets: a line with no live arrival but a published headway is not a
+     line with nothing to say. An optional `EtaReadout` would have made that invisible.
+  5. **Rows appear in exactly one place — `groups` or `rows`, never both.** A renderer reading `groups`
+     alone would draw nothing for most of Hong Kong, which is single-pole; one reading both would draw every
+     row twice. Asserted as a property over every corpus case.
+- **Verified, and three things the 100 % branch threshold and the property tests caught that review would
+  not have:**
+  - **An unreachable `?? []`.** `shown` was `orderPoles(...).filter(rows > 0)` and the render site then did
+    `byPole.get(m.id) ?? []` — an arm the filter had already made impossible. The threshold refused to go to
+    100 %, which is the threshold doing precisely the job it was set for. It is a `flatMap` carrying the rows
+    now, so there is no dead branch to cover or to explain.
+  - **A property test that was wrong about a real state.** "Every row is in exactly one place" was written
+    with a per-case *"and there is at least one row"*, which went red on the corpus row for a place with no
+    routes at all. A place with nothing due is a real state; what would have been vacuous is a corpus where
+    *no* case had rows — so the at-least-one check moved to the suite, where it belongs.
+  - **A corpus case that pinned nothing.** The served-policy case was recorded against a departed reading,
+    whose urgency is `none` under any band — so it passed while never exercising the branch, and the driver
+    silently dropping `policy` would not have been noticed either. It is a four-minute arrival now, `normal`
+    under the shipped 180 s band and `soon` under a served 600 s one, and the driver forwards **every**
+    optional argument a case can carry.
+- **Consequences, including what we are accepting:**
+  - 🟡 **"1 routes"** — a live English plural defect, now pinned by the corpus with `routeCount`'s doc naming
+    it. Fixing it is an ICU key in `@nextbus/i18n`, three locales and a re-emit; it is not this row's.
+  - 🟡 **An unreadable pole id yields a heading of `" · Southwest side"`** — a leading separator, because the
+    operator label is empty and the side is appended. Faithful to the RN screen, unreachable by any id in a
+    real build (every canonical id parses), pinned by a corpus case, and worth one line to fix in whichever
+    row next touches the heading.
+  - 🟠 **WP6-3 is not finished, and the split is deliberate.** This is the hoist; the **spec** and the
+    **`apps/web` port** remain, as does the row's stated acceptance — extending `check-no-derivation` to
+    `apps/mobile`'s Place detail. That extension is not a one-line change: the screen has genuine
+    *presentational* arithmetic (`Math.min`/`Math.max` over viewport dimensions for the shrinking map, a
+    `.filter` over a scroll-offset registry) that the gate's shape rules would flag, so it needs the
+    per-site `ALLOWLIST` mechanism `check-view-transport-free` already uses — each entry naming the one rule
+    it exempts, with a stale entry failing as loudly as a violation. Rushing a gate is the one thing worth
+    less than not having it, so it is the next thing rather than a hurried part of this one.
+  - ⚪ **The screen kept its geometry.** `poleDist` survives in the RN screen because `MiniMap` takes
+    coordinates and a group header takes a measured walk — geometry, not content. Everything that composes a
+    *string* left.
+  - **Test totals:** core **857** (+4 tests, +15 corpus cases: 96 groups → 97, 803 cases → 818), edge 149,
+    api-client 71, ui-spec 30, web 83, mobile 65 — 1 255.

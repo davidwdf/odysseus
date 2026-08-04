@@ -17,7 +17,18 @@
       // Declared rather than switched off (`packages/ui/turbo.json` chose `cache: false` for the same
       // shape) because the dependency is real and stating it is more useful than hiding it: a reader
       // learns what this task reads, and the cache keeps working.
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/core/spec/*.spec.json"]
+      //
+      // `packages/ui-spec/src` is here for the same reason and it is a *closer* call, so it is worth
+      // being explicit: `@nextbus/ui-spec` is a real devDependency of this package, so turbo does hash
+      // it — but only because the dependency is declared, and `check-ui-specs-current.mjs` reads it
+      // through a `tsx` child process rather than through an import turbo can see. Stating it means the
+      // gate cannot replay a pass across a schema change even if that dependency is ever dropped to a
+      // type-only one, which is exactly the direction `layers.json` describes it as (WP6-1).
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/core/spec/*.spec.json",
+        "$TURBO_ROOT$/packages/ui-spec/src/*.ts"
+      ]
     }
   }
 }

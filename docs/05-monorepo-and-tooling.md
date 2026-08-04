@@ -9,38 +9,53 @@
 ```
 /
 ├─ apps/
-│  ├─ mobile/            # Expo app → iOS, Android, Web/PWA (the single client)
+│  ├─ mobile/            # Expo app → iOS, Android, Web/PWA. The reference implementation until WP6-8
+│  ├─ web/              # Vite + plain React DOM — the renderer that replaces the Expo PWA (ADR-075).
+│  │                    #   A full shell since WP6-0; one ported screen (ADR-082)
 │  ├─ edge/             # Cloudflare Workers project (wrangler): API, LandsD tile proxy, sockets/DOs
 │  │                    #   scripts/  → the daily dataset build + publish (node, not the Worker)
 │  └─ web-landing/      # (backlog) optional static marketing page (Next.js/Astro)
 │
 ├─ packages/
+│  ├─ contract/         # Zod = the ONE declaration of every wire shape → openapi.json + asyncapi.json,
+│  │                    #   and src/ui/ → ui/<component>.spec.json, the component specs (ADR-052/056/083)
 │  ├─ core/             # canonical types + DataSource interface + the domain rules (pure TS):
-│  │                    #   ETA/units, geo, ids, route position, search, stop-name display.
-│  │                    #   Each module is pinned by a language-neutral spec/<module>.spec.json
+│  │                    #   ETA/units, geo, ids, route position, search, stop-name display, the live
+│  │                    #   protocol. Each module is pinned by a language-neutral spec/<module>.spec.json
+│  ├─ ports/            # the type-only platform interfaces = the iOS/Android porting checklist (ADR-051)
+│  ├─ ui-spec/          # the component-spec FORMAT + the conformance walker, with no domain vocabulary
+│  │                    #   (ADR-083). The first thing a second app would copy
 │  ├─ api-client/       # typed client for the edge API + the watch()/socket client
-│  ├─ data-normalize/   # crawl + GTFS + KMB/CTB normalization + stop-merging + the dataset
+│  ├─ data-normalize/   # crawl + GTFS + KMB/CTB/GMB normalization + stop-merging + the dataset
 │  │                    #   shard derivations (used by the daily build *and* the Worker)
-│  ├─ ui/               # design system: NativeWind preset, tokens, shared components
+│  ├─ ui/               # design system: the generated NativeWind/Tailwind preset, tokens, themes
 │  ├─ i18n/             # translations: en, zh-Hant, zh-Hans (all v1)
 │  └─ tsconfig/         # shared TS / lint / format config
 │
 ├─ docs/                # this folder — the plan & source of truth
-├─ .github/workflows/   # dataset.yml — the daily dataset build. The only workflow so far.
+├─ scripts/             # the gate chain, the layer generator, and pwa/ — one Workbox policy for two apps
+├─ .github/workflows/   # dataset.yml (the daily build) + ci.yml (every PR, since Wave 5)
+├─ layers.json          # the layer graph — the ONE declaration both boundary configs are generated from
 ├─ turbo.json
 ├─ pnpm-workspace.yaml
 └─ package.json
 ```
 
 ### Dependency direction (keep it acyclic)
+
+The authority is [`layers.json`](../layers.json), which generates both boundary configs and is checked
+against them on every `pnpm test` — this is a reader's summary of it, not a second declaration:
 ```
-apps/mobile  ─▶ packages/{ui, api-client, core, i18n}
-apps/edge    ─▶ packages/{core, data-normalize}
-packages/api-client ─▶ packages/core
-packages/data-normalize ─▶ packages/core
+apps/{mobile,web} ─▶ packages/{contract, core, ports, ui, i18n, api-client, ui-spec}
+apps/edge         ─▶ packages/{contract, core, ports, data-normalize}
+packages/api-client ─▶ packages/{contract, core, ports}
+packages/core       ─▶ packages/contract          (import type ONLY — ADR-052 d2)
+packages/contract   ─▶ packages/ui-spec           (import type ONLY — ADR-083 d8)
+packages/{ports, ui-spec} ─▶ nothing
 ```
-`core` is the shared contract (types + `DataSource`) both the client and the edge depend on,
-so the API can never drift from what the app expects.
+`core` is the shared contract (types + `DataSource`) both the client and the edge depend on, so the API can
+never drift from what the app expects — and the two type-only edges are what keep a validator out of any
+client's runtime graph.
 
 ## Language & quality tools
 - **TypeScript** everywhere, `strict: true`, shared base config in `packages/tsconfig`.
@@ -105,6 +120,34 @@ nothing (the repo has hit that eight times):
 - **`pnpm boundaries`' own `bannedSyntax` half has no comment stripper.** It matches raw source lines, so
   a file in `packages/core` cannot even *spell* `Date.now(` or `Math.random(` in a comment. That is why
   `live.ts` and `policy.ts` describe those forms in circumlocutions.
+
+**A gate that lives inside a package rather than in `scripts/` keeps the same shape.**
+`packages/ui-spec/scripts/check-no-domain-vocabulary.mjs` (WP6-1,
+[ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it))
+is the newest example, and both of its early mistakes were the standard one — *matching nothing while
+reporting ✓* — so they are worth knowing before writing the next matcher:
+
+- **`new RegExp('\\bword(?![a-z])', 'i')` is a trap.** The `i` flag applies to the character class too, so
+  the lookahead rejected every following letter and only bare words ever matched. The fix was to stop
+  regexing prose and **tokenise**: split identifiers on camelCase and non-alphanumerics, lowercase, then
+  compare.
+- **De-pluralise by *adding* candidates, never by substituting.** A stripper that rewrote each token turned
+  `routes` into `rout` and `onPress` into `pres`, and the check went quiet. It now tests the raw token plus
+  its plausible singulars.
+- **Scanning comments is a decision, not a default.** This gate started by scanning them (a JSDoc example
+  written in one app's terms is how vocabulary spreads) and its own selftest showed the cost: a package that
+  is meant to be portable cannot explain *why* it exists without naming the app it came from, so every ADR
+  citation became a violation. Comments are stripped; identifiers and string literals are not — the same
+  line `check-no-derivation.mjs` draws, for the same reason.
+- **A drift gate should check three directions, not one.** `check-ui-specs-current.mjs` asserts that every
+  committed artefact matches its declaration, that every declaration has an artefact, **and that every
+  artefact has a declaration.** The third is the one people forget, and an orphan artefact that no suite is
+  measured against passes for ever.
+
+**And declare the turbo `inputs` when a task reads an artefact from another package.** WP6-1 added three
+such declarations (`apps/{web,mobile}/turbo.json`, `packages/contract/turbo.json`) *before* a stale replay
+happened rather than after, which is the first time round that way. Verify it the cheap way: run the task
+twice (cache hit), touch the artefact, run again — it must be a cache **miss**.
 
 One gate departs from the shape on purpose. `precommit-docs-check.mjs` (ADR-078) polices **commits**
 rather than files, so it has no `POLICED` list, no `PATTERNS` and — deliberately — **no `ALLOWLIST`**: its

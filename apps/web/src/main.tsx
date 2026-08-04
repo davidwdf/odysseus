@@ -1,49 +1,41 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { detectedLocale } from './adapters/locale'
 import './index.css'
 import './tokens.css'
-import { Nearby } from './screens/Nearby'
+import { applyMode, currentMode } from './lib/appearance'
+import { registerServiceWorker } from './lib/serviceWorker'
+import { App } from './shell/App'
 
-// `tokens.css` is generated from packages/ui/tokens.json — the same 26 custom properties, byte for
-// byte, that apps/mobile/global.css carries (`pnpm --filter @nextbus/ui test` fails if either drifts).
+// `tokens.css` is generated from packages/ui/tokens.json — the same 26 custom properties, byte for byte,
+// that apps/mobile/global.css carries (`pnpm --filter @nextbus/ui test` fails if either drifts).
 // `index.css` is the hand-written half: the `@tailwind` directives and the font stack.
 
-/**
- * Appearance follows the OS, with no override UI yet. The class goes on `<html>` rather than on the app
- * root so the very first paint already carries it — a `.dark` applied after hydration is a visible
- * flash of the wrong theme. `apps/mobile` reaches the same place through NativeWind's `vars()` at its
- * root; the *values* are shared, the mechanism is each platform's own.
- */
-const media = window.matchMedia('(prefers-color-scheme: dark)')
-const applyAppearance = (dark: boolean) => {
-  document.documentElement.classList.toggle('dark', dark)
-}
-applyAppearance(media.matches)
-media.addEventListener('change', (e) => applyAppearance(e.matches))
+// PWA offline support (WP6-0; the caching policy is ADR-058, declared once in `scripts/pwa/`). At module
+// scope, not in an effect: this must run once per document, not once per mount, and it no-ops off a
+// production build.
+registerServiceWorker()
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // A single knob, and the same one the RN provider sets: it governs a remount refetch, and 15 s
-      // is coherent against a 30 s served cadence. Not policy-derived in either app — see `docs/11`.
-      staleTime: 15_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-})
+/**
+ * Appearance, applied **before** the first render.
+ *
+ * The persisted preference is read through a synchronous storage (see `lib/preferences.ts`), so by the
+ * time this line runs zustand has already rehydrated and `currentMode()` is the rider's actual choice —
+ * not the default that a `.dark` added after hydration would visibly correct.
+ *
+ * **The residual, stated rather than papered over:** the document still paints `bg-bg`'s light value for
+ * as long as it takes this module to parse, because that CSS is in the stylesheet and this class is not.
+ * The usual fix is an inline `<script>` in `index.html` that reads localStorage itself — which would be a
+ * second declaration of both the storage key and the meaning of `auto`, in a file no gate reads. Once the
+ * service worker is installed the bundle is served from cache and the window is a frame or two; before
+ * then it is the network. That trade is deliberate. `useAppearance()` inside the app takes over from here.
+ */
+applyMode(currentMode())
 
 const root = document.getElementById('root')
 if (!root) throw new Error('index.html is missing #root')
 
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      {/* The locale is resolved once, by the same `resolveLocale` the RN app uses, from the browser's
-          own ordered language list. No manual override yet — that is a settings screen, and this app
-          has one screen on purpose. */}
-      <Nearby locale={detectedLocale()} />
-    </QueryClientProvider>
+    <App />
   </StrictMode>,
 )

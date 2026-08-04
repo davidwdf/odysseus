@@ -1,31 +1,6 @@
-import type {
-  I18nText,
-  Locale,
-  OperatorId,
-  ResolvedClientPolicy,
-  StopDetailPole,
-  StopDetailRoute,
-} from '@nextbus/core'
-import {
-  boardingPoleId,
-  dedupeRoutes,
-  etaReadout,
-  formatBearing,
-  formatDistance,
-  formatHeadway,
-  formatWalk,
-  formatWalkRange,
-  haversineMeters,
-  operatorsOf,
-  orderPoles,
-  parseStopId,
-  poleDistinctions,
-  poleFlagCode,
-  remarkView,
-  splitStopCode,
-  titleCaseName,
-} from '@nextbus/core'
-import { type LocalizedString, poleSideLabel, t } from '@nextbus/i18n'
+import type { PlaceRouteRow, StopDetailPole } from '@nextbus/core'
+import { haversineMeters, parseStopId, placeDetailView, poleFlagCode } from '@nextbus/core'
+import { poleSideLabel, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { type ReactNode, useRef, useState } from 'react'
@@ -66,36 +41,10 @@ import { useLocation } from '../../lib/useLocation'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
 
-/**
- * Name for the operator of a pole id, e.g. `CTB:002403` → "Citybus" / "城巴". An id we cannot read
- * at all labels as nothing rather than as the letter `P` — which is what `id.split(':')[0]` produced
- * for a merged place. The unknown-*operator* case is handled by `operatorName`.
- */
-function poleOperatorLabel(poleId: string, locale: Locale): LocalizedString {
-  const operator = parseStopId(poleId)?.operator
-  return operator ? operatorName(operator, locale) : ('' as LocalizedString)
-}
-
-/**
- * The heading printed above a pole's routes: its operator, then the stop code the operator published
- * in the name, if any — "KMB · TN510", "Citybus".
- *
- * Hoisted out of the JSX because it is now needed **twice**: once to render, and once to hand
- * `poleDistinctions` the very text it must compare (see the render site). Two inline copies of this
- * expression is precisely how the rule would come to be told about a heading the screen no longer
- * prints, and then quietly stop disambiguating.
- *
- * **It takes the whole `I18nText`, not the active locale's string** (WP5-12). The code comes from
- * `poleFlagCode`, which prefers this locale's own trailing parenthetical and otherwise **borrows a
- * flag-shaped one from another locale** — at Prince Edward Station two KMB poles share a coordinate and
- * read identically in English while the Chinese carries `(MK356)` and `(MK357)`, so the only thing that
- * can tell them apart was on the wire and being discarded. A code is Latin letters and digits, so it is
- * the same string in every locale by construction.
- */
-function poleHeading(poleId: string, name: I18nText, locale: Locale): string {
-  const code = poleFlagCode(name, locale)
-  return `${poleOperatorLabel(poleId, locale)}${code ? ` · ${code}` : ''}`
-}
+// `poleOperatorLabel` and `poleHeading` used to live here. They are `placeDetailView`'s now (WP6-3): the
+// heading is composed by the kernel, because the `·` separator IS the composition and the rule that tells
+// two kerbs apart must be handed the very text the screen prints. Two copies of that expression is exactly
+// how the rule would come to be told about a heading the screen no longer draws.
 
 /** The map is a **full-width hero at rest that shrinks into a right-aligned floating PIP on scroll**
  *  (ADR-045). Its **height is constant** (`MAP_HEIGHT`); only the width animates, from the full hero
@@ -156,63 +105,43 @@ export default function StopDetail() {
 
   const stop = query.data?.stop
   const members: StopDetailPole[] = query.data?.members ?? []
-  // `members` is passed so `dedupeRoutes` keys on each row's **boarding point**: where upstream
-  // published one physical pole under two ids, a line boarding at "both" is one row (WP5-11).
-  // The rows come back with their own raw pole ids, which is what `SaveStar` below persists — see
-  // `boardingPoleId`. Rewriting them here instead would orphan every favourite it saves.
-  const routes = query.data ? dedupeRoutes(query.data.routes, members) : []
-  const multiPole = members.length > 1
-
-  const cleanName = stop ? titleCaseName(splitStopCode(stop.name[locale]).label) : ''
   const here = loc.status === 'ready' ? { lat: loc.lat, lng: loc.lng } : null
-  // Distance per pole (when located) → the place's walk is a *range* across its poles.
+
+  /**
+   * **The whole screen's content, in one call** (WP6-3). Nine decisions used to live here as loose
+   * expressions — the pole heading and its separator, the per-kerb distances, whether the walk is a single
+   * time or a range, the summary line and *its* two separator widths, the grouping under boarding points,
+   * which poles are shown at all, each row's three-way readout, and whether the place is grouped — every
+   * one of them reachable only by rendering this tree. They are `placeDetailView` now, pinned by 15 corpus
+   * cases, so `apps/web`'s Place screen calls the identical function rather than re-deriving them from this
+   * JSX (WP4-0's method, applied to the screen with the most domain rules in the app).
+   *
+   * The **words** it composes with are handed in, never imported by the kernel (ADR-054: core owns the
+   * rule, the catalogue owns the word). `routeCount` is a function because the plural rule is the
+   * catalogue's — see the note on that field for the "1 routes" defect this hoist reproduces faithfully
+   * rather than silently fixing.
+   */
+  const view = query.data
+    ? placeDetailView(query.data, {
+        locale,
+        now,
+        policy,
+        ...(here === null ? {} : { here }),
+        ...(pole === undefined ? {} : { arrivedFromPole: pole }),
+        labels: {
+          operator: (o) => operatorName(o, locale),
+          servedBy: t(locale, 'servedBy'),
+          routeCount: (n) => `${n} ${t(locale, 'routesLabel')}`,
+          side: (octant) => poleSideLabel(octant, locale),
+        },
+      })
+    : undefined
+  const multiPole = members.length > 1
+  const cleanName = view?.name.label ?? ''
+  // Still needed by the map and the per-kerb walk on a group header, which are geometry rather than
+  // content: `MiniMap` takes coordinates and `poleDistance` is what the kernel measured them against.
   const poleDist = new Map<string, number>()
   if (here) for (const m of members) poleDist.set(m.id, haversineMeters(here, m.location))
-  const dists = [...poleDist.values()]
-  const distanceM = here && stop ? haversineMeters(here, stop.location) : undefined
-
-  // Routes grouped under the member pole they depart from (ADR-042); poles ordered with the
-  // arrived-from `pole` first, then nearest, then the server order (`orderPoles`).
-  // Grouped by the row's **boarding point**, not its raw pole: a row departing from a folded id
-  // belongs under the member it was folded onto, and there is no heading of its own to put it under
-  // (WP5-11). The row itself keeps its raw id for the star.
-  const byPole = new Map<string, StopDetailRoute[]>()
-  for (const r of routes) {
-    const key = boardingPoleId(r.stopId, members)
-    byPole.set(key, [...(byPole.get(key) ?? []), r])
-  }
-  // A pole with no rows left after `dedupeRoutes` is not rendered at all, so it is not part of the
-  // list a rider is choosing between. Hoisted out of the JSX because `poleDistinctions` below must be
-  // asked about exactly these poles: a side printed to tell a heading apart from one that is not on
-  // screen is noise, and the whole rule is about not adding any.
-  // `?pole=` goes through `boardingPoleId` for the same reason the grouping does: a route schematic
-  // hands us the id its own stop list carries, which may be a folded one, and tier 1 of `orderPoles`
-  // matches a member id.
-  const shownPoles = orderPoles(
-    members,
-    pole === undefined ? undefined : boardingPoleId(pole, members),
-    poleDist,
-  ).filter((m) => (byPole.get(m.id)?.length ?? 0) > 0)
-  // A compass side for the poles whose heading would otherwise be indistinguishable from a sibling's
-  // — 567 of the 10 118 places in the shipped build print a duplicate one (WP5-10). The screen
-  // contributes the heading text and the layout; every decision about *whether* a side is warranted
-  // and *which* it is belongs to the kernel, including its refusal where two poles sit too
-  // close together for a compass word to mean anything. There is deliberately no fallback here for
-  // the poles it declines: read that function's last section before adding one.
-  // Since WP5-12 this is `poleDistinctions`, which answers with **at most one of** a compass side, the
-  // pole's own name, or "these two are adjacent" — in that order, because the side tier is byte-identical
-  // to `poleSideOctants` and 226 groups already speak through it. The screen still contributes only the
-  // heading text, the pole's printed name and the layout.
-  const poleCues = poleDistinctions(
-    shownPoles.map((m) => ({
-      id: m.id,
-      location: m.location,
-      heading: poleHeading(m.id, m.name, locale),
-      // The pole's own name, exactly as a renderer would print it — which is what makes comparing them
-      // the right question in this locale. `poleNameKey` does the comparing; this is the display string.
-      name: titleCaseName(splitStopCode(m.name[locale]).label),
-    })),
-  )
 
   // Collapsing header (ADR-033) — content scrolls beneath the floating chrome.
   const scrollY = useSharedValue(0)
@@ -278,6 +207,11 @@ export default function StopDetail() {
     const rest = sectionOffsets.value.filter((o) => o.id !== poleId)
     sectionOffsets.value = [...rest, { id: poleId, y }]
   }
+  /** A row opens that route *at* this kerb. The path is the shell's; the row carries its own raw pole id,
+   *  which is what `?stop=` must be — a favourite and an "arrivals here" card are keyed on the same thing. */
+  const openRoute = (row: PlaceRouteRow) =>
+    router.push(`/route/${encodeURIComponent(row.routeId)}?stop=${encodeURIComponent(row.stopId)}`)
+
   // Web-safe, reduced-motion-aware smooth scroll (see useScrollToY / ADR-045).
   const scrollToY = useScrollToY(scrollRef)
   // Tapping a dot (or its list header) scrolls its pole's group to the top, just under the map.
@@ -310,25 +244,15 @@ export default function StopDetail() {
           <Text variant="body" className="px-4 text-danger">
             {(query.error as Error).message}
           </Text>
-        ) : stop ? (
+        ) : stop && view ? (
           <>
             {/* Sub-details sit **above** the map so they tuck up behind the header as you scroll
                 (rather than wedged between the map and the list). */}
             <View onLayout={(e) => setMetaH(e.nativeEvent.layout.height)}>
-              <StopMeta
-                operators={operatorsOf(routes)}
-                routeCount={routes.length}
-                distanceM={dists.length ? Math.min(...dists) : distanceM}
-                walk={
-                  dists.length > 1
-                    ? formatWalkRange(Math.min(...dists), Math.max(...dists), locale)
-                    : distanceM != null
-                      ? formatWalk(distanceM, locale)
-                      : undefined
-                }
-                bearingDeg={stop.bearingDeg}
-                locale={locale}
-              />
+              {/* One string, composed by the kernel — separators, order, omissions and all. This used to be
+                  four expressions and a `parts.join()` in this file; `placeDetailView` owns them now, so the
+                  DOM renderer prints the identical sentence rather than reassembling it. */}
+              <StopMeta summary={view.summary} bearingDeg={view.bearingDeg} />
             </View>
 
             {/* Map — a **full-width hero that shrinks into a right-aligned floating PIP** as you
@@ -383,16 +307,13 @@ export default function StopDetail() {
             {/* Flat list, no card chrome (docs/09: data is the hero). For a multi-pole place the
                 routes are grouped under their pole; otherwise one flat list under "Routes". */}
             {multiPole ? (
-              shownPoles.map((m, i, shown) => {
-                const rs = byPole.get(m.id) ?? []
-                const isLast = i === shown.length - 1
-                const cue = poleCues.get(m.id)
-                const d = poleDist.get(m.id)
+              view.groups.map((group, i, groups) => {
+                const isLast = i === groups.length - 1
                 return (
                   <View
-                    key={m.id}
+                    key={group.poleId}
                     onLayout={(e) => {
-                      recordSection(m.id, e.nativeEvent.layout.y)
+                      recordSection(group.poleId, e.nativeEvent.layout.y)
                       if (isLast) setLastGroupH(e.nativeEvent.layout.height)
                     }}
                   >
@@ -403,7 +324,7 @@ export default function StopDetail() {
                         map dot — the list-side twin of tapping the dot. */}
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => scrollToPole(m.id)}
+                      onPress={() => scrollToPole(group.poleId)}
                       className="flex-row items-end justify-between px-4 pt-4 pb-1 active:opacity-60"
                     >
                       {/* A column, because the heading can now carry a second line: the walk time stays
@@ -414,51 +335,40 @@ export default function StopDetail() {
                         {/* The side is appended, never substituted: it earns its place only where
                               two poles print the same heading, so the operator and code stay put and
                               most places read exactly as they always have. */}
+                        {/* The heading, side and all — composed by the kernel, because the separator is
+                            part of the composition and two renderers joining their own get a plausible
+                            heading with the wrong rhythm and nothing fails (ADR-069's first finding). */}
                         <Text variant="label" className="text-subtle">
-                          {poleHeading(m.id, m.name, locale)}
-                          {cue?.octant !== undefined
-                            ? ` · ${poleSideLabel(cue.octant, locale)}`
-                            : ''}
+                          {group.heading}
                         </Text>
                         {/* The pole's own name, where that is what tells this kerb from its sibling —
                               143 of the declined groups in the shipped build (ADR-080). A plain string
                               and not a `LocalizedString`: the kernel has already picked the locale and
                               title-cased it, so `dataText` would be laundering it through the wrong
                               door. */}
-                        {cue?.name !== undefined ? (
+                        {group.distinctName !== undefined ? (
                           <Text variant="label" className="text-muted">
-                            {cue.name}
+                            {group.distinctName}
                           </Text>
                         ) : null}
                         {/* …and where nothing can, the app says so rather than leaving a rider to work
                               out for themselves that two identical headings are two different kerbs.
                               Same variant and token as ADR-077's `etasUnavailable` on a Nearby card —
                               deliberately not `caption`, which is reserved for timestamps. */}
-                        {cue?.crowded === true ? (
+                        {group.crowded ? (
                           <Text variant="label" className="text-muted">
                             {t(locale, 'poleTooCloseToTell')}
                           </Text>
                         ) : null}
                       </View>
-                      {d != null ? (
+                      {group.walk !== undefined ? (
                         <Text variant="caption" className="text-subtle">
-                          {formatWalk(d, locale)}
+                          {group.walk}
                         </Text>
                       ) : null}
                     </Pressable>
-                    {rs.map((r) => (
-                      <RouteRowItem
-                        key={r.route.id}
-                        r={r}
-                        locale={locale}
-                        now={now}
-                        policy={policy}
-                        onPress={() =>
-                          router.push(
-                            `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
-                          )
-                        }
-                      />
+                    {group.rows.map((row) => (
+                      <RouteRowItem key={row.routeId} row={row} onPress={() => openRoute(row)} />
                     ))}
                   </View>
                 )
@@ -468,19 +378,8 @@ export default function StopDetail() {
                 <Text variant="label" className="mb-1 px-4 text-subtle">
                   {t(locale, 'routesAtStop')}
                 </Text>
-                {routes.map((r) => (
-                  <RouteRowItem
-                    key={r.route.id}
-                    r={r}
-                    locale={locale}
-                    now={now}
-                    policy={policy}
-                    onPress={() =>
-                      router.push(
-                        `/route/${encodeURIComponent(r.route.id)}?stop=${encodeURIComponent(r.stopId)}`,
-                      )
-                    }
-                  />
+                {view.rows.map((row) => (
+                  <RouteRowItem key={row.routeId} row={row} onPress={() => openRoute(row)} />
                 ))}
               </>
             )}
@@ -564,34 +463,19 @@ function StickyMap({
   )
 }
 
-/** One route row: chip + "→ destination" (+ remark), and the live ETA or scheduled headway on
- *  the right. Compact, divider-free rows that mirror the Nearby list. Shared by the flat and
- *  pole-grouped layouts. */
-function RouteRowItem({
-  r,
-  locale,
-  now,
-  policy,
-  onPress,
-}: {
-  r: StopDetailRoute
-  locale: Locale
-  now: number
-  policy: ResolvedClientPolicy
-  onPress: () => void
-}) {
-  // The readout and the remark come from the kernel, by the same two functions the Nearby card uses
-  // (WP4-0). This row had been deriving both by hand — `isStale` + `etaLabelParts` plus an imminence
-  // literal inside `EtaBadge`, and the locale lookup + `classifyRemark` fallback inside `RemarkTag` —
-  // so two screens held two copies of one rule. This is the copy that would have been left behind when
-  // Nearby moved, which is how the imminence threshold came to disagree with the served policy in the
-  // first place.
-  const readout = r.eta ? etaReadout(r.eta, locale, now, policy) : undefined
-  const remark = remarkView(r.eta?.remark, locale, r.eta?.remarkKind)
-  // Row content and the save star are *sibling* tap targets (never nested — nested
-  // interactive elements are invalid HTML on web, which RN-web flags). The star is just a
-  // saved-state indicator here (hidden until saved); favouriting happens via the route
-  // schematic's action sheet. Keyed on the member pole (`r.stopId`), never the place id.
+/**
+ * One route at this place: the chip, where it is headed, and the right-hand readout.
+ *
+ * **It decides nothing.** Every string in it — the destination, the remark, the readout and its three-way
+ * fallback to a timetable frequency — arrives on the `PlaceRouteRow` the kernel derived (WP6-3). It had been
+ * deriving all four by hand, which is how the imminence threshold came to disagree with the served policy
+ * for months: two screens held two copies of one rule, and the copy left behind when Nearby moved was this.
+ */
+function RouteRowItem({ row, onPress }: { row: PlaceRouteRow; onPress: () => void }) {
+  // Row content and the save star are *sibling* tap targets (never nested — nested interactive elements are
+  // invalid HTML on web, and `sibling-not-nested` is a conformance check now). The star is a saved-state
+  // indicator here; favouriting happens via the route schematic's action sheet. Keyed on the member pole
+  // (`row.stopId`), never the place id — see `boardingPoleId`.
   return (
     <View className="flex-row items-center gap-2 px-4">
       <Pressable
@@ -600,20 +484,24 @@ function RouteRowItem({
         className="min-w-0 flex-1 flex-row items-center justify-between gap-3 py-1.5 active:opacity-60"
       >
         <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
-          <RouteChip operator={r.route.operator} routeNo={r.route.routeNo} />
+          <RouteChip operator={row.operator} routeNo={row.routeNo} />
           <View className="flex-1">
             <Text variant="body" className="text-text" numberOfLines={1}>
               <Text className="text-subtle">→ </Text>
-              {titleCaseName(r.route.destination[locale])}
+              {row.destination}
             </Text>
-            {remark ? <RemarkTag remark={remark} /> : null}
+            {row.remark ? <RemarkTag remark={row.remark} /> : null}
           </View>
         </View>
-        {readout ? (
-          <EtaBadge label={readout.label} urgency={readout.urgency} stale={readout.stale} />
-        ) : r.route.service?.headway ? (
+        {row.readout.kind === 'eta' ? (
+          <EtaBadge
+            label={row.readout.label}
+            urgency={row.readout.urgency}
+            stale={row.readout.stale}
+          />
+        ) : row.readout.kind === 'headway' ? (
           <Text variant="caption" className="max-w-[120px] text-right text-subtle">
-            {formatHeadway(r.route.service.headway, locale)}
+            {row.readout.text}
           </Text>
         ) : (
           <Text variant="h3" className="text-subtle">
@@ -621,48 +509,30 @@ function RouteRowItem({
           </Text>
         )}
       </Pressable>
-      <SaveStar stopId={r.stopId} routeId={r.route.id} size={20} hideWhenEmpty />
+      <SaveStar stopId={row.stopId} routeId={row.routeId} size={20} hideWhenEmpty />
     </View>
   )
 }
 
-/** A one-line place summary: operators served · route count · distance + walk (when located;
- *  `walk` is a single time or a range across the poles). */
-function StopMeta({
-  operators,
-  routeCount,
-  distanceM,
-  walk,
-  bearingDeg,
-  locale,
-}: {
-  operators: OperatorId[]
-  routeCount: number
-  distanceM?: number
-  walk?: string
-  /** Travel direction of a merged place (deg) → a compass cue; absent for a lone stop. */
-  bearingDeg?: number
-  locale: Locale
-}) {
-  const parts: string[] = []
-  if (bearingDeg != null) parts.push(formatBearing(bearingDeg, locale))
-  if (operators.length > 0) {
-    parts.push(
-      `${t(locale, 'servedBy')} ${operators.map((o) => operatorName(o, locale)).join(', ')}`,
-    )
-  }
-  parts.push(`${routeCount} ${t(locale, 'routesLabel')}`)
-  if (distanceM != null && walk) parts.push(`${formatDistance(distanceM)} · ${walk}`)
+/**
+ * The one-line place summary.
+ *
+ * The sentence is the kernel's, separators and all (`placeDetailView`); this draws the compass needle beside
+ * it and nothing else. It used to assemble the parts itself — direction, "served by", the count, the
+ * distance and the walk — with a `parts.join('  ·  ')` whose two widths are semantic, which is exactly the
+ * composition HTML collapses if the other renderer re-does it (ADR-069's first finding).
+ */
+function StopMeta({ summary, bearingDeg }: { summary: string; bearingDeg?: number }) {
   return (
     <View className="mb-3 px-4">
-      {/* Icon lives *inside* the text so it sits on the first line and the meta wraps underneath it,
-          rather than a flex sibling that centres against the whole wrapped block. */}
+      {/* Icon lives *inside* the text so it sits on the first line and the meta wraps underneath it, rather
+          than a flex sibling that centres against the whole wrapped block. */}
       <Text variant="caption" className="text-muted">
         {bearingDeg != null ? (
           <BearingArrow bearingDeg={bearingDeg} size={12} tone="muted" inline />
         ) : null}
         {bearingDeg != null ? '  ' : ''}
-        {parts.join('  ·  ')}
+        {summary}
       </Text>
     </View>
   )

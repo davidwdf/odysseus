@@ -1,13 +1,15 @@
-import { type Locale, nearbyView } from '@nextbus/core'
+import { nearbyView } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { StopCard } from '../components/StopCard'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveNearby } from '../hooks/useLiveNearby'
 import { useLocation } from '../hooks/useLocation'
+import { useLocale } from '../providers/LocaleProvider'
 
 /** One array, so "no cards yet" has a stable identity — see `useLiveNearby`'s note on the storm. */
 const EMPTY_IDS: readonly string[] = []
@@ -18,13 +20,27 @@ const EMPTY_IDS: readonly string[] = []
  * elements and classes: `nearbyView` produces the list, its order, every caption, every row and every
  * "+N more" count, once, for both.
  *
- * **What is deliberately absent.** Navigation (there is one screen, so a tap has nowhere to go yet),
- * a manual locale override, pull-to-refresh, and the persisted query cache. Each is real work and none
- * of it is what this package is testing; adding any of them would grow the diff a reviewer has to read
- * to check the claim. `Nearby` therefore takes no router — the RN screen's `router.push` calls are its
- * only structural difference from this one.
+ * **What WP6-0 supplied and what is still absent.** The shell now provides the router, the persisted
+ * query cache, the locale override and the appearance store, so three of the four things this comment used
+ * to list as deliberately missing are here — which is why the locale arrives through `useLocale()` now, as
+ * CLAUDE.md rule 5 requires of every screen, rather than as a prop from the entry point.
+ *
+ * **WP6-2 wired the taps and gave this screen a spec.** `packages/contract/ui/nearby.spec.json` declares its
+ * nine states and what each must show, and `test/nearby-states.test.tsx` drives every one of them — as does
+ * `apps/mobile/test/nearby-states.test.tsx`, from the same file and the same corpus fixtures. The paths
+ * below are byte-identical to the RN screen's, so a deep link resolves the same on either renderer; both
+ * destinations are placeholders until WP6-3 and WP6-6 port them.
+ *
+ * **Still absent, deliberately: pull-to-refresh.** The RN screen has a `RefreshControl` and this one has
+ * nothing, and the spec declares that asymmetry as **idiom** rather than leaving it an oversight — since
+ * WP5-7 the arrivals arrive by subscription at the served cadence, so a manual refresh is reassurance rather
+ * than how a rider gets fresh data, and the platform with a natural gesture for it offers it. The `failed`
+ * state's recovery is *not* idiom and is not a control either: `refetchInterval` fires only on error
+ * (ADR-079), identically on both.
  */
-export function Nearby({ locale }: { locale: Locale }) {
+export function Nearby() {
+  const locale = useLocale()
+  const navigate = useNavigate()
   const { policy } = useClientPolicy()
   const { state: loc, request } = useLocation()
   const ready = loc.status === 'ready' ? loc : null
@@ -121,7 +137,19 @@ export function Nearby({ locale }: { locale: Locale }) {
         <div>
           {cards.map((card, i) => (
             <div key={card.stopId} className={i === 0 ? '' : 'border-t border-border'}>
-              <StopCard view={card} locale={locale} />
+              {/* The same two destinations, spelled the same way, as `apps/mobile/app/(tabs)/index.tsx`:
+                  the heading opens the place, a row opens that route *at* this stop. Declared once, in
+                  `StopRow`'s spec — a screen that named them again would be a second declaration. */}
+              <StopCard
+                view={card}
+                locale={locale}
+                onPress={() => navigate(`/stop/${encodeURIComponent(card.stopId)}`)}
+                onRoutePress={(routeId) =>
+                  navigate(
+                    `/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(card.stopId)}`,
+                  )
+                }
+              />
             </div>
           ))}
           {cards.length === 0 ? (

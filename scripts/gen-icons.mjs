@@ -8,23 +8,33 @@
 //   favicon.png        196,  full-bleed ink (web tab) — enlarged full mark (fills the tab, crisper small)
 //   icon-mono.png      1024, white mark on transparent (reuse: in-app logo / iOS tinted source)
 //
-// And to apps/mobile/public/ (copied verbatim to the web root by `expo export`, for the PWA):
+// And to EVERY web root in PUBLIC_DIRS below (apps/mobile/public, copied verbatim by `expo export`;
+// apps/web/public, copied verbatim by `vite build`) — the PWA install set:
 //   apple-touch-icon.png   180, opaque — iOS "Add to Home Screen" (iOS ignores the manifest here)
 //   icon-192.png           192, opaque — PWA manifest icon (purpose "any")
 //   icon-512.png           512, opaque — PWA manifest icon (purpose "any")
 //   icon-maskable-512.png  512, mark in the ~66% safe zone on ink — manifest "maskable" (Android)
+//   manifest.webmanifest   the install manifest, whose two colours are the ink TOKEN rather than a
+//                          hand-copied hex — it was hand-maintained beside the icons until WP6-0,
+//                          which needed a second copy of it and would have made the hex a third
 //
 // And docs/social-preview.png (1280x640) — the GitHub repo social card (upload manually at
 // repo Settings → Social preview; GitHub has no API for it).
 
-import { mkdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ASSETS = join(ROOT, 'apps', 'mobile', 'assets')
-const PUBLIC = join(ROOT, 'apps', 'mobile', 'public')
+/**
+ * Every web root that ships the PWA install set. **Two, for as long as two renderers ship a PWA** —
+ * `apps/mobile` is the reference implementation until WP6-8 (ADR-075 decision 6) and `apps/web` is
+ * the one that survives. The files are byte-identical by construction because they are written from
+ * one run of one generator, which is the cheapest form of "one declaration" available for a binary.
+ */
+const PUBLIC_DIRS = [join(ROOT, 'apps', 'mobile', 'public'), join(ROOT, 'apps', 'web', 'public')]
 const DOCS = join(ROOT, 'docs')
 // The mark's field colour is the brand-ink *token*, read from the generated token set rather
 // than repeated here — the icon, the splash, the PWA `theme-color` and any brand chrome are one
@@ -35,6 +45,34 @@ const TOKENS = JSON.parse(
 )
 const INK = TOKENS['color.brand.ink']
 const WHITE = TOKENS['palette.white']
+
+/**
+ * The PWA install manifest, emitted beside the icons it references.
+ *
+ * `start_url` / `scope` are `/` because both builds are served from a domain root, and `display:
+ * standalone` is what makes an installed copy lose the browser chrome. The two colours are the ink
+ * token — the same value the icons are drawn on — so the splash a launcher paints and the mark on it
+ * cannot end up a shade apart. `lang: "en"` is the *manifest's* language, not the app's: the UI locale
+ * is resolved per session from the browser's ordered language list and can be overridden, which a
+ * static file cannot express.
+ */
+const MANIFEST = {
+  name: 'NextBus HK',
+  short_name: 'NextBus HK',
+  description: 'Fast, mobile-first Hong Kong bus arrival times.',
+  lang: 'en',
+  start_url: '/',
+  scope: '/',
+  display: 'standalone',
+  orientation: 'portrait',
+  background_color: INK,
+  theme_color: INK,
+  icons: [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+  ],
+}
 
 // Bus mask: white = keep, black = knock out (the two windows become transparent so the
 // mark composites on any background). Body + windows lean -9deg; tri-axle wheels stay round
@@ -110,42 +148,32 @@ async function run() {
     .png()
     .toFile(join(ASSETS, 'splash-icon.png'))
 
-  // Web/PWA icons → apps/mobile/public (served at the web root by `expo export`).
-  mkdirSync(PUBLIC, { recursive: true })
+  // Web/PWA install set → every web root (each app's bundler copies its own verbatim).
   // iOS Add-to-Home-Screen + PWA "any" icons: opaque, full-bleed (transparency renders black on iOS).
-  await sharp(FULL)
-    .resize(180, 180)
-    .flatten({ background: INK })
-    .png()
-    .toFile(join(PUBLIC, 'apple-touch-icon.png'))
-  await sharp(FULL)
-    .resize(192, 192)
-    .flatten({ background: INK })
-    .png()
-    .toFile(join(PUBLIC, 'icon-192.png'))
-  await sharp(FULL)
-    .resize(512, 512)
-    .flatten({ background: INK })
-    .png()
-    .toFile(join(PUBLIC, 'icon-512.png'))
+  const opaque = (px) => sharp(FULL).resize(px, px).flatten({ background: INK }).png().toBuffer()
   // Android maskable: mark inside the ~66% safe zone on an ink field (launchers crop the edges).
-  const maskable = await sharp(MARK).resize(340, 340).png().toBuffer()
-  await sharp({
-    create: { width: 512, height: 512, channels: 4, background: { r: 17, g: 24, b: 39, alpha: 1 } },
-  })
-    .composite([{ input: maskable, gravity: 'center' }])
-    .png()
-    .toFile(join(PUBLIC, 'icon-maskable-512.png'))
+  const maskableMark = await sharp(MARK).resize(340, 340).png().toBuffer()
+  const web = {
+    'apple-touch-icon.png': await opaque(180),
+    'icon-192.png': await opaque(192),
+    'icon-512.png': await opaque(512),
+    'icon-maskable-512.png': await sharp({
+      create: { width: 512, height: 512, channels: 4, background: INK },
+    })
+      .composite([{ input: maskableMark, gravity: 'center' }])
+      .png()
+      .toBuffer(),
+    'manifest.webmanifest': Buffer.from(`${JSON.stringify(MANIFEST, null, 2)}\n`),
+  }
+  for (const dir of PUBLIC_DIRS) {
+    mkdirSync(dir, { recursive: true })
+    for (const [name, bytes] of Object.entries(web)) writeFileSync(join(dir, name), bytes)
+  }
 
   // GitHub social-preview card: ink field, centred mark (no text — name TBD).
   const social = await sharp(MARK).resize(440, 440).png().toBuffer()
   await sharp({
-    create: {
-      width: 1280,
-      height: 640,
-      channels: 4,
-      background: { r: 17, g: 24, b: 39, alpha: 1 },
-    },
+    create: { width: 1280, height: 640, channels: 4, background: INK },
   })
     .composite([{ input: social, gravity: 'center' }])
     .png()
@@ -153,7 +181,8 @@ async function run() {
 
   console.log(
     'Generated assets/: icon, favicon, icon-mono, adaptive-icon, splash-icon; ' +
-      'public/: apple-touch-icon, icon-192, icon-512, icon-maskable-512; docs/social-preview.png',
+      `${Object.keys(web).length} PWA files × ${PUBLIC_DIRS.length} web roots ` +
+      `(${PUBLIC_DIRS.map((d) => relative(ROOT, d)).join(', ')}); docs/social-preview.png`,
   )
 }
 run().catch((e) => {

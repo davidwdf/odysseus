@@ -9,6 +9,10 @@ export default defineConfig({
     // jsdom, because the one claim worth asserting here cannot be checked without rendering: that the
     // renderer adds no logic. See test/nearby-projection.test.tsx.
     environment: 'jsdom',
-    include: ['test/**/*.test.{ts,tsx}'],
+    // `.mjs` is here for exactly one file, `test/pwa-policy.test.mjs`, whose subject is a `.mjs` build
+    // input with no type declaration — see its header for why a test in the same language beat writing
+    // and maintaining a `.d.mts` beside the config. `tsconfig.json` does not include it, so it is
+    // deliberately outside `typecheck`.
+    include: ['test/**/*.test.{ts,tsx,mjs}'],
   },
 })

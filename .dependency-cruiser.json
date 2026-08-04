@@ -2,14 +2,19 @@
   "forbidden": [
     {
       "name": "layer-contract",
-      "comment": "contract may import only [nothing] — boundary declared in layers.json (ADR-051)",
+      "comment": "contract may import only [uiSpec] — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^packages/contract/src/"],
         "pathNot": "(^|/)node_modules/"
       },
       "to": {
-        "pathNot": ["^packages/contract/src/", "(^|/)node_modules/", "^node:"]
+        "pathNot": [
+          "^packages/contract/src/",
+          "^packages/ui-spec/src/",
+          "(^|/)node_modules/",
+          "^node:"
+        ]
       }
     },
     {
@@ -23,6 +28,19 @@
       "to": {
         "path": "(^|/)node_modules/",
         "pathNot": ["(^|/)node_modules/zod/"]
+      }
+    },
+    {
+      "name": "layer-contract-type-only-uiSpec",
+      "comment": "contract → uiSpec is a type-only edge: `import type` or nothing — boundary declared in layers.json (ADR-051)",
+      "severity": "error",
+      "from": {
+        "path": ["^packages/contract/src/"],
+        "pathNot": "(^|/)node_modules/"
+      },
+      "to": {
+        "path": ["^packages/ui-spec/src/"],
+        "dependencyTypesNot": ["type-only"]
       }
     },
     {
@@ -75,7 +93,7 @@
     },
     {
       "name": "layer-ports-reach",
-      "comment": "ports must not reach [contract, kernel, tokens, client, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
+      "comment": "ports must not reach [contract, uiSpec, kernel, tokens, client, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^packages/ports/src/"],
@@ -84,6 +102,56 @@
       "to": {
         "path": [
           "^packages/contract/src/",
+          "^packages/ui-spec/src/",
+          "^packages/core/src/",
+          "^packages/ui/src/",
+          "^packages/i18n/src/",
+          "^packages/api-client/src/",
+          "^packages/data-normalize/src/",
+          "^apps/edge/",
+          "^apps/mobile/",
+          "^apps/web/"
+        ],
+        "reachable": true
+      }
+    },
+    {
+      "name": "layer-uiSpec",
+      "comment": "uiSpec may import only [nothing] — boundary declared in layers.json (ADR-051)",
+      "severity": "error",
+      "from": {
+        "path": ["^packages/ui-spec/src/"],
+        "pathNot": "(^|/)node_modules/"
+      },
+      "to": {
+        "pathNot": ["^packages/ui-spec/src/", "(^|/)node_modules/", "^node:"]
+      }
+    },
+    {
+      "name": "layer-uiSpec-npm",
+      "comment": "uiSpec's only npm packages are [zod] — boundary declared in layers.json (ADR-051)",
+      "severity": "error",
+      "from": {
+        "path": ["^packages/ui-spec/src/"],
+        "pathNot": "(^|/)node_modules/"
+      },
+      "to": {
+        "path": "(^|/)node_modules/",
+        "pathNot": ["(^|/)node_modules/zod/"]
+      }
+    },
+    {
+      "name": "layer-uiSpec-reach",
+      "comment": "uiSpec must not reach [contract, ports, kernel, tokens, client, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
+      "severity": "error",
+      "from": {
+        "path": ["^packages/ui-spec/src/"],
+        "pathNot": "(^|/)node_modules/"
+      },
+      "to": {
+        "path": [
+          "^packages/contract/src/",
+          "^packages/ports/src/",
           "^packages/core/src/",
           "^packages/ui/src/",
           "^packages/i18n/src/",
@@ -154,7 +222,7 @@
     },
     {
       "name": "layer-kernel-reach",
-      "comment": "kernel must not reach [ports, tokens, client, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
+      "comment": "kernel must not reach [ports, uiSpec, tokens, client, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^packages/core/src/"],
@@ -163,6 +231,7 @@
       "to": {
         "path": [
           "^packages/ports/src/",
+          "^packages/ui-spec/src/",
           "^packages/ui/src/",
           "^packages/i18n/src/",
           "^packages/api-client/src/",
@@ -208,7 +277,7 @@
     },
     {
       "name": "layer-tokens-reach",
-      "comment": "tokens must not reach [ports, client, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
+      "comment": "tokens must not reach [ports, uiSpec, client, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^packages/ui/src/", "^packages/i18n/src/"],
@@ -217,6 +286,7 @@
       "to": {
         "path": [
           "^packages/ports/src/",
+          "^packages/ui-spec/src/",
           "^packages/api-client/src/",
           "^packages/data-normalize/src/",
           "^apps/edge/",
@@ -260,7 +330,7 @@
     },
     {
       "name": "layer-client-reach",
-      "comment": "client must not reach [tokens, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
+      "comment": "client must not reach [uiSpec, tokens, adapters, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^packages/api-client/src/"],
@@ -268,6 +338,7 @@
       },
       "to": {
         "path": [
+          "^packages/ui-spec/src/",
           "^packages/ui/src/",
           "^packages/i18n/src/",
           "^packages/data-normalize/src/",
@@ -311,7 +382,7 @@
     },
     {
       "name": "layer-adapters-reach",
-      "comment": "adapters must not reach [ports, tokens, client, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
+      "comment": "adapters must not reach [ports, uiSpec, tokens, client, server, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^packages/data-normalize/src/"],
@@ -320,6 +391,7 @@
       "to": {
         "path": [
           "^packages/ports/src/",
+          "^packages/ui-spec/src/",
           "^packages/ui/src/",
           "^packages/i18n/src/",
           "^packages/api-client/src/",
@@ -340,6 +412,7 @@
       },
       "to": {
         "path": [
+          "^packages/ui-spec/src/",
           "^packages/ui/src/",
           "^packages/i18n/src/",
           "^packages/api-client/src/",
@@ -370,7 +443,7 @@
     },
     {
       "name": "layer-server-reach",
-      "comment": "server must not reach [tokens, client, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
+      "comment": "server must not reach [uiSpec, tokens, client, view], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^apps/edge/"],
@@ -378,6 +451,7 @@
       },
       "to": {
         "path": [
+          "^packages/ui-spec/src/",
           "^packages/ui/src/",
           "^packages/i18n/src/",
           "^packages/api-client/src/",
@@ -389,7 +463,7 @@
     },
     {
       "name": "layer-view",
-      "comment": "view may import only [contract, kernel, ports, tokens, client] — boundary declared in layers.json (ADR-051)",
+      "comment": "view may import only [contract, kernel, ports, tokens, client, uiSpec] — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
         "path": ["^apps/mobile/", "^apps/web/"],
