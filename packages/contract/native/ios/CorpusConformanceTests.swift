@@ -97,6 +97,7 @@ enum Corpus {
     /// of this file that goes stale when a corpus is added, it is generated and gated instead.
     static let modules = [
         "eta",
+        "favourites",
         "geo-snap",
         "geo",
         "ids",

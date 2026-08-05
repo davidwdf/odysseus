@@ -189,8 +189,11 @@ screen too — the ADR-069 asymmetry, closed for this screen. The spec-writing f
 **a failed fetch rendered nothing at all on both renderers** (`isLoading` is `isPending && isFetching`, so a
 paused retry matched no arm — the skeleton is the fallback arm now), and **two arms of the row's three-way
 readout were declared and never projected**, which an injected defect proved by passing. Both suites carry a
-coverage control now. Three declared states remain `knownDefect` with owners in `docs/07`. **WP6-4
-(Favourites) is next.** `watch()` is a real
+coverage control now. Three declared states remain `knownDefect` with owners in `docs/07`. **WP6-4 (Favourites) has started:** its hoist half is done (ADR-089) —
+`favouritesView`, `favouritePoleIds` and the versioned favourite-key migration are all corpus-pinned in
+`packages/core`, and `apps/web`'s store now models **all five** persisted fields so it can share
+`nextbus.preferences` without erasing a rider's list. **WP6-4b is the spec, the port, and the two bugs
+closed by declared states.** `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

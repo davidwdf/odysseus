@@ -1,0 +1,1294 @@
+{
+  "module": "favourites",
+  "source": "src/favourites.ts",
+  "version": 1,
+  "doc": "The three rules the Favourites screen is assembled from. A favourite is a route AT a boarding pole (ADR-032) keyed on the *member* pole id rather than the churning `P:` place id (ADR-062), so the screen's job is to turn a rider's hand-curated list of keys into cards: `migrateFavouriteKeys` brings a list written by an older scheme up to date — the one rule in this repo whose failure loses something a rider made by hand, which is why it is versioned rather than merely changed; `favouritePoleIds` says which poles to fetch, a question the screen must answer BEFORE it has any data; and `favouritesView` says what the cards contain, grouped by the place each saved pole resolves to. Every payload below is a **trimmed** real one from the live dataset — real canonical ids, real names in all three locales, real service facts — with only the route rows a case needs and every reading re-timed against a fixed `now` of 2026-08-05T00:30:00+08:00, because a fixture that read a clock would be worthless to a second platform. ONE ROW IS `knownDefect`: a saved route with no live reading renders a card with a name and nothing under it, which cannot be told from a broken favourite key by eye. Read it before changing what a card is built from.",
+  "groups": {
+    "migrateFavouriteKeys": {
+      "doc": "v0 → v1: a favourite saved against a merged `P:` place id becomes one key per member pole, in save order. Every member, never a guess at one — a place-keyed favourite does not say which kerb the rider meant, and the screen intersects the saved keys with the rows a place actually reports, so an over-expanded key can never render while a wrong guess is an invisibly missing favourite.",
+      "cases": [
+        {
+          "name": "a-place-keyed-favourite-becomes-one-key-per-member",
+          "why": "The migration proper. The place id names three members, so one saved key becomes three — and the route id is carried through unchanged.",
+          "args": {
+            "saved": [
+              "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442|CTB:969:outbound:1"
+            ],
+            "fromVersion": 0
+          },
+          "expect": [
+            "CTB:001992|CTB:969:outbound:1",
+            "KMB:775642281FBFE336|CTB:969:outbound:1",
+            "KMB:AFB9321F7CD2C2E4|CTB:969:outbound:1",
+            "KMB:DC5B5F4350685442|CTB:969:outbound:1"
+          ]
+        },
+        {
+          "name": "a-pole-keyed-favourite-passes-through",
+          "why": "The overwhelmingly common case even in a v0 blob: most favourites were saved from a lone stop or from a route schematic, which have always keyed on the pole.",
+          "args": {
+            "saved": ["CTB:001992|CTB:969:outbound:1"],
+            "fromVersion": 0
+          },
+          "expect": ["CTB:001992|CTB:969:outbound:1"]
+        },
+        {
+          "name": "an-expansion-that-lands-on-a-saved-key-does-not-duplicate-it",
+          "why": "A rider who saved the route at the place AND at one of its kerbs. Two identical keys would render as two rows of one line, which is the bug the de-duplication exists for.",
+          "args": {
+            "saved": [
+              "CTB:001992|CTB:969:outbound:1",
+              "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442|CTB:969:outbound:1"
+            ],
+            "fromVersion": 0
+          },
+          "expect": [
+            "CTB:001992|CTB:969:outbound:1",
+            "KMB:775642281FBFE336|CTB:969:outbound:1",
+            "KMB:AFB9321F7CD2C2E4|CTB:969:outbound:1",
+            "KMB:DC5B5F4350685442|CTB:969:outbound:1"
+          ]
+        },
+        {
+          "name": "a-key-the-grammar-cannot-read-is-kept-verbatim",
+          "why": "Not deleted, and not quarantined. Today's grammar is narrower than tomorrow's — a fifth operator ships and the id pattern widens — the render path already skips what it cannot parse, and a key that starts parsing again later simply starts working again.",
+          "args": {
+            "saved": ["not-a-key", "CTB:001992|CTB:969:outbound:1"],
+            "fromVersion": 0
+          },
+          "expect": ["not-a-key", "CTB:001992|CTB:969:outbound:1"]
+        },
+        {
+          "name": "a-blob-already-at-the-current-version-is-untouched",
+          "why": "The step must not run twice. It is idempotent anyway, but skipping it is what makes \"run once and stamp the blob\" true rather than \"fix up on every read\", which never finishes and leaves no evidence the scheme ever moved.",
+          "args": {
+            "saved": [
+              "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442|CTB:969:outbound:1"
+            ],
+            "fromVersion": 1
+          },
+          "expect": [
+            "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442|CTB:969:outbound:1"
+          ]
+        },
+        {
+          "name": "a-blob-from-a-future-version-is-untouched",
+          "why": "A rider who downgraded, or two tabs on different builds. A scheme we cannot read renders as nothing, which is recoverable by upgrading again; discarding it is not.",
+          "args": {
+            "saved": [
+              "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442|CTB:969:outbound:1"
+            ],
+            "fromVersion": 9
+          },
+          "expect": [
+            "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442|CTB:969:outbound:1"
+          ]
+        },
+        {
+          "name": "a-version-that-is-not-a-number-is-treated-as-the-oldest",
+          "why": "A hand-edited or truncated blob. One comparison, and the alternative failure is a list that silently skips every step it needed.",
+          "args": {
+            "saved": [
+              "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442|CTB:969:outbound:1"
+            ],
+            "fromVersion": null
+          },
+          "expect": [
+            "CTB:001992|CTB:969:outbound:1",
+            "KMB:775642281FBFE336|CTB:969:outbound:1",
+            "KMB:AFB9321F7CD2C2E4|CTB:969:outbound:1",
+            "KMB:DC5B5F4350685442|CTB:969:outbound:1"
+          ]
+        }
+      ]
+    },
+    "favouritePoleIds": {
+      "doc": "Which poles the screen fetches, in save order, de-duplicated — one query returns a whole place, so two saved poles of one place must not fetch it twice. A key the grammar cannot read is skipped rather than resolved to a pole the rider did not save.",
+      "cases": [
+        {
+          "name": "two-poles-of-one-place-are-two-queries-in-save-order",
+          "why": "The ordinary shape. They are two distinct poles, so both are asked about; the place they resolve to is the wire's answer, not this rule's, so it cannot collapse them here.",
+          "args": {
+            "saved": ["KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1", "CTB:001992|CTB:969:outbound:1"]
+          },
+          "expect": ["KMB:AFB9321F7CD2C2E4", "CTB:001992"]
+        },
+        {
+          "name": "two-routes-at-one-pole-are-one-query",
+          "why": "One `getStop` returns every route at every kerb, so asking twice would double the request count for a rider who saved two lines at their local stop — the commonest list there is.",
+          "args": {
+            "saved": ["CTB:001992|CTB:969:outbound:1", "CTB:001992|CTB:969C:outbound:1"]
+          },
+          "expect": ["CTB:001992"]
+        },
+        {
+          "name": "an-unreadable-key-is-skipped-not-guessed-at",
+          "why": "It stays on disk (see the migration group) and contributes no query. Resolving it would mean fetching a pole the rider never saved.",
+          "args": {
+            "saved": ["not-a-key", "CTB:001992|CTB:969:outbound:1"]
+          },
+          "expect": ["CTB:001992"]
+        },
+        {
+          "name": "nothing-saved-is-nothing-to-ask",
+          "why": "The empty state, and it is the same answer as a list of keys none of which can be read — which is right: to a rider, both are a screen with nothing on it.",
+          "args": {
+            "saved": []
+          },
+          "expect": []
+        }
+      ]
+    },
+    "favouritesView": {
+      "doc": "One card per saved PLACE, in save order, carrying only the rows the rider saved — intersected at the pole, so opposite-kerb directions of one route number stay distinct (ADR-042). No `routeCount` and no `distanceM`: Favourites knows what the rider saved, not what serves the place, and distance is irrelevant on a screen opened from anywhere. The rows are sorted soonest-first and NOT capped here: the cap is the served `maxRows`, applied by `stopCardView` together with the \"+N more\" count.",
+      "cases": [
+        {
+          "name": "two-saved-poles-of-one-place-are-one-card",
+          "why": "The grouping decision, and the reason it is a place rather than a pole: a rider who saved two lines at two kerbs of one interchange saved two things at ONE place, and two cards would read as two places. Rows sorted soonest-first across both kerbs.",
+          "args": {
+            "saved": ["CTB:001992|CTB:969:outbound:1", "KMB:775642281FBFE336|KMB:E37:outbound:1"],
+            "places": [
+              {
+                "stop": {
+                  "id": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                  "name": {
+                    "en": "Tin Shui Wai Park, Tin Shui Road",
+                    "zh-Hant": "天水圍公園, 天瑞路",
+                    "zh-Hans": "天水圍公園, 天瑞路"
+                  },
+                  "location": {
+                    "lat": 22.454496666666667,
+                    "lng": 114.00296333333334
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001992"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "775642281FBFE336"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "AFB9321F7CD2C2E4"
+                    }
+                  ],
+                  "bearingDeg": 148
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "CTB:969:outbound:1",
+                      "operator": "CTB",
+                      "routeNo": "969",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "Tin Shui Wai Town Centre",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "Causeway Bay (Moreton Terrace)",
+                        "zh-Hant": "銅鑼灣 (摩頓台)",
+                        "zh-Hans": "銅鑼灣 (摩頓台)"
+                      },
+                      "service": {
+                        "fareFull": "27.3",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 8,
+                          "max": 20
+                        },
+                        "hours": {
+                          "start": "05:30",
+                          "end": "18:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "CTB:969:outbound:1",
+                      "stopId": "CTB:001992",
+                      "operator": "CTB",
+                      "arrivals": ["2026-08-04T16:39:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "27.3",
+                    "stopId": "CTB:001992"
+                  },
+                  {
+                    "route": {
+                      "id": "KMB:E37:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "E37",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "TIN SHUI WAI TOWN CENTRE",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                        "zh-Hant": "機場(地面運輸中心)",
+                        "zh-Hans": "機場(地面運輸中心)"
+                      },
+                      "service": {
+                        "fareFull": "14.4",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 12,
+                          "max": 30
+                        },
+                        "hours": {
+                          "start": "05:10",
+                          "end": "23:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:E37:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": ["2026-08-04T16:33:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "14.4",
+                    "stopId": "KMB:775642281FBFE336"
+                  }
+                ],
+                "members": [
+                  {
+                    "id": "CTB:001992",
+                    "name": {
+                      "en": "Tin Shui Wai Park, Tin Shui Road",
+                      "zh-Hant": "天水圍公園, 天瑞路",
+                      "zh-Hans": "天水圍公園, 天瑞路"
+                    },
+                    "location": {
+                      "lat": 22.45453,
+                      "lng": 114.00295
+                    }
+                  },
+                  {
+                    "id": "KMB:775642281FBFE336",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN511)",
+                      "zh-Hant": "天水圍公園 (TN511)",
+                      "zh-Hans": "天水圍公園 (TN511)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    }
+                  },
+                  {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園 (TN510)",
+                      "zh-Hans": "天水圍公園 (TN510)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    },
+                    "aliasIds": ["KMB:DC5B5F4350685442"]
+                  }
+                ]
+              },
+              {
+                "stop": {
+                  "id": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                  "name": {
+                    "en": "Tin Shui Wai Park, Tin Shui Road",
+                    "zh-Hant": "天水圍公園, 天瑞路",
+                    "zh-Hans": "天水圍公園, 天瑞路"
+                  },
+                  "location": {
+                    "lat": 22.454496666666667,
+                    "lng": 114.00296333333334
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001992"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "775642281FBFE336"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "AFB9321F7CD2C2E4"
+                    }
+                  ],
+                  "bearingDeg": 148
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "CTB:969:outbound:1",
+                      "operator": "CTB",
+                      "routeNo": "969",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "Tin Shui Wai Town Centre",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "Causeway Bay (Moreton Terrace)",
+                        "zh-Hant": "銅鑼灣 (摩頓台)",
+                        "zh-Hans": "銅鑼灣 (摩頓台)"
+                      },
+                      "service": {
+                        "fareFull": "27.3",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 8,
+                          "max": 20
+                        },
+                        "hours": {
+                          "start": "05:30",
+                          "end": "18:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "CTB:969:outbound:1",
+                      "stopId": "CTB:001992",
+                      "operator": "CTB",
+                      "arrivals": ["2026-08-04T16:39:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "27.3",
+                    "stopId": "CTB:001992"
+                  },
+                  {
+                    "route": {
+                      "id": "KMB:E37:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "E37",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "TIN SHUI WAI TOWN CENTRE",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                        "zh-Hant": "機場(地面運輸中心)",
+                        "zh-Hans": "機場(地面運輸中心)"
+                      },
+                      "service": {
+                        "fareFull": "14.4",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 12,
+                          "max": 30
+                        },
+                        "hours": {
+                          "start": "05:10",
+                          "end": "23:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:E37:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": ["2026-08-04T16:33:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "14.4",
+                    "stopId": "KMB:775642281FBFE336"
+                  }
+                ],
+                "members": [
+                  {
+                    "id": "CTB:001992",
+                    "name": {
+                      "en": "Tin Shui Wai Park, Tin Shui Road",
+                      "zh-Hant": "天水圍公園, 天瑞路",
+                      "zh-Hans": "天水圍公園, 天瑞路"
+                    },
+                    "location": {
+                      "lat": 22.45453,
+                      "lng": 114.00295
+                    }
+                  },
+                  {
+                    "id": "KMB:775642281FBFE336",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN511)",
+                      "zh-Hant": "天水圍公園 (TN511)",
+                      "zh-Hans": "天水圍公園 (TN511)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    }
+                  },
+                  {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園 (TN510)",
+                      "zh-Hans": "天水圍公園 (TN510)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    },
+                    "aliasIds": ["KMB:DC5B5F4350685442"]
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-08-05T00:30:00+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+              "name": {
+                "label": "Tin Shui Wai Park, Tin Shui Road"
+              },
+              "caption": "Southeast-bound",
+              "bearingDeg": 148,
+              "rows": [
+                {
+                  "routeId": "KMB:E37:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "E37",
+                  "headline": "Airport (Ground Transportation Centre)",
+                  "label": {
+                    "kind": "mins",
+                    "value": 3,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "CTB:969:outbound:1",
+                  "operator": "CTB",
+                  "routeNo": "969",
+                  "headline": "Causeway Bay (Moreton Terrace)",
+                  "label": {
+                    "kind": "mins",
+                    "value": 9,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 0,
+              "incomplete": false
+            }
+          ]
+        },
+        {
+          "name": "only-the-rows-the-rider-saved",
+          "why": "The place reports two routes and the rider saved one. A screen showing both would be showing a list the rider did not curate — and the \"+N more\" count stays 0, because `routeCount` is deliberately not passed: the saved rows ARE the total on this surface.",
+          "args": {
+            "saved": ["KMB:775642281FBFE336|KMB:E37:outbound:1"],
+            "places": [
+              {
+                "stop": {
+                  "id": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                  "name": {
+                    "en": "Tin Shui Wai Park, Tin Shui Road",
+                    "zh-Hant": "天水圍公園, 天瑞路",
+                    "zh-Hans": "天水圍公園, 天瑞路"
+                  },
+                  "location": {
+                    "lat": 22.454496666666667,
+                    "lng": 114.00296333333334
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001992"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "775642281FBFE336"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "AFB9321F7CD2C2E4"
+                    }
+                  ],
+                  "bearingDeg": 148
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "CTB:969:outbound:1",
+                      "operator": "CTB",
+                      "routeNo": "969",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "Tin Shui Wai Town Centre",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "Causeway Bay (Moreton Terrace)",
+                        "zh-Hant": "銅鑼灣 (摩頓台)",
+                        "zh-Hans": "銅鑼灣 (摩頓台)"
+                      },
+                      "service": {
+                        "fareFull": "27.3",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 8,
+                          "max": 20
+                        },
+                        "hours": {
+                          "start": "05:30",
+                          "end": "18:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "CTB:969:outbound:1",
+                      "stopId": "CTB:001992",
+                      "operator": "CTB",
+                      "arrivals": ["2026-08-04T16:39:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "27.3",
+                    "stopId": "CTB:001992"
+                  },
+                  {
+                    "route": {
+                      "id": "KMB:E37:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "E37",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "TIN SHUI WAI TOWN CENTRE",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                        "zh-Hant": "機場(地面運輸中心)",
+                        "zh-Hans": "機場(地面運輸中心)"
+                      },
+                      "service": {
+                        "fareFull": "14.4",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 12,
+                          "max": 30
+                        },
+                        "hours": {
+                          "start": "05:10",
+                          "end": "23:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:E37:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": ["2026-08-04T16:33:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "14.4",
+                    "stopId": "KMB:775642281FBFE336"
+                  }
+                ],
+                "members": [
+                  {
+                    "id": "CTB:001992",
+                    "name": {
+                      "en": "Tin Shui Wai Park, Tin Shui Road",
+                      "zh-Hant": "天水圍公園, 天瑞路",
+                      "zh-Hans": "天水圍公園, 天瑞路"
+                    },
+                    "location": {
+                      "lat": 22.45453,
+                      "lng": 114.00295
+                    }
+                  },
+                  {
+                    "id": "KMB:775642281FBFE336",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN511)",
+                      "zh-Hant": "天水圍公園 (TN511)",
+                      "zh-Hans": "天水圍公園 (TN511)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    }
+                  },
+                  {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園 (TN510)",
+                      "zh-Hans": "天水圍公園 (TN510)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    },
+                    "aliasIds": ["KMB:DC5B5F4350685442"]
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-08-05T00:30:00+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+              "name": {
+                "label": "Tin Shui Wai Park, Tin Shui Road"
+              },
+              "caption": "Southeast-bound",
+              "bearingDeg": 148,
+              "rows": [
+                {
+                  "routeId": "KMB:E37:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "E37",
+                  "headline": "Airport (Ground Transportation Centre)",
+                  "label": {
+                    "kind": "mins",
+                    "value": 3,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 0,
+              "incomplete": false
+            }
+          ]
+        },
+        {
+          "name": "a-lone-stop-is-a-card-of-its-own",
+          "why": "Most of Hong Kong. The card carries no compass direction, because a lone stop has no bearing — so the caption is empty rather than half-built.",
+          "args": {
+            "saved": ["CTB:001775|CTB:50:outbound:1"],
+            "places": [
+              {
+                "stop": {
+                  "id": "CTB:001775",
+                  "name": {
+                    "en": "Argyle Centre, Nathan Road",
+                    "zh-Hant": "旺角中心, 彌敦道",
+                    "zh-Hans": "旺角中心, 彌敦道"
+                  },
+                  "location": {
+                    "lat": 22.31968,
+                    "lng": 114.16937
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001775"
+                    }
+                  ]
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "CTB:50:outbound:1",
+                      "operator": "CTB",
+                      "routeNo": "50",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "Tuen Mun (Ching Tin and Wo Tin)",
+                        "zh-Hant": "屯門 (菁田及和田)",
+                        "zh-Hans": "屯門 (菁田及和田)"
+                      },
+                      "destination": {
+                        "en": "Tsim Sha Tsui (Kowloon Station)",
+                        "zh-Hant": "尖沙咀 (九龍站)",
+                        "zh-Hans": "尖沙咀 (九龍站)"
+                      },
+                      "service": {
+                        "fareFull": "17.7",
+                        "journeyMin": 78,
+                        "headway": {
+                          "min": 20,
+                          "max": 30
+                        },
+                        "hours": {
+                          "start": "06:00",
+                          "end": "17:00"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "CTB:50:outbound:1",
+                      "stopId": "CTB:001775",
+                      "operator": "CTB",
+                      "arrivals": ["2026-08-04T16:36:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "6.6",
+                    "stopId": "CTB:001775"
+                  }
+                ],
+                "members": [
+                  {
+                    "id": "CTB:001775",
+                    "name": {
+                      "en": "Argyle Centre, Nathan Road",
+                      "zh-Hant": "旺角中心, 彌敦道",
+                      "zh-Hans": "旺角中心, 彌敦道"
+                    },
+                    "location": {
+                      "lat": 22.31968,
+                      "lng": 114.16937
+                    }
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-08-05T00:30:00+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "CTB:001775",
+              "name": {
+                "label": "Argyle Centre, Nathan Road"
+              },
+              "caption": "",
+              "rows": [
+                {
+                  "routeId": "CTB:50:outbound:1",
+                  "operator": "CTB",
+                  "routeNo": "50",
+                  "headline": "Tsim Sha Tsui (Kowloon Station)",
+                  "label": {
+                    "kind": "mins",
+                    "value": 6,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 0,
+              "incomplete": false
+            }
+          ]
+        },
+        {
+          "name": "a-place-whose-query-has-not-resolved-is-absent",
+          "why": "The screen renders incrementally rather than all at once: a saved pole with no place yet contributes no card, and the cards that have arrived are already correct. This is also the loading state seen from the kernel.",
+          "args": {
+            "saved": ["CTB:001992|CTB:969:outbound:1", "CTB:001775|CTB:50:outbound:1"],
+            "places": [
+              {
+                "stop": {
+                  "id": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                  "name": {
+                    "en": "Tin Shui Wai Park, Tin Shui Road",
+                    "zh-Hant": "天水圍公園, 天瑞路",
+                    "zh-Hans": "天水圍公園, 天瑞路"
+                  },
+                  "location": {
+                    "lat": 22.454496666666667,
+                    "lng": 114.00296333333334
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001992"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "775642281FBFE336"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "AFB9321F7CD2C2E4"
+                    }
+                  ],
+                  "bearingDeg": 148
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "CTB:969:outbound:1",
+                      "operator": "CTB",
+                      "routeNo": "969",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "Tin Shui Wai Town Centre",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "Causeway Bay (Moreton Terrace)",
+                        "zh-Hant": "銅鑼灣 (摩頓台)",
+                        "zh-Hans": "銅鑼灣 (摩頓台)"
+                      },
+                      "service": {
+                        "fareFull": "27.3",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 8,
+                          "max": 20
+                        },
+                        "hours": {
+                          "start": "05:30",
+                          "end": "18:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "CTB:969:outbound:1",
+                      "stopId": "CTB:001992",
+                      "operator": "CTB",
+                      "arrivals": ["2026-08-04T16:39:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "27.3",
+                    "stopId": "CTB:001992"
+                  },
+                  {
+                    "route": {
+                      "id": "KMB:E37:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "E37",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "TIN SHUI WAI TOWN CENTRE",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                        "zh-Hant": "機場(地面運輸中心)",
+                        "zh-Hans": "機場(地面運輸中心)"
+                      },
+                      "service": {
+                        "fareFull": "14.4",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 12,
+                          "max": 30
+                        },
+                        "hours": {
+                          "start": "05:10",
+                          "end": "23:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:E37:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": ["2026-08-04T16:33:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "14.4",
+                    "stopId": "KMB:775642281FBFE336"
+                  }
+                ],
+                "members": [
+                  {
+                    "id": "CTB:001992",
+                    "name": {
+                      "en": "Tin Shui Wai Park, Tin Shui Road",
+                      "zh-Hant": "天水圍公園, 天瑞路",
+                      "zh-Hans": "天水圍公園, 天瑞路"
+                    },
+                    "location": {
+                      "lat": 22.45453,
+                      "lng": 114.00295
+                    }
+                  },
+                  {
+                    "id": "KMB:775642281FBFE336",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN511)",
+                      "zh-Hant": "天水圍公園 (TN511)",
+                      "zh-Hans": "天水圍公園 (TN511)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    }
+                  },
+                  {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園 (TN510)",
+                      "zh-Hans": "天水圍公園 (TN510)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    },
+                    "aliasIds": ["KMB:DC5B5F4350685442"]
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-08-05T00:30:00+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+              "name": {
+                "label": "Tin Shui Wai Park, Tin Shui Road"
+              },
+              "caption": "Southeast-bound",
+              "bearingDeg": 148,
+              "rows": [
+                {
+                  "routeId": "CTB:969:outbound:1",
+                  "operator": "CTB",
+                  "routeNo": "969",
+                  "headline": "Causeway Bay (Moreton Terrace)",
+                  "label": {
+                    "kind": "mins",
+                    "value": 9,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ],
+              "remaining": 0,
+              "incomplete": false
+            }
+          ]
+        },
+        {
+          "name": "nothing-saved-is-no-cards",
+          "why": "The anti-vacuous end of the range, and it must not be an empty card: no saved keys means no rows to draw, which the screen renders as its own empty state rather than as a card with nothing in it.",
+          "args": {
+            "saved": [],
+            "places": [
+              {
+                "stop": {
+                  "id": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                  "name": {
+                    "en": "Tin Shui Wai Park, Tin Shui Road",
+                    "zh-Hant": "天水圍公園, 天瑞路",
+                    "zh-Hans": "天水圍公園, 天瑞路"
+                  },
+                  "location": {
+                    "lat": 22.454496666666667,
+                    "lng": 114.00296333333334
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001992"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "775642281FBFE336"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "AFB9321F7CD2C2E4"
+                    }
+                  ],
+                  "bearingDeg": 148
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "CTB:969:outbound:1",
+                      "operator": "CTB",
+                      "routeNo": "969",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "Tin Shui Wai Town Centre",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "Causeway Bay (Moreton Terrace)",
+                        "zh-Hant": "銅鑼灣 (摩頓台)",
+                        "zh-Hans": "銅鑼灣 (摩頓台)"
+                      },
+                      "service": {
+                        "fareFull": "27.3",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 8,
+                          "max": 20
+                        },
+                        "hours": {
+                          "start": "05:30",
+                          "end": "18:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "CTB:969:outbound:1",
+                      "stopId": "CTB:001992",
+                      "operator": "CTB",
+                      "arrivals": ["2026-08-04T16:39:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "27.3",
+                    "stopId": "CTB:001992"
+                  },
+                  {
+                    "route": {
+                      "id": "KMB:E37:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "E37",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "TIN SHUI WAI TOWN CENTRE",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                        "zh-Hant": "機場(地面運輸中心)",
+                        "zh-Hans": "機場(地面運輸中心)"
+                      },
+                      "service": {
+                        "fareFull": "14.4",
+                        "journeyMin": 90,
+                        "headway": {
+                          "min": 12,
+                          "max": 30
+                        },
+                        "hours": {
+                          "start": "05:10",
+                          "end": "23:40"
+                        }
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:E37:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": ["2026-08-04T16:33:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "fare": "14.4",
+                    "stopId": "KMB:775642281FBFE336"
+                  }
+                ],
+                "members": [
+                  {
+                    "id": "CTB:001992",
+                    "name": {
+                      "en": "Tin Shui Wai Park, Tin Shui Road",
+                      "zh-Hant": "天水圍公園, 天瑞路",
+                      "zh-Hans": "天水圍公園, 天瑞路"
+                    },
+                    "location": {
+                      "lat": 22.45453,
+                      "lng": 114.00295
+                    }
+                  },
+                  {
+                    "id": "KMB:775642281FBFE336",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN511)",
+                      "zh-Hant": "天水圍公園 (TN511)",
+                      "zh-Hans": "天水圍公園 (TN511)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    }
+                  },
+                  {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園 (TN510)",
+                      "zh-Hans": "天水圍公園 (TN510)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    },
+                    "aliasIds": ["KMB:DC5B5F4350685442"]
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-08-05T00:30:00+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+              "name": {
+                "label": "Tin Shui Wai Park, Tin Shui Road"
+              },
+              "caption": "Southeast-bound",
+              "bearingDeg": 148,
+              "rows": [],
+              "remaining": 0,
+              "incomplete": false
+            }
+          ]
+        },
+        {
+          "name": "a-saved-route-with-no-reading-renders-an-empty-card",
+          "knownDefect": true,
+          "why": "WRONG, and recorded so every platform is wrong in the same way rather than three different ways. A route the rider saved that has no live reading right now — a peak-only service at 23:00, which is most of the list overnight — contributes nothing at all, so the card is a name with nothing under it. The consequence that matters is diagnostic: **it cannot be told from a broken favourite key by eye**, which is why WP5-11's favourites proof had to rest on a route with a live arrival. Found by WP5-11, pre-existing since the screen shipped, declared as a `mustNot` in `StopRow`'s spec (WP6-1) and owned by WP6-4b. When fixed, `expect` becomes a card with one row for the saved route whose readout is its published frequency, else a dash — the three-way readout `PlaceRouteRow` already has, and the reason the fix is a change to what a card is built FROM rather than a patch here.",
+          "args": {
+            "saved": ["CTB:001992|CTB:969C:outbound:1"],
+            "places": [
+              {
+                "stop": {
+                  "id": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                  "name": {
+                    "en": "Tin Shui Wai Park, Tin Shui Road",
+                    "zh-Hant": "天水圍公園, 天瑞路",
+                    "zh-Hans": "天水圍公園, 天瑞路"
+                  },
+                  "location": {
+                    "lat": 22.454496666666667,
+                    "lng": 114.00296333333334
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001992"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "775642281FBFE336"
+                    },
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "AFB9321F7CD2C2E4"
+                    }
+                  ],
+                  "bearingDeg": 148
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "CTB:969C:outbound:1",
+                      "operator": "CTB",
+                      "routeNo": "969C",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "origin": {
+                        "en": "Tin Shui Wai Town Centre",
+                        "zh-Hant": "天水圍市中心",
+                        "zh-Hans": "天水圍市中心"
+                      },
+                      "destination": {
+                        "en": "Kornhill Plaza, Kornhill Road",
+                        "zh-Hant": "康怡廣場, 康山道",
+                        "zh-Hans": "康怡廣場, 康山道"
+                      },
+                      "service": {
+                        "fareFull": "28.2",
+                        "journeyMin": 97
+                      }
+                    },
+                    "eta": null,
+                    "fare": "28.2",
+                    "stopId": "CTB:001992"
+                  }
+                ],
+                "members": [
+                  {
+                    "id": "CTB:001992",
+                    "name": {
+                      "en": "Tin Shui Wai Park, Tin Shui Road",
+                      "zh-Hant": "天水圍公園, 天瑞路",
+                      "zh-Hans": "天水圍公園, 天瑞路"
+                    },
+                    "location": {
+                      "lat": 22.45453,
+                      "lng": 114.00295
+                    }
+                  },
+                  {
+                    "id": "KMB:775642281FBFE336",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN511)",
+                      "zh-Hant": "天水圍公園 (TN511)",
+                      "zh-Hans": "天水圍公園 (TN511)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    }
+                  },
+                  {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園 (TN510)",
+                      "zh-Hans": "天水圍公園 (TN510)"
+                    },
+                    "location": {
+                      "lat": 22.45448,
+                      "lng": 114.00297
+                    },
+                    "aliasIds": ["KMB:DC5B5F4350685442"]
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-08-05T00:30:00+08:00"
+          },
+          "expect": [
+            {
+              "stopId": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+              "name": {
+                "label": "Tin Shui Wai Park, Tin Shui Road"
+              },
+              "caption": "Southeast-bound",
+              "bearingDeg": 148,
+              "rows": [],
+              "remaining": 0,
+              "incomplete": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

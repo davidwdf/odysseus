@@ -6297,3 +6297,85 @@ pre-existing and unaddressed; it earned its keep here.
     surface `proposals/04` flags. WP6-9 still must not start before that is answered.
   - **Test totals:** core **869**, edge 149, api-client 71, ui-spec 30, web **105** (+22), mobile **86**
     (+21) — **1 310**. Corpus 98 groups / **834** cases (+1). `packages/core` stays at 100 % on all four axes.
+
+## ADR-089 — A favourite is a rider's own data, so its migration is a shared rule rather than a store's private business
+
+- **Status:** **Decided and implemented 2026-08-05** as the first half of **WP6-4**. Implementation:
+  `packages/core/src/favourites.ts` (`FAVOURITE_KEY_VERSION`, `migrateFavouriteKeys`,
+  `favouritePoleIds`, `favouritesView`) with a new corpus — `spec/favourites.spec.json`, **3 groups /
+  17 cases, one of them `knownDefect`** — the RN store and screen consuming it, and
+  `apps/web/src/lib/preferences.ts` rebuilt as the full five-field store on the **same storage key**.
+  A hoist, so no behaviour changes; `packages/core` stays at **100 % on all four axes**.
+- **Context.** Two things had to move before `apps/web` could draw a Favourites screen at all, and they
+  are the same thing seen from either end. The screen's composition lived in
+  `apps/mobile/app/(tabs)/favorites.tsx` — grouping resolved poles by place in save order, intersecting
+  each place's rows with the saved keys *at the pole*, assembling the readings — reachable only by
+  rendering a React tree. And the **migration** lived in that app's zustand store, reachable only by
+  loading it. ADR-082 decision 5 named this row as inheriting the second: WP6-0 deliberately wrote a
+  *different* storage key, because zustand's `persist` writes `partialize`'s output as the **whole
+  blob**, so a two-field store on `nextbus.preferences` would have erased every favourite a rider had
+  — silently, at WP6-8, on first launch.
+- **Decisions:**
+  1. **The version number is shared, and that is the load-bearing part.** Once two stores write one
+     blob, the hazard is not that they disagree about a display: it is that they stamp **different
+     versions** on it. A store writing a *lower* version re-runs a completed migration; one writing a
+     *higher* version makes the next step skip data it has never seen. Neither fails loudly, and the
+     data at stake cannot be re-derived from anywhere — so `FAVOURITE_KEY_VERSION` is one declaration
+     in the kernel and both stores read it.
+  2. **The rule moves; the store shape stays.** `migrateFavouriteKeys` is corpus-pinned in
+     `packages/core`; each app keeps its own `migratePreferences` adapter, because
+     `PersistedPreferences` names `Appearance` and `Locale` and the kernel may not import either
+     (ADR-051). That is ADR-069 decision 7 exactly: *the rule is shared and the wiring is not.* What
+     would be dangerous is a second implementation of the rebasing, and there is not one.
+  3. **The fix for the shared key is to model *more*, not to share less.** `apps/web` now holds all
+     five fields and writes `nextbus.preferences`. `recentRoutes` and `recentStops` have no consumer
+     there until WP6-5 — they are held in state and written back unchanged, which is exactly what makes
+     sharing safe. **A field a store *reads* and a field it *preserves* are different jobs**, and only
+     the first is optional.
+  4. **The guard changed shape rather than going away.** `shell-parity.test.ts` asserted the two keys
+     *differed*; it now asserts they are the **same**, that the two `partialize` field sets are equal
+     *by reading both sources*, that both stamp the shared version, and that neither re-implements the
+     rebasing. The field-set check is the stronger guard: a field added to the RN store and forgotten in
+     the web one is the only failure mode of a shared key, and it is the one that costs a rider
+     something they curated by hand. Watched failing by dropping the recents from `partialize`.
+  5. **Which poles to fetch is its own export.** The screen needs that list *before* it has any data,
+     so it cannot be derived from the cards — hence `favouritePoleIds` beside `favouritesView`. It
+     also decides two things a renderer should not: a key the id grammar cannot read is **skipped
+     rather than guessed at** (the migration keeps it on disk in case a later grammar can), and two
+     saved poles of one place are **one** query, because `getStop` promotes a member id to its place.
+  6. **A card is per *place*, never per saved pole.** Favourites key on the member pole precisely so a
+     clustering change cannot orphan them (ADR-062), and that is the wrong unit to draw: a rider who
+     saved two lines at two kerbs of one interchange saved two things at one place, and two cards for
+     it would read as two places.
+  7. **`migrateFavouriteKeys` returns its input by *reference* when it has nothing to do.** The RN
+     store's existing test asserts a future-version blob is passed through untouched with `toBe`, and
+     keeping that identity is what makes "untouched" mean untouched rather than "equal for now" — an
+     equal-but-new object is the shape a future step could quietly start rewriting fields through.
+- **The `knownDefect` row, and why it is recorded rather than fixed here.** A saved route with **no live
+  reading** contributes nothing, so the card is a name with nothing under it — a peak-only service at
+  23:00, which is most of a rider's list overnight. The consequence that matters is diagnostic: **it
+  cannot be told from a favourite key that no longer resolves**, which is why WP5-11's favourites proof
+  had to rest on a route with a live arrival. It is now a corpus row with its `expect` recorded as it
+  stands and its `why` saying what that becomes when fixed — a row whose readout is the published
+  frequency, else a dash, the three-way readout `PlaceRouteRow` already has. Fixing it is a change to
+  what a card is built **from**, which is WP6-4b's job and the reason this commit is a hoist.
+- **Verified in a browser, on the owner's own twelve favourites.** The rewired RN tab draws three cards
+  — two distinct `Belair Garden` places, Northeast- and Southwest-bound, which is ADR-042's
+  direction-aware clustering visible on screen — with all three readout kinds and a **"+3 more routes"**
+  count that is correct because the cap is `stopCardView`'s alone. And the *shared key* was measured
+  rather than reasoned about: handed a **v0** blob written the way the RN app writes one, the web store
+  ran the shared migration (one place-keyed favourite became **two** pole-keyed ones), stamped the blob
+  at version 1, and **preserved both recents lists it does not read**.
+  Screenshot: `.context/wave6-screenshots/7-rn-favourites-after-the-hoist.jpg`.
+- **Consequences:**
+  - ⚪ **A favourite starred in either app is visible in the other** once they share an origin. In dev
+    they do not — localStorage is per-origin *including the port* — so this is a WP6-8 property, and it
+    is why it was verified by seeding the blob rather than by clicking a star on one app and looking at
+    the other.
+  - 🟡 **The `nextbus.shell.v1` blob is not migrated.** It held an appearance and a language override,
+    for one work package, and re-picking both is two taps — where a migration for scaffolding WP6-7
+    deletes is a step every future reader has to understand. Favourites were never in it.
+  - 🟡 **WP6-4b still owns the two bugs the row is measured on**: the empty card above, and WP5-12's
+    one-row-for-two-kerbs residual, which needs a per-row kerb label the compact card does not have.
+  - **Test totals:** core **889** (+20), edge 149, api-client 71, ui-spec 30, web **108** (+3),
+    mobile 86 — **1 333**. Corpus **14** files / **101** groups / **851** cases (+1 module, +17 cases).

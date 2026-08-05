@@ -1,5 +1,6 @@
 export * from './datasource'
 export * from './eta'
+export * from './favourites'
 export * from './geo'
 export * from './geo-snap'
 export * from './ids'

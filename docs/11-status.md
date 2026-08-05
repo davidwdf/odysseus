@@ -45,6 +45,32 @@
 > its route (no id → disabled query → nothing rendered), the RN driver polled for a `data-testid` nothing
 > renders, and reanimated cannot load outside Metro while **its own shipped mock is broken in v4**, so the
 > suite died at *import* — which vitest counts as a failed file rather than failed tests.
+> **WP6-4 has started, and its hoist half is done**
+> ([ADR-089](./08-decision-log.md#adr-089--a-favourite-is-a-riders-own-data-so-its-migration-is-a-shared-rule-rather-than-a-stores-private-business)):
+> two things had to move before `apps/web` could draw a Favourites screen at all. The screen's
+> composition — grouping resolved poles by their place in save order, intersecting each place's rows with
+> the saved keys *at the pole*, assembling the readings — is `favouritesView` now, with `favouritePoleIds`
+> beside it because the screen needs to know **which poles to fetch before it has any data**. And the
+> **migration** moved: `FAVOURITE_KEY_VERSION` and `migrateFavouriteKeys` are the kernel's, corpus-pinned,
+> because once two stores write one blob the hazard is not that they disagree about a display — it is that
+> they **stamp different versions on it**, which re-runs a completed step or skips data a step has never
+> seen, silently, on the one list a rider curated by hand.
+> **The fix for the shared key was to model *more*, not to share less.** `apps/web`'s store now holds all
+> five fields and writes `nextbus.preferences`; `recentRoutes` and `recentStops` have no consumer there
+> until WP6-5 and are written back unchanged, which is exactly what makes sharing safe — *a field a store
+> reads and a field it preserves are different jobs*. `shell-parity.test.ts`'s guard changed shape rather
+> than going away: it asserted the two keys **differed** and now asserts they are the **same**, that the
+> two `partialize` field sets are equal *by reading both sources*, and that neither re-implements the
+> rebasing. Watched failing by dropping the recents from `partialize`.
+> **Measured in a browser rather than reasoned about**: handed a **v0** blob written the way the RN app
+> writes one, the web store ran the shared migration (one place-keyed favourite became **two** pole-keyed
+> ones), stamped it at version 1, and preserved both recents lists. And the rewired RN tab draws the
+> owner's own twelve favourites unchanged — three cards, two distinct `Belair Garden` places, and a
+> **"+3 more routes"** count that is right because the cap is `stopCardView`'s alone.
+> Screenshot: `.context/wave6-screenshots/7-rn-favourites-after-the-hoist.jpg`.
+> **WP6-4b is what remains, and it is what the row is measured on:** the Favourites spec, the `apps/web`
+> port, and the two bugs closed **by declared states** — the empty card (now a `knownDefect` corpus row
+> whose `why` says what its `expect` becomes) and WP5-12's one-row-for-two-kerbs residual.
 > **Wave 6's earlier rows, for context** — WP6-0, WP6-1, WP6-2 and WP6-3a
 > ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
 > [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),
@@ -989,12 +1015,16 @@ than any in its own row.
   rest get a **compass side** where the poles are far enough apart for one to mean something. **The residual
   is real and owned:** 141 pairs across 115 places sit 2–10 m apart — too far to fold, too close for a side
   (**WP5-12** below).
-- 🟡 **A favourite whose route has no current arrival renders an empty card** (found by WP5-11, **pre-existing
-  and unowned — worth its own row**, adjacent to WP5-4). `FavoritePlaceRow` filters rows to those carrying an
-  `eta` and drops the rest, so a peak-only service shows a card with a name and nothing under it (269D:3 at
-  Tin Shui Wai Park, tested at 22:55; the row *was* matched — fare 18.5 present by `curl`). The consequence
-  that matters is diagnostic: **an empty card cannot be told from a broken favourite key by eye**, which is
-  why WP5-11's favourites proof rests on a route with a live arrival instead.
+- 🟡 **A favourite whose route has no current arrival renders an empty card** (found by WP5-11,
+  pre-existing; **owned by WP6-4b since 2026-08-05 and now pinned as a `knownDefect` corpus row** —
+  `favourites.spec.json`'s `a-saved-route-with-no-reading-renders-an-empty-card`, whose `why` records what
+  its `expect` becomes when fixed). `favouritesView` keeps only rows carrying an `eta` and drops the rest,
+  so a peak-only service shows a card with a name and nothing under it (269D:3 at Tin Shui Wai Park, tested
+  at 22:55; the row *was* matched — fare 18.5 present by `curl`). The consequence that matters is
+  diagnostic: **an empty card cannot be told from a broken favourite key by eye**, which is why WP5-11's
+  favourites proof rests on a route with a live arrival instead. The fix is a change to what a card is built
+  **from** — a row per saved route, with the three-way readout `PlaceRouteRow` already has — not a patch at
+  the render site, which is why the hoist came first.
 - ✅ **Closed by Wave 5, kept here for the history: a raw upstream URL literal in a screen was invisible to
   both tools.** `pnpm boundaries` checks the *import graph*, and `fetch('https://data.etabus.gov.hk/…')`
   imports nothing, so golden rule 2 was encoded only as `view` ✗→ `adapters` — recorded in Wave 1 and owned by

@@ -1,4 +1,9 @@
-import { formatFavoriteRouteKey, type Locale, parseFavoriteRouteKey } from '@nextbus/core'
+import {
+  FAVOURITE_KEY_VERSION,
+  formatFavoriteRouteKey,
+  type Locale,
+  migrateFavouriteKeys,
+} from '@nextbus/core'
 import type { Appearance } from '@nextbus/ui'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { create } from 'zustand'
@@ -36,13 +41,17 @@ interface Preferences {
   clearRecentStops: () => void
 }
 
-// ── The persisted schema and its migration (ADR-062) ────────────────────────────────────────
-// Everything in this section exists because of one asymmetry: the rest of the store can be got
-// wrong and fixed in the next release, but a favourite is a thing a rider curated by hand, and
-// dropping one is silent and unrecoverable. So the key scheme is *versioned* rather than merely
-// changed, and the change is a numbered step that runs once and stamps the blob, not a fixup on
-// every read — a read fixup never finishes, has to stay correct forever, and leaves no evidence
-// that the scheme ever moved.
+// ── The persisted schema and its migration (ADR-062, hoisted by WP6-4) ──────────────────────
+// The *rule* — how a favourite key written by an older scheme is brought up to date, and which version
+// number stamps the blob — is `@nextbus/core`'s `migrateFavouriteKeys`, corpus-pinned by
+// `spec/favourites.spec.json`. It lived here until WP6-4 needed a second store to read the same
+// favourites, and the hazard that forced the move is not that two apps might disagree about a display:
+// it is that they would stamp **different version numbers on one storage blob**. A store writing a lower
+// version re-runs a completed step; one writing a higher version makes the next step skip data it has
+// never seen. Neither fails loudly, and the data at stake is a list a rider curated by hand.
+//
+// What stays here is this store's *shape* — `PersistedPreferences` names `Appearance` and `Locale`, which
+// the kernel may not import (ADR-051) — so the adapter below is deliberately the whole of the local half.
 
 /** Exactly what `partialize` writes, and therefore exactly what `migrate` is handed back. */
 type PersistedPreferences = Pick<
@@ -51,74 +60,38 @@ type PersistedPreferences = Pick<
 >
 
 /**
- * The persisted schema version. Bump it — and add a step to `migratePreferences` — when the
- * *meaning* of something already on disk changes. Adding a field is not that: zustand's `merge`
- * already falls back to the initial state for anything the blob does not carry.
+ * The persisted schema version — the kernel's, so both stores stamp the same number.
  *
- * `0 → 1` — favourite keys are re-based from the `P:` place id onto the member pole id
- * (ADR-042/ADR-062).
+ * Bump `FAVOURITE_KEY_VERSION` there, and add a step to `migrateFavouriteKeys`, when the *meaning* of
+ * something already on disk changes. Adding a field is not that: zustand's `merge` already falls back to
+ * the initial state for anything the blob does not carry.
  */
-export const PREFERENCES_VERSION = 1
+export const PREFERENCES_VERSION = FAVOURITE_KEY_VERSION
 
 /**
- * v0 → v1: rewrite `P:<a>+<b>|<route>` into one key per member pole, preserving save order.
+ * The `persist` migration: read the blob's favourite list, hand it to the shared rule, put it back.
  *
- * **Every member, not a guess at one.** A place-keyed favourite recorded "this route, at this
- * merged place" and simply does not say which kerb the rider meant. Picking a member would be a
- * coin flip whose losing side is an invisibly missing favourite; expanding to all of them is
- * invisible in the other direction, because the Favourites tab intersects the saved keys with the
- * route-at-pole rows the place actually reports, so a key for a pole that does not serve the route
- * can never render. Over-expansion costs a string; guessing costs the favourite.
- *
- * **A key we cannot parse is kept exactly as it is** — not deleted, and not moved to a quarantine
- * list that would become a second place to forget about. Today's grammar is deliberately narrower
- * than tomorrow's (a fifth operator ships and `OPERATOR_RE` widens), the render path already skips
- * what it cannot parse, and a key that starts parsing again later simply starts working again.
- */
-function rebaseFavoritesOntoPoles(entries: readonly unknown[]): string[] {
-  const out: unknown[] = []
-  const seen = new Set<unknown>()
-  const keep = (entry: unknown) => {
-    if (seen.has(entry)) return // a place expansion can land on a key that is already saved
-    seen.add(entry)
-    out.push(entry)
-  }
-  for (const entry of entries) {
-    const parsed = typeof entry === 'string' ? parseFavoriteRouteKey(entry) : null
-    if (parsed?.stop.kind === 'place') {
-      for (const member of parsed.stop.members) {
-        keep(formatFavoriteRouteKey(member.id, parsed.routeId))
-      }
-    } else keep(entry)
-  }
-  // `favoriteRoutes: string[]` is a claim about what *we* write. A hand-edited blob can hold
-  // anything, and the rule above is to pass an entry we do not understand through untouched
-  // rather than to drop it, so the cast records the gap instead of a `.filter()` closing it.
-  return out as string[]
-}
-
-/**
- * The `persist` migration. Steps are applied in order and **must each be idempotent**, because a
- * blob from a *future* version — a rider who downgraded, or two tabs on different builds — is
- * passed through untouched and then re-stamped at *our* version, so the step that follows it can
- * meet data it has already been run against. (Untouched, rather than reset to defaults: a scheme
- * we cannot read renders as nothing, which is recoverable by upgrading again; discarding it is
- * not.)
- *
- * One trap worth naming: zustand only calls `migrate` when the stored `version` is a **number**,
- * so a blob with no version field at all is loaded verbatim and never reaches here. Every blob
- * this store has written carries `version: 0` (that is `persist`'s default), so there is nothing
- * on a real device that this misses — but a non-number is still treated as 0 below, because it
- * costs one comparison and the alternative failure is silent.
+ * One trap worth naming and it is zustand's, not the rule's: `migrate` is only called when the stored
+ * `version` is a **number**, so a blob with no version field at all is loaded verbatim and never reaches
+ * here. Every blob this store has written carries one (`persist`'s default is 0), so nothing on a real
+ * device misses it — and `migrateFavouriteKeys` treats a non-number as the oldest version anyway, because
+ * that costs one comparison and the alternative failure is silent.
  */
 export function migratePreferences(persisted: unknown, version: number): PersistedPreferences {
   // The one cast: below this line the blob is untrusted data, and above it zustand's `merge`
   // shallow-merges whatever we return over the defaults.
   const state = persisted as PersistedPreferences | null
-  const from = Number.isFinite(version) ? version : 0
-  if (from >= PREFERENCES_VERSION || !state) return state as PersistedPreferences
-  if (!Array.isArray(state.favoriteRoutes)) return state
-  return { ...state, favoriteRoutes: rebaseFavoritesOntoPoles(state.favoriteRoutes) }
+  if (!state || !Array.isArray(state.favoriteRoutes)) return state as PersistedPreferences
+  const migrated = migrateFavouriteKeys(state.favoriteRoutes, version)
+  // **The same reference means the rule had nothing to do** — a blob already at, or ahead of, our version.
+  // Returning the *same object* rather than an equal one is what "passes it through untouched" means, and
+  // `preferences.migration.test.ts` asserts the identity precisely because an equal-but-new object is the
+  // shape a future step could quietly start rewriting fields through.
+  if (migrated === state.favoriteRoutes) return state
+  // `favoriteRoutes: string[]` is a claim about what *we* write; a hand-edited blob can hold anything, and
+  // the rule passes an entry it does not understand through untouched rather than dropping it. The cast
+  // records that gap rather than a `.filter()` closing it and losing a rider's key.
+  return { ...state, favoriteRoutes: migrated as string[] }
 }
 
 /** Move `id` to the front of `list`, de-duplicated, capped at `RECENTS_MAX`. */
