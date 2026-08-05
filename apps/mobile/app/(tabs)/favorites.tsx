@@ -61,7 +61,13 @@ export default function Favorites() {
     { locale, now, policy },
   )
 
+  // **A screen with saved favourites and nothing to show is one of three states, not one** — and until
+  // WP6-4b it collapsed them: `loading` was the only guard, so once every query had *failed* the screen
+  // rendered its heading and an empty list, which is the same blank-screen hole WP6-3b found on Place detail
+  // through a different door. A rider could not tell "still fetching" from "we could not reach any of them".
   const loading = results.some((r) => r.isLoading) && cards.length === 0
+  const errors = results.flatMap((r) => (r.isError ? [r.error] : []))
+  const failure = cards.length === 0 ? errors[0] : undefined
 
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
@@ -79,6 +85,10 @@ export default function Favorites() {
             {t(locale, 'favoritesEmptyHelp')}
           </Text>
         </View>
+      ) : failure ? (
+        <Text variant="body" className="px-4 text-danger">
+          {(failure as Error).message}
+        </Text>
       ) : loading ? (
         <View className="px-4 py-4">
           <Skeleton className="h-5 w-2/3" />

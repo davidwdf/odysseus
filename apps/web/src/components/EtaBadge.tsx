@@ -34,6 +34,11 @@ export function EtaBadge({
           <span className={`text-h2 font-semibold tabular-nums ${tone}`}>{label.value}</span>
           <span className="ml-0.5 text-caption text-muted">{label.unit}</span>
         </>
+      ) : label.kind === 'headway' ? (
+        // The published timetable, where there is no live reading at all (WP6-4b) — small and muted rather
+        // than a figure, because it is the *Static* honesty tier and must not read as a bus that has been
+        // seen. See the RN twin for the longer note.
+        <span className="max-w-[120px] text-right text-caption text-subtle">{label.text}</span>
       ) : (
         <span className={`text-h2 font-semibold tabular-nums ${tone}`}>
           {label.kind === 'due' ? label.label : '—'}

@@ -156,8 +156,11 @@ describe('every declared destination opens, and none of them is blank', () => {
   }
 
   it('shows an unported destination its name and says it is coming, not an empty page', () => {
-    const text = renderedText(mount('/favorites'))
-    expect(text).toContain(t('en', 'tabFavorites'))
+    // `/faq` rather than `/favorites`, which WP6-4b ported. A placeholder assertion has to die when its
+    // placeholder does, or it becomes a test asserting that a shipped screen is still missing — the same
+    // churn WP6-3b's `/stop/:id` assertion went through, and the right kind.
+    const text = renderedText(mount('/faq'))
+    expect(text).toContain(t('en', 'settingsFaq'))
     expect(text).toContain(t('en', 'comingSoon'))
   })
 

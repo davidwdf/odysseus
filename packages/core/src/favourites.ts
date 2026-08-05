@@ -18,10 +18,19 @@
 // Nothing here reads a clock, a locale or a device: `now` and `locale` arrive as arguments, for the reason
 // every rule in this package takes them that way.
 
-import { dedupeEtas } from './eta'
-import { formatFavoriteRouteKey, parseFavoriteRouteKey } from './ids'
-import { type StopCardOptions, type StopCardView, stopCardView } from './stop-card'
-import type { Eta, StopDetail } from './types'
+import { etaReadout, formatHeadway, type RemarkView, remarkView } from './eta'
+import { formatFavoriteRouteKey, parseFavoriteRouteKey, parseRouteId } from './ids'
+import { CLIENT_POLICY_DEFAULTS } from './policy'
+import {
+  displayName,
+  type StopCardOptions,
+  type StopCardRow,
+  type StopCardView,
+  stopCardCaption,
+} from './stop-card'
+import type { StopDetailRoute } from './stop-detail'
+import { titleCaseName } from './stop-name'
+import type { StopDetail } from './types'
 
 /**
  * The persisted favourite-key scheme's version. Bump it — and add a step to `migrateFavouriteKeys` —
@@ -160,6 +169,7 @@ export interface FavouritesInput {
  * @spec favourites#favouritesView
  */
 export function favouritesView(input: FavouritesInput, opts: StopCardOptions): StopCardView[] {
+  const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
   const savedKeys = new Set(input.saved)
   const order: string[] = []
   const byPlace = new Map<string, StopDetail>()
@@ -174,20 +184,104 @@ export function favouritesView(input: FavouritesInput, opts: StopCardOptions): S
     // `order` is built from the keys of `byPlace`, so the entry exists; the `as` records that rather
     // than a `?? throw` arm no payload can reach — the shape the 100 % branch threshold refuses.
     const detail = byPlace.get(placeId) as StopDetail
-    const etas: Eta[] = dedupeEtas(
-      detail.routes
-        .filter((route) => savedKeys.has(formatFavoriteRouteKey(route.stopId, route.route.id)))
-        // `/v1/stop`'s readings do not carry a destination — only the canonical route does — so it is
-        // stamped on here. Without it the card's row falls back to the remark and prints
-        // "→ Scheduled Bus" where every other surface prints the destination.
-        .map((route): Eta | null =>
-          route.eta
-            ? { ...route.eta, destination: route.eta.destination ?? route.route.destination }
-            : null,
-        )
-        .filter((eta): eta is Eta => eta !== null),
-    ).sort((a, b) => (a.arrivals[0] ?? '').localeCompare(b.arrivals[0] ?? ''))
+    const saved = detail.routes.filter((route) =>
+      savedKeys.has(formatFavoriteRouteKey(route.stopId, route.route.id)),
+    )
 
-    return stopCardView({ stop: detail.stop, etas }, opts)
+    // **Two rows for one line saved at two kerbs, and no label naming them** (WP6-4b, closing WP5-12's
+    // residual from the favourites side). The collapse this used to inherit from `soonestPerLine` is right
+    // for a card *summarising a place* and wrong for a list the rider curated: starring a line at both
+    // kerbs is an explicit choice, and one merged row hid the other kerb's bus entirely.
+    //
+    // Naming the kerbs was tried and **declined on a measurement**, which is the part worth keeping: across
+    // five Hong Kong neighbourhoods, **not one** line published at two kerbs of a place had *distinct*
+    // printed codes on them — and it could not, because a place's poles are clustered by sharing a name and
+    // the code is part of the name (at Tin Shui Wai Park both TN510 poles print `TN510`, which is ADR-071's
+    // own example). A label repeated on both rows claims a distinction it does not make, so there is none.
+    // What a rider gets is both buses instead of one, and Place detail — which has room for ADR-080's
+    // compass side, pole name and "check the sign" ladder — is one tap away.
+    const rows = saved
+      .map((route) => favouriteRow(route, opts.locale, opts.now, policy))
+      // **Soonest first, and the ones with no reading last.** A rider opens this screen to find the next
+      // bus, so a live arrival outranks a timetable and a timetable outranks a dash — and within the
+      // readings, the sooner one. It is the card's own order because Favourites is the one surface whose
+      // rows do not arrive pre-sorted from anywhere: the wire orders a *place's* rows, not a rider's list.
+      .sort((a, b) => readoutRank(a) - readoutRank(b) || (a.due ?? '').localeCompare(b.due ?? ''))
+      .map(({ due: _due, ...row }) => row)
+
+    const shown = rows.slice(0, policy.maxRows)
+    return {
+      stopId: detail.stop.id,
+      name: displayName(detail.stop.name[opts.locale]),
+      // No distance: Favourites knows what the rider saved, not where they are — and a screen opened
+      // from anywhere has nothing to measure from. `stopCardCaption` drops that half of the caption.
+      caption: stopCardCaption(undefined, detail.stop.bearingDeg, opts.locale),
+      ...(detail.stop.bearingDeg === undefined ? {} : { bearingDeg: detail.stop.bearingDeg }),
+      rows: shown,
+      // The cap and its count in one pass, over the **saved** rows: the `.slice(0, 4)` that used to sit in
+      // the screen passed on an already-truncated list, so the count computed `4 - 4` and a place with nine
+      // saved routes showed four of them and said nothing about the rest.
+      remaining: Math.max(0, rows.length - shown.length),
+      // Presence, not length — the same argument `stopCardView` makes: a rider cannot act on the
+      // difference between one refusing kerb and four (ADR-077).
+      incomplete: (detail.failed ?? []).length > 0,
+    }
   })
+}
+
+/** A row, plus the arrival it sorts on — stripped before it leaves `favouritesView`. */
+type SortableRow = StopCardRow & { due?: string }
+
+/** Live reading, then published timetable, then nothing. See the sort above. */
+function readoutRank(row: SortableRow): number {
+  if (row.label.kind === 'headway') return 1
+  if (row.label.kind === 'none') return 2
+  return 0
+}
+
+/**
+ * One saved route as a card row — **whether or not a bus is due**, which is the whole of WP6-4b's first fix.
+ *
+ * The readout is the same three-way choice `PlaceRouteRow` has carried since WP6-3a: a live arrival, else
+ * the timetable's own published frequency, else a dash. Before this, a route with no reading contributed
+ * *nothing*, so a card could be a name with nothing under it — indistinguishable by eye from a favourite
+ * key that no longer resolves, which is why WP5-11's favourites proof had to rest on a route with a live
+ * arrival.
+ */
+function favouriteRow(
+  route: StopDetailRoute,
+  locale: StopCardOptions['locale'],
+  now: number,
+  policy: NonNullable<StopCardOptions['policy']>,
+): SortableRow {
+  // Blank collapses to absent, deliberately: upstream really does send an empty `en`, and every decision
+  // here was a truthiness test in JSX before it was a rule (see `stopCardRow`).
+  const destination = route.route.destination?.[locale] || undefined
+  const remark: RemarkView | undefined = remarkView(
+    route.eta?.remark,
+    locale,
+    route.eta?.remarkKind,
+  )
+  // The destination is title-cased; a remark standing in for one is not — a remark is already prose the
+  // operator wrote for a rider to read, where a stop or route name arrives ALL-CAPS.
+  const headline = destination === undefined ? remark?.text : titleCaseName(destination)
+  const reading = route.eta ? etaReadout(route.eta, locale, now, policy) : undefined
+  const headway = route.route.service?.headway
+  return {
+    routeId: route.route.id,
+    operator: route.route.operator,
+    routeNo: parseRouteId(route.route.id)?.routeNo ?? route.route.id,
+    ...(headline === undefined ? {} : { headline }),
+    // Its own line only when it is not already the headline — otherwise the same words print twice.
+    ...(destination === undefined || remark === undefined ? {} : { remark }),
+    ...(reading ?? {
+      label:
+        headway === undefined
+          ? ({ kind: 'none' } as const)
+          : ({ kind: 'headway', text: formatHeadway(headway, locale) } as const),
+      urgency: 'none' as const,
+      stale: false,
+    }),
+    ...(route.eta?.arrivals[0] === undefined ? {} : { due: route.eta.arrivals[0] }),
+  }
 }

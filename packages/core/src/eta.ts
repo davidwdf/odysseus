@@ -108,6 +108,25 @@ export type EtaLabelParts =
   | { kind: 'departed' }
   | { kind: 'due'; label: string }
   | { kind: 'mins'; value: number; unit: string }
+  /**
+   * The published frequency, where there is **no live reading at all** — "every 10 – 15 min".
+   *
+   * `etaLabelParts` never returns this, and cannot: it is handed an arrival and every arm above is a
+   * statement about one. It exists because a **saved** route is a row whether or not a bus is due
+   * (WP6-4b), and a row with nothing on its right-hand side is the empty card `StopRow`'s spec has
+   * declared a `mustNot` since WP6-1: *a card with a name and nothing under it cannot be told from a
+   * favourite key that no longer resolves.* A route with a timetable is not a route with nothing to say.
+   */
+  | { kind: 'headway'; text: string }
+  /**
+   * Neither a reading nor a published frequency — the dash.
+   *
+   * The third arm of the same union `PlaceRouteRow.readout` has carried since WP6-3a, and it is here for
+   * the same reason: so that "we do not know" is a thing a row can *say*, rather than a blank a rider has
+   * to interpret. `urgency` is `none` and `stale` is false for both of these — there is no reading to be
+   * urgent or old about.
+   */
+  | { kind: 'none' }
 /**
  * The `EtaLabelParts` above, for one arrival — same rule as `formatRelative`, split so the
  * number and the unit can be styled separately.

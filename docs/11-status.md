@@ -68,9 +68,38 @@
 > owner's own twelve favourites unchanged — three cards, two distinct `Belair Garden` places, and a
 > **"+3 more routes"** count that is right because the cap is `stopCardView`'s alone.
 > Screenshot: `.context/wave6-screenshots/7-rn-favourites-after-the-hoist.jpg`.
-> **WP6-4b is what remains, and it is what the row is measured on:** the Favourites spec, the `apps/web`
-> port, and the two bugs closed **by declared states** — the empty card (now a `knownDefect` corpus row
-> whose `why` says what its `expect` becomes) and WP5-12's one-row-for-two-kerbs residual.
+> **WP6-4b closed it** ([ADR-090](./08-decision-log.md#adr-090--a-mustnot-a-component-cannot-satisfy-is-a-statement-about-its-producer)),
+> and the two bugs the row is measured on are both gone. The lesson is the ADR's title: **a `mustNot` a
+> component cannot satisfy is a statement about its producer.** `StopRow`'s `empty` state has carried
+> *"a card with a name and nothing under it"* since WP6-1 and could not be enforced, because the card was
+> never where the fix was — the **row was never built**. `favouritesView` emits one per saved route now,
+> whose readout is the published timetable (`EtaLabelParts` gained a `headway` arm) else a dash, and the
+> state's enforcement is `by: 'etaHeadway'`, a real slot. **`stop-row.spec.json` is the first spec in the
+> repo with zero `knownDefect`s, and it got there by fixing a producer rather than softening a sentence.**
+> **The kerb label was built, then declined on a measurement.** A per-row code naming the two kerbs is what
+> ADR-072 refused and WP5-12 left open; across five Hong Kong neighbourhoods **not one** line published at
+> two kerbs of a place had *distinct* printed codes, and it cannot — a place's poles are clustered by
+> sharing a name and the code is part of the name. So the field was removed rather than shipped
+> always-absent-or-always-equal: a rider gets **both buses instead of one**, and Place detail's ADR-080
+> ladder is one tap away.
+> 🔴 **A third instance of the blank-screen hole, found by asking the states**: the screen guarded only on
+> `isLoading`, so once *every* query had failed it drew its heading and an empty list — a curated list
+> looking empty. Both renderers have a `failed` arm now.
+> **Two measurements about the harnesses worth carrying forward.** Both drivers compute their expectation by
+> calling `favouritesView`, so a broken kernel moves the render and the expectation *together*: injecting
+> each bug back turned the **corpus** suite red by 4 and 2 tests and left both conformance suites
+> **passing**. That division is right (ADR-084) and it is a gap a reader would not expect, so each driver
+> now asserts its own fixtures' shape. And deleting the `headway` arm from `stop-row.spec.json` failed at
+> **emit** — `state 'empty' claims to be enforced by slot 'etaHeadway', which does not exist` — which is
+> ADR-083's "every state declares what enforces it" making a slot *undeletable*, a payoff its own ADR did
+> not predict.
+> **Verified in a browser on live data:** `269D → Lek Yuen 10 min` **and** `269D → Lek Yuen every 12 min`
+> (two rows for one line saved at two kerbs, the second on its timetable) plus `969C → Kornhill Plaza —`
+> (a saved route with no reading, now a row). Screenshot:
+> `.context/wave6-screenshots/8-web-favourites-both-bugs-closed.jpg`.
+> **WP6-5 (Search) is next**, and it inherits one thing named in writing: `apps/web`'s store already
+> **preserves** `recentRoutes` and `recentStops` without reading them, so porting Search is a matter of
+> reading fields that are already on the blob.
 > **Wave 6's earlier rows, for context** — WP6-0, WP6-1, WP6-2 and WP6-3a
 > ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
 > [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),
@@ -983,13 +1012,15 @@ than any in its own row.
   **Two residuals it leaves are below**: a rider starring one line at *both* kerbs still sees one Favourites
   row, and `stopCardView`'s collapse now depends on producers sorting soonest-first for *value* as well as
   order.
-- 🟡 **A rider who stars one line at *both* kerbs of a place sees one Favourites row** (left by WP5-9,
-  ADR-072, and verified in a browser with both keys saved). Both keys resolve; the compact card's
-  collapse-to-one-row-per-line is what merges them, which is right for a card with no kerb heading and wrong
-  for a rider's explicit choice. **Not a regression** — before WP5-9 only one of the two kerbs had a reading at
-  all — but telling the two apart needs a **per-row kerb label the card does not have**. Owner: **WP5-12**,
-  which this joins from the favourites side; the alternative is ADR-072's rejected "collapse on what the row
-  *prints*" (26 of the 43 cross-pole lines show **different destinations** at their two kerbs).
+- ✅ **Closed 2026-08-05 by WP6-4b** ([ADR-090](./08-decision-log.md#adr-090--a-mustnot-a-component-cannot-satisfy-is-a-statement-about-its-producer)),
+  kept for the history: *"a rider who stars one line at both kerbs of a place sees one Favourites row"*.
+  `favouritesView` builds its own rows now, so the compact card's collapse-to-one-row-per-line — right for a
+  card summarising a place, wrong for a list the rider curated — no longer applies to a rider's explicit
+  choice. **The per-row kerb label this row asked for was built and then declined on a measurement:** across
+  five HK neighbourhoods not one line published at two kerbs of a place had *distinct* printed codes, and it
+  cannot, because a place's poles are clustered by sharing a name and the code is part of the name. So the
+  rider gets both buses and the kerbs stay unnamed on the card, with ADR-080's ladder one tap away on Place
+  detail. Declared as the spec's `bothKerbs` state, measurement included.
 - 🟡 **`stopCardView`'s "keep the first" depends on every producer sorting soonest-first, and none is enforced
   to** (pre-existing, sharpened by WP5-9). `/v1/nearby`'s schema says sorted, `stopArrivals` sorts,
   `applyLiveEtasToNearby` sorts, Favourites sorts. The `maxRows` cap already had this dependency, so the
@@ -1015,8 +1046,11 @@ than any in its own row.
   rest get a **compass side** where the poles are far enough apart for one to mean something. **The residual
   is real and owned:** 141 pairs across 115 places sit 2–10 m apart — too far to fold, too close for a side
   (**WP5-12** below).
-- 🟡 **A favourite whose route has no current arrival renders an empty card** (found by WP5-11,
-  pre-existing; **owned by WP6-4b since 2026-08-05 and now pinned as a `knownDefect` corpus row** —
+- ✅ **Closed 2026-08-05 by WP6-4b** ([ADR-090](./08-decision-log.md#adr-090--a-mustnot-a-component-cannot-satisfy-is-a-statement-about-its-producer)),
+  kept for the history — and the useful part is *why it took a wave*: the sentence lived in `StopRow`'s spec
+  as a `mustNot` that the **card could not satisfy**, because the row was never built. `favouritesView` emits
+  one per saved route now, with the published timetable or a dash on its right. What follows was the state of
+  it (found by WP5-11,
   `favourites.spec.json`'s `a-saved-route-with-no-reading-renders-an-empty-card`, whose `why` records what
   its `expect` becomes when fixed). `favouritesView` keeps only rows carrying an `eta` and drops the rest,
   so a peak-only service shows a card with a name and nothing under it (269D:3 at Tin Shui Wai Park, tested

@@ -3,10 +3,12 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router'
 import { useAppearance } from '../lib/appearance'
 import { LocaleProvider } from '../providers/LocaleProvider'
 import { QueryProvider } from '../providers/QueryProvider'
+import { Favourites } from '../screens/Favourites'
 import { Nearby } from '../screens/Nearby'
 import { PlaceDetail } from '../screens/PlaceDetail'
 import {
   type Destination,
+  FAVOURITES_PATH,
   NEARBY_PATH,
   PLACE_PATH,
   PUSHED,
@@ -104,6 +106,7 @@ function screenFor(destination: Destination, opts: { back?: boolean } = {}): Rea
   // Place detail brings its own back control, because its header is in flow rather than floating over the
   // content — see the screen. `opts.back` is the placeholder's chrome, not every pushed screen's.
   if (destination.path === PLACE_PATH) return <PlaceDetail />
+  if (destination.path === FAVOURITES_PATH) return <Favourites />
   if (destination.path === SETTINGS_PATH) {
     return (
       <Placeholder destination={destination}>

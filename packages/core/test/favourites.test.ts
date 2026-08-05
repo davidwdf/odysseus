@@ -178,23 +178,81 @@ describe('favourites#favouritesView', () => {
     expect(checked, 'no corpus case produced a single row').toBeGreaterThan(0)
   })
 
-  it('records the empty card as a defect rather than as the design', () => {
-    // WP6-4b's target, asserted as it stands so the fix is one coordinated edit. A saved route with no
-    // live reading contributes nothing, so the card is a name with nothing under it — and the reason that
-    // matters is diagnostic: it is indistinguishable from a favourite key that no longer resolves.
-    const defect = cases<Args, StopCardView[]>('favouritesView').find(
-      (c) => c.name === 'a-saved-route-with-no-reading-renders-an-empty-card',
+  it('gives a saved route with no reading a row, and a readout that says so', () => {
+    // **The bug WP6-4b closed, pinned from the other side.** Until 2026-08-05 a saved route with no live
+    // reading contributed nothing, so a card could be a name with nothing under it — indistinguishable by
+    // eye from a favourite key that no longer resolves, which is why WP5-11's favourites proof had to rest
+    // on a route with a live arrival. Asserted as the *shape* rather than as one golden, because what
+    // matters is that every saved route reaches the card with something on its right-hand side.
+    const quiet = cases<Args, StopCardView[]>('favouritesView').find(
+      (c) => c.name === 'a-saved-route-with-no-reading-is-still-a-row',
     )
-    if (!defect) throw new Error('the knownDefect row moved — read its `why` before changing this')
+    if (!quiet) throw new Error('the no-reading row moved — read its `why` before changing this')
     const got = favouritesView(
-      { saved: defect.args.saved, places: defect.args.places },
-      optionsFor(defect.args),
+      { saved: quiet.args.saved, places: quiet.args.places },
+      optionsFor(quiet.args),
     )
     expect(got).toHaveLength(1)
-    expect(got[0]?.rows, 'the defect is that this is empty').toEqual([])
-    // And the thing that makes it a defect rather than an oversight: the card carries no other signal
-    // either, so nothing on screen separates "nothing due" from "this key is broken".
-    expect(got[0]?.incomplete).toBe(false)
-    expect(got[0]?.remaining).toBe(0)
+    expect(got[0]?.rows).toHaveLength(quiet.args.saved.length)
+    for (const row of got[0]?.rows ?? []) {
+      expect(['headway', 'none'], 'a route with no reading claimed one').toContain(row.label.kind)
+      expect(row.urgency, 'nothing to be urgent about').toBe('none')
+      expect(row.stale, 'nothing to be old').toBe(false)
+    }
+  })
+
+  it('never draws a card with a name and nothing under it while something is saved there', () => {
+    // The general form of the same rule, over every case — the sentence `StopRow`'s spec has carried as a
+    // `mustNot` since WP6-1. A card exists because a place resolved; a row exists because the rider saved
+    // one. So a card with saved routes at its place and no rows is the empty card, and there is now no
+    // payload in the corpus that produces one.
+    for (const c of cases<Args, StopCardView[]>('favouritesView')) {
+      const got = favouritesView({ saved: c.args.saved, places: c.args.places }, optionsFor(c.args))
+      for (const card of got) {
+        const savedHere = c.args.places
+          .filter((place) => place.stop.id === card.stopId)
+          .flatMap((place) => place.routes)
+          .filter((route) => c.args.saved.includes(`${route.stopId}|${route.route.id}`))
+        if (savedHere.length === 0) continue
+        expect(card.rows.length, `${c.name}: ${card.stopId} is an empty card`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('keeps one line saved at two kerbs as two rows', () => {
+    // WP5-12's residual from the favourites side (ADR-072): the compact card's collapse-to-one-row-per-line
+    // is right for a card summarising a place and wrong for a list the rider curated — one merged row hid
+    // the other kerb's bus entirely. The label naming the kerbs was declined on a measurement; see the
+    // corpus row's `why` and the note in `favouritesView`.
+    const both = cases<Args, StopCardView[]>('favouritesView').find(
+      (c) => c.name === 'one-line-saved-at-two-kerbs-is-two-rows',
+    )
+    if (!both) throw new Error('the two-kerbs row moved — read its `why` before changing this')
+    const got = favouritesView(
+      { saved: both.args.saved, places: both.args.places },
+      optionsFor(both.args),
+    )
+    expect(got).toHaveLength(1)
+    expect(got[0]?.rows).toHaveLength(2)
+    // The same rider line, twice — which is the whole point, and what `soonestPerLine` would have collapsed.
+    const lines = new Set((got[0]?.rows ?? []).map((row) => `${row.operator}|${row.routeNo}`))
+    expect(lines.size).toBe(1)
+  })
+
+  it('puts a live reading above a timetable and a timetable above a dash', () => {
+    // A rider opens this screen to find the next bus, so the order is the readout's own rank before it is
+    // anything else. It is the card's own sort because Favourites is the one surface whose rows do not
+    // arrive pre-ordered from anywhere: the wire orders a *place's* rows, not a rider's list.
+    const rank = (kind: string) => (kind === 'headway' ? 1 : kind === 'none' ? 2 : 0)
+    for (const c of cases<Args, StopCardView[]>('favouritesView')) {
+      const got = favouritesView({ saved: c.args.saved, places: c.args.places }, optionsFor(c.args))
+      for (const card of got) {
+        const ranks = card.rows.map((row) => rank(row.label.kind))
+        expect(
+          [...ranks].sort((a, b) => a - b),
+          `${c.name}: ${card.stopId} is out of order`,
+        ).toEqual(ranks)
+      }
+    }
   })
 })

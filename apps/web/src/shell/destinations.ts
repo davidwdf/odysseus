@@ -46,7 +46,7 @@ export interface ChromeDestination extends Destination {
 /** The bottom tabs, in tab order — the same three, in the same order, as `apps/mobile/app/(tabs)`. */
 export const TABS: readonly ChromeDestination[] = [
   { path: '/', titleKey: 'tabNearby', icon: MapPin },
-  { path: '/favorites', titleKey: 'tabFavorites', icon: Star, owner: 'WP6-4' },
+  { path: '/favorites', titleKey: 'tabFavorites', icon: Star },
   { path: '/settings', titleKey: 'tabSettings', icon: Settings, owner: 'WP6-7' },
 ]
 
@@ -58,6 +58,9 @@ export const SETTINGS_PATH = '/settings'
 
 /** Place detail's path — the second ported screen (WP6-3b), and the one a Nearby card heading opens. */
 export const PLACE_PATH = '/stop/:id'
+
+/** Favourites' path — the third ported screen (WP6-4b), and the only one whose content a rider authored. */
+export const FAVOURITES_PATH = '/favorites'
 
 /**
  * Search is reachable from the tab row but is **not a tab** — it is its own page with no tab bar

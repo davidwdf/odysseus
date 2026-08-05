@@ -58,6 +58,14 @@ export function EtaBadge({
             {label.unit}
           </Text>
         </>
+      ) : label.kind === 'headway' ? (
+        // **The published timetable, where there is no live reading at all** (WP6-4b). Small and muted
+        // rather than a figure: it is the *Static* honesty tier (docs/09) and must not be mistaken for a
+        // bus that has been seen. It is the arm that stopped a saved peak-only route rendering as a card
+        // with a name and nothing under it.
+        <Text variant="caption" className="max-w-[120px] text-right text-subtle">
+          {label.text}
+        </Text>
       ) : (
         <Text variant="h2" tabular className={tone}>
           {label.kind === 'due' ? label.label : '—'}

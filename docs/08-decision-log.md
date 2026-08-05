@@ -6379,3 +6379,84 @@ pre-existing and unaddressed; it earned its keep here.
     one-row-for-two-kerbs residual, which needs a per-row kerb label the compact card does not have.
   - **Test totals:** core **889** (+20), edge 149, api-client 71, ui-spec 30, web **108** (+3),
     mobile 86 — **1 333**. Corpus **14** files / **101** groups / **851** cases (+1 module, +17 cases).
+
+## ADR-090 — A `mustNot` a component cannot satisfy is a statement about its producer
+
+- **Status:** **Decided and implemented 2026-08-05** — **WP6-4b**, which closes WP6-4. Implementation:
+  `EtaLabelParts` gains a `headway` and a `none` arm; `favouritesView` builds its own rows rather than
+  delegating them; `packages/contract/ui/favourites.spec.json` (8 states, 6 projected);
+  `apps/web/src/screens/Favourites.tsx`; two conformance drivers; and both `EtaBadge`s drawing the
+  timetable arm. **`stop-row.spec.json` now carries zero `knownDefect`s.**
+- **Context.** WP6-4's row is measured on two bugs being *"closed by declared states, not by a patch"*:
+  a favourite whose route has no current arrival rendered an **empty card**, and a rider who starred one
+  line at **both kerbs** of a place saw one row. Both had been declared for a wave and neither could be
+  enforced, and the reason turned out to be the same one twice — which is this ADR's title.
+- **Decisions:**
+  1. **`StopRow`'s `empty` state was never the card's to satisfy.** The sentence — *"the static timetable
+     band, or an explicit 'no service' line"*, `mustNot: "a card with a name and nothing under it"* — has
+     been in the spec since WP6-1 as a `knownDefect` owned by this row. The card could not satisfy it
+     because **the row was never built**: `favouritesView` filtered `detail.routes` to those carrying an
+     `eta`, so a peak-only service contributed nothing. The fix is a change to what a card is built
+     **from**, and the state's enforcement is now `by: 'etaHeadway'` — a real slot.
+  2. **`EtaLabelParts` gains two display-only arms**, `headway` and `none`. `etaLabelParts` cannot return
+     either and never will: it is handed an arrival, and every existing arm is a statement about one. They
+     exist because a **saved** route is a row whether or not a bus is due, and they are the same
+     three-way choice `PlaceRouteRow.readout` has carried since WP6-3a. Widening the union rather than
+     restructuring `StopCardRow` keeps Nearby's corpus goldens untouched — those rows all come from
+     readings, so the new arms are unreachable there by construction.
+  3. **Favourites' rows are not `stopCardView`'s rows**, and that is why `favouritesView` now assembles
+     its own card. `soonestPerLine`'s collapse-to-one-row-per-line is right for a card *summarising a
+     place* and wrong for a list the rider curated — it hid the other kerb's bus entirely. The cap and the
+     "+N more" count are computed over the **saved** rows, and the order is the readout's rank then the
+     arrival: a live reading, then a timetable, then a dash, because a rider opens this screen to find the
+     next bus.
+  4. **The kerb label was tried and declined on a measurement.** A per-row code naming the two kerbs is
+     what ADR-072 refused and WP5-12 left open. Built, then measured: across five Hong Kong
+     neighbourhoods **not one** line published at two kerbs of a place had *distinct* printed codes on
+     them — and it cannot, because a place's poles are clustered by sharing a name and the code is part of
+     the name (at Tin Shui Wai Park both TN510 poles print `TN510`, which is ADR-071's own example). A
+     label repeated on both rows claims a distinction it does not make, so the field was removed rather
+     than shipped always-absent-or-always-equal. **What a rider gets is both buses instead of one**, and
+     Place detail — which has room for ADR-080's compass-side / pole-name / "check the sign" ladder — is
+     one tap away.
+  5. **A third instance of the same hole, found by asking the states.** The screen guarded only on
+     `isLoading`, so once **every** query had failed it rendered its heading and an empty list — a rider
+     could not tell "still fetching" from "we could not reach any of them", and a list they had curated
+     looked empty. Same shape as WP6-3b's blank Place screen, reached through a different door. Both
+     renderers now have a `failed` arm, and the spec declares it.
+  6. **The drivers assert their own fixtures' shape**, and that was measured rather than assumed. Both
+     compute their expectation by calling `favouritesView`, so a broken kernel moves the render and the
+     expectation *together*: re-introducing the reading-only filter and the per-line collapse turned the
+     **corpus** suite red by 4 and 2 tests and left both conformance suites **passing**. That division is
+     correct (ADR-084: the corpus enforces the rule, the spec enforces that a renderer draws it) and it is
+     also a gap a reader would not expect, so each driver now asserts that its `quietRoute` fixture
+     produces a row and its `bothKerbs` fixture produces two rows of one line. Re-injected: both suites
+     red.
+- **The best failure of the pass, and it is a compliment to the format.** Deleting the `headway` arm from
+  `stop-row.spec.json` left both conformance suites green — and failed at **emit**, with
+  `StopRow: state 'empty' claims to be enforced by slot 'etaHeadway', which does not exist`. That is
+  ADR-083's *"every state must declare what enforces it"* paying off in a way its own ADR did not predict:
+  the `by` link makes the slot **undeletable**, and the failure names the state, the slot and the reason
+  rather than reporting a text divergence somewhere downstream.
+- **Verified in a browser on live Hong Kong data.** On `apps/web`, a seeded list showing both fixes at
+  once: `269D → Lek Yuen  10 min` **and** `269D → Lek Yuen  every 12 min` — two rows for one line saved at
+  two kerbs, the second carrying the published timetable — plus `969C → Kornhill Plaza  —`, a saved route
+  with no reading that is now a row instead of an absence. Ordered live-then-timetable-then-dash. And the
+  RN tab is unchanged on the owner's own twelve favourites.
+  Screenshots: `.context/wave6-screenshots/8-web-favourites-both-bugs-closed.jpg`,
+  `7-rn-favourites-after-the-hoist.jpg`.
+- **Consequences:**
+  - ⚪ **`apps/web` has three ported screens** and five destinations still naming the work package that
+    ports them.
+  - ⚪ **`stop-row.spec.json` carries no `knownDefect`s**, which is the first spec in the repo to reach
+    that state — and it got there by fixing a producer, not by softening a sentence.
+  - 🟡 **A rider still cannot tell which of two kerbs a Favourites row belongs to.** Declared in the
+    `bothKerbs` state with the measurement, and it is one tap from an answer. The three `knownDefect`s on
+    `place-detail.spec.json` are untouched by this row.
+  - 🟡 **`favouritesView`'s `now` is the screen's `Date.now()`**, with no seam — correct, because the
+    screen still fetches on `refetchInterval` and re-renders every cadence, but it means both drivers pin
+    the clock with `vi.spyOn(Date, 'now')`. Without it every corpus reading renders `—` and the suite
+    reports a divergence for the wrong reason, which is the third variant of *a harness that looks at the
+    wrong moment* this wave has met.
+  - **Test totals:** core **892** (+3), edge 149, api-client 71, ui-spec 30, web **119** (+11),
+    mobile **97** (+11) — **1 358**. Corpus 14 files / 101 groups / **852** cases.
