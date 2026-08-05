@@ -1,12 +1,23 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-08-05**. **Waves 0–5 and Wave 6's first four rows are merged to `main`** (PRs #11–**#23**;
-> `main` is `a19066e`), and **WP6-3 is now complete** on `wp6-3b-place-detail-spec-and-port`
+> Snapshot: **2026-08-05**. **Waves 0–5 and Wave 6's rows WP6-0 … WP6-5 are all merged to `main`**
+> (PRs #11–**#24**; `main` is `4ea563f`), which closed Place detail, Favourites and Search in one PR
 > ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code),
-> [ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers)),
-> so `apps/web` has **two ported screens** and `apps/mobile`'s Place detail is policed by
-> `check-no-derivation` for the first time — the asymmetry ADR-069 recorded, closed for this screen.
+> [ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers),
+> [ADR-089](./08-decision-log.md#adr-089--a-favourite-is-a-riders-own-data-so-its-migration-is-a-shared-rule-rather-than-a-stores-private-business),
+> [ADR-090](./08-decision-log.md#adr-090--a-mustnot-a-component-cannot-satisfy-is-a-statement-about-its-producer),
+> [ADR-091](./08-decision-log.md#adr-091--the-keypad-and-the-result-list-are-one-filtered-set-and-a-chip-set-is-the-indexs-answer),
+> [ADR-092](./08-decision-log.md#adr-092--a-spec-cannot-hold-an-interaction-but-it-can-hold-what-a-rider-infers-from-one)),
+> so `apps/web` has **four ported screens** — Nearby, Place detail, Favourites, Search — four destinations
+> still naming the work package that ports them, and `apps/mobile`'s Place detail is policed by
+> `check-no-derivation` for the first time: the asymmetry ADR-069 recorded, closed for that screen.
+> **WP6-6 (Route detail) is the row in progress**, on `wp6-6-route-detail`.
+> One process rule came out of #24 and belongs at the top because it cost two CI runs: **run the gate chain
+> after committing, not before.** Both things CI caught — a `<div>` with an `onClick`, and rule 7 on the commit
+> that fixed it — were checks whose results had been measured before the final edit. *A check whose result you
+> are quoting from memory is not a check you ran*, which is the same class as WP6-5b's injections that came
+> back green because they never applied.
 > **What WP6-3b is, and the honest summary is that the spec was the measurement.** Place detail is the first
 > screen whose spec was extracted from a surface *nothing had ever rendered in a test*, and writing it found
 > more than it declared:
@@ -573,7 +584,10 @@ screen** and a named owner for each of the other seven destinations
 `packages/contract/ui/` holds the first two instances — `stop-row.spec.json` and a **screen** spec,
 `nearby.spec.json`, with nine states of which eight declare what they must show. **Both renderers drive both,
 and neither component changed.** `apps/web`'s Nearby is now the shipping web Nearby, taps and all.
-Next is **WP6-3**: Place detail, the screen with the most domain rules in the app.
+**WP6-3, WP6-4 and WP6-5 then landed together as PR #24** (ADRs 087–092): Place detail, Favourites and Search
+each have a published spec, a DOM port and conformance drivers on both renderers, so `apps/web` is at **four
+ported screens** and `check-no-derivation` reads `apps/mobile`'s Place screen too. Next is **WP6-6**: Route
+detail — the schematic, the bus tokens, the collapsing header, the auto-scroll, and the motion contract.
 WP0-5 (deploy) is Wave 0 and still needs a domain and
 Cloudflare credentials from a human; it remains the launch blocker. **Before writing a test or a gate here, read
 [`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
@@ -1233,11 +1247,19 @@ than any in its own row.
 > `apps/web` has the shell, and **WP6-1 and WP6-2 are done too**: `packages/ui-spec` is the format,
 > `stop-row.spec.json` and `nearby.spec.json` are the first two instances, both renderers drive both, and
 > `apps/web`'s Nearby is the shipping web Nearby with its taps wired.
-> **WP6-3 (Place detail) is next**, and it is an **L** rather than an M for a reason its row states: it holds
-> the most domain rules in the app — **and its hoist half (WP6-3a) is done**, so what is left is **WP6-3b**:
-> the spec, the `apps/web` port, and the gate extension that closes ADR-069's recorded asymmetry. Start with
-> the gate's per-site `ALLOWLIST`, because the Place screen has presentational arithmetic the shape rules
-> would flag and the exemptions must each name the one rule they exempt. **WP6-3b opened with a second
+> **WP6-3, WP6-4 and WP6-5 are done too** (ADRs 087–092, merged as PR #24), so the next row is **WP6-6 —
+> Route detail**, the second **L** of the wave: the schematic, the bus tokens, the collapsing header, the
+> auto-scroll and the first spec that has to say something about **motion**. Three things it inherits, all in
+> writing: `docs/07`'s route auto-scroll bug (`scrollTo` no-ops under reanimated v4 on web, and the RN screen's
+> own scroll-to-originating-stop has been broken since ADR-043), the undiagnosed pending-and-idle query state
+> that produced three blank screens in WP6-3/4, and `check-no-derivation`'s standing rule that `app/route/`
+> joins `POLICED` in the commit that hoists it.
+> **The record of how WP6-3 went, kept because each half taught something.** It is an **L** rather than an M
+> for a reason its row states: it holds the most domain rules in the app — its hoist half (WP6-3a) came first,
+> then **WP6-3b**: the spec, the `apps/web` port, and the gate extension that closes ADR-069's recorded
+> asymmetry. Starting with the gate's per-site `ALLOWLIST` was right, because the Place screen has
+> presentational arithmetic the shape rules would flag and the exemptions must each name the one rule they
+> exempt. **WP6-3b opened with a second
 > hoist that the port made unavoidable** ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code)):
 > ADR-086 put the pin *fold* in the kernel and left the three decisions **around** it in the renderer — the
 > dot's label, its colour, and the lone-stop pin — so `PlaceDetailView` carries `pins` now and `MiniMap`
