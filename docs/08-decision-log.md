@@ -6832,7 +6832,7 @@ pre-existing and unaddressed; it earned its keep here.
 
 - **Status:** **Decided and implemented 2026-08-05** as **WP6-6c**, which closes **WP6-6** entirely.
   Implementation: `routeFactSheet` in `packages/core/src/route-detail.ts` (+15 corpus cases in
-  `route-detail.spec.json`, +6 property/coverage tests), `apps/mobile/components/RouteFactSheets.tsx` reduced
+  `route-detail.spec.json`, +7 property/coverage tests), `apps/mobile/components/RouteFactSheets.tsx` reduced
   to a projection, a new `apps/web/src/components/RouteFactSheet.tsx`, and
   `apps/mobile/components/RouteFactSheets.tsx` joining `check-no-derivation`'s `POLICED` list — **with no new
   allowlist entries**, which is the cleanest signal that nothing derivable was left behind.
@@ -6888,12 +6888,15 @@ pre-existing and unaddressed; it earned its keep here.
     measurement. A corpus case with a sequence starting at 5 now exists, and the same injection turns two tests
     red. *An injection that comes back green is sometimes a statement about the fixtures rather than about the
     gate* — the third variant of this lesson in two rows.
-  - ⚪ **Two dead branches refused by the 100 % threshold, both removed rather than excused.** The stage lookup
-    became a walk over the rows (as the bus tokens did in WP6-6a), and `concessionFigures` became two
-    documented casts: `fareStages` has already screened the fare, so an `undefined` arm there is a line nobody
-    can run. The both-or-neither invariant it used to encode is **asserted** in the suite instead, which is the
-    stronger arrangement — if the two estimates ever stopped sharing a parse, a property goes red rather than a
-    dead line quietly becoming live.
+  - ⚪ **Two dead branches refused by the 100 % threshold; the stage lookup became a walk over the rows** (as
+    the bus tokens did in WP6-6a). `concessionFigures` was also written as two casts on the same premise — **but
+    the premise was false, and a post-merge review caught it.** `fareStages` admits a fare wherever `Number(f)`
+    is not `NaN`, so a whitespace cell (`Number(' ')` is `0`) or an `Infinity` string survives as a stage, while
+    the estimators reject exactly those through `parseFareOrUndefined`'s trim-and-`isFinite` screen — so a
+    malformed but unvalidated wire fare (ADR-052 decision 2) printed the literal `~$undefined` and populated the
+    legend with it. It is a **both-or-neither guard** now (`return []` when either estimate is absent), which is
+    what `FareStageRow.concessions` had already documented, and a regression test pins the empty arm the corpus
+    never reached.
 - **Also a live defect, pinned as a `knownDefect` corpus row.** A route whose per-stop fares are non-numeric
   gets an **entirely blank fare sheet**: `fareStages` drops any value `Number()` cannot read, so there are no
   stages and no concessions — while `fareRange` drops the same values, falls back to `service.fareFull`, and
@@ -6914,5 +6917,16 @@ pre-existing and unaddressed; it earned its keep here.
     cases and projected by both renderers; what the screen spec holds about the sheets is that the pill which
     opens one is a control and that the strip's own text does not depend on the affordance existing. A separate
     component spec for the sheets is available if a third renderer wants one and is not owed by this row.
-  - **Test totals:** core **930** (+6), edge 149, api-client 71, ui-spec 30, web 154, mobile 132 — **1 466**.
+  - ⚪ **A post-review pass (2026-08-05) closed four more introduced defects**, each one aligning the code with a
+    decision this row already recorded:
+    - the `concessionFigures` `~$undefined` above (decision 3's legend honesty), now a guard;
+    - **both renderers now read `RouteStatRow.estimate`** rather than re-deriving the caveat from the `stat`
+      kind (decision 5) — the flag had no reader on either side and each sheet's comment claimed otherwise;
+    - the DOM `<dialog>` gained an **accessible name** (`aria-labelledby` → its heading) and now **restores focus**
+      to the pill that opened it on close (decision 8, ADR-075's identity side) — `showModal()` gives an unnamed
+      dialog and React's unmount skips the browser's own focus-restore step;
+    - the web rail re-measures its node offsets through a **`ResizeObserver`** (ADR-093/094): they had been
+      measured once per stop-count change, so a row growing its arrivals line on a refetch drifted every token
+      below it off its node — a live divergence from the RN screen, which re-measures on `onLayout`.
+  - **Test totals:** core **931** (+7), edge 149, api-client 71, ui-spec 30, web 154, mobile 132 — **1 467**.
     Corpus 14 files / **107** groups / **915** cases / **5** `knownDefect`.

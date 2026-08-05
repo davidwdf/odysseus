@@ -23,7 +23,7 @@ export type FactKind = RouteFactSheetKind
  * **A pure projection of `routeFactSheet` since WP6-6c.** It used to derive eight things — the stages, the
  * concession figures and whether the legend appeared at all, the `~` on an estimate, the band headways, the
  * fallbacks when the dataset has no pattern table, and the day-name join for an unnamed mask. All eight are
- * `@nextbus/core`'s now, with 14 corpus cases, which is what let this file finally join
+ * `@nextbus/core`'s now, with 15 corpus cases, which is what let this file finally join
  * `check-no-derivation`'s `POLICED` list: it was the one route surface still absent from it.
  *
  * What stays here is the four glyph tables and the four titles — *which concept a glyph denotes* is identity
@@ -114,10 +114,13 @@ function OverviewBody({
           icon={STAT_GLYPH[stat.stat]}
           label={t(locale, STAT_LABEL[stat.stat])}
           value={stat.value}
-          // The caveat under an estimate, from the model's flag rather than from a re-test of the figure:
-          // the route distance is a straight line through the stops and the journey time is upstream's own
-          // origin→terminus timing, and a rider is told so (ADR-008).
-          {...(stat.stat === 'stops' ? {} : { note: t(locale, STAT_NOTE[stat.stat]) })}
+          // The caveat is shown where the **kernel** marks the figure an estimate (`stat.estimate`) — the
+          // route distance is a straight line through the stops and the journey time is upstream's own
+          // origin→terminus timing, and a rider is told so (ADR-008). The `!== 'stops'` only narrows the
+          // note lookup, which carries a sentence for the journey and the distance and none for the count.
+          {...(stat.estimate && stat.stat !== 'stops'
+            ? { note: t(locale, STAT_NOTE[stat.stat]) }
+            : {})}
         />
       ))}
     </View>

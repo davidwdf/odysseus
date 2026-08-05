@@ -40,11 +40,20 @@ export function RouteFactSheet({
   // traps focus, and only it fires `cancel` on Escape. Opened in an effect because the element must be in the
   // document first.
   useEffect(() => {
+    // Capture the pill that opened the sheet, then restore focus to it on unmount. React tears the
+    // `<dialog>` out of the document when `factSheet` goes null, which skips the browser's own focus-restore
+    // step (that runs only inside `close()`), so without this focus would fall to `<body>`.
+    const opener = document.activeElement as HTMLElement | null
     dialog.current?.showModal()
+    return () => opener?.focus()
   }, [])
   return (
     <dialog
       ref={dialog}
+      // `showModal()` gives the element `role="dialog"`, which takes its accessible name from neither its
+      // content nor the close button (whose label is "Back") — so name it by its own heading, else a screen
+      // reader announces an unnamed dialog.
+      aria-labelledby={TITLE_ID}
       onCancel={(e) => {
         e.preventDefault()
         onClose()
@@ -52,7 +61,9 @@ export function RouteFactSheet({
       className="m-auto w-[min(32rem,92vw)] rounded-2xl border border-border bg-surface p-0 text-text backdrop:bg-black/50"
     >
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
-        <h2 className="m-0 text-h3 font-semibold text-text">{t(locale, TITLE[sheet.kind])}</h2>
+        <h2 id={TITLE_ID} className="m-0 text-h3 font-semibold text-text">
+          {t(locale, TITLE[sheet.kind])}
+        </h2>
         <button
           type="button"
           onClick={onClose}
@@ -84,6 +95,9 @@ const TITLE = {
   hours: 'hoursTitle',
   stops: 'overviewTitle',
 } as const
+
+/** The heading's id, wired to the dialog's `aria-labelledby`. Static because only one sheet is ever open. */
+const TITLE_ID = 'route-fact-sheet-title'
 
 /** Which glyph denotes each concept — the same four concepts the RN sheet draws, from the web icon set. */
 const STAT_GLYPH: Record<RouteStatKind, LucideIcon> = {
@@ -123,8 +137,9 @@ function OverviewBody({
                 <span className="text-body text-text">{t(locale, STAT_LABEL[stat.stat])}</span>
                 <span className="text-body font-medium text-text tabular-nums">{stat.value}</span>
               </div>
-              {/* The caveat, from the model's flag rather than from a re-test of the figure (ADR-008). */}
-              {stat.stat !== 'stops' ? (
+              {/* Shown where the kernel marks the figure an estimate (`stat.estimate`, ADR-008); the
+                  `!== 'stops'` only narrows the note lookup, which has a sentence for journey and distance. */}
+              {stat.estimate && stat.stat !== 'stops' ? (
                 <p className="m-0 text-caption text-subtle">{t(locale, STAT_NOTE[stat.stat])}</p>
               ) : null}
             </div>

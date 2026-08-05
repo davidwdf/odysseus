@@ -1,7 +1,7 @@
 import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
 
 /**
- * **The Route screen** (WP6-6b) — the vertical schematic, its bus tokens, and the eighteen states it can be
+ * **The Route screen** (WP6-6b) — the vertical schematic, its bus tokens, and the nineteen states it can be
  * in. The row `proposals/04` calls *"the motion test — the first screen where 'motion is idiom' is a real
  * claim rather than a slogan"*.
  *
@@ -18,7 +18,7 @@ import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
  * > cut to it; neither may disagree about the stop.
  *
  * A sheet the strip opens is a **separate surface** and is deliberately not a state of this spec: its content
- * is `routeFactSheet`'s, pinned by 14 corpus cases (ADR-095), and both renderers are projections of it. What
+ * is `routeFactSheet`'s, pinned by 15 corpus cases (ADR-095), and both renderers are projections of it. What
  * this spec holds about the sheets is one thing — that the pill which opens one is a control, and that the
  * strip's own text does not change according to whether the affordance exists.
  *

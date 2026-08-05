@@ -1,5 +1,5 @@
 // The DOM renderer's Route detail conformance suite: it drives the published spec (WP6-6b, ADR-094) —
-// `packages/contract/ui/route-detail.spec.json`, eighteen states, sixteen of them projected.
+// `packages/contract/ui/route-detail.spec.json`, nineteen states, seventeen of them projected.
 //
 // WHAT IS DIFFERENT ABOUT THIS SCREEN
 // `proposals/04` picked it as *"the motion test"*, and the answer is narrower than "motion is idiom": **motion

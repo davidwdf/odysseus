@@ -380,6 +380,42 @@ describe('route-detail#routeFactSheet', () => {
     }
   })
 
+  it('prices no concession for a fare it cannot parse, rather than "$undefined"', () => {
+    // The `~$undefined` guard. `fareStages` admits a stage wherever `Number(f)` is not NaN — which keeps a
+    // whitespace-only cell (`Number(' ')` is 0) — while the concession estimators reject exactly those
+    // (`parseFareOrUndefined` trims and demands `isFinite`). A per-stop `fare` is an unvalidated wire string
+    // (ADR-052 decision 2), so the two must agree about "no figure" rather than format one from `undefined`.
+    // No corpus case carries such a fare, so this is a constructed row: a boarding stop priced as whitespace.
+    const base = rows().find((c) => c.args.kind === 'fare' && c.args.detail.stops.length > 1)
+    if (base === undefined) throw new Error('no fare-timeline corpus case to base the guard on')
+    const detail = structuredClone(base.args.detail)
+    const first = detail.stops[0]
+    if (first === undefined) throw new Error('unreachable: the case has stops')
+    first.fare = ' '
+    const view = routeDetailView(detail, {
+      locale: base.args.locale,
+      now: at(base.args.now),
+      labels: VIEW_LABELS,
+    })
+    const sheet = routeFactSheet('fare', view, detail.route.service, {
+      locale: base.args.locale,
+      labels: LABELS,
+    })
+    expect(sheet.kind).toBe('fare')
+    if (sheet.kind !== 'fare') return
+    // The whitespace fare still opens a stage (that is why it reaches the estimators)…
+    const whitespaceStage = sheet.stages.find((s) => s.fromSeq === 1)
+    expect(whitespaceStage, 'a fare fareStages admits should still open a stage').toBeDefined()
+    // …but it prices no concession, and a numeric stage further down still prices both — so the guard is
+    // targeted at the unparseable fare, not global.
+    expect(whitespaceStage?.concessions, 'an unparseable fare prices no concession').toEqual([])
+    expect(
+      sheet.stages.some((s) => s.concessions.length === 2),
+      'numeric stages still priced',
+    ).toBe(true)
+    expect(JSON.stringify(sheet), 'no figure reads "$undefined"').not.toContain('$undefined')
+  })
+
   it('marks an estimate as one, and never marks a count as one', () => {
     // ADR-008 on the overview sheet. The stop count is a fact; the distance is a straight line through the
     // stops and the journey time is upstream's own timing, and both are labelled. A port that dropped the

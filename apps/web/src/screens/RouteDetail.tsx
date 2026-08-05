@@ -37,7 +37,7 @@ import { BackButton } from '../shell/BackButton'
  * name/code/fare/readouts, which rows are the rider's saved ones, the boarding anchor, and **which node each
  * bus is at** — once, for both.
  *
- * `packages/contract/ui/route-detail.spec.json` declares what it must show in each of eighteen states, and
+ * `packages/contract/ui/route-detail.spec.json` declares what it must show in each of nineteen states, and
  * `test/route-detail-states.test.tsx` drives every projected one — as does
  * `apps/mobile/test/route-detail-states.test.tsx`, from the same file and the same corpus fixtures.
  *
@@ -133,21 +133,44 @@ export function RouteDetail() {
     else rows.current.delete(index)
   }, [])
   const list = useRef<HTMLDivElement | null>(null)
-  // A layout effect rather than an effect: measuring after paint would draw every token at the top of the
-  // list for one frame. Re-measured whenever the row set changes, which is what `stopCount` stands in for —
-  // a flip, a new route, or the first payload.
-  const stopCount = view?.stops.length ?? 0
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the registry is a ref read live; `stopCount` is what a new row set changes
-  useLayoutEffect(() => {
+  // Measure each row's top relative to the list, and publish only on an actual change — the equality skip is
+  // what lets the observer below drive this without a render loop, the same guard the RN screen's `setTop`
+  // makes at [id].tsx.
+  const measure = useCallback(() => {
     const container = list.current
     if (container === null) return
     const base = container.getBoundingClientRect().top
-    const measured = new Map<number, number>()
-    for (const [index, el] of rows.current) {
-      measured.set(index, el.getBoundingClientRect().top - base)
-    }
-    setTops(measured)
+    setTops((prev) => {
+      const next = new Map<number, number>()
+      for (const [index, el] of rows.current) {
+        next.set(index, el.getBoundingClientRect().top - base)
+      }
+      let changed = prev.size !== next.size
+      for (const [index, top] of next) if (prev.get(index) !== top) changed = true
+      return changed ? next : prev
+    })
+  }, [])
+  // The synchronous first measure, and a re-measure whenever the row set changes — a flip, a new route, or
+  // the first payload. A layout effect rather than an effect: measuring after paint would draw every token at
+  // the top of the list for one frame.
+  const stopCount = view?.stops.length ?? 0
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `measure` is stable; `stopCount` is the row-set change that needs a synchronous re-measure
+  useLayoutEffect(() => {
+    measure()
   }, [stopCount])
+  // Later height changes that do NOT change the stop count re-measure through a `ResizeObserver` on the list.
+  // A stop gaining or losing its arrivals line on a refetch (RouteStopRow renders that block only when it has
+  // one) grows its row and shifts every node below it, so without this the tokens drift off their nodes until
+  // the next flip or navigation — a live divergence from the RN screen, whose rows re-measure on `onLayout`.
+  // The layout-effect-plus-observer shape is `MiniMap`'s; `ResizeObserver` is absent in jsdom (the guard),
+  // where the conformance suite measures nothing anyway.
+  useEffect(() => {
+    const container = list.current
+    if (container === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [measure])
 
   // The reveal's one beat: bring the boarding row up, once, as soon as it exists. `scrollIntoView` rather than
   // a computed offset, so the browser honours `scroll-behavior` and the rider's reduced-motion setting.

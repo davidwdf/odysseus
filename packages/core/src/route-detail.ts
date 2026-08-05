@@ -812,22 +812,24 @@ function fareSheet(view: RouteDetailView, labels: RouteFactLabels): RouteFactShe
 const CONCESSION_CLASSES: readonly ConcessionClass[] = ['child', 'elderly']
 
 /**
- * The two estimates for one adult fare. See the note inside about why there is no `undefined` arm.
+ * The two estimates for one adult fare, or an empty list where the fare cannot be priced.
  */
 function concessionFigures(adultFare: string): ConcessionFigure[] {
-  // The two casts, and why they are casts rather than guards: `fareStages` has **already screened** this
-  // value — it drops any fare `Number()` cannot read, so a stage's fare always parses and both estimates
-  // always resolve. An `undefined` arm here would be a branch no payload can reach, which the 100 % branch
-  // threshold refuses and rightly: an unreachable arm reads as a considered case and is a line nobody has
-  // run. Same narrowing, same reason, as the indexed reads in `search.ts`. The both-or-neither invariant is
-  // asserted in the corpus suite (`[0, 2]` figures per stage), so if the two ever stopped sharing a parse the
-  // property goes red rather than a dead line quietly becoming live.
-  //
-  // Drawing one without the other would read as *"no elderly concession on this route"* rather than *"we
-  // could not work it out"*, which is why it matters at all.
+  // `fareStages` admits this fare on a **looser** test than the estimators apply, so the earlier
+  // both-always-resolve claim was wrong. `fareStages` keeps any `f` where `Number(f)` is not NaN — which
+  // lets a whitespace-only cell (`Number(' ')` is 0) or an `Infinity`-valued string survive as a stage —
+  // while `estimateChildFare`/`estimateElderlyFare` route through `parseFareOrUndefined`, which trims and
+  // demands `Number.isFinite`. A per-stop `fare` is an unvalidated wire string (ADR-052 decision 2), so
+  // those inputs are reachable, not hypothetical, and a cast to `string` would print the literal
+  // `~$undefined`. Absent must stay absent (ADR-008): a stage we cannot price for a concession gets **no**
+  // figure, which is exactly what `FareStageRow.concessions` documents. Both come from one parse, so it is
+  // both-or-neither and the corpus's `[0, 2]`-per-stage property still holds — with `0` now reachable.
+  const child = estimateChildFare(adultFare)
+  const elderly = estimateElderlyFare(adultFare)
+  if (child === undefined || elderly === undefined) return []
   return [
-    { class: 'child', fare: `~${formatFare(estimateChildFare(adultFare) as string)}` },
-    { class: 'elderly', fare: `~${formatFare(estimateElderlyFare(adultFare) as string)}` },
+    { class: 'child', fare: `~${formatFare(child)}` },
+    { class: 'elderly', fare: `~${formatFare(elderly)}` },
   ]
 }
 
