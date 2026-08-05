@@ -97,9 +97,29 @@
 > (two rows for one line saved at two kerbs, the second on its timetable) plus `969C → Kornhill Plaza —`
 > (a saved route with no reading, now a row). Screenshot:
 > `.context/wave6-screenshots/8-web-favourites-both-bugs-closed.jpg`.
-> **WP6-5 (Search) is next**, and it inherits one thing named in writing: `apps/web`'s store already
-> **preserves** `recentRoutes` and `recentStops` without reading them, so porting Search is a matter of
-> reading fields that are already on the blob.
+> **WP6-5 (Search) has started, and its hoist half is done**
+> ([ADR-091](./08-decision-log.md#adr-091--the-keypad-and-the-result-list-are-one-filtered-set-and-a-chip-set-is-the-indexs-answer)).
+> `proposals/04` calls Search *"pure interaction over a spec'd index"*; the screen was in fact deciding
+> **seven** things — which operator chips exist at all, which chips a mode offers, which are on, which route
+> numbers the keypad keeps live under the filter, which letters its row shows, what a saved recent resolves
+> to now the index has been rebuilt, and whether the list is a search or a history. All seven are
+> `searchView` now, with 12 corpus cases and five property tests; six `useMemo`s and two duplicate
+> components left the screen.
+> **The load-bearing decision is that the keypad and the result list are ONE filtered set** — the invariant
+> that makes a dimmed key honest, previously true by the coincidence of two `useMemo`s reading the same
+> variable. **And it is visible:** with the query `2` and the *Night* chip on, the screen says "No matches"
+> and **every** key is dimmed, letter row included, because no night route begins with a 2 — the two agree
+> without either knowing about the other.
+> **Search was walked in a browser for the first time**, which is the visual pass this doc has owed since
+> ADR-037: the resting screen dims only the `0` key, the letter row reads `A B C E H N P R S T W X`, the
+> chips read `Citybus GMB KMB · Night Airport Express` — **from the index, sorted**, so a fifth operator
+> appears the day its adapter lands — and two saved recents resolve, one of them a GMB minibus route.
+> Screenshots: `.context/wave6-screenshots/9-rn-search-first-browser-pass.jpg`,
+> `10-rn-search-keypad-and-list-agree.jpg`.
+> **WP6-5b is what remains:** the spec, the `apps/web` port, and the interaction states — a keypad that
+> collapses on scroll, a text field that focuses, a segment that switches mode. `apps/web`'s store already
+> **preserves** `recentRoutes` and `recentStops` without reading them (WP6-4a), so the port reads fields
+> that are already on the blob.
 > **Wave 6's earlier rows, for context** — WP6-0, WP6-1, WP6-2 and WP6-3a
 > ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
 > [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),

@@ -1,18 +1,11 @@
 import {
-  displayName,
   EMPTY_FILTER,
-  indexAlphabet,
-  type Locale,
   type OperatorId,
   type RouteCategory,
   type RouteFilter,
-  type RouteLite,
-  routeKeys,
-  routeMatchesFilter,
-  type StopLite,
-  searchRoutes,
-  searchStops,
-  titleCaseName,
+  type SearchRouteRow,
+  type SearchStopRow,
+  searchView,
 } from '@nextbus/core'
 import { type LocalizedString, operatorName, type PlainMessageKey, t } from '@nextbus/i18n'
 import { useRouter } from 'expo-router'
@@ -25,7 +18,7 @@ import {
   Search,
   X,
 } from 'lucide-react-native'
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
 import Animated, {
   Easing,
@@ -55,6 +48,15 @@ const CATEGORY_LABELS: Record<RouteCategory, PlainMessageKey> = {
   express: 'filterExpress',
 }
 const CATEGORIES: RouteCategory[] = ['night', 'airport', 'express']
+/**
+ * Every operator a chip can name, for matching a chip key back to its toggle.
+ *
+ * **Not the chip set** — `searchView` decides that from the index, so a fifth operator's chip appears the
+ * day its adapter lands (ADR-037). This is the closed set of values a key could carry, and it exists so the
+ * key can be *matched* rather than taken apart: the screen used to `split(':')` it and cast the halves to
+ * two different unions, which read exactly like ad-hoc id parsing and was flagged by the gate that bans it.
+ */
+const OPERATORS: OperatorId[] = ['KMB', 'LWB', 'CTB', 'GMB']
 /** Gap below the keypad / results — this page has no tab bar, so just clear the safe area. */
 const BOTTOM_GAP = 12
 
@@ -89,50 +91,41 @@ export default function SearchScreen() {
   const clearRecentRoutes = usePreferences((s) => s.clearRecentRoutes)
   const clearRecentStops = usePreferences((s) => s.clearRecentStops)
 
-  // Operators present in the index drive the operator chips — so GMB/MTR appear
-  // automatically the day those adapters land (ADR-037), no UI change needed.
-  const operators = useMemo<OperatorId[]>(
-    () => (index ? [...new Set(index.routes.map((r) => r.operator))].sort() : []),
-    [index],
-  )
-
-  // Keypad + route search both honour the active filter, so dimmed keys and the
-  // result list always agree on what's findable.
-  const filteredRouteNos = useMemo(
-    () =>
-      index ? index.routes.filter((r) => routeMatchesFilter(r, filter)).map((r) => r.routeNo) : [],
-    [index, filter],
-  )
-  const keys = useMemo(() => routeKeys(filteredRouteNos), [filteredRouteNos])
-  const letters = useMemo(() => indexAlphabet(filteredRouteNos).letters, [filteredRouteNos])
-
-  const routeResults = useMemo(
-    () => (index ? searchRoutes(index.routes, routeQuery, filter) : []),
-    [index, routeQuery, filter],
-  )
-  const stopResults = useMemo(
-    () => (index ? searchStops(index.stops, stopQuery, locale, filter.operators) : []),
-    [index, stopQuery, locale, filter.operators],
-  )
-
-  const recentRouteItems = useMemo(
-    () =>
-      index
-        ? recentRoutes
-            .map((id) => index.routes.find((r) => r.id === id))
-            .filter((r): r is RouteLite => Boolean(r))
-        : [],
-    [index, recentRoutes],
-  )
-  const recentStopItems = useMemo(
-    () =>
-      index
-        ? recentStops
-            .map((id) => index.stops.find((s) => s.id === id))
-            .filter((s): s is StopLite => Boolean(s))
-        : [],
-    [index, recentStops],
-  )
+  /**
+   * **The whole screen's content, in one call** (WP6-5). Seven decisions used to live here as `useMemo`s:
+   * which operator chips exist at all, which chips this mode offers, which of them are on, which route
+   * numbers the keypad keeps live under the active filter, which letters its letter row shows, what a saved
+   * *recent* resolves to now the index has been rebuilt, and whether the list is showing a search or a
+   * history — every one of them reachable only by rendering this tree. They are `searchView` now, pinned by
+   * 12 corpus cases, so `apps/web`'s Search screen calls the identical function.
+   *
+   * The **words** it composes with are handed in, never imported by the kernel (ADR-054: core owns the rule,
+   * the catalogue owns the word) — a chip carries its own label because the label is what a renderer draws
+   * and the *set* is what the kernel decides.
+   *
+   * No `useMemo`: `searchView` is pure and this screen re-renders on a keystroke either way, so memoizing
+   * would add a dependency array that has to stay correct for no measured gain. The six it replaced each
+   * had one.
+   */
+  const view = index
+    ? searchView(
+        {
+          index,
+          mode,
+          query: mode === 'routes' ? routeQuery : stopQuery,
+          filter,
+          recentRouteIds: recentRoutes,
+          recentStopIds: recentStops,
+        },
+        {
+          locale,
+          labels: {
+            operator: (op) => operatorName(op, locale),
+            category: (c) => t(locale, CATEGORY_LABELS[c]),
+          },
+        },
+      )
+    : undefined
 
   const toggleOperator = (op: OperatorId) =>
     setFilter((f) => ({
@@ -149,27 +142,23 @@ export default function SearchScreen() {
         : [...f.categories, c],
     }))
 
-  // Each chip carries its own toggle in a lookup keyed by the same string React uses as its key.
-  // This is NOT id parsing (a chip key is `op:KMB`, not a stop or route id) but it read exactly
-  // like it — `key.split(':')` with the halves cast to two different unions — which is why the
-  // check that bans ad-hoc id parsing flagged it. A key that is never taken apart cannot be taken
-  // apart wrongly, so the string stays opaque and the intent is visible.
-  const opChips = operators.map((op) => ({
-    key: `op:${op}`,
-    label: operatorName(op, locale),
-    active: filter.operators.includes(op),
-    toggle: () => toggleOperator(op),
-  }))
-  const catChips = CATEGORIES.map((c) => ({
-    key: `cat:${c}`,
-    label: t(locale, CATEGORY_LABELS[c]),
-    active: filter.categories.includes(c),
-    toggle: () => toggleCategory(c),
-  }))
-  const chips = mode === 'routes' ? [...opChips, ...catChips] : opChips
+  /**
+   * A chip's key names the axis and the value, and it is **matched, never taken apart**.
+   *
+   * The screen used to `split(':')` this string and cast the halves to two different unions, which read
+   * exactly like ad-hoc id parsing and was flagged by the gate that bans it. `searchView` mints the keys now
+   * (`operator:KMB`, `category:night`) and this compares whole strings against the same two builders, so
+   * there is nothing to take apart wrongly.
+   */
   const onToggleChip = (key: string) => {
-    chips.find((c) => c.key === key)?.toggle()
+    for (const op of OPERATORS) if (key === `operator:${op}`) return toggleOperator(op)
+    for (const c of CATEGORIES) if (key === `category:${c}`) return toggleCategory(c)
   }
+
+  // The union narrowed once. `mode` selects the branch that draws each, so the other is always empty —
+  // written here rather than inside the JSX so neither list is read through an inline cast.
+  const rows = view?.list.kind === 'routes' ? view.list.routes : []
+  const stops = view?.list.kind === 'stops' ? view.list.stops : []
 
   const openRoute = (id: string) => {
     pushRecentRoute(id)
@@ -202,7 +191,7 @@ export default function SearchScreen() {
 
       {loading ? (
         <LoadingState />
-      ) : error || !index ? (
+      ) : error || !index || !view ? (
         <Centered>
           <Text variant="body" className="text-center text-danger">
             {error?.message ?? t(locale, 'searchNoResults')}
@@ -221,7 +210,7 @@ export default function SearchScreen() {
             }}
           />
           <FilterChipsBar>
-            <FilterChips chips={chips} onToggle={onToggleChip} />
+            <FilterChips chips={view.chips} onToggle={onToggleChip} />
           </FilterChipsBar>
           <ScrollView
             className="flex-1"
@@ -230,23 +219,27 @@ export default function SearchScreen() {
             onScroll={(e) => onResultsScroll(e.nativeEvent.contentOffset.y)}
             scrollEventThrottle={32}
           >
-            {routeQuery === '' ? (
-              <RecentRoutes
-                items={recentRouteItems}
-                locale={locale}
-                label={t(locale, 'searchRecent')}
-                clearLabel={t(locale, 'searchClearRecent')}
-                onClear={clearRecentRoutes}
-                onOpen={openRoute}
-              />
-            ) : routeResults.length === 0 ? (
+            {/* Which of the three arms to draw is `view.source`'s answer, not a second reading of the
+                query: "nothing matched" and "nothing searched" are different sentences, and the screen used
+                to decide between them by re-testing `routeQuery === ''` beside a length check. */}
+            {view.source === 'none' ? (
               <Empty label={t(locale, 'searchNoResults')} />
             ) : (
-              routeResults.map((r, i) => (
-                <View key={r.id} className={i === 0 ? '' : 'border-border border-t'}>
-                  <RouteResultRow route={r} locale={locale} onPress={() => openRoute(r.id)} />
-                </View>
-              ))
+              <>
+                {view.source === 'recents' ? (
+                  <RecentsHeader
+                    label={t(locale, 'searchRecent')}
+                    clearLabel={t(locale, 'searchClearRecent')}
+                    onClear={clearRecentRoutes}
+                    empty={rows.length === 0}
+                  />
+                ) : null}
+                {rows.map((r, i) => (
+                  <View key={r.id} className={i === 0 ? '' : 'border-border border-t'}>
+                    <RouteResultRow route={r} onPress={() => openRoute(r.id)} />
+                  </View>
+                ))}
+              </>
             )}
           </ScrollView>
           <CollapsibleFooter shown={padShown}>
@@ -256,8 +249,8 @@ export default function SearchScreen() {
             >
               <RouteKeypad
                 value={routeQuery}
-                keys={keys}
-                letters={letters}
+                keys={view.keypad.keys}
+                letters={view.keypad.letters}
                 onChange={setRouteQuery}
               />
             </View>
@@ -307,27 +300,28 @@ export default function SearchScreen() {
             ) : null}
           </Pressable>
           <FilterChipsBar>
-            <FilterChips chips={chips} onToggle={onToggleChip} />
+            <FilterChips chips={view.chips} onToggle={onToggleChip} />
           </FilterChipsBar>
           <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
             <View style={{ paddingBottom: insets.bottom + BOTTOM_GAP }}>
-              {stopQuery === '' ? (
-                <RecentStops
-                  items={recentStopItems}
-                  locale={locale}
-                  label={t(locale, 'searchRecent')}
-                  clearLabel={t(locale, 'searchClearRecent')}
-                  onClear={clearRecentStops}
-                  onOpen={openStop}
-                />
-              ) : stopResults.length === 0 ? (
+              {view.source === 'none' ? (
                 <Empty label={t(locale, 'searchNoResults')} />
               ) : (
-                stopResults.map((s, i) => (
-                  <View key={s.id} className={i === 0 ? '' : 'border-border border-t'}>
-                    <StopResultRow stop={s} locale={locale} onPress={() => openStop(s.id)} />
-                  </View>
-                ))
+                <>
+                  {view.source === 'recents' ? (
+                    <RecentsHeader
+                      label={t(locale, 'searchRecent')}
+                      clearLabel={t(locale, 'searchClearRecent')}
+                      onClear={clearRecentStops}
+                      empty={stops.length === 0}
+                    />
+                  ) : null}
+                  {stops.map((stop, i) => (
+                    <View key={stop.id} className={i === 0 ? '' : 'border-border border-t'}>
+                      <StopResultRow stop={stop} onPress={() => openStop(stop.id)} />
+                    </View>
+                  ))}
+                </>
               )}
             </View>
           </ScrollView>
@@ -455,15 +449,9 @@ function CollapsibleFooter({ shown, children }: { shown: boolean; children: Reac
   )
 }
 
-function RouteResultRow({
-  route,
-  locale,
-  onPress,
-}: {
-  route: RouteLite
-  locale: Locale
-  onPress: () => void
-}) {
+/** One route result. It decides nothing: both ends of the journey arrive title-cased on the row, and the
+ *  arrow between them is the glyph this renderer supplies — the same split `StopRow` makes. */
+function RouteResultRow({ route, onPress }: { route: SearchRouteRow; onPress: () => void }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -472,23 +460,16 @@ function RouteResultRow({
     >
       <RouteChip operator={route.operator} routeNo={route.routeNo} />
       <Text variant="body" className="flex-1 text-text" numberOfLines={1}>
-        <Text className="text-subtle">{titleCaseName(route.origin[locale])} → </Text>
-        {titleCaseName(route.destination[locale])}
+        <Text className="text-subtle">{route.origin} → </Text>
+        {route.destination}
       </Text>
       <Icon icon={ChevronRight} tone="subtle" size={20} />
     </Pressable>
   )
 }
 
-function StopResultRow({
-  stop,
-  locale,
-  onPress,
-}: {
-  stop: StopLite
-  locale: Locale
-  onPress: () => void
-}) {
+/** One stop result. The printed code is already split off the name (ADR-034), by the model. */
+function StopResultRow({ stop, onPress }: { stop: SearchStopRow; onPress: () => void }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -496,72 +477,37 @@ function StopResultRow({
       className="flex-row items-center justify-between gap-3 px-4 py-3.5 active:opacity-60"
     >
       <View className="flex-1">
-        <StopName name={displayName(stop.name[locale])} variant="body" />
+        <StopName name={stop.name} variant="body" />
       </View>
       <Icon icon={ChevronRight} tone="subtle" size={20} />
     </Pressable>
   )
 }
 
-function RecentRoutes({
-  items,
-  locale,
+/**
+ * The heading above a history list, with its clear control — all that is left of `RecentRoutes` and
+ * `RecentStops` (WP6-5).
+ *
+ * Those two were the same twelve lines twice, and what differed between them was the *rows*, which
+ * `searchView` now produces in one shape per mode. `empty` renders nothing at all rather than a heading with
+ * no list under it: a rider who has searched for nothing yet should see the screen they would see before
+ * they had a history, not a label announcing an absence.
+ */
+function RecentsHeader({
   label,
   clearLabel,
   onClear,
-  onOpen,
+  empty,
 }: {
-  items: RouteLite[]
-  locale: Locale
   label: LocalizedString
   clearLabel: LocalizedString
   onClear: () => void
-  onOpen: (id: string) => void
+  empty: boolean
 }) {
-  if (items.length === 0) return null
-  return (
-    <View>
-      <SectionLabel label={label} clearLabel={clearLabel} onClear={onClear} />
-      {items.map((r, i) => (
-        <View key={r.id} className={i === 0 ? '' : 'border-border border-t'}>
-          <RouteResultRow route={r} locale={locale} onPress={() => onOpen(r.id)} />
-        </View>
-      ))}
-    </View>
-  )
+  if (empty) return null
+  return <SectionLabel label={label} clearLabel={clearLabel} onClear={onClear} />
 }
 
-function RecentStops({
-  items,
-  locale,
-  label,
-  clearLabel,
-  onClear,
-  onOpen,
-}: {
-  items: StopLite[]
-  locale: Locale
-  label: LocalizedString
-  clearLabel: LocalizedString
-  onClear: () => void
-  onOpen: (id: string) => void
-}) {
-  if (items.length === 0) return null
-  return (
-    <View>
-      <SectionLabel label={label} clearLabel={clearLabel} onClear={onClear} />
-      {items.map((s, i) => (
-        <View key={s.id} className={i === 0 ? '' : 'border-border border-t'}>
-          <StopResultRow stop={s} locale={locale} onPress={() => onOpen(s.id)} />
-        </View>
-      ))}
-    </View>
-  )
-}
-
-/** A section header. When `onClear` is given, a muted "Clear" affordance sits on the right —
- *  used by the recent-search lists to wipe that kind's history (kept muted, not brand, per the
- *  restraint on secondary UI). */
 function SectionLabel({
   label,
   clearLabel,

@@ -194,7 +194,10 @@ versioned favourite-key migration are corpus-pinned in `packages/core`, `apps/we
 five** persisted fields so it shares `nextbus.preferences` without erasing a rider's list, and both bugs
 the row was measured on are closed — **by fixing the producer, not the card**. The lesson: *a `mustNot` a
 component cannot satisfy is a statement about its producer*; `stop-row.spec.json` is now the first spec
-with zero `knownDefect`s. **WP6-5 (Search) is next.** `watch()` is a real
+with zero `knownDefect`s. **WP6-5 (Search) has started:** its hoist half is done (ADR-091) — `searchView` owns the seven
+decisions the screen was making, the keypad and the result list are **one filtered set** (the invariant
+that makes a dimmed key honest), and Search has been **walked in a browser for the first time**, which is
+the pass ADR-037 has owed. **WP6-5b is the spec, the port and the interaction states.** `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

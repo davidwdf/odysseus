@@ -1,11 +1,23 @@
-import type { LocalizedString } from '@nextbus/i18n'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { Text } from './Text'
 
 export interface FilterChip {
   key: string
-  label: LocalizedString
+  /**
+   * A plain `string`, deliberately — and it is the ADR-054 line rather than a weakening of the brand.
+   *
+   * Since WP6-5 the chip set is `searchView`'s: the kernel decides *which* chips exist (the operators come
+   * from the index, so a fifth one appears the day its adapter lands) and the caller injects the *words*.
+   * A `LocalizedString` cannot survive that round trip — the kernel may not import `@nextbus/i18n` — so the
+   * brand is laundered at the injection boundary, on purpose and in one place. The same call
+   * `PlaceGroup.heading` makes for the same reason: what is a rule is the joining, and what is a word is the
+   * catalogue's.
+   *
+   * The brand still does its job where it can: `searchView`'s `labels.category` is typed to take a
+   * `PlainMessageKey`, so an English literal cannot reach a chip without passing through `t()` first.
+   */
+  label: string
   active: boolean
 }
 

@@ -6460,3 +6460,70 @@ pre-existing and unaddressed; it earned its keep here.
     wrong moment* this wave has met.
   - **Test totals:** core **892** (+3), edge 149, api-client 71, ui-spec 30, web **119** (+11),
     mobile **97** (+11) — **1 358**. Corpus 14 files / 101 groups / **852** cases.
+
+## ADR-091 — The keypad and the result list are one filtered set, and a chip set is the index's answer
+
+- **Status:** **Decided and implemented 2026-08-05** as the first half of **WP6-5**. Implementation:
+  `searchView` in `packages/core/src/search.ts` (+12 corpus cases in the existing `search.spec.json`,
+  +5 property tests) and `apps/mobile/app/search.tsx` consuming it — six `useMemo`s and two local
+  components gone. A hoist, so **no behaviour changes**; `packages/core` stays at **100 % on all four
+  axes**.
+- **Context.** `proposals/04` puts Search fourth and calls it *"the keypad, chips and recents are pure
+  interaction over a spec'd index; never walked in a browser"*. The second half was the more accurate:
+  twelve corpus groups already pin what *matches*, and the screen was deciding everything about what a
+  rider sees — seven decisions, all of them reachable only by rendering a React tree.
+- **Decisions:**
+  1. **The keypad and the result list are computed from ONE filtered set.** This is the invariant that
+     makes a dimmed key honest: a rider presses a live key expecting a result, so a keypad computed over
+     a wider set than the search offers keys that lead nowhere, and a narrower one hides a reachable
+     route. It was already true by construction in the screen and it was true *by coincidence of two
+     `useMemo`s reading the same variable*; it is now one expression, with a property test asserting that
+     every key the keypad offers begins some findable number.
+  2. **Which operator chips exist is the *index's* answer** (ADR-037's promise, now a rule): a fifth
+     operator lights up the day its adapter lands, and — the half that matters more — a chip is never
+     offered for an operator the index cannot produce a result for. Sorted, so the row does not reorder
+     itself as the dataset is rebuilt.
+  3. **A stops list offers no category chips.** A stop has no route number, so a category cannot narrow
+     it; a dimmed-but-present night-bus chip over a stop list offers a filter that does nothing, which is
+     worse than not offering it.
+  4. **Three list states, not two.** "Nothing matched" and "nothing searched" are different sentences with
+     different copy, and the screen decided between them by re-testing `query === ''` beside a length
+     check. `source: 'results' | 'recents' | 'none'` is one answer, and it is the same shape as every
+     other state bug this wave has found: *a screen with less to show than expected must say which less.*
+  5. **A recent is a *reference*, resolved against the index.** The dataset is rebuilt daily, a route can
+     leave it, and clustering can mint a new `P:` id for a place (ADR-042) — so a saved id may name
+     nothing today. It is dropped silently, which is right: the rider's next search simply will not offer
+     it, where a row that renders the id and hopes is a tap into nothing.
+  6. **A chip key is matched, never taken apart.** `searchView` mints `operator:KMB` / `category:night`
+     and the screen compares whole strings against the same two builders. The screen used to
+     `split(':')` its own key and cast the halves to two different unions, which read exactly like
+     ad-hoc id parsing and was flagged by the gate that bans it; a key that is never split cannot be
+     split wrongly.
+  7. **`FilterChip.label` widens from `LocalizedString` to `string`**, and that is the ADR-054 line rather
+     than a weakening. The kernel decides which chips exist and the caller injects the words, so the brand
+     cannot survive the round trip — the kernel may not import `@nextbus/i18n`. It is laundered at the
+     injection boundary, in one place, exactly as `PlaceGroup.heading` is. The brand still does its work
+     where it can: an English literal cannot reach a chip without passing through `t()` first.
+  8. **No `useMemo`.** `searchView` is pure and this screen re-renders on every keystroke regardless, so
+     memoizing would add a dependency array that has to stay correct for no measured gain. The six it
+     replaced each had one.
+- **Walked in a browser for the first time — the pass `docs/11` has owed since ADR-037** — and the
+  invariant in decision 1 turned out to be *visible*. With the query `2` and the **Night** chip on, the
+  screen says **"No matches"** and **every key on the keypad is dimmed**, letter row included: no night
+  route begins with a `2`, so the keypad offers nothing and the list has nothing, and the two agree
+  without either knowing about the other. On the resting screen the `0` key alone is dimmed (no route
+  number starts with a zero), the letter row reads `A B C E H N P R S T W X`, the chips read
+  `Citybus GMB KMB · Night Airport Express`, and two saved recents resolve — including a GMB minibus
+  route, which is decision 2 working end to end.
+  Screenshots: `.context/wave6-screenshots/9-rn-search-first-browser-pass.jpg`,
+  `10-rn-search-keypad-and-list-agree.jpg`.
+- **Consequences:**
+  - ⚪ **`RecentRoutes` and `RecentStops` collapsed into one `RecentsHeader`.** They were the same twelve
+    lines twice and what differed was the rows, which the view now produces in one shape per mode.
+  - 🟡 **The GMB chip reads `GMB` in English and `專線小巴` in Chinese**, which is the `docs/07` row WP6-4
+    surfaced, visible again here on the widest surface it appears on.
+  - 🟡 **WP6-5b still owns the spec, the `apps/web` port and the interaction states** — a keypad that
+    collapses on scroll, a text field that focuses, a segment that switches mode. Those are the
+    interaction-heavy half `proposals/04` picked this screen for.
+  - **Test totals:** core **898** (+6), edge 149, api-client 71, ui-spec 30, web 119, mobile 97 —
+    **1 364**. Corpus 14 files / **102** groups / **864** cases (+1 group, +12 cases).
