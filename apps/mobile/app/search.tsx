@@ -1,11 +1,11 @@
 import {
   EMPTY_FILTER,
-  type OperatorId,
   type RouteCategory,
   type RouteFilter,
   type SearchRouteRow,
   type SearchStopRow,
   searchView,
+  toggleSearchChip,
 } from '@nextbus/core'
 import { type LocalizedString, operatorName, type PlainMessageKey, t } from '@nextbus/i18n'
 import { useRouter } from 'expo-router'
@@ -47,16 +47,7 @@ const CATEGORY_LABELS: Record<RouteCategory, PlainMessageKey> = {
   airport: 'filterAirport',
   express: 'filterExpress',
 }
-const CATEGORIES: RouteCategory[] = ['night', 'airport', 'express']
-/**
- * Every operator a chip can name, for matching a chip key back to its toggle.
- *
- * **Not the chip set** — `searchView` decides that from the index, so a fifth operator's chip appears the
- * day its adapter lands (ADR-037). This is the closed set of values a key could carry, and it exists so the
- * key can be *matched* rather than taken apart: the screen used to `split(':')` it and cast the halves to
- * two different unions, which read exactly like ad-hoc id parsing and was flagged by the gate that bans it.
- */
-const OPERATORS: OperatorId[] = ['KMB', 'LWB', 'CTB', 'GMB']
+const _CATEGORIES: RouteCategory[] = ['night', 'airport', 'express']
 /** Gap below the keypad / results — this page has no tab bar, so just clear the safe area. */
 const BOTTOM_GAP = 12
 
@@ -127,33 +118,11 @@ export default function SearchScreen() {
       )
     : undefined
 
-  const toggleOperator = (op: OperatorId) =>
-    setFilter((f) => ({
-      ...f,
-      operators: f.operators.includes(op)
-        ? f.operators.filter((o) => o !== op)
-        : [...f.operators, op],
-    }))
-  const toggleCategory = (c: RouteCategory) =>
-    setFilter((f) => ({
-      ...f,
-      categories: f.categories.includes(c)
-        ? f.categories.filter((x) => x !== c)
-        : [...f.categories, c],
-    }))
-
-  /**
-   * A chip's key names the axis and the value, and it is **matched, never taken apart**.
-   *
-   * The screen used to `split(':')` this string and cast the halves to two different unions, which read
-   * exactly like ad-hoc id parsing and was flagged by the gate that bans it. `searchView` mints the keys now
-   * (`operator:KMB`, `category:night`) and this compares whole strings against the same two builders, so
-   * there is nothing to take apart wrongly.
-   */
-  const onToggleChip = (key: string) => {
-    for (const op of OPERATORS) if (key === `operator:${op}`) return toggleOperator(op)
-    for (const c of CATEGORIES) if (key === `category:${c}`) return toggleCategory(c)
-  }
+  // The whole of what this screen does with a chip: hand the key straight back. `searchView` minted it and
+  // `toggleSearchChip` reads it, so the key's *format* is known in one place and a renderer never takes one
+  // apart. This screen used to `split(':')` it and cast the halves to two different unions, which read
+  // exactly like ad-hoc id parsing and was flagged by the gate that bans it (ADR-091).
+  const onToggleChip = (key: string) => setFilter((f) => toggleSearchChip(f, key))
 
   // The union narrowed once. `mode` selects the branch that draws each, so the other is always empty —
   // written here rather than inside the JSX so neither list is read through an inline cast.
@@ -247,12 +216,7 @@ export default function SearchScreen() {
               className="border-border border-t pt-3"
               style={{ paddingBottom: insets.bottom + BOTTOM_GAP }}
             >
-              <RouteKeypad
-                value={routeQuery}
-                keys={view.keypad.keys}
-                letters={view.keypad.letters}
-                onChange={setRouteQuery}
-              />
+              <RouteKeypad keypad={view.keypad} value={routeQuery} onChange={setRouteQuery} />
             </View>
           </CollapsibleFooter>
         </>
@@ -460,7 +424,9 @@ function RouteResultRow({ route, onPress }: { route: SearchRouteRow; onPress: ()
     >
       <RouteChip operator={route.operator} routeNo={route.routeNo} />
       <Text variant="body" className="flex-1 text-text" numberOfLines={1}>
-        <Text className="text-subtle">{route.origin} → </Text>
+        <Text className="text-subtle">{route.origin}</Text>
+        {/* Its own node — see the DOM twin. */}
+        <Text className="text-subtle"> → </Text>
         {route.destination}
       </Text>
       <Icon icon={ChevronRight} tone="subtle" size={20} />

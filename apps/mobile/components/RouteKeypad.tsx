@@ -1,4 +1,4 @@
-import { nextValidChars } from '@nextbus/core'
+import type { SearchKeypad } from '@nextbus/core'
 import { type LocalizedString, t } from '@nextbus/i18n'
 import { Delete } from 'lucide-react-native'
 import { type ReactNode, useMemo } from 'react'
@@ -19,11 +19,6 @@ import { Text } from './Text'
 // route-number array `routeKeys` produces. Same keys light up, one less structure to port.)
 // The letter row runs edge-to-edge: default left inset, items overflowing under the
 // right edge, with matching padding once scrolled.
-
-const DIGIT_ROWS: string[][] = [
-  ['1', '2', '3', '4', '5'],
-  ['6', '7', '8', '9', '0'],
-]
 
 function Key({
   label,
@@ -71,22 +66,24 @@ function Key({
   )
 }
 
+/**
+ * **It decides nothing at all** since WP6-5b — not even which keys are live. `searchView.keypad` arrives with
+ * the ten digits in keyboard order, each carrying whether pressing it can lead anywhere, and only the letters
+ * that continue the current prefix. Splitting the ten into two rows of five is the one decision left, and it
+ * is layout. See the DOM twin for the longer note.
+ */
 export function RouteKeypad({
+  keypad,
   value,
-  keys,
-  letters,
   onChange,
 }: {
+  keypad: SearchKeypad
+  /** The current prefix — what a key appends to, and what backspace removes from. */
   value: string
-  /** Every reachable route number, upper-cased and byte-sorted (`routeKeys`). */
-  keys: readonly string[]
-  /** Letters this dataset's route numbers ever use, in a stable order. */
-  letters: string[]
   onChange: (next: string) => void
 }) {
   const locale = useLocale()
-  const valid = useMemo(() => nextValidChars(keys, value), [keys, value])
-  const validLetters = useMemo(() => letters.filter((ch) => valid.has(ch)), [letters, valid])
+  const rows = useMemo(() => [keypad.digits.slice(0, 5), keypad.digits.slice(5)], [keypad.digits])
   const append = (ch: string) => onChange(value + ch)
   const backspace = () => onChange(value.slice(0, -1))
 
@@ -95,23 +92,23 @@ export function RouteKeypad({
       {/* Letters — one scrollable row above the numbers, filtered to the valid next letters.
           Edge-to-edge: 16px lead inset, items run off the right edge, 16px trailing inset
           revealed once scrolled all the way (the app's horizontal-scroll rule). */}
-      {validLetters.length > 0 ? (
+      {keypad.letters.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ gap: 8, paddingLeft: 16, paddingRight: 16 }}
         >
-          {validLetters.map((ch) => (
+          {keypad.letters.map((letter) => (
             <Pressable
-              key={ch}
+              key={letter.char}
               accessibilityRole="button"
-              accessibilityLabel={ch}
-              onPress={() => append(ch)}
+              accessibilityLabel={letter.char}
+              onPress={() => append(letter.char)}
               className="min-w-[40px] items-center justify-center rounded-lg border border-border bg-surface px-3 py-2 active:opacity-60"
             >
               <Text variant="label" weight="bold" className="text-text">
-                {ch}
+                {letter.char}
               </Text>
             </Pressable>
           ))}
@@ -122,10 +119,15 @@ export function RouteKeypad({
           Long-press backspace clears the whole number. */}
       <View className="flex-row gap-2 px-4">
         <View className="flex-[5] gap-2">
-          {DIGIT_ROWS.map((row) => (
-            <View key={row[0]} className="flex-row gap-2">
+          {rows.map((row) => (
+            <View key={row[0]?.char} className="flex-row gap-2">
               {row.map((d) => (
-                <Key key={d} label={d} enabled={valid.has(d)} onPress={() => append(d)} />
+                <Key
+                  key={d.char}
+                  label={d.char}
+                  enabled={d.enabled}
+                  onPress={() => append(d.char)}
+                />
               ))}
             </View>
           ))}
@@ -133,11 +135,11 @@ export function RouteKeypad({
         <Key
           accessibilityLabel={t(locale, 'keypadBackspace')}
           tall
-          enabled={value.length > 0}
+          enabled={keypad.backspace}
           onPress={backspace}
           onLongPress={() => onChange('')}
         >
-          <Icon icon={Delete} tone={value.length > 0 ? 'text' : 'muted'} size={22} />
+          <Icon icon={Delete} tone={keypad.backspace ? 'text' : 'muted'} size={22} />
         </Key>
       </View>
     </View>

@@ -289,6 +289,28 @@ const ALLOWLIST = [
       'is what made writing this component a rendering exercise rather than a second derivation.',
   },
   {
+    file: 'apps/web/src/components/RouteKeypad.tsx',
+    rule: 'capping',
+    snippet: 'keypad.digits.slice(0, 5)',
+    why:
+      'Splitting the ten digits the view hands over into two rows of five — **layout, and the only decision ' +
+      'left in this file**. Which characters exist and in what order is `SearchKeypad`’s, precisely so a ' +
+      'renderer cannot adopt a phone’s 1-2-3 grid where the other uses a keyboard’s 1-5 / 6-0; how many fit ' +
+      'on a line is the renderer’s. Nothing is dropped: `5 + 5` is every key, which the corpus asserts as ' +
+      '`digits.length === 10` on every case.',
+  },
+  {
+    file: 'apps/web/src/components/RouteKeypad.tsx',
+    rule: 'capping',
+    snippet: 'value.slice(0, -1)',
+    why:
+      'Backspace. It removes the last character a rider typed from the string they typed it into — a text ' +
+      'edit, not a cap over a list. The rule exists for `rows.slice(0, maxRows)`, where slicing first makes ' +
+      'the "+N more" count zero; there is no count here and no list. What the keypad could have derived — ' +
+      'which keys are live and which letters continue a prefix — is `nextValidChars` and `validNextLetters` ' +
+      'in `packages/core`, both corpus-pinned, and both are called rather than reimplemented.',
+  },
+  {
     file: 'apps/web/src/components/MiniMap.tsx',
     rule: 'string-composition',
     snippet: 'pin.ids.join(',

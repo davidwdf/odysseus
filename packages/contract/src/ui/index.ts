@@ -3,6 +3,7 @@ import { FAVOURITES_SPEC } from './favourites'
 import { NEARBY_SPEC } from './nearby'
 import { PLACE_DETAIL_SPEC } from './place-detail'
 import { PLACE_ROW_SPEC } from './place-row'
+import { SEARCH_SPEC } from './search'
 import { STOP_ROW_SPEC } from './stop-row'
 
 /**
@@ -20,6 +21,7 @@ export const UI_SPECS: Record<string, ComponentSpec> = {
   nearby: NEARBY_SPEC,
   'place-detail': PLACE_DETAIL_SPEC,
   'place-row': PLACE_ROW_SPEC,
+  search: SEARCH_SPEC,
   'stop-row': STOP_ROW_SPEC,
 }
 
@@ -33,4 +35,11 @@ export const UI_SPEC_REGISTRY: Record<string, ComponentSpec> = Object.fromEntrie
   Object.values(UI_SPECS).map((spec) => [spec.component, spec]),
 )
 
-export { FAVOURITES_SPEC, NEARBY_SPEC, PLACE_DETAIL_SPEC, PLACE_ROW_SPEC, STOP_ROW_SPEC }
+export {
+  FAVOURITES_SPEC,
+  NEARBY_SPEC,
+  PLACE_DETAIL_SPEC,
+  PLACE_ROW_SPEC,
+  SEARCH_SPEC,
+  STOP_ROW_SPEC,
+}

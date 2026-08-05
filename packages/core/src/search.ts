@@ -427,10 +427,39 @@ export interface SearchViewOptions {
 export interface SearchView {
   /** The chips to draw, in order: every operator in the index, then the categories a mode filters by. */
   chips: SearchChip[]
-  /** The keypad's live keys and its letter row, both narrowed by the active filter. */
-  keypad: { keys: string[]; letters: string[] }
+  keypad: SearchKeypad
   list: SearchList
   source: SearchSource
+}
+
+/** One key on the route keypad: the character it appends, and whether pressing it can lead anywhere. */
+export interface KeypadKey {
+  char: string
+  /**
+   * False renders the key **present but inert**, never hidden — a rider learns the pad has ten digits and
+   * that some cannot continue their number, where a shrinking grid moves the keys under their thumb between
+   * taps. And it is honest by construction: `enabled` is `nextValidChars` over the *filtered* key set, so a
+   * live key and a reachable row are the same question answered once (ADR-091).
+   */
+  enabled: boolean
+}
+
+/**
+ * The keypad, ready to draw.
+ *
+ * **The digit set and its order are here rather than in each component**, and that is not tidiness: both
+ * keypads held their own `DIGIT_ROWS` — the same two rows of five, twice — so a renderer that adopted the
+ * phone's 1-2-3 / 4-5-6 grid instead of the keyboard's 1-5 / 6-0 would have been a silent divergence in
+ * muscle memory. Which characters exist and in what order is one answer; splitting ten of them into rows is
+ * layout, and stays each renderer's.
+ */
+export interface SearchKeypad {
+  /** All ten digits, in keyboard order. */
+  digits: KeypadKey[]
+  /** Only the letters that can continue the current prefix — so the row disappears when none can. */
+  letters: KeypadKey[]
+  /** Whether there is anything to delete. */
+  backspace: boolean
 }
 
 /**
@@ -447,12 +476,12 @@ export function searchView(input: SearchViewInput, opts: SearchViewOptions): Sea
   // the dataset is rebuilt.
   const operators = [...new Set(index.routes.map((route) => route.operator))].sort()
   const operatorChips: SearchChip[] = operators.map((operator) => ({
-    key: `operator:${operator}`,
+    key: `${OPERATOR_CHIP_PREFIX}${operator}`,
     label: labels.operator(operator),
     active: filter.operators.includes(operator),
   }))
   const categoryChips: SearchChip[] = ROUTE_CATEGORIES.map((category) => ({
-    key: `category:${category}`,
+    key: `${CATEGORY_CHIP_PREFIX}${category}`,
     label: labels.category(category),
     active: filter.categories.includes(category),
   }))
@@ -465,7 +494,18 @@ export function searchView(input: SearchViewInput, opts: SearchViewOptions): Sea
   const findable = index.routes
     .filter((route) => routeMatchesFilter(route, filter))
     .map((route) => route.routeNo)
-  const keypad = { keys: routeKeys(findable), letters: indexAlphabet(findable).letters }
+  const reachable = routeKeys(findable)
+  const nextChars = nextValidChars(reachable, query)
+  const keypad: SearchKeypad = {
+    digits: KEYPAD_DIGITS.map((char) => ({ char, enabled: nextChars.has(char) })),
+    // Already narrowed, so every letter drawn is one that continues the prefix — the row simply disappears
+    // when none does, and the whole pad goes dark for a filter that admits nothing.
+    letters: validNextLetters(reachable, indexAlphabet(findable).letters, query).map((char) => ({
+      char,
+      enabled: true,
+    })),
+    backspace: query !== '',
+  }
 
   const searching = query !== ''
   const list: SearchList =
@@ -504,6 +544,9 @@ export function searchView(input: SearchViewInput, opts: SearchViewOptions): Sea
 /** The categories a route list can be filtered by, in chip order. */
 const ROUTE_CATEGORIES: readonly RouteCategory[] = ['night', 'airport', 'express']
 
+/** The ten digits, in **keyboard** order — 1-5 then 6-0, not a phone's 1-2-3 grid. See `SearchKeypad`. */
+const KEYPAD_DIGITS: readonly string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+
 /** Saved ids → the records the index still has for them, in save order. */
 function resolve<T extends { id: string }>(ids: readonly string[], records: readonly T[]): T[] {
   const byId = new Map(records.map((record) => [record.id, record]))
@@ -524,4 +567,87 @@ function routeRow(route: RouteLite, locale: Locale): SearchRouteRow {
     origin: titleCaseNameOf(route.origin[locale]),
     destination: titleCaseNameOf(route.destination[locale]),
   }
+}
+
+/**
+ * Cap on each per-kind recents list.
+ *
+ * Shared because two stores now write the same blob (ADR-089): a cap that differed between them would make
+ * a rider's history grow or shrink depending on which app they last used, which is the sort of difference
+ * nobody reports and nobody can explain.
+ */
+export const RECENTS_MAX = 8
+
+/**
+ * Move `id` to the front of a recents list, de-duplicated and capped.
+ *
+ * @spec search#bumpRecent
+ *
+ * Three rules in one line, and each has a reason a renderer should not get to re-choose: **most-recent
+ * first**, because that is the order the list is read in; **de-duplicated**, because opening a route twice
+ * should not fill the history with it; and **capped**, because the list is a shortcut rather than a log —
+ * past a screenful it stops being one. It was a local helper in `apps/mobile/lib/preferences.ts` until
+ * WP6-5b needed the identical answer in a second store.
+ */
+export function bumpRecent(list: readonly string[], id: string): string[] {
+  return [id, ...list.filter((existing) => existing !== id)].slice(0, RECENTS_MAX)
+}
+
+/**
+ * Toggle the axis a chip names, given the key `searchView` minted for it.
+ *
+ * **The key is never taken apart by a renderer, and this is why.** Both screens used to hold their own table
+ * of operators and categories and match a key against it — the RN one previously went further and
+ * `split(':')` the string, casting the halves to two different unions, which read exactly like ad-hoc id
+ * parsing and was flagged by the gate that bans it (ADR-091 decision 6). One function that *mints* the keys
+ * and one that *reads* them means the format is known in exactly one place, and a renderer's whole job is to
+ * hand back the string it was given.
+ *
+ * A key this does not recognise returns the filter **unchanged** rather than throwing: a chip row rendered
+ * from an older view is a stale tap, not a corruption, and a screen that crashed on one would lose the
+ * rider's whole filter over a race.
+ *
+ * @spec search#toggleSearchChip
+ */
+export function toggleSearchChip(filter: RouteFilter, key: string): RouteFilter {
+  const operator = key.startsWith(OPERATOR_CHIP_PREFIX)
+    ? key.slice(OPERATOR_CHIP_PREFIX.length)
+    : undefined
+  if (operator !== undefined) {
+    return { ...filter, operators: toggled(filter.operators, operator as OperatorId) }
+  }
+  const category = key.startsWith(CATEGORY_CHIP_PREFIX)
+    ? key.slice(CATEGORY_CHIP_PREFIX.length)
+    : undefined
+  if (category !== undefined && (ROUTE_CATEGORIES as readonly string[]).includes(category)) {
+    return { ...filter, categories: toggled(filter.categories, category as RouteCategory) }
+  }
+  return filter
+}
+
+const OPERATOR_CHIP_PREFIX = 'operator:'
+const CATEGORY_CHIP_PREFIX = 'category:'
+
+/** Add or remove one value, preserving the order of the rest. */
+function toggled<T>(values: readonly T[], value: T): T[] {
+  return values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
+}
+
+/**
+ * The letters the keypad's letter row should offer for a prefix — those that can *continue* it.
+ *
+ * Two rules composed, and the composition is the part a renderer should not own: `nextValidChars` says what
+ * may follow the prefix at all, and `indexAlphabet`'s stable letter order says how a row of them reads. The
+ * intersection is what makes the row **disappear** once a prefix admits no letters, and what makes the pad go
+ * entirely dark for a filter that admits nothing — which is the visible face of ADR-091's invariant.
+ *
+ * @spec search#validNextLetters
+ */
+export function validNextLetters(
+  keys: readonly string[],
+  letters: readonly string[],
+  prefix: string,
+): string[] {
+  const valid = nextValidChars(keys, prefix)
+  return letters.filter((letter) => valid.has(letter))
 }

@@ -116,10 +116,29 @@
 > appears the day its adapter lands — and two saved recents resolve, one of them a GMB minibus route.
 > Screenshots: `.context/wave6-screenshots/9-rn-search-first-browser-pass.jpg`,
 > `10-rn-search-keypad-and-list-agree.jpg`.
-> **WP6-5b is what remains:** the spec, the `apps/web` port, and the interaction states — a keypad that
-> collapses on scroll, a text field that focuses, a segment that switches mode. `apps/web`'s store already
-> **preserves** `recentRoutes` and `recentStops` without reading them (WP6-4a), so the port reads fields
-> that are already on the blob.
+> **WP6-5b closed it** ([ADR-092](./08-decision-log.md#adr-092--a-spec-cannot-hold-an-interaction-but-it-can-hold-what-a-rider-infers-from-one)),
+> and the answer to the row's own question is the ADR's title: **a spec cannot hold an interaction, but it can
+> hold what a rider infers from one.** A keypad that collapses, a field that focuses, a segment that slides
+> are gesture and motion — six `idiom` entries, declared rather than left silent. What *is* identity is that a
+> key drawn as live means some route number continues that way, and `filteredToNothing` is the state where
+> that bites: ten keys, none pressable.
+> **The keypad is purely presentational now.** `SearchKeypad` carries the ten digits in keyboard order with
+> their `enabled` flags and only the letters that continue the prefix; both components had held their own
+> `DIGIT_ROWS`, so a renderer adopting a phone's 1-2-3 grid would have been a silent divergence in muscle
+> memory. **A chip key is minted and read in one place** (`toggleSearchChip`), so no renderer knows its format.
+> **`noMatches` turns out to be reachable only in stops mode** — a fact about the keypad, not the state: a
+> smart keypad *cannot* type a query that matches nothing, which the driver discovered by pressing `9` five
+> times and getting a one-character query.
+> 🟠 **Five harness traps, and the fifth was in the injection script.** Two of the five watched-failing
+> injections came back green **because they never applied** — a string the formatter had reshaped, and an
+> assertion that tripped on the word appearing in `interactions`. *An injection that did not inject is
+> indistinguishable from a gate that does not fire.* Re-run with the edit asserted, both go red. Read the ADR
+> before trusting an injection pass again.
+> 🟡 **And one injection that applied taught something**: folding the journey arrow back into `{origin} →`
+> left both suites green, because **React emits an expression and an adjacent literal as separate text
+> nodes** — so a projection pins *order*, and markup-level node boundaries are not observable to it.
+> **WP6-6 (Route detail) is next** — the L row, the schematic, and the first screen where *"motion is idiom"*
+> is a real claim rather than a slogan.
 > **Wave 6's earlier rows, for context** — WP6-0, WP6-1, WP6-2 and WP6-3a
 > ([ADR-082](./08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps),
 > [ADR-083](./08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it),

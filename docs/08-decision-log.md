@@ -6527,3 +6527,66 @@ pre-existing and unaddressed; it earned its keep here.
     interaction-heavy half `proposals/04` picked this screen for.
   - **Test totals:** core **898** (+6), edge 149, api-client 71, ui-spec 30, web 119, mobile 97 —
     **1 364**. Corpus 14 files / **102** groups / **864** cases (+1 group, +12 cases).
+
+## ADR-092 — A spec cannot hold an interaction, but it can hold what a rider infers from one
+
+- **Status:** **Decided and implemented 2026-08-05** — **WP6-5b**, which closes WP6-5. Implementation:
+  `packages/contract/ui/search.spec.json` (10 states, 8 projected), `apps/web/src/screens/Search.tsx` with
+  `components/{RouteKeypad,FilterChips}.tsx` and `hooks/useSearchIndex.ts`, two conformance drivers, and
+  two more kernel rules (`toggleSearchChip`, `validNextLetters`) plus `SearchKeypad` on the view.
+- **Context.** `proposals/04` picked Search fourth for *"interaction-heavy specs"* — the open question being
+  whether a spec can carry interaction at all.
+- **Decisions:**
+  1. **It mostly cannot, and should not try.** A keypad that collapses on scroll, a field that autofocuses,
+     a segment that slides: gesture and motion, which ADR-075 puts on the idiom side. The spec says so by
+     **enumeration** — six `idiom` entries — rather than by silence, which is the difference between a
+     decision and an omission.
+  2. **What it can hold is what a rider *infers* from the interaction: a key drawn as live means some route
+     number continues that way.** One rule, and the states drive it — `filteredToNothing` being the extreme
+     where the honest answer is ten keys and none of them pressable.
+  3. **The keypad became purely presentational.** `SearchKeypad` carries the ten digits in keyboard order,
+     each with `enabled`, and only the letters that continue the prefix. Both components held their own
+     `DIGIT_ROWS` — the same two rows of five, twice — so a renderer adopting a phone's 1-2-3 grid would
+     have been a silent divergence in muscle memory. Splitting ten into rows is the one thing left, and it
+     is layout.
+  4. **A chip key is minted and read in one place.** `toggleSearchChip` takes the key `searchView` produced,
+     so no renderer knows the format and neither holds a table of operators to match against. An
+     unrecognised key returns the filter unchanged rather than throwing: a stale tap is not a corruption,
+     and crashing would lose the rider's whole selection.
+  5. **`noMatches` is reachable only in stops mode**, and that is a fact about the keypad rather than about
+     the state: **a smart keypad cannot type a query that matches nothing** — the key that would take you
+     there is inert by construction. Discovered by writing the driver, which pressed `9` five times and got
+     a one-character query.
+  6. **The query field is the one genuine platform split**, and it is declared rather than hidden:
+     `apps/mobile` draws the typed number in a `<Text>` because its keypad *is* the input, while `apps/web`
+     uses a real `<input>` and accepts the hardware keyboard as well, making the pad an accelerator. So
+     neither the value nor the placeholder is a shared projection, and the RN driver drops the field's
+     **subtree** — structurally, by position, not by value.
+  7. **The drivers press controls rather than setting state.** `mode`, `query` and `filter` are the screen's
+     own state, so the only honest way into a state is the way a rider gets there. A driver that reached in
+     would be asserting that the screen renders a view it was handed, which nothing doubted.
+- **Five harness traps, and the fifth was in the injection script itself.** Filtering the tree by *value* to
+  drop the field deleted the keypad's `2` key when the query was `2`, and reported a divergence twelve nodes
+  later. The RN driver's positional skip ate the **error message** in `failed`, because there is no field in
+  that state — the only one of these that hid a state's entire content rather than its timing. The index
+  hook memoizes for the session, which is right for the app and leaked a previous state's index into
+  `loading`, so the drivers import a fresh module graph per test. And then: **two of the five watched-failing
+  injections came back green because they never applied** — a string the formatter had reshaped, and an
+  assertion that tripped on the word appearing in `interactions` rather than on the slot surviving. *An
+  injection that did not inject is indistinguishable from a gate that does not fire.* Re-run with the edit
+  asserted, both go red — 3 states each.
+- **And the injection that applied taught something real.** Folding the arrow back into `{origin} →` as one
+  string left both suites green, because **React emits an expression and an adjacent literal as separate DOM
+  text nodes**: the arrow's node identity comes from React, not from the markup, so splitting it into its own
+  `<span>` was cosmetic. The original failure was purely the spec declaring the arrow *before* the origin.
+  Recorded rather than dressed up as a fix — what the projection genuinely pins here is the **order**, and
+  markup-level node boundaries are not observable to it at all.
+- **Consequences:**
+  - ⚪ **`apps/web` has four ported screens**, and four destinations still name the work package porting them.
+  - ⚪ **`toggleSearchChip` and `validNextLetters` join the kernel**, plus `bumpRecent` and `RECENTS_MAX`
+     from the same row — the recents rule two stores now share.
+  - 🟡 **`stale` and `offline` are `unenforced`, and the reason is a rule rather than a gap**: a stale search
+     index renders *identically* to a fresh one, by design, because a route number that existed yesterday
+     almost certainly exists today. ADR-008's staleness rule is about readings, which decay in minutes.
+  - **Test totals:** core **918**, edge 149, api-client 71, ui-spec 30, web **131** (+12), mobile **109**
+    (+12) — **1 408**. Corpus 14 files / **105** groups / **878** cases.

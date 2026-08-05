@@ -71,7 +71,6 @@ export const SEARCH: ChromeDestination = {
   path: '/search',
   titleKey: 'tabSearch',
   icon: Search,
-  owner: 'WP6-5',
 }
 
 /** Everything reached by a push rather than by the tab row. */

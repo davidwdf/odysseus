@@ -112,10 +112,10 @@ describe('the destination set is identity, and both renderers declare the same o
   it('gives every unported destination an owning work package', () => {
     // A route that renders a placeholder nobody has agreed to replace is a promise, not a plan. So the list
     // of owner-less destinations is exactly the list of **ported** ones, and it grows one row at a time:
-    // Nearby at WP6-0, Place detail at WP6-3b, Favourites at WP6-4b. Asserted as an equality rather than a count, so a
+    // Nearby at WP6-0, Place detail at WP6-3b, Favourites at WP6-4b, Search at WP6-5b. Asserted as an equality rather than a count, so a
     // destination that quietly loses its owner without gaining a screen goes red.
     const unowned = DESTINATIONS.filter((d) => !d.owner).map((d) => d.path)
-    expect(unowned).toEqual(['/', '/favorites', '/stop/:id'])
+    expect(unowned).toEqual(['/', '/favorites', '/search', '/stop/:id'])
     for (const d of DESTINATIONS) {
       if (d.owner) expect(d.owner).toMatch(/^WP6-\d+$/)
     }

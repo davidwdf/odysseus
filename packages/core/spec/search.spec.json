@@ -1832,8 +1832,59 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": true
+                },
+                {
+                  "char": "2",
+                  "enabled": true
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": true
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "A",
+                  "enabled": true
+                },
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "routes",
@@ -1996,8 +2047,50 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": true
+                },
+                {
+                  "char": "9",
+                  "enabled": false
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [],
+              "backspace": true
             },
             "list": {
               "kind": "routes",
@@ -2168,8 +2261,50 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": false
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [],
+              "backspace": true
             },
             "list": {
               "kind": "routes",
@@ -2332,8 +2467,59 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": true
+                },
+                {
+                  "char": "2",
+                  "enabled": true
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": true
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "A",
+                  "enabled": true
+                },
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "routes",
@@ -2496,8 +2682,55 @@
               }
             ],
             "keypad": {
-              "keys": ["N11"],
-              "letters": ["N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": false
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "routes",
@@ -2660,8 +2893,59 @@
               }
             ],
             "keypad": {
-              "keys": ["969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": true
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "A",
+                  "enabled": true
+                },
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "routes",
@@ -2809,8 +3093,59 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": true
+                },
+                {
+                  "char": "2",
+                  "enabled": true
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": true
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "A",
+                  "enabled": true
+                },
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "stops",
@@ -2958,8 +3293,50 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": false
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [],
+              "backspace": true
             },
             "list": {
               "kind": "stops",
@@ -3129,8 +3506,59 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": true
+                },
+                {
+                  "char": "2",
+                  "enabled": true
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": true
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "A",
+                  "enabled": true
+                },
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "routes",
@@ -3308,8 +3736,59 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": true
+                },
+                {
+                  "char": "2",
+                  "enabled": true
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": true
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "A",
+                  "enabled": true
+                },
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "routes",
@@ -3468,8 +3947,59 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": true
+                },
+                {
+                  "char": "2",
+                  "enabled": true
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": true
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [
+                {
+                  "char": "A",
+                  "enabled": true
+                },
+                {
+                  "char": "N",
+                  "enabled": true
+                }
+              ],
+              "backspace": false
             },
             "list": {
               "kind": "stops",
@@ -3639,8 +4169,50 @@
               }
             ],
             "keypad": {
-              "keys": ["1", "284", "969", "A10", "N11"],
-              "letters": ["A", "N"]
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": true
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": false
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [],
+              "backspace": true
             },
             "list": {
               "kind": "routes",
@@ -3656,6 +4228,388 @@
             },
             "source": "results"
           }
+        },
+        {
+          "name": "a-stop-query-that-matches-nothing",
+          "why": "The no-results state, and **it is reachable only in stops mode** — a fact about the keypad rather than about this state. A smart keypad cannot type a query that matches nothing: the key that would take you there is inert by construction. Found by writing the conformance driver, which pressed `9` five times and got a one-character query. So the no-results copy exists for the mode with a free-text field.",
+          "args": {
+            "index": {
+              "routes": [
+                {
+                  "id": "KMB:1:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "1",
+                  "bound": "outbound",
+                  "origin": {
+                    "en": "CHUK YUEN ESTATE",
+                    "zh-Hant": "竹園邨",
+                    "zh-Hans": "竹園邨"
+                  },
+                  "destination": {
+                    "en": "STAR FERRY",
+                    "zh-Hant": "尖沙咀碼頭",
+                    "zh-Hans": "尖沙咀碼頭"
+                  },
+                  "sortKey": "0001"
+                },
+                {
+                  "id": "CTB:N11:inbound:1",
+                  "operator": "CTB",
+                  "routeNo": "N11",
+                  "bound": "inbound",
+                  "origin": {
+                    "en": "Airport (Ground Transportation Centre)",
+                    "zh-Hant": "機場 (地面運輸中心)",
+                    "zh-Hans": "機場 (地面運輸中心)"
+                  },
+                  "destination": {
+                    "en": "Central (Macao Ferry)",
+                    "zh-Hant": "中環 (港澳碼頭)",
+                    "zh-Hans": "中環 (港澳碼頭)"
+                  },
+                  "sortKey": "N0011"
+                },
+                {
+                  "id": "CTB:A10:inbound:1",
+                  "operator": "CTB",
+                  "routeNo": "A10",
+                  "bound": "inbound",
+                  "origin": {
+                    "en": "Airport (via HZMB Hong Kong Port)",
+                    "zh-Hant": "機場 (經港珠澳大橋香港口岸)",
+                    "zh-Hans": "機場 (經港珠澳大橋香港口岸)"
+                  },
+                  "destination": {
+                    "en": "Ap Lei Chau (Lee Lok Street)",
+                    "zh-Hant": "鴨脷洲 (利樂街)",
+                    "zh-Hans": "鴨脷洲 (利樂街)"
+                  },
+                  "sortKey": "A0010"
+                },
+                {
+                  "id": "CTB:969:inbound:1",
+                  "operator": "CTB",
+                  "routeNo": "969",
+                  "bound": "inbound",
+                  "origin": {
+                    "en": "Causeway Bay (Moreton Terrace)",
+                    "zh-Hant": "銅鑼灣 (摩頓台)",
+                    "zh-Hans": "銅鑼灣 (摩頓台)"
+                  },
+                  "destination": {
+                    "en": "Tin Shui Wai Town Centre",
+                    "zh-Hant": "天水圍市中心",
+                    "zh-Hans": "天水圍市中心"
+                  },
+                  "sortKey": "0969"
+                },
+                {
+                  "id": "KMB:284:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "284",
+                  "bound": "outbound",
+                  "origin": {
+                    "en": "SHATIN CENTRAL",
+                    "zh-Hant": "沙田巿中心",
+                    "zh-Hans": "沙田巿中心"
+                  },
+                  "destination": {
+                    "en": "RAVANA GARDEN (CIRCULAR)",
+                    "zh-Hant": "濱景花園(循環線)",
+                    "zh-Hans": "濱景花園(循環線)"
+                  },
+                  "sortKey": "0284"
+                }
+              ],
+              "stops": [
+                {
+                  "id": "P:KMB:56E5C65B4893D75C+KMB:A37F8CF766FCF9F3+KMB:A6AED77D365E7011+KMB:E10A0960D4E103B1",
+                  "name": {
+                    "en": "TAK SHING STREET TSIM SHA TSUI (YT555)",
+                    "zh-Hant": "尖沙咀德成街 (YT555)",
+                    "zh-Hans": "尖沙咀德成街 (YT555)"
+                  },
+                  "lat": 22.30436333333333,
+                  "lng": 114.17181000000001
+                },
+                {
+                  "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              ]
+            },
+            "mode": "stops",
+            "query": "zzzz",
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
+            "recentRouteIds": [],
+            "recentStopIds": [],
+            "locale": "en"
+          },
+          "expect": {
+            "chips": [
+              {
+                "key": "operator:CTB",
+                "label": "Citybus",
+                "active": false
+              },
+              {
+                "key": "operator:KMB",
+                "label": "KMB",
+                "active": false
+              }
+            ],
+            "keypad": {
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": false
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [],
+              "backspace": true
+            },
+            "list": {
+              "kind": "stops",
+              "stops": []
+            },
+            "source": "none"
+          }
+        }
+      ]
+    },
+    "bumpRecent": {
+      "doc": "Move an id to the front of a recents list, de-duplicated and capped at 8. Three rules in one: most-recent first (the order the list is read in), de-duplicated (opening a route twice must not fill the history with it), and capped (the list is a shortcut, not a log). Shared between two stores since ADR-089, because a cap that differed between them would make a rider's history grow or shrink depending on which app they last used.",
+      "cases": [
+        {
+          "name": "a-new-id-goes-to-the-front",
+          "why": "The ordinary case, and the whole point of the order: the last thing a rider opened is the thing they are most likely to open again.",
+          "args": {
+            "list": ["KMB:284:outbound:1"],
+            "id": "CTB:969:outbound:1"
+          },
+          "expect": ["CTB:969:outbound:1", "KMB:284:outbound:1"]
+        },
+        {
+          "name": "an-id-already-in-the-list-moves-rather-than-repeats",
+          "why": "Opening a route twice must not fill the history with it. Moving rather than ignoring is what keeps the order meaningful — a re-opened route is the most recent one again.",
+          "args": {
+            "list": ["KMB:284:outbound:1", "CTB:969:outbound:1"],
+            "id": "CTB:969:outbound:1"
+          },
+          "expect": ["CTB:969:outbound:1", "KMB:284:outbound:1"]
+        },
+        {
+          "name": "the-list-is-capped-at-eight",
+          "why": "Past a screenful the list stops being a shortcut. The oldest entry falls off the end, which is the only end it can fall off given the order above.",
+          "args": {
+            "list": ["a", "b", "c", "d", "e", "f", "g", "h"],
+            "id": "i"
+          },
+          "expect": ["i", "a", "b", "c", "d", "e", "f", "g"]
+        },
+        {
+          "name": "an-empty-list-becomes-a-list-of-one",
+          "why": "The first search a rider ever makes. Asserted because an off-by-one in the cap or the spread would show up here first and nowhere else.",
+          "args": {
+            "list": [],
+            "id": "KMB:1:outbound:1"
+          },
+          "expect": ["KMB:1:outbound:1"]
+        }
+      ]
+    },
+    "toggleSearchChip": {
+      "doc": "Toggle the axis a chip names, from the key `searchView` minted for it. One function mints the keys and one reads them, so the format is known in exactly one place and a renderer's whole job is to hand back the string it was given — the RN screen used to `split(':')` it and cast the halves to two different unions, which is what the gate banning ad-hoc id parsing flagged. An unrecognised key returns the filter UNCHANGED rather than throwing: a tap on a chip row rendered from an older view is a stale tap, not a corruption, and crashing would lose the rider's whole filter over a race.",
+      "cases": [
+        {
+          "name": "an-operator-chip-turns-its-operator-on",
+          "why": "The ordinary case. The value comes back inside the filter the view is next computed from, so the chip's `active` and the narrowed list cannot disagree.",
+          "args": {
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
+            "key": "operator:KMB"
+          },
+          "expect": {
+            "operators": ["KMB"],
+            "categories": []
+          }
+        },
+        {
+          "name": "tapping-it-again-turns-it-off",
+          "why": "A chip is a toggle, not a radio button — a rider narrowing by two operators and then changing their mind must be able to get back.",
+          "args": {
+            "filter": {
+              "operators": ["KMB", "CTB"],
+              "categories": []
+            },
+            "key": "operator:KMB"
+          },
+          "expect": {
+            "operators": ["CTB"],
+            "categories": []
+          }
+        },
+        {
+          "name": "a-category-chip-toggles-the-other-axis",
+          "why": "Two axes, and they compose: an operator and a category are ANDed by `routeMatchesFilter`, so toggling one must not disturb the other.",
+          "args": {
+            "filter": {
+              "operators": ["CTB"],
+              "categories": []
+            },
+            "key": "category:night"
+          },
+          "expect": {
+            "operators": ["CTB"],
+            "categories": ["night"]
+          }
+        },
+        {
+          "name": "the-order-of-the-others-is-preserved",
+          "why": "The filter is not displayed, but it is the input to `searchView` on the very next render — and an order that shuffled would make the chip row's own `active` flags flicker for no reason a rider caused.",
+          "args": {
+            "filter": {
+              "operators": ["KMB", "CTB", "GMB"],
+              "categories": []
+            },
+            "key": "operator:CTB"
+          },
+          "expect": {
+            "operators": ["KMB", "GMB"],
+            "categories": []
+          }
+        },
+        {
+          "name": "a-key-we-do-not-recognise-changes-nothing",
+          "why": "A stale tap from a chip row rendered before the index changed. Returning the filter untouched is what stops one losing the rider's whole selection; throwing would.",
+          "args": {
+            "filter": {
+              "operators": ["KMB"],
+              "categories": ["night"]
+            },
+            "key": "nonsense"
+          },
+          "expect": {
+            "operators": ["KMB"],
+            "categories": ["night"]
+          }
+        },
+        {
+          "name": "a-category-that-is-not-one-of-the-three-changes-nothing",
+          "why": "The prefix is right and the value is not — a client compiled against a newer kernel that added a category. The same reasoning as the row above, one level in.",
+          "args": {
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
+            "key": "category:midnight"
+          },
+          "expect": {
+            "operators": [],
+            "categories": []
+          }
+        }
+      ]
+    },
+    "validNextLetters": {
+      "doc": "Which letters the keypad's letter row offers for a prefix: those that can continue it, in the alphabet's stable order. `nextValidChars` says what may follow and `indexAlphabet` says how a row reads; the intersection is what makes the row DISAPPEAR once a prefix admits no letters, and the whole pad go dark for a filter that admits nothing — the visible face of the keypad-and-list invariant (ADR-091).",
+      "cases": [
+        {
+          "name": "an-empty-prefix-offers-every-letter-a-number-starts-with",
+          "why": "The resting keypad. Only letters that begin some reachable number are offered — a letter that appears only mid-number would be a key that cannot be pressed first.",
+          "args": {
+            "keys": ["1", "1A", "269D", "N11", "NA37", "A10"],
+            "letters": ["A", "D", "N"],
+            "prefix": ""
+          },
+          "expect": ["A", "N"]
+        },
+        {
+          "name": "a-prefix-narrows-the-row-to-what-can-follow-it",
+          "why": "After a `1`, only `A` continues (`1A`). This is the rule that makes the row shrink as a rider types rather than offering the whole alphabet at every step.",
+          "args": {
+            "keys": ["1", "1A", "269D", "N11", "NA37", "A10"],
+            "letters": ["A", "D", "N"],
+            "prefix": "1"
+          },
+          "expect": ["A"]
+        },
+        {
+          "name": "a-prefix-that-admits-no-letter-empties-the-row",
+          "why": "The row disappears rather than showing dimmed letters: an empty row is the honest treatment for \"nothing here continues with a letter\", and it gives the results the space back.",
+          "args": {
+            "keys": ["1", "1A", "269D", "N11", "NA37", "A10"],
+            "letters": ["A", "D", "N"],
+            "prefix": "26"
+          },
+          "expect": []
+        },
+        {
+          "name": "the-alphabet-order-is-kept-not-the-key-order",
+          "why": "The row must not reorder itself as a rider types. The letters come back in `indexAlphabet`'s order, so `A` is always left of `N` whatever order the keys happen to be in.",
+          "args": {
+            "keys": ["N11", "A10"],
+            "letters": ["A", "D", "N"],
+            "prefix": ""
+          },
+          "expect": ["A", "N"]
+        },
+        {
+          "name": "a-complete-number-still-offers-what-extends-it",
+          "why": "`N` is a complete number in some datasets and a prefix of `NA37` here; a rider who has typed `N` must still be offered the `A`. Completeness is `isCompleteRoute`'s question, not this one's.",
+          "args": {
+            "keys": ["1", "1A", "269D", "N11", "NA37", "A10"],
+            "letters": ["A", "D", "N"],
+            "prefix": "N"
+          },
+          "expect": ["A"]
         }
       ]
     }

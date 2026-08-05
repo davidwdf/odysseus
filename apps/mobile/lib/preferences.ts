@@ -1,4 +1,5 @@
 import {
+  bumpRecent,
   FAVOURITE_KEY_VERSION,
   formatFavoriteRouteKey,
   type Locale,
@@ -18,9 +19,6 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 // stop. The keys are minted and read by the shared id grammar in `@nextbus/core`
 // — ADR-059 — and their scheme is versioned, so it can change without losing a
 // rider's list: ADR-062.)
-/** Cap on the per-kind recent-search lists. */
-const RECENTS_MAX = 8
-
 interface Preferences {
   appearance: Appearance
   localeOverride: Locale | null
@@ -94,10 +92,9 @@ export function migratePreferences(persisted: unknown, version: number): Persist
   return { ...state, favoriteRoutes: migrated as string[] }
 }
 
-/** Move `id` to the front of `list`, de-duplicated, capped at `RECENTS_MAX`. */
-function bumpRecent(list: string[], id: string): string[] {
-  return [id, ...list.filter((x) => x !== id)].slice(0, RECENTS_MAX)
-}
+// `bumpRecent` and its cap are `@nextbus/core`'s since WP6-5b, corpus-pinned — because two stores now write
+// the same blob (ADR-089) and a cap that differed between them would make a rider's history grow or shrink
+// depending on which app they last used.
 
 export const usePreferences = create<Preferences>()(
   persist(

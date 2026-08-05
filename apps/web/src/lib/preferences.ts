@@ -1,4 +1,5 @@
 import {
+  bumpRecent,
   FAVOURITE_KEY_VERSION,
   formatFavoriteRouteKey,
   type Locale,
@@ -44,22 +45,23 @@ import { safeLocalStorage } from '../adapters/storage'
  */
 const STORAGE_KEY = 'nextbus.preferences'
 
-/** Cap on the per-kind recent-search lists — the RN store's number, because it is the same list. */
-const RECENTS_MAX = 8
-
 interface Preferences {
   appearance: Appearance
   /** The manual UI-language override; `null` = follow the browser's ordered language list. */
   localeOverride: Locale | null
   /** Favourited route-at-stop pairs, keyed by `formatFavoriteRouteKey(memberPoleId, routeId)`. */
   favoriteRoutes: string[]
-  /** Recently-opened route ids from search, most-recent first. **Preserved, not yet read** — WP6-5. */
+  /** Recently-opened route ids from search, most-recent first — read by Search since WP6-5b. */
   recentRoutes: string[]
-  /** Recently-opened stop/place ids from search, most-recent first. **Preserved, not yet read** — WP6-5. */
+  /** Recently-opened stop/place ids from search, most-recent first. */
   recentStops: string[]
   setAppearance: (appearance: Appearance) => void
   setLocaleOverride: (locale: Locale | null) => void
   toggleFavoriteRoute: (stopId: string, routeId: string) => void
+  pushRecentRoute: (routeId: string) => void
+  pushRecentStop: (stopId: string) => void
+  clearRecentRoutes: () => void
+  clearRecentStops: () => void
 }
 
 /** Exactly what `partialize` writes, and therefore exactly what `migrate` is handed back. */
@@ -115,6 +117,13 @@ export const usePreferences = create<Preferences>()(
               : [...s.favoriteRoutes, key],
           }
         }),
+      // `bumpRecent` is the kernel's, corpus-pinned: most-recent first, de-duplicated, capped. Two stores
+      // writing one blob must not disagree about any of the three (ADR-089).
+      pushRecentRoute: (routeId) =>
+        set((s) => ({ recentRoutes: bumpRecent(s.recentRoutes, routeId) })),
+      pushRecentStop: (stopId) => set((s) => ({ recentStops: bumpRecent(s.recentStops, stopId) })),
+      clearRecentRoutes: () => set({ recentRoutes: [] }),
+      clearRecentStops: () => set({ recentStops: [] }),
     }),
     {
       name: STORAGE_KEY,
@@ -134,6 +143,3 @@ export const usePreferences = create<Preferences>()(
 
 /** Exported for `test/shell-parity.test.ts`, which asserts the two stores now write the *same* key. */
 export const PREFERENCES_STORAGE_KEY = STORAGE_KEY
-
-/** The per-kind recents cap, exported so WP6-5 binds to one number rather than a second copy. */
-export const PREFERENCES_RECENTS_MAX = RECENTS_MAX

@@ -6,12 +6,14 @@ import { QueryProvider } from '../providers/QueryProvider'
 import { Favourites } from '../screens/Favourites'
 import { Nearby } from '../screens/Nearby'
 import { PlaceDetail } from '../screens/PlaceDetail'
+import { Search } from '../screens/Search'
 import {
   type Destination,
   FAVOURITES_PATH,
   NEARBY_PATH,
   PLACE_PATH,
   PUSHED,
+  SEARCH,
   SETTINGS_PATH,
   TABS,
 } from './destinations'
@@ -107,6 +109,7 @@ function screenFor(destination: Destination, opts: { back?: boolean } = {}): Rea
   // content — see the screen. `opts.back` is the placeholder's chrome, not every pushed screen's.
   if (destination.path === PLACE_PATH) return <PlaceDetail />
   if (destination.path === FAVOURITES_PATH) return <Favourites />
+  if (destination.path === SEARCH.path) return <Search />
   if (destination.path === SETTINGS_PATH) {
     return (
       <Placeholder destination={destination}>
