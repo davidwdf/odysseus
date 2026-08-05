@@ -1,6 +1,6 @@
-import type { PlaceRouteRow, StopDetailPole } from '@nextbus/core'
-import { haversineMeters, parseStopId, placeDetailView, poleFlagCode } from '@nextbus/core'
-import { poleSideLabel, t } from '@nextbus/i18n'
+import type { PlaceRouteRow } from '@nextbus/core'
+import { placeDetailView } from '@nextbus/core'
+import { operatorName, poleSideLabel, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { type ReactNode, useRef, useState } from 'react'
@@ -34,7 +34,6 @@ import { Skeleton } from '../../components/Skeleton'
 import { StopHeader } from '../../components/StopHeader'
 import { Text } from '../../components/Text'
 import { dataSource } from '../../lib/datasource'
-import { operatorName } from '../../lib/operatorName'
 import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLiveEtas } from '../../lib/useLiveEtas'
 import { useLocation } from '../../lib/useLocation'
@@ -104,14 +103,14 @@ export default function StopDetail() {
   })
 
   const stop = query.data?.stop
-  const members: StopDetailPole[] = query.data?.members ?? []
   const here = loc.status === 'ready' ? { lat: loc.lat, lng: loc.lng } : null
 
   /**
-   * **The whole screen's content, in one call** (WP6-3). Nine decisions used to live here as loose
+   * **The whole screen's content, in one call** (WP6-3). Ten decisions used to live here as loose
    * expressions — the pole heading and its separator, the per-kerb distances, whether the walk is a single
    * time or a range, the summary line and *its* two separator widths, the grouping under boarding points,
-   * which poles are shown at all, each row's three-way readout, and whether the place is grouped — every
+   * which poles are shown at all, each row's three-way readout, whether the place is grouped, and (WP6-3b)
+   * **the map's pins**: which dots exist, what each is labelled with and which of them fold together — every
    * one of them reachable only by rendering this tree. They are `placeDetailView` now, pinned by 15 corpus
    * cases, so `apps/web`'s Place screen calls the identical function rather than re-deriving them from this
    * JSX (WP4-0's method, applied to the screen with the most domain rules in the app).
@@ -136,12 +135,9 @@ export default function StopDetail() {
         },
       })
     : undefined
-  const multiPole = members.length > 1
   const cleanName = view?.name.label ?? ''
-  // Still needed by the map and the per-kerb walk on a group header, which are geometry rather than
-  // content: `MiniMap` takes coordinates and `poleDistance` is what the kernel measured them against.
-  const poleDist = new Map<string, number>()
-  if (here) for (const m of members) poleDist.set(m.id, haversineMeters(here, m.location))
+  // `poleDist` used to be measured here and handed to nothing but the map. The map takes `view.pins` now
+  // (WP6-3b) and every group carries its own `walk`, so the last piece of geometry has left this file.
 
   // Collapsing header (ADR-033) — content scrolls beneath the floating chrome.
   const scrollY = useSharedValue(0)
@@ -230,21 +226,24 @@ export default function StopDetail() {
         // tapping the last dot/header highlights it) — not a whole empty screen. Once its height is
         // measured we pad `viewport − listTop − lastGroupH`; a lone stop needs none.
         contentContainerStyle={{
-          paddingBottom: multiPole ? Math.max(24, windowH - listTop - lastGroupH) : 32,
+          paddingBottom: view?.grouped ? Math.max(24, windowH - listTop - lastGroupH) : 32,
         }}
       >
         <View style={{ height: topSpacer }} />
-        {query.isLoading ? (
-          <View className="gap-3 px-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </View>
-        ) : query.isError ? (
-          <Text variant="body" className="px-4 text-danger">
-            {(query.error as Error).message}
-          </Text>
-        ) : stop && view ? (
+        {/*
+          **The skeleton is the fallback arm, and that is a bug fix (WP6-3b).** It used to read
+          `isLoading ? skeleton : isError ? message : stop && view ? content : null`, and that trailing
+          `null` is reachable: `isLoading` is `isPending && isFetching`, so a query that is pending and
+          **not fetching** — a paused retry — matched none of the three arms and this screen rendered
+          *nothing at all*, for ever. Measured on 2026-08-05 against a 404 on both renderers: no skeleton,
+          no error text, no name. ADR-079 already fixed the permanently-dead screen for the `error` case;
+          this is the same failure arriving through a state that never reaches `error`, so that fix's
+          `refetchInterval` predicate never fires either. Ordering the arms so "we have no answer" is the
+          **default** makes every query state draw something, which is what `place-detail.spec.json`'s
+          `failed.mustNot` — *"a blank screen"* — asks for. Why the retry pauses is undiagnosed and is in
+          `docs/07` with the reproduction.
+        */}
+        {stop && view ? (
           <>
             {/* Sub-details sit **above** the map so they tuck up behind the header as you scroll
                 (rather than wedged between the map and the list). */}
@@ -269,32 +268,14 @@ export default function StopDetail() {
               pinnedW={pinnedW}
             >
               <MiniMap
-                lat={stop.location.lat}
-                lng={stop.location.lng}
                 height={MAP_HEIGHT}
-                // A merged place has no single operator, and `parseStopId` says so by returning
-                // null for a `P:` id — where `stop.id.split(':')[0]` used to hand MiniMap the
-                // "operator" `P`, whose brand colour lookup silently missed. The multi-pole case
-                // colours each dot from its own member below, so undefined is the honest answer.
-                operator={parseStopId(stop.id)?.operator}
-                points={
-                  multiPole
-                    ? members.map((m) => {
-                        const pole = parseStopId(m.id)
-                        return {
-                          id: m.id,
-                          lat: m.location.lat,
-                          lng: m.location.lng,
-                          operator: pole?.operator,
-                          // The stop code if the operator published one **in any locale** (WP5-12),
-                          // else the raw operator stop id — short enough to label a dot. The same
-                          // helper the heading uses, deliberately: change one and at Prince Edward
-                          // the heading would read `KMB · MK356` while the dot read the raw id.
-                          label: poleFlagCode(m.name, locale) ?? pole?.rawId,
-                        }
-                      })
-                    : undefined
-                }
+                // The pins are the kernel's (WP6-3b): which dots exist, what each is labelled with —
+                // the printed code the heading above it uses, else the raw pole id — which operator
+                // colours it, and which of them fold together because they share a coordinate
+                // (ADR-086). This screen built all four here, one `members.map` at a time, and the
+                // DOM renderer's map would have had to arrive at every one of them independently.
+                pins={view.pins}
+                grouped={view.grouped}
                 activeId={activePole}
                 onPointPress={scrollToPole}
                 label={cleanName}
@@ -306,7 +287,7 @@ export default function StopDetail() {
 
             {/* Flat list, no card chrome (docs/09: data is the hero). For a multi-pole place the
                 routes are grouped under their pole; otherwise one flat list under "Routes". */}
-            {multiPole ? (
+            {view.grouped ? (
               view.groups.map((group, i, groups) => {
                 const isLast = i === groups.length - 1
                 return (
@@ -384,7 +365,17 @@ export default function StopDetail() {
               </>
             )}
           </>
-        ) : null}
+        ) : query.isError ? (
+          <Text variant="body" className="px-4 text-danger">
+            {(query.error as Error).message}
+          </Text>
+        ) : (
+          <View className="gap-3 px-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </View>
+        )}
       </Animated.ScrollView>
 
       {/* Floating collapsing chrome — rendered last so it sits above the scroll content. The

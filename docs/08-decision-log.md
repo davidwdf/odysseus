@@ -6114,3 +6114,489 @@ pre-existing and unaddressed; it earned its keep here.
     by corpus cases so neither can be fixed by accident and unnoticed.
   - **Test totals:** core **867** (+10; corpus 97 groups / 818 cases → **98 / 833**), edge 149,
     api-client 71, ui-spec 30, web 83, mobile 65 — 1 265.
+
+## ADR-087 — The map's pins are content, and the dot's label is the heading's own code
+
+- **Status:** **Decided and implemented 2026-08-04** as the first half of **WP6-3b**. Implementation:
+  `PlaceDetailView.pins` + `placePins` in `packages/core/src/stop-detail.ts` (all 15 `placeDetailView`
+  corpus cases gain the field, +2 property tests), `apps/mobile/components/MiniMap.tsx` reduced to
+  drawing them, and ~20 lines of derivation gone from `apps/mobile/app/stop/[id].tsx`. A hoist, so
+  **no behaviour changes**; `packages/core` stays at **100 % on all four axes**.
+- **Context.** [ADR-086](#adr-086--two-readings-that-were-honest-and-useless-a-walk-in-hours-and-poles-at-one-coordinate)
+  decision 7 put the *fold* in the kernel *"because a second renderer's map must reach the same answer on
+  it"*, and then left the three decisions **around** the fold in the renderer: the Place screen built a
+  `MapPoint[]` from its member poles — `poleFlagCode(m.name, locale) ?? pole?.rawId` for the dot's label,
+  `parseStopId(m.id)?.operator` for its colour, `parseStopId(stop.id)?.operator` for the lone-stop pin —
+  and `MiniMap` called `mergeCoincidentPins` on the result. So the rule was shared and its **inputs** were
+  not, which is the shape WP4-0 exists to catch: `apps/web`'s map, days away, would have had to arrive at
+  the same three answers independently, and a re-implementation looks right on the day it is written.
+  The screen's own comment already said so — *"the same helper the heading uses, deliberately: change one
+  and at Prince Edward the heading would read `KMB · MK356` while the dot read the raw id"* — a comment
+  being the only thing holding two expressions together.
+- **Decisions:**
+  1. **`PlaceDetailView` carries `pins`**, one per physical spot, already folded, labelled and coloured.
+     A map's *identity* is which spots exist, what each is called and which poles each stands for; how a
+     pin is **drawn** — a dot, a teardrop, an `MKAnnotationView` — stays idiom. `MiniMap` now takes
+     `pins` and `grouped` and decides neither.
+  2. **A dot is labelled with the printed code its heading uses**, because it is the same `poleFlagCode`
+     call — which borrows a flag-shaped code from *another locale* when this one has none (ADR-080), so
+     it is exactly the kind of answer two renderers get subtly differently.
+  3. **`grouped` is passed, never derived from `pins.length > 1`.** A place whose every pole shares one
+     coordinate folds to a **single** pin and still needs its code chip, its smaller dot and its tap
+     target — and "is this place grouped" is already a field of the view. A renderer computing it would be
+     a second declaration of it, and a wrong one for exactly the population ADR-086 was written about.
+  4. **Every member gets a pin, including one with no rows left**, and the asymmetry with the list is
+     deliberate: the list is what a rider is choosing between, the map is a picture of where they are
+     standing, and a kerb whose lines all folded away under `dedupeRoutes` is still a kerb. See the
+     consequence below for the one live cost of that.
+  5. **One code path through the fold, a lone stop included.** Written with its own `return [{ ids: … }]`
+     arm it carried a conditional spread for the operator that **no payload can reach** — a place with one
+     member always has a readable id — and the 100 % branch threshold refused it, exactly as it refused
+     WP6-3a's `?? []`. Handing every case to `mergeCoincidentPins` leaves the "absent stays absent"
+     branches in the one place whose corpus exercises both sides of them. **Twice now the threshold has
+     found dead code in this file that review did not**, which is the argument for keeping it at 100 %.
+- **The finding, and it came from writing the property down rather than from reading the code.** The
+  assertion *"a pin is labelled with the code its heading prints"* went red on the first run, on the real
+  Tin Shui Wai Park payload: the Citybus dot reads **`001992`** while its heading reads **`Citybus`**. The
+  label falls back to the raw pole id and the heading has nothing to fall back to, so the two genuinely
+  disagree — a rider matching the dot to the list has to do it by elimination. It has been true since
+  ADR-042 shipped the labels. A hoist changes no behaviour (WP4-0's rule), so the property now asserts the
+  disagreement **in both directions** — the raw id is on the dot and is *not* in the heading — and the row
+  is in `docs/07` with its options. Three anti-vacuous counters, one per branch, because a single total
+  would have let the middle branch never run, which is how this would have stayed invisible.
+- **Consequences:**
+  - 🟡 **A dot for a kerb with no rows scrolls nowhere.** Tapping it asks the list for a group that does
+    not exist, and does so silently. Pre-existing, now visible in the corpus, in `docs/07`.
+  - 🟡 **A dot labelled with a raw operator stop id names something no sign shows** — see the finding
+    above. In `docs/07` with three options, none of them taken here.
+  - ⚪ **`MiniMap`'s props no longer mention a coordinate.** It is handed the pins and the flag, which is
+    what makes a DOM twin a rendering exercise rather than a second derivation.
+  - **Test totals:** core **869** (+2), edge 149, api-client 71, ui-spec 30, web 83, mobile 65 — 1 267.
+    Corpus unchanged at 98 groups / 833 cases: **a field was added to 15 existing cases, not a rule.**
+
+## ADR-088 — Place detail's spec, its DOM port, and the gate that finally reads both renderers
+
+- **Status:** **Decided and implemented 2026-08-05** — **WP6-3b**, which closes WP6-3. Implementation:
+  `packages/contract/ui/place-detail.spec.json` (18 states, 13 projected) and `ui/place-row.spec.json`,
+  `apps/web/src/screens/PlaceDetail.tsx` + `components/{MiniMap,PlaceRow}.tsx` +
+  `adapters/{tileSource,links}.ts` + `hooks/useLiveEtas.ts`, two conformance drivers, and
+  `scripts/check-no-derivation.mjs` — **moved to the repo root and extended to `apps/mobile`**, which is the
+  row's stated acceptance and closes the asymmetry
+  [ADR-069](#adr-069--two-renderers-one-kernel-and-the-four-bugs-only-the-second-one-could-find) recorded.
+- **Context.** Place detail is the screen `proposals/04` picks third *"because it has the most domain rules
+  in the app"*. WP6-3a hoisted them ([ADR-085](#adr-085--the-place-screens-composition-is-a-kernel-function-and-the-words-it-joins-are-injected))
+  and WP6-3b is the half that holds a renderer to them. It is the first screen whose spec was written from a
+  surface **nothing had ever rendered in a test** — `StopRow` and Nearby both had suites first — so the
+  spec-writing itself was the measurement, and most of what follows is what it measured.
+- **Decisions:**
+  1. **A screen's states have a second axis: the shape of the data.** Nearby's nine states are branches over
+     an async status (ADR-084). Place detail has those *and* branches over the payload — one kerb or several,
+     and where several, which of ADR-080's three tiers tells two of them apart. Each tier exists only for a
+     payload that has it, so each is a **state** driven from the corpus case it was written for. The states
+     and the cases line up one to one, which is the evidence they are the data's rather than invented.
+  2. **A leaf row gets its own spec**, referenced twice. Place detail draws its rows grouped and flat; writing
+     the row's slots out twice inside the screen's spec would be two declarations of one thing — the failure
+     this format exists to prevent, reproduced inside it. `place-row.spec.json` is referenced by both shapes
+     through ADR-084's `component` word, so a slot added there appears in both with no edit here.
+  3. **The reading order is shared; where the chrome sits in the *tree* is idiom.** `apps/mobile` floats a
+     collapsing header over its scroll content and therefore renders it **last**, and renders its label
+     **twice** (an expanded slot and a collapsed marquee it cross-fades between). `apps/web` puts its header
+     in flow, first, which is better for a keyboard and a screen reader. Both put the name at the top of the
+     screen. So each driver reads its own chrome first, de-duplicated where it has to be, and the cost is
+     stated on the spec's `name` slot rather than discovered: **neither driver can see a name drawn in the
+     wrong place on screen** — only one that is missing or wrong.
+  4. **Three states are `knownDefect` and the sentences were kept, not softened** (ADR-083's rule). Writing
+     the spec is the first time anything asked this screen what it shows, and it does **not** show: the
+     "live times unavailable" marker (`PlaceDetailView.incomplete` has existed since ADR-077 and this screen
+     has never read it, so a Nearby card says it and the place that card links to does not); that the
+     distance and walk may be measured against a **remembered** fix (Nearby says so, this screen does not —
+     ADR-008's position rule applied by one screen out of two); and the place's own printed code, which
+     `displayName` splits off and the header drops, so a lone stop named *"NELSON STREET MONG KOK (MK514)"*
+     shows no `MK514` anywhere. All three are in `docs/07` with their fixes described.
+  5. **The gate moved to the repo root and needed a per-site `ALLOWLIST` to get there.** The RN screen has
+     genuine presentational arithmetic — `Math.min`/`Math.max` over viewport dimensions for the map's crop
+     and dock, a `.filter`/`.find` over a scroll-offset registry, `Math.floor` over tile coordinates — and
+     the shape rules cannot tell it from a domain rule. The line every entry has to earn: **geometry is
+     presentation, a list is a decision.** Each names the one rule it exempts, so a `.slice()` over rows in
+     the same file is still caught, and the four allowlist selftest cases are ported from the defect an
+     adversarial review found in `check-view-transport-free`'s matcher rather than waiting to repeat it.
+  6. **`apps/mobile` is policed per surface, not wholesale.** Route detail, search, the workbench and
+     favourites still hold rules WP4-0 has not hoisted, and so do `CollapsingHeader`, `StopHeader` and
+     `GlassView`, which are chrome and motion. Each joins `POLICED` in the commit that hoists it. The
+     asymmetry ADR-069 recorded is closed **for this screen** and stated as open for the others.
+  7. **`operatorName` moved into `@nextbus/i18n`.** `placeDetailView` takes its words as injected `labels`
+     (ADR-054), so the DOM screen needed the same operator names — and a second copy of the
+     `OperatorId` → catalogue-key table is how the previous two copies came to disagree. It is `poleSideLabel`'s
+     neighbour now, for `poleSideLabel`'s reason. Its third home; the first was a map inside the RN screen.
+  8. **The `LinkOpener` port has its first implementation.** Declared since WP1-3 and implemented by nothing —
+     `apps/mobile/lib/openExternal.ts` still carries the `Platform.OS` switch its own comment says exists
+     *"only because the port did not exist yet"*. The DOM map needed both members, so this app implements
+     the port rather than growing a second copy of the switch.
+- **What the spec-writing measured, in the order it hurt.**
+  - 🔴 **A failed fetch rendered *nothing at all*, on both renderers, for ever.** The branch read
+    `isLoading ? skeleton : isError ? message : view ? content : null`, and `isLoading` is
+    `isPending && isFetching` — so a query that is **pending and not fetching** matched no arm and the
+    trailing `null` won. Measured against a 404 in a real browser: `main` had exactly one child, no skeleton
+    and no error text, on `:8081` and `:8082` alike. ADR-079 had already fixed the permanently-dead screen
+    for the `error` case, and this is the same failure arriving through a state that never *reaches* `error`,
+    so that fix's `refetchInterval` predicate never fires either. **Fixed in both renderers by making the
+    skeleton the fallback arm**, so no query state can render nothing, and pinned in both suites as an
+    element assertion — because "no text" is what a correct `loading` state and a blank screen have in
+    common. *Why* the retry pauses is not diagnosed and is in `docs/07` with the reproduction.
+  - 🔴 **An injected defect passed.** Deleting the published-frequency text from the row component left
+    **both** suites green: no fixture had a row with a `headway` readout, so the middle arm of the
+    three-way readout was declared and never projected. Two more arms were in the same position — no corpus
+    case produced a `due` reading at all. Three states and **one new corpus case**
+    (`an-arrival-inside-the-minute-reads-due`) later, both injections go red, and the suites now carry a
+    **coverage control** that asserts which arms the fixture set exercises. A `oneOf` case nothing drives is
+    a specification looking at nothing, which is this repo's most-repeated failure.
+  - 🟠 **`onLayout` does not fire on first mount** for the RN map on this screen: it renders with `w === 0`,
+    drawing no tiles and no dots, until something else triggers a layout — measured by dispatching a
+    `resize` by hand, which made the whole map appear. The DOM twin takes its first measurement in a layout
+    effect and keeps a `ResizeObserver` for later changes, so it does not inherit it. In `docs/07`.
+  - 🟠 **`ResizeObserver` does not exist in jsdom**, so the effect threw and React dropped the whole screen —
+    reported as an empty tree for every state. Feature-detecting it is also simply correct: the first
+    measurement is what a map needs to draw at all, and tracking a later resize is the enhancement.
+  - 🟡 **The English GMB label is an acronym where the Chinese is a phrase** (`GMB` versus `專線小巴`), which
+    the driver now pins as the **only** place the app's catalogue and the corpus's own fixture labels
+    disagree — 14 of 15 cases identical. Confirmed on screen at Queen Mary Hospital.
+- **Three harness traps, all of them the same shape as WP6-2's and worth the pattern.** *A harness that
+  looks at the wrong moment — or cannot supply the input — is indistinguishable from a renderer that is
+  wrong.* (a) Both drivers first mounted the screen **without its route**, so `useParams` gave no id, the
+  query was disabled, and every state reported *"did not render at index 0"*. (b) The RN driver polled for a
+  `[data-testid]` nothing renders, so it always returned before the query resolved. (c) Reanimated cannot
+  load outside Metro and its **own shipped mock is broken in v4**, so the suite died at *import*, which
+  vitest counts as a failed file rather than failed tests — WP6-0's parity suite hit that exact shape. The
+  hand-written shim is the API the app measurably imports, and everything in it is motion, which ADR-075
+  puts on the idiom side. `nativewind` needed mocking for a reason worth writing down: it re-exports
+  `react-native-css-interop`, whose `main` is `"dist/index"` with **no extension**, so the resolver hands
+  node a `.d.ts` and the run dies with `SyntaxError: Unexpected token 'typeof'` — no stack, no file, no
+  package name. Found by bisecting the screen's imports one at a time.
+- **Watched failing, eight ways.** The "check the sign" slot deleted from the **spec** (both suites red) ·
+  the same line deleted from **only** `apps/web` (web red, **RN green** — the ADR-069 deletion, now caught by
+  a shared declaration) · the licence credit removed from the web map (6 states red) · the published
+  frequency dropped from the row (red **only after** the fixtures covered it) · the "Due" word replaced
+  (same) · the kerb's own name dropped from the RN screen (red) · the committed JSON hand-edited (the drift
+  gate) · a `.slice()` and a `.filter()` injected into the RN Place screen (the extended gate, which is the
+  first time it has ever read that file).
+- **Verified in a browser on live Hong Kong data**, on `apps/web`: Tin Shui Wai Park draws its folded
+  `TN511 · TN510` pin and `001992`, 14 tiles, the credit, both kerb headings with their walks, all three
+  readout kinds, **28 interactive elements and 0 nested** — the DOM half of `sibling-not-nested` measured
+  outside jsdom — and a row tap resolving to
+  `/route/KMB%3A264X%3Aoutbound%3A1?stop=KMB%3AAFB9321F7CD2C2E4`, the raw boarding pole in `?stop=` as
+  ADR-062 requires. Rumsey Street shows two kerbs both reading *"Another stop a few steps away — check the
+  sign"* and Queen Mary Hospital shows a kerb named by its own name: ADR-080's tiers 3 and 2, on a second
+  renderer, for the first time. Screenshot: `.context/wave6-screenshots/6-web-place-detail-shipping.jpg`.
+- **Consequences:**
+  - ⚪ **`apps/web` has two ported screens**, and `/stop/:id` has left the placeholder table. Six
+    destinations still name the work package that ports them.
+  - 🟡 **The map's own text is `unenforced` in both suites** and says so: neither harness lays anything out,
+    so the pin labels are in neither tree. What *is* enforced is one layer down — `mergeCoincidentPins`'s
+    corpus and ADR-087's property that a pin's label is the code its heading prints.
+  - 🟡 **`ui/*.spec.json` grew from two files to four**, which enlarges the unsolved corpus-vendoring
+    surface `proposals/04` flags. WP6-9 still must not start before that is answered.
+  - **Test totals:** core **869**, edge 149, api-client 71, ui-spec 30, web **105** (+22), mobile **86**
+    (+21) — **1 310**. Corpus 98 groups / **834** cases (+1). `packages/core` stays at 100 % on all four axes.
+
+## ADR-089 — A favourite is a rider's own data, so its migration is a shared rule rather than a store's private business
+
+- **Status:** **Decided and implemented 2026-08-05** as the first half of **WP6-4**. Implementation:
+  `packages/core/src/favourites.ts` (`FAVOURITE_KEY_VERSION`, `migrateFavouriteKeys`,
+  `favouritePoleIds`, `favouritesView`) with a new corpus — `spec/favourites.spec.json`, **3 groups /
+  17 cases, one of them `knownDefect`** — the RN store and screen consuming it, and
+  `apps/web/src/lib/preferences.ts` rebuilt as the full five-field store on the **same storage key**.
+  A hoist, so no behaviour changes; `packages/core` stays at **100 % on all four axes**.
+- **Context.** Two things had to move before `apps/web` could draw a Favourites screen at all, and they
+  are the same thing seen from either end. The screen's composition lived in
+  `apps/mobile/app/(tabs)/favorites.tsx` — grouping resolved poles by place in save order, intersecting
+  each place's rows with the saved keys *at the pole*, assembling the readings — reachable only by
+  rendering a React tree. And the **migration** lived in that app's zustand store, reachable only by
+  loading it. ADR-082 decision 5 named this row as inheriting the second: WP6-0 deliberately wrote a
+  *different* storage key, because zustand's `persist` writes `partialize`'s output as the **whole
+  blob**, so a two-field store on `nextbus.preferences` would have erased every favourite a rider had
+  — silently, at WP6-8, on first launch.
+- **Decisions:**
+  1. **The version number is shared, and that is the load-bearing part.** Once two stores write one
+     blob, the hazard is not that they disagree about a display: it is that they stamp **different
+     versions** on it. A store writing a *lower* version re-runs a completed migration; one writing a
+     *higher* version makes the next step skip data it has never seen. Neither fails loudly, and the
+     data at stake cannot be re-derived from anywhere — so `FAVOURITE_KEY_VERSION` is one declaration
+     in the kernel and both stores read it.
+  2. **The rule moves; the store shape stays.** `migrateFavouriteKeys` is corpus-pinned in
+     `packages/core`; each app keeps its own `migratePreferences` adapter, because
+     `PersistedPreferences` names `Appearance` and `Locale` and the kernel may not import either
+     (ADR-051). That is ADR-069 decision 7 exactly: *the rule is shared and the wiring is not.* What
+     would be dangerous is a second implementation of the rebasing, and there is not one.
+  3. **The fix for the shared key is to model *more*, not to share less.** `apps/web` now holds all
+     five fields and writes `nextbus.preferences`. `recentRoutes` and `recentStops` have no consumer
+     there until WP6-5 — they are held in state and written back unchanged, which is exactly what makes
+     sharing safe. **A field a store *reads* and a field it *preserves* are different jobs**, and only
+     the first is optional.
+  4. **The guard changed shape rather than going away.** `shell-parity.test.ts` asserted the two keys
+     *differed*; it now asserts they are the **same**, that the two `partialize` field sets are equal
+     *by reading both sources*, that both stamp the shared version, and that neither re-implements the
+     rebasing. The field-set check is the stronger guard: a field added to the RN store and forgotten in
+     the web one is the only failure mode of a shared key, and it is the one that costs a rider
+     something they curated by hand. Watched failing by dropping the recents from `partialize`.
+  5. **Which poles to fetch is its own export.** The screen needs that list *before* it has any data,
+     so it cannot be derived from the cards — hence `favouritePoleIds` beside `favouritesView`. It
+     also decides two things a renderer should not: a key the id grammar cannot read is **skipped
+     rather than guessed at** (the migration keeps it on disk in case a later grammar can), and two
+     saved poles of one place are **one** query, because `getStop` promotes a member id to its place.
+  6. **A card is per *place*, never per saved pole.** Favourites key on the member pole precisely so a
+     clustering change cannot orphan them (ADR-062), and that is the wrong unit to draw: a rider who
+     saved two lines at two kerbs of one interchange saved two things at one place, and two cards for
+     it would read as two places.
+  7. **`migrateFavouriteKeys` returns its input by *reference* when it has nothing to do.** The RN
+     store's existing test asserts a future-version blob is passed through untouched with `toBe`, and
+     keeping that identity is what makes "untouched" mean untouched rather than "equal for now" — an
+     equal-but-new object is the shape a future step could quietly start rewriting fields through.
+- **The `knownDefect` row, and why it is recorded rather than fixed here.** A saved route with **no live
+  reading** contributes nothing, so the card is a name with nothing under it — a peak-only service at
+  23:00, which is most of a rider's list overnight. The consequence that matters is diagnostic: **it
+  cannot be told from a favourite key that no longer resolves**, which is why WP5-11's favourites proof
+  had to rest on a route with a live arrival. It is now a corpus row with its `expect` recorded as it
+  stands and its `why` saying what that becomes when fixed — a row whose readout is the published
+  frequency, else a dash, the three-way readout `PlaceRouteRow` already has. Fixing it is a change to
+  what a card is built **from**, which is WP6-4b's job and the reason this commit is a hoist.
+- **Verified in a browser, on the owner's own twelve favourites.** The rewired RN tab draws three cards
+  — two distinct `Belair Garden` places, Northeast- and Southwest-bound, which is ADR-042's
+  direction-aware clustering visible on screen — with all three readout kinds and a **"+3 more routes"**
+  count that is correct because the cap is `stopCardView`'s alone. And the *shared key* was measured
+  rather than reasoned about: handed a **v0** blob written the way the RN app writes one, the web store
+  ran the shared migration (one place-keyed favourite became **two** pole-keyed ones), stamped the blob
+  at version 1, and **preserved both recents lists it does not read**.
+  Screenshot: `.context/wave6-screenshots/7-rn-favourites-after-the-hoist.jpg`.
+- **Consequences:**
+  - ⚪ **A favourite starred in either app is visible in the other** once they share an origin. In dev
+    they do not — localStorage is per-origin *including the port* — so this is a WP6-8 property, and it
+    is why it was verified by seeding the blob rather than by clicking a star on one app and looking at
+    the other.
+  - 🟡 **The `nextbus.shell.v1` blob is not migrated.** It held an appearance and a language override,
+    for one work package, and re-picking both is two taps — where a migration for scaffolding WP6-7
+    deletes is a step every future reader has to understand. Favourites were never in it.
+  - 🟡 **WP6-4b still owns the two bugs the row is measured on**: the empty card above, and WP5-12's
+    one-row-for-two-kerbs residual, which needs a per-row kerb label the compact card does not have.
+  - **Test totals:** core **889** (+20), edge 149, api-client 71, ui-spec 30, web **108** (+3),
+    mobile 86 — **1 333**. Corpus **14** files / **101** groups / **851** cases (+1 module, +17 cases).
+
+## ADR-090 — A `mustNot` a component cannot satisfy is a statement about its producer
+
+- **Status:** **Decided and implemented 2026-08-05** — **WP6-4b**, which closes WP6-4. Implementation:
+  `EtaLabelParts` gains a `headway` and a `none` arm; `favouritesView` builds its own rows rather than
+  delegating them; `packages/contract/ui/favourites.spec.json` (8 states, 6 projected);
+  `apps/web/src/screens/Favourites.tsx`; two conformance drivers; and both `EtaBadge`s drawing the
+  timetable arm. **`stop-row.spec.json` now carries zero `knownDefect`s.**
+- **Context.** WP6-4's row is measured on two bugs being *"closed by declared states, not by a patch"*:
+  a favourite whose route has no current arrival rendered an **empty card**, and a rider who starred one
+  line at **both kerbs** of a place saw one row. Both had been declared for a wave and neither could be
+  enforced, and the reason turned out to be the same one twice — which is this ADR's title.
+- **Decisions:**
+  1. **`StopRow`'s `empty` state was never the card's to satisfy.** The sentence — *"the static timetable
+     band, or an explicit 'no service' line"*, `mustNot: "a card with a name and nothing under it"* — has
+     been in the spec since WP6-1 as a `knownDefect` owned by this row. The card could not satisfy it
+     because **the row was never built**: `favouritesView` filtered `detail.routes` to those carrying an
+     `eta`, so a peak-only service contributed nothing. The fix is a change to what a card is built
+     **from**, and the state's enforcement is now `by: 'etaHeadway'` — a real slot.
+  2. **`EtaLabelParts` gains two display-only arms**, `headway` and `none`. `etaLabelParts` cannot return
+     either and never will: it is handed an arrival, and every existing arm is a statement about one. They
+     exist because a **saved** route is a row whether or not a bus is due, and they are the same
+     three-way choice `PlaceRouteRow.readout` has carried since WP6-3a. Widening the union rather than
+     restructuring `StopCardRow` keeps Nearby's corpus goldens untouched — those rows all come from
+     readings, so the new arms are unreachable there by construction.
+  3. **Favourites' rows are not `stopCardView`'s rows**, and that is why `favouritesView` now assembles
+     its own card. `soonestPerLine`'s collapse-to-one-row-per-line is right for a card *summarising a
+     place* and wrong for a list the rider curated — it hid the other kerb's bus entirely. The cap and the
+     "+N more" count are computed over the **saved** rows, and the order is the readout's rank then the
+     arrival: a live reading, then a timetable, then a dash, because a rider opens this screen to find the
+     next bus.
+  4. **The kerb label was tried and declined on a measurement.** A per-row code naming the two kerbs is
+     what ADR-072 refused and WP5-12 left open. Built, then measured: across five Hong Kong
+     neighbourhoods **not one** line published at two kerbs of a place had *distinct* printed codes on
+     them — and it cannot, because a place's poles are clustered by sharing a name and the code is part of
+     the name (at Tin Shui Wai Park both TN510 poles print `TN510`, which is ADR-071's own example). A
+     label repeated on both rows claims a distinction it does not make, so the field was removed rather
+     than shipped always-absent-or-always-equal. **What a rider gets is both buses instead of one**, and
+     Place detail — which has room for ADR-080's compass-side / pole-name / "check the sign" ladder — is
+     one tap away.
+  5. **A third instance of the same hole, found by asking the states.** The screen guarded only on
+     `isLoading`, so once **every** query had failed it rendered its heading and an empty list — a rider
+     could not tell "still fetching" from "we could not reach any of them", and a list they had curated
+     looked empty. Same shape as WP6-3b's blank Place screen, reached through a different door. Both
+     renderers now have a `failed` arm, and the spec declares it.
+  6. **The drivers assert their own fixtures' shape**, and that was measured rather than assumed. Both
+     compute their expectation by calling `favouritesView`, so a broken kernel moves the render and the
+     expectation *together*: re-introducing the reading-only filter and the per-line collapse turned the
+     **corpus** suite red by 4 and 2 tests and left both conformance suites **passing**. That division is
+     correct (ADR-084: the corpus enforces the rule, the spec enforces that a renderer draws it) and it is
+     also a gap a reader would not expect, so each driver now asserts that its `quietRoute` fixture
+     produces a row and its `bothKerbs` fixture produces two rows of one line. Re-injected: both suites
+     red.
+- **The best failure of the pass, and it is a compliment to the format.** Deleting the `headway` arm from
+  `stop-row.spec.json` left both conformance suites green — and failed at **emit**, with
+  `StopRow: state 'empty' claims to be enforced by slot 'etaHeadway', which does not exist`. That is
+  ADR-083's *"every state must declare what enforces it"* paying off in a way its own ADR did not predict:
+  the `by` link makes the slot **undeletable**, and the failure names the state, the slot and the reason
+  rather than reporting a text divergence somewhere downstream.
+- **Verified in a browser on live Hong Kong data.** On `apps/web`, a seeded list showing both fixes at
+  once: `269D → Lek Yuen  10 min` **and** `269D → Lek Yuen  every 12 min` — two rows for one line saved at
+  two kerbs, the second carrying the published timetable — plus `969C → Kornhill Plaza  —`, a saved route
+  with no reading that is now a row instead of an absence. Ordered live-then-timetable-then-dash. And the
+  RN tab is unchanged on the owner's own twelve favourites.
+  Screenshots: `.context/wave6-screenshots/8-web-favourites-both-bugs-closed.jpg`,
+  `7-rn-favourites-after-the-hoist.jpg`.
+- **Consequences:**
+  - ⚪ **`apps/web` has three ported screens** and five destinations still naming the work package that
+    ports them.
+  - ⚪ **`stop-row.spec.json` carries no `knownDefect`s**, which is the first spec in the repo to reach
+    that state — and it got there by fixing a producer, not by softening a sentence.
+  - 🟡 **A rider still cannot tell which of two kerbs a Favourites row belongs to.** Declared in the
+    `bothKerbs` state with the measurement, and it is one tap from an answer. The three `knownDefect`s on
+    `place-detail.spec.json` are untouched by this row.
+  - 🟡 **`favouritesView`'s `now` is the screen's `Date.now()`**, with no seam — correct, because the
+    screen still fetches on `refetchInterval` and re-renders every cadence, but it means both drivers pin
+    the clock with `vi.spyOn(Date, 'now')`. Without it every corpus reading renders `—` and the suite
+    reports a divergence for the wrong reason, which is the third variant of *a harness that looks at the
+    wrong moment* this wave has met.
+  - **Test totals:** core **892** (+3), edge 149, api-client 71, ui-spec 30, web **119** (+11),
+    mobile **97** (+11) — **1 358**. Corpus 14 files / 101 groups / **852** cases.
+
+## ADR-091 — The keypad and the result list are one filtered set, and a chip set is the index's answer
+
+- **Status:** **Decided and implemented 2026-08-05** as the first half of **WP6-5**. Implementation:
+  `searchView` in `packages/core/src/search.ts` (+12 corpus cases in the existing `search.spec.json`,
+  +5 property tests) and `apps/mobile/app/search.tsx` consuming it — six `useMemo`s and two local
+  components gone. A hoist, so **no behaviour changes**; `packages/core` stays at **100 % on all four
+  axes**.
+- **Context.** `proposals/04` puts Search fourth and calls it *"the keypad, chips and recents are pure
+  interaction over a spec'd index; never walked in a browser"*. The second half was the more accurate:
+  twelve corpus groups already pin what *matches*, and the screen was deciding everything about what a
+  rider sees — seven decisions, all of them reachable only by rendering a React tree.
+- **Decisions:**
+  1. **The keypad and the result list are computed from ONE filtered set.** This is the invariant that
+     makes a dimmed key honest: a rider presses a live key expecting a result, so a keypad computed over
+     a wider set than the search offers keys that lead nowhere, and a narrower one hides a reachable
+     route. It was already true by construction in the screen and it was true *by coincidence of two
+     `useMemo`s reading the same variable*; it is now one expression, with a property test asserting that
+     every key the keypad offers begins some findable number.
+  2. **Which operator chips exist is the *index's* answer** (ADR-037's promise, now a rule): a fifth
+     operator lights up the day its adapter lands, and — the half that matters more — a chip is never
+     offered for an operator the index cannot produce a result for. Sorted, so the row does not reorder
+     itself as the dataset is rebuilt.
+  3. **A stops list offers no category chips.** A stop has no route number, so a category cannot narrow
+     it; a dimmed-but-present night-bus chip over a stop list offers a filter that does nothing, which is
+     worse than not offering it.
+  4. **Three list states, not two.** "Nothing matched" and "nothing searched" are different sentences with
+     different copy, and the screen decided between them by re-testing `query === ''` beside a length
+     check. `source: 'results' | 'recents' | 'none'` is one answer, and it is the same shape as every
+     other state bug this wave has found: *a screen with less to show than expected must say which less.*
+  5. **A recent is a *reference*, resolved against the index.** The dataset is rebuilt daily, a route can
+     leave it, and clustering can mint a new `P:` id for a place (ADR-042) — so a saved id may name
+     nothing today. It is dropped silently, which is right: the rider's next search simply will not offer
+     it, where a row that renders the id and hopes is a tap into nothing.
+  6. **A chip key is matched, never taken apart.** `searchView` mints `operator:KMB` / `category:night`
+     and the screen compares whole strings against the same two builders. The screen used to
+     `split(':')` its own key and cast the halves to two different unions, which read exactly like
+     ad-hoc id parsing and was flagged by the gate that bans it; a key that is never split cannot be
+     split wrongly.
+  7. **`FilterChip.label` widens from `LocalizedString` to `string`**, and that is the ADR-054 line rather
+     than a weakening. The kernel decides which chips exist and the caller injects the words, so the brand
+     cannot survive the round trip — the kernel may not import `@nextbus/i18n`. It is laundered at the
+     injection boundary, in one place, exactly as `PlaceGroup.heading` is. The brand still does its work
+     where it can: an English literal cannot reach a chip without passing through `t()` first.
+  8. **No `useMemo`.** `searchView` is pure and this screen re-renders on every keystroke regardless, so
+     memoizing would add a dependency array that has to stay correct for no measured gain. The six it
+     replaced each had one.
+- **Walked in a browser for the first time — the pass `docs/11` has owed since ADR-037** — and the
+  invariant in decision 1 turned out to be *visible*. With the query `2` and the **Night** chip on, the
+  screen says **"No matches"** and **every key on the keypad is dimmed**, letter row included: no night
+  route begins with a `2`, so the keypad offers nothing and the list has nothing, and the two agree
+  without either knowing about the other. On the resting screen the `0` key alone is dimmed (no route
+  number starts with a zero), the letter row reads `A B C E H N P R S T W X`, the chips read
+  `Citybus GMB KMB · Night Airport Express`, and two saved recents resolve — including a GMB minibus
+  route, which is decision 2 working end to end.
+  Screenshots: `.context/wave6-screenshots/9-rn-search-first-browser-pass.jpg`,
+  `10-rn-search-keypad-and-list-agree.jpg`.
+- **Consequences:**
+  - ⚪ **`RecentRoutes` and `RecentStops` collapsed into one `RecentsHeader`.** They were the same twelve
+    lines twice and what differed was the rows, which the view now produces in one shape per mode.
+  - 🟡 **The GMB chip reads `GMB` in English and `專線小巴` in Chinese**, which is the `docs/07` row WP6-4
+    surfaced, visible again here on the widest surface it appears on.
+  - 🟡 **WP6-5b still owns the spec, the `apps/web` port and the interaction states** — a keypad that
+    collapses on scroll, a text field that focuses, a segment that switches mode. Those are the
+    interaction-heavy half `proposals/04` picked this screen for.
+  - **Test totals:** core **898** (+6), edge 149, api-client 71, ui-spec 30, web 119, mobile 97 —
+    **1 364**. Corpus 14 files / **102** groups / **864** cases (+1 group, +12 cases).
+
+## ADR-092 — A spec cannot hold an interaction, but it can hold what a rider infers from one
+
+- **Status:** **Decided and implemented 2026-08-05** — **WP6-5b**, which closes WP6-5. Implementation:
+  `packages/contract/ui/search.spec.json` (10 states, 8 projected), `apps/web/src/screens/Search.tsx` with
+  `components/{RouteKeypad,FilterChips}.tsx` and `hooks/useSearchIndex.ts`, two conformance drivers, and
+  two more kernel rules (`toggleSearchChip`, `validNextLetters`) plus `SearchKeypad` on the view.
+- **Context.** `proposals/04` picked Search fourth for *"interaction-heavy specs"* — the open question being
+  whether a spec can carry interaction at all.
+- **Decisions:**
+  1. **It mostly cannot, and should not try.** A keypad that collapses on scroll, a field that autofocuses,
+     a segment that slides: gesture and motion, which ADR-075 puts on the idiom side. The spec says so by
+     **enumeration** — six `idiom` entries — rather than by silence, which is the difference between a
+     decision and an omission.
+  2. **What it can hold is what a rider *infers* from the interaction: a key drawn as live means some route
+     number continues that way.** One rule, and the states drive it — `filteredToNothing` being the extreme
+     where the honest answer is ten keys and none of them pressable.
+  3. **The keypad became purely presentational.** `SearchKeypad` carries the ten digits in keyboard order,
+     each with `enabled`, and only the letters that continue the prefix. Both components held their own
+     `DIGIT_ROWS` — the same two rows of five, twice — so a renderer adopting a phone's 1-2-3 grid would
+     have been a silent divergence in muscle memory. Splitting ten into rows is the one thing left, and it
+     is layout.
+  4. **A chip key is minted and read in one place.** `toggleSearchChip` takes the key `searchView` produced,
+     so no renderer knows the format and neither holds a table of operators to match against. An
+     unrecognised key returns the filter unchanged rather than throwing: a stale tap is not a corruption,
+     and crashing would lose the rider's whole selection.
+  5. **`noMatches` is reachable only in stops mode**, and that is a fact about the keypad rather than about
+     the state: **a smart keypad cannot type a query that matches nothing** — the key that would take you
+     there is inert by construction. Discovered by writing the driver, which pressed `9` five times and got
+     a one-character query.
+  6. **The query field is the one genuine platform split**, and it is declared rather than hidden:
+     `apps/mobile` draws the typed number in a `<Text>` because its keypad *is* the input, while `apps/web`
+     uses a real `<input>` and accepts the hardware keyboard as well, making the pad an accelerator. So
+     neither the value nor the placeholder is a shared projection, and the RN driver drops the field's
+     **subtree** — structurally, by position, not by value.
+  7. **The drivers press controls rather than setting state.** `mode`, `query` and `filter` are the screen's
+     own state, so the only honest way into a state is the way a rider gets there. A driver that reached in
+     would be asserting that the screen renders a view it was handed, which nothing doubted.
+- **Five harness traps, and the fifth was in the injection script itself.** Filtering the tree by *value* to
+  drop the field deleted the keypad's `2` key when the query was `2`, and reported a divergence twelve nodes
+  later. The RN driver's positional skip ate the **error message** in `failed`, because there is no field in
+  that state — the only one of these that hid a state's entire content rather than its timing. The index
+  hook memoizes for the session, which is right for the app and leaked a previous state's index into
+  `loading`, so the drivers import a fresh module graph per test. And then: **two of the five watched-failing
+  injections came back green because they never applied** — a string the formatter had reshaped, and an
+  assertion that tripped on the word appearing in `interactions` rather than on the slot surviving. *An
+  injection that did not inject is indistinguishable from a gate that does not fire.* Re-run with the edit
+  asserted, both go red — 3 states each.
+- **And the injection that applied taught something real.** Folding the arrow back into `{origin} →` as one
+  string left both suites green, because **React emits an expression and an adjacent literal as separate DOM
+  text nodes**: the arrow's node identity comes from React, not from the markup, so splitting it into its own
+  `<span>` was cosmetic. The original failure was purely the spec declaring the arrow *before* the origin.
+  Recorded rather than dressed up as a fix — what the projection genuinely pins here is the **order**, and
+  markup-level node boundaries are not observable to it at all.
+- **Consequences:**
+  - ⚪ **`apps/web` has four ported screens**, and four destinations still name the work package porting them.
+  - ⚪ **`toggleSearchChip` and `validNextLetters` join the kernel**, plus `bumpRecent` and `RECENTS_MAX`
+     from the same row — the recents rule two stores now share.
+  - 🟡 **`stale` and `offline` are `unenforced`, and the reason is a rule rather than a gap**: a stale search
+     index renders *identically* to a fresh one, by design, because a route number that existed yesterday
+     almost certainly exists today. ADR-008's staleness rule is about readings, which decay in minutes.
+  - ⚪ **The stop field is a `<label>`, not a `<div>` with an `onClick`** — decided by CI rather than by me,
+     and worth keeping because it is the right answer rather than merely the lint-clean one. The RN screen
+     wraps its input in a `Pressable` so that tapping the icon or the padding focuses the field; the DOM
+     equivalent of that is not a click handler on a static element (a mouse-only affordance with no role and
+     no keyboard path) but a **label**, which focuses its control natively. `noStaticElementInteractions`
+     named it precisely. It reached CI because the local lint result quoted in the previous commit was
+     measured *before* the last edit to that file — the same class as WP6-5b's injections that came back
+     green: **a check whose result you are quoting from memory is not a check you ran.** The habit that
+     follows is to run the gate chain *after* committing, not before, which is also what makes rule 7's
+     per-commit range check meaningful.
+  - **Test totals:** core **918**, edge 149, api-client 71, ui-spec 30, web **131** (+12), mobile **109**
+    (+12) — **1 408**. Corpus 14 files / **105** groups / **878** cases.

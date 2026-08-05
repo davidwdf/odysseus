@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/stop-detail.spec.json'
+// The two rules the pin-label property below re-derives, so that "the dot and the heading agree" is
+// asserted against the *rules* rather than against a second copy of the expected strings.
+import { parseStopId } from '../src/ids'
 import {
   boardingPoleId,
   dedupeRoutes,
@@ -17,6 +20,7 @@ import {
   type StopDetailPole,
   type StopDetailRoute,
 } from '../src/stop-detail'
+import { poleFlagCode } from '../src/stop-name'
 import type { LatLng, Locale, OperatorId, ResolvedClientPolicy, StopDetail } from '../src/types'
 import { specCases } from './corpus'
 
@@ -325,6 +329,86 @@ describe('placeDetailView', () => {
     }
     expect(groupedRows, 'no corpus case put rows under a kerb').toBeGreaterThan(0)
     expect(flatRows, 'no corpus case put rows in a flat list').toBeGreaterThan(0)
+  })
+
+  it('gives every member pole exactly one pin, and never an empty map', () => {
+    // The map's half of "every row in exactly one place", and it is the property a folding rule most needs:
+    // a pole silently dropped here vanishes from the map while keeping its group in the list, and the
+    // scroll-spy then has a group whose dot cannot light up. `mergeCoincidentPins` carries the same
+    // assertion over its own group; this one is about the *set of points this view hands it*, which is
+    // where a member could go missing before the fold ever sees it.
+    for (const c of cases<Args, PlaceDetailView>('placeDetailView')) {
+      const got = placeDetailView(c.args.detail, optionsFor(c.args))
+      const members = c.args.detail.members ?? []
+      const pinned = got.pins.flatMap((pin) => pin.ids)
+      expect(
+        got.pins.length,
+        `${c.name}: a place with no pin is a map with nothing on it`,
+      ).toBeGreaterThan(0)
+      if (members.length > 1) {
+        expect([...pinned].sort(), c.name).toEqual(members.map((m) => m.id).sort())
+      } else {
+        // A lone stop is one pin at the place's own coordinate — the place id, not a member id, because
+        // the wire may give a single-member place a merged `P:` id and the pin belongs to the place.
+        expect(pinned, c.name).toEqual([c.args.detail.stop.id])
+      }
+    }
+  })
+
+  it('labels a pin with the printed code its heading uses — or, where there is none, with the raw id the heading omits', () => {
+    // The reason the label belongs to the kernel and not to the map, stated as the property rather than as
+    // an intention. `poleFlagCode` borrows a flag-shaped code from *another locale* when this one has none
+    // (ADR-080), so a renderer composing a dot's label itself gets a **plausible** answer that disagrees
+    // with the heading above it — at Prince Edward the heading would read `KMB · MK356` while the dot read
+    // the raw id, and nothing would fail.
+    //
+    // Writing it down found the one place where the dot and the heading **already** disagree, and it is
+    // pinned here rather than smoothed over: where the operator published no code at all, the dot falls
+    // back to the raw pole id and the heading has nothing to fall back to, so at Tin Shui Wai Park the
+    // Citybus dot reads `001992` while its heading reads `Citybus`. A hoist changes no behaviour (WP4-0's
+    // rule), so the asymmetry is asserted in both directions and carried in `docs/07` with an owner.
+    let withCode = 0
+    let withoutCode = 0
+    let unreadable = 0
+    for (const c of cases<Args, PlaceDetailView>('placeDetailView')) {
+      const got = placeDetailView(c.args.detail, optionsFor(c.args))
+      if (!got.grouped) continue
+      const members = c.args.detail.members ?? []
+      for (const group of got.groups) {
+        const pin = got.pins.find((p) => p.ids.includes(group.poleId))
+        expect(pin, `${c.name}: ${group.poleId} has a group and no pin`).toBeDefined()
+        const parts = pin?.label === undefined ? [] : pin.label.split(' · ')
+        const member = members.find((m) => m.id === group.poleId)
+        if (!member) throw new Error(`${c.name}: group ${group.poleId} is not a member`)
+        const code = poleFlagCode(member.name, c.args.locale)
+        const rawId = parseStopId(group.poleId)?.rawId
+        if (code === undefined && rawId === undefined) {
+          // An id neither rule can read: the dot carries **no label at all** and the heading names nothing
+          // either — this is the `" · Southwest side"` defect ADR-085 pinned, seen from the map. Unreachable
+          // by any id a real build produces; asserted so that "nothing at all" stays the answer rather than
+          // becoming an `undefined` printed on a dot.
+          expect(parts, `${c.name} / ${group.poleId}`).toEqual([])
+          unreadable += 1
+          continue
+        }
+        if (code === undefined) {
+          // No printed code: the dot says the raw id, the heading says only the operator. **They disagree**,
+          // and that is the finding this property exists to have made visible.
+          expect(parts, `${c.name} / ${group.poleId}`).toContain(rawId)
+          expect(group.heading, `${c.name} / ${group.poleId}`).not.toContain(rawId)
+          withoutCode += 1
+          continue
+        }
+        expect(parts, `${c.name} / ${group.poleId}`).toContain(code)
+        expect(group.heading, `${c.name} / ${group.poleId}`).toContain(code)
+        withCode += 1
+      }
+    }
+    // Three anti-vacuous controls, one per branch, because a single total would let two of the three never
+    // run — which is exactly how the disagreement in the middle branch would have stayed invisible.
+    expect(withCode, 'no corpus case had a pole with a printed code').toBeGreaterThan(0)
+    expect(withoutCode, 'no corpus case had a pole without one').toBeGreaterThan(0)
+    expect(unreadable, 'no corpus case had a pole id neither rule can read').toBeGreaterThan(0)
   })
 
   it('says nothing about distance without a fix', () => {

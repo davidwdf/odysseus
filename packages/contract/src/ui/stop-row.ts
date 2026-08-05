@@ -113,6 +113,23 @@ export const STOP_ROW_SPEC: ComponentSpec = {
                 },
               },
             ],
+            headway: [
+              {
+                name: 'etaHeadway',
+                text: { field: 'label.text' },
+                invariant:
+                  'The **published timetable**, where there is no live reading at all — composed by `formatHeadway`, en-dash range and spacing included. Drawn small and muted rather than as a figure, because it is the *Static* honesty tier (docs/09) and must not read as a bus that has been seen. Reached only by a **saved** route today (WP6-4b): `stopCardView` builds its rows from readings and `etaLabelParts` cannot return this arm, so on Nearby it is unreachable by construction.',
+              },
+            ],
+            none: [
+              {
+                name: 'etaNone',
+                text: {
+                  literal: '—',
+                  why: 'Neither a reading nor a published frequency. The same dash as `departed` and a different fact — which is why they are separate arms rather than one: a renderer that folded them would lose the ability to say anything else about either later.',
+                },
+              },
+            ],
           },
           invariant:
             'Tabular figures, and no client-side countdown — the value changes only when fresh data arrives (ADR-008). A `label.kind` with no case here is a hard failure rather than a silent skip, so growing the union goes red instead of quietly dropping the readout.',
@@ -151,10 +168,14 @@ export const STOP_ROW_SPEC: ComponentSpec = {
     empty: {
       must: 'The static timetable band, or an explicit "no service" line under the heading.',
       mustNot: 'A card with a name and nothing under it.',
-      why: "docs/11: a peak-only favourite renders blank, and an empty card cannot be told from a broken favourite key by eye — which is why WP5-11's favourites proof had to rest on a route with a live arrival.",
+      why: "docs/11: a peak-only favourite rendered blank, and an empty card cannot be told from a broken favourite key by eye — which is why WP5-11's favourites proof had to rest on a route with a live arrival.",
       enforcement: {
-        knownDefect:
-          'Neither renderer satisfies this today: a view with no rows and `incomplete: false` renders the heading alone, and both projection suites pin exactly that. Owner: WP6-4, which ports Favourites and is where the band or the line has to come from. Declared as the target rather than softened to match the code.',
+        by: 'etaHeadway',
+        // Was a `knownDefect` owned by WP6-4 from WP6-1 until 2026-08-05, and this is what closing it looked
+        // like: **not** a band added to the card, but a change to what a card is built *from*. `favouritesView`
+        // now emits a row per **saved route** rather than per reading, so a peak-only service reaches the card
+        // with its published frequency (`headway`) or a dash (`none`) instead of contributing nothing at all.
+        // The slot named here is the timetable arm, which is the "band" this sentence has always asked for.
       },
     },
     failed: {

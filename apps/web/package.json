@@ -9,7 +9,7 @@
     "build:web": "node --import tsx scripts/build-web.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node ./scripts/check-no-derivation.mjs && vitest run"
+    "test": "vitest run"
   },
   "dependencies": {
     "@nextbus/api-client": "workspace:*",

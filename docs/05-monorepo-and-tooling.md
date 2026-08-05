@@ -163,7 +163,7 @@ findings (four of its eight rule scenarios), and a hard failure when it examined
 | `check-no-raw-colours.mjs` | `apps/mobile/{app,components,lib,providers}/`, `apps/web/src/`, `packages/ui/src/` | hex literals, `rgb(`/`hsl(` with digits |
 | `check-no-adhoc-id-parsing.mjs` | the whole repo | `.split(':')`, `.split('+')`, `.split('\|')`, `.startsWith('P:')` |
 | `check-spec-coverage.mjs` | `packages/core/{src,spec}` | a `@spec` tag with no corpus group and a corpus group with no tag, **both directions**, plus `REQUIRED_ROWS` |
-| `apps/web/scripts/check-no-derivation.mjs` | `apps/web/src/{components,screens}/` only — `adapters/` is exempt | the renderer computing anything the kernel should |
+| `scripts/check-no-derivation.mjs` | `apps/web/src/{components,screens,shell}/` **plus** `apps/mobile`'s Place screen, its `MiniMap` and its five leaf projections — `adapters/`, `hooks/`, `lib/` and `providers/` are exempt, and so are the RN surfaces WP4-0 has not reached (route, search, workbench, favourites) and its chrome (`CollapsingHeader`, `StopHeader`, `GlassView`) | a renderer computing anything the kernel should. Carries a per-site `ALLOWLIST` since WP6-3b, because the RN screen has real geometry — *geometry is presentation, a list is a decision* |
 | `precommit-docs-check.mjs` | **commits, not files** — the index in hook mode, each commit in `--range` mode | a commit changing `apps`/`packages`/`scripts` or any `.ts`/`.js` file with no `docs/`, `*.md` or `README` change and no `[docs-ok]` |
 
 **Two layer facts that decide where a test can live.** `layers.json` gives `server` the dirs

@@ -634,6 +634,19 @@ export interface PlaceDetailView {
   /** Every row, in server order, for the ungrouped case. Empty when `grouped`. */
   rows: PlaceRouteRow[]
   /**
+   * The map's pins: one per **physical spot**, already folded, labelled and coloured. Never empty.
+   *
+   * On the identity/idiom line this is the identity half of a map. *How* a pin is drawn — a dot, a
+   * teardrop, an `MKAnnotationView` — is idiom; **which spots exist, what each is called, and which
+   * poles each stands for** is a rule, and it was being decided in a renderer until WP6-3b. Two
+   * decisions in particular: the printed code a pin is labelled with falls back to the raw pole id
+   * (`poleFlagCode(name, locale) ?? rawId`), which is the *same* fallback `heading` uses — change one
+   * and at Prince Edward the heading reads `KMB · MK356` while the dot reads the raw id — and poles at
+   * one coordinate fold into a single pin (ADR-086). Neither is something a second renderer should
+   * have to arrive at independently.
+   */
+  pins: MapPin[]
+  /**
    * True when at least one of this place's boarding points would not answer (ADR-077), so the rows may be
    * incomplete and an empty list is **not** a claim that nothing is due. Same fact, same reason and the
    * same wire field as `StopCardView.incomplete`.
@@ -802,6 +815,7 @@ export function placeDetailView(detail: StopDetail, opts: PlaceDetailOptions): P
         })
       : [],
     rows: grouped ? [] : routes.map((route) => placeRouteRow(route, locale, now, policy)),
+    pins: placePins(detail, members, locale),
     // Presence, not length — the same argument `stopCardView` makes: a rider cannot act on the difference
     // between one refusing kerb and four.
     incomplete: (detail.failed ?? []).length > 0,
@@ -830,6 +844,61 @@ function poleHeading(
   const operator = parseStopId(poleId)?.operator
   const code = poleFlagCode(name, locale)
   return `${operator ? labels.operator(operator) : ''}${code ? ` · ${code}` : ''}`
+}
+
+/**
+ * The map's pins: one per physical spot, folded, labelled and coloured.
+ *
+ * **Every member gets a pin, including one whose lines all folded away under `dedupeRoutes`** — so the map
+ * can show more spots than the list shows groups, and that asymmetry is intended rather than overlooked:
+ * the list is what a rider is choosing between, the map is a picture of where they are standing, and a
+ * kerb with nothing due is still a kerb. It has one live consequence, recorded in `docs/07` rather than
+ * fixed here because a hoist changes no behaviour: tapping such a dot scrolls to a group that does not
+ * exist, and does so silently.
+ *
+ * The three decisions it takes out of the renderers:
+ *
+ *  · **the label falls back to the raw pole id** where the operator published no flag-shaped code, and it
+ *    is `poleFlagCode`'s answer — the *same* call `poleHeading` makes. Two copies of that is how the dot
+ *    at Prince Edward would come to read the raw id while the heading above it read `KMB · MK356`;
+ *  · **the colour is the pole's own operator**, and `parseStopId` returning `null` for a merged `P:` id is
+ *    the honest answer rather than a lookup on the letter `P` that silently misses;
+ *  · **poles at one coordinate fold into one pin** (ADR-086) — not "close enough at this zoom", which is a
+ *    different answer per viewport, but published at the same point, which every renderer agrees on.
+ */
+function placePins(
+  detail: StopDetail,
+  members: readonly StopDetailPole[],
+  locale: Locale,
+): MapPin[] {
+  // **One code path through the fold**, a lone stop included, and that is not only tidiness: written with
+  // its own `return [{ ids: [...] }]` arm it carried a conditional spread for the operator that no payload
+  // can reach — a place with one member always has a readable id — and the 100 % branch threshold refused
+  // it, exactly as it refused WP6-3a's `?? []`. Handing every case to `mergeCoincidentPins` leaves the
+  // "absent stays absent" branches in the one place whose corpus already exercises both sides of them.
+  const points =
+    members.length > 1
+      ? members.map((member) => {
+          const pole = parseStopId(member.id)
+          return {
+            id: member.id,
+            location: member.location,
+            operator: pole?.operator,
+            label: poleFlagCode(member.name, locale) ?? pole?.rawId,
+          }
+        })
+      : // A lone stop is one pin at the **place's** own coordinate, carrying **no label**: a single dot
+        // needs no code beside it to be told from a neighbour it does not have, and the code is already in
+        // the heading above. It is the place id and not the member's, because the wire may name a
+        // single-member place with a merged `P:` id, and the pin belongs to the place.
+        [
+          {
+            id: detail.stop.id,
+            location: detail.stop.location,
+            operator: parseStopId(detail.stop.id)?.operator,
+          },
+        ]
+  return mergeCoincidentPins(points)
 }
 
 /**

@@ -2525,7 +2525,7 @@
       ]
     },
     "placeDetailView": {
-      "doc": "The whole Place screen, composed once (WP6-3). The four rules above decide *what* a rider sees; this decides what they collapse to on screen — the pole heading and its separator, the per-kerb walk, the summary line and its two separator widths, the grouping under boarding points, which poles appear at all, and the three-way readout. It lived in `apps/mobile/app/stop/[id].tsx` until now, reachable only by rendering a React tree. Words the composition needs are INJECTED (`labels`), never imported: core owns the rule, the catalogue owns the word (ADR-054).",
+      "doc": "The whole Place screen, composed once (WP6-3). The four rules above decide *what* a rider sees; this decides what they collapse to on screen — the pole heading and its separator, the per-kerb walk, the summary line and its two separator widths, the grouping under boarding points, which poles appear at all, the three-way readout, and the map pins — one per physical spot, folded by `mergeCoincidentPins`, each labelled with the same printed code the heading above it uses and coloured by its own pole operator (WP6-3b). Every member gets a pin, INCLUDING one whose lines all folded away under `dedupeRoutes`: the list is what a rider chooses between, the map is a picture of where they are standing. It lived in `apps/mobile/app/stop/[id].tsx` until now, reachable only by rendering a React tree. Words the composition needs are INJECTED (`labels`), never imported: core owns the rule, the catalogue owns the word (ADR-054).",
       "cases": [
         {
           "name": "a-lone-stop-is-one-flat-list",
@@ -2648,6 +2648,16 @@
                   "urgency": "none",
                   "stale": true
                 }
+              }
+            ],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB"
               }
             ],
             "incomplete": false
@@ -2900,6 +2910,35 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB",
+                "label": "001992"
+              },
+              {
+                "ids": ["KMB:775642281FBFE336", "KMB:AFB9321F7CD2C2E4"],
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511 · TN510"
+              },
+              {
+                "ids": ["KMB:DC5B5F4350685442"],
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -3143,6 +3182,35 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB",
+                "label": "001992"
+              },
+              {
+                "ids": ["KMB:775642281FBFE336", "KMB:AFB9321F7CD2C2E4"],
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511 · TN510"
+              },
+              {
+                "ids": ["KMB:DC5B5F4350685442"],
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -3393,6 +3461,35 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB",
+                "label": "001992"
+              },
+              {
+                "ids": ["KMB:775642281FBFE336", "KMB:AFB9321F7CD2C2E4"],
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511 · TN510"
+              },
+              {
+                "ids": ["KMB:DC5B5F4350685442"],
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -3471,6 +3568,16 @@
                   "kind": "headway",
                   "text": "every 10 – 15 min"
                 }
+              }
+            ],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB"
               }
             ],
             "incomplete": false
@@ -3730,6 +3837,35 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB",
+                "label": "001992"
+              },
+              {
+                "ids": ["KMB:775642281FBFE336", "KMB:AFB9321F7CD2C2E4"],
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511 · TN510"
+              },
+              {
+                "ids": ["KMB:DC5B5F4350685442"],
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ],
             "incomplete": true
           }
         },
@@ -3981,6 +4117,35 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB",
+                "label": "001992"
+              },
+              {
+                "ids": ["KMB:775642281FBFE336", "KMB:AFB9321F7CD2C2E4"],
+                "location": {
+                  "lat": 22.45448,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN511 · TN510"
+              },
+              {
+                "ids": ["KMB:DC5B5F4350685442"],
+                "location": {
+                  "lat": 22.45447,
+                  "lng": 114.00297
+                },
+                "operator": "KMB",
+                "label": "TN510"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -4141,6 +4306,44 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001031"],
+                "location": {
+                  "lat": 22.28187,
+                  "lng": 114.16153
+                },
+                "operator": "CTB",
+                "label": "001031"
+              },
+              {
+                "ids": ["KMB:CDA6257743B1D479"],
+                "location": {
+                  "lat": 22.28188,
+                  "lng": 114.16165
+                },
+                "operator": "KMB",
+                "label": "CDA6257743B1D479"
+              },
+              {
+                "ids": ["KMB:E499DA804188827F"],
+                "location": {
+                  "lat": 22.28193,
+                  "lng": 114.16148
+                },
+                "operator": "KMB",
+                "label": "E499DA804188827F"
+              },
+              {
+                "ids": ["KMB:EFFD42714E298795"],
+                "location": {
+                  "lat": 22.28194,
+                  "lng": 114.1612
+                },
+                "operator": "KMB",
+                "label": "EFFD42714E298795"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -4291,6 +4494,35 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:002236"],
+                "location": {
+                  "lat": 22.26987,
+                  "lng": 114.13046
+                },
+                "operator": "CTB",
+                "label": "002236"
+              },
+              {
+                "ids": ["GMB:20004547"],
+                "location": {
+                  "lat": 22.26969,
+                  "lng": 114.13057
+                },
+                "operator": "GMB",
+                "label": "20004547"
+              },
+              {
+                "ids": ["GMB:20014891"],
+                "location": {
+                  "lat": 22.26963,
+                  "lng": 114.1306
+                },
+                "operator": "GMB",
+                "label": "20014891"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -4439,6 +4671,35 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001037"],
+                "location": {
+                  "lat": 22.28648,
+                  "lng": 114.15404
+                },
+                "operator": "CTB",
+                "label": "001037"
+              },
+              {
+                "ids": ["KMB:A8CD8C1198907526"],
+                "location": {
+                  "lat": 22.28647,
+                  "lng": 114.15402
+                },
+                "operator": "KMB",
+                "label": "A8CD8C1198907526"
+              },
+              {
+                "ids": ["KMB:F0B6112380784741"],
+                "location": {
+                  "lat": 22.28645,
+                  "lng": 114.15406
+                },
+                "operator": "KMB",
+                "label": "F0B6112380784741"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -4535,6 +4796,16 @@
                 }
               }
             ],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -4628,6 +4899,16 @@
                   "urgency": "none",
                   "stale": true
                 }
+              }
+            ],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB"
               }
             ],
             "incomplete": false
@@ -4766,6 +5047,22 @@
               }
             ],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["not-an-id"],
+                "location": {
+                  "lat": 22.3,
+                  "lng": 114.1
+                }
+              },
+              {
+                "ids": ["also-not"],
+                "location": {
+                  "lat": 22.301,
+                  "lng": 114.101
+                }
+              }
+            ],
             "incomplete": false
           }
         },
@@ -4800,6 +5097,16 @@
             "grouped": false,
             "groups": [],
             "rows": [],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.3,
+                  "lng": 114.1
+                },
+                "operator": "CTB"
+              }
+            ],
             "incomplete": false
           }
         },
@@ -4928,6 +5235,113 @@
                   "urgency": "none",
                   "stale": true
                 }
+              }
+            ],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB"
+              }
+            ],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "an-arrival-inside-the-minute-reads-due",
+          "why": "The `due` arm of the readout, which nothing else in this group reaches — every other live reading here is already `departed` or a whole number of minutes. It exists because a renderer's `due` branch is otherwise declared and never drawn: deleting the word from a component left both conformance suites green until a case produced it (WP6-3b). The arrival is 20 s after `now`, inside `etaUrgency`'s due band.",
+          "args": {
+            "detail": {
+              "stop": {
+                "id": "CTB:001992",
+                "name": {
+                  "en": "Tin Shui Wai Park, Tin Shui Road (TS311)",
+                  "zh-Hant": "天水圍公園, 天瑞路",
+                  "zh-Hans": "天水圍公園, 天瑞路"
+                },
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "sources": [
+                  {
+                    "operator": "CTB",
+                    "operatorStopId": "001992"
+                  }
+                ]
+              },
+              "members": [],
+              "routes": [
+                {
+                  "route": {
+                    "id": "CTB:969:outbound:2",
+                    "operator": "CTB",
+                    "routeNo": "969",
+                    "bound": "outbound",
+                    "serviceType": "2",
+                    "origin": {
+                      "en": "Tin Shui Wai Town Centre",
+                      "zh-Hant": "天水圍市中心",
+                      "zh-Hans": "天水圍市中心"
+                    },
+                    "destination": {
+                      "en": "Causeway Bay (Moreton Terrace)",
+                      "zh-Hant": "銅鑼灣 (摩頓台)",
+                      "zh-Hans": "銅鑼灣 (摩頓台)"
+                    }
+                  },
+                  "eta": {
+                    "routeId": "CTB:969:outbound:2",
+                    "stopId": "CTB:001992",
+                    "operator": "CTB",
+                    "arrivals": ["2026-07-29T03:50:50Z"],
+                    "dataTimestamp": "2026-07-29T03:50:15Z",
+                    "observedAt": "2026-07-29T03:50:25Z"
+                  },
+                  "stopId": "CTB:001992"
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00"
+          },
+          "expect": {
+            "name": {
+              "label": "Tin Shui Wai Park, Tin Shui Road",
+              "code": "TS311"
+            },
+            "summary": "Served by Citybus  ·  1 routes",
+            "grouped": false,
+            "groups": [],
+            "rows": [
+              {
+                "routeId": "CTB:969:outbound:2",
+                "stopId": "CTB:001992",
+                "operator": "CTB",
+                "routeNo": "969",
+                "destination": "Causeway Bay",
+                "readout": {
+                  "kind": "eta",
+                  "label": {
+                    "kind": "due",
+                    "label": "Due"
+                  },
+                  "urgency": "due",
+                  "stale": false
+                }
+              }
+            ],
+            "pins": [
+              {
+                "ids": ["CTB:001992"],
+                "location": {
+                  "lat": 22.45453,
+                  "lng": 114.00295
+                },
+                "operator": "CTB"
               }
             ],
             "incomplete": false

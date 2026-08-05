@@ -1,4 +1,4 @@
-import type { I18nText, Locale } from '@nextbus/core'
+import type { I18nText, Locale, OperatorId } from '@nextbus/core'
 import { CATALOGUE, type MessageKey, SUPPORTED_LOCALES } from './catalogue'
 import { formatMessage, type MessageArgs } from './icu'
 
@@ -154,6 +154,41 @@ const POLE_SIDE_KEYS = [
 export function poleSideLabel(octant: number, locale: Locale): LocalizedString {
   const key = POLE_SIDE_KEYS[octant]
   return key ? t(locale, key) : ('' as LocalizedString)
+}
+
+const OPERATOR_KEY: Record<OperatorId, PlainMessageKey> = {
+  KMB: 'operatorKmb',
+  LWB: 'operatorLwb',
+  CTB: 'operatorCtb',
+  GMB: 'operatorGmb',
+}
+
+/**
+ * A bus operator's name, in the reader's language.
+ *
+ * **It lives here rather than in an app**, and the reason is the reason `poleSideLabel` above does: the
+ * mapping from an `OperatorId` to a catalogue key is *which word names this operator*, which is one answer
+ * for every renderer. It was `apps/mobile/lib/operatorName.ts` until WP6-3b, when the DOM Place screen
+ * needed the same three strings — `placeDetailView` takes them as injected `labels` (ADR-054), so a second
+ * app would have had to restate the table, and two tables disagree the moment the catalogue gains an
+ * operator. This is its third home: before the mobile lib it was an `OPERATOR_LABEL` map inside
+ * `app/stop/[id].tsx` and a second, English-only copy in the search screen's filter chips.
+ *
+ * Falls back to the raw code for an operator we have no copy for. ADR-052 treats `operator` as an open
+ * vocabulary, so a code like `NLB` will reach a screen before its name does — and showing `NLB` beats
+ * showing nothing. That fallback is the one place a raw upstream string is branded as a
+ * `LocalizedString`, which is why the cast is here, once, with this comment on it rather than scattered
+ * across call sites.
+ *
+ * **Known asymmetry, and it is content rather than code:** `operatorGmb` reads `專線小巴` / `专线小巴` in
+ * Chinese — a phrase a rider recognises — and plain `GMB` in English, an acronym they have to know.
+ * `docs/07` carries it; the corpus's own `placeDetailView` fixture labels it *"Minibus"*, which is the
+ * word the English catalogue arguably wants, and a driver assertion pins that this is the **only** place
+ * the catalogue and that fixture disagree.
+ */
+export function operatorName(operator: OperatorId, locale: Locale): LocalizedString {
+  const key = OPERATOR_KEY[operator]
+  return key ? t(locale, key) : (operator as LocalizedString)
 }
 
 /**

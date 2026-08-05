@@ -105,6 +105,24 @@
                   "why": "An em dash, not a word: the reading exists but names a moment already past, and inventing \"gone\" would be a claim the feed did not make (ADR-008)."
                 }
               }
+            ],
+            "headway": [
+              {
+                "name": "etaHeadway",
+                "invariant": "The **published timetable**, where there is no live reading at all — composed by `formatHeadway`, en-dash range and spacing included. Drawn small and muted rather than as a figure, because it is the *Static* honesty tier (docs/09) and must not read as a bus that has been seen. Reached only by a **saved** route today (WP6-4b): `stopCardView` builds its rows from readings and `etaLabelParts` cannot return this arm, so on Nearby it is unreachable by construction.",
+                "text": {
+                  "field": "label.text"
+                }
+              }
+            ],
+            "none": [
+              {
+                "name": "etaNone",
+                "text": {
+                  "literal": "—",
+                  "why": "Neither a reading nor a published frequency. The same dash as `departed` and a different fact — which is why they are separate arms rather than one: a renderer that folded them would lose the ability to say anything else about either later."
+                }
+              }
             ]
           }
         }
@@ -143,9 +161,9 @@
     "empty": {
       "must": "The static timetable band, or an explicit \"no service\" line under the heading.",
       "mustNot": "A card with a name and nothing under it.",
-      "why": "docs/11: a peak-only favourite renders blank, and an empty card cannot be told from a broken favourite key by eye — which is why WP5-11's favourites proof had to rest on a route with a live arrival.",
+      "why": "docs/11: a peak-only favourite rendered blank, and an empty card cannot be told from a broken favourite key by eye — which is why WP5-11's favourites proof had to rest on a route with a live arrival.",
       "enforcement": {
-        "knownDefect": "Neither renderer satisfies this today: a view with no rows and `incomplete: false` renders the heading alone, and both projection suites pin exactly that. Owner: WP6-4, which ports Favourites and is where the band or the line has to come from. Declared as the target rather than softened to match the code."
+        "by": "etaHeadway"
       }
     },
     "failed": {

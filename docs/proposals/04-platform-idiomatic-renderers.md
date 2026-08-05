@@ -1,9 +1,12 @@
 # 04 — Platform-idiomatic renderers: one spec, three UIs
 
-> **Status:** work plan, **in progress — WP6-0, WP6-1 and WP6-2 are done (2026-08-03,
+> **Status:** work plan, **in progress — WP6-0 … WP6-3 are done** (2026-08-03/05,
 > [ADR-082](../08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)
 > [ADR-083](../08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)
-> and [ADR-084](../08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)).**
+> [ADR-084](../08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)
+> [ADR-085](../08-decision-log.md#adr-085--the-place-screens-composition-is-a-kernel-function-and-the-words-it-joins-are-injected)
+> [ADR-087](../08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code)
+> [ADR-088](../08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers)).**
 > Drafted **2026-08-03**, owner's decision, recorded as
 > [ADR-075](../08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels).
 > It **supersedes [ADR-002](../08-decision-log.md#adr-002--expo-rn--rn-for-web-pwa-first-native-later-ota)**
@@ -254,10 +257,10 @@ rewrite with extra steps.
 |---|---|---|---|
 | 0 ✅ | *(none)* — the shell | `apps/web` had no router, no persisted query cache, no locale provider, no service worker | *"Nothing. It is invisible progress and it is unavoidable."* — **and that was wrong twice.** It settled where the destination set is declared and who may compare it, and it settled that a shell that persists anything must not share a storage key with a store that models more fields (ADR-082 decisions 1 and 5). Neither is invisible: one is an identity, the other is a rider's favourites. |
 | 1 ✅ | **Nearby** | already two renderers, already agreeing | **Answered, in two halves.** `StopRow`: yes, with five words and no expression language (WP6-1, ADR-083). The *screen* needed two more things and got them (WP6-2, ADR-084): a state that declares **what it shows**, because a screen's states are branches over an async status rather than fields of a view model; and a slot that **references another spec**, so "a list of these cards" is checked rather than restated. Nine states, eight of them projected, both renderers green. |
-| 2 ⬅ next | **Place detail** | the most domain rules in the app — `orderPoles`, `dedupeRoutes`, the kerb keying, `poleSideOctants`, the live merge | Can a spec carry a *multi-level* screen, and does it close ADR-069's asymmetry (`check-no-derivation` is web-only until Place and Route detail get their own WP4-0)? |
-| 3 | **Favourites** | reuses the card; owns the empty-state bug and the one-line-two-kerbs residual (WP5-12) | Do declared states actually close known bugs? |
-| 4 | **Search** | the keypad, chips and recents are pure interaction over a spec'd index; never walked in a browser | Interaction-heavy specs. |
-| 5 | **Route detail** | the schematic, the bus tokens, the collapsing header, the auto-scroll | **The motion test** — the first screen where "motion is idiom" is a real claim rather than a slogan. |
+| 2 ✅ | **Place detail** | the most domain rules in the app — `orderPoles`, `dedupeRoutes`, the kerb keying, `poleSideOctants`, the live merge | **Answered yes to both, and the second question turned out to be the smaller one.** A spec carries a multi-level screen by giving the leaf its own spec and referencing it (ADR-088 decision 2), and it needed a *second axis of states*: not only branches over an async status but branches over the **shape of the data** — one kerb or several, and which of ADR-080's three tiers tells two of them apart. ADR-069's asymmetry is closed **for this screen**: `check-no-derivation` moved to the repo root and polices the RN Place screen, its map and its five leaf projections, with a per-site `ALLOWLIST` for the genuine geometry. What the spec *found* is the bigger half — see below. |
+| 3 ✅ | **Favourites** | reuses the card; owns the empty-state bug and the one-line-two-kerbs residual (WP5-12) | **Answered, and not the way the question assumed.** Declared states did not close either bug — they *located* them. Both sentences had been in `StopRow`'s spec for a wave as things the card could not satisfy, and the reason was the same twice: **a `mustNot` a component cannot satisfy is a statement about its producer** (ADR-090). Fixing what a card is built *from* closed both, and made `stop-row.spec.json` the first spec in the repo with zero `knownDefect`s. Declaring them is what made the producer the obvious suspect; a third instance of the same hole — a screen whose every query had failed drawing an empty list — was found by asking the states rather than by a rider hitting it. |
+| 4 ✅ | **Search** | the keypad, chips and recents are pure interaction over a spec'd index; never walked in a browser | **Half answered, and the premise was wrong.** *"Pure interaction over a spec'd index"* undersold it: the screen was deciding **seven** things, including the one that matters most — the keypad's live keys and the searchable set were the same filtered list only by the coincidence of two `useMemo`s reading one variable. They are `searchView`'s now ([ADR-091](../08-decision-log.md#adr-091--the-keypad-and-the-result-list-are-one-filtered-set-and-a-chip-set-is-the-indexs-answer)), and the invariant is **visible**: query `2` with *Night* on dims every key and says "No matches". Walked in a browser for the first time. The interaction states — a keypad collapsing on scroll, a field focusing, a segment switching — are WP6-5b's. |
+| 5 ⬅ next | **Route detail** | the schematic, the bus tokens, the collapsing header, the auto-scroll | **The motion test** — the first screen where "motion is idiom" is a real claim rather than a slogan. |
 | 6 | **Settings · About · FAQ** | mostly chrome and prose | Cheap; last. |
 | 7 | *(none)* — retire `apps/mobile` | when every screen's spec passes on both renderers | Nothing, if 1–6 were honest. |
 
@@ -325,17 +328,46 @@ Waves 0–5 are spent; this is **Wave 6**.
 > owns how it builds a tree and reads text back out — which genuinely differs, `<button>` here and
 > `div[role="button"]` under `react-native-web`.
 
+> **WP6-3 landed 2026-08-05**, and the useful part is not the spec — it is what writing the spec **found**,
+> because this is the first screen whose spec was extracted from a surface *nothing had ever rendered in a
+> test*. Four things this table did not anticipate:
+> **(a)** 🔴 **A failed fetch rendered nothing at all, on both renderers, for ever.** `isLoading` is
+> `isPending && isFetching`, so a query that is pending and **not fetching** matched no arm of
+> `isLoading ? … : isError ? … : view ? … : null` and the trailing `null` won. Measured against a 404 in a real
+> browser on both apps. Fixed by making the skeleton the **fallback** arm so no query state can draw a blank;
+> *why* the retry pauses is undiagnosed and is in `docs/07`. This is the second time a screen has been
+> permanently dead after one lost packet (ADR-079 was the first) and the first time a declared state caught it.
+> **(b)** 🔴 **An injected defect passed, twice.** Deleting the published-frequency text and then the "Due"
+> word from a row left **both** suites green: no fixture produced a `headway` readout and **no corpus case
+> produced a `due` reading at all**, so two arms of a three-way `oneOf` were declared and never projected.
+> Fixed with three states, one new corpus case, and a **coverage control** in both suites that asserts which
+> arms the fixture set exercises. *A `oneOf` case nothing drives is a specification looking at nothing* — and
+> the lesson generalises past this row: every spec from here on needs its fixtures audited against its
+> branches, not merely written.
+> **(c)** **A screen's states have two axes**, and the plan's *"can a spec carry a multi-level screen"* only
+> asked about one. States over an async status (ADR-084) and states over the **shape of the payload** are
+> different questions, and the second is where a renderer silently drops the tier a rider needs most.
+> **(d)** **Three declared states no renderer satisfies**, all found by asking the question rather than by
+> reading the code: the "live times unavailable" marker the Place screen has never drawn (ADR-077 gave it the
+> boolean in Wave 5), the remembered-fix caveat Nearby prints and this screen does not, and the place's own
+> printed code, dropped by the header. WP6-4's question — *"do declared states actually close known bugs?"* —
+> now has three concrete cases waiting for it, and one already closed by (a).
+
 | ID | What | Acceptance | Size |
 |---|---|---|---|
 | **WP6-0** ✅ | The `apps/web` shell: router, `PersistQueryClientProvider` + storage persister, `LocaleProvider` + override, theme store, Workbox service worker, `build:web` | The PWA opens offline on `apps/web` and switches locale, with **zero screens ported** — measured the way ADR-058 was (kill the static server *and* the Worker, cold-load) | L |
 | **WP6-1** ✅ | The spec format: `packages/ui-spec` (schema + conformance walker, no domain vocabulary, in `layers.json` before it has a file), `contract/ui/*.spec.json` emitted + drift-gated, and both renderers driving the walker | `StopRow`'s spec is retrofitted to the **existing** two renderers and both pass unmodified; the gate fails on an injected slot deletion, **watched**; `tsc --outDir /tmp` proves `ui-spec` names nothing bus-shaped | M |
 | **WP6-2** ✅ | Nearby: complete spec + both suites green | Every ADR-069 finding is a declared invariant with a case; `apps/web`'s Nearby is the shipping web Nearby | M |
-| **WP6-3** 🟡 | Place detail: WP4-0-style hoist of anything left deriving, then spec, then port | `check-no-derivation` extends to `apps/mobile`'s Place detail — closing ADR-069's recorded asymmetry | L |
+| **WP6-3** ✅ | Place detail: WP4-0-style hoist of anything left deriving, then spec, then port | `check-no-derivation` extends to `apps/mobile`'s Place detail — closing ADR-069's recorded asymmetry | L |
 | ↳ **WP6-3a** ✅ | …the **hoist**: `placeDetailView` + 15 corpus cases, and the RN screen consuming it ([ADR-085](../08-decision-log.md#adr-085--the-place-screens-composition-is-a-kernel-function-and-the-words-it-joins-are-injected)) | ~90 lines of derivation gone from the screen; `packages/core` back at 100 % on all four axes | M |
-| ↳ **WP6-3b** | …the **spec**, the `apps/web` **port**, and the gate extension — which needs a per-site `ALLOWLIST` because the screen has real *presentational* arithmetic (the shrinking map, the scroll-spy) | as the row above | M |
-| **WP6-4** | Favourites: spec + port | The empty-card bug and WP5-12's one-row-for-two-kerbs are closed **by declared states**, not by a patch | M |
-| **WP6-5** | Search: spec + port | Walked in a browser for the first time — the visual pass `docs/11` has owed since ADR-037 | M |
-| **WP6-6** | Route detail: spec + port; the motion contract | Reduced-motion is asserted; the schematic's intent is declared and the web curve is *chosen*, not inherited | L |
+| ↳ **WP6-3b** ✅ | …the **spec** (18 states, 13 projected, plus `place-row.spec.json`), the `apps/web` **port** including its map, and the gate extension with its per-site `ALLOWLIST` ([ADR-088](../08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers)) — preceded by one more hoist the port made unavoidable, the map's pins ([ADR-087](../08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code)) | as the row above | M |
+| **WP6-4** ✅ | Favourites: spec + port | The empty-card bug and WP5-12's one-row-for-two-kerbs are closed **by declared states**, not by a patch | M |
+| ↳ **WP6-4a** ✅ | …the **hoist**: `favouritesView` + `favouritePoleIds` + the versioned key migration, all three corpus-pinned, and the `apps/web` store rebuilt to share `nextbus.preferences` safely ([ADR-089](../08-decision-log.md#adr-089--a-favourite-is-a-riders-own-data-so-its-migration-is-a-shared-rule-rather-than-a-stores-private-business)) | The RN tab is unchanged on real favourites; the empty card is a `knownDefect` corpus row rather than a sentence | M |
+| ↳ **WP6-4b** ✅ | …the **spec** (8 states, 6 projected), the `apps/web` **port**, and both bugs closed ([ADR-090](../08-decision-log.md#adr-090--a-mustnot-a-component-cannot-satisfy-is-a-statement-about-its-producer)) — **by fixing the producer**, which is what neither had been able to declare its way out of | as the row above | M |
+| **WP6-5** ✅ | Search: spec + port | Walked in a browser for the first time — the visual pass `docs/11` has owed since ADR-037 | M |
+| ↳ **WP6-5a** ✅ | …the **hoist**: `searchView` + 12 corpus cases + 5 property tests, and the RN screen consuming it ([ADR-091](../08-decision-log.md#adr-091--the-keypad-and-the-result-list-are-one-filtered-set-and-a-chip-set-is-the-indexs-answer)) — **and the browser pass, which is the row's stated acceptance** | Six `useMemo`s and two duplicate components gone; the keypad/list invariant is one expression with a property test | M |
+| ↳ **WP6-5b** ✅ | …the **spec** (10 states, 8 projected), the `apps/web` **port**, and the answer to *"interaction-heavy specs"* ([ADR-092](../08-decision-log.md#adr-092--a-spec-cannot-hold-an-interaction-but-it-can-hold-what-a-rider-infers-from-one)): a spec cannot hold an interaction, but it can hold **what a rider infers from one** | as the row above | M |
+| **WP6-6** ⬅ next | Route detail: spec + port; the motion contract | Reduced-motion is asserted; the schematic's intent is declared and the web curve is *chosen*, not inherited | L |
 | **WP6-7** | Settings · About · FAQ | Ported; the stale `faqOfflineA` strings refreshed at the same time | S |
 | **WP6-8** | Retire `apps/mobile` | Every spec green on `apps/web`; `expo`, `react-native`, `nativewind`, `reanimated`, `gesture-handler` leave the lockfile; `packages/ui` keeps generating for three platforms | M |
 | **WP6-9** | The first native repo consumes `contract/ui/` | One screen in SwiftUI passing the same specs — **the honest test of the whole thesis**, and the first time the Swift/Kotlin token artefacts are compiled at all | L |

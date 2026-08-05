@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/search.spec.json'
 import {
+  bumpRecent,
   compareRouteNo,
+  EMPTY_FILTER,
   indexAlphabet,
   isCompleteRoute,
   nextValidChars,
   normalizeRouteQuery,
+  RECENTS_MAX,
   type RouteCategory,
   type RouteFilter,
   type RouteLite,
@@ -13,10 +16,15 @@ import {
   routeKeys,
   routeMatchesFilter,
   routeSortKey,
+  type SearchIndex,
+  type SearchView,
   type StopLite,
   searchRoutes,
   searchStops,
+  searchView,
   stopMatchesOperators,
+  toggleSearchChip,
+  validNextLetters,
 } from '../src/search'
 import type { Locale, OperatorId } from '../src/types'
 import { specCases } from './corpus'
@@ -162,5 +170,241 @@ describe('search#searchStops', () => {
       lng: 114.17,
     }))
     expect(searchStops(stops, 'city', 'en')).toHaveLength(60)
+  })
+})
+
+describe('search#searchView', () => {
+  interface Args {
+    index: SearchIndex
+    mode: 'routes' | 'stops'
+    query: string
+    filter: RouteFilter
+    recentRouteIds: string[]
+    recentStopIds: string[]
+    locale: Locale
+  }
+  const LABELS = {
+    operator: (o: string) => ({ KMB: 'KMB', LWB: 'LWB', CTB: 'Citybus', GMB: 'Minibus' })[o] ?? o,
+    category: (c: RouteCategory) =>
+      ({ night: 'Night', airport: 'Airport', express: 'Express' })[c] ?? c,
+  }
+  const run = (a: Args) =>
+    searchView(
+      {
+        index: a.index,
+        mode: a.mode,
+        query: a.query,
+        filter: a.filter,
+        recentRouteIds: a.recentRouteIds,
+        recentStopIds: a.recentStopIds,
+      },
+      { locale: a.locale, labels: LABELS as never },
+    )
+
+  it('matches the corpus, case for case', () => {
+    const rows = cases<Args, SearchView>('searchView')
+    // The anti-vacuous control: a group that resolved to nothing would make the loop assert nothing.
+    expect(rows.length).toBeGreaterThanOrEqual(10)
+    for (const c of rows) expect(run(c.args), c.name).toEqual(c.expect)
+  })
+
+  it('offers a chip for every operator in the index, and none for any other', () => {
+    // ADR-037's promise as a property: a fifth operator lights up the day its adapter lands, and — the half
+    // that matters more — a chip is never offered for an operator the index cannot produce a result for.
+    for (const c of cases<Args, SearchView>('searchView')) {
+      const got = run(c.args)
+      const inIndex = new Set(c.args.index.routes.map((r) => r.operator))
+      const offered = got.chips
+        .filter((chip) => chip.key.startsWith('operator:'))
+        .map((chip) => chip.key.slice('operator:'.length))
+      expect([...offered].sort(), c.name).toEqual([...inIndex].sort())
+    }
+  })
+
+  it('keeps the keypad and the list agreeing about what is findable', () => {
+    // **The invariant that makes a dimmed key honest.** A rider presses a live key expecting a result; if
+    // the keypad were computed over a wider set than the search, some keys would lead nowhere, and if it
+    // were narrower, a reachable route would be unreachable. Asserted as containment in the direction that
+    // can actually go wrong: every first character the keypad offers must begin some findable number.
+    let checked = 0
+    for (const c of cases<Args, SearchView>('searchView')) {
+      const got = run(c.args)
+      const findable = c.args.index.routes
+        .filter((r) => routeMatchesFilter(r, c.args.filter))
+        .map((r) => r.routeNo)
+      // Every **live** digit must continue the current prefix into some findable number, and every letter
+      // offered must do the same. A key that led to "No matches" is exactly what this invariant forbids.
+      for (const digit of got.keypad.digits.filter((d) => d.enabled)) {
+        expect(
+          findable.some((no) => no.startsWith(c.args.query + digit.char)),
+          `${c.name}: digit ${digit.char} is live and continues nothing`,
+        ).toBe(true)
+        checked += 1
+      }
+      for (const letter of got.keypad.letters) {
+        expect(
+          findable.some((no) => no.startsWith(c.args.query + letter.char)),
+          `${c.name}: letter row offers ${letter.char}, which continues nothing`,
+        ).toBe(true)
+        checked += 1
+      }
+      // The digit set itself never shrinks — an inert key stays on the pad so the grid does not move under
+      // a rider's thumb between taps.
+      expect(got.keypad.digits.length, `${c.name}: the pad lost a key`).toBe(10)
+    }
+    expect(checked, 'no corpus case produced a single live key').toBeGreaterThan(0)
+  })
+
+  it('never lists a recent the index cannot open', () => {
+    // A saved id is a *reference*: the dataset is rebuilt daily, a route can leave it and clustering can
+    // mint a new `P:` id for a place (ADR-042). So a history row must always name something openable —
+    // rendering the id and hoping is the failure, and it is invisible until a rider taps it.
+    for (const c of cases<Args, SearchView>('searchView')) {
+      const got = run(c.args)
+      if (got.source !== 'recents') continue
+      const ids =
+        got.list.kind === 'routes'
+          ? got.list.routes.map((r) => r.id)
+          : got.list.stops.map((s) => s.id)
+      const known = new Set(
+        got.list.kind === 'routes'
+          ? c.args.index.routes.map((r) => r.id)
+          : c.args.index.stops.map((s) => s.id),
+      )
+      for (const id of ids) expect(known.has(id), `${c.name}: listed ${id}`).toBe(true)
+    }
+  })
+
+  it('tells "nothing matched" apart from "nothing searched"', () => {
+    // Two empty lists, two different sentences. Collapsing them tells a rider who mistyped that they have
+    // no history, which is the shape of every state bug this wave has found: a screen with less to show
+    // than expected saying nothing about which less it is.
+    const rows = cases<Args, SearchView>('searchView')
+    const none = rows.filter((c) => run(c.args).source === 'none')
+    const recents = rows.filter((c) => run(c.args).source === 'recents')
+    expect(none.length, 'no corpus case reaches the no-results state').toBeGreaterThan(0)
+    expect(recents.length, 'no corpus case reaches the recents state').toBeGreaterThan(0)
+    for (const c of none) expect(c.args.query, `${c.name}: no-results without a query`).not.toBe('')
+    for (const c of recents) expect(run(c.args).source).toBe('recents')
+  })
+
+  it('offers a category chip only where a category can narrow anything', () => {
+    // A stop has no route number, so a category cannot filter it. A dimmed-but-present night-bus chip over
+    // a stop list would offer a rider a filter that does nothing, which is worse than not offering it.
+    for (const c of cases<Args, SearchView>('searchView')) {
+      const got = run(c.args)
+      const categories = got.chips.filter((chip) => chip.key.startsWith('category:'))
+      expect(categories.length > 0, c.name).toBe(c.args.mode === 'routes')
+    }
+  })
+})
+
+describe('search#bumpRecent', () => {
+  type Args = { list: string[]; id: string }
+  for (const c of cases<Args, string[]>('bumpRecent')) {
+    it(c.name, () => {
+      expect(bumpRecent(c.args.list, c.args.id)).toEqual(c.expect)
+    })
+  }
+
+  it('never grows past the cap, and never loses the id it was given', () => {
+    // Two properties over every row, because they are the two ways this can go wrong silently: a list that
+    // grew unboundedly would be a log rather than a shortcut, and an id that failed to land would make the
+    // rider's tap look like it did nothing.
+    for (const c of cases<Args, string[]>('bumpRecent')) {
+      const got = bumpRecent(c.args.list, c.args.id)
+      expect(got.length, c.name).toBeLessThanOrEqual(RECENTS_MAX)
+      expect(got[0], `${c.name}: the id did not reach the front`).toBe(c.args.id)
+      expect(new Set(got).size, `${c.name}: duplicated an entry`).toBe(got.length)
+    }
+  })
+
+  it('leaves the caller’s array alone', () => {
+    // zustand's `set` receives the current state; a rule that mutated it would corrupt the store's own list
+    // and only for a rider whose history was already long.
+    const list = ['a', 'b']
+    const before = JSON.stringify(list)
+    bumpRecent(list, 'c')
+    expect(JSON.stringify(list)).toBe(before)
+  })
+})
+
+describe('search#toggleSearchChip', () => {
+  type Args = { filter: RouteFilter; key: string }
+  for (const c of cases<Args, RouteFilter>('toggleSearchChip')) {
+    it(c.name, () => {
+      expect(toggleSearchChip(c.args.filter, c.args.key)).toEqual(c.expect)
+    })
+  }
+
+  it('round-trips every key the view mints', () => {
+    // **The property that makes "mint here, read here" safe**: every key `searchView` produces must be one
+    // this understands, and toggling it twice must return the filter it started from. A key format known in
+    // two places would drift, and the failure is a chip that looks pressed and filters nothing.
+    const index = { routes: [], stops: [] } as unknown as SearchIndex
+    const view = searchView(
+      {
+        index: {
+          routes: [
+            {
+              id: 'KMB:1:outbound:1',
+              operator: 'KMB',
+              routeNo: '1',
+              bound: 'outbound',
+              origin: { en: 'A', 'zh-Hant': 'A', 'zh-Hans': 'A' },
+              destination: { en: 'B', 'zh-Hant': 'B', 'zh-Hans': 'B' },
+              sortKey: '0001',
+            },
+          ],
+          stops: [],
+        } as unknown as typeof index,
+        mode: 'routes',
+        query: '',
+        filter: EMPTY_FILTER,
+        recentRouteIds: [],
+        recentStopIds: [],
+      },
+      { locale: 'en', labels: { operator: (o) => o, category: (c) => c } },
+    )
+    expect(view.chips.length).toBeGreaterThan(0)
+    for (const chip of view.chips) {
+      const once = toggleSearchChip(EMPTY_FILTER, chip.key)
+      expect(once, `${chip.key} was not recognised`).not.toEqual(EMPTY_FILTER)
+      expect(toggleSearchChip(once, chip.key), `${chip.key} does not round-trip`).toEqual(
+        EMPTY_FILTER,
+      )
+    }
+  })
+
+  it('leaves the caller’s filter alone', () => {
+    // React state, held by the screen and passed straight in. A rule that mutated it would change the value
+    // `useState` still believes it holds, which is the class of bug that only shows up on a re-render.
+    const filter: RouteFilter = { operators: ['KMB'], categories: ['night'] }
+    const before = JSON.stringify(filter)
+    toggleSearchChip(filter, 'operator:CTB')
+    expect(JSON.stringify(filter)).toBe(before)
+  })
+})
+
+describe('search#validNextLetters', () => {
+  type Args = { keys: string[]; letters: string[]; prefix: string }
+  for (const c of cases<Args, string[]>('validNextLetters')) {
+    it(c.name, () => {
+      expect(validNextLetters(c.args.keys, c.args.letters, c.args.prefix)).toEqual(c.expect)
+    })
+  }
+
+  it('offers only letters that actually continue the prefix', () => {
+    // The property behind a dimmed key being honest: every letter offered must extend the prefix into some
+    // reachable number. A row that offered one that did not would be a key leading to "No matches", which is
+    // the thing ADR-091's invariant exists to make impossible.
+    for (const c of cases<Args, string[]>('validNextLetters')) {
+      for (const letter of validNextLetters(c.args.keys, c.args.letters, c.args.prefix)) {
+        expect(
+          c.args.keys.some((key) => key.startsWith(c.args.prefix + letter)),
+          `${c.name}: offered ${letter}, which continues nothing`,
+        ).toBe(true)
+      }
+    }
   })
 })

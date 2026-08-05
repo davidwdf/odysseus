@@ -156,15 +156,22 @@ describe('every declared destination opens, and none of them is blank', () => {
   }
 
   it('shows an unported destination its name and says it is coming, not an empty page', () => {
-    const text = renderedText(mount('/favorites'))
-    expect(text).toContain(t('en', 'tabFavorites'))
+    // `/faq` rather than `/favorites`, which WP6-4b ported. A placeholder assertion has to die when its
+    // placeholder does, or it becomes a test asserting that a shipped screen is still missing — the same
+    // churn WP6-3b's `/stop/:id` assertion went through, and the right kind.
+    const text = renderedText(mount('/faq'))
+    expect(text).toContain(t('en', 'settingsFaq'))
     expect(text).toContain(t('en', 'comingSoon'))
   })
 
   it('shows the id it was asked for where the heading would be bus data', () => {
-    // `/stop/:id` and `/route/:id` have no catalogue title, because a stop's name is `I18nText` from the
-    // model and never a UI string (CLAUDE.md rule 5). The id is the honest substitute.
-    expect(renderedText(mount('/stop/KMB%3AAA'))).toContain('KMB:AA')
+    // `/route/:id` has no catalogue title, because a route's name is `I18nText` from the model and never a
+    // UI string (CLAUDE.md rule 5). The id is the honest substitute while the screen is a placeholder.
+    //
+    // It was `/stop/:id` until WP6-3b **ported** that screen, which is the right kind of churn: a
+    // placeholder assertion has to die when the placeholder does, or it becomes a test asserting that a
+    // shipped screen is still missing.
+    expect(renderedText(mount('/route/KMB%3AAA'))).toContain('KMB:AA')
   })
 
   it('sends an unknown path to Nearby rather than to a page it has no words for', () => {

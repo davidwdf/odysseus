@@ -182,7 +182,23 @@ list of these cards" is checked, not restated). `apps/web`'s Nearby is now the s
 all. **WP6-3a is done too** (ADR-085): Place detail's composition — nine decisions that lived in the RN screen
 as loose expressions — is one kernel function, `placeDetailView`, with 15 corpus cases, and the words it joins
 are **injected** rather than imported (ADR-054). **WP6-3b is next:** the spec, the `apps/web` port, and
-extending `check-no-derivation` to `apps/mobile`'s Place detail. `watch()` is a real
+extending `check-no-derivation` to `apps/mobile`'s Place detail. **WP6-3b is done too** (ADR-087/088),
+which closes WP6-3: Place detail has an 18-state spec (plus `place-row.spec.json`), `apps/web` has a real
+Place screen **with its own DOM map**, and `check-no-derivation` moved to `scripts/` and polices the RN
+screen too — the ADR-069 asymmetry, closed for this screen. The spec-writing found more than it declared:
+**a failed fetch rendered nothing at all on both renderers** (`isLoading` is `isPending && isFetching`, so a
+paused retry matched no arm — the skeleton is the fallback arm now), and **two arms of the row's three-way
+readout were declared and never projected**, which an injected defect proved by passing. Both suites carry a
+coverage control now. Three declared states remain `knownDefect` with owners in `docs/07`. **WP6-4 (Favourites) is done too** (ADR-089/090): `favouritesView`, `favouritePoleIds` and the
+versioned favourite-key migration are corpus-pinned in `packages/core`, `apps/web`'s store models **all
+five** persisted fields so it shares `nextbus.preferences` without erasing a rider's list, and both bugs
+the row was measured on are closed — **by fixing the producer, not the card**. The lesson: *a `mustNot` a
+component cannot satisfy is a statement about its producer*; `stop-row.spec.json` is now the first spec
+with zero `knownDefect`s. **WP6-5 (Search) is done too** (ADR-091/092): `searchView` owns the seven decisions the screen was
+making, the keypad and the result list are **one filtered set** (the invariant that makes a dimmed key
+honest), Search has been **walked in a browser for the first time**, and its spec answers the row's
+question — *a spec cannot hold an interaction, but it can hold what a rider infers from one*. `apps/web`
+has **four ported screens**. **WP6-6 (Route detail) is next.** `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

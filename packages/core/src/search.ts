@@ -8,6 +8,11 @@
 // declaration, imported type-only so nothing reaches the runtime graph (ADR-052). See `types.ts`.
 import type { RouteLiteSchema, SearchIndexSchema, StopLiteSchema } from '@nextbus/contract'
 import type { z } from 'zod'
+// `searchView` (at the foot of this file) composes the two name rules every other surface uses. Imported
+// under local aliases because this module's own exports are the *search* rules, and a reader looking for
+// `displayName` should be sent to the module that declares it.
+import { displayName as displayNameOf } from './stop-card'
+import { titleCaseName as titleCaseNameOf } from './stop-name'
 import type { Locale, OperatorId } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
@@ -341,4 +346,308 @@ export function searchStops(
   }
   scored.sort((a, b) => b.rank - a.rank)
   return scored.slice(0, limit).map((x) => x.s)
+}
+
+// ── The whole Search screen, in one call (WP6-5) ───────────────────────────────────────────────
+//
+// Everything above is a *rule*; `searchView` is the **composition** of those rules into the thing a
+// renderer draws, and it exists for the reason WP4-0 built `stopCardView` and WP6-3a built
+// `placeDetailView`: until now the composition lived in `apps/mobile/app/search.tsx`, reachable only by
+// rendering a React tree, so a second renderer could only re-implement it. Concretely, that screen was
+// deciding: which operator chips exist at all (from the index, so a fifth operator lights up the day its
+// adapter lands — ADR-037), which chips a mode shows, which of them are on, which route numbers the keypad
+// keeps live under the active filter, which letters its letter row offers, what a saved *recent* resolves
+// to now that the index has been rebuilt, and whether the list is showing a search or a history. Seven
+// decisions, none of them presentation.
+//
+// **Words are injected, never imported** (ADR-054: core owns the rule, the catalogue owns the word). A chip
+// carries its own label because the label is what a renderer draws and the *set* is what the kernel decides;
+// splitting them would put the two halves of one chip in two places.
+
+/** One filter chip: what it filters on, what it is called, and whether it is on. */
+export interface SearchChip {
+  /**
+   * Stable identity — `operator:KMB`, `category:night`. Opaque by construction and **never taken apart**:
+   * the screen used to key its toggles on a string it then `split(':')`, which read exactly like ad-hoc id
+   * parsing and was flagged by the gate that bans it. A key that is never split cannot be split wrongly.
+   */
+  key: string
+  label: string
+  active: boolean
+}
+
+/** One route in the result list: the chip, and where it runs, both ends title-cased. */
+export interface SearchRouteRow {
+  /** The canonical route id to open. */
+  id: string
+  operator: OperatorId
+  routeNo: string
+  /** "Tin Shui Wai Town Centre", title-cased — the renderer supplies the arrow between them. */
+  origin: string
+  destination: string
+}
+
+/** One stop in the result list, with its printed code split off (ADR-034). */
+export interface SearchStopRow {
+  id: string
+  name: { label: string; code?: string }
+}
+
+/** Which list a mode shows, and therefore which row shape a renderer draws. */
+export type SearchList =
+  | { kind: 'routes'; routes: SearchRouteRow[] }
+  | { kind: 'stops'; stops: SearchStopRow[] }
+
+/** Where the rows came from — a search, the rider's history, or nothing at all. */
+export type SearchSource = 'results' | 'recents' | 'none'
+
+export interface SearchViewInput {
+  index: SearchIndex
+  mode: 'routes' | 'stops'
+  /** The query for the active mode. Empty means "show me what I looked at before". */
+  query: string
+  filter: RouteFilter
+  /** Saved ids, most-recent first — the store's lists, verbatim. */
+  recentRouteIds: readonly string[]
+  recentStopIds: readonly string[]
+}
+
+/** The words this view composes with, supplied by the caller's catalogue. */
+export interface SearchLabels {
+  operator: (operator: OperatorId) => string
+  category: (category: RouteCategory) => string
+}
+
+export interface SearchViewOptions {
+  locale: Locale
+  labels: SearchLabels
+}
+
+/** What a renderer needs to draw the Search screen, with nothing left to decide. */
+export interface SearchView {
+  /** The chips to draw, in order: every operator in the index, then the categories a mode filters by. */
+  chips: SearchChip[]
+  keypad: SearchKeypad
+  list: SearchList
+  source: SearchSource
+}
+
+/** One key on the route keypad: the character it appends, and whether pressing it can lead anywhere. */
+export interface KeypadKey {
+  char: string
+  /**
+   * False renders the key **present but inert**, never hidden — a rider learns the pad has ten digits and
+   * that some cannot continue their number, where a shrinking grid moves the keys under their thumb between
+   * taps. And it is honest by construction: `enabled` is `nextValidChars` over the *filtered* key set, so a
+   * live key and a reachable row are the same question answered once (ADR-091).
+   */
+  enabled: boolean
+}
+
+/**
+ * The keypad, ready to draw.
+ *
+ * **The digit set and its order are here rather than in each component**, and that is not tidiness: both
+ * keypads held their own `DIGIT_ROWS` — the same two rows of five, twice — so a renderer that adopted the
+ * phone's 1-2-3 / 4-5-6 grid instead of the keyboard's 1-5 / 6-0 would have been a silent divergence in
+ * muscle memory. Which characters exist and in what order is one answer; splitting ten of them into rows is
+ * layout, and stays each renderer's.
+ */
+export interface SearchKeypad {
+  /** All ten digits, in keyboard order. */
+  digits: KeypadKey[]
+  /** Only the letters that can continue the current prefix — so the row disappears when none can. */
+  letters: KeypadKey[]
+  /** Whether there is anything to delete. */
+  backspace: boolean
+}
+
+/**
+ * The Search screen's content, derived once.
+ *
+ * @spec search#searchView
+ */
+export function searchView(input: SearchViewInput, opts: SearchViewOptions): SearchView {
+  const { index, mode, query, filter } = input
+  const { locale, labels } = opts
+
+  // **Which operator chips exist is the index's answer, not a hard-coded list** (ADR-037): a fifth operator
+  // lights up the day its adapter lands, with no UI change. Sorted so the row does not reorder itself as
+  // the dataset is rebuilt.
+  const operators = [...new Set(index.routes.map((route) => route.operator))].sort()
+  const operatorChips: SearchChip[] = operators.map((operator) => ({
+    key: `${OPERATOR_CHIP_PREFIX}${operator}`,
+    label: labels.operator(operator),
+    active: filter.operators.includes(operator),
+  }))
+  const categoryChips: SearchChip[] = ROUTE_CATEGORIES.map((category) => ({
+    key: `${CATEGORY_CHIP_PREFIX}${category}`,
+    label: labels.category(category),
+    active: filter.categories.includes(category),
+  }))
+  // Stops have no route number, so a *category* cannot narrow them — only an operator can. Showing a
+  // dimmed-but-present night-bus chip over a stop list would offer a filter that does nothing.
+  const chips = mode === 'routes' ? [...operatorChips, ...categoryChips] : operatorChips
+
+  // **The keypad and the result list are narrowed by the same filter**, so a dimmed key and an absent row
+  // always agree about what is findable. Two lists over one filtered set rather than two filtered sets.
+  const findable = index.routes
+    .filter((route) => routeMatchesFilter(route, filter))
+    .map((route) => route.routeNo)
+  const reachable = routeKeys(findable)
+  const nextChars = nextValidChars(reachable, query)
+  const keypad: SearchKeypad = {
+    digits: KEYPAD_DIGITS.map((char) => ({ char, enabled: nextChars.has(char) })),
+    // Already narrowed, so every letter drawn is one that continues the prefix — the row simply disappears
+    // when none does, and the whole pad goes dark for a filter that admits nothing.
+    letters: validNextLetters(reachable, indexAlphabet(findable).letters, query).map((char) => ({
+      char,
+      enabled: true,
+    })),
+    backspace: query !== '',
+  }
+
+  const searching = query !== ''
+  const list: SearchList =
+    mode === 'routes'
+      ? {
+          kind: 'routes',
+          routes: (searching
+            ? searchRoutes(index.routes, query, filter)
+            : // **A recent is resolved against the index, and one the index no longer has is dropped.** The
+              // dataset is rebuilt daily and a route can leave it, so a saved id is a *reference* rather
+              // than a record — keeping the id and rendering a blank row is the failure this avoids, and
+              // silently dropping it is right because the rider's next search will simply not offer it.
+              resolve(input.recentRouteIds, index.routes)
+          ).map((route) => routeRow(route, locale)),
+        }
+      : {
+          kind: 'stops',
+          stops: (searching
+            ? searchStops(index.stops, query, locale, filter.operators)
+            : resolve(input.recentStopIds, index.stops)
+          ).map((stop) => ({ id: stop.id, name: displayNameOf(stop.name[locale]) })),
+        }
+
+  const rows = list.kind === 'routes' ? list.routes.length : list.stops.length
+  return {
+    chips,
+    keypad,
+    list,
+    // Three states, not two: a query that matched nothing is **not** the same screen as no query at all,
+    // and the copy differs (`searchNoResults` versus the recents heading). Collapsing them would tell a
+    // rider who mistyped that they have no history.
+    source: rows === 0 ? (searching ? 'none' : 'recents') : searching ? 'results' : 'recents',
+  }
+}
+
+/** The categories a route list can be filtered by, in chip order. */
+const ROUTE_CATEGORIES: readonly RouteCategory[] = ['night', 'airport', 'express']
+
+/** The ten digits, in **keyboard** order — 1-5 then 6-0, not a phone's 1-2-3 grid. See `SearchKeypad`. */
+const KEYPAD_DIGITS: readonly string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+
+/** Saved ids → the records the index still has for them, in save order. */
+function resolve<T extends { id: string }>(ids: readonly string[], records: readonly T[]): T[] {
+  const byId = new Map(records.map((record) => [record.id, record]))
+  return ids.flatMap((id) => {
+    const found = byId.get(id)
+    return found === undefined ? [] : [found]
+  })
+}
+
+function routeRow(route: RouteLite, locale: Locale): SearchRouteRow {
+  return {
+    id: route.id,
+    operator: route.operator,
+    routeNo: route.routeNo,
+    // Title-cased here rather than in the row, because the feeds shout and they do not agree with each
+    // other about it (ADR-034) — and because the arrow between these two is the renderer's literal, so
+    // handing it two finished strings is what stops two renderers composing the pair differently.
+    origin: titleCaseNameOf(route.origin[locale]),
+    destination: titleCaseNameOf(route.destination[locale]),
+  }
+}
+
+/**
+ * Cap on each per-kind recents list.
+ *
+ * Shared because two stores now write the same blob (ADR-089): a cap that differed between them would make
+ * a rider's history grow or shrink depending on which app they last used, which is the sort of difference
+ * nobody reports and nobody can explain.
+ */
+export const RECENTS_MAX = 8
+
+/**
+ * Move `id` to the front of a recents list, de-duplicated and capped.
+ *
+ * @spec search#bumpRecent
+ *
+ * Three rules in one line, and each has a reason a renderer should not get to re-choose: **most-recent
+ * first**, because that is the order the list is read in; **de-duplicated**, because opening a route twice
+ * should not fill the history with it; and **capped**, because the list is a shortcut rather than a log —
+ * past a screenful it stops being one. It was a local helper in `apps/mobile/lib/preferences.ts` until
+ * WP6-5b needed the identical answer in a second store.
+ */
+export function bumpRecent(list: readonly string[], id: string): string[] {
+  return [id, ...list.filter((existing) => existing !== id)].slice(0, RECENTS_MAX)
+}
+
+/**
+ * Toggle the axis a chip names, given the key `searchView` minted for it.
+ *
+ * **The key is never taken apart by a renderer, and this is why.** Both screens used to hold their own table
+ * of operators and categories and match a key against it — the RN one previously went further and
+ * `split(':')` the string, casting the halves to two different unions, which read exactly like ad-hoc id
+ * parsing and was flagged by the gate that bans it (ADR-091 decision 6). One function that *mints* the keys
+ * and one that *reads* them means the format is known in exactly one place, and a renderer's whole job is to
+ * hand back the string it was given.
+ *
+ * A key this does not recognise returns the filter **unchanged** rather than throwing: a chip row rendered
+ * from an older view is a stale tap, not a corruption, and a screen that crashed on one would lose the
+ * rider's whole filter over a race.
+ *
+ * @spec search#toggleSearchChip
+ */
+export function toggleSearchChip(filter: RouteFilter, key: string): RouteFilter {
+  const operator = key.startsWith(OPERATOR_CHIP_PREFIX)
+    ? key.slice(OPERATOR_CHIP_PREFIX.length)
+    : undefined
+  if (operator !== undefined) {
+    return { ...filter, operators: toggled(filter.operators, operator as OperatorId) }
+  }
+  const category = key.startsWith(CATEGORY_CHIP_PREFIX)
+    ? key.slice(CATEGORY_CHIP_PREFIX.length)
+    : undefined
+  if (category !== undefined && (ROUTE_CATEGORIES as readonly string[]).includes(category)) {
+    return { ...filter, categories: toggled(filter.categories, category as RouteCategory) }
+  }
+  return filter
+}
+
+const OPERATOR_CHIP_PREFIX = 'operator:'
+const CATEGORY_CHIP_PREFIX = 'category:'
+
+/** Add or remove one value, preserving the order of the rest. */
+function toggled<T>(values: readonly T[], value: T): T[] {
+  return values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
+}
+
+/**
+ * The letters the keypad's letter row should offer for a prefix — those that can *continue* it.
+ *
+ * Two rules composed, and the composition is the part a renderer should not own: `nextValidChars` says what
+ * may follow the prefix at all, and `indexAlphabet`'s stable letter order says how a row of them reads. The
+ * intersection is what makes the row **disappear** once a prefix admits no letters, and what makes the pad go
+ * entirely dark for a filter that admits nothing — which is the visible face of ADR-091's invariant.
+ *
+ * @spec search#validNextLetters
+ */
+export function validNextLetters(
+  keys: readonly string[],
+  letters: readonly string[],
+  prefix: string,
+): string[] {
+  const valid = nextValidChars(keys, prefix)
+  return letters.filter((letter) => valid.has(letter))
 }

@@ -23,3 +23,16 @@
     @apply bg-bg text-text;
   }
 }
+
+/* Turn the light basemap into a dark one: invert the luminance, then hue-rotate 180° so water and parks
+   land back near their real colour; trim brightness and contrast so it is not harsh. Applied to the tile
+   layer only — the dots and the licence credit above it stay true-colour.
+
+   The Lands Department's raster service has no dark variant, which is a property of the *source* rather
+   than of the map component: `TileSource.invertForDark` records it, and a vector basemap would switch this
+   off (ADR-041). The recipe itself is idiom — a class here, a `Platform.select` in the RN twin, because
+   react-native-web 0.21 has no `filter` handler and passes a string straight through while native RN wants
+   the array form. */
+.dark .map-tiles-invert {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+}

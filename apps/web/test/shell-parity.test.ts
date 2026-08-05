@@ -110,10 +110,12 @@ describe('the destination set is identity, and both renderers declare the same o
   })
 
   it('gives every unported destination an owning work package', () => {
-    // A route that renders a placeholder nobody has agreed to replace is a promise, not a plan. Nearby is
-    // the one destination WP6-0 ports, so it is the one destination with no owner.
+    // A route that renders a placeholder nobody has agreed to replace is a promise, not a plan. So the list
+    // of owner-less destinations is exactly the list of **ported** ones, and it grows one row at a time:
+    // Nearby at WP6-0, Place detail at WP6-3b, Favourites at WP6-4b, Search at WP6-5b. Asserted as an equality rather than a count, so a
+    // destination that quietly loses its owner without gaining a screen goes red.
     const unowned = DESTINATIONS.filter((d) => !d.owner).map((d) => d.path)
-    expect(unowned).toEqual(['/'])
+    expect(unowned).toEqual(['/', '/favorites', '/search', '/stop/:id'])
     for (const d of DESTINATIONS) {
       if (d.owner) expect(d.owner).toMatch(/^WP6-\d+$/)
     }
@@ -167,23 +169,74 @@ describe("ADR-058's persisted cache is one policy, declared in two shells", () =
   })
 })
 
-describe('the two preference stores own different keys, so neither can erase the other', () => {
+describe('the two preference stores share one key, so neither may model fewer fields', () => {
   const rnStore = read('lib/preferences.ts')
+  const webStore = readWeb('src/lib/preferences.ts')
+
+  /** The field names inside a store's `partialize` — what it actually writes to the blob. */
+  const persistedFields = (source: string, where: string): string[] => {
+    const block = capture(source, /partialize: \(\{([^}]+)\}\)/, `${where}'s partialize`)
+    return block
+      .split(',')
+      .map((field) => field.trim())
+      .filter(Boolean)
+      .sort()
+  }
 
   it('the RN store really does hold favourites under its key', () => {
-    // The control that makes the assertion below mean something. If the RN store stopped persisting
-    // favourites, the hazard this guards would be gone and the guard would be cargo.
+    // The control that makes the assertions below mean something. If the RN store stopped persisting
+    // favourites, the hazard they guard would be gone and the guards would be cargo.
     expect(rnStore).toContain('favoriteRoutes')
     expect(rnStore).toMatch(/partialize:[\s\S]{0,200}favoriteRoutes/)
   })
 
-  it('does not write the blob the favourites live in', () => {
-    // zustand's `persist` writes `partialize`'s output as the WHOLE blob, so a store that models fewer
-    // fields does not preserve the rest — it erases them. Sharing this key would delete every favourite a
-    // rider had, silently, the first time `apps/web` was served from the origin the Expo PWA was
-    // installed from (WP6-8). See `src/lib/preferences.ts`.
+  it('writes the same blob as the RN store, deliberately (WP6-4)', () => {
+    // WP6-0 wrote a *different* key, because a two-field store would have erased a rider's favourites.
+    // WP6-4 ports the screen that reads them, so the two stores now share one blob — which is what makes a
+    // favourite starred in either app visible in the other, and what makes the assertion below the thing
+    // standing between a rider and a silently emptied list.
     const rnKey = capture(rnStore, /name: '([^']+)'/, "the RN store's storage key")
     expect(rnKey).toBe('nextbus.preferences')
-    expect(PREFERENCES_STORAGE_KEY).not.toBe(rnKey)
+    expect(PREFERENCES_STORAGE_KEY).toBe(rnKey)
+  })
+
+  it('persists every field the RN store persists, or it erases the rest', () => {
+    // **The guard that replaced the different-key one, and it is the stronger of the two.** zustand's
+    // `persist` writes `partialize`'s output as the WHOLE blob: a field this store does not model is not
+    // preserved, it is deleted. So the two field sets are compared *by reading both sources*, and a field
+    // added to the RN store and forgotten here goes red — which is the only failure mode of a shared key
+    // and the one that costs a rider something they curated by hand.
+    //
+    // Equality rather than a superset check, both ways round: a field this store writes and the RN store
+    // does not would be a field the RN app then erases on its next write.
+    expect(persistedFields(webStore, 'apps/web')).toEqual(persistedFields(rnStore, 'apps/mobile'))
+  })
+
+  it('stamps the blob with the same version, from one declaration', () => {
+    // The hazard a shared key adds on top of the field sets: a store writing a *lower* version re-runs a
+    // completed migration, one writing a *higher* version makes the next step skip data it has never seen,
+    // and neither fails loudly. Both read `FAVOURITE_KEY_VERSION` from the kernel, which is corpus-pinned,
+    // so this asserts that neither has quietly grown a literal of its own.
+    for (const [where, source] of [
+      ['apps/mobile', rnStore],
+      ['apps/web', webStore],
+    ] as const) {
+      expect(source, `${where} declares its own version literal`).toContain('FAVOURITE_KEY_VERSION')
+      expect(source, `${where} does not stamp the shared version`).toMatch(
+        /version: PREFERENCES_VERSION/,
+      )
+    }
+  })
+
+  it('runs the kernel migration rather than a second copy of the rebasing', () => {
+    // The rule a rider's favourites survive on. Two implementations of it is the shape of every defect
+    // Wave 5 found in its own live code, and here the data at stake cannot be re-derived from anywhere.
+    for (const [where, source] of [
+      ['apps/mobile', rnStore],
+      ['apps/web', webStore],
+    ] as const) {
+      expect(source, `${where} does not call the shared rule`).toContain('migrateFavouriteKeys')
+      expect(source, `${where} re-implements the rebasing`).not.toContain("kind === 'place'")
+    }
   })
 })

@@ -101,6 +101,7 @@ object Corpus {
      *  list a directory inside a jar. Generated and gated, so a new corpus cannot be invisible. */
     val modules = listOf(
         "eta",
+        "favourites",
         "geo-snap",
         "geo",
         "ids",
