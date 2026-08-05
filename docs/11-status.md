@@ -12,7 +12,42 @@
 > so `apps/web` has **four ported screens** — Nearby, Place detail, Favourites, Search — four destinations
 > still naming the work package that ports them, and `apps/mobile`'s Place detail is policed by
 > `check-no-derivation` for the first time: the asymmetry ADR-069 recorded, closed for that screen.
-> **WP6-6 (Route detail) is the row in progress**, on `wp6-6-route-detail`.
+> **WP6-6 (Route detail) is the row in progress**, on `wp6-6-route-detail`, and **its hoist half is done**
+> ([ADR-093](./08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry)).
+> `proposals/04` calls Place detail *"the most domain rules in the app"*; Place detail had **nine** and this
+> screen had **sixteen** — which row is the boarding anchor and that a flip drops it, each row's soonest
+> upcoming arrival, which inferred buses earn a token, **where each token sits**, the sectional fare span,
+> which rows are saved at that pole, both ends of the route, the header's two label strings, each row's
+> display name and readouts, first/last, the route distance, the tapped stop's sheet name, which static facts
+> exist, whether a reverse exists at all, and what a bus token is *called*. All sixteen are `routeDetailView`
+> now, with 20 corpus cases; `RouteMeta`, `RouteHeader` and `EtaTimes` are projections, and `EtaTimes` lost
+> its clock and its policy entirely — it had been the **fourth** place the imminence band was written down.
+> **The load-bearing decision is the ADR's title: which node a bus is at is content; where that node is on
+> screen is geometry.** `RailBus` is `{kind:'node', index}` or `{kind:'segment', from, to}`, so a 52 px RN
+> rail and a DOM list that measures itself cannot disagree about the bus and are free to disagree about the
+> pixels.
+> 🔴 **And the spec format found a defect by being unable to look at something.** A component spec's
+> vocabulary is *text* (ADR-083), so the conformance walker cannot see a disc with a bus glyph in it at all.
+> The tempting answer is to declare the tokens `unenforced`; the honest one is that a graphic carrying
+> information a rider acts on needs an accessible name — which ADR-075 puts on the **identity** side. `BusToken`
+> had none: no `accessibilityLabel`, `pointerEvents: 'none'`, and the screen's signature element silently
+> invisible to a screen reader. `RailBus.label` is the kernel's now (`busApproaching` / `busAtStop`), and the
+> same edit makes the tokens projectable *and* closes the accessibility hole.
+> 🔴 **A second live defect, pinned rather than smuggled: a Citybus or GMB route shows no times anywhere and
+> does not say why.** `/v1/route/:id` fetches live arrivals for KMB and LWB only, so every row on a CTB or GMB
+> route carries `eta: null` for ever and renders exactly what *"no bus is due right now"* renders. ADR-077
+> closed this shape for `/v1/nearby` and `/v1/stop`; `apps/edge/src/stop-route.ts` says in a comment that
+> route detail's equivalent *"should come from here"* and WP5-13 shipped without it. Corpus row + `docs/07`.
+> **Verified in a browser on live Hong Kong data:** KMB 1A opened from Kwun Tong (Yue Man Square) — 34 rows
+> with codes and sectional fares, four fact pills, **seven bus tokens each with its own accessible name**, the
+> anchored row highlighted, the action sheet titled with the row's own name (one spelling now, where the
+> screen had two eleven lines apart), and a direction flip that swaps the header, the facts strip and the
+> whole list. Screenshots: `.context/wave6-screenshots/11-rn-route-detail-after-the-hoist.jpg`,
+> `12-rn-route-action-sheet-one-stop-name.jpg`.
+> **WP6-6b is next**: the spec, the `apps/web` port, the motion contract and `app/route/` joining
+> `check-no-derivation`. **WP6-6c** is new and is the four **fact sheets**, which still derive — 397 lines
+> holding the fare-stage timeline, the frequency bands and the day-name list, so they are a hoist of their own
+> rather than something to smuggle into a screen commit.
 > One process rule came out of #24 and belongs at the top because it cost two CI runs: **run the gate chain
 > after committing, not before.** Both things CI caught — a `<div>` with an `onClick`, and rule 7 on the commit
 > that fixed it — were checks whose results had been measured before the final edit. *A check whose result you

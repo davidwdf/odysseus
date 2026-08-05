@@ -1,10 +1,4 @@
-import {
-  type EtaUrgency,
-  etaLabelParts,
-  etaUrgency,
-  type Locale,
-  type ResolvedClientPolicy,
-} from '@nextbus/core'
+import type { EtaUrgency, RouteStopArrival } from '@nextbus/core'
 import { FONT_FAMILY } from '@nextbus/ui'
 import { useEffect, useState } from 'react'
 import { Text as RNText, StyleSheet, View } from 'react-native'
@@ -31,30 +25,33 @@ const DUR = 260
  */
 export function EtaTimes({
   arrivals,
-  now,
-  locale,
-  policy,
 }: {
-  arrivals: string[]
-  now: number
-  locale: Locale
-  /** The served thresholds (ADR-053). Required rather than defaulted: this component had been the
-   *  **fourth** place the imminence band was written down, and a default here would let the next caller
-   *  silently reintroduce a fifth. */
-  policy: Pick<ResolvedClientPolicy, 'dueUnderSec' | 'warnUnderSec'>
+  /**
+   * The readouts, already derived — `routeDetailView`'s since WP6-6a.
+   *
+   * It used to take raw ISO strings plus a locale and a policy, and call `etaLabelParts`/`etaUrgency`
+   * itself. Those are kernel calls, so it was never *deriving* — but it did compose the visible string
+   * (`${value} ${unit}`, else the word, else a dash), and the composition is what two renderers get
+   * subtly different. **`now` and `policy` went with it**, which is the part worth noticing: this
+   * component was the *fourth* place the imminence band had been written down, and it now has no clock and
+   * no threshold to be wrong about — the odometer's identity is the arrival's own `iso`, and the
+   * animations are driven by value changes rather than by time passing (ADR-008: no client-side
+   * countdown).
+   */
+  arrivals: readonly RouteStopArrival[]
 }) {
   return (
     <View
       className="mt-1 flex-row flex-wrap items-center gap-x-3 gap-y-0.5"
       style={{ minHeight: 22 }}
     >
-      {arrivals.map((iso, i) => (
+      {arrivals.map((arrival, i) => (
         <Animated.View
-          key={iso}
+          key={arrival.iso}
           layout={LinearTransition.duration(DUR)}
           exiting={FadeOut.duration(160)}
         >
-          <TimeSlot iso={iso} now={now} locale={locale} policy={policy} first={i === 0} withUnit />
+          <TimeSlot arrival={arrival} first={i === 0} />
         </Animated.View>
       ))}
     </View>
@@ -72,40 +69,29 @@ const TONE: Record<EtaUrgency, `--${string}`> = {
   none: '--text',
 }
 
-function TimeSlot({
-  iso,
-  now,
-  locale,
-  policy,
-  first,
-  withUnit,
-}: {
-  iso: string
-  now: number
-  locale: Locale
-  policy: Pick<ResolvedClientPolicy, 'dueUnderSec' | 'warnUnderSec'>
-  first: boolean
-  /** Append the "min" unit. Every slot sets this, so the row reads "12 min  27 min  42 min".
-   *  A "Due" slot never takes it. */
-  withUnit: boolean
-}) {
+function TimeSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolean }) {
   const { color } = useTheme()
-  const parts = etaLabelParts(iso, now, locale, policy.dueUnderSec)
-  const tone = TONE[etaUrgency(iso, now, policy)] ?? TONE.none
+  const { label } = arrival
+  const tone = TONE[arrival.urgency] ?? TONE.none
+  // The unit rides on every numeric slot, so the row reads "12 min  27 min  42 min"; a "Due" slot has
+  // no unit to take. `headway` cannot reach this row — `upcoming` yields arrivals, and a published
+  // frequency is not one — but the union carries the arm, so it renders as the text it is rather than
+  // falling through to the dash and losing a real sentence.
   const value =
-    parts.kind === 'due'
-      ? parts.label
-      : parts.kind === 'mins'
-        ? withUnit
-          ? `${parts.value} ${parts.unit}`
-          : `${parts.value}`
-        : '—'
+    label.kind === 'due'
+      ? label.label
+      : label.kind === 'mins'
+        ? `${label.value} ${label.unit}`
+        : label.kind === 'headway'
+          ? label.text
+          : '—'
   return (
     <SlideNumber
       value={value}
       color={first ? color(tone) : color('--text-muted')}
       size={first ? 16 : 14}
       bold={first}
+      stale={arrival.stale}
     />
   )
 }
@@ -120,11 +106,15 @@ function SlideNumber({
   color,
   size,
   bold,
+  stale,
 }: {
   value: string
   color: string
   size: number
   bold: boolean
+  /** Old enough to say so (ADR-008) — dimmed, and never colour alone: the value stops moving too,
+   *  because a stale reading only changes when a fresh one arrives. */
+  stale: boolean
 }) {
   const [display, setDisplay] = useState(value)
   // The transition only animates the part that actually changed: the common prefix and
@@ -167,6 +157,7 @@ function SlideNumber({
     color,
     fontFamily: bold ? FONT_FAMILY.semibold : FONT_FAMILY.regular,
     fontVariant: ['tabular-nums' as const],
+    opacity: stale ? 0.45 : 1,
   }
   const incoming = useAnimatedStyle(() => ({
     opacity: t.value,

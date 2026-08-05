@@ -22,10 +22,17 @@ import { Text } from './Text'
  *  (`stops`) → a whole-route overview (stops · journey · distance). */
 export type FactKind = 'fare' | 'freq' | 'hours' | 'stops'
 
-/** A single stop as the fact sheets need it — sequence, display name, boarding fare. */
+/**
+ * A single stop as the fact sheets need it — sequence, display name, boarding fare.
+ *
+ * Structural rather than a re-mapping, so `routeDetailView`'s own rows satisfy it directly (WP6-6a):
+ * the route screen used to build a third list here with `titleCaseName(splitStopCode(…).label)`, which
+ * was a **second spelling of `displayName`** and one edit away from a fare timeline that named its
+ * stages differently from the schematic above it.
+ */
 export interface FactStop {
   seq: number
-  name: string
+  name: { label: string }
   fare?: string
 }
 
@@ -46,7 +53,7 @@ export function RouteFactSheet({
 }: {
   kind: FactKind
   service?: RouteServiceInfo
-  stops: FactStop[]
+  stops: readonly FactStop[]
   /** Straight-line-through-stops route distance (metres) for the overview sheet; 0 hides it. */
   distanceM?: number
   locale: Locale
@@ -177,10 +184,10 @@ function StatRow({
  * (`Accessibility`) estimates, closed by an `Info` glyph → the concession legend + disclaimer below
  * (ADR-044). Concessions are policy-derived, never route data — always shown as labelled estimates.
  */
-function FareBody({ stops, locale }: { stops: FactStop[]; locale: Locale }) {
+function FareBody({ stops, locale }: { stops: readonly FactStop[]; locale: Locale }) {
   const fares = stops.map((s) => s.fare)
   const stages = fareStages(fares)
-  const nameForSeq = (seq: number) => stops.find((s) => s.seq === seq)?.name ?? ''
+  const nameForSeq = (seq: number) => stops.find((s) => s.seq === seq)?.name.label ?? ''
   const hasConcessions = stages.some(
     (st) => estimateChildFare(st.fare) && estimateElderlyFare(st.fare),
   )

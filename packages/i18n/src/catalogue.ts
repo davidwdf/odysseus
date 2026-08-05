@@ -620,6 +620,37 @@ export const CATALOGUE = {
     'zh-Hant': '反方向',
     'zh-Hans': '反方向',
   },
+  /**
+   * The accessible name of a bus token riding the route schematic, approaching `{stop}`.
+   *
+   * **The screen's signature graphic had no name at all until WP6-6.** `BusToken` is a disc with a
+   * double-decker glyph in it and `pointerEvents: 'none'`, so a screen reader was told nothing about the
+   * one element on the schematic that carries live information — and ADR-075 puts *"every element's role
+   * and its label content"* squarely on the identity side of the invariant line. It surfaced from the spec
+   * format rather than from the screen: a component spec's vocabulary is **text**, so the conformance
+   * walker could not see the tokens, and the honest fix was to give them a name rather than to exempt them.
+   *
+   * It says *approaching*, not a distance and not a fraction of a segment: the token sits at the midpoint
+   * of a segment because that is the only position the data supports (ADR-030, and no polylines upstream),
+   * so a label claiming "halfway to X" would assert precision the pixel does not have (ADR-008).
+   */
+  busApproaching: {
+    en: 'Bus approaching {stop}',
+    'zh-Hant': '巴士即將到達{stop}',
+    'zh-Hans': '巴士即将到达{stop}',
+  },
+  /**
+   * …and the same token where the bus is **at** `{stop}` — a different fact and a different sentence.
+   *
+   * Two keys rather than one with a branch, because the two are not degrees of the same thing: a bus at a
+   * stop is one a rider standing there can board, and a bus approaching one is not. It is also the label a
+   * token on the *origin* node gets, which is the only token on the rail a rider can act on immediately.
+   */
+  busAtStop: {
+    en: 'Bus at {stop}',
+    'zh-Hant': '巴士在{stop}',
+    'zh-Hans': '巴士在{stop}',
+  },
   /** Circular-route destination line; `{place}` is the loop's turnaround terminus (ADR-046). */
   circularVia: {
     en: 'Circular via {place}',

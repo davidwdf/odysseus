@@ -6600,3 +6600,127 @@ pre-existing and unaddressed; it earned its keep here.
      per-commit range check meaningful.
   - **Test totals:** core **918**, edge 149, api-client 71, ui-spec 30, web **131** (+12), mobile **109**
     (+12) — **1 408**. Corpus 14 files / **105** groups / **878** cases.
+
+## ADR-093 — Which node a bus is at is content; where that node is on screen is geometry
+
+- **Status:** **Decided and implemented 2026-08-05** as the first half of **WP6-6**. Implementation:
+  `routeDetailView` in `packages/core/src/route-detail.ts` (+20 corpus cases and 6 property/coverage tests
+  in the existing `route-detail.spec.json`), `apps/mobile/app/route/[id].tsx` consuming it, and three leaf
+  components reduced to projections — `RouteMeta`, `RouteHeader` and `EtaTimes`. Two new
+  catalogue keys (`busApproaching`, `busAtStop`). A hoist, so **no behaviour changes** bar the one named
+  below; `packages/core` stays at **100 % on all four axes**.
+- **Context.** `proposals/04` puts Route detail fifth and sizes it **L**: *"the schematic, the bus tokens,
+  the collapsing header, the auto-scroll"*. It also calls Place detail *"the most domain rules in the app"* —
+  and Place detail had nine. **This screen had sixteen**, spread across a 598-line `.tsx` and two components,
+  every one of them reachable only by rendering a React tree.
+- **Decisions:**
+  1. **A bus's position is a stop index, never a pixel.** `RailBus` is
+     `{ kind: 'node', index } | { kind: 'segment', from, to }`, and that is the line the title states: the
+     kernel says *"between stops 7 and 8"* and each renderer turns that into a y. It is what lets one
+     declaration serve a 52 px RN rail whose rows report their own `onLayout` heights and a DOM list that
+     measures itself differently — neither can disagree about the **bus**, and both are free to disagree
+     about the pixels. The RN screen previously computed `atNode`, the midpoint and the y together in the
+     render body, so the *rule* and the *arithmetic* were one expression.
+  2. **The origin exception belongs with the position, not with the suppression.** Stop 0 has no segment
+     leading into it, so a bus heading there has nowhere to be but on the node — the screen spelled this
+     `m.atStop || m.toIndex === 0`. `visibleBusMarkers` already decides *whether* an origin bus is drawn
+     (`ORIGIN_BUS_DEPARTS_WITHIN_SEC`); `railBus` decides only where the survivor goes. Two rules, one
+     composition, one corpus case each — and a third case for the pair together, because a port that applied
+     one and not the other looks right in a screenshot.
+  3. **A bus token needs a name, and that is the finding of this row.** A component spec's vocabulary is
+     **text** (ADR-083), so the conformance walker cannot see a disc with a glyph in it at all. The tempting
+     answer is to declare the tokens `unenforced`; the honest one is that a graphic carrying information a
+     rider acts on needs an accessible name, which ADR-075's own table puts on the **identity** side
+     (*"every element's role and its label content"*). `BusToken` had none — no `accessibilityLabel`,
+     `pointerEvents: 'none'`, and the screen's signature element silently invisible to a screen reader. So
+     `RailBus.label` is composed by the kernel from injected words, and the same edit makes the tokens
+     projectable *and* closes an accessibility hole nobody had reported. **The spec format found a defect by
+     being unable to look at something.**
+  4. **Two label keys, not one with a branch.** `busApproaching` and `busAtStop` are different facts: a bus
+     at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment —
+     the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines
+     upstream), so *"halfway to X"* would assert precision the pixel does not have (ADR-008).
+  5. **The header's two label strings are the kernel's.** `RouteHeader` composed
+     `${origin} → ${destination}` at rest and `→ ${destination}` collapsed, each with its own `circular ?`
+     branch — four plausible variants of two strings for a second renderer to arrive at. `label` and
+     `collapsedLabel` are fields now, and the arrow is one constant so the collapsed form is provably the
+     resting one with its origin removed.
+  6. **`reverseId`'s presence *is* `canReverse`.** The screen passed `canReverse={!!reverse}` to the header
+     and read `reverse.id` in a separate closure, so the control's existence and the id it navigates to were
+     two facts that could get out of step. One optional field: a renderer with nothing to flip to draws
+     nothing.
+  7. **`flipped` is an argument, not something to infer.** The anchor is dropped on a flip because the
+     reverse serves the opposite kerbs — and deriving "flipped" from "did the arrived-from id match a row"
+     would keep an anchor on a route whose reverse happens to name the same pole, which is a real shape at a
+     terminus. Two different facts, so two inputs.
+  8. **`hereIndex` and each row's `here` are one answer.** A renderer needs the index because the *second
+     beat* of ADR-043's reveal scrolls to it, and it needs the flag because the row is emphasised — but
+     "which row to scroll to" and "which row is highlighted" are the same question, and a port that computed
+     them separately would scroll to one row and highlight another. A property test asserts they agree on
+     every case.
+  9. **Staleness is the board's, not the arrival's.** One `dataTimestamp` per stop, so every slot on a row
+     dims together; a per-slot answer would make the third time look fresher than the first. `EtaTimes` gained
+     the dimming it never had on this screen and **lost its clock and its policy entirely** — it had been the
+     *fourth* place the imminence band was written down, and it now has no threshold to be wrong about.
+  10. **The static-facts strip is content.** Which pills exist, in what order, the fare's fallback from a
+      sectional span to the origin's full fare, and the holiday fare as a **note on the fare pill rather than
+      a fifth pill** were all inside `RouteMeta.tsx`. What stays there is the icon table — *"which concept
+      each glyph denotes"* is identity and *"the set"* is idiom, so a per-renderer `RouteFactKey → glyph` map
+      is the correct residue.
+  11. **The tapped stop's name is the row's own.** The screen computed the action sheet's title as
+      `titleCaseName(splitStopCode(s.stop.name[locale]).label)` — which is `displayName`'s definition
+      inlined, **eleven lines from the call that passed the other spelling to the row**. Neither was wrong;
+      that is the problem, because the day one grows a rule the other does not is the day the sheet and the
+      row disagree about a stop's name. `RouteFactSheets`' `FactStop` is structural over `RouteStopRowView`
+      for the same reason — it was a *third* list built with the same expression.
+  12. **`distanceM` is compared with a tolerance, and the corpus says so.** It is a sum of haversines, and
+      `geo.spec.json` already states the rule for that class of value — *"trigonometry does not agree to the
+      last bit across languages"*. This is the first place in the repo where such a value sits **inside** an
+      object compared for exact equality, so the driver lifts it out and compares it within 1 m rather than
+      rounding it in the view: rounding would be a second, invisible display rule competing with
+      `formatDistance`, which rounds to the nearest 10 m under ADR-008.
+- **The one behaviour change, named rather than smuggled.** The action sheet's subtitle used to read
+  `titleCaseName(route.destination[locale])` — upstream's LED-sign abbreviation — and now reads the header's
+  own `destination`, which prefers the last stop's fuller name. So the sheet says *"1A → Star Ferry, Harbour
+  City"* where it used to say *"1A → Star Ferry"*. WP4-0's rule is that a hoist changes no behaviour; the
+  alternative here was to keep a **third** answer to "where does this route go" in a file that already had
+  two, and one consistent sentence is worth the diff. Visible in the screenshot below.
+- **Verified in a browser on live Hong Kong data** (`.context/wave6-screenshots/11-rn-route-detail-after-the-hoist.jpg`,
+  `12-rn-route-action-sheet-one-stop-name.jpg`): KMB 1A opened from Kwun Tong (Yue Man Square), 34 rows with
+  their codes and sectional fares, the four fact pills, **seven bus tokens each carrying its own accessible
+  name** — *"Bus at Sau Mau Ping (Central)"*, *"Bus approaching Kwun Tong BBI - Millennium City"* — the
+  anchored row highlighted and scrolled to as ADR-043's second beat, the action sheet titled with the row's
+  own name, and a direction flip that swaps the header, the facts strip (`06:00 – 00:50`, `$8.2 → $5.1`) and
+  the whole list with its stagger.
+- **Consequences:**
+  - 🔴 **A Citybus or GMB route shows no times anywhere and does not say why**, and it is now a
+    `knownDefect` corpus row rather than an unrecorded fact. `/v1/route/:id` fetches live arrivals for KMB and
+    LWB only — Citybus publishes no bulk route-eta endpoint (ADR-021) and GMB is not wired — so every row
+    carries `eta: null` for ever, rendering exactly what *"no bus is due right now"* renders. ADR-077 solved
+    this shape for `/v1/nearby` and `/v1/stop` by putting `failed` on the wire, and `apps/edge/src/stop-route.ts`
+    says in a comment that route detail's equivalent *"should come from here"* — it was WP5-13's and did not
+    land. Owner and reproduction in `docs/07`.
+  - 🟠 **The four fact *sheets* are not part of this row.** `RouteFactSheets.tsx` is 397 lines and holds three
+    more corpus-worthy compositions — the fare-stage timeline with its concession estimates, the per-day-type
+    frequency bands, and the day-name list — so it is its own hoist (**WP6-6c** in `proposals/04`) rather than
+    something to smuggle into a screen commit. The strip that *opens* them is hoisted here; the sheets
+    themselves still derive, which is why `apps/mobile/components/RouteFactSheets.tsx` does **not** join
+    `check-no-derivation`'s `POLICED` list.
+  - ⚪ **`buses` is walked over the rows, not over the markers**, which puts the tokens in route order and —
+    the reason it is written that way — leaves no dead branch. Mapping the markers needs a
+    `rows[m.toIndex] === undefined` guard for a name to label the token with, and that arm is unreachable by
+    construction. The 100 % branch threshold refused it, exactly as it refused WP6-3a's `?? []`.
+  - ⚪ **Seven injected defects, all watched failing** — the origin exception dropped, the collapsed label's
+    arrow removed, a flip keeping its anchor, a saved route starring every row, the holiday fare promoted to
+    its own pill, per-arrival staleness, and the served arrival cap ignored. Each turned the corpus red by 1
+    or 2 tests with the control green either side, and **each injection asserted that it applied** — the
+    WP6-5b lesson, where two of five came back green because they never touched the file.
+  - 🟡 **A `getBoundingClientRect` read during a 650 ms entry tween is a reading of the animation, not of the
+    layout.** The first browser check reported all seven bus tokens stacked at one y and looked like a real
+    defect; they were in flight from the origin, as designed. Worth writing down because the next person
+    measuring an animated overlay will make the same call.
+  - ⚪ **A `git checkout <file>` inside an injection loop destroyed an hour of uncommitted work.** The loop
+    reverted to `HEAD`, which predated the hoist. Restore from a copy, never from the index, while the work is
+    unstaged — and the same note already exists one hazard over, for `git stash --keep-index`.
+  - **Test totals:** core **924** (+6), edge 149, api-client 71, ui-spec 30, web 131, mobile 109 — **1 414**.
+    Corpus 14 files / **106** groups / **900** cases / 4 `knownDefect`.

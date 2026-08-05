@@ -340,6 +340,27 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 - [ ] **Shareable arrival card** — a "boarding-pass"-style card of a stop + next arrivals to send to friends.
 
 ## Infra / hardening
+- [ ] 🔴 **Route detail cannot say "we could not ask", so a Citybus or GMB route reads as "no bus is due".**
+      Found by WP6-6a ([ADR-093](./08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry))
+      and pinned as the corpus row `a-citybus-route-shows-no-times-anywhere-and-does-not-say-why`
+      (`knownDefect`). `/v1/route/:id` fetches live arrivals for **KMB and LWB only** — Citybus publishes no
+      bulk route-eta endpoint at all ([ADR-021](./08-decision-log.md)) and GMB is not wired — so on a CTB or
+      GMB route **every** stop row carries `eta: null`, for ever, and the screen renders exactly what a route
+      with nothing currently due renders. A rider cannot tell a route the app never asks about from a route
+      with no buses coming. This is the same hole [ADR-077](./08-decision-log.md#adr-077--a-card-can-say-we-could-not-ask-and-a-failure-list-must-not-outlive-its-round)
+      closed for `/v1/nearby` and `/v1/stop` by putting `failed` on the wire, and
+      `apps/edge/src/stop-route.ts` says so in a comment on the very call: *"Route detail has no per-stop
+      failure field of its own; whoever gives it one is WP5-13, and it should come from here."* WP5-13 shipped
+      without it. **The fix has three parts:** `RouteDetailSchema` gains `failed` (a `CONTRACT_VERSION` minor,
+      since it is additive), `routeDetailView` gains the `incomplete` boolean `StopCardView` and
+      `PlaceDetailView` already have, and both renderers say it **once for the screen** rather than per row —
+      a rider cannot act on which rows. Reproduction: open `/route/CTB:962:outbound:1` on either app.
+- [ ] 🟠 **The four route fact sheets still derive** (`apps/mobile/components/RouteFactSheets.tsx`, 397 lines).
+      WP6-6a hoisted the *strip* that opens them; the sheets themselves still hold three corpus-worthy
+      compositions — the fare-stage timeline with its child/elderly concession estimates, the per-day-type
+      frequency bands, and the day-name list (`p.days.map(...).filter(Boolean).join(' · ')`). That is why the
+      file is **absent** from `check-no-derivation`'s `POLICED` list and why `apps/web` has no fact sheets yet.
+      Owner: **WP6-6c** in [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md).
 - [ ] 🔴 **Why does a failed `getStop` leave the query pending-and-idle rather than `error`?** Found by
       WP6-3b ([ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers))
       and **half fixed**: the screen no longer renders nothing (the skeleton is the fallback arm on both
@@ -359,20 +380,35 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       inherit it: `apps/web/src/components/MiniMap.tsx` takes its first measurement in a layout effect and
       keeps a `ResizeObserver` only for later changes. The RN fix is the same shape — measure once on mount
       rather than waiting to be told.
-- [ ] **Route auto-scroll doesn't land on web** — `app/route/[id].tsx` should scroll to the originating stop
+- [ ] 🟠 **Route auto-scroll doesn't land on web** — `app/route/[id].tsx` should scroll to the originating stop
       (the two-step reveal's second beat, [ADR-043](./08-decision-log.md#adr-043--a-core-navigation-animation-system-cross-fade-tabs-slide-and-reveal-stack-web-swipe-back)),
       but the `scrollTo` no-ops on react-native-web (reproduced with the ADR-043 reveal-gate **and** `animated` flag
       neutralised, so it predates that work). The gating mechanism is in place; needs the underlying scroll fixed
       (likely a measurement / `Animated.ScrollView` `scrollTo` timing issue on web). Native unaffected.
+      **Re-measured 2026-08-05 during WP6-6a**, and the measurement narrows it usefully: on
+      `/route/KMB:1A:outbound:1?stop=KMB:04BED071257A601F` the `Animated.ScrollView`'s own `scrollTop` samples
+      **0 for five seconds** after load — the window never scrolls at all (`document.scrollHeight` equals the
+      viewport, so the scroller is the inner element and reading `window.scrollY` will mislead you). Then a
+      single click anywhere on a row **does** land the scroll, with row 8 arriving at the top of the list. So
+      it is not that `scrollTo` cannot work on web: something about the reveal gate never satisfies itself
+      until an interaction flushes it. `usePageRevealReady` is the first suspect, since a direct URL load
+      produces no navigation event for it to observe. **WP6-6b meets this head-on** — the DOM port scrolls the
+      document and needs no `scrollTo` at all, which will make the two renderers visibly disagree until this
+      is fixed.
 - [ ] **Web down/back slide animation** — ADR-043 reverted the JS stack (it broke web scrolling), so on web the
       down/back transition is an instant cut; the slide + reveal is native-only. If a web push/back animation is
       wanted, do it *purely additively* with per-screen Reanimated `entering`/`exiting` (no navigator swap):
       push-in is reliable; reveal-on-pop is hard on web (native-stack hides the outgoing screen instantly). Also
       consider an interactive follow-the-finger web swipe-back (currently threshold-triggered + instant).
-- [ ] **`BottomSheet` slide-up doesn't complete on web** — `components/BottomSheet.tsx`'s `onPanelLayout`→
+- [ ] 🟡 **`BottomSheet` slide-up doesn't complete on web** — `components/BottomSheet.tsx`'s `onPanelLayout`→
       `withTiming(0)` entrance doesn't run on web; the panel mounts but only its grab handle peeks (likely cancelled
       by the handle pan's `onBegin`→`cancelAnimation`, or the layout-driven entrance not firing on react-native-web).
       Affects the route schematic's stop action sheet. Independent of ADR-043 (which only un-clipped it).
+      **Did not reproduce on 2026-08-05** (WP6-6a, Chrome, `:8081`): the route schematic's stop action sheet
+      opened fully — title, route subtitle and both actions — with the handle at the panel's top where it
+      belongs. Left open rather than closed, because "did not reproduce once" is not "fixed": nothing changed
+      here deliberately, so either the cause is timing-dependent or an unrelated edit moved it. Whoever closes
+      it should say which.
 - [ ] Upstash Redis (only if we need true Redis semantics beyond KV + Durable Objects).
 - [ ] Analytics (privacy-respecting) for most-watched stops → smarter pre-warming of caches.
 - [ ] Self-hosted MapLibre tiles (if tile-provider cost/limits become an issue).
