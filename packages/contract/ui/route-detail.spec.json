@@ -2420,8 +2420,7 @@
     {
       "target": "factValue",
       "goes": "that fact’s detail — the fare-stage timeline, the frequency bands, the service hours, or the route overview (ADR-044)",
-      "optional": true,
-      "note": "Absent on `apps/web` until WP6-6c, which is the fact sheets’ own hoist: `RouteFactSheets.tsx` still derives (the fare stages, the day-name list), so the DOM screen draws the strip as static pills. `optional` is what makes that honest rather than hidden — and the walker then requires the **text** to be unchanged either way, which is ADR-069’s overflow rule applied to a whole surface."
+      "note": "It was `optional: true` for exactly one commit, while `apps/web` drew the strip as inert pills and `RouteFactSheets.tsx` still derived its own content. WP6-6c closed that (ADR-095): the four sheets are `routeFactSheet`’s, both renderers project them, and the pill is a control on both. **What `optional` bought in the meantime is worth keeping in mind** — it made the missing affordance a declaration rather than a silence, and it made the walker require the *text* to be identical either way, which is ADR-069’s overflow rule applied to a whole surface."
     },
     {
       "target": "buses",

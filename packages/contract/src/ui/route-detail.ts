@@ -17,6 +17,11 @@ import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
  * > `{kind:'segment', from, to}` (ADR-093). One renderer may animate the move over 650 ms and another may
  * > cut to it; neither may disagree about the stop.
  *
+ * A sheet the strip opens is a **separate surface** and is deliberately not a state of this spec: its content
+ * is `routeFactSheet`'s, pinned by 14 corpus cases (ADR-095), and both renderers are projections of it. What
+ * this spec holds about the sheets is one thing — that the pill which opens one is a control, and that the
+ * strip's own text does not change according to whether the affordance exists.
+ *
  * The same line settles the two the plan asked about by name. **The collapsing header** is idiom in its
  * *behaviour* and identity in its *content*: it says the route number and both ends of the journey, at
  * whatever size its platform gives it. **The auto-scroll** is idiom in the strongest sense — the DOM screen
@@ -451,8 +456,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
     {
       target: 'factValue',
       goes: 'that fact’s detail — the fare-stage timeline, the frequency bands, the service hours, or the route overview (ADR-044)',
-      optional: true,
-      note: 'Absent on `apps/web` until WP6-6c, which is the fact sheets’ own hoist: `RouteFactSheets.tsx` still derives (the fare stages, the day-name list), so the DOM screen draws the strip as static pills. `optional` is what makes that honest rather than hidden — and the walker then requires the **text** to be unchanged either way, which is ADR-069’s overflow rule applied to a whole surface.',
+      note: 'It was `optional: true` for exactly one commit, while `apps/web` drew the strip as inert pills and `RouteFactSheets.tsx` still derived its own content. WP6-6c closed that (ADR-095): the four sheets are `routeFactSheet`’s, both renderers project them, and the pill is a control on both. **What `optional` bought in the meantime is worth keeping in mind** — it made the missing affordance a declaration rather than a silence, and it made the walker require the *text* to be identical either way, which is ADR-069’s overflow rule applied to a whole surface.',
     },
     {
       target: 'buses',

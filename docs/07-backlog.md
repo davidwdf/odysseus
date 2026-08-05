@@ -355,12 +355,20 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       since it is additive), `routeDetailView` gains the `incomplete` boolean `StopCardView` and
       `PlaceDetailView` already have, and both renderers say it **once for the screen** rather than per row —
       a rider cannot act on which rows. Reproduction: open `/route/CTB:962:outbound:1` on either app.
-- [ ] 🟠 **The four route fact sheets still derive** (`apps/mobile/components/RouteFactSheets.tsx`, 397 lines).
-      WP6-6a hoisted the *strip* that opens them; the sheets themselves still hold three corpus-worthy
-      compositions — the fare-stage timeline with its child/elderly concession estimates, the per-day-type
-      frequency bands, and the day-name list (`p.days.map(...).filter(Boolean).join(' · ')`). That is why the
-      file is **absent** from `check-no-derivation`'s `POLICED` list and why `apps/web` has no fact sheets yet.
-      Owner: **WP6-6c** in [`proposals/04`](./proposals/04-platform-idiomatic-renderers.md).
+- [x] ✅ **The four route fact sheets still derive** — **done as WP6-6c**
+      ([ADR-095](./08-decision-log.md#adr-095--the-estimate-mark-is-content-and-so-is-the-separator-between-two-day-names)).
+      All eight decisions are `routeFactSheet`'s, with 15 corpus cases; both renderers project it, `apps/web`
+      has the sheets as a `<dialog>`, and `RouteFactSheets.tsx` joined `check-no-derivation`'s `POLICED` list
+      **with no new allowlist entries**.
+- [ ] 🔴 **A route whose per-stop fares are not numbers opens an entirely blank fare sheet**, while the pill
+      that opened it shows a fare. Found by WP6-6c and pinned as the corpus row
+      `a-route-whose-fares-are-not-numbers-opens-an-entirely-blank-fare-sheet` (`knownDefect`). `fareStages`
+      drops any value `Number()` cannot read, so there are no stages and no concessions; `fareRange` drops the
+      same values, falls back to `service.fareFull`, and the strip therefore reads `$13.4`. So a rider taps a
+      pill showing a fare and gets nothing. **The fix:** fall back to the origin full fare as a **single stage
+      covering the whole route** — the same datum the pill used — and say nothing about sections the data
+      cannot describe. Whether upstream actually publishes such a fare is not measured; the guard in
+      `fareStages` makes the state reachable by construction, which is enough to pin it.
 - [ ] 🔴 **Why does a failed `getStop` leave the query pending-and-idle rather than `error`?** Found by
       WP6-3b ([ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers))
       and **half fixed**: the screen no longer renders nothing (the skeleton is the fallback arm on both

@@ -3,6 +3,8 @@ import {
   type RouteFactKey,
   type RouteStopRowView,
   routeDetailView,
+  routeFactSheet,
+  type ServiceDayType,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -21,6 +23,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { RailBusToken } from '../components/RailBusToken'
 import { RouteChip } from '../components/RouteChip'
+import { RouteFactSheet } from '../components/RouteFactSheet'
 import { RouteStopRow } from '../components/RouteStopRow'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { usePreferences } from '../lib/preferences'
@@ -162,6 +165,9 @@ export function RouteDetail() {
   const openStop = (row: RouteStopRowView) =>
     navigate(`/stop/${encodeURIComponent(row.stopId)}?pole=${encodeURIComponent(row.stopId)}`)
 
+  // Which fact sheet is open, if any (ADR-044). Held here rather than per pill so only one can be.
+  const [factSheet, setFactSheet] = useState<RouteFactKey | null>(null)
+
   return (
     <main className="min-h-dvh bg-bg pb-10">
       {/* The chrome, in flow and first — see the note above. The back control does not wait for the payload,
@@ -203,15 +209,18 @@ export function RouteDetail() {
 
       {view ? (
         <>
-          {/* The static-facts strip (ADR-036, the Static tier). Pills rather than controls until WP6-6c gives
-              this renderer the four detail sheets — which the spec declares as an `optional` interaction, so
-              the *text* is asserted to be identical either way (ADR-069's overflow rule). */}
+          {/* The static-facts strip (ADR-036, the Static tier). Each pill opens its detail sheet (ADR-044) —
+              a `<button>` since WP6-6c, where it was an inert `<span>`. The spec declares that interaction
+              `optional`, which is what made the inert version honest rather than hidden: the walker requires
+              the *text* to be identical whether or not the affordance exists (ADR-069's overflow rule). */}
           {view.facts.length > 0 ? (
             <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
               {view.facts.map((fact) => (
-                <span
+                <button
                   key={fact.key}
-                  className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5"
+                  type="button"
+                  onClick={() => setFactSheet(fact.key)}
+                  className="flex items-center gap-1.5 rounded-full border-0 bg-surface px-3 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus active:opacity-60"
                 >
                   <FactGlyph fact={fact.key} />
                   <span className="text-caption font-medium text-muted tabular-nums">
@@ -226,7 +235,7 @@ export function RouteDetail() {
                       <span className="text-caption text-subtle tabular-nums">{fact.note}</span>
                     </>
                   ) : null}
-                </span>
+                </button>
               ))}
             </div>
           ) : null}
@@ -254,6 +263,23 @@ export function RouteDetail() {
               return <RailBusToken key={i} bus={bus} top={top - TOKEN_HALF} />
             })}
           </div>
+
+          {/* The sheet a pill opens — one call, the same one the RN screen makes, handed the **view** rather
+              than the payload so its fare timeline cannot name a stop differently from the schematic. */}
+          {factSheet !== null ? (
+            <RouteFactSheet
+              sheet={routeFactSheet(factSheet, view, query.data?.route.service, {
+                locale,
+                labels: {
+                  stopCount: (n) => t(locale, 'stopCount', { n }),
+                  dayNames: t(locale, 'daysShort').split(','),
+                  day: (kind) => t(locale, DAY_LABEL[kind]),
+                },
+              })}
+              locale={locale}
+              onClose={() => setFactSheet(null)}
+            />
+          ) : null}
         </>
       ) : query.isError ? (
         <p className="m-0 px-4 pt-4 text-body text-danger">{(query.error as Error).message}</p>
@@ -288,6 +314,25 @@ const GLYPH: Record<RouteFactKey, LucideIcon> = {
 function FactGlyph({ fact }: { fact: RouteFactKey }) {
   const Glyph = GLYPH[fact] ?? Star
   return <Glyph size={14} className="shrink-0 text-text" aria-hidden />
+}
+
+/**
+ * The words the fact sheets' composed strings are built from — the day names an unnamed mask is joined out
+ * of, and the passenger classes a concession legend keys.
+ *
+ * At the injection boundary because the kernel may not import `@nextbus/i18n` (ADR-054): it decides *which*
+ * days a pattern runs and *what goes between them*; the catalogue owns the words. The RN screen passes the
+ * identical four.
+ */
+const DAY_LABEL: Record<
+  ServiceDayType | 'other',
+  'dayWeekday' | 'daySaturday' | 'daySunday' | 'dayDaily' | 'dayOther'
+> = {
+  weekday: 'dayWeekday',
+  saturday: 'daySaturday',
+  sunday: 'daySunday',
+  daily: 'dayDaily',
+  other: 'dayOther',
 }
 
 /** Where a node's centre falls inside a row, and half a token — both layout, both this renderer's. */

@@ -60,21 +60,18 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
  *
  *  · `app/stop/` — the Place screen, whose rules are `placeDetailView`'s since ADR-085/087.
  *  · `app/route/` — the Route screen, whose rules are `routeDetailView`'s since ADR-093, together with the
- *    three leaf components that hoist made projections: `RouteMeta` (the facts strip), `EtaTimes` (the
- *    readouts) and `Fare` (the printed figure). `RouteHeader` is **not** here and that is deliberate: it is
- *    `CollapsingHeader` with a from/to card on it, so it is nothing but arithmetic over viewport dimensions —
- *    the same reason `CollapsingHeader` itself is absent.
+ *    four leaf components that hoist made projections: `RouteMeta` (the facts strip), `RouteFactSheets` (the
+ *    four sheets a pill opens, `routeFactSheet`'s since ADR-095), `EtaTimes` (the readouts) and `Fare` (the
+ *    printed figure). `RouteHeader` is **not** here and that is deliberate: it is `CollapsingHeader` with a
+ *    from/to card on it, so it is nothing but arithmetic over viewport dimensions — the same reason
+ *    `CollapsingHeader` itself is absent.
  *  · `components/MiniMap.tsx` — its map, whose pins are the kernel's since ADR-087.
  *  · the five leaf projections a place's rows and heading are made of, all of them already spec'd as part
  *    of `StopRow` (WP6-1) and therefore already rule-free.
  *
- * **What is deliberately absent, and it is not an oversight:** `app/search.tsx`, `app/workbench.tsx`,
- * `app/(tabs)/favorites.tsx` and — new with WP6-6b — `components/RouteFactSheets.tsx` still hold rules WP4-0
- * has not hoisted, so the shape rules would fire on legitimate un-migrated code and the gate would be
- * switched off within a week. The fact sheets are the sharpest case: the *strip* that opens them is
- * `routeDetailView`'s now, and the sheets themselves still compose a fare-stage timeline, concession
- * estimates and a day-name list — three corpus-worthy rules, owned by **WP6-6c** in `proposals/04` and
- * recorded in `docs/07`. So
+ * **What is deliberately absent, and it is not an oversight:** `app/search.tsx`, `app/workbench.tsx` and
+ * `app/(tabs)/favorites.tsx` still hold rules WP4-0 has not hoisted, so the shape rules would fire on
+ * legitimate un-migrated code and the gate would be switched off within a week. So
  * would `CollapsingHeader`, `StopHeader`, `Skeleton` and `GlassView`, which are chrome and motion —
  * `proposals/04` lists them with no corpus and no spec, *"becomes idiom"* — and are nothing but arithmetic
  * over viewport dimensions. Each surface joins this list in the commit that hoists it, which is this file's
@@ -89,6 +86,7 @@ const POLICED = [
   'apps/mobile/app/route/',
   'apps/mobile/components/MiniMap.tsx',
   'apps/mobile/components/RouteMeta.tsx',
+  'apps/mobile/components/RouteFactSheets.tsx',
   'apps/mobile/components/EtaTimes.tsx',
   'apps/mobile/components/Fare.tsx',
   'apps/mobile/components/EtaBadge.tsx',

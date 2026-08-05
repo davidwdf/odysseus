@@ -1,29 +1,35 @@
 import {
   type EtaLabelParts,
   type EtaUrgency,
+  estimateChildFare,
+  estimateElderlyFare,
   etaLabelParts,
   etaUrgency,
   etaView,
   fareRange,
+  fareStages,
   formatFare,
   formatFareRange,
   formatHeadway,
+  formatJourney,
   formatServiceHours,
   isStale,
 } from './eta'
-import { routeDistanceM } from './geo'
+import { formatDistance, routeDistanceM } from './geo'
 import { formatFavoriteRouteKey, memberStopIds } from './ids'
 import { CLIENT_POLICY_DEFAULTS } from './policy'
 import { type BusMarker, inferBusMarkers } from './route-position'
 import { displayName, type StopCardName } from './stop-card'
 import { isCircular, splitStopCode, stripCircular, titleCaseName } from './stop-name'
 import type {
+  FreqPattern,
   I18nText,
   Locale,
   OperatorId,
   ResolvedClientPolicy,
   RouteDetail,
   RouteServiceInfo,
+  ServiceDayType,
 } from './types'
 
 // The rules the route-detail screen used to hold inline. They are judgements about what a rider is
@@ -601,3 +607,321 @@ function routeFacts(
   if (stops.length > 0) facts.push({ key: 'stops', value: labels.stopCount(stops.length) })
   return facts
 }
+
+// ── The four fact sheets (WP6-6c) ──────────────────────────────────────────────────────────────
+//
+// `routeDetailView` hoisted the *strip*; these are the four surfaces a pill opens (ADR-044), and they were
+// the last derivation left on this screen — 397 lines of `RouteFactSheets.tsx`, and the reason that file was
+// deliberately absent from `check-no-derivation`'s `POLICED` list until now.
+//
+// Eight decisions lived there, and the pattern is the wave's: each looks like formatting and each is a
+// judgement about what a rider is told.
+
+/** Which pill opened a sheet. The same four keys the strip carries, so a renderer switches once. */
+export type RouteFactSheetKind = RouteFactKey
+
+/** Which passenger class a concession figure is for. **A name, not a word** (ADR-054). */
+export type ConcessionClass = 'child' | 'elderly'
+
+/** Which whole-route figure a stat row states. A name, so the caller picks both word and glyph. */
+export type RouteStatKind = 'stops' | 'journey' | 'distance'
+
+/** One concession figure on a fare stage — an estimate, and printed as one. */
+export interface ConcessionFigure {
+  class: ConcessionClass
+  /**
+   * The figure, `~` and `$` included.
+   *
+   * **The tilde is part of the content, not a decoration a renderer adds.** These are policy-derived
+   * estimates rather than route data (ADR-044), and ADR-008 forbids presenting an estimate as a reading —
+   * so the mark that says so is composed here, where it cannot be dropped by one renderer.
+   */
+  fare: string
+}
+
+/** One step of the sectional fare, dearest first. */
+export interface FareStageRow {
+  /** The stops this price covers, 1-based and inclusive. `fromSeq` is also the row's identity. */
+  fromSeq: number
+  toSeq: number
+  /** The adult fare, printed. */
+  fare: string
+  /** Where a rider boards to pay it — the stop's display name, the same one the schematic shows. */
+  boardingStop: string
+  /** How far the price carries them, e.g. "12 stops" — the caller's plural rule, the kernel's count. */
+  covers: string
+  /** The estimates for this price. **Empty where the fare cannot be parsed**, never zeroed. */
+  concessions: ConcessionFigure[]
+}
+
+/** One whole-route figure behind the stop-count pill. */
+export interface RouteStatRow {
+  stat: RouteStatKind
+  value: string
+  /**
+   * True where the figure is an explicit estimate, so a renderer must say so.
+   *
+   * The route distance is a straight-line sum through the stops — there are no polylines upstream — and the
+   * journey time is the dataset's own origin→terminus figure. One is a guess and one is not, and a renderer
+   * that treated them alike would either over- or under-claim. It is a flag rather than a `~` in the string
+   * because the *caveat* is a whole sentence the catalogue owns, where the `~` on a concession fare is a
+   * mark inside a figure.
+   */
+  estimate: boolean
+}
+
+/** One day's frequency bands. */
+export interface FreqDayRow {
+  /** What this day is called — a named type, or the running days composed from the mask. */
+  day: string
+  bands: Array<{
+    /** The band's span, e.g. "07:00 – 09:30". */
+    hours: string
+    /** Its headway, e.g. "every 4 min". */
+    headway: string
+  }>
+}
+
+/** One day's first and last departure. */
+export interface HoursDayRow {
+  day: string
+  first: string
+  last: string
+}
+
+/** What a renderer needs to draw one fact sheet, with nothing left to decide. */
+export type RouteFactSheetView =
+  | {
+      kind: 'fare'
+      /** Dearest (origin) first, which is the order sectional fares step down in. */
+      stages: FareStageRow[]
+      /**
+       * Which concession classes the legend explains, or empty for no legend at all.
+       *
+       * **Empty is a real state**: a GMB route whose fares upstream publishes as a non-numeric string has no
+       * estimate to make, and a legend keyed to figures that are not on screen is worse than none. The RN
+       * sheet spelled this `stages.some((st) => estimateChildFare(st.fare) && estimateElderlyFare(st.fare))`,
+       * which is a decision about what a rider is shown rather than a formatting step.
+       */
+      concessions: ConcessionClass[]
+    }
+  | {
+      kind: 'freq'
+      /** Per day type, where the dataset carries a frequency table. */
+      days: FreqDayRow[]
+      /** The coarse range the pill shows, as the fallback when it does not. Absent when neither exists. */
+      headway?: string
+    }
+  | {
+      kind: 'hours'
+      days: HoursDayRow[]
+      /** The coarse span, as the fallback. Absent when neither exists. */
+      span?: string
+    }
+  | { kind: 'stops'; stats: RouteStatRow[] }
+
+/** The words this view composes with, supplied by the caller's catalogue. */
+export interface RouteFactLabels {
+  /** The whole "N stops" phrase — the plural rule is the catalogue's (ADR-054). */
+  stopCount: (n: number) => string
+  /**
+   * The seven short day names, **Sunday first**, matching `FreqPattern.days`' documented order.
+   *
+   * A list rather than seven getters, because what the kernel does with them is **join a subset** — and that
+   * join, separator and all, is the composition worth owning: the RN sheet did it with
+   * `.map(...).filter(Boolean).join(' · ')`, which is three renderer decisions (which days, in what order,
+   * with what between them) for one answer.
+   */
+  dayNames: readonly string[]
+  /** A named day type, or the fallback for a mask that names none. */
+  day: (kind: ServiceDayType | 'other') => string
+}
+
+// There is deliberately **no** `concession` label here, and the absence is the ADR-054 line drawn tightly: the
+// kernel decides *which* passenger classes have a figure and *what that figure reads* (the `~` and the `$`),
+// and it never joins their names to anything — so the word stays in each renderer's own table beside the glyph
+// it belongs with. It was in this interface for one draft, unused, and `noUnusedFunctionParameters` said so.
+
+export interface RouteFactSheetOptions {
+  locale: Locale
+  labels: RouteFactLabels
+}
+
+/**
+ * One fact sheet's content, derived once.
+ *
+ * Takes the same `RouteDetail` payload the screen already has plus the view it already computed, because two
+ * of the four sheets are about the **stop list** (the fare timeline's boarding names, the stop count) and two
+ * are about the **service block**. Handing over the view rather than re-deriving from the payload is what
+ * keeps the fare timeline naming its stages exactly as the schematic above it does — the failure WP6-6a found
+ * when this file built a third list of its own.
+ *
+ * @spec route-detail#routeFactSheet
+ */
+export function routeFactSheet(
+  kind: RouteFactSheetKind,
+  view: RouteDetailView,
+  service: RouteServiceInfo | undefined,
+  opts: RouteFactSheetOptions,
+): RouteFactSheetView {
+  const { locale, labels } = opts
+  if (kind === 'fare') return fareSheet(view, labels)
+  if (kind === 'freq') return freqSheet(service, locale, labels)
+  if (kind === 'hours') return hoursSheet(service, labels)
+  return { kind: 'stops', stats: routeStats(view, service, locale) }
+}
+
+function fareSheet(view: RouteDetailView, labels: RouteFactLabels): RouteFactSheetView {
+  // The **raw** fares, which is why `RouteStopRowView` keeps both: `fareStages` groups contiguous runs by
+  // comparing the decimal, and `fareLabel` is what is printed.
+  const rows = view.stops
+  const byPosition = new Map(fareStages(rows.map((row) => row.fare)).map((s) => [s.fromSeq, s]))
+  // **Walked over the rows, and the stage looked up by POSITION rather than by `seq`.** Two reasons, and the
+  // second is a bug this shape closes. `fareStages` numbers its stages from the *array* it was handed
+  // (`fromSeq` is `index + 1`), while a row's `seq` is what the **wire** numbered it — the two agree on every
+  // payload seen so far and a route whose sequence did not start at 1 would make them differ, at which point
+  // a `find` by `seq` would name no stop at all and the timeline would print blank headings. And walking the
+  // rows leaves no dead branch: "this row does not start a stage" is the ordinary case, where a `find` with a
+  // `?? ''` fallback has an arm no payload can reach — the same finding as WP6-3a's `?? []`.
+  const stages = rows.flatMap((row, index) => {
+    const stage = byPosition.get(index + 1)
+    if (stage === undefined) return []
+    return [
+      {
+        fromSeq: stage.fromSeq,
+        toSeq: stage.toSeq,
+        fare: formatFare(stage.fare),
+        // The name from the row itself, so the timeline and the schematic cannot name one stop two ways.
+        boardingStop: row.name.label,
+        covers: labels.stopCount(stage.toSeq - stage.fromSeq + 1),
+        concessions: concessionFigures(stage.fare),
+      },
+    ]
+  })
+  // The legend explains exactly the classes that appear, which is what makes it honest: a class with no
+  // figure anywhere on screen has nothing to explain.
+  const classes = new Set(stages.flatMap((stage) => stage.concessions.map((c) => c.class)))
+  return {
+    kind: 'fare',
+    stages,
+    concessions: CONCESSION_CLASSES.filter((klass) => classes.has(klass)),
+  }
+}
+
+/** In legend order, which is the order the figures appear on a stage. */
+const CONCESSION_CLASSES: readonly ConcessionClass[] = ['child', 'elderly']
+
+/**
+ * The two estimates for one adult fare. See the note inside about why there is no `undefined` arm.
+ */
+function concessionFigures(adultFare: string): ConcessionFigure[] {
+  // The two casts, and why they are casts rather than guards: `fareStages` has **already screened** this
+  // value — it drops any fare `Number()` cannot read, so a stage's fare always parses and both estimates
+  // always resolve. An `undefined` arm here would be a branch no payload can reach, which the 100 % branch
+  // threshold refuses and rightly: an unreachable arm reads as a considered case and is a line nobody has
+  // run. Same narrowing, same reason, as the indexed reads in `search.ts`. The both-or-neither invariant is
+  // asserted in the corpus suite (`[0, 2]` figures per stage), so if the two ever stopped sharing a parse the
+  // property goes red rather than a dead line quietly becoming live.
+  //
+  // Drawing one without the other would read as *"no elderly concession on this route"* rather than *"we
+  // could not work it out"*, which is why it matters at all.
+  return [
+    { class: 'child', fare: `~${formatFare(estimateChildFare(adultFare) as string)}` },
+    { class: 'elderly', fare: `~${formatFare(estimateElderlyFare(adultFare) as string)}` },
+  ]
+}
+
+function freqSheet(
+  service: RouteServiceInfo | undefined,
+  locale: Locale,
+  labels: RouteFactLabels,
+): RouteFactSheetView {
+  const days = (service?.patterns ?? []).map((pattern) => ({
+    day: dayLabel(pattern, labels),
+    bands: pattern.bands.map((band) => ({
+      hours: formatServiceHours({ start: band.start, end: band.end }),
+      // A band has one headway, not a range, so it is formatted as a degenerate range rather than with a
+      // second rule — which is what keeps "every 4 min" here and "every 4 – 12 min" on the pill in one voice.
+      headway: formatHeadway({ min: band.headwayMin, max: band.headwayMin }, locale),
+    })),
+  }))
+  return {
+    kind: 'freq',
+    days,
+    // The coarse range only where there is no table to show instead. Both absent is a real state: the pill
+    // that opened this sheet exists on the stop count, so a route with no frequency data can still be here.
+    ...(days.length > 0 || service?.headway === undefined
+      ? {}
+      : { headway: formatHeadway(service.headway, locale) }),
+  }
+}
+
+function hoursSheet(
+  service: RouteServiceInfo | undefined,
+  labels: RouteFactLabels,
+): RouteFactSheetView {
+  const days = (service?.patterns ?? []).map((pattern) => ({
+    day: dayLabel(pattern, labels),
+    first: pattern.first,
+    last: pattern.last,
+  }))
+  return {
+    kind: 'hours',
+    days,
+    ...(days.length > 0 || service?.hours === undefined
+      ? {}
+      : { span: formatServiceHours(service.hours) }),
+  }
+}
+
+/**
+ * The whole-route figures, each present only where the dataset supports it.
+ *
+ * The stop count is always there (it is what the pill counted); the journey time only where upstream
+ * published one; the distance only where the sequence had enough coordinates to have one. `journeyMin` of
+ * zero is treated as absent, which is the RN sheet's `journeyMin ?` truthiness preserved: a route that
+ * takes no time is a broken row, not a fast bus.
+ */
+function routeStats(
+  view: RouteDetailView,
+  service: RouteServiceInfo | undefined,
+  locale: Locale,
+): RouteStatRow[] {
+  // The count is a **bare number** here, not "34 stops": the row beside it already says "Stops", where the
+  // strip's pill has no label of its own and therefore carries the whole phrase. Same datum, two honest
+  // readings — which is why `labels.stopCount` is not consulted on this sheet.
+  const stats: RouteStatRow[] = [
+    { stat: 'stops', value: String(view.stops.length), estimate: false },
+  ]
+  const journeyMin = service?.journeyMin
+  if (journeyMin !== undefined && journeyMin > 0) {
+    // `formatJourney` already carries its own "~" (or 約 / 约), because "about 62 min" is how the figure is
+    // said rather than a caveat about it. `estimate` is still true: the *sentence* under it is the caveat.
+    stats.push({ stat: 'journey', value: formatJourney(journeyMin, locale), estimate: true })
+  }
+  if (view.distanceM > 0) {
+    stats.push({ stat: 'distance', value: `~${formatDistance(view.distanceM)}`, estimate: true })
+  }
+  return stats
+}
+
+/**
+ * What a frequency or hours row calls its day.
+ *
+ * The four named types are a lookup; the fifth is the composition. `dayType: 'other'` means the dataset
+ * carries a day mask that matches none of them, and the honest answer is to name the days it runs —
+ * **Sunday-first, in the mask's own order, joined with the app's separator** — falling back to the generic
+ * word only when the mask names nothing at all. Three decisions (which days, in what order, with what
+ * between them) that were a `.map().filter().join(' · ')` in a renderer.
+ */
+function dayLabel(pattern: FreqPattern, labels: RouteFactLabels): string {
+  if (pattern.dayType !== 'other') return labels.day(pattern.dayType)
+  const running = pattern.days.flatMap((runs, index) => {
+    const name = labels.dayNames[index]
+    return runs && name !== undefined ? [name] : []
+  })
+  return running.length > 0 ? running.join(DAY_SEPARATOR) : labels.day('other')
+}
+
+/** The separator between running days. The same `' · '` the app uses to bind two readings of one thing. */
+const DAY_SEPARATOR = ' · '

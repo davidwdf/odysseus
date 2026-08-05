@@ -6827,3 +6827,92 @@ pre-existing and unaddressed; it earned its keep here.
     boarding row up — failing `anchored` for a reason that has nothing to do with the screen.
   - **Test totals:** core 924, edge 149, api-client 71, ui-spec 30, web **154** (+23), mobile **132** (+23) —
     **1 460**. Corpus 14 files / 106 groups / 900 cases / 4 `knownDefect`; **7 component specs**.
+
+## ADR-095 — The estimate mark is content, and so is the separator between two day names
+
+- **Status:** **Decided and implemented 2026-08-05** as **WP6-6c**, which closes **WP6-6** entirely.
+  Implementation: `routeFactSheet` in `packages/core/src/route-detail.ts` (+15 corpus cases in
+  `route-detail.spec.json`, +6 property/coverage tests), `apps/mobile/components/RouteFactSheets.tsx` reduced
+  to a projection, a new `apps/web/src/components/RouteFactSheet.tsx`, and
+  `apps/mobile/components/RouteFactSheets.tsx` joining `check-no-derivation`'s `POLICED` list — **with no new
+  allowlist entries**, which is the cleanest signal that nothing derivable was left behind.
+- **Context.** WP6-6a hoisted the static-facts *strip*; the four surfaces a pill opens (ADR-044) were the last
+  derivation on this screen and the reason `RouteFactSheets.tsx` — 397 lines — was deliberately the one route
+  surface the gate did not read. `apps/web` drew the strip as inert pills, declared in the spec as an
+  `optional` interaction so the gap was a statement rather than a silence.
+- **Decisions:**
+  1. **The `~` on a concession figure is content.** These are policy-derived estimates rather than route data,
+     and ADR-008 forbids presenting an estimate as a reading — so the mark that says so is composed in the
+     kernel, where one renderer cannot drop it. The same argument puts the `~` on the route distance.
+  2. **The separator between two day names is content too**, and it is the sharpest case in the group. A
+     `dayType` of `other` means the dataset's mask matches none of the four named types, and the honest answer
+     is to name the days it runs — *which* days, in *what* order (Sunday-first, the mask's own), with *what*
+     between them. That was `.map().filter(Boolean).join(' · ')` in a React component: three decisions for one
+     answer, and a second renderer would have picked a comma.
+  3. **The legend explains exactly the classes that appear.** A class explained but never shown is a promise
+     the sheet did not keep; a class shown but not explained is an unlabelled estimate. It was
+     `stages.some((st) => estimateChildFare(st.fare) && estimateElderlyFare(st.fare))` inline, and it is a
+     property test now.
+  4. **A coarse fallback appears only where there is no table**, on both the frequency and the hours sheet.
+     Both at once would state one fact twice at two fidelities. Asserted as its own property rather than
+     assumed symmetric: the two sheets read *different* fields of the same block, so a port that wired one
+     fallback and forgot the other looks right on every route that has patterns.
+  5. **`estimate` is a flag, not a mark in the string** — on the overview's three figures. The route distance
+     is a straight line through the stops and the journey time is upstream's own timing; the *caveat* under
+     each is a whole sentence the catalogue owns, where the `~` inside a fare is a mark inside a figure. A
+     property asserts the stop count is never flagged and the other two always are.
+  6. **The overview's stop count is a bare number**; the strip's pill carries the whole "34 stops" phrase.
+     Same datum, two honest readings — the row beside it already says *Stops* and the pill has no label of its
+     own. It is why `labels.stopCount` is not consulted on that sheet, which `noUnusedFunctionParameters`
+     pointed out before the reasoning was written down.
+  7. **There is no `concession` label in `RouteFactLabels`**, and the absence draws ADR-054's line tightly: the
+     kernel decides which classes have a figure and what the figure reads, and never joins their *names* to
+     anything — so the word stays in each renderer's table beside the glyph it belongs with. It was in the
+     interface for one draft, unused, and lint said so.
+  8. **The DOM sheet is a `<dialog>`, and it does not dismiss on a backdrop click.** `showModal()` gives focus
+     trapping, Escape and an inert backdrop for free — what a keyboard and a screen reader need, and what a pan
+     gesture cannot provide. The obvious backdrop-click (an `onClick` on the `<dialog>`, since a click on the
+     backdrop *is* a click on the element) is a handler on a non-interactive element with no keyboard path, and
+     Biome's `useKeyWithClickEvents` is right about it. The RN scrim tap is a thumb-reach idiom; Escape and the
+     close control are the two paths here and both work for every input device. **Suppressing the rule to add a
+     third would have been the wrong trade** — a note worth keeping, because the previous instinct on this
+     repo was to suppress (ADR-092's `<div>` with an `onClick`, which CI caught).
+- **What the injections found, and one of them is the interesting result.**
+  - ⚪ **Four of five went red as expected**: dropping a figure's `~`, joining an unnamed mask with a comma,
+    showing the coarse fallback beside the table, and marking the stop count an estimate.
+  - 🟠 **The fifth came back green, and the fix it reverted was real.** The fare timeline looks its boarding
+    stop up by **position** rather than by `seq`, because `fareStages` numbers stages from the array it was
+    handed while a row's `seq` is what the wire numbered it — and the spec's own `seq` invariant says the two
+    agree today and would differ on an offset or gapped sequence. Reverting to a `find` by `seq` changed
+    nothing, because **every fixture had `seq === index + 1`**: the fix was reasoning rather than a
+    measurement. A corpus case with a sequence starting at 5 now exists, and the same injection turns two tests
+    red. *An injection that comes back green is sometimes a statement about the fixtures rather than about the
+    gate* — the third variant of this lesson in two rows.
+  - ⚪ **Two dead branches refused by the 100 % threshold, both removed rather than excused.** The stage lookup
+    became a walk over the rows (as the bus tokens did in WP6-6a), and `concessionFigures` became two
+    documented casts: `fareStages` has already screened the fare, so an `undefined` arm there is a line nobody
+    can run. The both-or-neither invariant it used to encode is **asserted** in the suite instead, which is the
+    stronger arrangement — if the two estimates ever stopped sharing a parse, a property goes red rather than a
+    dead line quietly becoming live.
+- **Also a live defect, pinned as a `knownDefect` corpus row.** A route whose per-stop fares are non-numeric
+  gets an **entirely blank fare sheet**: `fareStages` drops any value `Number()` cannot read, so there are no
+  stages and no concessions — while `fareRange` drops the same values, falls back to `service.fareFull`, and
+  the pill therefore reads `$13.4`. A rider taps a pill showing a fare and gets nothing. The fix is in
+  `docs/07`: fall back to the origin full fare as a single stage covering the whole route, which is the same
+  datum the pill used.
+- **Verified in a browser on live Hong Kong data** (`.context/wave6-screenshots/15-web-route-fare-sheet.jpg`,
+  `16-web-route-overview-sheet.jpg`): KMB 1A on `apps/web` — the fare timeline's four price steps with
+  `~$4.1` / `~$2.0` beside each, the boarding stop and the stops covered, and the *Estimated concessions*
+  legend with both classes and the disclaimer; the frequency sheet's `Mon – Fri` bands; the hours sheet's three
+  day types with First/Last; and the overview reading `Stops 34`, `Full journey ~60 min` and `Distance ~13.0km`
+  with a caveat under each of the two estimates. The RN sheets render the same content from the same call.
+- **Consequences:**
+  - ⚪ **`check-no-derivation` now polices every route surface**, 37 files across 15 paths, and the strip's
+    interaction is no longer `optional` in the spec — both renderers open a sheet. What `optional` bought while
+    it lasted is recorded on the interaction rather than deleted with it.
+  - ⚪ **A sheet is not a state of the Route spec.** Its content is `routeFactSheet`'s, pinned by 15 corpus
+    cases and projected by both renderers; what the screen spec holds about the sheets is that the pill which
+    opens one is a control and that the strip's own text does not depend on the affordance existing. A separate
+    component spec for the sheets is available if a third renderer wants one and is not owed by this row.
+  - **Test totals:** core **930** (+6), edge 149, api-client 71, ui-spec 30, web 154, mobile 132 — **1 466**.
+    Corpus 14 files / **107** groups / **915** cases / **5** `knownDefect`.

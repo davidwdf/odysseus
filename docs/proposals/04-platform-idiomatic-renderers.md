@@ -1,6 +1,6 @@
 # 04 — Platform-idiomatic renderers: one spec, three UIs
 
-> **Status:** work plan, **in progress — WP6-0 … WP6-6 are done bar WP6-6c** (2026-08-03/05,
+> **Status:** work plan, **in progress — WP6-0 … WP6-6 are done** (2026-08-03/05,
 > [ADR-082](../08-decision-log.md#adr-082--the-web-shell-before-the-web-screens-a-router-over-a-declared-destination-set-and-one-pwa-policy-for-two-apps)
 > [ADR-083](../08-decision-log.md#adr-083--a-component-spec-is-data-with-five-words-and-the-projection-is-what-pins-it)
 > [ADR-084](../08-decision-log.md#adr-084--a-screen-spec-a-state-that-declares-what-it-shows-and-a-slot-that-references-another-spec)
@@ -370,7 +370,7 @@ Waves 0–5 are spent; this is **Wave 6**.
 | **WP6-6** ✅ | Route detail: spec + port; the motion contract | Reduced-motion is asserted; the schematic's intent is declared and the web curve is *chosen*, not inherited | L |
 | ↳ **WP6-6a** ✅ | …the **hoist**: `routeDetailView` + 20 corpus cases, and the RN screen plus `RouteMeta`, `RouteHeader` and `EtaTimes` consuming it ([ADR-093](../08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry)) | **Sixteen** decisions gone from the screen — more than any other in the app; `packages/core` back at 100 % on all four axes; browser-verified on KMB 1A | M |
 | ↳ **WP6-6b** ✅ | …the **spec** (19 states, 17 projected), the `apps/web` **port**, the motion contract, and `app/route/` plus three leaf components joining `check-no-derivation`'s `POLICED` list ([ADR-094](../08-decision-log.md#adr-094--motion-is-idiom-what-the-motion-is-about-is-not)) | as the row above; `apps/web` reaches **five** ported screens and the last id-parameterised placeholder dies | M |
-| ↳ **WP6-6c** | …the four **fact sheets** (`RouteFactSheets.tsx`): the fare-stage timeline with its concession estimates, the per-day-type frequency bands, the day-name list — a hoist of its own, then the DOM port | The sheets stop deriving and the file joins `POLICED`; `docs/07` carries the row | M |
+| ↳ **WP6-6c** ✅ | …the four **fact sheets**: `routeFactSheet` + 15 corpus cases, `RouteFactSheets.tsx` reduced to a projection, and a DOM `<dialog>` twin ([ADR-095](../08-decision-log.md#adr-095--the-estimate-mark-is-content-and-so-is-the-separator-between-two-day-names)) | The sheets stop deriving and the file joins `POLICED` **with no new allowlist entries**; the `~` that marks an estimate and the ` · ` that joins an unnamed day mask are both the kernel's | M |
 | **WP6-7** ⬅ next | Settings · About · FAQ | Ported; the stale `faqOfflineA` strings refreshed at the same time | S |
 | **WP6-8** | Retire `apps/mobile` | Every spec green on `apps/web`; `expo`, `react-native`, `nativewind`, `reanimated`, `gesture-handler` leave the lockfile; `packages/ui` keeps generating for three platforms | M |
 | **WP6-9** | The first native repo consumes `contract/ui/` | One screen in SwiftUI passing the same specs — **the honest test of the whole thesis**, and the first time the Swift/Kotlin token artefacts are compiled at all | L |

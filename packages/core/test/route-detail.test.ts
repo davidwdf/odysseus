@@ -6,8 +6,11 @@ import {
   isOriginStop,
   type RouteDetailView,
   type RouteEnds,
+  type RouteFactSheetKind,
+  type RouteFactSheetView,
   type RouteHeaderNames,
   routeDetailView,
+  routeFactSheet,
   routeTerminusNames,
   upcoming,
   visibleBusMarkers,
@@ -278,6 +281,178 @@ describe('route-detail#routeDetailView', () => {
         v.stops.some((s) => s.name.code !== undefined),
       ),
       'a name with none': views.some((v) => v.stops.some((s) => s.name.code === undefined)),
+    }
+    expect(
+      Object.entries(arms)
+        .filter(([, hit]) => !hit)
+        .map(([arm]) => arm),
+    ).toEqual([])
+  })
+})
+
+describe('route-detail#routeFactSheet', () => {
+  // The four sheets a static pill opens (WP6-6c). Every case's `expect` is the whole sheet, so a change to
+  // any of the eight decisions it makes — where a fare stage starts, which concessions are explained, how an
+  // unnamed day mask is named, which whole-route figures are estimates — is a corpus diff.
+  const LABELS = {
+    stopCount: (n: number) => `${n} stops`,
+    dayNames: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    day: (kind: string) =>
+      ({
+        weekday: 'Mon – Fri',
+        saturday: 'Saturday',
+        sunday: 'Sunday & holidays',
+        daily: 'Every day',
+        other: 'Selected days',
+      })[kind] ?? kind,
+  }
+
+  interface Args {
+    kind: RouteFactSheetKind
+    detail: RouteDetailPayload
+    locale: Locale
+    now: string
+  }
+
+  const rows = () => specCases<Args, RouteFactSheetView>(corpus, 'routeFactSheet')
+
+  /** The sheet, derived through the **same view the screen has** — see the function's own note. */
+  const sheetFor = (a: Args) =>
+    routeFactSheet(
+      a.kind,
+      routeDetailView(a.detail, { locale: a.locale, now: at(a.now), labels: VIEW_LABELS }),
+      a.detail.route.service,
+      { locale: a.locale, labels: LABELS },
+    )
+
+  /** `routeDetailView`'s own label fixture, reused so the two groups cannot disagree about a stop's name. */
+  const VIEW_LABELS = {
+    stopCount: (n: number) => `${n} stops`,
+    holiday: 'hol',
+    circularVia: (place: string) => `Circular via ${place}`,
+    busApproaching: (stop: string) => `Bus approaching ${stop}`,
+    busAtStop: (stop: string) => `Bus at ${stop}`,
+  }
+
+  it('matches the corpus, case for case', () => {
+    const cases = rows()
+    expect(cases.length).toBeGreaterThanOrEqual(12)
+    for (const c of cases) {
+      expect(sheetFor(c.args), c.name).toEqual(c.expect)
+    }
+  })
+
+  it('names every fare stage’s boarding stop with the schematic’s own words', () => {
+    // The property behind handing the *view* in rather than the payload. A timeline that computed its own
+    // display names would drift from the list above it the first time either grew a rule — which is exactly
+    // what WP6-6a found in this file, as a second inlined spelling of `displayName` eleven lines from the
+    // first. So: every stage's `boardingStop` is some row's `name.label`, never a string of its own.
+    for (const c of rows()) {
+      const view = routeDetailView(c.args.detail, {
+        locale: c.args.locale,
+        now: at(c.args.now),
+        labels: VIEW_LABELS,
+      })
+      const names = new Set(view.stops.map((row) => row.name.label))
+      const sheet = sheetFor(c.args)
+      if (sheet.kind !== 'fare') continue
+      for (const stage of sheet.stages) {
+        expect(names.has(stage.boardingStop), `${c.name}: invented "${stage.boardingStop}"`).toBe(
+          true,
+        )
+      }
+    }
+  })
+
+  it('explains exactly the concession classes that appear, and never one that does not', () => {
+    // The legend's honesty, as a property rather than a value: a class explained but never shown is a promise
+    // the sheet did not keep, and a class shown but not explained is an unlabelled estimate — which ADR-044
+    // forbids, because these are policy figures rather than route data.
+    for (const c of rows()) {
+      const sheet = sheetFor(c.args)
+      if (sheet.kind !== 'fare') continue
+      const shown = new Set(
+        sheet.stages.flatMap((stage) => stage.concessions.map((figure) => figure.class)),
+      )
+      expect([...sheet.concessions].sort(), c.name).toEqual([...shown].sort())
+      // Both or neither, per stage — the two come from one parse, so a stage with exactly one is impossible.
+      for (const stage of sheet.stages) expect([0, 2], c.name).toContain(stage.concessions.length)
+    }
+  })
+
+  it('marks an estimate as one, and never marks a count as one', () => {
+    // ADR-008 on the overview sheet. The stop count is a fact; the distance is a straight line through the
+    // stops and the journey time is upstream's own timing, and both are labelled. A port that dropped the
+    // flag would present a guess as a measurement, which is the one thing this app does not do.
+    for (const c of rows()) {
+      const sheet = sheetFor(c.args)
+      if (sheet.kind !== 'stops') continue
+      for (const stat of sheet.stats) {
+        expect(stat.estimate, `${c.name} / ${stat.stat}`).toBe(stat.stat !== 'stops')
+      }
+      // The count is always there: this sheet was opened from the pill that showed it.
+      expect(
+        sheet.stats.some((s) => s.stat === 'stops'),
+        c.name,
+      ).toBe(true)
+    }
+  })
+
+  it('shows a coarse fallback only where there is no table to show instead', () => {
+    // Never both, on either sheet. Both at once would state one fact twice at two fidelities and leave a
+    // rider to work out which is authoritative — and the two sheets read *different* fields of the same
+    // block, so a port that wired one fallback and forgot the other looks right on every route with patterns.
+    for (const c of rows()) {
+      const sheet = sheetFor(c.args)
+      if (sheet.kind === 'freq') {
+        expect(sheet.days.length > 0 && sheet.headway !== undefined, c.name).toBe(false)
+      }
+      if (sheet.kind === 'hours') {
+        expect(sheet.days.length > 0 && sheet.span !== undefined, c.name).toBe(false)
+      }
+    }
+  })
+
+  it('exercises every arm its own declarations have', () => {
+    // The coverage control, as on `routeDetailView` and for the same reason (WP6-3b): a case nothing drives
+    // is a specification looking at nothing.
+    const sheets = rows().map((c) => sheetFor(c.args))
+    const arms: Record<string, boolean> = {
+      'a fare timeline with stages': sheets.some((s) => s.kind === 'fare' && s.stages.length > 0),
+      'a fare timeline with none': sheets.some((s) => s.kind === 'fare' && s.stages.length === 0),
+      'a concession legend': sheets.some((s) => s.kind === 'fare' && s.concessions.length > 0),
+      'no concession legend': sheets.some((s) => s.kind === 'fare' && s.concessions.length === 0),
+      'a frequency table': sheets.some((s) => s.kind === 'freq' && s.days.length > 0),
+      'a frequency fallback': sheets.some((s) => s.kind === 'freq' && s.headway !== undefined),
+      'a frequency sheet with neither': sheets.some(
+        (s) => s.kind === 'freq' && s.days.length === 0 && s.headway === undefined,
+      ),
+      'an hours table': sheets.some((s) => s.kind === 'hours' && s.days.length > 0),
+      'an hours fallback': sheets.some((s) => s.kind === 'hours' && s.span !== undefined),
+      'a multi-band day': sheets.some(
+        (s) => s.kind === 'freq' && s.days.some((day) => day.bands.length > 1),
+      ),
+      'a day named from its mask': sheets.some(
+        (s) =>
+          (s.kind === 'freq' || s.kind === 'hours') && s.days.some((d) => d.day.includes(' · ')),
+      ),
+      'a mask that names nothing': sheets.some(
+        (s) =>
+          (s.kind === 'freq' || s.kind === 'hours') &&
+          s.days.some((d) => d.day === 'Selected days'),
+      ),
+      'an overview with a journey time': sheets.some(
+        (s) => s.kind === 'stops' && s.stats.some((r) => r.stat === 'journey'),
+      ),
+      'an overview without a journey time': sheets.some(
+        (s) => s.kind === 'stops' && !s.stats.some((r) => r.stat === 'journey'),
+      ),
+      'an overview with a distance': sheets.some(
+        (s) => s.kind === 'stops' && s.stats.some((r) => r.stat === 'distance'),
+      ),
+      'an overview without a distance': sheets.some(
+        (s) => s.kind === 'stops' && !s.stats.some((r) => r.stat === 'distance'),
+      ),
     }
     expect(
       Object.entries(arms)

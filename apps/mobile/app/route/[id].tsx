@@ -4,6 +4,8 @@ import {
   type RouteDetailView,
   type RouteStopRowView,
   routeDetailView,
+  routeFactSheet,
+  type ServiceDayType,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -46,6 +48,25 @@ import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
+
+/**
+ * The words the fact sheets' composed strings are built from — the day names a mask is joined out of, and
+ * the passenger classes a concession legend keys.
+ *
+ * They live here, at the injection boundary, because the kernel may not import `@nextbus/i18n` (ADR-054): it
+ * decides *which* days a pattern runs and *what goes between them*, and the catalogue owns the words. The DOM
+ * screen passes the identical four.
+ */
+const DAY_LABEL: Record<
+  ServiceDayType | 'other',
+  'dayWeekday' | 'daySaturday' | 'daySunday' | 'dayDaily' | 'dayOther'
+> = {
+  weekday: 'dayWeekday',
+  saturday: 'daySaturday',
+  sunday: 'daySunday',
+  daily: 'dayDaily',
+  other: 'dayOther',
+}
 
 const RAIL_W = 52
 const NODE = 28
@@ -332,12 +353,19 @@ export default function RouteDetail() {
         />
       ) : null}
 
-      {factSheet ? (
+      {/* The sheet a fact pill opens (ADR-044). Both the pill and the sheet read one call each, and the
+          sheet is handed the **view** rather than the payload so its fare timeline cannot name a stop
+          differently from the schematic above it (WP6-6c). */}
+      {factSheet && view ? (
         <RouteFactSheet
-          kind={factSheet}
-          service={query.data?.route.service}
-          stops={view?.stops ?? []}
-          distanceM={view?.distanceM ?? 0}
+          sheet={routeFactSheet(factSheet, view, query.data?.route.service, {
+            locale,
+            labels: {
+              stopCount: (n) => t(locale, 'stopCount', { n }),
+              dayNames: t(locale, 'daysShort').split(','),
+              day: (kind) => t(locale, DAY_LABEL[kind]),
+            },
+          })}
           locale={locale}
           onClose={() => setFactSheet(null)}
         />

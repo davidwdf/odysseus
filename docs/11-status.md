@@ -12,7 +12,7 @@
 > so `apps/web` has **five ported screens** — Nearby, Place detail, Favourites, Search and (on this branch)
 > Route detail — three destinations still naming the work package that ports them, and `apps/mobile`'s Place detail is policed by
 > `check-no-derivation` for the first time: the asymmetry ADR-069 recorded, closed for that screen.
-> **WP6-6 (Route detail) is done bar WP6-6c**, on `wp6-6-route-detail`. **Its hoist half came first**
+> **WP6-6 (Route detail) is done**, on `wp6-6-route-detail`. **Its hoist half came first**
 > ([ADR-093](./08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry)).
 > `proposals/04` calls Place detail *"the most domain rules in the app"*; Place detail had **nine** and this
 > screen had **sixteen** — which row is the boarding anchor and that a flip drops it, each row's soonest
@@ -74,12 +74,35 @@
 > Bay`, 36 rows, every fare present and **not one arrival time**, with nothing saying why. Screenshots:
 > `.context/wave6-screenshots/13-web-route-detail-shipping.jpg`,
 > `14-web-route-citybus-no-times-anywhere.jpg`.
-> **WP6-6c** is what is left of the row and is new: the four **fact sheets** still derive — 397 lines holding
-> the fare-stage timeline with its concession estimates, the per-day-type frequency bands and the day-name
-> list — so `RouteFactSheets.tsx` is deliberately absent from `check-no-derivation`'s `POLICED` list and
-> `apps/web` draws the strip as static pills. The spec declares that honestly rather than hiding it:
-> `factValue`'s interaction is `optional: true`, which makes the walker require the *text* to be identical
-> whether or not the affordance exists. **WP6-7 (Settings · About · FAQ) is next after it.**
+> **WP6-6c closed the row** ([ADR-095](./08-decision-log.md#adr-095--the-estimate-mark-is-content-and-so-is-the-separator-between-two-day-names)):
+> the four **fact sheets** were the last derivation on this screen — 397 lines — and the reason
+> `RouteFactSheets.tsx` was the one route surface `check-no-derivation` did not read. All eight decisions are
+> `routeFactSheet`'s now, with 15 corpus cases; the RN component is a projection, `apps/web` has the sheets as
+> a **`<dialog>`**, and the file joined `POLICED` **with no new allowlist entries** — which is the cleanest
+> signal that nothing derivable was left behind.
+> **The two load-bearing decisions are both about a mark:** the `~` on a concession figure is **content**,
+> because these are policy estimates rather than route data and ADR-008 forbids presenting an estimate as a
+> reading — so the mark is composed where one renderer cannot drop it. And the ` · ` between two day names is
+> content too: `dayType: 'other'` means the mask matches none of the four named types, and *which* days, in
+> *what* order, with *what* between them was `.map().filter(Boolean).join(' · ')` in a React component — three
+> decisions for one answer, and a second renderer would have picked a comma.
+> 🟠 **An injection came back green and the fix it reverted was real.** The fare timeline looks its boarding
+> stop up by **position** rather than by `seq`, because `fareStages` numbers stages from the array it was
+> handed while a row's `seq` is the wire's. Reverting that changed nothing, because **every fixture had
+> `seq === index + 1`** — the fix was reasoning rather than a measurement. A case with a sequence starting at 5
+> now exists and the same injection turns two tests red. *An injection that comes back green is sometimes a
+> statement about the fixtures rather than about the gate.*
+> 🔴 **And one more live defect: a route whose per-stop fares are not numbers opens an entirely blank fare
+> sheet** while the pill that opened it shows `$13.4` — `fareStages` drops what it cannot parse and `fareRange`
+> falls back to `service.fareFull`. Corpus row + `docs/07`, with the fix (fall back to a single stage over the
+> whole route).
+> **Verified in a browser:** all four sheets on `apps/web` — the fare timeline's four price steps with
+> `~$4.1` / `~$2.0` beside each and the *Estimated concessions* legend, the `Mon – Fri` frequency bands, three
+> day types of First/Last, and `Stops 34` · `Full journey ~60 min` · `Distance ~13.0km` with a caveat under
+> each estimate. Screenshots: `.context/wave6-screenshots/15-web-route-fare-sheet.jpg`,
+> `16-web-route-overview-sheet.jpg`.
+> **WP6-7 (Settings · About · FAQ) is next**, and it is an **S**: mostly chrome and prose, plus deleting
+> `ShellPreferences.tsx` — the scaffolding WP6-0 left with that work package's name on it.
 > One process rule came out of #24 and belongs at the top because it cost two CI runs: **run the gate chain
 > after committing, not before.** Both things CI caught — a `<div>` with an `onClick`, and rule 7 on the commit
 > that fixed it — were checks whose results had been measured before the final edit. *A check whose result you

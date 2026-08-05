@@ -5947,6 +5947,2746 @@
           }
         }
       ]
+    },
+    "routeFactSheet": {
+      "doc": "One of the four fact sheets a static pill opens (ADR-044), derived once: the sectional-fare timeline with its concession estimates, the per-day-type frequency bands, the first/last hours, and the whole-route overview. Eight decisions that lived in `apps/mobile/components/RouteFactSheets.tsx` (WP6-6c) — which is why that file was the one surface `check-no-derivation` still did not police. `labels` is a fixture supplied by each platform’s suite; what these rows pin is the COMPOSITION, chiefly the `~` that marks an estimate and the ` · ` that joins an unnamed day mask. `view` is `routeDetailView`’s output for the same payload, so a timeline cannot name a stop differently from the schematic above it.",
+      "cases": [
+        {
+          "name": "the-fare-timeline-steps-down-and-names-where-you-board-for-each-price",
+          "why": "The sheet ADR-044 exists for. HK fares are **sectional**, so a rider boarding later pays less, and the timeline says where each price starts and how far it carries them. The boarding name comes from the schematic’s own rows rather than a second mapping — the route screen used to build a third list here with `titleCaseName(splitStopCode(…).label)`, one edit away from a timeline that named its stages differently from the list above it (WP6-6a).",
+          "args": {
+            "kind": "fare",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "fare",
+            "stages": [
+              {
+                "fromSeq": 1,
+                "toSeq": 2,
+                "fare": "$13.4",
+                "boardingStop": "Tin Shui Wai Station",
+                "covers": "2 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$6.7"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.7"
+                  }
+                ]
+              },
+              {
+                "fromSeq": 3,
+                "toSeq": 3,
+                "fare": "$11.2",
+                "boardingStop": "Kingswood Richly Plaza",
+                "covers": "1 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$5.6"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.2"
+                  }
+                ]
+              },
+              {
+                "fromSeq": 4,
+                "toSeq": 4,
+                "fare": "$6.9",
+                "boardingStop": "Tsuen Wan Station",
+                "covers": "1 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$3.5"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.0"
+                  }
+                ]
+              }
+            ],
+            "concessions": ["child", "elderly"]
+          }
+        },
+        {
+          "name": "every-fare-stage-carries-both-concession-estimates-or-neither",
+          "why": "Both or neither, because both come from the same parse. Two independent optionals would let a renderer draw a child figure beside a missing elderly one, which reads as \"no elderly concession on this route\" rather than \"we could not work it out\". Each figure carries its own `~`: these are policy-derived estimates, not route data, and ADR-008 forbids presenting an estimate as a reading — so the mark that says so is composed here where one renderer cannot drop it.",
+          "args": {
+            "kind": "fare",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "24.2"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "24.2"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "9.9"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "2.3"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "fare",
+            "stages": [
+              {
+                "fromSeq": 1,
+                "toSeq": 2,
+                "fare": "$24.2",
+                "boardingStop": "Tin Shui Wai Station",
+                "covers": "2 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$12.1"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$4.8"
+                  }
+                ]
+              },
+              {
+                "fromSeq": 3,
+                "toSeq": 3,
+                "fare": "$9.9",
+                "boardingStop": "Kingswood Richly Plaza",
+                "covers": "1 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$5.0"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.0"
+                  }
+                ]
+              },
+              {
+                "fromSeq": 4,
+                "toSeq": 4,
+                "fare": "$2.3",
+                "boardingStop": "Tsuen Wan Station",
+                "covers": "1 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$1.2"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.0"
+                  }
+                ]
+              }
+            ],
+            "concessions": ["child", "elderly"]
+          }
+        },
+        {
+          "name": "a-route-whose-fares-are-not-numbers-opens-an-entirely-blank-fare-sheet",
+          "why": "A LIVE DEFECT, and the row records it as it stands. `fareStages` skips any fare it cannot read as a number (its own guard, `Number.isNaN(Number(f))`), so a payload whose per-stop fares are non-numeric yields **no stages at all** — and `concessions` is empty with them, which is correct on its own terms: there is no estimate to make and a legend keyed to figures that are not on screen is worse than none. What makes it a defect is the pill: `fareRange` skips the same values, falls back to `service.fareFull`, and the strip therefore reads `$13.4`. So a rider taps a pill showing a fare and gets a blank sheet. WHEN FIXED: the sheet falls back to the origin full fare as a single stage covering the whole route — the same datum the pill used — and says nothing about sections it cannot describe. Owner: `docs/07`. Whether upstream actually publishes such a fare is not something this row measures; the guard makes the state reachable by construction, which is enough to pin it.",
+          "knownDefect": true,
+          "args": {
+            "kind": "fare",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "n/a"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "n/a"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "n/a"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "n/a"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "fare",
+            "stages": [],
+            "concessions": []
+          }
+        },
+        {
+          "name": "a-sequence-that-does-not-start-at-one-still-names-the-right-boarding-stops",
+          "why": "THE ROW THAT MAKES THE LOOKUP A MEASUREMENT RATHER THAN AN ARGUMENT. `fareStages` numbers its stages from the **array** it was handed (`fromSeq` is `index + 1`), while a row’s `seq` is what the **wire** numbered it — and `RouteStopRowView.seq`’s own note says the two agree today and would differ on a payload whose sequence was offset or gapped. So the boarding stop is looked up by **position**, and this payload (seq 5…9) is what tells the two apart: by position it names Tin Shui Wai Station and Kingswood Richly Plaza, and by `seq` it would find no row at all and print blank headings above real prices. Written after an injection that reverted the lookup came back **green** — every other fixture has `seq === index + 1`, so the fix was reasoning rather than a measurement until this row existed.",
+          "args": {
+            "kind": "fare",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 6,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 7,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 8,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 9,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "fare",
+            "stages": [
+              {
+                "fromSeq": 1,
+                "toSeq": 2,
+                "fare": "$13.4",
+                "boardingStop": "Tin Shui Wai Station",
+                "covers": "2 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$6.7"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.7"
+                  }
+                ]
+              },
+              {
+                "fromSeq": 3,
+                "toSeq": 3,
+                "fare": "$11.2",
+                "boardingStop": "Kingswood Richly Plaza",
+                "covers": "1 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$5.6"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.2"
+                  }
+                ]
+              },
+              {
+                "fromSeq": 4,
+                "toSeq": 4,
+                "fare": "$6.9",
+                "boardingStop": "Tsuen Wan Station",
+                "covers": "1 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$3.5"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.0"
+                  }
+                ]
+              }
+            ],
+            "concessions": ["child", "elderly"]
+          }
+        },
+        {
+          "name": "the-frequency-sheet-breaks-the-coarse-pill-into-its-own-bands",
+          "why": "The pill says \"every 10 – 25 min\" because that is all a pill can honestly say; this sheet is where the peak band that produced the 10 and the off-peak one that produced the 25 are visible. A single-headway band is formatted as a **degenerate range** rather than by a second rule, which is what keeps \"every 4 min\" here and \"every 10 – 25 min\" on the pill in one voice.",
+          "args": {
+            "kind": "freq",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  },
+                  "patterns": [
+                    {
+                      "dayType": "weekday",
+                      "days": [false, true, true, true, true, true, false],
+                      "bands": [
+                        {
+                          "start": "05:30",
+                          "end": "07:00",
+                          "headwayMin": 12
+                        },
+                        {
+                          "start": "07:00",
+                          "end": "09:30",
+                          "headwayMin": 4
+                        },
+                        {
+                          "start": "09:30",
+                          "end": "24:15",
+                          "headwayMin": 15
+                        }
+                      ],
+                      "first": "05:30",
+                      "last": "00:15"
+                    },
+                    {
+                      "dayType": "sunday",
+                      "days": [true, false, false, false, false, false, false],
+                      "bands": [
+                        {
+                          "start": "06:10",
+                          "end": "23:50",
+                          "headwayMin": 20
+                        }
+                      ],
+                      "first": "06:10",
+                      "last": "23:50"
+                    }
+                  ]
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "freq",
+            "days": [
+              {
+                "day": "Mon – Fri",
+                "bands": [
+                  {
+                    "hours": "05:30 – 07:00",
+                    "headway": "every 12 min"
+                  },
+                  {
+                    "hours": "07:00 – 09:30",
+                    "headway": "every 4 min"
+                  },
+                  {
+                    "hours": "09:30 – 00:15",
+                    "headway": "every 15 min"
+                  }
+                ]
+              },
+              {
+                "day": "Sunday & holidays",
+                "bands": [
+                  {
+                    "hours": "06:10 – 23:50",
+                    "headway": "every 20 min"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "without-a-frequency-table-the-sheet-falls-back-to-the-coarse-range",
+          "why": "Most of the dataset. The fallback is the same string the pill shows, and it appears **only** when there is no table — a sheet that showed both would state one fact twice at two fidelities and invite a rider to wonder which is right.",
+          "args": {
+            "kind": "freq",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "freq",
+            "days": [],
+            "headway": "every 10 – 25 min"
+          }
+        },
+        {
+          "name": "with-neither-a-table-nor-a-range-the-frequency-sheet-is-empty",
+          "why": "Reachable, which is the point: the pill that opens this sheet is the **stop count**’s in that case, so a route with no frequency data at all can still get here. Empty rather than a placeholder — the Static tier shows what the open data says (ADR-036).",
+          "args": {
+            "kind": "freq",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "freq",
+            "days": []
+          }
+        },
+        {
+          "name": "the-hours-sheet-gives-each-day-type-its-own-first-and-last",
+          "why": "The coarse span on the pill is the earliest first and the latest last across every day type, so a rider reading \"05:30 – 00:15\" cannot tell that Sunday starts 40 minutes later. This sheet is where the true edges are, per day type, and the times are printed as upstream publishes them (a \"24:15\" is a service that runs past midnight, not a typo).",
+          "args": {
+            "kind": "hours",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  },
+                  "patterns": [
+                    {
+                      "dayType": "weekday",
+                      "days": [false, true, true, true, true, true, false],
+                      "bands": [
+                        {
+                          "start": "05:30",
+                          "end": "07:00",
+                          "headwayMin": 12
+                        },
+                        {
+                          "start": "07:00",
+                          "end": "09:30",
+                          "headwayMin": 4
+                        },
+                        {
+                          "start": "09:30",
+                          "end": "24:15",
+                          "headwayMin": 15
+                        }
+                      ],
+                      "first": "05:30",
+                      "last": "00:15"
+                    },
+                    {
+                      "dayType": "sunday",
+                      "days": [true, false, false, false, false, false, false],
+                      "bands": [
+                        {
+                          "start": "06:10",
+                          "end": "23:50",
+                          "headwayMin": 20
+                        }
+                      ],
+                      "first": "06:10",
+                      "last": "23:50"
+                    }
+                  ]
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "hours",
+            "days": [
+              {
+                "day": "Mon – Fri",
+                "first": "05:30",
+                "last": "00:15"
+              },
+              {
+                "day": "Sunday & holidays",
+                "first": "06:10",
+                "last": "23:50"
+              }
+            ]
+          }
+        },
+        {
+          "name": "without-a-pattern-table-the-hours-sheet-falls-back-to-the-coarse-span",
+          "why": "The same fallback rule as the frequency sheet, and it is stated as its own row rather than assumed symmetric: the two sheets read different fields of the same block, and a port that wired one fallback and forgot the other would look right on every route that has patterns.",
+          "args": {
+            "kind": "hours",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "hours",
+            "days": [],
+            "span": "05:30 – 00:15"
+          }
+        },
+        {
+          "name": "an-unnamed-day-mask-is-named-by-the-days-it-runs",
+          "why": "THE COMPOSITION IN THIS GROUP. `dayType: \"other\"` means the dataset’s mask matches none of the four named types, and the honest answer is to name the days — **Sunday-first, in the mask’s own order, joined with the app’s separator**. That was `.map().filter(Boolean).join(\" · \")` in a renderer: three decisions (which days, in what order, with what between them) for one answer, and a second renderer would have picked a comma.",
+          "args": {
+            "kind": "freq",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  },
+                  "patterns": [
+                    {
+                      "dayType": "other",
+                      "days": [false, false, true, false, true, false, true],
+                      "bands": [
+                        {
+                          "start": "07:20",
+                          "end": "08:40",
+                          "headwayMin": 20
+                        }
+                      ],
+                      "first": "07:20",
+                      "last": "08:40"
+                    }
+                  ]
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "freq",
+            "days": [
+              {
+                "day": "Tue · Thu · Sat",
+                "bands": [
+                  {
+                    "hours": "07:20 – 08:40",
+                    "headway": "every 20 min"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-mask-that-names-no-days-falls-back-to-the-generic-word",
+          "why": "The other side of the composition, and it is not defensive: an all-false mask is a pattern the dataset carries and nobody can describe, so the generic word is the only honest label. A port that joined an empty list would print an empty heading above a real band table.",
+          "args": {
+            "kind": "hours",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  },
+                  "patterns": [
+                    {
+                      "dayType": "other",
+                      "days": [false, false, false, false, false, false, false],
+                      "bands": [
+                        {
+                          "start": "09:00",
+                          "end": "18:00",
+                          "headwayMin": 30
+                        }
+                      ],
+                      "first": "09:00",
+                      "last": "18:00"
+                    }
+                  ]
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "hours",
+            "days": [
+              {
+                "day": "Selected days",
+                "first": "09:00",
+                "last": "18:00"
+              }
+            ]
+          }
+        },
+        {
+          "name": "the-overview-states-the-stop-count-the-journey-and-the-distance",
+          "why": "Three whole-route figures, each present only where the dataset supports it, and each flagged for whether it is an **estimate** — because one of them is a straight-line sum through the stops (there are no polylines upstream) and one is upstream’s own timing. A renderer that treated them alike would either over- or under-claim. `estimate` is a flag rather than a `~` in the string because the caveat under it is a whole sentence the catalogue owns.",
+          "args": {
+            "kind": "stops",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  },
+                  "patterns": [
+                    {
+                      "dayType": "weekday",
+                      "days": [false, true, true, true, true, true, false],
+                      "bands": [
+                        {
+                          "start": "05:30",
+                          "end": "07:00",
+                          "headwayMin": 12
+                        },
+                        {
+                          "start": "07:00",
+                          "end": "09:30",
+                          "headwayMin": 4
+                        },
+                        {
+                          "start": "09:30",
+                          "end": "24:15",
+                          "headwayMin": 15
+                        }
+                      ],
+                      "first": "05:30",
+                      "last": "00:15"
+                    },
+                    {
+                      "dayType": "sunday",
+                      "days": [true, false, false, false, false, false, false],
+                      "bands": [
+                        {
+                          "start": "06:10",
+                          "end": "23:50",
+                          "headwayMin": 20
+                        }
+                      ],
+                      "first": "06:10",
+                      "last": "23:50"
+                    }
+                  ]
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "stops",
+            "stats": [
+              {
+                "stat": "stops",
+                "value": "5",
+                "estimate": false
+              },
+              {
+                "stat": "journey",
+                "value": "~62 min",
+                "estimate": true
+              },
+              {
+                "stat": "distance",
+                "value": "~27.7km",
+                "estimate": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "the-overview-omits-a-journey-time-the-dataset-does-not-carry",
+          "why": "A service block with no `journeyMin`, which is common. The row is absent rather than \"—\": a figure we do not have is not a figure. The stop count survives, because it is what the pill counted.",
+          "args": {
+            "kind": "stops",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "stops",
+            "stats": [
+              {
+                "stat": "stops",
+                "value": "5",
+                "estimate": false
+              },
+              {
+                "stat": "distance",
+                "value": "~27.7km",
+                "estimate": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-route-with-no-stops-still-states-a-stop-count-of-zero",
+          "why": "The one figure that is always present, and deliberately: this sheet was opened from the count pill, and a rider who tapped a number expects to see it. Zero is also honest — the distance is dropped (a straight line through nothing is not zero metres, it is no answer) and so is the journey time, and a corpus row is the only way that asymmetry stays deliberate.",
+          "args": {
+            "kind": "stops",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": []
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "stops",
+            "stats": [
+              {
+                "stat": "stops",
+                "value": "0",
+                "estimate": false
+              },
+              {
+                "stat": "journey",
+                "value": "~62 min",
+                "estimate": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "the-whole-sheet-is-composed-in-the-readers-own-locale",
+          "why": "The frequency sheet in `zh-Hant`: `formatHeadway` says 每 … 分鐘 while `formatServiceHours` — a clock span — is identical in every locale. The day names are the caller’s and the separator between them is the kernel’s, which is the split that keeps a Chinese heading from being joined with an English comma.",
+          "args": {
+            "kind": "freq",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中環"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  },
+                  "patterns": [
+                    {
+                      "dayType": "weekday",
+                      "days": [false, true, true, true, true, true, false],
+                      "bands": [
+                        {
+                          "start": "05:30",
+                          "end": "07:00",
+                          "headwayMin": 12
+                        },
+                        {
+                          "start": "07:00",
+                          "end": "09:30",
+                          "headwayMin": 4
+                        },
+                        {
+                          "start": "09:30",
+                          "end": "24:15",
+                          "headwayMin": 15
+                        }
+                      ],
+                      "first": "05:30",
+                      "last": "00:15"
+                    },
+                    {
+                      "dayType": "sunday",
+                      "days": [true, false, false, false, false, false, false],
+                      "bands": [
+                        {
+                          "start": "06:10",
+                          "end": "23:50",
+                          "headwayMin": 20
+                        }
+                      ],
+                      "first": "06:10",
+                      "last": "23:50"
+                    }
+                  ]
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "zh-Hant",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "freq",
+            "days": [
+              {
+                "day": "Mon – Fri",
+                "bands": [
+                  {
+                    "hours": "05:30 – 07:00",
+                    "headway": "每 12 分鐘"
+                  },
+                  {
+                    "hours": "07:00 – 09:30",
+                    "headway": "每 4 分鐘"
+                  },
+                  {
+                    "hours": "09:30 – 00:15",
+                    "headway": "每 15 分鐘"
+                  }
+                ]
+              },
+              {
+                "day": "Sunday & holidays",
+                "bands": [
+                  {
+                    "hours": "06:10 – 23:50",
+                    "headway": "每 20 分鐘"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
     }
   }
 }
