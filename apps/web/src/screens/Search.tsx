@@ -7,7 +7,7 @@ import {
 } from '@nextbus/core'
 import { operatorName, type PlainMessageKey, t } from '@nextbus/i18n'
 import { ChevronRight, MapPin, Route, Search as SearchIcon, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { FilterChips } from '../components/FilterChips'
 import { RouteChip } from '../components/RouteChip'
@@ -46,7 +46,6 @@ export function Search() {
   const [routeQuery, setRouteQuery] = useState('')
   const [stopQuery, setStopQuery] = useState('')
   const [filter, setFilter] = useState<RouteFilter>(EMPTY_FILTER)
-  const stopInput = useRef<HTMLInputElement>(null)
 
   const recentRoutes = usePreferences((s) => s.recentRoutes)
   const recentStops = usePreferences((s) => s.recentStops)
@@ -144,14 +143,13 @@ export function Search() {
               ) : null}
             </div>
           ) : (
-            <div
-              onClick={() => stopInput.current?.focus()}
-              onKeyDown={undefined}
-              className="mx-4 mb-1 mt-1 flex h-12 items-center gap-2 rounded-xl border border-border bg-surface px-4 focus-within:border-accent"
-            >
+            // A `<label>`, not a `<div>` with an `onClick`: clicking a label focuses its control natively, so
+            // tapping the icon or the padding does what the RN screen's `Pressable` wrapper does — without a
+            // click handler on a static element, which is both a lint error and a real a11y one (a mouse-only
+            // affordance with no role and no keyboard path).
+            <label className="mx-4 mb-1 mt-1 flex h-12 items-center gap-2 rounded-xl border border-border bg-surface px-4 focus-within:border-accent">
               <SearchIcon aria-hidden width={18} height={18} className="shrink-0 text-subtle" />
               <input
-                ref={stopInput}
                 value={stopQuery}
                 onChange={(e) => setStopQuery(e.target.value)}
                 placeholder={t(locale, 'searchStopPlaceholder')}
@@ -168,7 +166,7 @@ export function Search() {
                   onClear={() => setStopQuery('')}
                 />
               ) : null}
-            </div>
+            </label>
           )}
 
           <FilterChips chips={view.chips} onToggle={toggleChip} />

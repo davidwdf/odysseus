@@ -6588,5 +6588,15 @@ pre-existing and unaddressed; it earned its keep here.
   - 🟡 **`stale` and `offline` are `unenforced`, and the reason is a rule rather than a gap**: a stale search
      index renders *identically* to a fresh one, by design, because a route number that existed yesterday
      almost certainly exists today. ADR-008's staleness rule is about readings, which decay in minutes.
+  - ⚪ **The stop field is a `<label>`, not a `<div>` with an `onClick`** — decided by CI rather than by me,
+     and worth keeping because it is the right answer rather than merely the lint-clean one. The RN screen
+     wraps its input in a `Pressable` so that tapping the icon or the padding focuses the field; the DOM
+     equivalent of that is not a click handler on a static element (a mouse-only affordance with no role and
+     no keyboard path) but a **label**, which focuses its control natively. `noStaticElementInteractions`
+     named it precisely. It reached CI because the local lint result quoted in the previous commit was
+     measured *before* the last edit to that file — the same class as WP6-5b's injections that came back
+     green: **a check whose result you are quoting from memory is not a check you ran.** The habit that
+     follows is to run the gate chain *after* committing, not before, which is also what makes rule 7's
+     per-commit range check meaningful.
   - **Test totals:** core **918**, edge 149, api-client 71, ui-spec 30, web **131** (+12), mobile **109**
     (+12) — **1 408**. Corpus 14 files / **105** groups / **878** cases.
