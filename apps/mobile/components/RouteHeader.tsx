@@ -1,4 +1,4 @@
-import type { Locale, OperatorId } from '@nextbus/core'
+import type { Locale, RouteJourneyHeader } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { FONT_FAMILY } from '@nextbus/ui'
 import { ArrowDown, RotateCw } from 'lucide-react-native'
@@ -55,12 +55,7 @@ const BOX_H = D_TOP + D_LH // 42
  * animates stale text; long names marquee at rest.
  */
 export function RouteHeader({
-  operator,
-  routeNo,
-  origin,
-  destination,
-  canReverse,
-  circular,
+  header,
   onFlip,
   swapNonce,
   scrollY,
@@ -69,16 +64,16 @@ export function RouteHeader({
   onTitlePress,
   locale,
 }: {
-  operator: OperatorId
-  routeNo: string
-  /** Localized names for the two card lines. For a bidirectional route these are the full first/
-   *  last stop names; for a circular route, the boarding terminus and a "Circular via …" line. */
-  origin: string
-  destination: string
-  /** A reverse direction exists (dataset carries the opposite bound) → show the toggle. */
-  canReverse: boolean
-  /** This route loops back to its origin → loop connector + no toggle (ADR-046). */
-  circular: boolean
+  /**
+   * Everything this header says, composed by `routeDetailView` (WP6-6a).
+   *
+   * It used to take `origin`, `destination`, `canReverse` and `circular` as four props and compose
+   * **two label strings** from them, with a `circular ?` branch over each — four plausible variants of
+   * two strings for a second renderer to arrive at independently. `label` and `collapsedLabel` are the
+   * kernel's now, and `reverseId`'s presence *is* `canReverse`, so the control and the id it flips to
+   * cannot get out of step.
+   */
+  header: RouteJourneyHeader
   onFlip: () => void
   /** Increments on each flip → arms the swap animation (which fires when the new names arrive). */
   swapNonce: number
@@ -90,6 +85,8 @@ export function RouteHeader({
   locale: Locale
 }) {
   const { color } = useTheme()
+  const { operator, routeNo, origin, destination, circular, label, collapsedLabel } = header
+  const canReverse = header.reverseId !== undefined
   const textColor = color('--text')
   const mutedColor = color('--text-muted')
 
@@ -159,8 +156,8 @@ export function RouteHeader({
   return (
     <CollapsingHeader
       badge={<RouteChip operator={operator} routeNo={routeNo} />}
-      label={circular ? destination : `${origin} → ${destination}`}
-      collapsedLabel={circular ? destination : `→ ${destination}`}
+      label={label}
+      collapsedLabel={collapsedLabel}
       backAccessibilityLabel={t(locale, 'back')}
       expandedSlot={
         <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface py-2 pr-2 pl-3.5">

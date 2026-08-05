@@ -102,6 +102,10 @@
 "removeFavorite" = "Remove from favourites";
 "viewStop" = "View stop";
 "reverseDirection" = "Reverse direction";
+/* {stop} → %1$@ */
+"busApproaching" = "Bus approaching %1$@";
+/* {stop} → %1$@ */
+"busAtStop" = "Bus at %1$@";
 /* {place} → %1$@ */
 "circularVia" = "Circular via %1$@";
 "favoritesEmpty" = "No saved routes yet";

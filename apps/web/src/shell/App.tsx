@@ -6,6 +6,7 @@ import { QueryProvider } from '../providers/QueryProvider'
 import { Favourites } from '../screens/Favourites'
 import { Nearby } from '../screens/Nearby'
 import { PlaceDetail } from '../screens/PlaceDetail'
+import { RouteDetail } from '../screens/RouteDetail'
 import { Search } from '../screens/Search'
 import {
   type Destination,
@@ -13,6 +14,7 @@ import {
   NEARBY_PATH,
   PLACE_PATH,
   PUSHED,
+  ROUTE_PATH,
   SEARCH,
   SETTINGS_PATH,
   TABS,
@@ -108,6 +110,8 @@ function screenFor(destination: Destination, opts: { back?: boolean } = {}): Rea
   // Place detail brings its own back control, because its header is in flow rather than floating over the
   // content — see the screen. `opts.back` is the placeholder's chrome, not every pushed screen's.
   if (destination.path === PLACE_PATH) return <PlaceDetail />
+  // Route detail brings its own back control too, for the same reason: its header is in flow and first.
+  if (destination.path === ROUTE_PATH) return <RouteDetail />
   if (destination.path === FAVOURITES_PATH) return <Favourites />
   if (destination.path === SEARCH.path) return <Search />
   if (destination.path === SETTINGS_PATH) {

@@ -108,6 +108,10 @@
 	<string name="removeFavorite">Remove from favourites</string>
 	<string name="viewStop">View stop</string>
 	<string name="reverseDirection">Reverse direction</string>
+	<!-- {stop} → %1$s -->
+	<string name="busApproaching">Bus approaching %1$s</string>
+	<!-- {stop} → %1$s -->
+	<string name="busAtStop">Bus at %1$s</string>
 	<!-- {place} → %1$s -->
 	<string name="circularVia">Circular via %1$s</string>
 	<string name="favoritesEmpty">No saved routes yet</string>

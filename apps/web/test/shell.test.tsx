@@ -164,14 +164,19 @@ describe('every declared destination opens, and none of them is blank', () => {
     expect(text).toContain(t('en', 'comingSoon'))
   })
 
-  it('shows the id it was asked for where the heading would be bus data', () => {
-    // `/route/:id` has no catalogue title, because a route's name is `I18nText` from the model and never a
-    // UI string (CLAUDE.md rule 5). The id is the honest substitute while the screen is a placeholder.
+  it('has no id-parameterised placeholder left, which is why this assertion is now the absence of one', () => {
+    // This test used to mount `/route/KMB:AA` and assert the id appeared where a heading would, because a
+    // route's name is `I18nText` from the model and never a UI string (CLAUDE.md rule 5) — so the id was the
+    // honest substitute while the screen was a placeholder. It was `/stop/:id` before WP6-3b ported that one
+    // and `/route/:id` after, and **WP6-6b ported the last of them**.
     //
-    // It was `/stop/:id` until WP6-3b **ported** that screen, which is the right kind of churn: a
-    // placeholder assertion has to die when the placeholder does, or it becomes a test asserting that a
-    // shipped screen is still missing.
-    expect(renderedText(mount('/route/KMB%3AAA'))).toContain('KMB:AA')
+    // A placeholder assertion has to die when its placeholder does, or it becomes a test asserting that a
+    // shipped screen is still missing. What survives is the rule it was protecting: a destination with no
+    // `titleKey` must have a ported screen, because the placeholder has no words for it.
+    const untitled = DESTINATIONS.filter((d) => d.titleKey === undefined)
+    expect(untitled.map((d) => d.path)).toEqual(['/stop/:id', '/route/:id'])
+    for (const d of untitled)
+      expect(d.owner, `${d.path} has no title and no screen`).toBeUndefined()
   })
 
   it('sends an unknown path to Nearby rather than to a page it has no words for', () => {

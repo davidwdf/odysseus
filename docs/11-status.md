@@ -1,12 +1,113 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-08-05**. **Waves 0–5 and Wave 6's first four rows are merged to `main`** (PRs #11–**#23**;
-> `main` is `a19066e`), and **WP6-3 is now complete** on `wp6-3b-place-detail-spec-and-port`
+> Snapshot: **2026-08-05**. **Waves 0–5 and Wave 6's rows WP6-0 … WP6-5 are all merged to `main`**
+> (PRs #11–**#24**; `main` is `4ea563f`), which closed Place detail, Favourites and Search in one PR
 > ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code),
-> [ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers)),
-> so `apps/web` has **two ported screens** and `apps/mobile`'s Place detail is policed by
-> `check-no-derivation` for the first time — the asymmetry ADR-069 recorded, closed for this screen.
+> [ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers),
+> [ADR-089](./08-decision-log.md#adr-089--a-favourite-is-a-riders-own-data-so-its-migration-is-a-shared-rule-rather-than-a-stores-private-business),
+> [ADR-090](./08-decision-log.md#adr-090--a-mustnot-a-component-cannot-satisfy-is-a-statement-about-its-producer),
+> [ADR-091](./08-decision-log.md#adr-091--the-keypad-and-the-result-list-are-one-filtered-set-and-a-chip-set-is-the-indexs-answer),
+> [ADR-092](./08-decision-log.md#adr-092--a-spec-cannot-hold-an-interaction-but-it-can-hold-what-a-rider-infers-from-one)),
+> so `apps/web` has **five ported screens** — Nearby, Place detail, Favourites, Search and (on this branch)
+> Route detail — three destinations still naming the work package that ports them, and `apps/mobile`'s Place detail is policed by
+> `check-no-derivation` for the first time: the asymmetry ADR-069 recorded, closed for that screen.
+> **WP6-6 (Route detail) is done**, on `wp6-6-route-detail`. **Its hoist half came first**
+> ([ADR-093](./08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry)).
+> `proposals/04` calls Place detail *"the most domain rules in the app"*; Place detail had **nine** and this
+> screen had **sixteen** — which row is the boarding anchor and that a flip drops it, each row's soonest
+> upcoming arrival, which inferred buses earn a token, **where each token sits**, the sectional fare span,
+> which rows are saved at that pole, both ends of the route, the header's two label strings, each row's
+> display name and readouts, first/last, the route distance, the tapped stop's sheet name, which static facts
+> exist, whether a reverse exists at all, and what a bus token is *called*. All sixteen are `routeDetailView`
+> now, with 20 corpus cases; `RouteMeta`, `RouteHeader` and `EtaTimes` are projections, and `EtaTimes` lost
+> its clock and its policy entirely — it had been the **fourth** place the imminence band was written down.
+> **The load-bearing decision is the ADR's title: which node a bus is at is content; where that node is on
+> screen is geometry.** `RailBus` is `{kind:'node', index}` or `{kind:'segment', from, to}`, so a 52 px RN
+> rail and a DOM list that measures itself cannot disagree about the bus and are free to disagree about the
+> pixels.
+> 🔴 **And the spec format found a defect by being unable to look at something.** A component spec's
+> vocabulary is *text* (ADR-083), so the conformance walker cannot see a disc with a bus glyph in it at all.
+> The tempting answer is to declare the tokens `unenforced`; the honest one is that a graphic carrying
+> information a rider acts on needs an accessible name — which ADR-075 puts on the **identity** side. `BusToken`
+> had none: no `accessibilityLabel`, `pointerEvents: 'none'`, and the screen's signature element silently
+> invisible to a screen reader. `RailBus.label` is the kernel's now (`busApproaching` / `busAtStop`), and the
+> same edit makes the tokens projectable *and* closes the accessibility hole.
+> 🔴 **A second live defect, pinned rather than smuggled: a Citybus or GMB route shows no times anywhere and
+> does not say why.** `/v1/route/:id` fetches live arrivals for KMB and LWB only, so every row on a CTB or GMB
+> route carries `eta: null` for ever and renders exactly what *"no bus is due right now"* renders. ADR-077
+> closed this shape for `/v1/nearby` and `/v1/stop`; `apps/edge/src/stop-route.ts` says in a comment that
+> route detail's equivalent *"should come from here"* and WP5-13 shipped without it. Corpus row + `docs/07`.
+> **Verified in a browser on live Hong Kong data:** KMB 1A opened from Kwun Tong (Yue Man Square) — 34 rows
+> with codes and sectional fares, four fact pills, **seven bus tokens each with its own accessible name**, the
+> anchored row highlighted, the action sheet titled with the row's own name (one spelling now, where the
+> screen had two eleven lines apart), and a direction flip that swaps the header, the facts strip and the
+> whole list. Screenshots: `.context/wave6-screenshots/11-rn-route-detail-after-the-hoist.jpg`,
+> `12-rn-route-action-sheet-one-stop-name.jpg`.
+> **WP6-6b closed it** ([ADR-094](./08-decision-log.md#adr-094--motion-is-idiom-what-the-motion-is-about-is-not)),
+> and the answer to the row's own question is the ADR's title: **motion is idiom; what the motion is about is
+> not.** A bus token's slide-in, its tween and its idle bob are curve, duration and physics — `apps/web`
+> animates only the position change and does not bob at all, which is the acceptance's *"the web curve is
+> chosen, not inherited"*. What is identity is **which node** the token is at, and it is projected in eight
+> states through the token's accessible name. The same line settled the two the plan asked about by name: the
+> collapsing header is idiom in its *behaviour* and identity in its *content*, and the auto-scroll is idiom in
+> the strongest sense — the DOM screen sets `scroll-margin-top` and calls `scrollIntoView`, so it owns no
+> offset at all where the RN one owns a measured one behind a reveal gate that `docs/07` records as broken.
+> **19 states, 17 projected, both renderers green**, 23 tests each. `apps/web` now has **five ported screens**
+> and `/route/:id` was the **last id-parameterised placeholder**.
+> 🔴 **Writing the spec found three more defects.** The RN row composed `"22 min"` as **one animated string**,
+> so the odometer slid a `min` that cannot change and it diverged from its twin, which styles the figure and
+> the unit apart as the model's two fields invite — found by the projection reporting
+> *`rendered "22 min" where the spec declares "22"`*. A **bus token that waits for a measurement draws nothing
+> when the measurement never arrives**: the overlay skipped any token whose row had not reported its
+> `onLayout` offset, which is the same react-native-web gap `MiniMap` carries and meant the conformance suite
+> could not reach a single bus state. And a **loop's `collapsedLabel` *is* its `destination`**, so the RN
+> driver's value-based filter deleted the destination too — it drops the collapsed marquee as a *node* now.
+> 🟡 **Two injections applied and changed nothing**, which is a new variant of WP6-5b's lesson: a slot's
+> **name** is load-bearing only where something refers to it, so renaming an unreferenced one leaves every
+> suite green. The real ones are a **deletion** (both suites red by 11 tests — the spec pinned from both sides)
+> and a rename of a slot an interaction *does* target, which fails at **emit** and prints every slot name.
+> **Verified in a browser on live data:** KMB 1A on `apps/web` — the `1A` chip, the four fact pills, 34 rows
+> with codes and sectional fares, figure-plus-unit readouts, `Due` green and `1 min` amber, **six named bus
+> tokens**, **36 interactive elements and 0 nested**, a reverse link to `/route/KMB%3A1A%3Ainbound%3A1`, and a
+> tab title reading the whole journey. And the Citybus defect **on screen**: `962 · Lung Mun Oasis → Causeway
+> Bay`, 36 rows, every fare present and **not one arrival time**, with nothing saying why. Screenshots:
+> `.context/wave6-screenshots/13-web-route-detail-shipping.jpg`,
+> `14-web-route-citybus-no-times-anywhere.jpg`.
+> **WP6-6c closed the row** ([ADR-095](./08-decision-log.md#adr-095--the-estimate-mark-is-content-and-so-is-the-separator-between-two-day-names)):
+> the four **fact sheets** were the last derivation on this screen — 397 lines — and the reason
+> `RouteFactSheets.tsx` was the one route surface `check-no-derivation` did not read. All eight decisions are
+> `routeFactSheet`'s now, with 15 corpus cases; the RN component is a projection, `apps/web` has the sheets as
+> a **`<dialog>`**, and the file joined `POLICED` **with no new allowlist entries** — which is the cleanest
+> signal that nothing derivable was left behind.
+> **The two load-bearing decisions are both about a mark:** the `~` on a concession figure is **content**,
+> because these are policy estimates rather than route data and ADR-008 forbids presenting an estimate as a
+> reading — so the mark is composed where one renderer cannot drop it. And the ` · ` between two day names is
+> content too: `dayType: 'other'` means the mask matches none of the four named types, and *which* days, in
+> *what* order, with *what* between them was `.map().filter(Boolean).join(' · ')` in a React component — three
+> decisions for one answer, and a second renderer would have picked a comma.
+> 🟠 **An injection came back green and the fix it reverted was real.** The fare timeline looks its boarding
+> stop up by **position** rather than by `seq`, because `fareStages` numbers stages from the array it was
+> handed while a row's `seq` is the wire's. Reverting that changed nothing, because **every fixture had
+> `seq === index + 1`** — the fix was reasoning rather than a measurement. A case with a sequence starting at 5
+> now exists and the same injection turns two tests red. *An injection that comes back green is sometimes a
+> statement about the fixtures rather than about the gate.*
+> 🔴 **And one more live defect: a route whose per-stop fares are not numbers opens an entirely blank fare
+> sheet** while the pill that opened it shows `$13.4` — `fareStages` drops what it cannot parse and `fareRange`
+> falls back to `service.fareFull`. Corpus row + `docs/07`, with the fix (fall back to a single stage over the
+> whole route).
+> **Verified in a browser:** all four sheets on `apps/web` — the fare timeline's four price steps with
+> `~$4.1` / `~$2.0` beside each and the *Estimated concessions* legend, the `Mon – Fri` frequency bands, three
+> day types of First/Last, and `Stops 34` · `Full journey ~60 min` · `Distance ~13.0km` with a caveat under
+> each estimate. Screenshots: `.context/wave6-screenshots/15-web-route-fare-sheet.jpg`,
+> `16-web-route-overview-sheet.jpg`.
+> **WP6-7 (Settings · About · FAQ) is next**, and it is an **S**: mostly chrome and prose, plus deleting
+> `ShellPreferences.tsx` — the scaffolding WP6-0 left with that work package's name on it.
+> One process rule came out of #24 and belongs at the top because it cost two CI runs: **run the gate chain
+> after committing, not before.** Both things CI caught — a `<div>` with an `onClick`, and rule 7 on the commit
+> that fixed it — were checks whose results had been measured before the final edit. *A check whose result you
+> are quoting from memory is not a check you ran*, which is the same class as WP6-5b's injections that came
+> back green because they never applied.
 > **What WP6-3b is, and the honest summary is that the spec was the measurement.** Place detail is the first
 > screen whose spec was extracted from a surface *nothing had ever rendered in a test*, and writing it found
 > more than it declared:
@@ -573,7 +674,10 @@ screen** and a named owner for each of the other seven destinations
 `packages/contract/ui/` holds the first two instances — `stop-row.spec.json` and a **screen** spec,
 `nearby.spec.json`, with nine states of which eight declare what they must show. **Both renderers drive both,
 and neither component changed.** `apps/web`'s Nearby is now the shipping web Nearby, taps and all.
-Next is **WP6-3**: Place detail, the screen with the most domain rules in the app.
+**WP6-3, WP6-4 and WP6-5 then landed together as PR #24** (ADRs 087–092): Place detail, Favourites and Search
+each have a published spec, a DOM port and conformance drivers on both renderers, so `apps/web` is at **four
+ported screens** and `check-no-derivation` reads `apps/mobile`'s Place screen too. Next is **WP6-6**: Route
+detail — the schematic, the bus tokens, the collapsing header, the auto-scroll, and the motion contract.
 WP0-5 (deploy) is Wave 0 and still needs a domain and
 Cloudflare credentials from a human; it remains the launch blocker. **Before writing a test or a gate here, read
 [`docs/05`](./05-monorepo-and-tooling.md#writing-a-test-or-a-gate-here-what-the-harnesses-require)** — the
@@ -1233,11 +1337,19 @@ than any in its own row.
 > `apps/web` has the shell, and **WP6-1 and WP6-2 are done too**: `packages/ui-spec` is the format,
 > `stop-row.spec.json` and `nearby.spec.json` are the first two instances, both renderers drive both, and
 > `apps/web`'s Nearby is the shipping web Nearby with its taps wired.
-> **WP6-3 (Place detail) is next**, and it is an **L** rather than an M for a reason its row states: it holds
-> the most domain rules in the app — **and its hoist half (WP6-3a) is done**, so what is left is **WP6-3b**:
-> the spec, the `apps/web` port, and the gate extension that closes ADR-069's recorded asymmetry. Start with
-> the gate's per-site `ALLOWLIST`, because the Place screen has presentational arithmetic the shape rules
-> would flag and the exemptions must each name the one rule they exempt. **WP6-3b opened with a second
+> **WP6-3, WP6-4 and WP6-5 are done too** (ADRs 087–092, merged as PR #24), so the next row is **WP6-6 —
+> Route detail**, the second **L** of the wave: the schematic, the bus tokens, the collapsing header, the
+> auto-scroll and the first spec that has to say something about **motion**. Three things it inherits, all in
+> writing: `docs/07`'s route auto-scroll bug (`scrollTo` no-ops under reanimated v4 on web, and the RN screen's
+> own scroll-to-originating-stop has been broken since ADR-043), the undiagnosed pending-and-idle query state
+> that produced three blank screens in WP6-3/4, and `check-no-derivation`'s standing rule that `app/route/`
+> joins `POLICED` in the commit that hoists it.
+> **The record of how WP6-3 went, kept because each half taught something.** It is an **L** rather than an M
+> for a reason its row states: it holds the most domain rules in the app — its hoist half (WP6-3a) came first,
+> then **WP6-3b**: the spec, the `apps/web` port, and the gate extension that closes ADR-069's recorded
+> asymmetry. Starting with the gate's per-site `ALLOWLIST` was right, because the Place screen has
+> presentational arithmetic the shape rules would flag and the exemptions must each name the one rule they
+> exempt. **WP6-3b opened with a second
 > hoist that the port made unavoidable** ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code)):
 > ADR-086 put the pin *fold* in the kernel and left the three decisions **around** it in the renderer — the
 > dot's label, its colour, and the lone-stop pin — so `PlaceDetailView` carries `pins` now and `MiniMap`

@@ -59,13 +59,19 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
  * **`apps/mobile` is policed per surface**, and only where a WP4-0 hoist has happened:
  *
  *  · `app/stop/` — the Place screen, whose rules are `placeDetailView`'s since ADR-085/087.
+ *  · `app/route/` — the Route screen, whose rules are `routeDetailView`'s since ADR-093, together with the
+ *    four leaf components that hoist made projections: `RouteMeta` (the facts strip), `RouteFactSheets` (the
+ *    four sheets a pill opens, `routeFactSheet`'s since ADR-095), `EtaTimes` (the readouts) and `Fare` (the
+ *    printed figure). `RouteHeader` is **not** here and that is deliberate: it is `CollapsingHeader` with a
+ *    from/to card on it, so it is nothing but arithmetic over viewport dimensions — the same reason
+ *    `CollapsingHeader` itself is absent.
  *  · `components/MiniMap.tsx` — its map, whose pins are the kernel's since ADR-087.
  *  · the five leaf projections a place's rows and heading are made of, all of them already spec'd as part
  *    of `StopRow` (WP6-1) and therefore already rule-free.
  *
- * **What is deliberately absent, and it is not an oversight:** `app/route/`, `app/search.tsx`,
- * `app/workbench.tsx` and `app/(tabs)/favorites.tsx` still hold rules WP4-0 has not hoisted, so the shape
- * rules would fire on legitimate un-migrated code and the gate would be switched off within a week. So
+ * **What is deliberately absent, and it is not an oversight:** `app/search.tsx`, `app/workbench.tsx` and
+ * `app/(tabs)/favorites.tsx` still hold rules WP4-0 has not hoisted, so the shape rules would fire on
+ * legitimate un-migrated code and the gate would be switched off within a week. So
  * would `CollapsingHeader`, `StopHeader`, `Skeleton` and `GlassView`, which are chrome and motion —
  * `proposals/04` lists them with no corpus and no spec, *"becomes idiom"* — and are nothing but arithmetic
  * over viewport dimensions. Each surface joins this list in the commit that hoists it, which is this file's
@@ -77,7 +83,12 @@ const POLICED = [
   'apps/web/src/screens/',
   'apps/web/src/shell/',
   'apps/mobile/app/stop/',
+  'apps/mobile/app/route/',
   'apps/mobile/components/MiniMap.tsx',
+  'apps/mobile/components/RouteMeta.tsx',
+  'apps/mobile/components/RouteFactSheets.tsx',
+  'apps/mobile/components/EtaTimes.tsx',
+  'apps/mobile/components/Fare.tsx',
   'apps/mobile/components/EtaBadge.tsx',
   'apps/mobile/components/RemarkTag.tsx',
   'apps/mobile/components/RouteChip.tsx',
@@ -206,6 +217,49 @@ const ALLOWLIST = [
       'Scoped to `arithmetic` rather than left open, deliberately: a `.slice()` over rows, a `.filter()` over ' +
       'routes, a `.join()` composing a heading or a comparison against a minutes value would all still be ' +
       'findings here, and those are the shapes that would actually mean this screen had taken a decision back.',
+  },
+  {
+    file: 'apps/mobile/app/route/[id].tsx',
+    rule: 'arithmetic',
+    why:
+      'Every number this file computes is **rail geometry**, and there are five: the node centre the ' +
+      'connectors meet at, the star badge’s offset on that node’s corner, the token’s half-width, the ' +
+      'midpoint between two measured node positions, and the flip cascade’s per-row delay cap ' +
+      '(`Math.min(index, 10) * 26`). None reads a domain quantity — *which* node a bus is at is ' +
+      '`RailBus`’s and *whether* it is drawn is `visibleBusMarkers`’ (ADR-093). Scoped to `arithmetic` ' +
+      'deliberately: a `.slice()` over stops, a `.filter()` over rows, a `.join()` composing a header label ' +
+      'or a comparison against a minutes value would all still be findings here, and those are the shapes ' +
+      'that would mean this screen had taken a decision back.',
+  },
+  {
+    file: 'apps/mobile/components/EtaTimes.tsx',
+    rule: 'arithmetic',
+    why:
+      'The odometer’s own arithmetic: the common prefix and suffix of the old and new figures (a `Math.min` ' +
+      'over two string lengths), and the rise distance as a fraction of the font size. It animates the ' +
+      '**difference between two strings the kernel produced** — `52` → `51` slides just the `2` — and reads ' +
+      'no threshold at all, which is the part that matters: this component was the fourth place the ' +
+      'imminence band had been written down, and since WP6-6a it has no clock and no policy.',
+  },
+  {
+    file: 'apps/mobile/app/route/[id].tsx',
+    rule: 'capping',
+    snippet: 'const next = prev.slice()',
+    why:
+      'A **copy**, not a cap: the measured-offsets array is cloned before one index is written, because a ' +
+      'zustand-style state update must not mutate. `slice()` with no arguments cannot drop a row, which is ' +
+      'the failure the rule exists for — `rows.slice(0, maxRows)` before the "+N more" count is computed.',
+  },
+  {
+    file: 'apps/mobile/components/EtaTimes.tsx',
+    rule: 'capping',
+    why:
+      'Three `.slice()`s over the **characters of two figures**, not over a list of rows: the odometer splits ' +
+      '`"52"` and `"51"` into a shared prefix, a differing middle and a shared suffix so only the digit that ' +
+      'changed slides. A whole-file exemption for the one rule, because all three are the same expression ' +
+      'and naming each line would rot on the next reformat. The list this component *could* have capped — ' +
+      'how many arrivals a row shows — is `policy.maxArrivals` applied by `upcoming` in the kernel, and this ' +
+      'component no longer receives a policy at all.',
   },
   {
     file: 'apps/mobile/components/BearingArrow.tsx',

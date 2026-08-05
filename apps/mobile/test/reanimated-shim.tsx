@@ -91,6 +91,8 @@ export const Extrapolation = { CLAMP: 'clamp', EXTEND: 'extend', IDENTITY: 'iden
 export const Easing = {
   linear: (t: number) => t,
   ease: (t: number) => t,
+  quad: (t: number) => t,
+  sin: (t: number) => t,
   bezier: () => (t: number) => t,
   in: (fn: (t: number) => number) => fn,
   out: (fn: (t: number) => number) => fn,
@@ -100,6 +102,14 @@ export const Easing = {
 /** Entering/exiting animations are props the plain views below simply ignore. */
 export const FadeIn = { duration: () => FadeIn, delay: () => FadeIn }
 export const FadeOut = { duration: () => FadeOut, delay: () => FadeOut }
+/**
+ * The layout transition `EtaTimes` uses so a bus keeps its slot when a round refreshes.
+ *
+ * Added for WP6-6b's route-detail suites, and it is the same argument as everything else here: the
+ * *reordering* is what the layout transition animates, and which slot a reading is in is the model's (each
+ * arrival carries its own `iso` as the key). A shim that pretended to animate would invite someone to trust it.
+ */
+export const LinearTransition = { duration: () => LinearTransition, delay: () => LinearTransition }
 
 export type SharedValue<T> = { value: T }
 export type AnimatedStyle = Record<string, unknown>

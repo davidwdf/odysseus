@@ -102,6 +102,10 @@
 "removeFavorite" = "移除收藏";
 "viewStop" = "查看車站";
 "reverseDirection" = "反方向";
+/* {stop} → %1$@ */
+"busApproaching" = "巴士即將到達%1$@";
+/* {stop} → %1$@ */
+"busAtStop" = "巴士在%1$@";
 /* {place} → %1$@ */
 "circularVia" = "經%1$@循環線";
 "favoritesEmpty" = "尚未收藏路線";
