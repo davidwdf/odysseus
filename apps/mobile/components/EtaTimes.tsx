@@ -77,22 +77,36 @@ function TimeSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolea
   // no unit to take. `headway` cannot reach this row — `upcoming` yields arrivals, and a published
   // frequency is not one — but the union carries the arm, so it renders as the text it is rather than
   // falling through to the dash and losing a real sentence.
-  const value =
-    label.kind === 'due'
-      ? label.label
-      : label.kind === 'mins'
-        ? `${label.value} ${label.unit}`
-        : label.kind === 'headway'
-          ? label.text
-          : '—'
+  const size = first ? 16 : 14
+  const figure = first ? color(tone) : color('--text-muted')
+  // **The unit is its own node and never animates**, which the spec found: the row composed
+  // `${value} ${unit}` into one animated string, so the odometer slid a "min" that cannot change and the
+  // DOM twin — which styles the figure and the unit differently, as the model's two fields invite — read
+  // as a divergence. Two nodes, the figure animated and the unit static and muted. The whole point of
+  // `EtaLabelParts` carrying `value` and `unit` separately is that they are styled apart (`@nextbus/core`).
+  if (label.kind === 'mins') {
+    return (
+      <View className="flex-row items-baseline" style={{ opacity: arrival.stale ? 0.45 : 1 }}>
+        <SlideNumber value={String(label.value)} color={figure} size={size} bold={first} />
+        <RNText
+          style={{
+            fontSize: 12,
+            lineHeight: size + 5,
+            marginLeft: 3,
+            color: color('--text-muted'),
+            fontFamily: FONT_FAMILY.regular,
+          }}
+        >
+          {label.unit}
+        </RNText>
+      </View>
+    )
+  }
+  const value = label.kind === 'due' ? label.label : label.kind === 'headway' ? label.text : '—'
   return (
-    <SlideNumber
-      value={value}
-      color={first ? color(tone) : color('--text-muted')}
-      size={first ? 16 : 14}
-      bold={first}
-      stale={arrival.stale}
-    />
+    <View style={{ opacity: arrival.stale ? 0.45 : 1 }}>
+      <SlideNumber value={value} color={figure} size={size} bold={first} />
+    </View>
   )
 }
 
@@ -106,15 +120,11 @@ function SlideNumber({
   color,
   size,
   bold,
-  stale,
 }: {
   value: string
   color: string
   size: number
   bold: boolean
-  /** Old enough to say so (ADR-008) — dimmed, and never colour alone: the value stops moving too,
-   *  because a stale reading only changes when a fresh one arrives. */
-  stale: boolean
 }) {
   const [display, setDisplay] = useState(value)
   // The transition only animates the part that actually changed: the common prefix and
@@ -157,7 +167,6 @@ function SlideNumber({
     color,
     fontFamily: bold ? FONT_FAMILY.semibold : FONT_FAMILY.regular,
     fontVariant: ['tabular-nums' as const],
-    opacity: stale ? 0.45 : 1,
   }
   const incoming = useAnimatedStyle(() => ({
     opacity: t.value,

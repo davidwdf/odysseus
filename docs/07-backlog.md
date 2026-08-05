@@ -374,6 +374,14 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       *paused* rather than run; `PersistQueryClientProvider`'s restore interacting with a first-load failure;
       the service worker turning a cross-origin 404 into something `classifyFailure` cannot read. Worth an
       afternoon — every screen in the app shares this shape.
+- [ ] 🟠 **A bus token that waits for a measurement draws nothing when the measurement never arrives** —
+      **the symptom is fixed, the cause is the row below.** WP6-6b (ADR-094) found that the RN route
+      schematic's overlay skipped any token whose target row had not reported its `onLayout` offset, so a
+      route whose rows never report has a **silently empty rail**. It is the same react-native-web gap as
+      `MiniMap`'s, one screen over, and the conformance suite could not reach a single bus state until the
+      guard went. An unmeasured token now sits at the top of the rail and slides down to its node, which is
+      the entrance animation anyway — so the tokens always exist. What is still unfixed is *why* `onLayout`
+      does not fire on first mount, which is the next row.
 - [ ] 🟠 **`MiniMap`'s `onLayout` does not fire on first mount** on the RN Place screen, so the map renders
       with `w === 0` — no tiles, no dots — until something else triggers a layout. Measured 2026-08-05 by
       dispatching a `resize` event by hand, which made the whole map appear at once. The DOM twin does not

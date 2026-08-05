@@ -240,9 +240,15 @@ export default function RouteDetail() {
                 Which node each is at is `view.buses`'; where that node is on screen is this file's. */}
             {view.buses.map((bus, i) => {
               const target = bus.kind === 'node' ? bus.index : bus.to
-              const a = nodeY(target)
-              const b = bus.kind === 'node' ? a : nodeY(bus.from)
-              if (a === undefined || b === undefined) return null
+              // **Drawn whether or not the rows have reported their offsets yet**, which is a fix rather than
+              // a simplification. It used to bail out on an unmeasured row — and `onLayout` not firing on
+              // first mount is a live react-native-web bug this repo already carries for `MiniMap`
+              // (`docs/07`), so "no measurement" is not merely the first frame: it is a state in which the
+              // rail silently had no buses on it at all. WP6-6b's conformance suite could not reach a single
+              // bus state until this changed, which is how it was noticed. An unmeasured token sits at the
+              // top of the rail and slides down to its node, which is the entrance animation anyway.
+              const a = nodeY(target) ?? 0
+              const b = (bus.kind === 'node' ? a : nodeY(bus.from)) ?? 0
               const y = bus.kind === 'node' ? a : (a + b) / 2
               // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is intentional — buses keep order, so the k-th token tweens to its new position (ADR-030)
               return <RailBusToken key={i} bus={bus} y={y} enterY={nodeY(0) ?? y} />
@@ -548,9 +554,9 @@ function RouteStopRow({
             <View className="min-w-0 flex-1">
               <StopName name={row.name} variant="body" emphasis={here} numberOfLines={3} />
             </View>
-            {row.fare ? (
+            {row.fareLabel ? (
               <Text variant="body" className="shrink-0">
-                <Fare fare={row.fare} style={{ verticalAlign: 'middle' }} />
+                <Fare label={row.fareLabel} style={{ verticalAlign: 'middle' }} />
               </Text>
             ) : null}
           </View>

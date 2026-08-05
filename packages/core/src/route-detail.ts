@@ -270,8 +270,24 @@ export interface RouteStopRowView {
   name: StopCardName
   /** Up to `policy.maxArrivals` upcoming readouts, soonest first. Empty when there is no reading. */
   arrivals: RouteStopArrival[]
-  /** Boarding fare here, HK$ decimal string, as the wire carries it. */
+  /**
+   * Boarding fare here, HK$ decimal string, **as the wire carries it** — compared, never displayed.
+   *
+   * Two fields for one thing, and each has a job the other cannot do: `fareStages` groups contiguous runs
+   * by comparing this value, so it must stay the raw decimal, while `fareLabel` is what a rider reads. It is
+   * the same split `RouteStopArrival` makes between `iso` (an identity) and `label` (a reading), and the
+   * same one `poleNameKey` makes with its *"compared, never displayed"*.
+   */
   fare?: string
+  /**
+   * The printed fare, `$` and all — `formatFare`'s answer.
+   *
+   * The prefix is a composition, and a composition is exactly what the kernel owns: `RouteFact.value`
+   * already arrives formatted for the same reason. It also makes the row projectable, which the raw value is
+   * not: a spec cannot express `formatFare`, so a projection reading `fare` would expect `18.9` where every
+   * renderer draws `$18.9` — a divergence the spec would report against both of them.
+   */
+  fareLabel?: string
   /** The stop the rider opened this route from, so the row is emphasised and scrolled to. */
   here: boolean
   /** First / last in the sequence — which rail connectors this row draws. */
@@ -455,7 +471,7 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
         urgency: etaUrgency(iso, now, policy),
         stale,
       })),
-      ...(s.fare === undefined ? {} : { fare: s.fare }),
+      ...(s.fare === undefined ? {} : { fare: s.fare, fareLabel: formatFare(s.fare) }),
       here: i === hereIndex,
       first: i === 0,
       last: i === stops.length - 1,

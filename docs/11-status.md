@@ -9,10 +9,10 @@
 > [ADR-090](./08-decision-log.md#adr-090--a-mustnot-a-component-cannot-satisfy-is-a-statement-about-its-producer),
 > [ADR-091](./08-decision-log.md#adr-091--the-keypad-and-the-result-list-are-one-filtered-set-and-a-chip-set-is-the-indexs-answer),
 > [ADR-092](./08-decision-log.md#adr-092--a-spec-cannot-hold-an-interaction-but-it-can-hold-what-a-rider-infers-from-one)),
-> so `apps/web` has **four ported screens** — Nearby, Place detail, Favourites, Search — four destinations
-> still naming the work package that ports them, and `apps/mobile`'s Place detail is policed by
+> so `apps/web` has **five ported screens** — Nearby, Place detail, Favourites, Search and (on this branch)
+> Route detail — three destinations still naming the work package that ports them, and `apps/mobile`'s Place detail is policed by
 > `check-no-derivation` for the first time: the asymmetry ADR-069 recorded, closed for that screen.
-> **WP6-6 (Route detail) is the row in progress**, on `wp6-6-route-detail`, and **its hoist half is done**
+> **WP6-6 (Route detail) is done bar WP6-6c**, on `wp6-6-route-detail`. **Its hoist half came first**
 > ([ADR-093](./08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry)).
 > `proposals/04` calls Place detail *"the most domain rules in the app"*; Place detail had **nine** and this
 > screen had **sixteen** — which row is the boarding anchor and that a flip drops it, each row's soonest
@@ -44,10 +44,42 @@
 > screen had two eleven lines apart), and a direction flip that swaps the header, the facts strip and the
 > whole list. Screenshots: `.context/wave6-screenshots/11-rn-route-detail-after-the-hoist.jpg`,
 > `12-rn-route-action-sheet-one-stop-name.jpg`.
-> **WP6-6b is next**: the spec, the `apps/web` port, the motion contract and `app/route/` joining
-> `check-no-derivation`. **WP6-6c** is new and is the four **fact sheets**, which still derive — 397 lines
-> holding the fare-stage timeline, the frequency bands and the day-name list, so they are a hoist of their own
-> rather than something to smuggle into a screen commit.
+> **WP6-6b closed it** ([ADR-094](./08-decision-log.md#adr-094--motion-is-idiom-what-the-motion-is-about-is-not)),
+> and the answer to the row's own question is the ADR's title: **motion is idiom; what the motion is about is
+> not.** A bus token's slide-in, its tween and its idle bob are curve, duration and physics — `apps/web`
+> animates only the position change and does not bob at all, which is the acceptance's *"the web curve is
+> chosen, not inherited"*. What is identity is **which node** the token is at, and it is projected in eight
+> states through the token's accessible name. The same line settled the two the plan asked about by name: the
+> collapsing header is idiom in its *behaviour* and identity in its *content*, and the auto-scroll is idiom in
+> the strongest sense — the DOM screen sets `scroll-margin-top` and calls `scrollIntoView`, so it owns no
+> offset at all where the RN one owns a measured one behind a reveal gate that `docs/07` records as broken.
+> **19 states, 17 projected, both renderers green**, 23 tests each. `apps/web` now has **five ported screens**
+> and `/route/:id` was the **last id-parameterised placeholder**.
+> 🔴 **Writing the spec found three more defects.** The RN row composed `"22 min"` as **one animated string**,
+> so the odometer slid a `min` that cannot change and it diverged from its twin, which styles the figure and
+> the unit apart as the model's two fields invite — found by the projection reporting
+> *`rendered "22 min" where the spec declares "22"`*. A **bus token that waits for a measurement draws nothing
+> when the measurement never arrives**: the overlay skipped any token whose row had not reported its
+> `onLayout` offset, which is the same react-native-web gap `MiniMap` carries and meant the conformance suite
+> could not reach a single bus state. And a **loop's `collapsedLabel` *is* its `destination`**, so the RN
+> driver's value-based filter deleted the destination too — it drops the collapsed marquee as a *node* now.
+> 🟡 **Two injections applied and changed nothing**, which is a new variant of WP6-5b's lesson: a slot's
+> **name** is load-bearing only where something refers to it, so renaming an unreferenced one leaves every
+> suite green. The real ones are a **deletion** (both suites red by 11 tests — the spec pinned from both sides)
+> and a rename of a slot an interaction *does* target, which fails at **emit** and prints every slot name.
+> **Verified in a browser on live data:** KMB 1A on `apps/web` — the `1A` chip, the four fact pills, 34 rows
+> with codes and sectional fares, figure-plus-unit readouts, `Due` green and `1 min` amber, **six named bus
+> tokens**, **36 interactive elements and 0 nested**, a reverse link to `/route/KMB%3A1A%3Ainbound%3A1`, and a
+> tab title reading the whole journey. And the Citybus defect **on screen**: `962 · Lung Mun Oasis → Causeway
+> Bay`, 36 rows, every fare present and **not one arrival time**, with nothing saying why. Screenshots:
+> `.context/wave6-screenshots/13-web-route-detail-shipping.jpg`,
+> `14-web-route-citybus-no-times-anywhere.jpg`.
+> **WP6-6c** is what is left of the row and is new: the four **fact sheets** still derive — 397 lines holding
+> the fare-stage timeline with its concession estimates, the per-day-type frequency bands and the day-name
+> list — so `RouteFactSheets.tsx` is deliberately absent from `check-no-derivation`'s `POLICED` list and
+> `apps/web` draws the strip as static pills. The spec declares that honestly rather than hiding it:
+> `factValue`'s interaction is `optional: true`, which makes the walker require the *text* to be identical
+> whether or not the affordance exists. **WP6-7 (Settings · About · FAQ) is next after it.**
 > One process rule came out of #24 and belongs at the top because it cost two CI runs: **run the gate chain
 > after committing, not before.** Both things CI caught — a `<div>` with an `onClick`, and rule 7 on the commit
 > that fixed it — were checks whose results had been measured before the final edit. *A check whose result you

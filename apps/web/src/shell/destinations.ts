@@ -63,6 +63,16 @@ export const PLACE_PATH = '/stop/:id'
 export const FAVOURITES_PATH = '/favorites'
 
 /**
+ * Route detail's path — the fifth ported screen (WP6-6b).
+ *
+ * The **direction toggle navigates here**, to the reverse route's own id, where the RN screen swaps the
+ * direction in local state so Back exits the screen rather than the flip. That is a navigation decision, so
+ * it is identity and it is recorded rather than left to each renderer — and a URL that names a direction is
+ * one a rider can share.
+ */
+export const ROUTE_PATH = '/route/:id'
+
+/**
  * Search is reachable from the tab row but is **not a tab** — it is its own page with no tab bar
  * (ADR-037), launched from a button sharing the row at the far right. That is a navigation decision,
  * not a chrome one, so it is identity and it is recorded here rather than left to each renderer.
@@ -77,7 +87,7 @@ export const SEARCH: ChromeDestination = {
 export const PUSHED: readonly Destination[] = [
   SEARCH,
   { path: '/stop/:id' },
-  { path: '/route/:id', owner: 'WP6-6' },
+  { path: ROUTE_PATH },
   { path: '/about-data', titleKey: 'aboutData', owner: 'WP6-7' },
   { path: '/faq', titleKey: 'settingsFaq', owner: 'WP6-7' },
 ]

@@ -6724,3 +6724,106 @@ pre-existing and unaddressed; it earned its keep here.
     unstaged — and the same note already exists one hazard over, for `git stash --keep-index`.
   - **Test totals:** core **924** (+6), edge 149, api-client 71, ui-spec 30, web 131, mobile 109 — **1 414**.
     Corpus 14 files / **106** groups / **900** cases / 4 `knownDefect`.
+
+## ADR-094 — Motion is idiom; what the motion is about is not
+
+- **Status:** **Decided and implemented 2026-08-05** as the second half of **WP6-6**, which closes it.
+  Implementation: `packages/contract/ui/route-detail.spec.json` (**19 states, 17 projected**),
+  `apps/web/src/screens/RouteDetail.tsx` + `components/RouteStopRow.tsx` + `components/RailBusToken.tsx`,
+  conformance drivers on **both** renderers (`test/route-detail-states.test.tsx` × 2, 23 tests each), and
+  `check-no-derivation` extended to `apps/mobile/app/route/` and three of its leaf components.
+- **Context.** `proposals/04` picks Route detail fifth and calls it *"the motion test — the first screen where
+  'motion is idiom' is a real claim rather than a slogan"*. WP6-5b had already settled that a spec should not
+  try to hold an **interaction** (ADR-092); motion is the same question one step further in, and *"motion is
+  idiom"* on its own is too coarse to act on — it would put the bus tokens entirely outside the specification,
+  and the bus tokens are the screen.
+- **Decisions:**
+  1. **Motion is idiom; what the motion is about is not.** A token slides in from the origin, tweens to a new
+     position when a round arrives, and bobs on the spot between rounds. Every one of those is curve, duration
+     and physics. What is **identity** is *which node it is at* — `{kind:'node', index}` or
+     `{kind:'segment', from, to}` (ADR-093) — and that is projected, through the token's name, in eight
+     states. `apps/web` animates only the position change and does not bob at all, which is a *choice*: the
+     acceptance asked for the web curve to be chosen rather than inherited, and "a page a rider is reading
+     should hold still" is the reason.
+  2. **The collapsing header is idiom in its behaviour and identity in its content.** It states the route
+     number and both ends of the journey at whatever size its platform gives it. The two **composed** journey
+     strings (`label`, `collapsedLabel`) are corpus-pinned and deliberately *not* projected, because they are
+     chrome at a particular size: `apps/mobile` cross-fades between them, and `apps/web` has one size and puts
+     the resting one in `document.title`. Declaring them as slots would fail whichever renderer's chrome did
+     not draw both. *The spec holds what both must show; a suite holds what only one can see* — the same line
+     ADR-092 drew for the keypad's `enabled`.
+  3. **The auto-scroll is idiom in the strongest sense the wave has produced.** `apps/web` sets
+     `scroll-margin-top` and calls `scrollIntoView`, so the browser honours the rider's reduced-motion setting
+     and this screen owns no offset at all; `apps/mobile` measures every row and computes one behind a reveal
+     gate — which `docs/07` records as **not landing on web**. Two renderers, one declared state (`anchored`),
+     and what that state pins is that the anchor changes **nothing about what is shown**.
+  4. **The direction toggle navigates on the web and swaps state on the phone**, and both are right. A URL
+     that names a direction is one a rider can share, so `ROUTE_PATH` is where the DOM toggle points; the RN
+     screen holds the flip locally so Back exits the screen rather than the flip. The consequence for the
+     suites is worth stating because it is the clearest case yet of *the driver owns getting there*: the RN
+     driver reaches `flipped` by **pressing the toggle**, and the DOM driver by opening the route with no
+     `?stop=`. Different journeys, identical state, one projection.
+  5. **A row with nothing on its right is allowed here and forbidden on a card**, and the spec says why.
+     `StopRow`'s `empty` has banned *"a card with a name and nothing under it"* since WP6-1 because a compact
+     card is one place among many and a blank readout cannot be told from a broken favourite key. A row on a
+     schematic is one stop among a route's own, under a numbered node, in a list read in order — absence there
+     says *"no bus reported for this stop"*, which is a fact rather than an ambiguity. **The same shape is not
+     the same claim in a different container**, which is the first time this wave has had to draw that
+     distinction rather than generalise a `mustNot`.
+- **What writing the spec found, and it is three things rather than one.**
+  - 🔴 **The RN row composed `"22 min"` as a single animated string.** The kernel hands over `value` and `unit`
+    as two fields precisely so they can be styled apart — the figure tabular and urgency-coloured, the unit
+    small and muted — and the DOM row does that. The RN odometer animated the pair as one string, so it slid a
+    `min` that cannot change *and* diverged from its twin. Two nodes now, the figure animated and the unit
+    static. **Found by the projection, not by looking**: the suite reported `rendered "22 min" where the spec
+    declares "22"`.
+  - 🔴 **A bus token that waits for a measurement draws nothing when the measurement never arrives.** The RN
+    overlay skipped any token whose target row had not reported its offset — correct in the moment, and a
+    silent empty rail whenever `onLayout` does not fire, which is a live react-native-web bug this repo
+    already carries for `MiniMap` (`docs/07`). The conformance suite could not reach a *single* bus state
+    until it changed. An unmeasured token now sits at the top of the rail and slides down, which is the
+    entrance animation anyway.
+  - 🟠 **A loop's `collapsedLabel` *is* its `destination`.** The RN driver drops the collapsed marquee because
+    at rest it is in the tree and invisible on screen — and dropping it *by value* deleted the destination too
+    on a circular route, where there is no arrow and no origin to shorten away. It is dropped as a **node**
+    now: the first child, in visual order, whose whole text is that label.
+- **Verified in a browser on live Hong Kong data** (`.context/wave6-screenshots/13-web-route-detail-shipping.jpg`):
+  KMB 1A on `apps/web` — the `1A` chip, `Sau Mau Ping (Central)` over `↓ Star Ferry, Harbour City`, the four
+  fact pills, 34 rows with codes, sectional fares and figure-plus-unit readouts, `Due` in green and `1 min` in
+  amber, **six named bus tokens**, **36 interactive elements and 0 nested**, a reverse link resolving to
+  `/route/KMB%3A1A%3Ainbound%3A1`, and a tab title reading the whole journey.
+- **Consequences:**
+  - ⚪ **`apps/web` has five ported screens** and three destinations still name the work package porting them.
+    `/route/:id` was the **last id-parameterised placeholder**, so `test/shell.test.tsx`'s "shows the id it was
+    asked for" assertion died with it — replaced by the rule it was protecting: a destination with no
+    `titleKey` must have a ported screen, because the placeholder has no words for it.
+  - ⚪ **`check-no-derivation` polices `app/route/` and three leaf components.** The allowlist gained three
+    entries and every one earns the line *geometry is presentation, a list is a decision*: rail arithmetic, the
+    odometer's character-level `slice`s, and a `slice()` with no arguments that is a **copy** rather than a cap.
+    `RouteFactSheets.tsx` is deliberately still absent — see below.
+  - 🟠 **The four fact sheets are WP6-6c and are not in this row.** `RouteFactSheets.tsx` holds three more
+    corpus-worthy compositions (the fare-stage timeline with its concession estimates, the per-day-type
+    frequency bands, the day-name list), so the DOM screen draws the strip as **static pills**. The spec
+    declares that honestly rather than hiding it: `factValue`'s interaction is `optional: true`, which makes
+    the walker require the *text* to be identical whether or not the affordance exists — ADR-069's overflow
+    rule applied to a whole surface.
+  - 🟡 **Two injections applied and were semantically inert**, which is a new variant of WP6-5b's lesson.
+    Renaming a slot the spec references nowhere, and renaming one whose interaction targets its *parent*, both
+    left every suite green — because a slot's **name** is only load-bearing where something refers to it. The
+    real injections are a **deletion** (both suites red by 11 tests each, which is the spec pinned from both
+    sides) and a rename of a slot an interaction *does* target, which fails at **emit** and prints every slot
+    name. *An injection that applies is not the same as an injection that changes anything.*
+  - ⚪ **Five injections watched failing**, each asserting that it applied: the DOM row dropping its printed
+    stop code (web red 14, RN green), the RN strip losing its holiday separator (RN red 1, web green), the DOM
+    screen unnaming its tokens (web red 7, RN green), the spec deleting a slot (both red 11), and the emit
+    guard above. The asymmetry is the point: a per-renderer defect is a per-renderer failure.
+  - 🟡 **Two more platform substitutions than the Place screen needed**, both dying with
+    `SyntaxError: Unexpected token 'typeof'` and no stack: `react-native-svg` (through the double-decker glyph)
+    and `react-native-gesture-handler` (through the sheet). Found by bisecting the import graph one module at a
+    time, which is now twice the only way in. And a **`ResizeObserver` stub installed above the screen's
+    import** — a class declaration is hoisted but not initialised, so assigning it in `beforeEach`, or even
+    lower in the file, is too late: `react-native-web` has already captured the constructor.
+  - 🟡 **jsdom has no `scrollIntoView`**, and an unstubbed call throws out of the effect that brings the
+    boarding row up — failing `anchored` for a reason that has nothing to do with the screen.
+  - **Test totals:** core 924, edge 149, api-client 71, ui-spec 30, web **154** (+23), mobile **132** (+23) —
+    **1 460**. Corpus 14 files / 106 groups / 900 cases / 4 `knownDefect`; **7 component specs**.
