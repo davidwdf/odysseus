@@ -148,9 +148,9 @@ export function PlaceDetail() {
     <main className="min-h-dvh bg-bg">
       {/* The chrome, in flow and first — see the note above. The name arrives with the data; the back
           control does not wait for it, deliberately, so a rider can leave a screen that is still loading. */}
-      <header className="px-4 pb-2 pt-3">
-        <BackButton />
-        <h1 className="m-0 mt-3 text-h1 font-bold text-text">{view?.name.label}</h1>
+      <BackButton />
+      <header className="pushed-header px-4 pb-2">
+        <h1 className="m-0 text-h1 font-bold text-text">{view?.name.label}</h1>
       </header>
 
       {/*

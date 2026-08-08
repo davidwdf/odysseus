@@ -106,6 +106,79 @@
   }
 }
 
+/*
+  The glass material — the DOM half of `apps/mobile/components/GlassView.tsx`.
+
+  A class rather than Tailwind utilities because of the two `@supports`/`@media` guards below, which have
+  no utility form: a pane whose tint is 60% is unreadable the moment the blur behind it does not render,
+  and both conditions are real (Firefox before 103, `backdrop-filter` disabled by policy, and any rider who
+  has asked their OS to reduce transparency). `apps/mobile` has neither guard; the DOM makes them cheap and
+  they are legibility rather than taste.
+
+  `saturate` before `blur` matches the RN fallback's order. The Chromium-only SVG refraction the RN
+  component layers on top is deliberately not ported — see `shell/TabBar.tsx`.
+*/
+.glass-pane {
+  background-color: rgb(var(--surface) / 0.6);
+  -webkit-backdrop-filter: blur(13px) saturate(1.8);
+  backdrop-filter: blur(13px) saturate(1.8);
+}
+
+/*
+  Tab → tab: a 150 ms linear cross-fade, which is React Navigation's `FadeSpec` — the exact spec the RN
+  shell uses (`apps/mobile/app/(tabs)/_layout.tsx`) and the one ADR-043 left standing when it reverted the
+  JS stack.
+
+  The default root view-transition IS a cross-fade, so only the timing is set here. `shell/TabBar.tsx`
+  starts it; browsers without `startViewTransition` never run these rules and navigate as they did before.
+
+  The reduced-motion query is the thing the RN version cannot do: React Navigation collapses its spec to
+  `none` only if the app asks, and this asks by default.
+*/
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+  animation-timing-function: linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+/*
+  The top of a pushed screen, where the floating back lens sits.
+
+  Declared once because five screens need the identical two numbers and a class is the only way to keep
+  `env()` in them — Tailwind's arbitrary values are resolved at build time and `env()` cannot be.
+
+  · `padding-top` clears the iOS status bar. `index.html` opts into `viewport-fit=cover` and a translucent
+    status bar, and until the back control was fixed **nothing on the web side read this inset at all**.
+  · `padding-left` clears the lens: 12 (its inset) + 48 (`GLASS_BUTTON_SIZE`) + 12 (a gap) = 72. Written as
+    one number rather than composed from three, because the lens's own geometry lives in `BackButton.tsx`
+    and a second copy of it here would be the kind of duplication this repo keeps closing.
+*/
+.pushed-header {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
+  padding-left: 72px;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-pane {
+    background-color: rgb(var(--surface));
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-pane {
+    background-color: rgb(var(--surface));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 /* Turn the light basemap into a dark one: invert the luminance, then hue-rotate 180° so water and parks
    land back near their real colour; trim brightness and contrast so it is not harsh. Applied to the tile
    layer only — the dots and the licence credit above it stay true-colour.

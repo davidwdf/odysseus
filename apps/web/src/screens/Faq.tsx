@@ -47,8 +47,8 @@ export function Faq() {
 
   return (
     <main className="min-h-dvh bg-bg pb-8">
-      <header className="flex items-center gap-3 px-4 pb-1 pt-4">
-        <BackButton />
+      <BackButton />
+      <header className="pushed-header flex items-center px-4 pb-1">
         <h1 className="m-0 min-w-0 flex-1 text-h2 font-bold text-text">
           {t(locale, 'settingsFaq')}
         </h1>

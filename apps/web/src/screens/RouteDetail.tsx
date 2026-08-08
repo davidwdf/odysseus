@@ -208,10 +208,10 @@ export function RouteDetail() {
     <main className="min-h-dvh bg-bg pb-10">
       {/* The chrome, in flow and first — see the note above. The back control does not wait for the payload,
           deliberately, so a rider can leave a screen that is still loading. */}
-      <header className="sticky top-0 z-10 border-border border-b bg-bg/95 px-4 pt-3 pb-3 backdrop-blur">
-        <BackButton />
+      <BackButton />
+      <header className="pushed-header sticky top-0 z-10 border-border border-b bg-bg/95 px-4 pb-3 backdrop-blur">
         {view ? (
-          <div className="mt-3 flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <RouteChip operator={view.header.operator} routeNo={view.header.routeNo} />
             <div className="min-w-0 flex-1">
               <p className="m-0 truncate text-label text-muted">{view.header.origin}</p>

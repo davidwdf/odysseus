@@ -1201,8 +1201,32 @@
       ]
     },
     "estimateElderlyFare": {
-      "doc": "A LABELLED ESTIMATE of the Government $2 Scheme fare for 65+/PwD riders, as amended 3 Apr 2026: $2 for adult fares up to $10, otherwise 20% of the adult fare — i.e. max($2, 20%), to one decimal. Requires an eligible/JoyYou Octopus, not cash. Changing the scheme means editing this group and re-porting.",
+      "doc": "A LABELLED ESTIMATE of the Government $2 Scheme fare for 65+/PwD riders, as amended 3 Apr 2026: $2 for adult fares up to $10, otherwise 20% of the adult fare — i.e. max($2, 20%) — and then **capped at the adult fare itself**, because the Scheme caps what a concessionary rider pays and does not invent a charge. The cap is inert above $2 (for any n >= 2, max(2, 0.2n) <= n) and binding below it, which is where the bug was: a $0 interchange section estimated $2.0, a figure no rider is charged and MORE than the adult fare beside it. To one decimal. Requires an eligible/JoyYou Octopus, not cash. Changing the scheme means editing this group and re-porting every platform.",
       "cases": [
+        {
+          "name": "a-free-section-costs-a-concessionary-rider-nothing",
+          "why": "**The bug this group carried until 2026-08-08, reported from the shipping app.** A bus-bus interchange leg is genuinely free — 49X through the Shing Mun Tunnels BBI prices its A5 and A2 sections at $0 — and `max($2, 20%)` turned that into $2.0: a charge that does not exist, printed as an estimate beside an adult fare of $0, i.e. MORE than an adult pays. The Scheme is a cap, not a floor. Wrong on all three renderers at once, because the rule is shared — which is the argument for it being here rather than in a screen.",
+          "args": {
+            "adultFare": "0"
+          },
+          "expect": "0.0"
+        },
+        {
+          "name": "a-fare-below-the-floor-is-never-rounded-up-to-it",
+          "why": "The general form of the row above, and the one that shows the cap is a rule rather than a special case for zero: a $1.50 fare estimates $1.50, because no concession makes a rider pay more than the adult beside them. `max($2, …)` alone returns $2.0 here.",
+          "args": {
+            "adultFare": "1.5"
+          },
+          "expect": "1.5"
+        },
+        {
+          "name": "the-cap-is-inert-exactly-where-the-scheme-applies",
+          "why": "The control that stops the cap being a silent behaviour change: at exactly $2 the two rules agree, so this row would go red if `min` were ever applied to the percentage instead of to the whole expression. Above it, `cheap-fare-pays-the-two-dollar-floor` and the four rows after it are unchanged by the fix — which is the evidence that it is a fix and not a re-tuning.",
+          "args": {
+            "adultFare": "2"
+          },
+          "expect": "2.0"
+        },
         {
           "name": "cheap-fare-pays-the-two-dollar-floor",
           "args": {

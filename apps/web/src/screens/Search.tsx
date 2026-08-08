@@ -95,8 +95,8 @@ export function Search() {
 
   return (
     <main className="flex min-h-dvh flex-col bg-bg">
-      <header className="flex items-center gap-3 px-4 pb-1 pt-4">
-        <BackButton />
+      <BackButton />
+      <header className="pushed-header flex items-center px-4 pb-1">
         <Segment
           mode={mode}
           onChange={setMode}

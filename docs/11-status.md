@@ -1,7 +1,52 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
+> Snapshot: **2026-08-08**, and the top of this doc is now an **owner review of `apps/web`** rather than a
+> work-package report — read [ADR-100](./08-decision-log.md#adr-100--the-apps-signature-motion-and-material-are-identity-platform-conventional-detail-is-idiom)
+> before touching either renderer.
+> **The line moved:** *the app's signature motion and material are **identity**; platform-conventional
+> detail is **idiom**.* ADR-075 put motion, material, gesture and shape on the idiom side wholesale and
+> ADR-094 sharpened it into *"the web curve is chosen, not inherited"*; every renderer difference that
+> followed was justified by pointing at those words — a flat tab bar, no cross-fade, a `<dialog>` for a
+> sheet, a stock Lucide bus, no odometer, no collapsing headers. The owner's verdict is that the result is
+> not a platform-idiomatic renderer, it is **less of the app**. ADR-100 amends ADR-075's table, ADR-094,
+> ADR-095 decision 8 and the `idiom` lists of five specs; ADR-075's thesis is untouched.
+> 🟠 **And the process finding matters more than the design one.** WP6-7b's parity audit told its verifiers
+> to reclassify a finding as *intended idiom* when the choice was **written down somewhere** — which made
+> documentation self-justifying, because most of it was written by the same agent sessions that made the
+> choices and was never reviewed by the owner. Re-read against ADR-100, **at least five findings that audit
+> refuted or reclassified are real**, three of them independently on the owner's own list. *"It is in an ADR"
+> is not "the owner chose it."*
+> **Landed so far against the review:**
+> · 🔴 **A fare bug on every platform.** `estimateElderlyFare` was `max($2, 20%)` — treating the $2 Scheme as
+>   a floor when it is a **cap** — so a $0 bus-bus-interchange section (49X through the Shing Mun Tunnels)
+>   estimated **$2.0**, *more than the adult fare beside it*. Now `min(adult, max($2, 20%))`, which is inert
+>   above $2 and binding below; three corpus rows, watched failing.
+> · **The floating glass tab bar**, value for value with `apps/mobile`: 54 px tall, radius 24, inset 12 on
+>   every side, `bg-surface/60` under `blur(13px) saturate(1.8)`, the light-only `ELEVATION.e3` plus both
+>   `GLASS_RIM` insets, and the 54 px circular search lens beside it. The Chromium-only SVG refraction is
+>   deliberately **not** ported — the frosted fallback is what most riders already see and it needs no
+>   raw-colour exemption. Two guards `apps/mobile` never got: no-`backdrop-filter` and
+>   `prefers-reduced-transparency` both go opaque.
+> · **A 150 ms linear tab cross-fade** — React Navigation's `FadeSpec` exactly. Driven by
+>   `document.startViewTransition` directly, because `react-router@7.18.2` only wires View Transitions inside
+>   a *data* router and migrating the shell for a motion feature would be the wrong trade; Firefox falls back
+>   to today's cut, and `prefers-reduced-motion` turns it off, which the RN version cannot.
+> · **The back control is a floating icon-only glass lens fixed to the top**, 48 px, the RN
+>   `GLASS_BUTTON_SIZE`. It used to be a labelled pill in flow that **scrolled away**, leaving a rider on a
+>   scrolled page no way back in an installed PWA. Its name is an `aria-label` now, so `shell.test.tsx` reads
+>   the accessible name rather than the rendered word — the better assertion of the two.
+> · **`env(safe-area-inset-top)` is read for the first time.** `index.html` has opted into
+>   `viewport-fit=cover` since WP6-0 and nothing on the web side ever compensated at the top; a control fixed
+>   there turned that open amber into a blocker.
+> **Still open from the review, in order:** the bottom sheet with drag gestures (replacing both `<dialog>`s);
+> Route detail's seven items (the `BusGlyph` double-decker and its bob, the odometer, the dividers, the
+> anchored row, the direction icon and its swap animation, the centred badge and its collapsing header, the
+> star's outline); Place detail's header animation and its **tail padding** — where recon also found the
+> scroll-spy line (206 px) and the tap snap point (214 px) are *different numbers*, so tapping any kerb
+> highlights the one above it; and Search's pinned keypad and preserved query.
+>
+> Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
 > **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no
 > destination carries an `owner`, and `screenFor` is an exhaustive switch whose default throws, so a
 > destination added without a screen is a *typecheck* failure rather than a blank route.

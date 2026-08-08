@@ -7219,3 +7219,43 @@ pre-existing and unaddressed; it earned its keep here.
     Screenshot `.context/wave6-screenshots/23`.
   - 🟡 **The first runtime dependency `apps/web` has that `apps/mobile` does not**, which is the direction of
     travel: WP6-8 removes Expo's font pipeline and this replaces it at a twentieth of the bytes.
+
+## ADR-100 — The app's signature motion and material are identity; platform-conventional detail is idiom
+
+- **Status:** **Decided by the owner 2026-08-08**, and it **amends ADR-075's invariant/idiom table, ADR-094,
+  ADR-095 decision 8, and the `idiom` entries of five component specs.** Implementation is in progress; the
+  shell chrome landed first.
+- **Context.** ADR-075 put motion, material, gesture and shape on the **idiom** side wholesale, and ADR-094
+  sharpened that into *"motion is idiom; what the motion is about is not"* — with the stated acceptance that
+  *"`apps/web` animates only the position change and does not bob at all"*, because *"the web curve is
+  chosen, not inherited"*. Every renderer difference that followed was then justified by pointing at those
+  words: a flat opaque tab bar, no cross-fade, a `<dialog>` instead of a bottom sheet, a stock Lucide bus in
+  place of the app's own glyph, no odometer, no collapsing headers.
+  On review the owner's verdict was that the result is not a platform-idiomatic renderer, it is **less of
+  the app** — and that the line was drawn in the wrong place.
+- **Decision.** *The app's signature motion and material are identity. Platform-conventional detail is
+  idiom.*
+  - **Identity** — the things that make this app recognisably itself, and which a second renderer must
+    therefore reproduce: the floating glass tab bar and its lens; the cross-fade between tabs; the
+    collapsing headers; the bottom action sheet and its drag; the double-decker bus token and its bob; the
+    arrival odometer; the direction-swap animation. A rider who used both should not be able to tell which
+    one they are holding by how it *feels*.
+  - **Idiom** — what genuinely belongs to the platform: the focus ring, the scrollbar, press feedback,
+    hover, the text-selection colour, how a keyboard traverses, the fallbacks a browser needs where a native
+    effect has no equivalent, and every accessibility affordance a platform offers that the other cannot.
+- **Consequences:**
+  - ⚠️ **Amends rather than deletes.** ADR-075's thesis is untouched: one executable spec, three renderers,
+    drift defined on the spec. What moves is the boundary the spec's `idiom` lists draw, and the six specs
+    that assert "nothing moves on this screen" have to be corrected as each surface is done rather than in
+    one sweep — an `idiom` entry left claiming the old line is worse than none.
+  - 🟠 **A process finding, and it is the reason this ADR exists at all.** The parity audit that preceded it
+    (WP6-7b) told its verifiers to reclassify a finding as *intended idiom* when the choice was **written
+    down somewhere** — which made documentation self-justifying, since most of it was written by the same
+    agent sessions that made the choices, never reviewed by the owner. Re-read against this decision, **at
+    least five findings the audit refuted or reclassified are real**, three of them independently on the
+    owner's own list: the direction swap with no feedback, the instant kerb jump, the header tap-to-top, the
+    unmanaged scroll position, and the keypad the OS keyboard covers. *"It is in an ADR" is not "the owner
+    chose it"*, and an audit that cannot tell the two apart under-reports in a predictable direction.
+  - ⚪ **What it does not license.** Copying a native constant into the web without asking whether it means
+    the same thing is still wrong — a 52 px RN rail and a 44 px DOM gutter arrive at different numbers from
+    the same answer (ADR-093), and that stays true. Identity is the *effect*, not the implementation.

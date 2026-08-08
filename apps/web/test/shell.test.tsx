@@ -151,7 +151,15 @@ describe('every declared destination opens, and none of them is blank', () => {
     // place id contains `+`, which a URL decodes as a space — ADR-079's own trap, one layer up.
     const path = destination.path.replace(':id', encodeURIComponent('P:KMB:AA+CTB:AB'))
     it(`renders something at ${path}`, () => {
-      expect(renderedText(mount(path)).length).toBeGreaterThan(0)
+      // **Text OR a labelled control**, which is a change and a strengthening rather than a weakening.
+      // This used to assert text alone, and it passed on the two id-parameterised screens only because the
+      // back control printed the word "Back" — so with no payload the assertion was really about the shell
+      // rather than the screen. The back control is a floating icon now (its name is an `aria-label`), and
+      // a skeleton has no words at all, so "not blank" has to mean what ADR-075 actually says: a rider is
+      // shown *something*, whether that is text, a control, or a shape.
+      const tree = mount(path)
+      const labelled = tree.querySelectorAll('[aria-label], .animate-pulse, svg')
+      expect(renderedText(tree).length + labelled.length).toBeGreaterThan(0)
     })
   }
 
@@ -215,8 +223,30 @@ describe('the tab bar is on the tabs and nowhere else (ADR-037)', () => {
     for (const destination of PUSHED) {
       remount(destination.path.replace(':id', 'KMB%3AAA'))
       expect(container.querySelector('nav')).toBeNull()
-      expect(renderedText(container)).toContain(t('en', 'back'))
+      // The **accessible name**, not the rendered word. The back control is a floating icon-only lens now,
+      // matching `apps/mobile`'s, so "Back" is an attribute rather than a text node — and reading the name
+      // is the better assertion anyway: it is what a screen reader is offered rather than what a sighted
+      // rider happens to see. Every conformance driver already discarded the word as chrome noise.
+      const back = container.querySelector(`button[aria-label="${t('en', 'back')}"]`)
+      expect(back, `${destination.path} offers no way back`).not.toBeNull()
     }
+  })
+
+  it('keeps the back control out of the document flow, so scrolling cannot take it away', () => {
+    // The reason it moved out of flow at all: it used to sit inside each screen's header, so on a scrolled
+    // page a rider had no way back except the browser's own chrome — which an installed PWA does not have.
+    //
+    // **Asserted as the class rather than as the computed style, and that is a real limit worth naming.**
+    // jsdom parses no stylesheet, so `getComputedStyle(el).position` is `''` here for every element on
+    // every screen — a computed-style assertion would have been the vacuous kind this repo audits for. What
+    // this can honestly check is that the control is a direct child of the screen root carrying `fixed`
+    // rather than a descendant of a `<header>`; that it actually stays put is a browser claim, and it was
+    // measured in one.
+    remount('/faq')
+    const back = container.querySelector('button[aria-label]')
+    if (!back) throw new Error('no back control')
+    expect(back.className).toContain('fixed')
+    expect(back.closest('header'), 'the back control is back inside a header').toBeNull()
   })
 })
 

@@ -532,15 +532,27 @@ export function estimateChildFare(adultFare: string): string | undefined {
 }
 
 /** Approximate elderly-65+/PwD fare under the Government $2 Scheme (from 3 Apr 2026: $2 for
- *  fares up to $10, otherwise 20% of the fare — i.e. `max($2, 20%)`). Requires an eligible/
- *  JoyYou Octopus, not cash. Estimate.
+ *  fares up to $10, otherwise 20% of the fare — i.e. `max($2, 20%)`), **capped at the adult fare**.
+ *  Requires an eligible/JoyYou Octopus, not cash. Estimate.
+ *
+ *  ## The cap is the whole of the rule, and it was missing
+ *
+ *  `max($2, 20%)` is right for every fare *above* $2 and wrong below it: the Scheme **caps** what a
+ *  concessionary rider pays, it does not invent a charge. A section priced at **$0** — which is what a
+ *  bus-bus interchange leg costs on routes like 49X through the Shing Mun Tunnels BBI — came out as
+ *  **$2.0**, a figure no rider is charged and which is *more than the adult beside it*. Reported from
+ *  the shipping app, and it was wrong on all three renderers because the rule is shared.
+ *
+ *  `min(adult, …)` is the fix and it changes nothing above $2: for any `n >= 2`, `max(2, 0.2n) <= n`
+ *  already, so the clamp is inert exactly where the Scheme applies and binding exactly where it does
+ *  not. A $1.50 fare now estimates $1.50 rather than $2.00, for the same reason.
  *
  * @spec eta#estimateElderlyFare
  */
 export function estimateElderlyFare(adultFare: string): string | undefined {
   const n = parseFareOrUndefined(adultFare)
   if (n === undefined) return undefined
-  return (Math.round(Math.max(2, n * 0.2) * 10) / 10).toFixed(1)
+  return (Math.round(Math.min(n, Math.max(2, n * 0.2)) * 10) / 10).toFixed(1)
 }
 
 // `formatStopCount` used to sit here; it is now `t(locale, 'stopCount', { n })` in `@nextbus/i18n`.
