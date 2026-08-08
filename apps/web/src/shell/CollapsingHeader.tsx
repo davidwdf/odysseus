@@ -105,7 +105,7 @@ export function CollapsingHeader({
       </div>
       <header
         data-collapsed={collapsed ? 'true' : 'false'}
-        className="collapsing-header fixed inset-x-0 top-0 z-10"
+        className="collapsing-header fixed inset-x-0 top-0 z-20"
         style={{
           // The height is a custom property rather than an inline `height`, so the collapsed rule in
           // `index.css` can override it without `!important` — an inline declaration outranks any class.
@@ -141,3 +141,14 @@ export function CollapsingHeader({
  * row is scrolled to, and two numbers that must agree should be one.
  */
 export const COLLAPSE = 96
+
+/**
+ * The collapsed band's height, **excluding** the safe-area inset that `index.css` adds to it.
+ *
+ * Exported because Place detail docks its map below this band and has to know where the band ends —
+ * `apps/mobile` reads the same number through `collapsedHeaderH(insets.top)`. It is duplicated in
+ * `index.css` (`… + 60px`, and `+ 30px` for the badge's centre), which is the one place that must be
+ * changed with it; a custom property could hold it once, and would be worth it the moment a third
+ * consumer appears.
+ */
+export const COLLAPSED_HEIGHT = 60

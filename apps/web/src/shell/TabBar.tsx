@@ -81,7 +81,7 @@ export function TabBar() {
 
   return (
     <nav
-      className="pointer-events-none fixed inset-x-0 z-10 flex items-center"
+      className="pointer-events-none fixed inset-x-0 z-20 flex items-center"
       style={{
         bottom: BAR_BOTTOM,
         paddingLeft: TAB_BAR_GAP,

@@ -7429,3 +7429,46 @@ pre-existing and unaddressed; it earned its keep here.
   - ⚪ **Confined to this gate.** `check-view-transport-free`, `check-no-adhoc-id-parsing` and
     `check-one-endpoint-declaration` scan raw lines on purpose — a URL literal is exactly what they are
     looking for — so none of them shared the hole.
+
+## ADR-106 — The scroll-spy's line is the map's own edge, and fixed chrome outranks sticky content
+
+- **Status:** **Decided 2026-08-08**, implemented in `apps/web/src/screens/PlaceDetail.tsx` and the three
+  shell components whose `z-index` it corrects.
+- **Context.** Place detail lights the map dot for the kerb the list is scrolled to, and tapping a dot (or a
+  heading) brings that kerb up. The owner's review asked for the tail padding `apps/mobile` has; recon found
+  a second defect underneath it — the spy tested `STICKY_TOP + MAP_HEIGHT` (206) while a section's snap
+  point was a hard-coded `scroll-mt-[214px]`, so **every** tap lit the kerb above the one tapped.
+  `apps/mobile` cannot have that bug: one `listTop` feeds both its reaction and its `scrollToPole`.
+- **Decisions:**
+  1. **The line is the card's measured bottom edge plus the gap under it**, not a recomputed constant. The
+     stronger version of "make the two agree": there is no second expression that *can* drift, and while
+     the card is still travelling to its dock the line travels with it — which is what *"has this heading
+     cleared the map"* means at any scroll position. One pixel of slack absorbs sub-pixel settling at
+     fractional device pixel ratios.
+  2. **The snap point is declared once, on the section, in terms of `env(safe-area-inset-top)`.** The inset
+     is part of the header's height, so it is part of this, and only CSS knows it — which is why it is a
+     `calc()` string rather than a number.
+  3. **Tail padding is `max(24px, calc(100dvh − snap − lastGroupHeight))`**, the RN expression, in CSS
+     rather than JavaScript. `100dvh` tracks a mobile URL bar showing and hiding; `window.innerHeight` read
+     at render time does not. The last group's height is measured by a `ResizeObserver` installed from a
+     React 19 ref callback that returns its own cleanup.
+  4. **The map docks *below* the collapsed header band**, at `COLLAPSED_HEIGHT + MAP_GAP` — `apps/mobile`'s
+     `collapsedHeaderH(insets.top) + MAP_GAP`. It docked at a flat 56 inside a 60 px band.
+  5. **A stacking order, stated once:** sticky content 10, fixed chrome 20, the floating back button 30. The
+     header and the map card were both `z-10` with the card later in the document, so **the map painted over
+     the collapsed header and hid its label entirely** — a bug that only existed because two components
+     picked the same number independently.
+- **Consequences:**
+  - 🟠 **Three defects, none of which any suite could have seen.** A snap point and a spy line are not
+    words, so `conformStates` is blind to them — the same blind spot ADR-098 names for interaction
+    destinations. jsdom lays nothing out, so a projection suite cannot measure them either. And **jsdom's
+    CSSOM rejects both expressions**: `style.paddingBottom` reports the *previously set* value when handed a
+    `max()` wrapping a nested `calc(env(…))`, so a test reading it would see the flat tail on a grouped
+    place and pass a screen with no tail room at all. `tailRoom()` is exported for that reason — the
+    expression is what matters and a function is where it can be read.
+  - ⚠️ **`COLLAPSED_HEIGHT` is duplicated in `index.css`** (as `60px`, and `30px` for the badge's centre).
+    One consumer justified an export with a note; a second would justify a custom property.
+  - ⚪ **A browser-automation fact worth recording**, because it cost time twice: a **hidden** tab produces
+    no frames, so it fires no `scroll` events, delivers no `IntersectionObserver` callbacks and freezes CSS
+    transitions mid-flight. Screenshots of it are stale. Dispatching `new Event('scroll')` and reading
+    `getBoundingClientRect()` after suppressing transitions is how the numbers above were actually measured.

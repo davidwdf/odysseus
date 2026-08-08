@@ -124,7 +124,7 @@ vi.mock('../src/adapters/datasource', () => ({
   dataSource: { getStop: () => stop(), getClientPolicy: () => Promise.resolve(undefined) },
 }))
 
-const { PlaceDetail } = await import('../src/screens/PlaceDetail')
+const { PlaceDetail, SNAP_BASE, tailRoom } = await import('../src/screens/PlaceDetail')
 // The preference store is real, not mocked: which routes a rider saved at this place is this screen's
 // input, so a mock of it would be a mock of the thing the star block below is about.
 const { usePreferences } = await import('../src/lib/preferences')
@@ -450,5 +450,51 @@ describe('the saved-state star — the other half of WP6-8’s blocker', () => {
     if (!row) throw new Error('the fixture has no rows')
     await mountWith([formatFavoriteRouteKey(row.stopId, row.routeId)])
     expect(readTree(container).text).toEqual(bare)
+  })
+})
+
+describe('the map scroll-spy’s geometry — the half no projection can reach', () => {
+  /**
+   * Two numbers had to agree and did not: the spy tested `STICKY_TOP + MAP_HEIGHT` (206) while a section's
+   * snap point was a hard-coded `scroll-mt-[214px]`, so a kerb scrolled to by a tap landed **below** the
+   * line the spy tested and the kerb above it stayed lit. Tapping any dot highlighted the wrong one, every
+   * time, on every place with more than one kerb.
+   *
+   * Neither of these is a *word*, so `conformStates` cannot see either — the same blind spot ADR-098 names
+   * for interaction destinations, one screen over. Nor can jsdom see much of it: it lays nothing out, and
+   * its CSSOM rejects both expressions below. So what is asserted is the shape of the fix — one declared
+   * snap point per section, inset-aware, and a tail expression that leaves the last kerb room to reach the
+   * line. The pixels themselves were measured in a browser and are recorded in ADR-106.
+   */
+  it('gives every kerb section one declared snap point, inset-aware', async () => {
+    await fixture('groupedKerbs')
+    const sections = [...container.querySelectorAll('section')]
+    expect(sections.length, 'the grouped fixture rendered no kerb sections').toBeGreaterThan(1)
+    for (const section of sections) {
+      // jsdom re-serialises the `calc()` into something of its own (`calc(228px + env(0px * , * …))`), so
+      // this asserts the two things that survive that: the base offset, and that the safe-area inset is
+      // part of it. A bare `214px` — the literal this replaced — has neither.
+      expect(section.style.scrollMarginTop).toContain(`${SNAP_BASE}px`)
+      expect(section.style.scrollMarginTop).toContain('safe-area-inset-top')
+    }
+    const [first] = sections
+    expect(
+      sections.every((s) => s.style.scrollMarginTop === first?.style.scrollMarginTop),
+      'two kerbs snapped to different places',
+    ).toBe(true)
+  })
+
+  it('pads a grouped place so its last kerb can reach the line, and a lone stop not at all', () => {
+    // Without the tail the last dot is unreachable: a place whose content is shorter than a viewport stops
+    // scrolling before its final heading gets near the line, so tapping that dot moves nothing and lights
+    // nothing. `apps/mobile` measures `lastGroupH` for exactly this.
+    const grouped = tailRoom(true, 400)
+    expect(grouped).toContain('100dvh')
+    expect(grouped).toContain(`${SNAP_BASE}px`)
+    expect(grouped, 'the measured group height is not subtracted').toContain('400px')
+    expect(grouped, 'a short last group could pad the page negatively').toMatch(/^max\(\d+px,/)
+    // A place with one flat list has nothing to scroll anywhere, so it gets a flat tail — the RN screen's
+    // `paddingBottom: 32` on the same branch.
+    expect(tailRoom(false, 400)).toMatch(/^\d+px$/)
   })
 })

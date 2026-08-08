@@ -121,9 +121,32 @@
 > surfaced **two** live sites, one of them in the bottom sheet written the same afternoon; both are geometry
 > and are allowlisted by name. Fourth in the family of *"a check that quietly stops seeing things and goes on
 > printing a success line"*.
-> **Still open from the review:** Place detail's **tail padding** — where recon also found the scroll-spy
-> line (206 px) and the tap snap point (214 px) are *different numbers*, so tapping any kerb highlights the
-> one above it.
+> **Place detail's scroll-spy (part 7) closes the review's last item**
+> ([ADR-106](./08-decision-log.md#adr-106--the-scroll-spys-line-is-the-maps-own-edge-and-fixed-chrome-outranks-sticky-content)),
+> and the tail padding the owner asked for was sitting on top of two defects rather than one.
+> 🔴 **Tapping any kerb lit the one above it.** The spy tested `STICKY_TOP + MAP_HEIGHT` (206) while the snap
+> point was a hard-coded `scroll-mt-[214px]`, so a section scrolled to by a tap landed *below* the line the
+> spy tested. The line is the **card's own measured bottom edge** now — the stronger version of "make the two
+> agree", since there is no second expression that can drift and the line travels with the card while it is
+> still on its way to dock.
+> 🔴 **The map painted over the collapsed header and hid its label.** Both were `z-10` and the card is later
+> in the document. There is a stated stacking order now — sticky content 10, fixed chrome 20, the floating
+> back button 30 — and the map docks *below* the 60 px band rather than four pixels inside it.
+> 🟢 **The tail** is `max(24px, calc(100dvh − snap − lastGroupHeight))`, the RN expression in CSS so `100dvh`
+> tracks a mobile URL bar. Without it the last dot is simply unreachable on a short place.
+> 🟠 **None of the three was reachable by any suite**: a snap point is not a word, so `conformStates` is blind
+> to it (ADR-098's blind spot, one screen over); jsdom lays nothing out; and **jsdom's CSSOM rejects both
+> expressions outright**, reporting the *previously set* value — so a test reading `style.paddingBottom`
+> would have seen the flat tail on a grouped place and passed a screen with no tail room at all. `tailRoom()`
+> is exported so the expression itself can be asserted.
+> ⚪ **A harness fact that cost time twice:** a **hidden** tab produces no frames, so it fires no `scroll`
+> events, delivers no `IntersectionObserver` callbacks, and freezes CSS transitions mid-flight — screenshots
+> of it are stale. Dispatching `new Event('scroll')` and reading rects with transitions suppressed is how
+> these numbers were measured.
+>
+> **The owner's review list is now clear.** What is left before WP6-8 is the two items already filed in
+> `docs/07`: Search's results-list scroll offset, and the RN `apps/mobile` back-port question — which
+> ADR-100's odometer note answers with *no*, since that renderer retires at WP6-8.
 >
 > Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
 > **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no

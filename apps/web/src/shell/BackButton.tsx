@@ -52,7 +52,7 @@ export function BackButton() {
       type="button"
       aria-label={t(locale, 'back')}
       onClick={() => (cameFromInsideTheApp ? navigate(-1) : navigate('/'))}
-      className="glass-pane fixed left-3 z-20 flex items-center justify-center rounded-full border border-border text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+      className="glass-pane fixed left-3 z-30 flex items-center justify-center rounded-full border border-border text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
       style={{
         top: `calc(${CONTENT_INSET_TOP} + 12px)`,
         width: SIZE,
