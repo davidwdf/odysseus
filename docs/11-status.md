@@ -51,6 +51,26 @@
 > accent one, `z-10` so a passing bus cannot hide a rider's favourite). Measured on KMB 1A: 34 rows, **0
 > dividers**, exactly one anchored row at `--surface-2`, two star layers, three animations running at
 > 550/550/2200 ms.
+> **The collapsing header (part 4), on both screens at once** — which is the point of it: ADR-033 makes
+> `CollapsingHeader` one component with two thin wrappers *"so the two screens feel like one family"*, and
+> `apps/web` had neither. `shell/CollapsingHeader.tsx` is the DOM twin, with the RN parameters (route
+> `expH` 168 / label top 96, place 118 / 86, badge 1.45× centred, collapsed left edge 90). Route detail's
+> badge is the `RouteChip`, top-centre, over a from/to card — **origin muted above, destination below, two
+> nodes**, because the spec declares them separately and the RN card draws them that way; a first pass used
+> the composed `header.label` and turned 14 states red at index 1. Place detail's badge is the pin.
+> **Two differences from the RN version, both deliberate and both written down.** It is a **two-state CSS
+> transition** where the RN header scrubs against `scrollY` — an observer fires twice per journey where a
+> scroll handler runs per frame on the main thread, and CSS transitions honour `prefers-reduced-motion`
+> through one query. `animation-timeline: scroll()` is the true-scrub upgrade the day Firefox ships it;
+> today it would leave Firefox stuck expanded. And the label **swaps rather than cross-fading**, because a
+> cross-fade needs both in the tree and a projection reads text by presence — the FAQ's lesson, one
+> component over.
+> 🟠 **Two harness facts this row cost.** `IntersectionObserver` does not exist in jsdom, so the component
+> guards for it — and the guard is right on its own terms, since an environment without the API should get
+> the header expanded rather than no header. It also means **no suite can see the collapse at all**; both
+> states were verified in a browser and nowhere else. And the first `rootMargin: '-96px'` collapsed the
+> header immediately, because an element at y=0 is already outside a root whose top edge has been pushed
+> to 96 — the sentinel sits 96 px down the page now, with default margins.
 > **Still open from the review, in order:** the bottom sheet with drag gestures (replacing both `<dialog>`s);
 > Route detail's seven items (the `BusGlyph` double-decker and its bob, the odometer, the dividers, the
 > anchored row, the direction icon and its swap animation, the centred badge and its collapsing header, the

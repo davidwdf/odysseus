@@ -31,6 +31,7 @@ import { useClientPolicy } from '../hooks/useClientPolicy'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
+import { CollapsingHeader } from '../shell/CollapsingHeader'
 
 /**
  * Route detail, rendered by React DOM from the identical kernel function the React Native screen uses
@@ -210,28 +211,45 @@ export function RouteDetail() {
       {/* The chrome, in flow and first — see the note above. The back control does not wait for the payload,
           deliberately, so a rider can leave a screen that is still loading. */}
       <BackButton />
-      <header className="pushed-header sticky top-0 z-10 border-border border-b bg-bg/95 px-4 pb-3 backdrop-blur">
-        {view ? (
-          <div className="flex items-center gap-3">
-            <RouteChip operator={view.header.operator} routeNo={view.header.routeNo} />
-            <div className="min-w-0 flex-1">
-              <p className="m-0 truncate text-label text-muted">{view.header.origin}</p>
-              <p className="m-0 flex items-center gap-1.5 truncate text-body font-semibold text-text">
+      {/* The collapsing header (ADR-033, ADR-100) — the same component Place detail uses, so the two
+          screens feel like one family. The badge is the `RouteChip`: centred and 1.45× at rest, travelling
+          to the left of a glass bar as the rider scrolls. `header.label` is the whole journey on one line,
+          which is what the RN header shows at its expanded size and what this used to put only in the tab
+          title. */}
+      {view ? (
+        <CollapsingHeader
+          expandedHeight={168}
+          labelExpandedTop={96}
+          labelExpandedSize={20}
+          labelCollapsedSize={15}
+          badge={<RouteChip operator={view.header.operator} routeNo={view.header.routeNo} />}
+          label={
+            /* The from/to card, as on native: origin small and muted above, destination larger below —
+               two nodes, which is what `route-detail.spec.json` declares and what a single composed
+               `header.label` would have collapsed into one. */
+            <span className="flex flex-col items-center gap-0.5">
+              <span className="block max-w-full truncate text-label font-normal text-muted">
+                {view.header.origin}
+              </span>
+              <span className="flex max-w-full items-center gap-1.5">
                 {/* A loop glyph for a circular service, a direction-of-travel arrow otherwise — the same
-                    concepts the RN header draws, from the web icon set (ADR-075: the concept is shared, the
-                    set is idiom). Decorative: the sentence beside it already says which it is. */}
+                    concepts the RN header draws, from the web icon set. Decorative: the sentence beside
+                    it already says which it is. */}
                 {view.header.circular ? (
                   <RotateCw size={14} className="shrink-0 text-subtle" aria-hidden />
                 ) : (
                   <ArrowDown size={14} className="shrink-0 text-subtle" aria-hidden />
                 )}
                 <span className="truncate">{view.header.destination}</span>
-              </p>
-            </div>
-            {/* A link rather than a button: the reverse direction has its own URL, so a rider can share or
-                bookmark it and Back returns to this direction. Absent when there is nothing to flip to —
-                `reverseId`'s presence *is* the answer (ADR-093 decision 6). */}
-            {view.header.reverseId !== undefined ? (
+              </span>
+            </span>
+          }
+          collapsedLabel={<span className="truncate">{view.header.collapsedLabel}</span>}
+          trailing={
+            /* A link rather than a button: the reverse direction has its own URL, so a rider can share or
+               bookmark it and Back returns to this direction. Absent when there is nothing to flip to —
+               `reverseId`'s presence *is* the answer (ADR-093 decision 6). */
+            view.header.reverseId !== undefined ? (
               <Link
                 to={`/route/${encodeURIComponent(view.header.reverseId)}`}
                 aria-label={t(locale, 'reverseDirection')}
@@ -239,10 +257,10 @@ export function RouteDetail() {
               >
                 <GitCompareArrows size={18} aria-hidden />
               </Link>
-            ) : null}
-          </div>
-        ) : null}
-      </header>
+            ) : null
+          }
+        />
+      ) : null}
 
       {view ? (
         <>

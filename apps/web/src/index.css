@@ -244,6 +244,105 @@
   }
 }
 
+/*
+  The collapsing header's two states — see `shell/CollapsingHeader.tsx` for why this is a transition where
+  `apps/mobile` scrubs.
+
+  Every value here is the RN component's: the badge scales 1.45 → 1 and travels from the centre to a left
+  edge at 90 px, its centre sitting at `insetTop + 42`; the expanded label is centred at `--ch-label-top`
+  and cross-fades into a small line beside the badge; the glass bar fades in behind them. 200 ms
+  ease-out is the one number chosen here rather than inherited — the RN header has no duration at all,
+  because a scrub does not need one.
+
+  The collapsed bar starts at 80 px so it clears the floating back lens (12 + 48 = 60) with room, which is
+  `PILL_LEFT` on the RN side.
+*/
+.collapsing-header {
+  pointer-events: none;
+}
+.collapsing-header > * {
+  pointer-events: auto;
+}
+
+.ch-pill {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border-bottom: 1px solid rgb(var(--border));
+  transition: opacity 200ms ease-out;
+}
+.collapsing-header[data-collapsed="true"] {
+  height: calc(env(safe-area-inset-top, 0px) + 60px) !important;
+}
+.collapsing-header[data-collapsed="true"] .ch-pill {
+  opacity: 1;
+}
+
+.ch-badge {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 42px);
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1.45);
+  transition:
+    transform 200ms ease-out,
+    top 200ms ease-out,
+    left 200ms ease-out;
+}
+.collapsing-header[data-collapsed="true"] .ch-badge {
+  top: calc(env(safe-area-inset-top, 0px) + 30px);
+  left: 90px;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/*
+  A flex column rather than a block with `nowrap`, which was the first version and clipped the route's
+  origin line out of existence: the from/to card is two stacked nodes, and `white-space: nowrap` plus
+  `overflow: hidden` on their container collapses them to whichever one fits. Truncation belongs on the
+  individual lines, where each screen already puts it.
+*/
+.ch-label {
+  position: absolute;
+  top: var(--ch-label-top);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: var(--ch-label-size);
+  line-height: 1.25;
+  font-weight: 700;
+  color: rgb(var(--text));
+  min-width: 0;
+  transition:
+    top 200ms ease-out,
+    left 200ms ease-out,
+    right 200ms ease-out,
+    font-size 200ms ease-out;
+}
+.collapsing-header[data-collapsed="true"] .ch-label {
+  top: calc(env(safe-area-inset-top, 0px) + 30px);
+  left: 118px;
+  right: 60px;
+  align-items: flex-start;
+  transform: translateY(-50%);
+  font-size: var(--ch-label-size-collapsed);
+}
+
+.ch-trailing {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 30px);
+  right: 12px;
+  transform: translateY(-50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-pill,
+  .ch-badge,
+  .ch-label {
+    transition: none;
+  }
+}
+
 /* Turn the light basemap into a dark one: invert the luminance, then hue-rotate 180° so water and parks
    land back near their real colour; trim brightness and contrast so it is not harsh. Applied to the tile
    layer only — the dots and the licence credit above it stay true-colour.

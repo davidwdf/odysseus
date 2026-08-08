@@ -1,6 +1,7 @@
 import { type PlaceRouteRow, placeDetailView } from '@nextbus/core'
 import { operatorName, poleSideLabel, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
+import { MapPin } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
@@ -12,6 +13,7 @@ import { useLiveEtas } from '../hooks/useLiveEtas'
 import { useLocation } from '../hooks/useLocation'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
+import { CollapsingHeader } from '../shell/CollapsingHeader'
 
 /**
  * Place detail, rendered by React DOM from the identical kernel function the React Native screen uses
@@ -149,9 +151,21 @@ export function PlaceDetail() {
       {/* The chrome, in flow and first — see the note above. The name arrives with the data; the back
           control does not wait for it, deliberately, so a rider can leave a screen that is still loading. */}
       <BackButton />
-      <header className="pushed-header px-4 pb-2">
-        <h1 className="m-0 text-h1 font-bold text-text">{view?.name.label}</h1>
-      </header>
+      {/* The same collapsing header Route detail uses (ADR-033, ADR-100) — a pin badge instead of a route
+          chip, and the RN `StopHeader`'s parameters: a shorter expanded height and a smaller label, since a
+          place has one line where a route has a journey. */}
+      <CollapsingHeader
+        expandedHeight={118}
+        labelExpandedTop={86}
+        labelExpandedSize={20}
+        labelCollapsedSize={15}
+        badge={
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-2">
+            <MapPin size={16} className="text-accent" aria-hidden />
+          </span>
+        }
+        label={view?.name.label ?? ''}
+      />
 
       {/*
         **The skeleton is the fallback arm, and that is a bug fix.** It used to read
