@@ -494,6 +494,20 @@ describe('a stop row opens the save sheet — the interaction no projection can 
     expect(interactive.filter((el) => el.parentElement?.closest(INTERACTIVE))).toHaveLength(0)
   })
 
+  it('does not let the dialog itself scroll, which would drag the panel off the bottom edge', async () => {
+    // The panel hangs `UNDERLAP` px below the viewport on purpose, so an upward rubber-band never bares the
+    // scrim. That also makes the `<dialog>` — which the UA stylesheet gives `overflow: auto` — a scroll
+    // container with 320 px of content in it, and a mouse wheel scrolled it: the panel slid up and left a
+    // screenful of empty sheet behind it. Invisible to a touch device, because a drag is handled by the
+    // pointer handlers and never reaches a scroller, so this is one of the few defects that exists only on
+    // the platform this renderer is *for*.
+    await openFirstStop()
+    const dialog = container.querySelector('dialog')
+    expect(dialog?.className, 'the dialog can scroll its own underlap').toContain('overflow-hidden')
+    // …and the content that is *meant* to scroll is the panel's body, which keeps its own scroller.
+    expect(container.querySelector('.sheet-panel')).not.toBeNull()
+  })
+
   it('cancels the entrance keyframes before it writes the exit transform', async () => {
     // **The one thing here that a projection could never fail on, and it shipped broken for an afternoon.**
     //

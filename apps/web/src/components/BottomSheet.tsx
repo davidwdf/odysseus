@@ -18,6 +18,15 @@ import { useLocale } from '../providers/LocaleProvider'
  * argument was really about and gives up none of them. That is the whole trick, and it is why this is not
  * a trade.
  *
+ * ## This restyles ONE dialog, not the element
+ *
+ * Worth stating because the reskin looks invasive and is not: every class here is on this component's own
+ * `<dialog>` instance, and `index.css` carries **no bare `dialog` selector at all**. A later confirmation
+ * dialog or a detail modal would be its own component over the same `showModal()` primitive, keeping the UA
+ * defaults this one overrides — centred, `fit-content`, and `overflow: auto` so a long body scrolls. None of
+ * those defaults have been taken away from it. The `overflow-hidden` below is scoped to the one dialog whose
+ * panel deliberately hangs past the bottom edge, and is the reason it needs it.
+ *
  * ## The scrim is a real `<button>`, which is also not a suppression
  *
  * ADR-095 declined tap-to-dismiss because an `onClick` on the `<dialog>` itself is a handler on a
@@ -145,7 +154,15 @@ export function BottomSheet({
       }}
       // A full-viewport transparent box: the panel inside it is what a rider sees. `backdrop:bg-transparent`
       // because the dim is the scrim button below, which a thumb can actually press.
-      className="m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-transparent"
+      //
+      // **`overflow-hidden` is load-bearing, not tidiness.** The UA stylesheet gives `dialog` an
+      // `overflow: auto`, and the panel deliberately hangs `UNDERLAP` px below the bottom edge — so the
+      // dialog was a scroll container with 320 px of scrollable content in it. A mouse wheel scrolled *the
+      // dialog*, dragging the panel up and exposing the underlap padding as a screenful of empty sheet.
+      // Desktop-only, because a touch drag is handled by the pointer handlers below and never reaches a
+      // scroller. Reported by the owner; the panel's own body keeps its `overflow-y-auto`, so the content
+      // that is *meant* to scroll still does.
+      className="m-0 h-full max-h-none w-full max-w-none overflow-hidden border-0 bg-transparent p-0 backdrop:bg-transparent"
     >
       <button
         ref={scrim}

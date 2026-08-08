@@ -7361,6 +7361,17 @@ pre-existing and unaddressed; it earned its keep here.
     `onPointerDown` already cancelled. The fix is one `dropEntrance(node)` called from both paths;
     `route-detail-states.test.tsx` asserts the *mechanism* (cancelled, and only then the transform), since
     jsdom runs no animations and could never have seen the picture.
+  - 🔴 **The underlap made the `<dialog>` a scroll container, and a mouse wheel found it.** Reported by the
+    owner: scrolling over an open sheet slid the panel upward and left a screenful of empty sheet behind it.
+    The UA stylesheet gives `dialog` an `overflow: auto`, and the panel deliberately hangs `UNDERLAP` px
+    below the bottom edge — so there were 848 px of scrollable content in a box nobody meant to be
+    scrollable. `overflow-hidden` on the dialog fixes it; the panel's own body keeps its `overflow-y-auto`,
+    so what is *meant* to scroll still does.
+    **Desktop-only, and that is the interesting part**: a touch drag is handled by this component's pointer
+    handlers and never reaches a scroller, so the bug could only appear on the platform this renderer exists
+    for. The RN sheet has no equivalent — there is no ambient scroller to find. If it ever bites again the
+    way to remove it at source is to drop the 320 px of padding and paint the underlap with a spread
+    `box-shadow` instead, since a shadow contributes no scrollable overflow.
   - ⚪ **The sheet's own content still has no spec**, for ADR-092's reason: a spec cannot hold an
     interaction. Both suites assert its words and both its actions directly. Giving it one would mean
     speccing the native sheet in the same row, and that is in `docs/07`.
