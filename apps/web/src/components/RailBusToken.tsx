@@ -32,9 +32,16 @@ export function RailBusToken({ bus, top }: { bus: RailBus; top: number }) {
       style={{ top, left: RAIL_WIDTH / 2 - TOKEN / 2, width: TOKEN, height: TOKEN }}
     >
       {/* Three nested spans because three transforms run on three clocks and CSS allows one `transform`
-          per element — the same nesting the RN token uses for its bounce and squash. */}
-      <span className="bus-rock flex">
-        <span className="bus-bob flex">
+          per element.
+
+          **The bob is outermost and the rock inside it, which is not the obvious order.** The RN token
+          writes `transform: [translateY, rotateZ]` on one view, and a transform list composes left-to-right
+          — translate applied *last*. Nested elements compose outermost-last, so matching that means the
+          translate has to be the outer span. With the rock outside, the bob's 0.75 px was itself rotated by
+          up to 6°, which showed up as a measured ±0.11 px sideways wobble on a glyph that should only ever
+          move vertically. Free to fix, and it removes a divergence rather than adding one. */}
+      <span className="bus-bob flex">
+        <span className="bus-rock flex">
           <span className="bus-squash flex text-accent-contrast">
             <BusGlyph size={TOKEN * 0.66} />
           </span>

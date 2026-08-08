@@ -185,27 +185,45 @@
   The disc stays put; only the glyph moves, exactly as on native. Three nested elements because three
   transforms run on three different clocks and CSS gives one `transform` per element:
 
-  · `.bus-bob`    ±0.5 px vertically, one leg 550 ms
+  · `.bus-bob`    a 1 px vertical travel, one leg 550 ms — see the centring note below for why its two
+                  ends are not ±0.5
   · `.bus-rock`   ±6° lean, one leg 2200 ms — ~4× slower, so it sways rather than wags
   · `.bus-squash` a 6% vertical squeeze anchored at the wheels (`transform-origin: center bottom`) with a
-                  touch of widen, on the bob's own clock, so a 0.5 px bounce still reads as lively
+                  touch of widen, on the bob's own clock, so a 1 px bounce still reads as lively
 
   `alternate` + `infinite` is reanimated's `withRepeat(…, -1, true)`, and the numbers are the RN constants
   (`BOB_PX`, `TILT_DEG`, `SQUASH`, `BOB_MS`, `ROCK_MS`) rather than a curve chosen here. The easing is
   ease-in-out **sine** — `cubic-bezier(.37,0,.63,1)` — not the `ease-in-out` keyword, which is a different
   curve: velocity has to ease to zero at each turning point or a bounce reads as a mechanical shuttle.
 
-  🟡 **Reduced motion is honoured here and is not on native.** `apps/mobile`'s token bobs regardless, while
-  `route-detail.spec.json` claims everything that moves on that screen respects the setting — so the spec is
-  true of this renderer and false of the other. Recorded rather than quietly matched: copying the gap would
-  make both wrong.
+  🔴 **The bounce has to be centred on the node, and copying `BOB_PX` verbatim did not do that.** The owner
+  reported the bouncing buses looking misaligned; measured in a browser, the glyph's ink centre travelled
+  from −0.47 px to **+1.00 px** against the disc centre, a mean of +0.27 px. Every landing put the bus a
+  whole pixel low and no part of the cycle put it a whole pixel high.
+
+  The reason is that the squash is not a pure squeeze. Its origin is `center bottom` of a box **1.25 px
+  taller than the glyph's ink** — the glyph is drawn to y 22.1 of a 24 viewBox, so the box bottom is below
+  the wheels — so squeezing about that point also *translates* the ink downward, by 0.5 px at full squash.
+  It runs on the bob's own clock and in phase with it, so on the downstroke the two **add**: −0.5 up, but
+  +0.5 +0.5 = +1.0 down. Anchoring at the true wheel line does not fix it either; a squash about any point
+  below the centre moves the centre down, which is what squash-and-stretch *is*.
+
+  So the bob carries the correction instead: its two ends are offset by half the squash's contribution, so
+  bob-plus-squash swings a symmetric ±0.75 px about the node. Same 1.5 px of travel, same squeeze-on-landing,
+  mean zero.
+
+  🟡 **Two deliberate divergences from `apps/mobile`, both recorded rather than quietly matched.**
+  `BOB_PX` there is a flat ±0.5 with the same squash, so the native token has the identical quarter-pixel
+  droop; it is not back-ported because that renderer retires at WP6-8 — the same call ADR-100 made for the
+  odometer. And reduced motion is honoured here and is not on native, while `route-detail.spec.json` claims
+  everything that moves on this screen respects the setting — true of this renderer, false of the other.
 */
 @keyframes bus-bob {
   from {
-    transform: translateY(-0.5px);
+    transform: translateY(-0.75px);
   }
   to {
-    transform: translateY(0.5px);
+    transform: translateY(0.25px);
   }
 }
 @keyframes bus-rock {

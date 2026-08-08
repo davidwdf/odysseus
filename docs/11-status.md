@@ -144,6 +144,29 @@
 > of it are stale. Dispatching `new Event('scroll')` and reading rects with transitions suppressed is how
 > these numbers were measured.
 >
+> **The bouncing bus (part 8)** — the owner reported the tokens looking misaligned
+> ([ADR-107](./08-decision-log.md#adr-107--a-bounce-has-to-be-centred-on-the-thing-it-bounces-on)), and the
+> interesting part is that **everything static measured exact**: every disc centre on its node to 0.0 px in
+> both axes, the glyph's ink on the disc centre to 0.03 px, no drift across 50 s of live refetches. The
+> defect was in the motion. Sweeping the animation phase by phase through `getScreenCTM()`, the ink centre
+> travelled **−0.47 px to +1.00 px**, mean **+0.27 px** — a whole pixel low at every landing and never a
+> whole pixel high.
+> 🔴 **The squash is not a pure squeeze.** Its origin is `center bottom` of a box 1.25 px *taller* than the
+> glyph's ink, so squeezing about that point also translates the glyph down — and it shares the bob's clock,
+> in phase, so on the downstroke the two add. Anchoring at the true wheel line does not help: a squash about
+> any point below the centre moves the centre down, which is what squash-and-stretch is. The bob carries the
+> correction instead (−0.75 → +0.25), which keeps the travel and the squeeze and re-centres the swing:
+> **−0.72 → +0.75, mean 0.015 px.** The bob also moved outside the rock, so the translation is no longer
+> itself rotated — a ±0.11 px sideways wobble on something that should only move vertically.
+> ⚠️ **The lesson is bigger than one glyph: copying the constants verbatim is not reproducing the motion.**
+> The two renderers anchor the same squash to boxes of different sizes around glyphs of different sizes, so
+> the amplitude transfers and *where the motion is centred* has to be re-derived. That is ADR-093's static
+> lesson — a 52 px rail and a 44 px gutter reaching the same answer from different numbers — applied to
+> motion for the first time. `apps/mobile` has the same droop and is not being back-ported, per ADR-100.
+> ⚪ **The test recomputes the invariant rather than matching strings**: jsdom runs no animations, so it reads
+> the glyph's rects and the keyframes, works out the squash's displacement and asserts the swing's midpoint
+> is the node. It scores the old code at 0.237 px against the browser's 0.27 px — agreement to 0.03 px.
+>
 > **The owner's review list is now clear.** What is left before WP6-8 is the two items already filed in
 > `docs/07`: Search's results-list scroll offset, and the RN `apps/mobile` back-port question — which
 > ADR-100's odometer note answers with *no*, since that renderer retires at WP6-8.

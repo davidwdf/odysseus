@@ -7472,3 +7472,46 @@ pre-existing and unaddressed; it earned its keep here.
     no frames, so it fires no `scroll` events, delivers no `IntersectionObserver` callbacks and freezes CSS
     transitions mid-flight. Screenshots of it are stale. Dispatching `new Event('scroll')` and reading
     `getBoundingClientRect()` after suppressing transitions is how the numbers above were actually measured.
+
+## ADR-107 — A bounce has to be centred on the thing it bounces on
+
+- **Status:** **Fixed 2026-08-08** in `apps/web/src/index.css` and `apps/web/src/components/RailBusToken.tsx`,
+  after the owner reported *"the bouncing buses seem mis-aligned"*.
+- **Context.** ADR-100 brought the RN bus token's idle motion to the web: the disc stays put and the glyph
+  bobs ±0.5 px, rocks ±6° and squashes 6% anchored at the wheels, on `apps/mobile`'s constants. Measured in
+  a browser afterwards, **everything static was exact** — every disc centre sat on its node to 0.0 px in
+  both axes, the glyph's ink centre sat on the disc centre to 0.03 px, and there was no drift across 50 s of
+  live refetches. The complaint was about the *moving* glyph, and it was right.
+- **What was actually wrong.** Sweeping the animation phase by phase and reading the composed transform
+  through `getScreenCTM()`, the ink centre travelled **−0.47 px to +1.00 px** against the disc centre, mean
+  **+0.27 px**. Every landing put the bus a whole pixel low; no part of the cycle put it a whole pixel high.
+  **The squash is not a pure squeeze.** Its origin is `center bottom` of a box *taller than the glyph's
+  ink* — the glyph is drawn to y 22.1 of a 24 viewBox, so the box bottom is 1.25 px below the wheels — so
+  squeezing about that point also **translates** the ink down, by ~0.5 px at full squash. It runs on the
+  bob's own clock and in phase with it, so on the downstroke the two add: −0.5 up against +0.5 +0.5 down.
+- **Decisions:**
+  1. **The bob carries the correction: −0.75 px → +0.25 px instead of ±0.5.** Anchoring the squash at the
+     true wheel line does not help — a squash about *any* point below the centre moves the centre down,
+     which is what squash-and-stretch is. Offsetting the bob by half the squash's contribution keeps the
+     1.5 px of travel and the squeeze-on-landing and makes the pair swing a symmetric ±0.75 px about the
+     node. Re-measured: **−0.72 px → +0.75 px, mean 0.015 px.**
+  2. **The bob is the outer span and the rock is inside it.** `apps/mobile` writes
+     `transform: [translateY, rotateZ]`, and a transform list composes translate-*last*; nested elements
+     compose outermost-last, so matching that order means the translate has to be outermost. It was the
+     other way round, so the bob's travel was itself being rotated by up to 6° — a measured ±0.11 px
+     sideways wobble on a glyph that should only ever move vertically. Now ±0.06 px, the remainder being the
+     squash's widen interacting with the lean, which is inherent.
+- **Consequences:**
+  - 🟡 **A deliberate divergence from `apps/mobile`, recorded rather than quietly matched.** `BOB_PX` there
+    is a flat ±0.5 with the identical squash, so the native token has the same quarter-pixel droop. Not
+    back-ported: that renderer retires at WP6-8, which is the call ADR-100 already made for the odometer.
+  - ⚠️ **"Copied the constants verbatim" is not the same as "reproduced the motion".** The RN squash and the
+    web squash are anchored to boxes of different sizes around glyphs of different sizes; the constant that
+    transfers is the *amplitude*, and what has to be re-derived is where the motion is centred. This is the
+    same lesson ADR-093 draws for static geometry — a 52 px rail and a 44 px gutter reach the same answer
+    from different numbers — applied to motion for the first time.
+  - ⚪ **The regression test recomputes the invariant, it does not match strings.** jsdom lays nothing out
+    and runs no animations, so `test/bus-token.test.tsx` reads the glyph's own rect coordinates and the
+    keyframes out of `index.css`, works out what the squash does to the ink centre, and asserts the swing's
+    midpoint is the node. Its answer for the old code is 0.237 px against the browser's measured 0.27 px —
+    agreement to 0.03 px, which is what makes it a model of the defect rather than a snapshot of it.
