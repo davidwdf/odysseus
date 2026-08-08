@@ -442,6 +442,12 @@ Pull-to-refresh, the collapsing header's tap-to-top, the keypad's collapse-on-sc
 the map's label placement were all **claimed as gaps and refuted** — each is declared idiom with the choice
 written down.
 
+- [ ] 🟡 **Search's results list loses its scroll offset on back.** The query, the mode and the chips are
+      restored from the URL since ADR-102, and the offset is not — react-router unmounts the screen where
+      the RN stack keeps it, and no scroll restoration is wired. A rider who scrolls a long route list,
+      opens one and comes back lands at the top. `ScrollRestoration` is available now the shell is a data
+      router (ADR-101), which is the obvious fix.
+
 ## Infra / hardening
 - [ ] 🔴 **Two tabs of the PWA silently overwrite each other's preferences — including a rider's
       favourites.** Found by WP6-7 while declaring Settings' `stale` state

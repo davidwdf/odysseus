@@ -1,20 +1,14 @@
-import {
-  EMPTY_FILTER,
-  type RouteCategory,
-  type RouteFilter,
-  searchView,
-  toggleSearchChip,
-} from '@nextbus/core'
+import { type RouteCategory, type RouteFilter, searchView, toggleSearchChip } from '@nextbus/core'
 import { operatorName, type PlainMessageKey, t } from '@nextbus/i18n'
 import { ChevronRight, MapPin, Route, Search as SearchIcon, X } from 'lucide-react'
-import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { FilterChips } from '../components/FilterChips'
 import { RouteChip } from '../components/RouteChip'
 import { RouteKeypad } from '../components/RouteKeypad'
 import { StopName } from '../components/StopName'
 import { useSearchIndex } from '../hooks/useSearchIndex'
 import { usePreferences } from '../lib/preferences'
+import { formatFilter, parseFilter } from '../lib/searchParams'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
 
@@ -42,10 +36,51 @@ export function Search() {
   const navigate = useNavigate()
   const { index, loading, error } = useSearchIndex()
 
-  const [mode, setMode] = useState<'routes' | 'stops'>('routes')
-  const [routeQuery, setRouteQuery] = useState('')
-  const [stopQuery, setStopQuery] = useState('')
-  const [filter, setFilter] = useState<RouteFilter>(EMPTY_FILTER)
+  /**
+   * **The screen's state lives in the URL**, not in `useState` — which is what stops it being thrown away.
+   *
+   * `apps/mobile` keeps the query because expo-router holds the screen mounted on a stack; react-router
+   * unmounts it, so opening a result and coming back used to land a rider on an empty keypad having lost
+   * the query, the mode and every chip. That was on the owner's review list.
+   *
+   * **`replace: true` on every change is the whole of the back-button question**, and the reason a URL is
+   * safe here at all: pushing an entry per keystroke would turn Back into a per-character undo, which is the
+   * failure mode people mean when they say URL state is messy. Replacing mutates the current entry instead,
+   * so Back leaves Search entirely and a *shared* link still restores the query, the mode and the chips.
+   *
+   * Read straight from the params rather than mirrored into state: one source, so a back/forward that
+   * changes the URL changes the screen with no effect to keep them in step.
+   */
+  const [params, setParams] = useSearchParams()
+  const mode: 'routes' | 'stops' = params.get('mode') === 'stops' ? 'stops' : 'routes'
+  const routeQuery = params.get('q') ?? ''
+  const stopQuery = params.get('q') ?? ''
+  const filter: RouteFilter = parseFilter(params.get('ops'), params.get('cats'))
+
+  /** Write one key, dropping it when it is at its default so a resting URL stays `/search`. */
+  const setParam = (key: string, value: string) => {
+    const next = new URLSearchParams(params)
+    if (value === '') next.delete(key)
+    else next.set(key, value)
+    setParams(next, { replace: true })
+  }
+  const setMode = (next: 'routes' | 'stops') => setParam('mode', next === 'stops' ? 'stops' : '')
+  // The query is shared between the two modes' fields, because a rider switching mode is asking the same
+  // question a different way — which is what the RN screen does by keeping both fields' state alive.
+  const setRouteQuery = (next: string) => setParam('q', next)
+  const setStopQuery = (next: string) => setParam('q', next)
+  const setFilter = (next: RouteFilter) => {
+    const { ops, cats } = formatFilter(next)
+    const params2 = new URLSearchParams(params)
+    for (const [key, value] of [
+      ['ops', ops],
+      ['cats', cats],
+    ] as const) {
+      if (value === '') params2.delete(key)
+      else params2.set(key, value)
+    }
+    setParams(params2, { replace: true })
+  }
 
   const recentRoutes = usePreferences((s) => s.recentRoutes)
   const recentStops = usePreferences((s) => s.recentStops)
@@ -82,7 +117,7 @@ export function Search() {
   // The whole of what this screen does with a chip: hand the key straight back. `searchView` minted it and
   // `toggleSearchChip` reads it, so the key's *format* is known in one place and a renderer never takes one
   // apart (ADR-091). This screen previously held its own table of operators and categories to match against.
-  const toggleChip = (key: string) => setFilter((f) => toggleSearchChip(f, key))
+  const toggleChip = (key: string) => setFilter(toggleSearchChip(filter, key))
 
   const openRoute = (id: string) => {
     pushRecentRoute(id)
@@ -94,7 +129,19 @@ export function Search() {
   }
 
   return (
-    <main className="flex min-h-dvh flex-col bg-bg">
+    /*
+      `h-dvh` and not `min-h-dvh` — **the whole of the pinned-keypad fix.**
+
+      A minimum height leaves the flex column's height *indefinite*, so `flex-1` on the results list
+      resolved against a container that grew with its content: typing `8` produced a list of routes, the
+      page got taller, and the keypad was pushed off the bottom instead of the list scrolling behind it.
+      A definite height makes `flex-1 min-h-0 overflow-y-auto` on the list mean what it says.
+
+      `min-h-0` on that list is the other half and is easy to miss: a flex item's default `min-height:auto`
+      refuses to shrink below its content, so a scroll container that is a flex child does not scroll
+      without it.
+    */
+    <main className="flex h-dvh flex-col overflow-hidden bg-bg">
       <BackButton />
       <header className="pushed-header flex items-center px-4 pb-1">
         <Segment
@@ -171,7 +218,7 @@ export function Search() {
 
           <FilterChips chips={view.chips} onToggle={toggleChip} />
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {/* Which of the three arms to draw is `view.source`'s answer, never a second reading of the
                 query: "nothing matched" and "nothing searched" are different sentences (ADR-091). */}
             {view.source === 'none' ? (
@@ -245,7 +292,13 @@ export function Search() {
             // keyboard for the bottom of the screen; a browser does not, and a pad that vanished as a rider
             // scrolled a long result list would be a gesture answer to a problem this platform does not
             // have. Declared `idiom` in the spec, with the RN behaviour named beside it.
-            <div className="border-t border-border pb-3 pt-3">
+            <div
+              className="shrink-0 border-t border-border pt-3"
+              // The bottom safe-area inset: this screen has no tab bar (ADR-037), so nothing else is
+              // holding the keypad's last row clear of the iOS home indicator — the RN screen pads its
+              // list by `insets.bottom + 12` for the same reason.
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
+            >
               <RouteKeypad keypad={view.keypad} value={routeQuery} onChange={setRouteQuery} />
             </div>
           ) : null}

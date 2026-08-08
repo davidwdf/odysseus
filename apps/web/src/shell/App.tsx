@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router'
+import { useState } from 'react'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router'
 import { useAppearance } from '../lib/appearance'
 import { LocaleProvider } from '../providers/LocaleProvider'
 import { QueryProvider } from '../providers/QueryProvider'
@@ -50,41 +51,73 @@ import { TabBar } from './TabBar'
  * ADR-037's decision rather than a styling accident. It also means a pushed destination is the one that
  * owes the rider a back control, which is why `back` is set there and only there.
  */
-export function App() {
-  return (
-    <BrowserRouter>
-      <QueryProvider>
-        <LocaleProvider>
-          <Shell />
-        </LocaleProvider>
-      </QueryProvider>
-    </BrowserRouter>
-  )
-}
-
-function Shell() {
-  // Keeps `<html>` in step with the persisted appearance and with the OS. `main.tsx` has already applied
-  // the mode once before the first paint; this is what tracks a *change* to either input.
-  useAppearance()
-  return (
-    <Routes>
-      <Route element={<TabsLayout />}>
-        {TABS.map((tab) => (
-          <Route key={tab.path} path={tab.path} element={screenFor(tab)} />
-        ))}
-      </Route>
-      {PUSHED.map((pushed) => (
-        <Route key={pushed.path} path={pushed.path} element={screenFor(pushed)} />
-      ))}
-      {/*
+/**
+ * The route table, as data — the shape `createBrowserRouter` takes.
+ *
+ * **A data router rather than `<BrowserRouter>`, and the reason is motion.** `react-router@7.18.2` wires
+ * View Transitions only inside a data router: `<Link viewTransition>`, `navigate(to, { viewTransition })`
+ * and — the one that matters — `useViewTransitionState(href)`, which is what lets a component put a
+ * `view-transition-name` on itself *for the duration of one navigation*. That is the difference between a
+ * page that cross-fades and a route badge that flies from a list row into the header, and there is no way
+ * to get it from `<BrowserRouter>` (the call sits behind `router.window`, which the component router never
+ * populates).
+ *
+ * **This is the second attempt at web page transitions and the first one was reverted.** ADR-043 built a JS
+ * navigator stack for push/back and took it out again because it broke web scrolling; `docs/07` still
+ * carries the item. View Transitions do not have that failure mode — no navigator swap, no scroll container
+ * of their own, the browser snapshots and animates — which is why this is a different attempt rather than a
+ * retry. Firefox has no View Transitions today and cuts, exactly as the app does now.
+ *
+ * The providers moved *inside* the router, into a root route element. `RouterProvider` has to be outermost,
+ * and the order below is otherwise the one the RN root layout uses: `QueryProvider` outside
+ * `LocaleProvider`, because a query key never contains the locale (ADR-052) and switching language must not
+ * invalidate a single cached response.
+ */
+const routes = [
+  {
+    element: <Root />,
+    children: [
+      {
+        element: <TabsLayout />,
+        children: TABS.map((tab) => ({ path: tab.path, element: screenFor(tab) })),
+      },
+      ...PUSHED.map((pushed) => ({ path: pushed.path, element: screenFor(pushed) })),
+      /*
         An unknown path goes to Nearby rather than to a "not found" page, and that is a content decision
         rather than a lazy one: every string in this app comes from `@nextbus/i18n` (CLAUDE.md rule 5), the
         catalogue has no "page not found" message, and inventing one in three locales to describe a URL a
         rider cannot have typed on purpose is the wrong trade. `replace` keeps the bad URL out of history,
         so back does not bounce off it.
-      */}
-      <Route path="*" element={<Navigate to={NEARBY_PATH} replace />} />
-    </Routes>
+      */
+      { path: '*', element: <Navigate to={NEARBY_PATH} replace /> },
+    ],
+  },
+]
+
+export function App() {
+  /**
+   * Built on first render rather than at module scope, and that is load-bearing for the suites.
+   *
+   * `createBrowserRouter` reads `window.location` **when it is created**. At module scope it would capture
+   * whatever the URL was when the bundle loaded, so `shell.test.tsx`'s `pushState(path)` → mount would open
+   * the wrong screen every time and the whole file would be asserting one route eight times. `useState`'s
+   * initialiser runs once per mount, which is also exactly what its `remount()` cold-start helper wants.
+   */
+  const [router] = useState(() => createBrowserRouter(routes))
+  return <RouterProvider router={router} />
+}
+
+/** The providers, and the one effect that has to run above every screen. */
+function Root() {
+  // Keeps `<html>` in step with the persisted appearance and with the OS. `main.tsx` has already applied
+  // the mode once before the first paint; this is what tracks a *change* to either input.
+  useAppearance()
+  return (
+    <QueryProvider>
+      <LocaleProvider>
+        <Outlet />
+      </LocaleProvider>
+    </QueryProvider>
   )
 }
 

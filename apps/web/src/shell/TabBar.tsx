@@ -1,7 +1,6 @@
 import { t } from '@nextbus/i18n'
 import { ELEVATION, GLASS_RIM, webBoxShadow } from '@nextbus/ui'
-import { flushSync } from 'react-dom'
-import { Link, NavLink, useNavigate } from 'react-router'
+import { Link, NavLink } from 'react-router'
 import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
 import { SEARCH, TABS } from './destinations'
@@ -53,33 +52,23 @@ const SearchIcon = SEARCH.icon
 export function TabBar() {
   const locale = useLocale()
   const mode = useAppearance()
-  const navigate = useNavigate()
 
   /**
    * Tab → tab is a 150 ms linear cross-fade, matching React Navigation's `FadeSpec` — which is what the RN
    * shell uses and what ADR-043 left standing after it reverted the JS stack.
    *
-   * **Driven by `startViewTransition` directly rather than by react-router.** `react-router@7.18.2` has the
-   * machinery, but only inside a *data* router: `<BrowserRouter>` never reaches the code path (verified in
-   * `node_modules/react-router/dist/.../chunk-*.mjs`, where the call sits behind `router.window`). Migrating
-   * the shell to `createBrowserRouter` to get it would be a routing change for a motion feature, so this
-   * asks the browser itself. `flushSync` is required: the callback must have applied the DOM change before
-   * it returns, or the browser snapshots the old tree twice and nothing fades.
+   * `viewTransition` on the link, rather than a hand-rolled `document.startViewTransition`: the shell moved
+   * to a data router precisely so the router owns this, which is also what makes
+   * `useViewTransitionState()` available to any component that wants a `view-transition-name` for the
+   * duration of one navigation. That is the difference between a page that cross-fades and a shared element
+   * that flies, and it is the direction this is going.
    *
-   * Where `startViewTransition` is absent — Firefox today — the handler does nothing and the `<NavLink>`
-   * navigates exactly as it did before: a cut, which is what this app shipped until now. The duration and
-   * the curve live in `index.css` on `::view-transition-old/new(root)`, where a `prefers-reduced-motion`
-   * query can turn them off, which is the one thing the RN version cannot do.
+   * Where View Transitions are absent — Firefox today — react-router navigates exactly as it did before: a
+   * cut, which is what this app shipped until now. The duration and the curve live in `index.css` on
+   * `::view-transition-old/new(root)`, where a `prefers-reduced-motion` query turns them off — the one
+   * thing the RN version cannot do.
    */
-  const crossFade = (event: React.MouseEvent<HTMLAnchorElement>, to: string) => {
-    const start = document.startViewTransition?.bind(document)
-    // Modified clicks are the browser's business — open-in-new-tab must not be swallowed by a transition.
-    if (!start || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    event.preventDefault()
-    start(() => {
-      flushSync(() => navigate(to))
-    })
-  }
+
   // A drop shadow has almost no contrast budget on a near-black field, so ADR-035 drops elevation in dark
   // and leans on the surface and border instead — the same branch `elevationStyle` makes on native.
   const glass = {
@@ -109,7 +98,7 @@ export function TabBar() {
             key={tab.path}
             to={tab.path}
             end
-            onClick={(event) => crossFade(event, tab.path)}
+            viewTransition
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center justify-center gap-0.5 no-underline focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus ${
                 isActive ? 'text-accent' : 'text-muted'

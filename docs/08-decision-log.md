@@ -7259,3 +7259,68 @@ pre-existing and unaddressed; it earned its keep here.
   - ⚪ **What it does not license.** Copying a native constant into the web without asking whether it means
     the same thing is still wrong — a 52 px RN rail and a 44 px DOM gutter arrive at different numbers from
     the same answer (ADR-093), and that stays true. Identity is the *effect*, not the implementation.
+
+## ADR-101 — A data router, because the point of View Transitions is the shared element rather than the fade
+
+- **Status:** **Decided 2026-08-08** with the owner, implemented in `apps/web/src/shell/App.tsx`.
+- **Context.** The owner asked for a cross-fade between tabs and, beyond it, for the mobile page
+  transitions the web has never had. `react-router@7.18.2` wires View Transitions **only inside a data
+  router** — the call sits behind `router.window`, which `<BrowserRouter>` never populates — so the choice
+  was a hand-rolled `document.startViewTransition` in the tab bar, or migrating the shell.
+- **Decisions:**
+  1. **Migrate to `createBrowserRouter`.** A hand-rolled transition gets the cross-fade and nothing else.
+     What the router adds is **`useViewTransitionState(href)`**, which lets a component claim a
+     `view-transition-name` *for the duration of one navigation* — the difference between a page that fades
+     and a route badge that flies from a list row into a header. The cross-fade was never the reason.
+  2. **The router is built in `useState`, not at module scope.** `createBrowserRouter` reads
+     `window.location` when it is *created*: at module scope it would capture whatever the URL was when the
+     bundle loaded, and `shell.test.tsx`'s `pushState(path)` → mount would have opened the same screen eight
+     times while appearing to cover every destination. The initialiser runs once per mount, which is also
+     what that file's cold-start `remount()` wants.
+  3. **The providers move inside the router**, into a root route element, since `RouterProvider` must be
+     outermost. Their order is unchanged and still the RN root layout's: `QueryProvider` outside
+     `LocaleProvider`, because a query key never contains the locale (ADR-052) and switching language must
+     not invalidate a single cached response.
+- **Consequences:**
+  - ⚠️ **This is the second attempt at web page transitions.** ADR-043 built a JS navigator stack for
+    push/back and reverted it because it broke web scrolling; `docs/07` still carries the item. View
+    Transitions have no such failure mode — no navigator swap, no scroll container of their own, the browser
+    snapshots and animates — which is why this is a different attempt rather than a retry. Firefox has none
+    and cuts, exactly as the app does today.
+  - ⚪ **Loaders and actions are deliberately not adopted.** The data router is here for its transition
+    machinery; data still arrives through TanStack Query, which is what ADR-058's persisted cache is built
+    on. Moving fetches into loaders would be a second, unrelated decision.
+
+## ADR-102 — Search's query lives in the URL, and `replace` is what makes that safe
+
+- **Status:** **Decided 2026-08-08** with the owner, implemented in `apps/web/src/screens/Search.tsx` and
+  `apps/web/src/lib/searchParams.ts`.
+- **Context.** Opening a result and coming back landed a rider on an empty keypad, having lost the query,
+  the mode and every chip — `apps/mobile` keeps them because expo-router holds the screen mounted on a
+  stack, and react-router unmounts it. The owner's instinct was a store, on the grounds that URL state
+  *"often causes bugs and quirks with back button behavior"*.
+- **Decisions:**
+  1. **The URL, not a store** — but the objection was right about the failure mode and wrong about it being
+     inherent. Pushing a history entry per keystroke turns Back into a per-character undo, which is what
+     people mean when they say URL state is messy. **`replace: true` on every change** mutates the current
+     entry instead, so Back leaves the screen. Measured rather than asserted: typing `805` grew
+     `history.length` by **0**, and opening a result then going back returned to `/search?q=805`.
+  2. **Read straight from the params, never mirrored into state.** One source, so a back/forward that
+     changes the URL changes the screen with no effect keeping the two in step — which is the *other* class
+     of bug URL state is blamed for.
+  3. **Two parameters (`ops`, `cats`) rather than one encoded blob, and no knowledge of the kernel's chip
+     keys.** `toggleSearchChip` mints and reads those keys with prefixes it owns (ADR-091); the codec
+     encodes the filter's own two fields instead, so a change to the chip grammar cannot break a bookmark.
+     An unrecognised value is passed through rather than dropped: `searchView` decides which chips exist
+     from the index, so a hand-edited URL narrows to nothing, which is honest. Dropping it would show
+     unfiltered results under a URL claiming otherwise.
+  4. **The codec is `lib/`, not the screen.** A query-string grammar is plumbing, like the storage key and
+     the appearance resolver. Worth stating because `lib/` is also outside `check-no-derivation`'s policed
+     set, and moving code there *to dodge a gate* would be the failure this repo keeps writing ADRs about —
+     the test is whether it would belong there anyway, and it would.
+- **Consequences:**
+  - 🟡 **The results list's scroll offset is still lost**, which the URL does not restore and the RN stack
+    gave away free. Open in `docs/07`.
+  - ⚪ **Reversible by design.** If any of the three things the owner asked to watch for misbehaves — Back
+    undoing characters, a shared link not restoring the mode, a reload losing the chips — the state moves to
+    a non-persisted store slice and only this file and the codec change.
