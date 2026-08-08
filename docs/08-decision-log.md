@@ -7556,8 +7556,13 @@ pre-existing and unaddressed; it earned its keep here.
     no-op.** Worth checking as a class: `MiniMap`'s observer is safe because it renders its own element
     unconditionally, and Place detail's tail measure is safe because it is a ref callback rather than an
     effect. This was the only one.
-  - ⚪ **The deeper fix is to stop measuring.** A token could be a positioned child of the row it belongs to
-    (`top: 13px` for a node, `calc(50% + 13px)` for the midpoint between two), which is pure CSS and cannot
-    drift. It is not taken here because it would interleave the tokens between the rows in document order,
-    which changes the projection both renderers are measured against — a spec change, and therefore a row of
-    its own rather than a bug fix. Recorded in `docs/07`.
+  - ⚪ **The deeper fix is to stop measuring**, and it is cheaper than it first looked. A token can be a
+    positioned child of the row it belongs to — `top: 13px` at a node, `calc(50% + 13px)` on the segment
+    into it, since `railBusFor` only ever emits `from: toIndex - 1` so a segment is always between
+    *adjacent* nodes and its midpoint is exactly half a row below the first. Pure CSS; cannot drift.
+    **Corrected from the first draft of this ADR:** it does *not* change the projection. Both conformance
+    suites collect the tokens separately from the text walk (`querySelectorAll('[role="img"][aria-label]')`,
+    appended last) and `buses` is in route order, so interleaving leaves the projected sequence identical —
+    no spec edit and no `apps/mobile` change. What it does cost is the travel animation: a token that moves
+    between rows changes parent, and no CSS transition survives that, so the 500 ms slide has to be
+    re-implemented as FLIP. Written up in `docs/07`.

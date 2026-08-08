@@ -351,12 +351,32 @@ not.
 into it, since the midpoint between two adjacent nodes is exactly half a row below the first. Pure CSS, no
 measurement, no observer, and it cannot drift by construction.
 
-**Why it is a row rather than a bug fix:** the tokens would then be interleaved between the rows in document
-order instead of following them, which changes the accessible reading order and therefore the projection
-both renderers are measured against (ADR-093 decision 3 put the tokens' names *in* that projection). That is
-a spec change and an `apps/mobile` change — the RN screen draws its tokens as a deliberate overlay pass,
-after the rows, because the saved-stop stars must paint above them. Worth doing when `route-detail.spec.json`
-is next opened.
+`railBusFor` only ever emits `from: marker.toIndex - 1`, so a segment is always between **adjacent** nodes
+and its midpoint is exactly half a row below the first — which is what makes the second expression possible.
+The token also stays inside its row's box for any row taller than 50 px, and `min-h-16` guarantees 64, so
+nothing needs to overflow.
+
+**It does not change the projection**, which was this entry's first claim and was wrong. Both conformance
+suites collect the tokens separately from the text walk — `querySelectorAll('[role="img"][aria-label]')`,
+appended after the body text — and `RouteDetailView.buses` is in route order, so interleaving them between
+the rows leaves the projected sequence byte-identical. **No spec edit, no `apps/mobile` change**; the RN
+screen keeps its overlay pass, which it needs anyway so the saved-stop stars paint above the tokens.
+
+**What it actually costs is the travel animation.** A token that moves from one row to another changes
+parent, and no CSS transition survives a DOM move — the bus would teleport where today it slides for 500 ms
+(ADR-030: *a bus that moved is a bus that moved*). So the slide has to be re-implemented as FLIP: record the
+rect either side of the commit and `element.animate()` the delta. That reintroduces a measurement, but of a
+different kind and a much better failure mode — a momentary pair of rects taken at the instant of a move,
+where a wrong answer is one half-second animation that self-corrects, against today's standing registry
+where a wrong answer is a bus in the wrong place forever.
+
+View Transitions would also survive the DOM move and were considered instead. Rejected: a same-document
+transition snapshots and freezes the page for its duration, and this screen re-renders on a 30 s refetch
+cadence, so it would stutter the whole page every round — and Firefox has none (ADR-101).
+
+**Estimate: about half a day.** The CSS and the deletions are an hour or two; FLIP and its test are the rest,
+and are where the risk sits. The correctness win is structural: the resting position stops being computed
+at all.
 
 ## WP6-8 blockers — the parity audit's findings (2026-08-08)
 
