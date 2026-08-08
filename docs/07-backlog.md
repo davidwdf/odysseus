@@ -457,7 +457,10 @@ at all.
       WCAG AA. A token change, not a redesign.
 - [ ] 🟡 **`apps/web` carries the document scroll position into a pushed screen.** react-router does no
       scroll management and nothing in the shell adds any; the RN app's per-screen scrollers do it
-      implicitly. Back *does* restore correctly, so this is one direction only.
+      implicitly. Back *does* restore correctly, so this is one direction only. **This one genuinely is
+      `<ScrollRestoration>`'s job** — unlike the Search item below, the quantity is `window.scrollY` — and it
+      is deliberately not bundled with ADR-109 because it changes behaviour on all eight screens at once,
+      including Route detail's `scrollIntoView` reveal and both collapsing headers' sentinels.
 - [ ] 🟡 **Route detail's bus tokens keep stale row offsets** when a refetch redistributes arrivals lines
       without changing the list's overall height — the `ResizeObserver` added in WP6-6c's review pass
       watches the wrong quantity.
@@ -481,11 +484,17 @@ Pull-to-refresh, the collapsing header's tap-to-top, the keypad's collapse-on-sc
 the map's label placement were all **claimed as gaps and refuted** — each is declared idiom with the choice
 written down.
 
-- [ ] 🟡 **Search's results list loses its scroll offset on back.** The query, the mode and the chips are
-      restored from the URL since ADR-102, and the offset is not — react-router unmounts the screen where
-      the RN stack keeps it, and no scroll restoration is wired. A rider who scrolls a long route list,
-      opens one and comes back lands at the top. `ScrollRestoration` is available now the shell is a data
-      router (ADR-101), which is the obvious fix.
+- [x] ✅ **Search's results list loses its scroll offset on back** — **fixed**
+      ([ADR-109](./08-decision-log.md#adr-109--scrollrestoration-restores-the-window-and-the-list-that-loses-its-place-is-not-the-window)).
+      The query, the mode and the chips had been restored from the URL since ADR-102 and the offset was not,
+      so a rider who scrolled a long route list, opened one and came back landed at the top.
+      **This entry named the wrong fix, and the correction is the useful part:** it said `ScrollRestoration`
+      was the obvious one now the shell is a data router (ADR-101) — but that component restores
+      `window.scrollY`, and Search does not scroll the window. It is `h-dvh` with the results in an inner
+      `overflow-y-auto` box, because that is what pins the keypad, so its document offset is permanently 0
+      and wiring it would have restored nothing while looking done. `useScrollRestoration` stores an
+      element's offset against `useLocation().key` — the history entry rather than the URL — in
+      `sessionStorage`.
 
 ## Infra / hardening
 - [ ] 🔴 **Two tabs of the PWA silently overwrite each other's preferences — including a rider's

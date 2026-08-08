@@ -7577,3 +7577,70 @@ pre-existing and unaddressed; it earned its keep here.
     no spec edit and no `apps/mobile` change. What it does cost is the travel animation: a token that moves
     between rows changes parent, and no CSS transition survives that, so the 500 ms slide has to be
     re-implemented as FLIP. Written up in `docs/07`.
+
+## ADR-109 — `<ScrollRestoration>` restores the window, and the list that loses its place is not the window
+
+- **Status:** **Accepted 2026-08-08**, implemented in `apps/web/src/hooks/useScrollRestoration.ts`,
+  `apps/web/src/lib/scrollOffsets.ts` and `apps/web/src/screens/Search.tsx`. Closes the last open item from
+  the owner's review of Search.
+- **Context.** ADR-102 put Search's query, mode and chips in the URL, so a rider who opens a result and
+  presses Back returns to the search they were doing. What it did not restore is **where they were in the
+  list** — react-router unmounts the screen where an expo-router stack keeps it mounted, so a rider who
+  scrolled forty routes down, opened one and came back landed at the top. `docs/07` filed the fix as small
+  on the grounds that *"`ScrollRestoration` is available now the shell is a data router (ADR-101)"*.
+- **That was wrong, and the reason is the interesting part.** `<ScrollRestoration>` saves and restores
+  `window.scrollY`. Search does not scroll the window: it is `h-dvh` with the results in an inner
+  `overflow-y-auto` box, **because that is what pins the keypad to the bottom** — a document that scrolled
+  would take the pad with it, which is exactly the bug ADR-102's sitting removed. So the document's offset on
+  that screen is permanently 0, and the component that restores it would have restored nothing, convincingly:
+  green build, no visible change, item ticked. react-router has no vocabulary for an element's scroll offset,
+  and it is not obliged to — but the repo's own note assumed it did.
+- **Decisions:**
+  1. **The offset is stored against `useLocation().key`, the history entry — not the URL.** react-router
+     keeps that key in `history.state` and hands the same one back on a POP, so "come back to it" means
+     *this* visit rather than *any* visit to the same URL. It also gets the ADR-102 interaction right for
+     free: every keystroke rewrites the URL with `replace: true`, a replace **mints a new key**, so a
+     changed query is an entry with nothing stored against it and the hook leaves the list alone. Keying on
+     the path instead would drag one search's offset onto another's results, which is one of the injected
+     defects the suite is watched failing on.
+  2. **`sessionStorage`, in one bounded blob.** It dies with the tab, which is the same call ADR-102 made
+     about the query: where a rider was in a list is a fact about this visit, and a history key does not
+     survive a closed tab anyway, so a longer-lived store could only accumulate offsets nothing can read
+     back. One blob rather than a key per entry — with the oldest trimmed past 50 — because nothing prunes a
+     store keyed by history entries; `<ScrollRestoration>` keeps its own window offsets the same way.
+  3. **Saved in a layout-effect cleanup, and on `pagehide`. There is no scroll listener.** A layout-effect
+     destructor runs while the element is still in the document, which is what makes it the right save
+     point: React detaches a removed subtree *after* running its destructors, and a detached element reports
+     `scrollTop` 0 because it has no layout box. Reading the offset at the two instants it is needed also
+     means a flung list does not write to storage sixty times a second. `pagehide` covers the two exits that
+     run no React cleanup at all — a reload and a closed tab — and a reload is a case that genuinely
+     restores, since both the blob and the entry's key survive one.
+  4. **A restore is held pending until the element is actually scrollable, and a pending restore blocks the
+     save.** Assigning `scrollTop` to an element with nothing to scroll clamps silently to 0 and the value
+     is gone; on a POP back into Search the list is usually populated in the first commit (`useSearchIndex`
+     memoizes the index for the session) but "usually" is not a contract. So the offset waits for a render
+     in which `scrollHeight > clientHeight`, is applied once, and is then done — one attempt against real
+     content, so an offset longer than a narrower result set clamps once instead of fighting the rider for
+     the scrollbar. And a mount that never gets there must **not** write its own 0 over the saved value,
+     which is also precisely what makes the hook safe under `<StrictMode>`'s mount/unmount/mount.
+- **Consequences:**
+  - 🟢 **The hook is screen-agnostic and the next caller is already identified.** Nothing in it names Search;
+    it takes no arguments and returns a ref. Place detail's kerb list is the obvious second caller and is
+    deliberately not wired here — that screen has a collapsing header and a sticky map whose interaction
+    with a restored offset wants its own sitting.
+  - ⚠️ **"The obvious fix" in a backlog entry is a claim, not a finding.** This one had been written down
+    twice and read past several times, and it named a real component that really was newly available — the
+    only thing wrong with it was that it addressed a different scroller. Worth the habit: when a backlog item
+    names the fix, check the *subject* before the mechanism.
+  - ⚪ **jsdom runs no layout, so the suite declares one.** Every element there reports `scrollHeight` and
+    `clientHeight` as 0, which would make the restore unreachable; `test/search-scroll.test.tsx` stubs those
+    two accessors on the prototype for its own duration and nothing else — `scrollTop` is jsdom's own, and
+    it stores and returns what you assign, which is the quantity under test. The stub doubles as a control:
+    setting the two equal is the honest model of a screen whose results have not landed, and that is the
+    state decision 4 is about. The router is real (`createMemoryRouter`, the shell's own kind) and
+    `navigate(-1)` is a real POP, because the whole claim rests on react-router returning the same key.
+  - ⚪ **The sibling item stays open, deliberately.** `docs/07` also carries *"`apps/web` carries the document
+    scroll position into a pushed screen"* — that one **is** `<ScrollRestoration>`'s job, and it is left
+    alone here because it changes behaviour on all eight screens at once, including Route detail's
+    `scrollIntoView` reveal and both collapsing headers, which is a sitting of its own rather than a rider
+    on this one.
