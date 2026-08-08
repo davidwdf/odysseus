@@ -82,7 +82,8 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   for (const property of ['scrollHeight', 'clientHeight']) {
-    // biome-ignore lint/performance/noDelete: restoring the prototype is the point — a stubbed accessor left behind would leak into every later suite in this worker
+    // Restoring the prototype is the point: a stubbed accessor left behind would leak into every later
+    // suite in this worker.
     delete (window.HTMLElement.prototype as unknown as Record<string, unknown>)[property]
   }
   vi.restoreAllMocks()
