@@ -18,6 +18,7 @@
 import routeDetailSpec from '@nextbus/contract/ui/route-detail.spec.json'
 import {
   type CLIENT_POLICY_DEFAULTS,
+  formatFavoriteRouteKey,
   type Locale,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
@@ -138,7 +139,10 @@ const INTERACTIVE = 'button, a[href], [role="button"]'
  */
 function readTree(host: HTMLElement): RenderedTree {
   const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
-  const noise = new Set([t(LOCALE, 'back')])
+  // `Set<string>` explicitly: `t()` returns the branded `LocalizedString`, so an inferred set could not be
+  // queried with the plain strings read out of the tree. Invisible until WP6-7 put `test/**/*.tsx` into
+  // this app's `tsconfig` — seven suites had never been typechecked.
+  const noise = new Set<string>([t(LOCALE, 'back')])
   const text: string[] = []
   let node = walker.nextNode()
   while (node) {
@@ -356,4 +360,263 @@ describe('apps/web conforms to Route detail’s published spec, state by state',
       expect(findings).toEqual([])
     })
   }
+})
+
+/**
+ * jsdom implements `<dialog>` but not `showModal()`/`close()`, so a component that opens itself modally
+ * throws `showModal is not a function` on mount.
+ *
+ * **Worth a paragraph because of what it explains**: this shim did not exist before WP6-8's blocker fix, and
+ * the reason is that **no test in this repo had ever opened a `<dialog>`**. `RouteFactSheet` has been the
+ * four fact sheets' container since WP6-6c and is reached only by pressing a pill, which no suite did — so
+ * the sheets' content is projected from `routeFactSheet` in the corpus and their *container* has never been
+ * mounted. That is the same blind spot this whole row is about: a component behind an interaction is a
+ * component no state projection reaches.
+ *
+ * The shim is deliberately the smallest honest one — `open` on, `open` off — rather than a fake modal: what
+ * these tests assert is which actions the sheet offers and what pressing them writes, and focus trapping and
+ * inertness are the browser's job and not something a stub could prove anything about.
+ */
+function stubDialog(): void {
+  const proto = window.HTMLDialogElement?.prototype
+  if (!proto || typeof proto.showModal === 'function') return
+  proto.showModal = function showModal(this: HTMLDialogElement) {
+    this.setAttribute('open', '')
+  }
+  proto.close = function close(this: HTMLDialogElement) {
+    this.removeAttribute('open')
+  }
+}
+
+describe('a stop row opens the save sheet — the interaction no projection can see', () => {
+  /**
+   * **The regression test for WP6-8's blocker, and it is the shape of the whole finding.**
+   *
+   * `route-detail.spec.json` has declared this interaction non-optionally since WP6-6b — a tap on a stop row
+   * opens a sheet offering to save this route at this stop, *"deliberately not straight to the place"* —
+   * and `apps/web` navigated straight to the place for two waves anyway. **Every suite stayed green**,
+   * because `conformStates` asserts text and nesting and never interaction *destinations*: the sheet is not
+   * rendered until a tap, so no projected state changes either way.
+   *
+   * The cost was not one screen. ADR-032 makes this sheet the app's only favourite-creating affordance, so
+   * `toggleFavoriteRoute` had zero callers and the Favourites tab could never be filled by a web-only rider.
+   * Found by WP6-7b's parity audit, by four auditors independently and by none of the gates.
+   *
+   * These assertions are therefore *direct* rather than projected — the same division `search.spec.json`
+   * makes for a keypad key's `enabled`, and for the same reason: the thing that matters is not text.
+   */
+  const CASE = FIXTURE.content as string
+
+  beforeEach(stubDialog)
+
+  const openFirstStop = async (saved: string[] = []) => {
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    route = () => Promise.resolve(detail)
+    usePreferences.setState({ favoriteRoutes: saved })
+    vi.setSystemTime(Date.parse(c.args.now))
+    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+    const rows = [...container.querySelectorAll('button')].filter((b) =>
+      b.className.includes('w-full'),
+    )
+    const row = rows[0]
+    if (!row) throw new Error('no stop row to press')
+    act(() => {
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    return { detail, dialog: container.querySelector('dialog') }
+  }
+
+  const actionLabelled = (label: string) =>
+    [...container.querySelectorAll('dialog button')].find(
+      (b) => (b.textContent ?? '').trim() === label,
+    )
+
+  it('opens a dialog rather than navigating away', async () => {
+    const { dialog } = await openFirstStop()
+    expect(dialog, 'the row navigated instead of opening the sheet').not.toBeNull()
+    // Still on the route, not on the place — the half that was wrong.
+    expect(container.querySelector('dialog')?.getAttribute('open')).not.toBeNull()
+  })
+
+  it('offers both actions the spec names, in the RN screen’s order', async () => {
+    await openFirstStop()
+    expect(actionLabelled(t(LOCALE, 'addFavorite')), 'no save action').toBeDefined()
+    expect(actionLabelled(t(LOCALE, 'viewStop')), 'no view-stop action').toBeDefined()
+  })
+
+  it('writes the favourite under the same key the kernel computed `saved` from', async () => {
+    // The subtle half. `routeDetailView` keys `saved` on `formatFavoriteRouteKey(pole, route.id)`; a toggle
+    // written under the URL parameter's spelling would be stored and then read back as unsaved, silently.
+    const { detail } = await openFirstStop()
+    const save = actionLabelled(t(LOCALE, 'addFavorite'))
+    act(() => {
+      save?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const saved = usePreferences.getState().favoriteRoutes
+    expect(saved, 'nothing was saved').toHaveLength(1)
+    const [pole] = detail.stops
+    if (!pole) throw new Error('the fixture has no stops')
+    expect(saved[0]).toBe(formatFavoriteRouteKey(pole.stop.id, detail.route.id))
+  })
+
+  it('offers to remove it once it is saved, and the sheet closes on the action', async () => {
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    const [pole] = detail.stops
+    if (!pole) throw new Error('the fixture has no stops')
+    const key = formatFavoriteRouteKey(pole.stop.id, detail.route.id)
+    await openFirstStop([key])
+    expect(actionLabelled(t(LOCALE, 'removeFavorite')), 'still offering to add').toBeDefined()
+    expect(actionLabelled(t(LOCALE, 'addFavorite'))).toBeUndefined()
+    const remove = actionLabelled(t(LOCALE, 'removeFavorite'))
+    act(() => {
+      remove?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(usePreferences.getState().favoriteRoutes).toEqual([])
+    // **The sheet closes after its exit animation, not during it**, which is a deliberate change: a panel
+    // that vanishes the instant you press it has no slide-out, and `BottomSheet.requestClose()` therefore
+    // runs the 220 ms transform and *then* calls `onClose`. The store is written immediately either way —
+    // the favourite is gone before the animation starts, which is the ordering that matters to a rider.
+    expect(
+      container.querySelector('dialog'),
+      'the sheet closed before it could animate out',
+    ).not.toBeNull()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+    expect(container.querySelector('dialog'), 'the sheet stayed open').toBeNull()
+  })
+
+  it('nests no tap target inside another, sheet included', async () => {
+    await openFirstStop()
+    const interactive = [...container.querySelectorAll(INTERACTIVE)]
+    expect(interactive.filter((el) => el.parentElement?.closest(INTERACTIVE))).toHaveLength(0)
+  })
+
+  it('does not let the dialog itself scroll, which would drag the panel off the bottom edge', async () => {
+    // The panel hangs `UNDERLAP` px below the viewport on purpose, so an upward rubber-band never bares the
+    // scrim. That also makes the `<dialog>` — which the UA stylesheet gives `overflow: auto` — a scroll
+    // container with 320 px of content in it, and a mouse wheel scrolled it: the panel slid up and left a
+    // screenful of empty sheet behind it. Invisible to a touch device, because a drag is handled by the
+    // pointer handlers and never reaches a scroller, so this is one of the few defects that exists only on
+    // the platform this renderer is *for*.
+    await openFirstStop()
+    const dialog = container.querySelector('dialog')
+    expect(dialog?.className, 'the dialog can scroll its own underlap').toContain('overflow-hidden')
+    // …and the content that is *meant* to scroll is the panel's body, which keeps its own scroller.
+    expect(container.querySelector('.sheet-panel')).not.toBeNull()
+  })
+
+  it('cancels the entrance keyframes before it writes the exit transform', async () => {
+    // **The one thing here that a projection could never fail on, and it shipped broken for an afternoon.**
+    //
+    // `.sheet-panel` runs `sheet-in` with `animation-fill-mode: both`, so after the entrance settles the
+    // animation *keeps* applying `transform: none` — and a filled animation outranks inline style in the
+    // cascade. `requestClose()` wrote `style.transform` and the computed value stayed at the identity
+    // matrix: on a scrim tap or `Escape` the panel sat perfectly still for 220 ms and then blinked out.
+    // Drag-to-dismiss animated correctly the whole time, because `onPointerDown` cancels before it drags —
+    // which is precisely why the cancel is one function called from both paths now.
+    //
+    // jsdom runs no animations, so this asserts the *mechanism* rather than the picture: the panel's
+    // animations are cancelled, and only then is the exit transform written. That is the smallest claim
+    // that fails if the call is dropped again.
+    await openFirstStop()
+    const panel = container.querySelector<HTMLElement>('.sheet-panel')
+    const scrim = container.querySelector<HTMLElement>('.sheet-scrim')
+    if (!panel || !scrim) throw new Error('the sheet rendered without a panel or a scrim')
+    let transformWhenCancelled: string | null = null
+    const cancel = vi.fn(() => {
+      transformWhenCancelled = panel.style.transform
+    })
+    panel.getAnimations = () => [{ cancel } as unknown as Animation]
+    act(() => {
+      scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(cancel, 'the entrance keyframes were left filling over the exit').toHaveBeenCalled()
+    expect(transformWhenCancelled, 'cancelled after the transform, which is too late').toBe('')
+    expect(panel.style.transform, 'no exit transform was written at all').not.toBe('')
+  })
+})
+
+describe('the rail overlay re-measures when a row changes size, not only when the list does', () => {
+  /**
+   * **The defect the owner saw as "the buses are completely off the targets".**
+   *
+   * The tokens are an absolutely positioned overlay whose `top` comes from measured row offsets, so the
+   * measurement has to re-run whenever a row moves. It did — through a `ResizeObserver` **on the list
+   * container only**. A `ResizeObserver` reports changes to *the element it observes*, so that arrangement
+   * sees nothing when the list's own box is unchanged: a refetch where one stop gains an arrivals line and
+   * another loses one shifts every row between them and leaves the container exactly as tall as it was. No
+   * callback, no re-measure, and the tokens stay where they were **permanently** — until a direction flip or
+   * a navigation happens to re-measure for another reason.
+   *
+   * The direction is what makes it recognisable: a row that *loses* its arrivals line pulls everything below
+   * it up (`min-h-16` puts that at about 12 px a row), so the tokens are left sitting **too low** — a bus
+   * visibly below its node rather than on it.
+   *
+   * `apps/mobile` cannot have this: every row reports its own geometry through its own `onLayout`. That is
+   * the divergence, and it is why native looked right while this did not.
+   *
+   * This asserts the fix at the only level jsdom can reach — **which elements are watched**. jsdom lays
+   * nothing out, so a measurement assertion here would compare zeroes; and the browser could not be used
+   * either, because the automation tab is always `visibilityState: "hidden"` and a hidden tab produces no
+   * frames, so `ResizeObserver` never delivers a callback at all (not even its initial one). What is left
+   * that is worth pinning is the subscription itself, and it is exactly what regressed.
+   */
+  const CASE = FIXTURE.content as string
+
+  /** Records what the screen subscribes to, and with which box. */
+  function stubResizeObserver(): { targets: Set<Element>; boxes: Set<string> } {
+    const targets = new Set<Element>()
+    const boxes = new Set<string>()
+    class Recording {
+      observe(el: Element, options?: ResizeObserverOptions) {
+        targets.add(el)
+        boxes.add(options?.box ?? 'content-box')
+      }
+      unobserve(el: Element) {
+        targets.delete(el)
+      }
+      disconnect() {
+        targets.clear()
+      }
+    }
+    vi.stubGlobal('ResizeObserver', Recording)
+    return { targets, boxes }
+  }
+
+  it('observes every stop row, not just the list that holds them', async () => {
+    const observed = stubResizeObserver()
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    route = () => Promise.resolve(detail)
+    vi.setSystemTime(Date.parse(c.args.now))
+    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+
+    const rowElements = [...container.querySelectorAll('button')].filter((b) =>
+      b.className.includes('min-h-16'),
+    )
+    expect(rowElements.length, 'the fixture rendered no stop rows').toBeGreaterThan(1)
+    const unwatched = rowElements.filter((el) => !observed.targets.has(el))
+    expect(
+      unwatched,
+      `${unwatched.length} of ${rowElements.length} rows are unwatched — a row that changes height will move its node and leave its bus behind`,
+    ).toHaveLength(0)
+    vi.unstubAllGlobals()
+  })
+
+  it('watches the border box, because that is what moves the rows below it', async () => {
+    // `content-box` is the default and it is the wrong one: a row that gained padding or a border would
+    // shift every node under it and report nothing. Caught by re-running the reproduction rather than by
+    // assuming the first fix was complete.
+    const observed = stubResizeObserver()
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    route = () => Promise.resolve(detail)
+    vi.setSystemTime(Date.parse(c.args.now))
+    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+    expect([...observed.boxes]).toEqual(['border-box'])
+    vi.unstubAllGlobals()
+  })
 })

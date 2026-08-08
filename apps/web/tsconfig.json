@@ -4,5 +4,12 @@
     "types": ["vite/client"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "*.ts", "*.config.ts"]
+  "//": [
+    "`test/**/*.tsx` was missing until WP6-7, so every conformance suite in this app — seven of them —",
+    "ran under vitest (which strips types without checking them) and was invisible to `pnpm typecheck`.",
+    "A mis-shaped `StatefulHarness` or a wrong `RenderedTree` field could not fail CI. `apps/mobile`'s",
+    "tsconfig has always included both extensions, so the two renderers' suites were held to different",
+    "standards — in the direction that matters least, since `apps/web` is what survives WP6-8."
+  ],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx", "*.ts", "*.config.ts"]
 }

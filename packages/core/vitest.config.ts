@@ -19,8 +19,20 @@ export default defineConfig({
       // that emit nothing (the ADR-052 gate proves it for `types.ts`), and `index.ts` is re-exports;
       // including them would dilute the ratio with unreachable-by-construction lines and let real
       // coverage rot while the number stayed green.
+      // **This list was hand-spelled and had already gone stale**, which is this repo's named recurring
+      // failure wearing its dullest costume: `src/favourites.ts` landed in Wave 6 carrying the rule a
+      // rider's curated list survives on, and it was never added — so the module holding
+      // `migrateFavouriteKeys` sat outside the 100 % branch threshold while the threshold went on
+      // reporting green. WP6-7 found it by reading this file before adding to it, and closed it in the
+      // same commit that added `src/settings.ts`.
+      //
+      // Left as an explicit list rather than `src/*.ts` plus exclusions, deliberately: a glob would make
+      // the three declaration-only modules below into unexplained exclusions, and the reason each is out
+      // is the part worth keeping. The cost is that this list must be edited when a module is added, and
+      // the mitigation is that a module with no rows fails the threshold loudly rather than silently.
       include: [
         'src/eta.ts',
+        'src/favourites.ts',
         'src/geo.ts',
         'src/geo-snap.ts',
         'src/ids.ts',
@@ -30,6 +42,7 @@ export default defineConfig({
         'src/route-detail.ts',
         'src/route-position.ts',
         'src/search.ts',
+        'src/settings.ts',
         'src/stop-card.ts',
         'src/stop-detail.ts',
         'src/stop-name.ts',

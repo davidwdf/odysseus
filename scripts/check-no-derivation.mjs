@@ -84,6 +84,15 @@ const POLICED = [
   'apps/web/src/shell/',
   'apps/mobile/app/stop/',
   'apps/mobile/app/route/',
+  // WP6-7's three, and they joined with **no new allowlist entries** — which is the cleanest signal that
+  // nothing derivable was left behind, and the same one WP6-6c's fact sheets gave. Worth knowing why it
+  // was free: a preference screen's derivations are *tables and selectedness* rather than arithmetic, so
+  // none of the six shape rules fires on them even before the hoist. The gate could not have found this
+  // row's work; `settingsView`/`aboutView`/`faqView` exist because a decision was written down twice, not
+  // because a regex caught it. The list is what keeps them from coming back.
+  'apps/mobile/app/(tabs)/settings.tsx',
+  'apps/mobile/app/about-data.tsx',
+  'apps/mobile/app/faq.tsx',
   'apps/mobile/components/MiniMap.tsx',
   'apps/mobile/components/RouteMeta.tsx',
   'apps/mobile/components/RouteFactSheets.tsx',
@@ -178,15 +187,34 @@ function files() {
   return { list, missing }
 }
 
-/** Strip comments and string/template literals: prose about `.sort()` must not be a violation, and
- *  this file's own hints would otherwise trip every rule they describe. */
+/**
+ * Strip comments and string/template literals: prose about `.sort()` must not be a violation, and this
+ * file's own hints would otherwise trip every rule they describe.
+ *
+ * **A template literal keeps its `${…}` expressions**, and that is not a refinement — it was a hole. The
+ * first version replaced the whole literal with an empty one, so every rule went blind inside an
+ * interpolation: `` `${rows.filter(r => r.eta < 5).length} buses` `` was a `selecting` *and* a `threshold`
+ * finding that this gate reported as clean. Found by writing one, in
+ * `apps/web/src/components/RouteStopRow.tsx`, and noticing the count of allowed sites had not moved.
+ *
+ * It is the recurring failure this repo keeps meeting from a new direction — a check that quietly stops
+ * seeing things and goes on printing a success line. `files()` carries the two-level guard for the same
+ * reason, and this is the third gate-blindness bug in the same family (WP3-3, WP6-3b).
+ *
+ * The `[^{}]` in the interpolation pattern means a nested brace — `` `${ {a:1}.a }` `` — is not recovered.
+ * That is a known and narrow gap, written down rather than papered over: it costs a false *negative* on a
+ * shape no renderer here writes, where the alternative is a brace-matching parser in a 600-line gate.
+ */
 export function strip(source) {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/.*$/gm, '$1 ')
     .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
-    .replace(/`(?:[^`\\]|\\.)*`/g, '``')
+    .replace(/`(?:[^`\\]|\\.)*`/g, (literal) => {
+      const code = [...literal.matchAll(/\$\{([^{}]*)\}/g)].map((m) => m[1]).join('; ')
+      return code === '' ? '``' : `\`\${${code}}\``
+    })
 }
 
 /**
@@ -343,6 +371,29 @@ const ALLOWLIST = [
       'is what made writing this component a rendering exercise rather than a second derivation.',
   },
   {
+    file: 'apps/web/src/components/RouteStopRow.tsx',
+    rule: 'arithmetic',
+    snippet: 'animationDelay',
+    why:
+      'The direction-flip cascade’s per-row beat, capped so a 60-stop route does not take two seconds to ' +
+      'rebuild — `Math.min(index, 10) * 26`, the same expression `apps/mobile/app/route/[id].tsx` is exempted ' +
+      'for on the line above. A **delay in milliseconds**, read from a row’s position in a list the kernel ' +
+      'ordered; it decides nothing about what that row says. One of the two sites the template-literal hole ' +
+      'in `strip` was hiding, and it is here rather than in CSS deliberately: `calc(min(var(--i), 10) * 26ms)` ' +
+      'would have passed the gate without ever being looked at, which is the wrong reason to move code.',
+  },
+  {
+    file: 'apps/web/src/components/BottomSheet.tsx',
+    rule: 'arithmetic',
+    snippet: 'style.opacity',
+    why:
+      'How far the scrim has faded while a thumb drags the sheet down: the drag distance as a fraction of ' +
+      'the panel’s own measured height, clamped at zero. A **gesture position**, and there is no other kind ' +
+      'of number in this file — what the sheet *offers* is `RouteStopSheet`’s two actions and ' +
+      '`routeFactSheet`’s content, neither of which this container reads. The other site the hole was ' +
+      'hiding, and it had been invisible since the day the component was written.',
+  },
+  {
     file: 'apps/web/src/components/RouteKeypad.tsx',
     rule: 'capping',
     snippet: 'keypad.digits.slice(0, 5)',
@@ -437,6 +488,20 @@ const FIXTURES = [
     why: 'The literal this whole wave was written around: `EtaBadge` carried `parts.value <= 5` while the served warnUnderSec said 180.',
     source: 'const tone = row.label.value <= 5 ? "text-warning" : "text-text"',
     expect: ['threshold'],
+  },
+  {
+    name: 'a derivation hidden inside a template literal',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a fixture for the interpolation hole has to contain a literal one
+    why: 'THE THIRD CONTROL, and it was a live hole rather than a hypothetical: `strip` replaced every template literal with an empty one, so the gate went blind inside `${…}` and reported a `.filter()` and a threshold as clean. Two rules on one line, because an interpolation is the shape that hides a whole expression.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: as above — this string IS the source under test
+    source: 'const label = `${rows.filter((r) => r.eta < 5).length} buses`',
+    expect: ['selecting', 'threshold'],
+  },
+  {
+    name: 'a template literal with nothing but text in it',
+    why: 'The other half: keeping interpolations must not make ordinary prose visible again. `.sort()` inside a template string is still a sentence.',
+    source: 'const hint = `never .sort() in a view`',
+    expect: [],
   },
   {
     name: 'prose and class names that look like violations',

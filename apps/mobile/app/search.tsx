@@ -319,7 +319,11 @@ function Segment({
     return (
       <Pressable
         accessibilityRole="button"
+        // Both props: `accessibilityState` is read on native and dropped by react-native-web;
+        // `aria-pressed` is read on the web and is not a React Native prop at all. See the long note in
+        // `app/(tabs)/settings.tsx` — one fact, two spellings, neither platform reading the other's.
         accessibilityState={{ selected: active }}
+        aria-pressed={active}
         // onPressIn (press-down): when the Stops text field is focused, the first outside tap is
         // consumed blurring it (react-native-web terminates the press responder on blur, so
         // onPress never fires → the dreaded two-tap). Press-down lands before that. onPress stays

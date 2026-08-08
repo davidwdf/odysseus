@@ -256,3 +256,186 @@ describe('favourites#favouritesView', () => {
     }
   })
 })
+
+/**
+ * The branches the corpus does not reach, asserted here rather than hidden by a lowered threshold.
+ *
+ * **Why this block exists at all is the more useful half.** `packages/core/vitest.config.ts` scopes its
+ * 100 % thresholds with a hand-spelled `include` list, and `src/favourites.ts` was never added to it when
+ * WP6-4 created the module — so the file holding the rule a rider's hand-curated list survives on sat
+ * *outside* the threshold for a whole wave while the threshold went on reporting green. WP6-7 added the
+ * line and this is what fell out: eight branches nothing exercised. That is the repo's named recurring
+ * failure — a gate that passes because it is looking at nothing — in its dullest possible costume, and
+ * the reason the config now carries a paragraph about editing that list.
+ *
+ * These are tests rather than corpus rows, which `vitest.config.ts` already establishes as the honest
+ * alternative for a branch a corpus cannot reach (it says so about `formatBearing`'s two). Each below is
+ * either a **malformed input** the corpus deliberately does not model in a real payload, or a **fallback**
+ * whose trigger is a shape the live dataset does not currently produce. A Swift port reads the corpus for
+ * the rules; it reads these for the edges.
+ */
+describe('favourites — the edges the corpus cannot reach', () => {
+  const NOW = Date.parse('2026-08-05T00:30:00+08:00')
+  const options: StopCardOptions = { locale: 'en', now: NOW }
+
+  /** A corpus place, cloned so a case can bend one route without disturbing the recorded fixtures. */
+  const placeFrom = (caseName: string): StopDetail => {
+    const found = cases<{ places: StopDetail[] }, unknown>('favouritesView').find(
+      (c) => c.name === caseName,
+    )
+    if (!found) throw new Error(`the favouritesView corpus case \`${caseName}\` moved`)
+    const place = found.args.places[0]
+    if (!place) throw new Error(`\`${caseName}\` has no place to clone`)
+    return structuredClone(place)
+  }
+
+  const QUIET = 'a-saved-route-with-no-reading-is-still-a-row'
+
+  /**
+   * A reading due `minutes` from the fixed `now`, in the wire's own shape.
+   *
+   * Built rather than borrowed because the corpus case these tests clone has `eta: null` — it is the row
+   * that exists to prove a route with *no* reading is still drawn — and every edge below needs one.
+   */
+  const arrivalIn = (minutes: number, extra: Record<string, unknown> = {}) => ({
+    routeId: 'CTB:969C:outbound:1',
+    stopId: 'CTB:001992',
+    operator: 'CTB' as const,
+    arrivals: [new Date(NOW + minutes * 60_000).toISOString()],
+    dataTimestamp: new Date(NOW - 20_000).toISOString(),
+    observedAt: new Date(NOW - 5_000).toISOString(),
+    ...extra,
+  })
+
+  it('drops an entry that is not a string rather than trusting it', () => {
+    // A blob is JSON a previous version of this app wrote, and the one thing the migration must never do
+    // is hand a non-key to the parser and act on whatever comes back. The corpus models a *corrupt string*
+    // because that is what a scheme change produces; a `null` or a number in the array is what a hand-edit,
+    // a partial write or a future field produces, and it reaches a different arm.
+    expect(migrateFavouriteKeys([null, 42, { stopId: 'x' }], 0)).toEqual([
+      null,
+      42,
+      { stopId: 'x' },
+    ])
+  })
+
+  it('sorts two equally-ranked readings by which is due sooner', () => {
+    // The tiebreaker inside the rank sort. Every corpus card has at most one live reading, so the
+    // comparator's second clause has never run against real data — and it is the clause that decides which
+    // of two buses a rider sees first, which is the whole reason they opened the screen.
+    const place = placeFrom(QUIET)
+    const [first] = place.routes
+    if (!first) throw new Error('unreachable: the cloned place has no routes')
+    const second = structuredClone(first)
+    second.route.id = 'CTB:962:outbound:1'
+    first.eta = arrivalIn(10) as typeof first.eta
+    second.eta = arrivalIn(4, { routeId: second.route.id }) as typeof second.eta
+    place.routes = [first, second]
+    const view = favouritesView(
+      {
+        saved: [
+          formatFavoriteRouteKey('CTB:001992', first.route.id),
+          formatFavoriteRouteKey('CTB:001992', second.route.id),
+        ],
+        places: [place],
+      },
+      options,
+    )
+    expect(view[0]?.rows.map((row) => row.routeId)).toEqual([second.route.id, first.route.id])
+  })
+
+  it('falls back to the raw route id when the grammar cannot read a route number out of it', () => {
+    // ADR-052 treats these ids as an open vocabulary, so a shape this build's grammar does not know will
+    // reach a row before a parser update does — and showing the id beats showing nothing, which is the
+    // same argument `operatorName` makes for an unknown operator code.
+    const place = placeFrom(QUIET)
+    const [route] = place.routes
+    if (!route) throw new Error('unreachable: the cloned place has no routes')
+    route.route.id = 'NOT-AN-ID'
+    const view = favouritesView(
+      { saved: [formatFavoriteRouteKey('CTB:001992', 'NOT-AN-ID')], places: [place] },
+      options,
+    )
+    expect(view[0]?.rows[0]?.routeNo).toBe('NOT-AN-ID')
+  })
+
+  it('lets a remark stand in as the headline when the destination is blank, and untitle-cases it', () => {
+    // Upstream really does send an empty `en` destination (the blank-`en` GMB circulars are a corpus
+    // `knownDefect` elsewhere), and when it does the operator's own note is the only thing left to name
+    // the row with. It is deliberately NOT title-cased: a remark is prose written for a rider to read,
+    // where a destination arrives ALL-CAPS from the feed.
+    const place = placeFrom(QUIET)
+    const [route] = place.routes
+    if (!route) throw new Error('unreachable: the cloned place has no routes')
+    route.route.destination = { en: '', 'zh-Hant': '', 'zh-Hans': '' }
+    route.eta = arrivalIn(6, {
+      remark: { en: 'Scheduled departure', 'zh-Hant': '原定班次', 'zh-Hans': '原定班次' },
+    }) as typeof route.eta
+    const view = favouritesView(
+      { saved: [formatFavoriteRouteKey('CTB:001992', route.route.id)], places: [place] },
+      options,
+    )
+    const row = view[0]?.rows[0]
+    expect(row?.headline).toBe('Scheduled departure')
+    // …and it is not *also* printed as a remark line, or the same words appear twice in one row.
+    expect(row).not.toHaveProperty('remark')
+  })
+
+  it('ranks a published timetable between a live reading and nothing at all, and holds the order of two silent rows', () => {
+    // Three of the four remaining branches meet in one card, and they are the shape of a rider's list at
+    // 23:00: most of it is peak-only services with no bus due. `headway` is the middle rank — WP6-4b's fix,
+    // the reason an empty card is no longer possible — and it had never been exercised through this
+    // function, only through the place screen's. Two rows with *neither* a reading nor a timetable then
+    // reach the comparator's tiebreaker with no arrival on either side, which is the arm that decides
+    // whether a rider's list is stable between refreshes or shuffles under them.
+    const place = placeFrom(QUIET)
+    const [base] = place.routes
+    if (!base) throw new Error('unreachable: the cloned place has no routes')
+
+    const timetabled = structuredClone(base)
+    timetabled.route.id = 'CTB:962:outbound:1'
+    timetabled.route.service = { ...timetabled.route.service, headway: { min: 12, max: 20 } }
+
+    // Blank in every locale AND no remark — so there is nothing to head the row with, which is the last
+    // arm of the headline conditional. The row is still drawn; it just has only its route number.
+    const nameless = structuredClone(base)
+    nameless.route.id = 'CTB:970:outbound:1'
+    nameless.route.destination = { en: '', 'zh-Hant': '', 'zh-Hans': '' }
+
+    place.routes = [base, timetabled, nameless]
+    const view = favouritesView(
+      {
+        saved: [base, timetabled, nameless].map((route) =>
+          formatFavoriteRouteKey('CTB:001992', route.route.id),
+        ),
+        places: [place],
+      },
+      options,
+    )
+    const rows = view[0]?.rows ?? []
+    expect(rows.map((row) => row.label.kind)).toEqual(['headway', 'none', 'none'])
+    expect(rows[0]?.routeId).toBe('CTB:962:outbound:1')
+    // The two silent rows keep the order they arrived in, rather than swapping between refreshes.
+    expect(rows.slice(1).map((row) => row.routeId)).toEqual([base.route.id, 'CTB:970:outbound:1'])
+    expect(rows.find((row) => row.routeId === 'CTB:970:outbound:1')).not.toHaveProperty('headline')
+  })
+
+  it('keeps the remark on its own line when there is a destination to be the headline', () => {
+    // The other arm of the same conditional, and the one that makes the assertion above mean something:
+    // with both present the destination leads and the remark is a second line, so a rule that always chose
+    // one of them would pass exactly one of these two tests.
+    const place = placeFrom(QUIET)
+    const [route] = place.routes
+    if (!route) throw new Error('unreachable: the cloned place has no routes')
+    route.eta = arrivalIn(8, {
+      remark: { en: 'Last bus of the day', 'zh-Hant': '尾班車', 'zh-Hans': '尾班车' },
+    }) as typeof route.eta
+    const view = favouritesView(
+      { saved: [formatFavoriteRouteKey('CTB:001992', route.route.id)], places: [place] },
+      options,
+    )
+    const row = view[0]?.rows[0]
+    expect(row?.headline).toBe('Kornhill Plaza, Kornhill Road')
+    expect(row?.remark?.text).toBe('Last bus of the day')
+  })
+})

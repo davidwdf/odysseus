@@ -1,0 +1,162 @@
+{
+  "component": "AboutData",
+  "version": 1,
+  "doc": "Where every figure in this app comes from, which licences it ships under, and which build a rider is looking at.",
+  "viewModel": {
+    "module": "settings",
+    "type": "AboutView",
+    "corpus": "settings.spec.json",
+    "group": "aboutView"
+  },
+  "slots": [
+    {
+      "name": "title",
+      "text": {
+        "message": "aboutData"
+      }
+    },
+    {
+      "name": "intro",
+      "invariant": "A field rather than a message, because it is the kernel that decides this page opens with a claim about its sources at all. The claim itself was narrowed by this row: \"no scraping, no private feeds\" was true of us and glossed that the static tier arrives through someone else’s crawl, which is now a credited row below.",
+      "text": {
+        "field": "intro"
+      }
+    },
+    {
+      "name": "sourcesHeading",
+      "text": {
+        "message": "aboutSourcesTitle"
+      }
+    },
+    {
+      "name": "sources",
+      "invariant": "One row per source this app actually reads, in the kernel’s order — never a subset, and never reordered by prominence. The set is asserted against the operator list too, so an operator can no longer ship without its credit: that disagreement is exactly what this row found.",
+      "each": "sources",
+      "of": [
+        {
+          "name": "sourceTitle",
+          "text": {
+            "field": "title"
+          }
+        },
+        {
+          "name": "sourceBody",
+          "text": {
+            "field": "body"
+          }
+        }
+      ]
+    },
+    {
+      "name": "licenceHeading",
+      "text": {
+        "message": "aboutLicenceTitle"
+      }
+    },
+    {
+      "name": "licences",
+      "invariant": "One row **per licence actually in force**, and there are two. ADR-038 built this section for exactly one link row; the basemap arrived a wave later under different terms, leaving a single sentence about \"the Government’s terms\" standing for two different sets of them.",
+      "each": "licences",
+      "of": [
+        {
+          "name": "licenceTitle",
+          "text": {
+            "field": "title"
+          }
+        },
+        {
+          "name": "licenceBody",
+          "text": {
+            "field": "body"
+          }
+        }
+      ]
+    },
+    {
+      "name": "versionLabel",
+      "invariant": "Its own node. See the note at the top: a renderer composing `\"Version 1.4.0\"` as one string would diverge from one that does not, and both are plausible.",
+      "text": {
+        "field": "version.label"
+      }
+    },
+    {
+      "name": "versionValue",
+      "text": {
+        "field": "version.value"
+      }
+    }
+  ],
+  "states": {
+    "content": {
+      "must": "Every source, every licence, and the build.",
+      "mustNot": "A source the app reads and does not name, or a licence it ships under and does not name. Both were true before this row.",
+      "enforcement": {
+        "shows": []
+      }
+    },
+    "loading": {
+      "must": "The finished screen, on the first frame.",
+      "mustNot": "A skeleton, a spinner, or a section that fills in afterwards — there is nothing to wait for.",
+      "why": "A state that would be vacuous if the projection were empty and is the opposite because the whole screen is in `slots`: entering `loading` here asserts that every row is already there. The driver renders with no query client and no `DataSource` in scope, so a future fetch on this screen breaks the harness rather than quietly weakening it.",
+      "enforcement": {
+        "shows": []
+      }
+    },
+    "empty": {
+      "must": "Unreachable: the source and licence lists are constants and neither can be filtered.",
+      "mustNot": "A \"Sources\" heading with nothing under it, which is what a renderer that built this list from whichever operators had data today would produce on a bad morning.",
+      "why": "Worth declaring precisely because the obvious \"improvement\" — showing only the sources currently in use — would break a licence condition rather than a layout.",
+      "enforcement": {
+        "by": "sources"
+      }
+    },
+    "failed": {
+      "must": "Nothing this screen can promise: the hand-off to an external page is one-way.",
+      "mustNot": "A claim that the page opened.",
+      "why": "`packages/ports`’ `LinkOpener` is `void` on both members and argues the case at length: once the OS or the browser has the URL we have lost control, so a promise would resolve on \"handed over\" rather than on \"the rider saw the page\" — precision we do not have, which is ADR-008’s rule applied to a side effect. A blocked pop-up therefore fails silently.",
+      "enforcement": {
+        "unenforced": "Deliberately unobservable at this layer, by the port’s own decision rather than by omission. The web renderer narrows it anyway by using a real anchor, where a blocked pop-up is not a failure mode at all."
+      }
+    },
+    "stale": {
+      "must": "Prose that is true of the app as it is now.",
+      "mustNot": "A credit for a source that has been replaced, or a licence that no longer applies — a wrong attribution is worse than a missing one, because it looks discharged.",
+      "why": "The only decay this screen has, and it is measured in ADRs rather than in seconds. It is not hypothetical: three sources were missing for between one and three waves, and the words were audited only when this row forced someone to read them against the code.",
+      "enforcement": {
+        "unenforced": "Nothing mechanical can know that a sentence has stopped being true. What *is* mechanical is the corpus row asserting that every shipped operator has a credit — which would have caught the GMB omission on the day it shipped — and that is the honest half."
+      }
+    },
+    "offline": {
+      "must": "Every row, drawn, with its link.",
+      "mustNot": "A hidden or disabled link. The rider is offline; the credit is still owed, and the URL is still the answer to \"where did this come from\".",
+      "why": "The page is part of the precached shell (ADR-058/082), so it opens with no network like any other. What a link *does* offline is the browser’s business and not this screen’s — which is the same division the walker’s `content-not-affordance` rule makes: the text is a function of the model, never of whether the affordance can be honoured.",
+      "enforcement": {
+        "shows": []
+      }
+    }
+  },
+  "interactions": [
+    {
+      "target": "sources",
+      "goes": "that source’s own site, externally — away from the app, in a new tab or the OS browser",
+      "note": "The one screen in the app whose targets are all off-site. The role is `link` on both renderers, which is why the web one uses a real anchor rather than the `LinkOpener` port a button would need."
+    },
+    {
+      "target": "licences",
+      "goes": "the terms, in the reader’s own language"
+    }
+  ],
+  "a11y": {
+    "role": "article: an intro, two labelled lists of external links, and a build identifier",
+    "name": {
+      "fromSlot": "title"
+    },
+    "reducedMotion": "No motion on this screen on either renderer."
+  },
+  "idiom": [
+    "**how an external URL is opened** — a real `<a href target=\"_blank\" rel=\"noopener noreferrer\">` on the web, a `Pressable` with `accessibilityRole=\"link\"` handing off through `openExternal` on native. The anchor is the DOM-idiomatic answer and buys middle-click, copy-link-address and a visible target; what is identity is that the row *is* a link and that it leaves the app",
+    "whether rows sit in cards with dividers or in whitespace-separated runs",
+    "the trailing external-link glyph, and whether it is drawn at all",
+    "where the build identifier sits — the foot of the page on both, but a rider-facing \"about\" sheet elsewhere"
+  ]
+}

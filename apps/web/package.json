@@ -27,6 +27,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@fontsource-variable/inter": "5.3.0",
     "@nextbus/contract": "workspace:*",
     "@nextbus/tsconfig": "workspace:*",
     "@nextbus/ui-spec": "workspace:*",

@@ -1,5 +1,5 @@
-import type { Locale } from '@nextbus/core'
-import { type LocalizedString, type PlainMessageKey, t } from '@nextbus/i18n'
+import { aboutView } from '@nextbus/core'
+import { type PlainMessageKey, t } from '@nextbus/i18n'
 import Constants from 'expo-constants'
 import { useRouter } from 'expo-router'
 import { ExternalLink } from 'lucide-react-native'
@@ -12,16 +12,18 @@ import { Text } from '../components/Text'
 import { openExternal } from '../lib/openExternal'
 import { useLocale } from '../providers/LocaleProvider'
 
-// External sources we attribute (docs/02). The terms link is locale-aware so it
-// lands on the user's language; the source portals are single hosts.
-const TERMS_URL: Record<Locale, string> = {
-  en: 'https://data.gov.hk/en/terms-and-conditions',
-  'zh-Hant': 'https://data.gov.hk/tc/terms-and-conditions',
-  'zh-Hans': 'https://data.gov.hk/sc/terms-and-conditions',
-}
-const GOVHK_URL = 'https://data.gov.hk'
-const KMB_URL = 'https://data.etabus.gov.hk'
-const CTB_URL = 'https://www.citybus.com.hk'
+// Which sources this app credits, in what order, with which URL — and the locale-aware terms links — left
+// this file at WP6-7. They are `aboutView`'s now (`packages/core/src/settings.ts`), because attribution is
+// an **obligation** rather than content: three of the six rows were missing here and each closed a
+// decision that had been taken and never actioned (the basemap, ADR-049 decision 5; green minibus, a
+// shipped operator this page did not credit; and the consolidated crawl every route and fare is built
+// from, ADR-021's own decision). An obligation living as loose JSX in one renderer is one a second
+// renderer can simply not have.
+//
+// The terms URL is the strongest kernel rule on this screen: the portals' path slugs are `en`/`tc`/`sc`
+// and ours are `en`/`zh-Hant`/`zh-Hans`, so it is neither the identity nor a `toLowerCase()` — and a
+// renderer inventing `zh-hant` lands a rider on a 404 in the one place the app sends them to read a
+// licence.
 
 export default function AboutData() {
   const locale = useLocale()
@@ -29,6 +31,10 @@ export default function AboutData() {
   const router = useRouter()
   // expo-config `version` (app.json); shown plainly so testers can quote a build.
   const version = Constants.expoConfig?.version ?? '0.0.0'
+  const view = aboutView(locale, {
+    text: (key) => t(locale, key as PlainMessageKey),
+    version,
+  })
 
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
@@ -43,30 +49,30 @@ export default function AboutData() {
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
         <View className="px-4 pb-2 pt-2">
           <Text variant="body" className="text-muted">
-            {t(locale, 'aboutIntro')}
+            {view.intro}
           </Text>
         </View>
 
         {/* Sources — full-width link rows, each opens the source in a new tab. */}
         <Section title={t(locale, 'aboutSourcesTitle')}>
-          <LinkRow titleKey="aboutGovHk" bodyKey="aboutGovHkBody" url={GOVHK_URL} locale={locale} />
-          <LinkRow titleKey="aboutKmb" bodyKey="aboutKmbBody" url={KMB_URL} locale={locale} />
-          <LinkRow titleKey="aboutCtb" bodyKey="aboutCtbBody" url={CTB_URL} locale={locale} />
+          {view.sources.map((row) => (
+            <LinkRow key={row.id} title={row.title} body={row.body} url={row.url} />
+          ))}
         </Section>
 
-        {/* Licence — a single link row to the (locale-aware) terms. */}
+        {/* Licences — one row per licence actually in force. Two since WP6-7: the basemap arrived a wave
+            after ADR-038 built this section for exactly one, under a different set of terms. */}
         <Section title={t(locale, 'aboutLicenceTitle')}>
-          <LinkRow
-            titleKey="aboutTerms"
-            bodyKey="aboutTermsBody"
-            url={TERMS_URL[locale]}
-            locale={locale}
-          />
+          {view.licences.map((row) => (
+            <LinkRow key={row.id} title={row.title} body={row.body} url={row.url} />
+          ))}
         </Section>
 
         <View className="px-4 pt-4">
+          {/* Two text nodes, not one composed string — the kernel keeps the label and the number apart so
+              that a projection can pin the order rather than a renderer's spacing (ADR-092). */}
           <Text variant="caption" className="text-subtle">
-            {t(locale, 'aboutVersion')} {version}
+            {view.version.label} {view.version.value}
           </Text>
         </View>
       </ScrollView>
@@ -74,7 +80,7 @@ export default function AboutData() {
   )
 }
 
-function Section({ title, children }: { title: LocalizedString; children: ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View className="pt-6">
       <Text variant="label" className="mb-1 px-4 text-subtle">
@@ -86,17 +92,7 @@ function Section({ title, children }: { title: LocalizedString; children: ReactN
   )
 }
 
-function LinkRow({
-  titleKey,
-  bodyKey,
-  url,
-  locale,
-}: {
-  titleKey: PlainMessageKey
-  bodyKey: PlainMessageKey
-  url: string
-  locale: Locale
-}) {
+function LinkRow({ title, body, url }: { title: string; body: string; url: string }) {
   return (
     <Pressable
       accessibilityRole="link"
@@ -105,10 +101,10 @@ function LinkRow({
     >
       <View className="flex-1 gap-0.5">
         <Text variant="body" weight="semibold" className="text-accent">
-          {t(locale, titleKey)}
+          {title}
         </Text>
         <Text variant="body" className="text-muted">
-          {t(locale, bodyKey)}
+          {body}
         </Text>
       </View>
       <Icon icon={ExternalLink} tone="accent" size={18} />

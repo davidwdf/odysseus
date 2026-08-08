@@ -242,10 +242,13 @@ export const CATALOGUE = {
     'zh-Hant': '關於資料',
     'zh-Hans': '关于数据',
   },
+  // "no scraping, no private feeds" was true of us and glossed that the static tier reaches us through a
+  // third party's crawl of the official APIs. That source is credited below now, so the claim can be the
+  // stronger and simpler one: every source is public, and every one of them is named on this screen.
   aboutIntro: {
-    en: 'NextBus HK is built entirely on Hong Kong open data — no scraping, no private feeds.',
-    'zh-Hant': '香港巴士完全建基於香港開放資料 — 沒有抓取網頁，亦沒有私有數據源。',
-    'zh-Hans': '香港巴士完全基于香港开放数据 — 没有抓取网页，也没有私有数据源。',
+    en: 'NextBus HK is built entirely on Hong Kong open data. Every source it uses is public, and every one of them is credited below.',
+    'zh-Hant': '香港巴士完全建基於香港開放資料。所用的每個資料來源都是公開的，並全部列於下方。',
+    'zh-Hans': '香港巴士完全基于香港开放数据。所用的每个数据来源都是公开的，并全部列于下方。',
   },
   aboutSourcesTitle: {
     en: 'Sources',
@@ -261,9 +264,9 @@ export const CATALOGUE = {
       'the portal brands itself in Latin script in every language, including its own zh pages',
   },
   aboutGovHkBody: {
-    en: 'The Government open-data portal — routes, stops & fares, refreshed daily.',
-    'zh-Hant': '政府開放資料平台 — 路線、車站及車費，每日更新。',
-    'zh-Hans': '政府开放数据平台 — 路线、车站及车费，每日更新。',
+    en: 'The Government open-data portal the operators publish through, and whose terms this app uses their data under.',
+    'zh-Hant': '巴士公司發布資料的政府開放資料平台，本 App 亦按其條款使用這些資料。',
+    'zh-Hans': '巴士公司发布数据的政府开放数据平台，本 App 也按其条款使用这些数据。',
   },
   aboutKmb: {
     en: 'KMB / LWB (Long Win)',
@@ -271,9 +274,9 @@ export const CATALOGUE = {
     'zh-Hans': '九巴／龙运',
   },
   aboutKmbBody: {
-    en: 'Real-time arrivals, via the Transport Department.',
-    'zh-Hant': '即時到站時間，由運輸署提供。',
-    'zh-Hans': '实时到站时间，由运输署提供。',
+    en: "Real-time arrivals, from KMB's own open-data service.",
+    'zh-Hant': '即時到站時間，來自九巴的開放資料服務。',
+    'zh-Hans': '实时到站时间，来自九巴的开放数据服务。',
   },
   aboutCtb: {
     en: 'Citybus',
@@ -281,9 +284,49 @@ export const CATALOGUE = {
     'zh-Hans': '城巴',
   },
   aboutCtbBody: {
-    en: 'Real-time arrivals (incl. former NWFB routes).',
-    'zh-Hant': '即時到站時間（包括前新巴路線）。',
-    'zh-Hans': '实时到站时间（包括前新巴路线）。',
+    en: "Real-time arrivals (incl. former NWFB routes), via the Government's real-time data gateway.",
+    'zh-Hant': '即時到站時間（包括前新巴路線），經政府即時資料閘道提供。',
+    'zh-Hans': '实时到站时间（包括前新巴路线），经政府实时数据网关提供。',
+  },
+  // Green minibus shipped as a v1 operator with its own feed (ADR-047) and `faqCoverageA` names it, but
+  // the Sources list had three rows and none of them was GMB until WP6-7 — so the app's own coverage
+  // answer and its own attribution page disagreed about which operators it uses.
+  aboutGmb: {
+    en: 'Green Minibus (GMB)',
+    'zh-Hant': '專線小巴',
+    'zh-Hans': '专线小巴',
+  },
+  aboutGmbBody: {
+    en: 'Real-time arrivals for green minibuses.',
+    'zh-Hant': '綠色專線小巴的即時到站時間。',
+    'zh-Hans': '绿色专线小巴的实时到站时间。',
+  },
+  // The basemap. ADR-049 decision 5 ends "This extends the ADR-038 'About the data' sources list" and it
+  // never did — the binding credit is the one on the map face, which has always shipped; this is the
+  // second half, and the CSDI grant conditions on naming the portal as well as the department.
+  aboutLandsd: {
+    en: 'Lands Department (CSDI Portal)',
+    'zh-Hant': '地政總署（空間數據共享平台）',
+    'zh-Hans': '地政总署（空间数据共享平台）',
+  },
+  aboutLandsdBody: {
+    en: 'Map tiles and place labels, cached by us and credited on every map.',
+    'zh-Hant': '地圖圖磚及地名標籤，由我們自行快取，並在每幅地圖上標示來源。',
+    'zh-Hans': '地图图块及地名标签，由我们自行缓存，并在每幅地图上标示来源。',
+  },
+  // Where the static tier actually comes from. ADR-021's decision says to attribute the consolidation and
+  // ADR-038's follow-up list repeats it; neither was actioned until WP6-7.
+  aboutHkbus: {
+    en: 'hkbus / hk-bus-crawling',
+    'zh-Hant': 'hkbus / hk-bus-crawling',
+    'zh-Hans': 'hkbus / hk-bus-crawling',
+    untranslated:
+      'a project name, written the same way in every language — as DATA.GOV.HK is above',
+  },
+  aboutHkbusBody: {
+    en: 'The consolidated open-data crawl our routes, stops and fares are built from.',
+    'zh-Hant': '我們的路線、車站及車費資料，建基於這個開放資料整合專案。',
+    'zh-Hans': '我们的路线、车站及车费数据，基于这个开放数据整合项目。',
   },
   aboutLicenceTitle: {
     en: 'Licence',
@@ -297,9 +340,22 @@ export const CATALOGUE = {
     'zh-Hans': '使用条款及细则',
   },
   aboutTermsBody: {
-    en: "Open data from DATA.GOV.HK is used under the Government's terms.",
-    'zh-Hant': 'DATA.GOV.HK 的開放資料按政府使用條款使用。',
-    'zh-Hans': 'DATA.GOV.HK 的开放数据按政府使用条款使用。',
+    en: "Routes, stops, fares and arrival times from DATA.GOV.HK, used under the Government's terms.",
+    'zh-Hant': '路線、車站、車費及到站時間來自 DATA.GOV.HK，按政府使用條款使用。',
+    'zh-Hans': '路线、车站、车费及到站时间来自 DATA.GOV.HK，按政府使用条款使用。',
+  },
+  // A second licence row, because the basemap arrived a wave after ADR-038 built this section for exactly
+  // one — leaving `aboutTermsBody` as the app's only licence statement while a different set of terms was
+  // silently in force on every map.
+  aboutCsdiTerms: {
+    en: 'CSDI Portal Terms and Conditions',
+    'zh-Hant': '空間數據共享平台使用條款',
+    'zh-Hans': '空间数据共享平台使用条款',
+  },
+  aboutCsdiTermsBody: {
+    en: 'The map tiles and place labels are used under the CSDI Portal’s own terms.',
+    'zh-Hant': '地圖圖磚及地名標籤按空間數據共享平台的使用條款使用。',
+    'zh-Hans': '地图图块及地名标签按空间数据共享平台的使用条款使用。',
   },
   aboutVersion: {
     en: 'Version',
@@ -317,22 +373,32 @@ export const CATALOGUE = {
     'zh-Hant': '到站時間有多新？',
     'zh-Hans': '到站时间有多新？',
   },
+  // "grey out" over-described the shipped cue: the whole stale treatment is `opacity.etaStale`, and the
+  // urgency colour is retained, so a stale figure fades rather than turning grey. ADR-008's "updated Ns
+  // ago" chip has never been built (`updatedAgo` is in this catalogue and no renderer calls it), so this
+  // answer describes what ships rather than what was promised.
   faqFreshnessA: {
-    en: 'Live arrival times refresh about once a minute at source — we can never be fresher than that, and we grey out figures that have gone stale.',
+    en: 'Live arrival times refresh about once a minute at source — we can never be fresher than that, and a figure we think has gone stale is faded rather than shown as current.',
     'zh-Hant':
-      '即時到站時間在來源端約每分鐘更新一次 — 我們不可能比來源更快，並會將過時的數字轉為灰色。',
+      '即時到站時間在來源端約每分鐘更新一次 — 我們不可能比來源更快；當某個數字可能已過時，我們會將它調淡，而不會當作最新資料顯示。',
     'zh-Hans':
-      '实时到站时间在来源端约每分钟更新一次 — 我们不可能比来源更快，并会将过时的数字转为灰色。',
+      '实时到站时间在来源端约每分钟更新一次 — 我们不可能比来源更快；当某个数字可能已过时，我们会将它调淡，而不会当作最新数据显示。',
   },
   faqTimingsQ: {
     en: 'Are the fares and timings live?',
     'zh-Hant': '車費與班次是即時的嗎？',
     'zh-Hans': '车费与班次是实时的吗？',
   },
+  // "shown as published" was false for two figures the app draws prominently: child and elderly fares are
+  // not published anywhere, so we work them out from the fare policy and mark each with a `~` (ADR-095
+  // decision 1 makes that mark kernel-composed content precisely so no renderer can drop it). Leaving the
+  // old wording was the one case in the audit where the FAQ contradicted an on-screen honesty label.
   faqTimingsA: {
-    en: 'No — fares, frequencies and journey times are scheduled reference data, shown as published, not live.',
-    'zh-Hant': '不是 — 車費、班次頻率及行車時間屬時間表參考資料，按發布內容顯示，並非即時。',
-    'zh-Hans': '不是 — 车费、班次频率及行车时间属时间表参考数据，按发布内容显示，并非实时。',
+    en: 'No — fares, frequencies and journey times are scheduled reference data, shown as published, not live. Child and elderly fares are the exception: those are not published at all, so we work them out from the fare policy and mark every one with a ~.',
+    'zh-Hant':
+      '不是 — 車費、班次頻率及行車時間屬時間表參考資料，按發布內容顯示，並非即時。小童及長者車費則屬例外：這些數字並無公開發布，我們按車費政策推算，並在每個數字前加上 ~ 標示。',
+    'zh-Hans':
+      '不是 — 车费、班次频率及行车时间属时间表参考数据，按发布内容显示，并非实时。小童及长者车费则属例外：这些数字并无公开发布，我们按车费政策推算，并在每个数字前加上 ~ 标示。',
   },
   faqCoverageQ: {
     en: 'Which bus operators are covered?',
@@ -346,53 +412,75 @@ export const CATALOGUE = {
     'zh-Hans':
       '九巴、龙运、城巴（包括前新巴路线）及专线小巴（绿色小巴）。新大屿山巴士、港铁巴士及铁路将陆续加入。',
   },
+  // This pair described ADR-022's superseded cross-operator *pair* merge and survived three ADRs that
+  // changed every clause of it. ADR-042 replaced the "one KMB + one CTB within 30 m" rule with
+  // direction-aware N-member clustering that explicitly permits same-operator members; the merged thing is
+  // a *place* of several kerbs rather than "one stop"; and ADR-072 reversed "listed once", so a line
+  // boarding at two kerbs of one place now keeps a row at each. The question is widened with it, because
+  // two companies at one stop is now the minority reason a place has several kerbs.
   faqMergeQ: {
-    en: 'Why do some stops list two companies?',
-    'zh-Hant': '為何部分車站會列出兩間公司？',
-    'zh-Hans': '为何部分车站会列出两家公司？',
+    en: 'Why is one stop sometimes several kerbs?',
+    'zh-Hant': '為何一個車站有時會有多支站柱？',
+    'zh-Hans': '为何一个车站有时会有多支站柱？',
   },
   faqMergeA: {
-    en: 'When KMB and Citybus serve the same kerb, we merge them into one stop so you see every route arriving there at once.',
+    en: 'Because nearby stop poles that face the same way are grouped into one place — whichever companies run them. The place is one entry in the list, and inside it each route is listed under the kerb you board it from.',
     'zh-Hant':
-      '當九巴與城巴停靠同一個車站時，我們會將它們合併為一個車站，讓你一次過看到該站所有路線。',
+      '因為我們會把方向相同的鄰近站柱合併為一個地點 — 不論由哪些公司營運。該地點在列表中只佔一項；進入地點後，每條路線會列在你上車的那支站柱之下。',
     'zh-Hans':
-      '当九巴与城巴停靠同一个车站时，我们会将它们合并为一个车站，让你一次过看到该站所有路线。',
+      '因为我们会把方向相同的邻近站柱合并为一个地点 — 不论由哪些公司运营。该地点在列表中只占一项；进入地点后，每条路线会列在你上车的那支站柱之下。',
   },
   faqOfflineQ: {
     en: 'Does the app work offline?',
     'zh-Hant': 'App 可以離線使用嗎？',
     'zh-Hans': 'App 可以离线使用吗？',
   },
+  // **WP6-7's named acceptance.** Three things were wrong. It understated offline by two ADRs — since
+  // ADR-058/082 the app *opens* offline and previously-seen arrivals replay from the persisted cache,
+  // aged; "an on-device index" is true only after a first online session, since the index is fetched and
+  // then persisted rather than bundled (the zh strings already said so, and were the more accurate pair);
+  // and "straight from the operators" was wrong about the path, because every live reading goes through
+  // our own Worker, which coalesces per pole (ADR-057).
   faqOfflineA: {
-    en: 'Route and stop search work offline from an on-device index. Live arrival times need a connection — they come straight from the operators.',
+    en: 'Partly. The app opens offline, and route and stop search keeps working from the index saved on your device the first time you used it. Arrivals you have already seen come back from the cache, faded rather than shown as current — a new reading always needs a connection.',
     'zh-Hant':
-      '路線及車站搜尋可離線使用（資料已下載至裝置）。即時到站時間則需連接網絡，因為它直接來自巴士公司。',
+      '部分可以。App 可離線開啟，路線及車站搜尋亦可繼續使用（索引在首次使用時已下載至裝置）。之前看過的到站時間會從快取重現，並以淡色顯示，不會當作最新資料 — 要取得新的讀數則必須連接網絡。',
     'zh-Hans':
-      '路线及车站搜索可离线使用（数据已下载至设备）。实时到站时间则需连接网络，因为它直接来自巴士公司。',
+      '部分可以。App 可离线打开，路线及车站搜索也可继续使用（索引在首次使用时已下载至设备）。之前看过的到站时间会从缓存重现，并以淡色显示，不会当作最新数据 — 要取得新的读数则必须连接网络。',
   },
   faqMapQ: {
     en: "Why isn't there a live bus map?",
     'zh-Hant': '為何沒有即時巴士地圖？',
     'zh-Hans': '为何没有实时巴士地图？',
   },
+  // The claim is still literally true — HK open data publishes no vehicle positions and no polylines — but
+  // since ADR-093/094 the route schematic draws bus tokens inferred from the per-stop arrival sequence, so
+  // a rider who has just watched one slide down the rail reads this as a refusal the app appears to make a
+  // liar of. The distinction is the honesty point worth making out loud: a stop list is not a map, and an
+  // inference is not a position. Hence one added sentence rather than a softened first half.
   faqMapA: {
-    en: "Hong Kong's open data publishes stop-by-stop arrival estimates, not live vehicle positions or route shapes — so we can't honestly show buses moving on a map.",
+    en: "Hong Kong's open data publishes stop-by-stop arrival estimates, not live vehicle positions or route shapes — so we can't honestly show buses moving on a map. What we can do is place a bus on the route's stop list, between the two stops its own arrival times put it between.",
     'zh-Hant':
-      '香港的開放資料只提供逐站到站時間估算，並無即時車輛位置或路線圖形，因此我們無法如實在地圖上顯示巴士位置。',
+      '香港的開放資料只提供逐站到站時間估算，並無即時車輛位置或路線圖形，因此我們無法如實在地圖上顯示巴士位置。我們能做的，是根據各站的到站時間，把巴士標示在路線的車站列表上、它應在的兩站之間。',
     'zh-Hans':
-      '香港的开放数据只提供逐站到站时间估算，并无实时车辆位置或路线图形，因此我们无法如实在地图上显示巴士位置。',
+      '香港的开放数据只提供逐站到站时间估算，并无实时车辆位置或路线图形，因此我们无法如实在地图上显示巴士位置。我们能做的，是根据各站的到站时间，把巴士标示在路线的车站列表上、它应在的两站之间。',
   },
   faqRemarksQ: {
     en: 'What do "Scheduled" and "Last bus" mean?',
     'zh-Hant': '「預定班次」和「尾班車」是什麼意思？',
     'zh-Hans': '“预定班次”和“尾班车”是什么意思？',
   },
+  // `RemarkTag` prints the operator's own wording verbatim for the active locale, and `classifyRemark`
+  // matches on stems — so the quoted pair is a *family* of wordings ("Scheduled departure", 原定班次,
+  // 未開出, 尾班車已開出) rather than two labels the app draws, and there is a third class, `info`, for
+  // anything unmatched. The answer now says so, and the zh drafts quote the stems the classifier actually
+  // matches rather than a phrasing the feeds rarely send.
   faqRemarksA: {
-    en: 'They are notes from the operator. "Scheduled" means the time is timetable-based (lower confidence than a live estimate); "Last bus" flags the final departure of the day.',
+    en: 'They are notes from the operator, shown in its own words, so the exact wording varies. Anything about a schedule — "Scheduled", say — means the time is timetable-based, i.e. lower confidence than a live estimate; a last-bus note flags the final departure of the day. Other notes are passed through as the operator wrote them.',
     'zh-Hant':
-      '這些是巴士公司的提示。「預定班次」表示該時間根據時間表（準確度低於即時估算）；「尾班車」標示當天最後一班車。',
+      '這些是巴士公司的提示，按對方原文顯示，因此措辭並不固定。凡提到「原定」「預定」或「未開出」，即表示該時間根據時間表（準確度低於即時估算）；「尾班車」則標示當天最後一班車。其他提示會照原文顯示。',
     'zh-Hans':
-      '这些是巴士公司的提示。“预定班次”表示该时间根据时间表（准确度低于实时估算）；“尾班车”标示当天最后一班车。',
+      '这些是巴士公司的提示，按对方原文显示，因此措辞并不固定。凡提到“原定”“预定”或“未开出”，即表示该时间根据时间表（准确度低于实时估算）；“尾班车”则标示当天最后一班车。其他提示会照原文显示。',
   },
   // Stop / route detail + favorites (Slice 2)
   routesAtStop: {

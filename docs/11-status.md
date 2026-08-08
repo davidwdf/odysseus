@@ -1,7 +1,314 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-08-05**. **Waves 0–5 and Wave 6's rows WP6-0 … WP6-5 are all merged to `main`**
+> Snapshot: **2026-08-08**, and the top of this doc is now an **owner review of `apps/web`** rather than a
+> work-package report — read [ADR-100](./08-decision-log.md#adr-100--the-apps-signature-motion-and-material-are-identity-platform-conventional-detail-is-idiom)
+> before touching either renderer.
+> **The line moved:** *the app's signature motion and material are **identity**; platform-conventional
+> detail is **idiom**.* ADR-075 put motion, material, gesture and shape on the idiom side wholesale and
+> ADR-094 sharpened it into *"the web curve is chosen, not inherited"*; every renderer difference that
+> followed was justified by pointing at those words — a flat tab bar, no cross-fade, a `<dialog>` for a
+> sheet, a stock Lucide bus, no odometer, no collapsing headers. The owner's verdict is that the result is
+> not a platform-idiomatic renderer, it is **less of the app**. ADR-100 amends ADR-075's table, ADR-094,
+> ADR-095 decision 8 and the `idiom` lists of five specs; ADR-075's thesis is untouched.
+> 🟠 **And the process finding matters more than the design one.** WP6-7b's parity audit told its verifiers
+> to reclassify a finding as *intended idiom* when the choice was **written down somewhere** — which made
+> documentation self-justifying, because most of it was written by the same agent sessions that made the
+> choices and was never reviewed by the owner. Re-read against ADR-100, **at least five findings that audit
+> refuted or reclassified are real**, three of them independently on the owner's own list. *"It is in an ADR"
+> is not "the owner chose it."*
+> **Landed so far against the review:**
+> · 🔴 **A fare bug on every platform.** `estimateElderlyFare` was `max($2, 20%)` — treating the $2 Scheme as
+>   a floor when it is a **cap** — so a $0 bus-bus-interchange section (49X through the Shing Mun Tunnels)
+>   estimated **$2.0**, *more than the adult fare beside it*. Now `min(adult, max($2, 20%))`, which is inert
+>   above $2 and binding below; three corpus rows, watched failing.
+> · **The floating glass tab bar**, value for value with `apps/mobile`: 54 px tall, radius 24, inset 12 on
+>   every side, `bg-surface/60` under `blur(13px) saturate(1.8)`, the light-only `ELEVATION.e3` plus both
+>   `GLASS_RIM` insets, and the 54 px circular search lens beside it. The Chromium-only SVG refraction is
+>   deliberately **not** ported — the frosted fallback is what most riders already see and it needs no
+>   raw-colour exemption. Two guards `apps/mobile` never got: no-`backdrop-filter` and
+>   `prefers-reduced-transparency` both go opaque.
+> · **A 150 ms linear tab cross-fade** — React Navigation's `FadeSpec` exactly. Driven by
+>   `document.startViewTransition` directly, because `react-router@7.18.2` only wires View Transitions inside
+>   a *data* router and migrating the shell for a motion feature would be the wrong trade; Firefox falls back
+>   to today's cut, and `prefers-reduced-motion` turns it off, which the RN version cannot.
+> · **The back control is a floating icon-only glass lens fixed to the top**, 48 px, the RN
+>   `GLASS_BUTTON_SIZE`. It used to be a labelled pill in flow that **scrolled away**, leaving a rider on a
+>   scrolled page no way back in an installed PWA. Its name is an `aria-label` now, so `shell.test.tsx` reads
+>   the accessible name rather than the rendered word — the better assertion of the two.
+> · **`env(safe-area-inset-top)` is read for the first time.** `index.html` has opted into
+>   `viewport-fit=cover` since WP6-0 and nothing on the web side ever compensated at the top; a control fixed
+>   there turned that open amber into a blocker.
+> **Route detail, first pass (part 3):** the app's own **`BusGlyph` double-decker** replaces Lucide's stock
+> `BusFront` — which was never a decision, `docs/09-theme.md` has named the glyph since Wave 1 — and it
+> **bobs**, on the RN token's own constants (±0.5 px at 550 ms, a ±6° lean at 2200 ms, a 6 % squash anchored
+> at the wheels), with `prefers-reduced-motion` honoured, which the RN token does not do. The **dividers are
+> gone** (the rail is the separator; `min-h-16` keeps the rhythm the border was standing in for), the
+> **anchored row is lighter** — it had `bg-transparent` and `bg-surface-2` as two equal-specificity
+> utilities, so the winner was whichever Tailwind emitted last and it was the transparent one — the
+> **direction glyph is `GitCompareArrows`** rather than `Repeat`, which was already the frequency icon on
+> the same screen, and the **saved star has its outline back** (two stars, a `--surface` one behind the
+> accent one, `z-10` so a passing bus cannot hide a rider's favourite). Measured on KMB 1A: 34 rows, **0
+> dividers**, exactly one anchored row at `--surface-2`, two star layers, three animations running at
+> 550/550/2200 ms.
+> **The collapsing header (part 4), on both screens at once** — which is the point of it: ADR-033 makes
+> `CollapsingHeader` one component with two thin wrappers *"so the two screens feel like one family"*, and
+> `apps/web` had neither. `shell/CollapsingHeader.tsx` is the DOM twin, with the RN parameters (route
+> `expH` 168 / label top 96, place 118 / 86, badge 1.45× centred, collapsed left edge 90). Route detail's
+> badge is the `RouteChip`, top-centre, over a from/to card — **origin muted above, destination below, two
+> nodes**, because the spec declares them separately and the RN card draws them that way; a first pass used
+> the composed `header.label` and turned 14 states red at index 1. Place detail's badge is the pin.
+> **Two differences from the RN version, both deliberate and both written down.** It is a **two-state CSS
+> transition** where the RN header scrubs against `scrollY` — an observer fires twice per journey where a
+> scroll handler runs per frame on the main thread, and CSS transitions honour `prefers-reduced-motion`
+> through one query. `animation-timeline: scroll()` is the true-scrub upgrade the day Firefox ships it;
+> today it would leave Firefox stuck expanded. And the label **swaps rather than cross-fading**, because a
+> cross-fade needs both in the tree and a projection reads text by presence — the FAQ's lesson, one
+> component over.
+> 🟠 **Two harness facts this row cost.** `IntersectionObserver` does not exist in jsdom, so the component
+> guards for it — and the guard is right on its own terms, since an environment without the API should get
+> the header expanded rather than no header. It also means **no suite can see the collapse at all**; both
+> states were verified in a browser and nowhere else. And the first `rootMargin: '-96px'` collapsed the
+> header immediately, because an element at y=0 is already outside a root whose top edge has been pushed
+> to 96 — the sentinel sits 96 px down the page now, with default margins.
+> **The arrival odometer (part 5), and the owner extended its scope**: the RN app animates its times in
+> exactly one place — `EtaTimes` on the route schematic — and `EtaBadge`, which Nearby, Favourites and
+> Place detail all draw, has never moved on either renderer. The instruction was that times should behave
+> the same way *wherever* they change, so `apps/web` animates both. **A deliberate divergence, recorded as
+> one**: `apps/mobile` is not being back-ported, since it retires at WP6-8.
+> The numbers are the RN component's — 260 ms, ease-in-out quad, a rise of `0.85em` (its `size * 0.85`
+> expressed relatively, so one CSS rule serves the card's `h2` figure and the schematic's `body` one) — and
+> so is the rule that **only the changed characters slide**: `"52 min"` → `"51 min"` moves the `2`→`1` and
+> leaves the `5` and the ` min` still. `prefers-reduced-motion` is honoured, which the RN odometer does not
+> do.
+> 🟠 **The load-bearing property is that at rest it is a single text node**, and it is load-bearing for a
+> reason specific to this repo: a projection reads text by presence, so a readout that kept both values
+> mounted would make every screen carrying an arrival project **two figures for one bus**, permanently, and
+> no state suite would catch it — they mount settled and never change a value. `test/slide-number.test.tsx`
+> is the only thing standing there, and it earned its place immediately: the first implementation drew a
+> third, invisible copy of the wider value as a sizer, and the test read the mid-flight readout as
+> `"5112 min"`. An inline grid sizes the box instead, so mid-flight is the irreducible two.
+> **The bottom sheet (part 6)** replaces both `<dialog>`s with one draggable container
+> ([ADR-103](./08-decision-log.md#adr-103--the-bottom-sheet-keeps-every-property-the-dialog-was-chosen-for)),
+> and the thing worth carrying forward is that **it is not a trade**: the container is still a `<dialog>`
+> opened with `showModal()`, just reshaped into a full-viewport transparent box with the panel docked to the
+> bottom edge, so the focus trap, `Escape` and inertness that ADR-095 decision 8 argued for all survive. The
+> backdrop objection is *answered* rather than suppressed — the dim is a real `<button>` sibling, which has
+> keyboard activation by construction. `apps/mobile`'s constants port value for value, the 320 px underlap
+> included.
+> 🔴 **One defect that only a browser could show, and it is a cascade rule worth knowing.** `.sheet-panel`
+> runs its entrance with `animation-fill-mode: both`, so the finished animation *keeps* applying
+> `transform: none` — and a filled animation **outranks inline style**. The exit wrote `style.transform` and
+> computed to the identity matrix: on a scrim tap or `Escape` the panel sat still for 220 ms and blinked out.
+> Only drag-to-dismiss animated, because `onPointerDown` already cancelled. One `dropEntrance()` from both
+> paths; the test asserts the mechanism, since jsdom runs no animations.
+> **The direction swap (part 6 too)** closes the last of Route detail's seven items
+> ([ADR-104](./08-decision-log.md#adr-104--a-url-change-is-not-an-excuse-for-no-motion)). The toggle stays a
+> **link** — a URL that names a direction is shareable, which was always the right call — and what was wrong
+> was treating a `:id` change as a reason for no animation. react-router keeps the screen mounted across it,
+> so ADR-046's three moves run unchanged: the old destination rises into the origin slot and shrinks, the old
+> origin slides out, the new destination rises in, 380 ms, with the glyph's 460 ms half-turn and the rows'
+> 26 ms cascade behind it.
+> 🟠 **Two things a browser found that no suite would have.** The cascade flag has to be **read once at
+> mount** (`useState(animateIn)`, the RN row's `useSharedValue` + empty-deps effect): adding an animation
+> class to a *mounted* element starts it, so the outbound rows blinked out and back in during the tick before
+> the inbound ones arrived. And reduced motion is switched off **in JavaScript** here rather than by the
+> media query — a swap puts four lines in the tree at once, so `animation: none` would stack them.
+> 🔴 **`check-no-derivation` was blind inside every template literal**
+> ([ADR-105](./08-decision-log.md#adr-105--check-no-derivation-was-blind-inside-every-template-literal)) —
+> `strip` replaced `` `…` `` wholesale, interpolations and all, so any expression inside `${…}` was invisible
+> to all six rules. Found by writing one and noticing the allowed-site count had not moved. Fixing it
+> surfaced **two** live sites, one of them in the bottom sheet written the same afternoon; both are geometry
+> and are allowlisted by name. Fourth in the family of *"a check that quietly stops seeing things and goes on
+> printing a success line"*.
+> **Place detail's scroll-spy (part 7) closes the review's last item**
+> ([ADR-106](./08-decision-log.md#adr-106--the-scroll-spys-line-is-the-maps-own-edge-and-fixed-chrome-outranks-sticky-content)),
+> and the tail padding the owner asked for was sitting on top of two defects rather than one.
+> 🔴 **Tapping any kerb lit the one above it.** The spy tested `STICKY_TOP + MAP_HEIGHT` (206) while the snap
+> point was a hard-coded `scroll-mt-[214px]`, so a section scrolled to by a tap landed *below* the line the
+> spy tested. The line is the **card's own measured bottom edge** now — the stronger version of "make the two
+> agree", since there is no second expression that can drift and the line travels with the card while it is
+> still on its way to dock.
+> 🔴 **The map painted over the collapsed header and hid its label.** Both were `z-10` and the card is later
+> in the document. There is a stated stacking order now — sticky content 10, fixed chrome 20, the floating
+> back button 30 — and the map docks *below* the 60 px band rather than four pixels inside it.
+> 🟢 **The tail** is `max(24px, calc(100dvh − snap − lastGroupHeight))`, the RN expression in CSS so `100dvh`
+> tracks a mobile URL bar. Without it the last dot is simply unreachable on a short place.
+> 🟠 **None of the three was reachable by any suite**: a snap point is not a word, so `conformStates` is blind
+> to it (ADR-098's blind spot, one screen over); jsdom lays nothing out; and **jsdom's CSSOM rejects both
+> expressions outright**, reporting the *previously set* value — so a test reading `style.paddingBottom`
+> would have seen the flat tail on a grouped place and passed a screen with no tail room at all. `tailRoom()`
+> is exported so the expression itself can be asserted.
+> ⚪ **A harness fact that cost time twice:** a **hidden** tab produces no frames, so it fires no `scroll`
+> events, delivers no `IntersectionObserver` callbacks, and freezes CSS transitions mid-flight — screenshots
+> of it are stale. Dispatching `new Event('scroll')` and reading rects with transitions suppressed is how
+> these numbers were measured.
+>
+> **The bouncing bus (part 8)** — the owner reported the tokens looking misaligned
+> ([ADR-107](./08-decision-log.md#adr-107--a-bounce-has-to-be-centred-on-the-thing-it-bounces-on)), and the
+> interesting part is that **everything static measured exact**: every disc centre on its node to 0.0 px in
+> both axes, the glyph's ink on the disc centre to 0.03 px, no drift across 50 s of live refetches. The
+> defect was in the motion. Sweeping the animation phase by phase through `getScreenCTM()`, the ink centre
+> travelled **−0.47 px to +1.00 px**, mean **+0.27 px** — a whole pixel low at every landing and never a
+> whole pixel high.
+> 🔴 **The squash is not a pure squeeze.** Its origin is `center bottom` of a box 1.25 px *taller* than the
+> glyph's ink, so squeezing about that point also translates the glyph down — and it shares the bob's clock,
+> in phase, so on the downstroke the two add. Anchoring at the true wheel line does not help: a squash about
+> any point below the centre moves the centre down, which is what squash-and-stretch is. The bob carries the
+> correction instead (−0.75 → +0.25), which keeps the travel and the squeeze and re-centres the swing:
+> **−0.72 → +0.75, mean 0.015 px.** The bob also moved outside the rock, so the translation is no longer
+> itself rotated — a ±0.11 px sideways wobble on something that should only move vertically.
+> ⚠️ **The lesson is bigger than one glyph: copying the constants verbatim is not reproducing the motion.**
+> The two renderers anchor the same squash to boxes of different sizes around glyphs of different sizes, so
+> the amplitude transfers and *where the motion is centred* has to be re-derived. That is ADR-093's static
+> lesson — a 52 px rail and a 44 px gutter reaching the same answer from different numbers — applied to
+> motion for the first time. `apps/mobile` has the same droop and is not being back-ported, per ADR-100.
+> ⚪ **The test recomputes the invariant rather than matching strings**: jsdom runs no animations, so it reads
+> the glyph's rects and the keyframes, works out the squash's displacement and asserts the swing's midpoint
+> is the node. It scores the old code at 0.237 px against the browser's 0.27 px — agreement to 0.03 px.
+>
+> 🔴 **The buses really were off their nodes, and part 8 fixed the wrong thing first**
+> ([ADR-108](./08-decision-log.md#adr-108--the-rail-overlays-re-measure-never-attached-and-a-hidden-tab-hid-it)).
+> The owner sent a screenshot of tokens sitting well below their nodes and confirmed `apps/mobile` renders
+> the same route correctly. The sub-pixel bounce asymmetry of part 8 was real but was **not** what they were
+> seeing.
+> The overlay's `ResizeObserver` had two faults, and the second is the one that mattered: it watched only the
+> **list container**, so it was blind to a reflow that leaves the list the same height (one stop gains an
+> arrivals line as another loses one) — and **it never attached at all**, because its only dependency was the
+> stable `measure` and on first mount the query is loading, so `list.current` was `null` and it returned
+> early with nothing left to make it run again. After the initial layout-effect measurement, *nothing
+> re-measured for the life of the screen*. `stopCount` in the deps is what fixes that; every row is observed
+> now, on its `border-box`, which is the shape `apps/mobile` has always had via per-row `onLayout`.
+> ⚠️ **The tooling disguised it, and this is the part to remember.** The automation tab is always
+> `visibilityState: "hidden"` and a hidden tab produces no frames, so a `ResizeObserver` there never delivers
+> a callback — *not even its initial one*. "The observer never fires" and "there is no observer" look
+> identical, and the first was assumed. Three browser measurements had reported the tokens perfectly aligned
+> because each was taken moments after load, before any reflow. **A test found it**; the browser only
+> confirmed it after patching `window.ResizeObserver` and forcing a *client-side* remount so the patch
+> survived.
+>
+> **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
+> Search's results-list scroll offset, positioning the rail tokens in pure CSS so the measurement can be
+> deleted outright, and the RN `apps/mobile` back-port question — which ADR-100's odometer note answers with
+> *no*, since that renderer retires at WP6-8.
+>
+> Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
+> **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no
+> destination carries an `owner`, and `screenFor` is an exhaustive switch whose default throws, so a
+> destination added without a screen is a *typecheck* failure rather than a blank route.
+> **WP6-8's stated precondition is met.** Two ADRs:
+> [ADR-096](./08-decision-log.md#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them),
+> [ADR-097](./08-decision-log.md#adr-097--the-conformance-walker-sees-presence-not-visibility--and-an-aria-state-it-cannot-see-is-one-a-rider-may-not-be-getting-either).
+> **`proposals/04` calls this row *"mostly chrome and prose"* and *"Cheap; last"*, and the cheap part was
+> wrong for a reason about the format rather than the screens.** These are the only surfaces in the app with
+> no `DataSource` call, and the spec format requires all five canonical states — which were designed as
+> branches over a fetch. The honest answer inverts the `slots`/`shows` split: **the whole screen goes in
+> `slots`, so `shows: []` declares *everything***, and a renderer that drew a heading and filled its list in
+> an effect diverges at index 0 rather than passing. `route-detail.spec.json` records the trap this inverts —
+> there, `shows: []` and "renders nothing at all" are indistinguishable. Here they are opposites. About and
+> FAQ therefore project the **whole page in `loading`**, and both drivers mount with **no query client and no
+> `DataSource` in scope**, so a fetch added to either screen breaks the harness rather than weakening the
+> claim.
+> **A preference screen's content is a choice, and the choice is a rule.** 35 decisions across three files,
+> every one a private `const`, two of them already duplicated in the shell scaffolding this row deletes. Two
+> are traps: a language is selected by the **override** and never by the resolved locale (both hooks are in
+> scope four lines apart, either type-checks, and reading the wrong one lights *two* rows for a rider on an
+> English device who has never touched the picker), and an appearance is selected by the **raw** preference
+> and never by `resolveMode`'s answer (which looks right on every machine whose theme is light). Both are
+> corpus rows now.
+> 🔴 **And the walker's blind spot arrived from the other side, which found a live accessibility defect on
+> the shipping PWA.** ADR-093 found the walker could not see a *graphic*; this row found it **sees text a
+> rider cannot** — `createTreeWalker` consults the DOM and never CSS, so a closed `<details>`, a `hidden`
+> node and a `display: none` node are all fully visible to it. That rules out `<details>` for the FAQ (the
+> collapsed state would project seven answers), and it caught a `›` character diverging from the RN row's
+> SVG. The mirror of it is the defect: **`react-native-web@0.21` forwards `aria-*` and drops
+> `accessibilityState` entirely**, so six controls — both Settings pickers, the search chips, the search mode
+> segment, the save star and the FAQ disclosure — announced **no state at all** to a screen reader on the
+> Expo PWA. Found by writing an assertion that expected to check something and found nothing; confirmed by a
+> probe; measured before and after in a live browser (0 `aria-pressed` elements, then 7 with exactly 2 lit).
+> 🔴 **The prose audit found worse than the row's own acceptance.** `faqOfflineA` understated offline by two
+> ADRs and said live times come "straight from the operators" (they go through our Worker, coalesced) — but
+> **`faqMergeA` described ADR-022's cross-operator *pair* merge**, a rule ADR-042 replaced and ADR-072 partly
+> reversed, so every clause was wrong and its *question* was widened with it. `faqTimingsA` said everything
+> is "shown as published" while the app draws concession fares it works out itself and marks with a `~` —
+> the one case where the FAQ contradicted an on-screen honesty label. `faqFreshnessA` promised a grey-out
+> that is an opacity. `faqMapA` gains one sentence about the schematic rather than a rewrite. `faqCoverageA`
+> audits clean and is untouched.
+> 🔴 **Attribution turned out to be the biggest thing on the About screen, and three of six sources were
+> missing** — each one closing a decision taken, written down and never actioned: the **basemap** (ADR-049
+> decision 5 ends *"This extends the ADR-038 sources list"* and it never did), **green minibus** (a shipped
+> operator that `faqCoverageA` names, so the app's own coverage answer contradicted its own attribution
+> page), and the **consolidated crawl** every route, stop and fare is normalized from (ADR-021's decision,
+> ADR-038's follow-up). There are two licence rows now, not one: the basemap ships under different terms and
+> a single sentence about "the Government's terms" was standing for both.
+> 🟠 **Two gates were found looking at nothing while this row was built, and both are closed.**
+> `packages/core/src/favourites.ts` was never added to `vitest.config.ts`'s hand-spelled coverage `include`,
+> so the module holding the rule a rider's curated list survives on sat **outside** the 100 % branch
+> threshold for a whole wave while the threshold reported green — adding it revealed **eight untested
+> branches**, now covered. And `apps/web/tsconfig.json` included `test/**/*.ts` but not `test/**/*.tsx`, so
+> **seven conformance suites were invisible to `pnpm typecheck`**; two real type errors surfaced at once.
+> **Eleven injections, and two of them taught the usual lesson before they taught anything else:** one was
+> semantically equivalent to the code it replaced (so it proved nothing), and one landed in a **doc comment**
+> that quoted the line it meant to break. Re-aimed, all bite — the strongest being the `<details>` shape
+> (mount every answer, hide with CSS: **7 tests red**) and reverting one `aria-pressed` (2 red).
+> **Verified in a browser on both renderers** (2026-08-07): `apps/web` Settings with *Automatic* and *Auto*
+> lit, then the whole UI in 繁體中文 with the language list still reading **English · 繁體中文 · 简体中文** —
+> the endonym rule on screen; the FAQ collapsed with **zero answers in the DOM**, then two open at once; About
+> with six sources and **eight anchors, every one `target="_blank" rel="noopener noreferrer"`**, terms
+> resolving to `data.gov.hk/tc/…` under a Chinese UI. And the Expo PWA's About drawing the same six sources.
+> Screenshots: `.context/wave6-screenshots/17`–`20`.
+> **WP6-7b — the parity audit — is DONE, and both blockers it found were closed the same day.** `apps/web`
+> can now create and delete favourites (ADR-098) and renders in Inter (ADR-099), which were the two things
+> standing between it and WP6-8. Eight auditors
+> walked it screen by screen against the `apps/mobile` it replaces; a refutation pass judged 25 of their
+> claims (**9 refuted as noise, 6 reclassified as intended idiom, 10 confirmed**) and 15 were left unverified
+> when the run hit its session limit — those were checked by hand instead. The full list with owners is the
+> new **"WP6-8 blockers"** section at the top of `docs/07`.
+> ✅ **THE BLOCKER IS CLOSED (2026-08-08): `apps/web` can create and delete a favourite.** Both RN
+> affordances are ported — the route schematic's **stop action sheet** (a `<dialog>`, the twin of the RN
+> `BottomSheet`: *Add/Remove favourite* and *View stop*) and Place detail's **saved-state star**, a sibling of
+> the row's button per ADR-024. The toggle writes under the **payload's** route id rather than the URL
+> parameter, so its key can never differ from the one `routeDetailView` computed `saved` from. Nine new
+> tests, each watched failing on an injected revert; the round trip walked in a browser on live data
+> (KMB 1A → 秀安樓 → 加入收藏 → the Favourites tab draws the card → the place shows one `已收藏` star,
+> 27 interactive elements, 0 nested). Screenshots `.context/wave6-screenshots/21`–`22`. **One `apps/web`
+> blocker remains: Inter.**
+> 🔴 **What the blocker was, kept because of what it says about the gates: a rider could not add or remove a
+> favourite on `apps/web`. At all.** Four auditors
+> found it independently and it was confirmed by hand: `toggleFavoriteRoute` is defined in the web store and
+> has **zero callers**. The two affordances that write it — the route schematic's stop action sheet (ADR-032
+> made it the app's *only* save affordance) and Place detail's `SaveStar` — were never ported. So the
+> Favourites tab renders a curated list perfectly and offers no way to change it, and WP6-8 would strand
+> every one. **Nothing caught it**: `favourites.spec.json` describes what a card *shows* and both renderers
+> satisfy it completely; the format has no vocabulary for *how the content got there*, and `conformStates`
+> asserts text and nesting but never interaction destinations — so `route-detail.spec.json`'s
+> non-optional `stopName` interaction going somewhere else is invisible. **This is the strongest argument yet
+> for WP6-9: a second renderer catches what a spec cannot.**
+> ✅ **The second blocker is closed too: `apps/web` loads Inter** (ADR-099) — one **48 KB** variable woff2,
+> latin subset, self-hosted and precached, aliased by four `@font-face` rules whose names are the *preset's*,
+> so native satisfies the shared declaration with four static cuts and the web with one file. ADR-019 stands:
+> Chinese still renders in the platform face. What let it survive a parity review is the lesson — `index.css`
+> justified its system stack with a comment claiming it matched the RN app's, and every clause was wrong.
+> **Both `apps/web` blockers are now closed; WP6-8 is unblocked.** Then three ambers: no `env(safe-area-inset-top)` anywhere despite `viewport-fit=cover` (headers under
+> the iOS status bar in an installed PWA), a deep link that will 404 on a first visit until the host has an
+> SPA fallback (a **WP0-5 precondition**, not a code defect), and Place detail's last kerb which can never be
+> highlighted. Plus four `defect-both` items that retiring `apps/mobile` neither causes nor fixes.
+> ⚠️ **And the audit corrected WP6-7's own accessibility fix within the day.** Replacing `accessibilityState`
+> with `aria-*` was **half right**: RN 0.85 declares fourteen `aria-*` props and **`aria-pressed` is not among
+> them**, so on iOS/Android it is dropped exactly the way `accessibilityState` is dropped on the web — *the
+> same defect, one platform over, introduced by the fix for it*, and type-checking in both directions. The
+> five toggle sites carry **both** props now.
+> 🟡 **A process note, second time now:** 48 agents hit the session limit at the verification stage and 15
+> claims came back unjudged. `docs/11`'s own advice is to size a workflow from its widest stage; the widest
+> stage here was the fan-out over *findings*, whose count is unknown when the run starts. Cap it.
+>
+> Previously: **the parity audit (WP6-7b), slipped in ahead of WP6-8 by request** — walk `apps/web` screen by
+> screen against the `apps/mobile` it replaces and separate **identity gaps** (something a spec covers and
+> web misses) from **capability gaps** (a rider can do something on RN they cannot on web) from **intended
+> idiom** (ADR-075 makes that free to differ). The `accessibilityState` finding is the template: it was
+> invisible to typecheck, lint, every gate and every existing test.
+>
+> Previously — snapshot **2026-08-05**. **Waves 0–5 and Wave 6's rows WP6-0 … WP6-5 are all merged to `main`**
 > (PRs #11–**#24**; `main` is `4ea563f`), which closed Place detail, Favourites and Search in one PR
 > ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code),
 > [ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers),
@@ -1297,9 +1604,12 @@ than any in its own row.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**1 255 tests** on `design-language-reuse-v2`: core 857 · edge 149 · api-client 71 ·
-   **ui-spec 30** · mobile 65 · web 83; corpus 97 groups / 818 cases, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has
-   1 161. WP6-1's app totals went *down* by two and that was the intended direction — the bespoke "+N more
+3. `pnpm test` (**1 563 tests** after WP6-7: core 954 · web 192 · mobile 167 · edge 149 · api-client 71 ·
+   **ui-spec 30**; corpus **15** files / **110** groups / **927** cases / 5 `knownDefect`, plus the whole
+   `pnpm boundaries` chain. **Measured on this branch, not quoted** — the figures this section carried before
+   WP6-7 said 1 255 and were stale by 212 against `main` at `378a43f`, which had 1 467. `pnpm lint` is green
+   with 5 pre-existing warnings; `pnpm typecheck` covers `apps/web`'s `.test.tsx` suites for the first time.
+   Historic: `main` at `0c97e17` had 1 161. WP6-1's app totals went *down* by two and that was the intended direction — the bespoke "+N more
    with nowhere to tap" case in each suite became `content-not-affordance` running over **every** corpus
    case) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with

@@ -6,21 +6,578 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Inter, the brand typeface (ADR-017) — **absent from this app until WP6-7b's parity audit found it.**
+
+  What stood here was a hand-written system stack with a comment saying it was *"the same stack the RN app
+  resolves to on web, so a glyph difference is not mistaken for a rendering difference"*. That was a
+  rationalisation and it was false: `apps/mobile` loads four Inter cuts through `expo-font`, which on web
+  registers real `FontFace`s — so the Expo PWA has always rendered in Inter and this app never did. The two
+  renderers were being compared in different typefaces, and the comment said the opposite.
+
+  ## Four families, one file
+
+  `packages/ui`'s preset names the families `Inter_400Regular` … `Inter_700Bold`, because that is what
+  `expo-font` registers on native and the preset is **one declaration for both platforms**. So the names here
+  are not ours to choose — they are the contract, and four `@font-face` rules is what satisfying it looks
+  like on a platform that has variable fonts. All four point at the **same** 48 KB variable file and declare
+  the full `100 900` range, so the browser downloads it once and renders whatever weight the utility asks
+  for. Native needs four static cuts because native has no variable-font pipeline here; the web needs one
+  file. Same declaration, two honest implementations — which is ADR-075's whole line, arriving somewhere
+  nobody expected it.
+
+  ## Why self-hosted rather than a CDN link
+
+  ADR-058 makes this app offline-first and `scripts/pwa`'s precache globs already include `woff2`, so a font
+  emitted into `dist/` is precached with everything else and the first offline launch has it. A Google Fonts
+  `<link>` would be a third-party request that fails exactly when the rest of the app is working, and it
+  would leak a request per rider to a domain the About screen does not credit.
+
+  ## Latin only, deliberately
+
+  This is the `latin` subset. ADR-019 declines to bundle a CJK webfont for size — a Noto Sans HK face is
+  megabytes — and that decision is untouched: Chinese still renders in the platform face, which is what the
+  fallback chain after each cut is for. So a Chinese UI looks exactly as it did, and an English one gets the
+  typeface the design system has specified since Wave 1.
+*/
+@font-face {
+  font-family: "Inter_400Regular";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: "Inter_500Medium";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: "Inter_600SemiBold";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: "Inter_700Bold";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
 @layer base {
   :root {
-    /* The same system stack the RN app resolves to on web, so a glyph difference is not mistaken for
-       a rendering difference while the two are being compared. */
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang HK",
-      "Noto Sans CJK HK", "Microsoft JhengHei", sans-serif;
     -webkit-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
     /* `bg-bg` / `text-text` as the document background rather than only on the app root, so an
-       over-scroll does not reveal white in dark mode. */
-    @apply bg-bg text-text;
+       over-scroll does not reveal white in dark mode.
+
+       `font-sans` rather than a stack written out here: it reads `packages/ui`'s preset, so the fallback
+       chain after Inter — Noto Sans HK, PingFang HK, system-ui — is declared once for both renderers rather
+       than twice with a comment claiming they agree. The stack this replaced did not even contain Inter. */
+    @apply bg-bg font-sans text-text;
+  }
+}
+
+/*
+  The glass material — the DOM half of `apps/mobile/components/GlassView.tsx`.
+
+  A class rather than Tailwind utilities because of the two `@supports`/`@media` guards below, which have
+  no utility form: a pane whose tint is 60% is unreadable the moment the blur behind it does not render,
+  and both conditions are real (Firefox before 103, `backdrop-filter` disabled by policy, and any rider who
+  has asked their OS to reduce transparency). `apps/mobile` has neither guard; the DOM makes them cheap and
+  they are legibility rather than taste.
+
+  `saturate` before `blur` matches the RN fallback's order. The Chromium-only SVG refraction the RN
+  component layers on top is deliberately not ported — see `shell/TabBar.tsx`.
+*/
+.glass-pane {
+  background-color: rgb(var(--surface) / 0.6);
+  -webkit-backdrop-filter: blur(13px) saturate(1.8);
+  backdrop-filter: blur(13px) saturate(1.8);
+}
+
+/*
+  Tab → tab: a 150 ms linear cross-fade, which is React Navigation's `FadeSpec` — the exact spec the RN
+  shell uses (`apps/mobile/app/(tabs)/_layout.tsx`) and the one ADR-043 left standing when it reverted the
+  JS stack.
+
+  The default root view-transition IS a cross-fade, so only the timing is set here. `shell/TabBar.tsx`
+  starts it; browsers without `startViewTransition` never run these rules and navigate as they did before.
+
+  The reduced-motion query is the thing the RN version cannot do: React Navigation collapses its spec to
+  `none` only if the app asks, and this asks by default.
+*/
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+  animation-timing-function: linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+/*
+  The top of a pushed screen, where the floating back lens sits.
+
+  Declared once because five screens need the identical two numbers and a class is the only way to keep
+  `env()` in them — Tailwind's arbitrary values are resolved at build time and `env()` cannot be.
+
+  · `padding-top` clears the iOS status bar. `index.html` opts into `viewport-fit=cover` and a translucent
+    status bar, and until the back control was fixed **nothing on the web side read this inset at all**.
+  · `padding-left` clears the lens: 12 (its inset) + 48 (`GLASS_BUTTON_SIZE`) + 12 (a gap) = 72. Written as
+    one number rather than composed from three, because the lens's own geometry lives in `BackButton.tsx`
+    and a second copy of it here would be the kind of duplication this repo keeps closing.
+*/
+.pushed-header {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
+  padding-left: 72px;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-pane {
+    background-color: rgb(var(--surface));
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-pane {
+    background-color: rgb(var(--surface));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/*
+  The bus token's idle motion — the DOM twin of `apps/mobile/components/BusToken.tsx`.
+
+  The disc stays put; only the glyph moves, exactly as on native. Three nested elements because three
+  transforms run on three different clocks and CSS gives one `transform` per element:
+
+  · `.bus-bob`    a 1 px vertical travel, one leg 550 ms — see the centring note below for why its two
+                  ends are not ±0.5
+  · `.bus-rock`   ±6° lean, one leg 2200 ms — ~4× slower, so it sways rather than wags
+  · `.bus-squash` a 6% vertical squeeze anchored at the wheels (`transform-origin: center bottom`) with a
+                  touch of widen, on the bob's own clock, so a 1 px bounce still reads as lively
+
+  `alternate` + `infinite` is reanimated's `withRepeat(…, -1, true)`, and the numbers are the RN constants
+  (`BOB_PX`, `TILT_DEG`, `SQUASH`, `BOB_MS`, `ROCK_MS`) rather than a curve chosen here. The easing is
+  ease-in-out **sine** — `cubic-bezier(.37,0,.63,1)` — not the `ease-in-out` keyword, which is a different
+  curve: velocity has to ease to zero at each turning point or a bounce reads as a mechanical shuttle.
+
+  🔴 **The bounce has to be centred on the node, and copying `BOB_PX` verbatim did not do that.** The owner
+  reported the bouncing buses looking misaligned; measured in a browser, the glyph's ink centre travelled
+  from −0.47 px to **+1.00 px** against the disc centre, a mean of +0.27 px. Every landing put the bus a
+  whole pixel low and no part of the cycle put it a whole pixel high.
+
+  The reason is that the squash is not a pure squeeze. Its origin is `center bottom` of a box **1.25 px
+  taller than the glyph's ink** — the glyph is drawn to y 22.1 of a 24 viewBox, so the box bottom is below
+  the wheels — so squeezing about that point also *translates* the ink downward, by 0.5 px at full squash.
+  It runs on the bob's own clock and in phase with it, so on the downstroke the two **add**: −0.5 up, but
+  +0.5 +0.5 = +1.0 down. Anchoring at the true wheel line does not fix it either; a squash about any point
+  below the centre moves the centre down, which is what squash-and-stretch *is*.
+
+  So the bob carries the correction instead: its two ends are offset by half the squash's contribution, so
+  bob-plus-squash swings a symmetric ±0.75 px about the node. Same 1.5 px of travel, same squeeze-on-landing,
+  mean zero.
+
+  🟡 **Two deliberate divergences from `apps/mobile`, both recorded rather than quietly matched.**
+  `BOB_PX` there is a flat ±0.5 with the same squash, so the native token has the identical quarter-pixel
+  droop; it is not back-ported because that renderer retires at WP6-8 — the same call ADR-100 made for the
+  odometer. And reduced motion is honoured here and is not on native, while `route-detail.spec.json` claims
+  everything that moves on this screen respects the setting — true of this renderer, false of the other.
+*/
+@keyframes bus-bob {
+  from {
+    transform: translateY(-0.75px);
+  }
+  to {
+    transform: translateY(0.25px);
+  }
+}
+@keyframes bus-rock {
+  from {
+    transform: rotate(-6deg);
+  }
+  to {
+    transform: rotate(6deg);
+  }
+}
+@keyframes bus-squash {
+  from {
+    transform: scale(1, 1);
+  }
+  to {
+    transform: scale(1.03, 0.94);
+  }
+}
+
+.bus-rock {
+  animation: bus-rock 2200ms cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+.bus-bob {
+  animation: bus-bob 550ms cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+.bus-squash {
+  transform-origin: center bottom;
+  animation: bus-squash 550ms cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bus-rock,
+  .bus-bob,
+  .bus-squash {
+    animation: none;
+  }
+}
+
+/*
+  The collapsing header's two states — see `shell/CollapsingHeader.tsx` for why this is a transition where
+  `apps/mobile` scrubs.
+
+  Every value here is the RN component's: the badge scales 1.45 → 1 and travels from the centre to a left
+  edge at 90 px, its centre sitting at `insetTop + 42`; the expanded label is centred at `--ch-label-top`
+  and cross-fades into a small line beside the badge; the glass bar fades in behind them. 200 ms
+  ease-out is the one number chosen here rather than inherited — the RN header has no duration at all,
+  because a scrub does not need one.
+
+  The collapsed bar starts at 80 px so it clears the floating back lens (12 + 48 = 60) with room, which is
+  `PILL_LEFT` on the RN side.
+*/
+.collapsing-header {
+  pointer-events: none;
+  height: var(--ch-height);
+  transition: height 200ms ease-out;
+}
+.collapsing-header > * {
+  pointer-events: auto;
+}
+
+.ch-pill {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border-bottom: 1px solid rgb(var(--border));
+  transition: opacity 200ms ease-out;
+}
+.collapsing-header[data-collapsed="true"] {
+  height: calc(env(safe-area-inset-top, 0px) + 60px);
+}
+.collapsing-header[data-collapsed="true"] .ch-pill {
+  opacity: 1;
+}
+
+.ch-badge {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 42px);
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1.45);
+  transition:
+    transform 200ms ease-out,
+    top 200ms ease-out,
+    left 200ms ease-out;
+}
+.collapsing-header[data-collapsed="true"] .ch-badge {
+  top: calc(env(safe-area-inset-top, 0px) + 30px);
+  left: 90px;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/*
+  A flex column rather than a block with `nowrap`, which was the first version and clipped the route's
+  origin line out of existence: the from/to card is two stacked nodes, and `white-space: nowrap` plus
+  `overflow: hidden` on their container collapses them to whichever one fits. Truncation belongs on the
+  individual lines, where each screen already puts it.
+*/
+.ch-label {
+  position: absolute;
+  top: var(--ch-label-top);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: var(--ch-label-size);
+  line-height: 1.25;
+  font-weight: 700;
+  color: rgb(var(--text));
+  min-width: 0;
+  transition:
+    top 200ms ease-out,
+    left 200ms ease-out,
+    right 200ms ease-out,
+    font-size 200ms ease-out;
+}
+.collapsing-header[data-collapsed="true"] .ch-label {
+  top: calc(env(safe-area-inset-top, 0px) + 30px);
+  left: 118px;
+  right: 60px;
+  align-items: flex-start;
+  transform: translateY(-50%);
+  font-size: var(--ch-label-size-collapsed);
+}
+
+.ch-trailing {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 30px);
+  right: 12px;
+  transform: translateY(-50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-pill,
+  .ch-badge,
+  .ch-label {
+    transition: none;
+  }
+}
+
+/*
+  The direction flip (ADR-046, identity under ADR-100) — three moves, 380 ms, `Easing.inOut(Easing.quad)`.
+
+  The geometry comes in as custom properties from `JourneyLines`, so the slot heights are declared once
+  beside the markup that lays them out and this file only says how they move. `both` fill on all three: the
+  outgoing lines must hold their end state for the frame between the animation finishing and React tearing
+  the layers down, or they flash back to full opacity on their way out.
+
+  There is no reduced-motion rule here on purpose. Killing the keyframes would leave four lines stacked at
+  full opacity for 380 ms, so `JourneyLines` never enters the swap state at all — the one animation in this
+  file whose off switch is in JavaScript, and the component says why.
+*/
+@keyframes jl-origin-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--jl-origin-lh) * -1));
+  }
+}
+/* The old destination becoming the new origin: up a slot, down to origin size, out to muted. */
+@keyframes jl-rise {
+  from {
+    transform: translateY(var(--jl-dest-top)) scale(1);
+    color: rgb(var(--text));
+  }
+  to {
+    transform: translateY(0) scale(var(--jl-shrink));
+    color: rgb(var(--text-muted));
+  }
+}
+/* Its arrow hands over rather than shrinking into a slot that has none. */
+@keyframes jl-glyph-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes jl-dest-in {
+  0% {
+    opacity: 0;
+    transform: translateY(var(--jl-dest-lh));
+  }
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.jl-origin-out,
+.jl-rise,
+.jl-glyph-out,
+.jl-dest-in {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  animation-fill-mode: both;
+}
+.jl-origin-out {
+  animation-name: jl-origin-out;
+}
+.jl-rise {
+  animation-name: jl-rise;
+}
+.jl-glyph-out {
+  animation-name: jl-glyph-out;
+}
+.jl-dest-in {
+  animation-name: jl-dest-in;
+}
+
+/*
+  The flip cascade: on a direction change the reverse rows mount fresh and each fades + rises into place a
+  beat after the one above, so the swap reads as the list rebuilding even when the reverse payload was
+  already cached. `apps/mobile` runs the identical 300 ms / 10 px / 26 ms-per-row entrance.
+
+  Here the reduced-motion rule IS enough, because the resting markup is already correct: with no animation
+  the row simply renders where it belongs.
+*/
+@keyframes row-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.row-rise {
+  animation: row-rise 300ms cubic-bezier(0.5, 1, 0.89, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-rise,
+  .swap-icon {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* The reverse toggle's half-turn — `Easing.out(Easing.cubic)`, 460 ms, as on the RN glyph. */
+.swap-icon {
+  transition: transform 460ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/*
+  The arrival odometer — `SlideNumber`'s two halves, and `apps/mobile/components/EtaTimes.tsx`'s numbers.
+
+  260 ms, and a rise of `0.85em`, which is the RN `size * 0.85` expressed relatively so one rule serves the
+  card's `h2` figure and the schematic's `body` one without either passing a pixel value down. The old value
+  rises out as the new rises in, both fading, so the two cross at the halfway point like an odometer drum.
+
+  `ease-in-out` quad is `cubic-bezier(.45,0,.55,1)` — the RN `Easing.inOut(Easing.quad)`.
+*/
+@keyframes odo-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.85em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes odo-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.85em);
+  }
+}
+
+/*
+  Both values occupy one grid cell, so the box is as wide as the wider of them and neither clips — which is
+  what a third, invisible "sizer" copy used to do, at the cost of a third copy of the text in the tree.
+*/
+.odo-box {
+  display: inline-grid;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+.odo-box > * {
+  grid-area: 1 / 1;
+}
+
+.odo-in {
+  animation: odo-in 260ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+.odo-out {
+  animation: odo-out 260ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-in {
+    animation: none;
+  }
+  /* The outgoing value is hidden outright rather than left at rest on top of the incoming one — with no
+     animation both would occupy the same box and the readout would render as two values overprinted. */
+  .odo-out {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/*
+  The bottom sheet's entrance — `apps/mobile/components/BottomSheet.tsx`'s two-stage spring, as keyframes.
+
+  330 ms out to 7 px past rest, then 180 ms back to it. A **constant** overshoot rather than an easing curve
+  with overshoot built in (`Easing.back`), which is what the RN sheet does and what keeps a tall sheet and a
+  short one feeling the same: a proportional overshoot makes a 600 px sheet leap and a 200 px one twitch.
+
+  330 / 510 = 64.7 %, which is where the two stages meet.
+*/
+@keyframes sheet-in {
+  0% {
+    transform: translate3d(0, 100%, 0);
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  64.7% {
+    transform: translate3d(0, -7px, 0);
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sheet-panel {
+  animation: sheet-in 510ms both;
+}
+.sheet-scrim {
+  animation: scrim-in 220ms linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel,
+  .sheet-scrim {
+    animation: none;
   }
 }
 

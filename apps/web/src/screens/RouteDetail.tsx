@@ -8,27 +8,22 @@ import {
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import {
-  ArrowDown,
-  ClockFading,
-  CreditCard,
-  type LucideIcon,
-  MapPin,
-  Repeat,
-  RotateCw,
-  Star,
-} from 'lucide-react'
+import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat, Star } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
+import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
+import { JourneyLines } from '../components/JourneyLines'
 import { RailBusToken } from '../components/RailBusToken'
 import { RouteChip } from '../components/RouteChip'
 import { RouteFactSheet } from '../components/RouteFactSheet'
 import { RouteStopRow } from '../components/RouteStopRow'
+import { RouteStopSheet } from '../components/RouteStopSheet'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
+import { CollapsingHeader } from '../shell/CollapsingHeader'
 
 /**
  * Route detail, rendered by React DOM from the identical kernel function the React Native screen uses
@@ -41,21 +36,21 @@ import { BackButton } from '../shell/BackButton'
  * `test/route-detail-states.test.tsx` drives every projected one — as does
  * `apps/mobile/test/route-detail-states.test.tsx`, from the same file and the same corpus fixtures.
  *
- * ## Four places this deliberately differs from the RN screen, all of them declared `idiom`
+ * ## Where this differs from the RN screen — a much shorter list since ADR-100
  *
- *  · **The header is in the document flow, first, and does not collapse.** The RN one floats a collapsing card
- *    over the scroll content, cross-fading a full journey line into a one-line pill, and therefore renders
- *    last. Both put the route at the top of the screen; only this one puts it first for a keyboard and a
- *    screen reader. `header.collapsedLabel` has no consumer here and `header.label` becomes the tab title,
- *    which is the one place a web rider reads a whole journey on one line.
- *  · **The direction toggle is a link, not a state swap.** Flipping navigates to the reverse route's own URL,
- *    because a URL that names a direction is a URL a rider can share — where the RN screen holds the flip
- *    locally so Back exits the screen rather than the flip.
+ * Three of the four entries that used to sit here were **not** idiom, and the owner's review said so: the
+ * header that stayed put where the RN one collapses, the bus tokens that held still where the RN ones bob,
+ * and the arrival figures that cut where the RN ones roll. Signature motion is identity; only
+ * platform-conventional detail is idiom. All three are ported and what is left is this:
+ *
+ *  · **The direction toggle is a link.** Flipping navigates to the reverse route's own URL, because a URL
+ *    that names a direction is a URL a rider can share — where the RN screen holds the flip locally so Back
+ *    exits the screen rather than the flip. The *motion* is no longer part of the difference: react-router
+ *    keeps this component mounted across the change of `:id`, so the header runs the same lyrics-style name
+ *    swap and the rows the same cascade (see `swapNonce` below).
  *  · **The auto-scroll is `scrollIntoView` plus `scroll-margin-top`.** No measured offset, no reveal gate, and
  *    the browser honours reduced motion for free. `docs/07` records that the RN equivalent does not land on
  *    web at all, which is the sharpest illustration in the repo of why *how* a screen scrolls is idiom.
- *  · **No idle motion on the bus tokens.** They transition when they move, because a bus that moved is a bus
- *    that moved; they do not bob, because a page a rider is reading should hold still.
  */
 export function RouteDetail() {
   const { id } = useParams<{ id: string }>()
@@ -66,6 +61,37 @@ export function RouteDetail() {
   const navigate = useNavigate()
   const { policy } = useClientPolicy()
   const favouriteRoutes = usePreferences((s) => s.favoriteRoutes)
+
+  /**
+   * The direction flip's motion, and the one piece of state this screen keeps that the RN screen also keeps.
+   *
+   * **The toggle stays a link.** The reverse direction has its own URL and that is this renderer's honest
+   * difference (ADR-093 decision 6) — a rider can share or bookmark a direction, where the RN screen holds
+   * the flip locally so Back exits the screen rather than the flip. What ADR-100 changes is that the URL
+   * change no longer has to mean *no motion*: react-router keeps this component mounted across a change of
+   * `:id`, so the header can run the same 380 ms name swap and the rows the same 26 ms cascade the RN screen
+   * runs — driven, as there, by a nonce the tap bumps.
+   *
+   * `armFlip` runs before the navigation and ignores the clicks react-router itself ignores: a ⌘-click opens
+   * a tab and leaves this one where it was, so animating a swap that never happened would be a lie.
+   */
+  const [swapNonce, setSwapNonce] = useState(0)
+  const flipping = useRef(false)
+  const lastId = useRef(id)
+  const armFlip = useCallback((event: React.MouseEvent) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)
+      return
+    flipping.current = true
+    setSwapNonce((previous) => previous + 1)
+  }, [])
+  // Arriving at a *different* route is not a flip: it gets the screen's own reveal, not the cascade. Adjusted
+  // during render rather than in an effect, which is React's documented shape for this — an effect runs after
+  // paint, so every row of the new route would cascade for one frame first.
+  if (id !== lastId.current) {
+    lastId.current = id
+    if (flipping.current) flipping.current = false
+    else if (swapNonce !== 0) setSwapNonce(0)
+  }
 
   const query = useQuery({
     queryKey: ['route', id],
@@ -128,9 +154,21 @@ export function RouteDetail() {
    */
   const rows = useRef(new Map<number, HTMLElement>())
   const [tops, setTops] = useState<Map<number, number>>(new Map())
+  /**
+   * One observer for every row, held in a ref so `registerRow` can attach each row as it mounts.
+   *
+   * **Watching the list alone was the bug** — see the note on the effect below.
+   */
+  const rowSizes = useRef<ResizeObserver | null>(null)
   const registerRow = useCallback((index: number, el: HTMLElement | null) => {
-    if (el) rows.current.set(index, el)
-    else rows.current.delete(index)
+    const previous = rows.current.get(index)
+    if (previous !== undefined && previous !== el) rowSizes.current?.unobserve(previous)
+    if (el) {
+      rows.current.set(index, el)
+      rowSizes.current?.observe(el, OBSERVE_BORDER_BOX)
+    } else {
+      rows.current.delete(index)
+    }
   }, [])
   const list = useRef<HTMLDivElement | null>(null)
   // Measure each row's top relative to the list, and publish only on an actual change — the equality skip is
@@ -158,19 +196,47 @@ export function RouteDetail() {
   useLayoutEffect(() => {
     measure()
   }, [stopCount])
-  // Later height changes that do NOT change the stop count re-measure through a `ResizeObserver` on the list.
-  // A stop gaining or losing its arrivals line on a refetch (RouteStopRow renders that block only when it has
-  // one) grows its row and shifts every node below it, so without this the tokens drift off their nodes until
-  // the next flip or navigation — a live divergence from the RN screen, whose rows re-measure on `onLayout`.
-  // The layout-effect-plus-observer shape is `MiniMap`'s; `ResizeObserver` is absent in jsdom (the guard),
-  // where the conformance suite measures nothing anyway.
+  /**
+   * Later height changes re-measure through a `ResizeObserver` — **and this is the bug the owner reported
+   * as the buses being "completely off the targets".** It had two halves, and the second was the serious one.
+   *
+   *  1. It watched **only the list container**. A `ResizeObserver` reports changes to *the element it
+   *     observes*, so that arrangement is blind to any reflow leaving the list's own box the same size —
+   *     a refetch where one stop gains an arrivals line while another loses one shifts every row between
+   *     them and the container never moves. Every row is watched now, which is also the shape the RN screen
+   *     has always had: each of its rows reports through its own `onLayout`.
+   *  2. **It never attached at all.** Its only dependency was `measure`, which is stable — and on first
+   *     mount the query is still loading, so there is no list `<div>`, `list.current` is `null`, and the
+   *     effect returned early. Nothing ever changed to make it run again, so after the initial layout-effect
+   *     measurement *nothing re-measured for the life of the screen*. Any reflow at all left the tokens
+   *     permanently stale. `stopCount` is the dependency that fixes it: it goes 0 → n when the payload
+   *     lands, which is exactly when the list exists.
+   *
+   * The direction is what makes it recognisable in a screenshot: a row that *loses* its arrivals line pulls
+   * everything below it up (`min-h-16` puts that at about 12 px a row), so the tokens are left sitting
+   * **too low** — a bus visibly below its node rather than on it.
+   *
+   * Found by a test rather than in a browser, and only because the browser refused to show it: the
+   * automation tab is always `visibilityState: "hidden"`, a hidden tab produces no frames, and a
+   * `ResizeObserver` in one never delivers a callback — not even its initial one. That looks identical to
+   * "there is no observer", which is what this actually was.
+   *
+   * `ResizeObserver` is absent in jsdom (the guard), where the conformance suite measures nothing anyway.
+   */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `stopCount` is when the list first exists — see above
   useEffect(() => {
     const container = list.current
     if (container === null || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(() => measure())
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [measure])
+    rowSizes.current = observer
+    observer.observe(container, OBSERVE_BORDER_BOX)
+    // Rows that mounted before this effect ran — `registerRow` catches every one after it.
+    for (const el of rows.current.values()) observer.observe(el, OBSERVE_BORDER_BOX)
+    return () => {
+      observer.disconnect()
+      rowSizes.current = null
+    }
+  }, [measure, stopCount])
 
   // The reveal's one beat: bring the boarding row up, once, as soon as it exists. `scrollIntoView` rather than
   // a computed offset, so the browser honours `scroll-behavior` and the rider's reduced-motion setting.
@@ -188,6 +254,18 @@ export function RouteDetail() {
   const openStop = (row: RouteStopRowView) =>
     navigate(`/stop/${encodeURIComponent(row.stopId)}?pole=${encodeURIComponent(row.stopId)}`)
 
+  /**
+   * Which stop's action sheet is open, if any.
+   *
+   * **A tap on a row opens this rather than navigating**, which is what `route-detail.spec.json` has
+   * declared non-optionally since WP6-6b and what this renderer did not do until WP6-7b's parity audit found
+   * it. The reason is in the spec's own note: the row's primary purpose is saving the route *at that pole*
+   * (ADR-042), and a tap that navigated away made the common action the harder one — in fact impossible,
+   * because ADR-032 makes this sheet the app's only favourite-creating affordance, so this app could not
+   * create a favourite at all.
+   */
+  const [sheetRow, setSheetRow] = useState<RouteStopRowView | null>(null)
+
   // Which fact sheet is open, if any (ADR-044). Held here rather than per pill so only one can be.
   const [factSheet, setFactSheet] = useState<RouteFactKey | null>(null)
 
@@ -195,40 +273,49 @@ export function RouteDetail() {
     <main className="min-h-dvh bg-bg pb-10">
       {/* The chrome, in flow and first — see the note above. The back control does not wait for the payload,
           deliberately, so a rider can leave a screen that is still loading. */}
-      <header className="sticky top-0 z-10 border-border border-b bg-bg/95 px-4 pt-3 pb-3 backdrop-blur">
-        <BackButton />
-        {view ? (
-          <div className="mt-3 flex items-center gap-3">
-            <RouteChip operator={view.header.operator} routeNo={view.header.routeNo} />
-            <div className="min-w-0 flex-1">
-              <p className="m-0 truncate text-label text-muted">{view.header.origin}</p>
-              <p className="m-0 flex items-center gap-1.5 truncate text-body font-semibold text-text">
-                {/* A loop glyph for a circular service, a direction-of-travel arrow otherwise — the same
-                    concepts the RN header draws, from the web icon set (ADR-075: the concept is shared, the
-                    set is idiom). Decorative: the sentence beside it already says which it is. */}
-                {view.header.circular ? (
-                  <RotateCw size={14} className="shrink-0 text-subtle" aria-hidden />
-                ) : (
-                  <ArrowDown size={14} className="shrink-0 text-subtle" aria-hidden />
-                )}
-                <span className="truncate">{view.header.destination}</span>
-              </p>
-            </div>
-            {/* A link rather than a button: the reverse direction has its own URL, so a rider can share or
-                bookmark it and Back returns to this direction. Absent when there is nothing to flip to —
-                `reverseId`'s presence *is* the answer (ADR-093 decision 6). */}
-            {view.header.reverseId !== undefined ? (
+      <BackButton />
+      {/* The collapsing header (ADR-033, ADR-100) — the same component Place detail uses, so the two
+          screens feel like one family. The badge is the `RouteChip`: centred and 1.45× at rest, travelling
+          to the left of a glass bar as the rider scrolls. `header.label` is the whole journey on one line,
+          which is what the RN header shows at its expanded size and what this used to put only in the tab
+          title. */}
+      {view ? (
+        <CollapsingHeader
+          expandedHeight={168}
+          labelExpandedTop={96}
+          labelExpandedSize={20}
+          labelCollapsedSize={15}
+          badge={<RouteChip operator={view.header.operator} routeNo={view.header.routeNo} />}
+          label={
+            /* The from/to card, as on native: origin small and muted above, destination larger below —
+               two nodes, which is what `route-detail.spec.json` declares and what a single composed
+               `header.label` would have collapsed into one. `JourneyLines` also owns the flip's
+               lyrics-style swap, which is why the nonce goes in here rather than to the header. */
+            <JourneyLines
+              origin={view.header.origin}
+              destination={view.header.destination}
+              circular={view.header.circular}
+              nonce={swapNonce}
+            />
+          }
+          collapsedLabel={<span className="truncate">{view.header.collapsedLabel}</span>}
+          trailing={
+            /* A link rather than a button: the reverse direction has its own URL, so a rider can share or
+               bookmark it and Back returns to this direction. Absent when there is nothing to flip to —
+               `reverseId`'s presence *is* the answer (ADR-093 decision 6). */
+            view.header.reverseId !== undefined ? (
               <Link
                 to={`/route/${encodeURIComponent(view.header.reverseId)}`}
+                onClick={armFlip}
                 aria-label={t(locale, 'reverseDirection')}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-text no-underline active:opacity-70"
               >
-                <Repeat size={16} aria-hidden />
+                <DirectionSwapIcon nonce={swapNonce} />
               </Link>
-            ) : null}
-          </div>
-        ) : null}
-      </header>
+            ) : null
+          }
+        />
+      ) : null}
 
       {view ? (
         <>
@@ -269,7 +356,8 @@ export function RouteDetail() {
                 key={`${row.seq}-${row.stopId}`}
                 row={row}
                 index={index}
-                onPress={openStop}
+                animateIn={swapNonce > 0}
+                onPress={setSheetRow}
                 registerRow={registerRow}
               />
             ))}
@@ -301,6 +389,29 @@ export function RouteDetail() {
               })}
               locale={locale}
               onClose={() => setFactSheet(null)}
+            />
+          ) : null}
+
+          {/* The sheet a stop row opens: save this route at this pole, or go to the place. The route
+              context it prints is the header's own view, so the sheet cannot name the journey differently
+              from the screen behind it. */}
+          {sheetRow !== null && query.data ? (
+            <RouteStopSheet
+              row={sheetRow}
+              // **The payload's route id, never the URL parameter.** `routeDetailView` keys each row's
+              // `saved` on `formatFavoriteRouteKey(pole, route.id)`, so a toggle written under any other
+              // spelling would produce a key the star was not computed from — the favourite would be stored
+              // and then read back as unsaved, silently. The URL param is the same string today; it is
+              // percent-decoded by the router and has no such guarantee tomorrow.
+              routeId={query.data.route.id}
+              routeNo={view.header.routeNo}
+              locale={locale}
+              destination={view.header.destination}
+              onClose={() => setSheetRow(null)}
+              onViewStop={() => {
+                setSheetRow(null)
+                openStop(sheetRow)
+              }}
             />
           ) : null}
         </>
@@ -361,3 +472,13 @@ const DAY_LABEL: Record<
 /** Where a node's centre falls inside a row, and half a token — both layout, both this renderer's. */
 const NODE_CENTRE = 12 + 26 / 2
 const TOKEN_HALF = 12
+
+/**
+ * Watch the **border** box, not the content box.
+ *
+ * `ResizeObserver` defaults to `content-box`, and what shifts the rows below a row is its *border* box — so
+ * a row that gained padding or a border would move every node under it and report nothing. Not a
+ * hypothetical: it is the one case that still drifted after the observer was moved onto the rows, caught by
+ * re-running the reproduction rather than by assuming the first fix was complete.
+ */
+const OBSERVE_BORDER_BOX: ResizeObserverOptions = { box: 'border-box' }
