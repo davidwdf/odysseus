@@ -7324,3 +7324,108 @@ pre-existing and unaddressed; it earned its keep here.
   - ⚪ **Reversible by design.** If any of the three things the owner asked to watch for misbehaves — Back
     undoing characters, a shared link not restoring the mode, a reload losing the chips — the state moves to
     a non-persisted store slice and only this file and the codec change.
+
+## ADR-103 — The bottom sheet keeps every property the `<dialog>` was chosen for
+
+- **Status:** **Decided 2026-08-08**, implemented in `apps/web/src/components/BottomSheet.tsx` (with
+  `RouteFactSheet` and `RouteStopSheet` rewired onto it).
+- **Context.** ADR-095 decision 8 made the web's sheets **centred modal dialogs**, and argued the case at
+  length: `showModal()` gives focus trapping, `Escape`, an inert backdrop and a browser-managed focus
+  restore, and a dismiss-on-backdrop-click would be an `onClick` on a non-interactive element with no
+  keyboard equivalent — which Biome's `useKeyWithClickEvents` says out loud. `apps/mobile` slides a panel up
+  from the bottom edge and lets a thumb throw it away. ADR-100 puts that panel on the **identity** side, and
+  the owner asked for it directly.
+- **Decisions:**
+  1. **The `<dialog>` stays; only its shape changes.** It is a full-viewport transparent box now with the
+     panel docked to its bottom edge inside it. That is the whole trick and it is why this is not a trade:
+     every accessibility property the old argument was really about — the focus trap, `Escape`, inertness —
+     comes from `showModal()` and is untouched.
+  2. **The scrim is a real `<button>`**, a sibling of the panel carrying the dim, rather than an `onClick`
+     on the dialog. The lint objection is *answered* rather than suppressed: a button has keyboard
+     activation by construction. It is `tabIndex={-1}` because `Escape` and the close control are the
+     keyboard's paths — the scrim exists for a thumb.
+  3. **The motion and the gesture are `apps/mobile`'s constants, value for value** — a 330 ms rise to 7 px
+     past rest and 180 ms back, a 220 ms exit, dismissal past 90 px or 850 px·s⁻¹, an upward rubber band of
+     `−√(−dy)·2.5`, and the **320 px underlap** (the panel hangs below the viewport and pads itself by the
+     same amount, so a rubber-banded drag never bares the scrim beneath it).
+  4. **`onClose` fires *after* the exit, not during it.** The store is written immediately — a favourite is
+     gone before the animation starts — but the container unmounts when the slide-out finishes, because a
+     panel that vanishes the instant you press it has no slide-out at all.
+- **Consequences:**
+  - 🔴 **One defect found only by dismissing a sheet in a browser, and it is a cascade rule worth
+    remembering.** `.sheet-panel` runs its entrance with `animation-fill-mode: both`, so after it finishes
+    the animation *keeps* applying `transform: none` — and a filled animation lives in the animation origin
+    of the cascade, which **outranks inline style**. `requestClose()` wrote `style.transform` and the
+    computed value stayed at the identity matrix: on a scrim tap or `Escape` the panel sat perfectly still
+    for 220 ms and then blinked out. Drag-to-dismiss animated correctly the whole time, because
+    `onPointerDown` already cancelled. The fix is one `dropEntrance(node)` called from both paths;
+    `route-detail-states.test.tsx` asserts the *mechanism* (cancelled, and only then the transform), since
+    jsdom runs no animations and could never have seen the picture.
+  - ⚪ **The sheet's own content still has no spec**, for ADR-092's reason: a spec cannot hold an
+    interaction. Both suites assert its words and both its actions directly. Giving it one would mean
+    speccing the native sheet in the same row, and that is in `docs/07`.
+
+## ADR-104 — A URL change is not an excuse for no motion
+
+- **Status:** **Decided 2026-08-08**, implemented in `apps/web/src/components/JourneyLines.tsx`,
+  `DirectionSwapIcon.tsx` and `screens/RouteDetail.tsx`.
+- **Context.** ADR-046 gives the direction flip three moves: the old destination **rises into the origin
+  slot** and shrinks to origin style, because it *is* the new origin; the old origin slides up and out; the
+  new destination rises in from below — 380 ms, with a 460 ms half-turn on the glyph and a 26 ms-per-row
+  cascade behind it. `apps/web` had none of it, and the reason on file was ADR-093 decision 6: the web's
+  toggle is a **link** to the reverse direction's own URL, where the RN screen holds the flip in local
+  state. The owner listed "no animation on direction swap" in the review.
+- **Decisions:**
+  1. **Keep the URL, take the motion.** The link is the right call and stays — a URL that names a direction
+     is a URL a rider can share, and Back returns to the direction they came from. What was wrong was
+     treating a `:id` change as a reason to have no animation: react-router keeps the component mounted
+     across it, so the same nonce-driven swap the RN screen runs works unchanged.
+  2. **Armed on the tap, fired on the words.** The nonce *arms* a swap; the swap *runs* when the names
+     actually change. `apps/mobile` does this because the reverse payload lands a tick after the tap, and
+     animating on the tap would play 380 ms against the still-current names and then jump. Ported as-is.
+  3. **Reduced motion is checked in JavaScript here, and only here.** Every other animation in `apps/web` is
+     switched off by a media query because the resting markup is already correct without it. A swap puts
+     **four lines in the tree at once**, so `animation: none` would leave them stacked at full opacity for
+     380 ms. A rider who asked for less motion never enters the swap state.
+  4. **The cascade flag is read once, at mount** — `useState(animateIn)`, which is what the RN row gets from
+     `useSharedValue(...)` plus an empty-deps effect. Adding an animation class to a *mounted* element
+     starts it, so without this the outbound rows blinked out and back in during the tick before the inbound
+     ones arrived. Caught in a browser, with a `MutationObserver` log rather than by eye.
+  5. **The arrow hands over rather than riding along.** On the RN header the direction glyph sits outside
+     the name box; here it is inside the destination line, so a destination rising into the origin slot
+     would carry an arrow into a slot that has none. It fades out with its line and in with the new one.
+- **Consequences:**
+  - ⚠️ **`JourneyLines` must be two lines at rest, permanently.** A conformance projection reads text by
+    presence rather than visibility (ADR-097), so a header that kept the outgoing journey mounted would
+    project four names for one route in all nineteen declared states — and no state suite would catch it,
+    because they mount settled and never flip. `test/journey-swap.test.tsx` is the only thing standing
+    there, exactly as `slide-number.test.tsx` is for the odometer.
+  - ⚪ **The reversal case hides a bug the third-route case does not.** On a plain reversal the old
+    destination and the new origin are the same string, so a `.jl-rise` layer carrying the wrong one of them
+    still looks right. The suite asserts it on a flip between two *different* journeys.
+
+## ADR-105 — `check-no-derivation` was blind inside every template literal
+
+- **Status:** **Fixed 2026-08-08** in `scripts/check-no-derivation.mjs`.
+- **Context.** The gate strips comments and string literals before matching, so prose about `.sort()` is not
+  a violation. Template literals were stripped **whole** — `` `…` `` → `` `` `` — which also deleted their
+  `${…}` interpolations. Interpolations are not string content; they are arbitrary expressions.
+- **Decision.** `strip` keeps the interpolations and discards only the literal text around them. Two
+  `--selftest` fixtures pin both halves: `` `${rows.filter((r) => r.eta < 5).length} buses` `` must report
+  **`selecting` and `threshold`**, and a template containing nothing but the words *"never .sort() in a
+  view"* must still report nothing.
+- **Consequences:**
+  - 🔴 **It was hiding live sites, which is how it was found.** Writing
+    `` `${Math.min(index, CASCADE_CAP) * CASCADE_STEP}ms` `` and noticing the allowed-site count had not
+    moved. Turning the strip off surfaced **two** findings — that one, and
+    `` `${Math.max(0, 1 - dy / node.offsetHeight)}` `` in `BottomSheet.tsx`, invisible since the day it was
+    written. Both are genuinely geometry and are now allowlisted **by name, with reasons**, which is the
+    point: they were not passing the gate, they were not being read by it.
+  - ⚠️ **Fourth in the same family.** A check that quietly stops seeing things and goes on printing a
+    success line — WP3-3's `.gitignore`d file, WP6-3b's stale `POLICED` path, `files()`'s two-level guard,
+    and now this. The recurring shape is that **the success line counts what it looked at, not what it could
+    see**, and the counts all looked healthy. When a gate is extended, the fixture that watches it *fail* is
+    the part that matters.
+  - ⚪ **Confined to this gate.** `check-view-transport-free`, `check-no-adhoc-id-parsing` and
+    `check-one-endpoint-declaration` scan raw lines on purpose — a URL literal is exactly what they are
+    looking for — so none of them shared the hole.

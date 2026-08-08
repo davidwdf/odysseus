@@ -346,6 +346,117 @@
 }
 
 /*
+  The direction flip (ADR-046, identity under ADR-100) — three moves, 380 ms, `Easing.inOut(Easing.quad)`.
+
+  The geometry comes in as custom properties from `JourneyLines`, so the slot heights are declared once
+  beside the markup that lays them out and this file only says how they move. `both` fill on all three: the
+  outgoing lines must hold their end state for the frame between the animation finishing and React tearing
+  the layers down, or they flash back to full opacity on their way out.
+
+  There is no reduced-motion rule here on purpose. Killing the keyframes would leave four lines stacked at
+  full opacity for 380 ms, so `JourneyLines` never enters the swap state at all — the one animation in this
+  file whose off switch is in JavaScript, and the component says why.
+*/
+@keyframes jl-origin-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--jl-origin-lh) * -1));
+  }
+}
+/* The old destination becoming the new origin: up a slot, down to origin size, out to muted. */
+@keyframes jl-rise {
+  from {
+    transform: translateY(var(--jl-dest-top)) scale(1);
+    color: rgb(var(--text));
+  }
+  to {
+    transform: translateY(0) scale(var(--jl-shrink));
+    color: rgb(var(--text-muted));
+  }
+}
+/* Its arrow hands over rather than shrinking into a slot that has none. */
+@keyframes jl-glyph-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes jl-dest-in {
+  0% {
+    opacity: 0;
+    transform: translateY(var(--jl-dest-lh));
+  }
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.jl-origin-out,
+.jl-rise,
+.jl-glyph-out,
+.jl-dest-in {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  animation-fill-mode: both;
+}
+.jl-origin-out {
+  animation-name: jl-origin-out;
+}
+.jl-rise {
+  animation-name: jl-rise;
+}
+.jl-glyph-out {
+  animation-name: jl-glyph-out;
+}
+.jl-dest-in {
+  animation-name: jl-dest-in;
+}
+
+/*
+  The flip cascade: on a direction change the reverse rows mount fresh and each fades + rises into place a
+  beat after the one above, so the swap reads as the list rebuilding even when the reverse payload was
+  already cached. `apps/mobile` runs the identical 300 ms / 10 px / 26 ms-per-row entrance.
+
+  Here the reduced-motion rule IS enough, because the resting markup is already correct: with no animation
+  the row simply renders where it belongs.
+*/
+@keyframes row-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.row-rise {
+  animation: row-rise 300ms cubic-bezier(0.5, 1, 0.89, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-rise,
+  .swap-icon {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* The reverse toggle's half-turn — `Easing.out(Easing.cubic)`, 460 ms, as on the RN glyph. */
+.swap-icon {
+  transition: transform 460ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/*
   The arrival odometer — `SlideNumber`'s two halves, and `apps/mobile/components/EtaTimes.tsx`'s numbers.
 
   260 ms, and a rise of `0.85em`, which is the RN `size * 0.85` expressed relatively so one rule serves the
@@ -404,6 +515,51 @@
   .odo-out {
     animation: none;
     opacity: 0;
+  }
+}
+
+/*
+  The bottom sheet's entrance — `apps/mobile/components/BottomSheet.tsx`'s two-stage spring, as keyframes.
+
+  330 ms out to 7 px past rest, then 180 ms back to it. A **constant** overshoot rather than an easing curve
+  with overshoot built in (`Easing.back`), which is what the RN sheet does and what keeps a tall sheet and a
+  short one feeling the same: a proportional overshoot makes a 600 px sheet leap and a 200 px one twitch.
+
+  330 / 510 = 64.7 %, which is where the two stages meet.
+*/
+@keyframes sheet-in {
+  0% {
+    transform: translate3d(0, 100%, 0);
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  64.7% {
+    transform: translate3d(0, -7px, 0);
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sheet-panel {
+  animation: sheet-in 510ms both;
+}
+.sheet-scrim {
+  animation: scrim-in 220ms linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel,
+  .sheet-scrim {
+    animation: none;
   }
 }
 

@@ -474,6 +474,17 @@ describe('a stop row opens the save sheet — the interaction no projection can 
       remove?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     expect(usePreferences.getState().favoriteRoutes).toEqual([])
+    // **The sheet closes after its exit animation, not during it**, which is a deliberate change: a panel
+    // that vanishes the instant you press it has no slide-out, and `BottomSheet.requestClose()` therefore
+    // runs the 220 ms transform and *then* calls `onClose`. The store is written immediately either way —
+    // the favourite is gone before the animation starts, which is the ordering that matters to a rider.
+    expect(
+      container.querySelector('dialog'),
+      'the sheet closed before it could animate out',
+    ).not.toBeNull()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
     expect(container.querySelector('dialog'), 'the sheet stayed open').toBeNull()
   })
 
@@ -481,5 +492,35 @@ describe('a stop row opens the save sheet — the interaction no projection can 
     await openFirstStop()
     const interactive = [...container.querySelectorAll(INTERACTIVE)]
     expect(interactive.filter((el) => el.parentElement?.closest(INTERACTIVE))).toHaveLength(0)
+  })
+
+  it('cancels the entrance keyframes before it writes the exit transform', async () => {
+    // **The one thing here that a projection could never fail on, and it shipped broken for an afternoon.**
+    //
+    // `.sheet-panel` runs `sheet-in` with `animation-fill-mode: both`, so after the entrance settles the
+    // animation *keeps* applying `transform: none` — and a filled animation outranks inline style in the
+    // cascade. `requestClose()` wrote `style.transform` and the computed value stayed at the identity
+    // matrix: on a scrim tap or `Escape` the panel sat perfectly still for 220 ms and then blinked out.
+    // Drag-to-dismiss animated correctly the whole time, because `onPointerDown` cancels before it drags —
+    // which is precisely why the cancel is one function called from both paths now.
+    //
+    // jsdom runs no animations, so this asserts the *mechanism* rather than the picture: the panel's
+    // animations are cancelled, and only then is the exit transform written. That is the smallest claim
+    // that fails if the call is dropped again.
+    await openFirstStop()
+    const panel = container.querySelector<HTMLElement>('.sheet-panel')
+    const scrim = container.querySelector<HTMLElement>('.sheet-scrim')
+    if (!panel || !scrim) throw new Error('the sheet rendered without a panel or a scrim')
+    let transformWhenCancelled: string | null = null
+    const cancel = vi.fn(() => {
+      transformWhenCancelled = panel.style.transform
+    })
+    panel.getAnimations = () => [{ cancel } as unknown as Animation]
+    act(() => {
+      scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(cancel, 'the entrance keyframes were left filling over the exit').toHaveBeenCalled()
+    expect(transformWhenCancelled, 'cancelled after the transform, which is too late').toBe('')
+    expect(panel.style.transform, 'no exit transform was written at all').not.toBe('')
   })
 })

@@ -88,12 +88,42 @@
 > is the only thing standing there, and it earned its place immediately: the first implementation drew a
 > third, invisible copy of the wider value as a sizer, and the test read the mid-flight readout as
 > `"5112 min"`. An inline grid sizes the box instead, so mid-flight is the irreducible two.
-> **Still open from the review, in order:** the bottom sheet with drag gestures (replacing both `<dialog>`s);
-> Route detail's seven items (the `BusGlyph` double-decker and its bob, the odometer, the dividers, the
-> anchored row, the direction icon and its swap animation, the centred badge and its collapsing header, the
-> star's outline); Place detail's header animation and its **tail padding** — where recon also found the
-> scroll-spy line (206 px) and the tap snap point (214 px) are *different numbers*, so tapping any kerb
-> highlights the one above it; and Search's pinned keypad and preserved query.
+> **The bottom sheet (part 6)** replaces both `<dialog>`s with one draggable container
+> ([ADR-103](./08-decision-log.md#adr-103--the-bottom-sheet-keeps-every-property-the-dialog-was-chosen-for)),
+> and the thing worth carrying forward is that **it is not a trade**: the container is still a `<dialog>`
+> opened with `showModal()`, just reshaped into a full-viewport transparent box with the panel docked to the
+> bottom edge, so the focus trap, `Escape` and inertness that ADR-095 decision 8 argued for all survive. The
+> backdrop objection is *answered* rather than suppressed — the dim is a real `<button>` sibling, which has
+> keyboard activation by construction. `apps/mobile`'s constants port value for value, the 320 px underlap
+> included.
+> 🔴 **One defect that only a browser could show, and it is a cascade rule worth knowing.** `.sheet-panel`
+> runs its entrance with `animation-fill-mode: both`, so the finished animation *keeps* applying
+> `transform: none` — and a filled animation **outranks inline style**. The exit wrote `style.transform` and
+> computed to the identity matrix: on a scrim tap or `Escape` the panel sat still for 220 ms and blinked out.
+> Only drag-to-dismiss animated, because `onPointerDown` already cancelled. One `dropEntrance()` from both
+> paths; the test asserts the mechanism, since jsdom runs no animations.
+> **The direction swap (part 6 too)** closes the last of Route detail's seven items
+> ([ADR-104](./08-decision-log.md#adr-104--a-url-change-is-not-an-excuse-for-no-motion)). The toggle stays a
+> **link** — a URL that names a direction is shareable, which was always the right call — and what was wrong
+> was treating a `:id` change as a reason for no animation. react-router keeps the screen mounted across it,
+> so ADR-046's three moves run unchanged: the old destination rises into the origin slot and shrinks, the old
+> origin slides out, the new destination rises in, 380 ms, with the glyph's 460 ms half-turn and the rows'
+> 26 ms cascade behind it.
+> 🟠 **Two things a browser found that no suite would have.** The cascade flag has to be **read once at
+> mount** (`useState(animateIn)`, the RN row's `useSharedValue` + empty-deps effect): adding an animation
+> class to a *mounted* element starts it, so the outbound rows blinked out and back in during the tick before
+> the inbound ones arrived. And reduced motion is switched off **in JavaScript** here rather than by the
+> media query — a swap puts four lines in the tree at once, so `animation: none` would stack them.
+> 🔴 **`check-no-derivation` was blind inside every template literal**
+> ([ADR-105](./08-decision-log.md#adr-105--check-no-derivation-was-blind-inside-every-template-literal)) —
+> `strip` replaced `` `…` `` wholesale, interpolations and all, so any expression inside `${…}` was invisible
+> to all six rules. Found by writing one and noticing the allowed-site count had not moved. Fixing it
+> surfaced **two** live sites, one of them in the bottom sheet written the same afternoon; both are geometry
+> and are allowlisted by name. Fourth in the family of *"a check that quietly stops seeing things and goes on
+> printing a success line"*.
+> **Still open from the review:** Place detail's **tail padding** — where recon also found the scroll-spy
+> line (206 px) and the tap snap point (214 px) are *different numbers*, so tapping any kerb highlights the
+> one above it.
 >
 > Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
 > **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no

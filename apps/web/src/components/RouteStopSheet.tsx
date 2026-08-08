@@ -1,8 +1,8 @@
 import type { Locale, RouteStopRowView } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
-import { MapPin, Star, X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { MapPin, Star } from 'lucide-react'
 import { usePreferences } from '../lib/preferences'
+import { BottomSheet, SheetAction } from './BottomSheet'
 
 /**
  * What a tap on a stop row opens — the DOM twin of the action sheet in `apps/mobile/app/route/[id].tsx`,
@@ -22,14 +22,13 @@ import { usePreferences } from '../lib/preferences'
  * filled by a web-only rider. Found by WP6-7b's parity audit — by four auditors independently, and by none
  * of the gates.
  *
- * ## The container is a `<dialog>`, for the reasons `RouteFactSheet` gives
+ * ## The container is the shared `BottomSheet` now
  *
- * `apps/mobile` slides a `BottomSheet` up from the bottom edge with a drag handle, because a thumb reaches
- * the bottom of a phone. This is a native modal dialog: focus trapping, `Escape`, an inert backdrop and a
- * close control, which is what a keyboard and a screen reader need and what a pan gesture cannot give them.
- * Same content, same order, same two actions; a different idea of what "a sheet" is (ADR-075). And, as
- * there, **no dismiss-on-backdrop-click** — a click handler on the `<dialog>` itself is a handler on a
- * non-interactive element with no keyboard equivalent.
+ * This file used to carry its own centred `<dialog>` and its own `SheetAction`, arguing that a modal dialog
+ * was the web's honest answer where `apps/mobile` slides a panel up from the bottom edge. ADR-100 moves the
+ * sheet to the identity side, and `components/BottomSheet.tsx` is the twin — same two-stage entrance, same
+ * drag-to-dismiss, and it keeps every accessibility property the old argument was really about, because it
+ * is still a `<dialog>` underneath. The content and its order are unchanged.
  *
  * ## What it is *not*, stated because the next reader will look for it
  *
@@ -57,32 +56,17 @@ export function RouteStopSheet({
   onClose: () => void
   onViewStop: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement | null>(null)
   const toggle = usePreferences((s) => s.toggleFavoriteRoute)
   // `row.saved` is the kernel's answer for this route at this pole — `routeDetailView` computes it from the
   // same `savedRouteKeys` the screen already passes, so the sheet and the node's star cannot disagree.
   const saved = row.saved
 
-  useEffect(() => {
-    // Capture the row that opened the sheet and restore focus to it on unmount: React tears the `<dialog>`
-    // out of the document when the state clears, which skips the browser's own focus-restore step.
-    const opener = document.activeElement as HTMLElement | null
-    dialog.current?.showModal()
-    return () => opener?.focus()
-  }, [])
-
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby={TITLE_ID}
-      onCancel={(e) => {
-        e.preventDefault()
-        onClose()
-      }}
-      className="m-auto w-[min(32rem,92vw)] rounded-2xl border border-border bg-surface p-0 text-text backdrop:bg-black/50"
-    >
-      <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
+    <BottomSheet
+      titleId={TITLE_ID}
+      onClose={onClose}
+      header={
+        <div className="flex flex-col gap-2 pb-2">
           {/* The tapped stop leads — it is what the rider just touched. The name is the **row's own**, which
               is what stops this sheet and the row it came from disagreeing: on native it used to be a second
               spelling of `displayName` eleven lines away (WP6-6a). */}
@@ -106,63 +90,25 @@ export function RouteStopSheet({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t(locale, 'back')}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-0 bg-surface-2 text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
-        >
-          <X size={16} aria-hidden />
-        </button>
-      </div>
-
-      <div className="flex flex-col px-2 pt-1 pb-3">
-        <SheetAction
-          icon={
-            <Star
-              size={20}
-              aria-hidden
-              className="shrink-0 text-accent"
-              fill={saved ? 'currentColor' : 'none'}
-            />
-          }
-          label={t(locale, saved ? 'removeFavorite' : 'addFavorite')}
-          onClick={() => {
-            toggle(row.stopId, routeId)
-            onClose()
-          }}
-        />
-        <SheetAction
-          icon={<MapPin size={20} aria-hidden className="shrink-0 text-muted" />}
-          label={t(locale, 'viewStop')}
-          onClick={onViewStop}
-        />
-      </div>
-    </dialog>
+      }
+    >
+      {(close) => (
+        <>
+          <SheetAction
+            icon={Star}
+            filled={saved}
+            label={t(locale, saved ? 'removeFavorite' : 'addFavorite')}
+            onClick={() => {
+              toggle(row.stopId, routeId)
+              close()
+            }}
+          />
+          <SheetAction icon={MapPin} label={t(locale, 'viewStop')} onClick={onViewStop} />
+        </>
+      )}
+    </BottomSheet>
   )
 }
 
 /** The heading's id, wired to the dialog's `aria-labelledby`. Static because only one sheet is ever open. */
 const TITLE_ID = 'route-stop-sheet-title'
-
-/** One full-width action row. A real `<button>`, so the role and keyboard focus come from the element. */
-function SheetAction({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex min-h-[52px] w-full items-center gap-3 rounded-xl border-0 bg-transparent px-3 text-left text-body text-text hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
-    >
-      {icon}
-      <span className="flex-1">{label}</span>
-    </button>
-  )
-}

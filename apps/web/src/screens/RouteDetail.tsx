@@ -8,20 +8,12 @@ import {
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import {
-  ArrowDown,
-  ClockFading,
-  CreditCard,
-  GitCompareArrows,
-  type LucideIcon,
-  MapPin,
-  Repeat,
-  RotateCw,
-  Star,
-} from 'lucide-react'
+import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat, Star } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
+import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
+import { JourneyLines } from '../components/JourneyLines'
 import { RailBusToken } from '../components/RailBusToken'
 import { RouteChip } from '../components/RouteChip'
 import { RouteFactSheet } from '../components/RouteFactSheet'
@@ -44,21 +36,21 @@ import { CollapsingHeader } from '../shell/CollapsingHeader'
  * `test/route-detail-states.test.tsx` drives every projected one — as does
  * `apps/mobile/test/route-detail-states.test.tsx`, from the same file and the same corpus fixtures.
  *
- * ## Four places this deliberately differs from the RN screen, all of them declared `idiom`
+ * ## Where this differs from the RN screen — a much shorter list since ADR-100
  *
- *  · **The header is in the document flow, first, and does not collapse.** The RN one floats a collapsing card
- *    over the scroll content, cross-fading a full journey line into a one-line pill, and therefore renders
- *    last. Both put the route at the top of the screen; only this one puts it first for a keyboard and a
- *    screen reader. `header.collapsedLabel` has no consumer here and `header.label` becomes the tab title,
- *    which is the one place a web rider reads a whole journey on one line.
- *  · **The direction toggle is a link, not a state swap.** Flipping navigates to the reverse route's own URL,
- *    because a URL that names a direction is a URL a rider can share — where the RN screen holds the flip
- *    locally so Back exits the screen rather than the flip.
+ * Three of the four entries that used to sit here were **not** idiom, and the owner's review said so: the
+ * header that stayed put where the RN one collapses, the bus tokens that held still where the RN ones bob,
+ * and the arrival figures that cut where the RN ones roll. Signature motion is identity; only
+ * platform-conventional detail is idiom. All three are ported and what is left is this:
+ *
+ *  · **The direction toggle is a link.** Flipping navigates to the reverse route's own URL, because a URL
+ *    that names a direction is a URL a rider can share — where the RN screen holds the flip locally so Back
+ *    exits the screen rather than the flip. The *motion* is no longer part of the difference: react-router
+ *    keeps this component mounted across the change of `:id`, so the header runs the same lyrics-style name
+ *    swap and the rows the same cascade (see `swapNonce` below).
  *  · **The auto-scroll is `scrollIntoView` plus `scroll-margin-top`.** No measured offset, no reveal gate, and
  *    the browser honours reduced motion for free. `docs/07` records that the RN equivalent does not land on
  *    web at all, which is the sharpest illustration in the repo of why *how* a screen scrolls is idiom.
- *  · **No idle motion on the bus tokens.** They transition when they move, because a bus that moved is a bus
- *    that moved; they do not bob, because a page a rider is reading should hold still.
  */
 export function RouteDetail() {
   const { id } = useParams<{ id: string }>()
@@ -69,6 +61,37 @@ export function RouteDetail() {
   const navigate = useNavigate()
   const { policy } = useClientPolicy()
   const favouriteRoutes = usePreferences((s) => s.favoriteRoutes)
+
+  /**
+   * The direction flip's motion, and the one piece of state this screen keeps that the RN screen also keeps.
+   *
+   * **The toggle stays a link.** The reverse direction has its own URL and that is this renderer's honest
+   * difference (ADR-093 decision 6) — a rider can share or bookmark a direction, where the RN screen holds
+   * the flip locally so Back exits the screen rather than the flip. What ADR-100 changes is that the URL
+   * change no longer has to mean *no motion*: react-router keeps this component mounted across a change of
+   * `:id`, so the header can run the same 380 ms name swap and the rows the same 26 ms cascade the RN screen
+   * runs — driven, as there, by a nonce the tap bumps.
+   *
+   * `armFlip` runs before the navigation and ignores the clicks react-router itself ignores: a ⌘-click opens
+   * a tab and leaves this one where it was, so animating a swap that never happened would be a lie.
+   */
+  const [swapNonce, setSwapNonce] = useState(0)
+  const flipping = useRef(false)
+  const lastId = useRef(id)
+  const armFlip = useCallback((event: React.MouseEvent) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)
+      return
+    flipping.current = true
+    setSwapNonce((previous) => previous + 1)
+  }, [])
+  // Arriving at a *different* route is not a flip: it gets the screen's own reveal, not the cascade. Adjusted
+  // during render rather than in an effect, which is React's documented shape for this — an effect runs after
+  // paint, so every row of the new route would cascade for one frame first.
+  if (id !== lastId.current) {
+    lastId.current = id
+    if (flipping.current) flipping.current = false
+    else if (swapNonce !== 0) setSwapNonce(0)
+  }
 
   const query = useQuery({
     queryKey: ['route', id],
@@ -226,23 +249,14 @@ export function RouteDetail() {
           label={
             /* The from/to card, as on native: origin small and muted above, destination larger below —
                two nodes, which is what `route-detail.spec.json` declares and what a single composed
-               `header.label` would have collapsed into one. */
-            <span className="flex flex-col items-center gap-0.5">
-              <span className="block max-w-full truncate text-label font-normal text-muted">
-                {view.header.origin}
-              </span>
-              <span className="flex max-w-full items-center gap-1.5">
-                {/* A loop glyph for a circular service, a direction-of-travel arrow otherwise — the same
-                    concepts the RN header draws, from the web icon set. Decorative: the sentence beside
-                    it already says which it is. */}
-                {view.header.circular ? (
-                  <RotateCw size={14} className="shrink-0 text-subtle" aria-hidden />
-                ) : (
-                  <ArrowDown size={14} className="shrink-0 text-subtle" aria-hidden />
-                )}
-                <span className="truncate">{view.header.destination}</span>
-              </span>
-            </span>
+               `header.label` would have collapsed into one. `JourneyLines` also owns the flip's
+               lyrics-style swap, which is why the nonce goes in here rather than to the header. */
+            <JourneyLines
+              origin={view.header.origin}
+              destination={view.header.destination}
+              circular={view.header.circular}
+              nonce={swapNonce}
+            />
           }
           collapsedLabel={<span className="truncate">{view.header.collapsedLabel}</span>}
           trailing={
@@ -252,10 +266,11 @@ export function RouteDetail() {
             view.header.reverseId !== undefined ? (
               <Link
                 to={`/route/${encodeURIComponent(view.header.reverseId)}`}
+                onClick={armFlip}
                 aria-label={t(locale, 'reverseDirection')}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-text no-underline active:opacity-70"
               >
-                <GitCompareArrows size={18} aria-hidden />
+                <DirectionSwapIcon nonce={swapNonce} />
               </Link>
             ) : null
           }
@@ -301,6 +316,7 @@ export function RouteDetail() {
                 key={`${row.seq}-${row.stopId}`}
                 row={row}
                 index={index}
+                animateIn={swapNonce > 0}
                 onPress={setSheetRow}
                 registerRow={registerRow}
               />

@@ -1,5 +1,6 @@
 import type { EtaUrgency, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
 import { Star } from 'lucide-react'
+import { useState } from 'react'
 import { RAIL_WIDTH } from './RailBusToken'
 import { SlideNumber } from './SlideNumber'
 import { StopName } from './StopName'
@@ -20,22 +21,41 @@ import { StopName } from './StopName'
 export function RouteStopRow({
   row,
   index,
+  animateIn,
   onPress,
   registerRow,
 }: {
   row: RouteStopRowView
-  /** Position in the list — what `RailBus`'s `index`/`from`/`to` name. */
+  /** Position in the list — what `RailBus`'s `index`/`from`/`to` name, and the cascade's per-row delay. */
   index: number
+  /**
+   * Play the staggered fade-and-rise entrance. True on a direction flip, false on a first load — where the
+   * screen has its own reveal and a second one on top of it would read as a stutter (ADR-046).
+   */
+  animateIn: boolean
   onPress: (row: RouteStopRowView) => void
   /** Reports this row's element so the rail overlay can place a bus at its node — geometry, not a decision. */
   registerRow: (index: number, el: HTMLElement | null) => void
 }) {
   const { here, first, last } = row
+  // **Read once, at mount** — `useState`'s initial value is ignored on every later render, which is exactly
+  // what the RN row gets from `useSharedValue(animateIn ? 0 : 1)` plus an effect with empty deps.
+  //
+  // Not a micro-optimisation. The nonce advances on the *tap*, and the reverse payload lands a tick later,
+  // so for that tick the rows still on screen are the current direction's — and adding an animation class to
+  // a mounted element *starts* it. Without this the outbound list blinks out and back in before the inbound
+  // list arrives. A flip animates the rows that mount fresh because of it, and nothing else.
+  const [rise] = useState(animateIn)
   return (
     <button
       type="button"
       ref={(el) => registerRow(index, el)}
       onClick={() => onPress(row)}
+      // The cascade's per-row beat, capped so a 60-stop route does not drag for two seconds — the delay
+      // `apps/mobile` applies with `withDelay(Math.min(index, 10) * 26, …)`, value for value.
+      style={
+        rise ? { animationDelay: `${Math.min(index, CASCADE_CAP) * CASCADE_STEP}ms` } : undefined
+      }
       // `scroll-mt` is the whole of this renderer's auto-scroll: `scrollIntoView` then lands the boarding row
       // below the sticky header without this screen computing an offset, and honours the rider's
       // reduced-motion setting without owning that decision either (ADR-045 is idiom). 7rem clears the
@@ -51,7 +71,7 @@ export function RouteStopRow({
       // transparent one. That is why the rider's boarding stop had no lighter background.
       className={`relative flex min-h-16 w-full scroll-mt-28 gap-0 border-0 px-0 py-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
         here ? 'bg-surface-2' : 'bg-transparent'
-      }`}
+      } ${rise ? 'row-rise' : ''}`}
     >
       {/* The rail gutter: a continuous line behind a top-aligned node. */}
       <span className="relative shrink-0" style={{ width: RAIL_WIDTH }}>
@@ -178,3 +198,7 @@ function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; first: boo
 const NODE = 26
 const NODE_TOP = 12
 const NODE_CENTRE = NODE_TOP + NODE / 2
+
+/** The flip cascade's beat and its cap — `apps/mobile`'s `Math.min(index, 10) * 26`, value for value. */
+const CASCADE_STEP = 26
+const CASCADE_CAP = 10
