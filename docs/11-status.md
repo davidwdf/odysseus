@@ -1,7 +1,123 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
-> Snapshot: **2026-08-05**. **Waves 0–5 and Wave 6's rows WP6-0 … WP6-5 are all merged to `main`**
+> Snapshot: **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
+> **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no
+> destination carries an `owner`, and `screenFor` is an exhaustive switch whose default throws, so a
+> destination added without a screen is a *typecheck* failure rather than a blank route.
+> **WP6-8's stated precondition is met.** Two ADRs:
+> [ADR-096](./08-decision-log.md#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them),
+> [ADR-097](./08-decision-log.md#adr-097--the-conformance-walker-sees-presence-not-visibility--and-an-aria-state-it-cannot-see-is-one-a-rider-may-not-be-getting-either).
+> **`proposals/04` calls this row *"mostly chrome and prose"* and *"Cheap; last"*, and the cheap part was
+> wrong for a reason about the format rather than the screens.** These are the only surfaces in the app with
+> no `DataSource` call, and the spec format requires all five canonical states — which were designed as
+> branches over a fetch. The honest answer inverts the `slots`/`shows` split: **the whole screen goes in
+> `slots`, so `shows: []` declares *everything***, and a renderer that drew a heading and filled its list in
+> an effect diverges at index 0 rather than passing. `route-detail.spec.json` records the trap this inverts —
+> there, `shows: []` and "renders nothing at all" are indistinguishable. Here they are opposites. About and
+> FAQ therefore project the **whole page in `loading`**, and both drivers mount with **no query client and no
+> `DataSource` in scope**, so a fetch added to either screen breaks the harness rather than weakening the
+> claim.
+> **A preference screen's content is a choice, and the choice is a rule.** 35 decisions across three files,
+> every one a private `const`, two of them already duplicated in the shell scaffolding this row deletes. Two
+> are traps: a language is selected by the **override** and never by the resolved locale (both hooks are in
+> scope four lines apart, either type-checks, and reading the wrong one lights *two* rows for a rider on an
+> English device who has never touched the picker), and an appearance is selected by the **raw** preference
+> and never by `resolveMode`'s answer (which looks right on every machine whose theme is light). Both are
+> corpus rows now.
+> 🔴 **And the walker's blind spot arrived from the other side, which found a live accessibility defect on
+> the shipping PWA.** ADR-093 found the walker could not see a *graphic*; this row found it **sees text a
+> rider cannot** — `createTreeWalker` consults the DOM and never CSS, so a closed `<details>`, a `hidden`
+> node and a `display: none` node are all fully visible to it. That rules out `<details>` for the FAQ (the
+> collapsed state would project seven answers), and it caught a `›` character diverging from the RN row's
+> SVG. The mirror of it is the defect: **`react-native-web@0.21` forwards `aria-*` and drops
+> `accessibilityState` entirely**, so six controls — both Settings pickers, the search chips, the search mode
+> segment, the save star and the FAQ disclosure — announced **no state at all** to a screen reader on the
+> Expo PWA. Found by writing an assertion that expected to check something and found nothing; confirmed by a
+> probe; measured before and after in a live browser (0 `aria-pressed` elements, then 7 with exactly 2 lit).
+> 🔴 **The prose audit found worse than the row's own acceptance.** `faqOfflineA` understated offline by two
+> ADRs and said live times come "straight from the operators" (they go through our Worker, coalesced) — but
+> **`faqMergeA` described ADR-022's cross-operator *pair* merge**, a rule ADR-042 replaced and ADR-072 partly
+> reversed, so every clause was wrong and its *question* was widened with it. `faqTimingsA` said everything
+> is "shown as published" while the app draws concession fares it works out itself and marks with a `~` —
+> the one case where the FAQ contradicted an on-screen honesty label. `faqFreshnessA` promised a grey-out
+> that is an opacity. `faqMapA` gains one sentence about the schematic rather than a rewrite. `faqCoverageA`
+> audits clean and is untouched.
+> 🔴 **Attribution turned out to be the biggest thing on the About screen, and three of six sources were
+> missing** — each one closing a decision taken, written down and never actioned: the **basemap** (ADR-049
+> decision 5 ends *"This extends the ADR-038 sources list"* and it never did), **green minibus** (a shipped
+> operator that `faqCoverageA` names, so the app's own coverage answer contradicted its own attribution
+> page), and the **consolidated crawl** every route, stop and fare is normalized from (ADR-021's decision,
+> ADR-038's follow-up). There are two licence rows now, not one: the basemap ships under different terms and
+> a single sentence about "the Government's terms" was standing for both.
+> 🟠 **Two gates were found looking at nothing while this row was built, and both are closed.**
+> `packages/core/src/favourites.ts` was never added to `vitest.config.ts`'s hand-spelled coverage `include`,
+> so the module holding the rule a rider's curated list survives on sat **outside** the 100 % branch
+> threshold for a whole wave while the threshold reported green — adding it revealed **eight untested
+> branches**, now covered. And `apps/web/tsconfig.json` included `test/**/*.ts` but not `test/**/*.tsx`, so
+> **seven conformance suites were invisible to `pnpm typecheck`**; two real type errors surfaced at once.
+> **Eleven injections, and two of them taught the usual lesson before they taught anything else:** one was
+> semantically equivalent to the code it replaced (so it proved nothing), and one landed in a **doc comment**
+> that quoted the line it meant to break. Re-aimed, all bite — the strongest being the `<details>` shape
+> (mount every answer, hide with CSS: **7 tests red**) and reverting one `aria-pressed` (2 red).
+> **Verified in a browser on both renderers** (2026-08-07): `apps/web` Settings with *Automatic* and *Auto*
+> lit, then the whole UI in 繁體中文 with the language list still reading **English · 繁體中文 · 简体中文** —
+> the endonym rule on screen; the FAQ collapsed with **zero answers in the DOM**, then two open at once; About
+> with six sources and **eight anchors, every one `target="_blank" rel="noopener noreferrer"`**, terms
+> resolving to `data.gov.hk/tc/…` under a Chinese UI. And the Expo PWA's About drawing the same six sources.
+> Screenshots: `.context/wave6-screenshots/17`–`20`.
+> **WP6-7b — the parity audit — is DONE, and both blockers it found were closed the same day.** `apps/web`
+> can now create and delete favourites (ADR-098) and renders in Inter (ADR-099), which were the two things
+> standing between it and WP6-8. Eight auditors
+> walked it screen by screen against the `apps/mobile` it replaces; a refutation pass judged 25 of their
+> claims (**9 refuted as noise, 6 reclassified as intended idiom, 10 confirmed**) and 15 were left unverified
+> when the run hit its session limit — those were checked by hand instead. The full list with owners is the
+> new **"WP6-8 blockers"** section at the top of `docs/07`.
+> ✅ **THE BLOCKER IS CLOSED (2026-08-08): `apps/web` can create and delete a favourite.** Both RN
+> affordances are ported — the route schematic's **stop action sheet** (a `<dialog>`, the twin of the RN
+> `BottomSheet`: *Add/Remove favourite* and *View stop*) and Place detail's **saved-state star**, a sibling of
+> the row's button per ADR-024. The toggle writes under the **payload's** route id rather than the URL
+> parameter, so its key can never differ from the one `routeDetailView` computed `saved` from. Nine new
+> tests, each watched failing on an injected revert; the round trip walked in a browser on live data
+> (KMB 1A → 秀安樓 → 加入收藏 → the Favourites tab draws the card → the place shows one `已收藏` star,
+> 27 interactive elements, 0 nested). Screenshots `.context/wave6-screenshots/21`–`22`. **One `apps/web`
+> blocker remains: Inter.**
+> 🔴 **What the blocker was, kept because of what it says about the gates: a rider could not add or remove a
+> favourite on `apps/web`. At all.** Four auditors
+> found it independently and it was confirmed by hand: `toggleFavoriteRoute` is defined in the web store and
+> has **zero callers**. The two affordances that write it — the route schematic's stop action sheet (ADR-032
+> made it the app's *only* save affordance) and Place detail's `SaveStar` — were never ported. So the
+> Favourites tab renders a curated list perfectly and offers no way to change it, and WP6-8 would strand
+> every one. **Nothing caught it**: `favourites.spec.json` describes what a card *shows* and both renderers
+> satisfy it completely; the format has no vocabulary for *how the content got there*, and `conformStates`
+> asserts text and nesting but never interaction destinations — so `route-detail.spec.json`'s
+> non-optional `stopName` interaction going somewhere else is invisible. **This is the strongest argument yet
+> for WP6-9: a second renderer catches what a spec cannot.**
+> ✅ **The second blocker is closed too: `apps/web` loads Inter** (ADR-099) — one **48 KB** variable woff2,
+> latin subset, self-hosted and precached, aliased by four `@font-face` rules whose names are the *preset's*,
+> so native satisfies the shared declaration with four static cuts and the web with one file. ADR-019 stands:
+> Chinese still renders in the platform face. What let it survive a parity review is the lesson — `index.css`
+> justified its system stack with a comment claiming it matched the RN app's, and every clause was wrong.
+> **Both `apps/web` blockers are now closed; WP6-8 is unblocked.** Then three ambers: no `env(safe-area-inset-top)` anywhere despite `viewport-fit=cover` (headers under
+> the iOS status bar in an installed PWA), a deep link that will 404 on a first visit until the host has an
+> SPA fallback (a **WP0-5 precondition**, not a code defect), and Place detail's last kerb which can never be
+> highlighted. Plus four `defect-both` items that retiring `apps/mobile` neither causes nor fixes.
+> ⚠️ **And the audit corrected WP6-7's own accessibility fix within the day.** Replacing `accessibilityState`
+> with `aria-*` was **half right**: RN 0.85 declares fourteen `aria-*` props and **`aria-pressed` is not among
+> them**, so on iOS/Android it is dropped exactly the way `accessibilityState` is dropped on the web — *the
+> same defect, one platform over, introduced by the fix for it*, and type-checking in both directions. The
+> five toggle sites carry **both** props now.
+> 🟡 **A process note, second time now:** 48 agents hit the session limit at the verification stage and 15
+> claims came back unjudged. `docs/11`'s own advice is to size a workflow from its widest stage; the widest
+> stage here was the fan-out over *findings*, whose count is unknown when the run starts. Cap it.
+>
+> Previously: **the parity audit (WP6-7b), slipped in ahead of WP6-8 by request** — walk `apps/web` screen by
+> screen against the `apps/mobile` it replaces and separate **identity gaps** (something a spec covers and
+> web misses) from **capability gaps** (a rider can do something on RN they cannot on web) from **intended
+> idiom** (ADR-075 makes that free to differ). The `accessibilityState` finding is the template: it was
+> invisible to typecheck, lint, every gate and every existing test.
+>
+> Previously — snapshot **2026-08-05**. **Waves 0–5 and Wave 6's rows WP6-0 … WP6-5 are all merged to `main`**
 > (PRs #11–**#24**; `main` is `4ea563f`), which closed Place detail, Favourites and Search in one PR
 > ([ADR-087](./08-decision-log.md#adr-087--the-maps-pins-are-content-and-the-dots-label-is-the-headings-own-code),
 > [ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers),
@@ -1297,9 +1413,12 @@ than any in its own row.
 ## ▶️ How to resume
 1. Read [`CLAUDE.md`](../CLAUDE.md) → [`docs/README.md`](./README.md).
 2. `pnpm install`, then `pnpm dev` (or `pnpm dev:edge` / `pnpm dev:web`). Verify per [`docs/10`](./10-scaffold-and-running.md).
-3. `pnpm test` (**1 255 tests** on `design-language-reuse-v2`: core 857 · edge 149 · api-client 71 ·
-   **ui-spec 30** · mobile 65 · web 83; corpus 97 groups / 818 cases, plus the whole `pnpm boundaries` chain; `main` at `0c97e17` has
-   1 161. WP6-1's app totals went *down* by two and that was the intended direction — the bespoke "+N more
+3. `pnpm test` (**1 563 tests** after WP6-7: core 954 · web 192 · mobile 167 · edge 149 · api-client 71 ·
+   **ui-spec 30**; corpus **15** files / **110** groups / **927** cases / 5 `knownDefect`, plus the whole
+   `pnpm boundaries` chain. **Measured on this branch, not quoted** — the figures this section carried before
+   WP6-7 said 1 255 and were stale by 212 against `main` at `378a43f`, which had 1 467. `pnpm lint` is green
+   with 5 pre-existing warnings; `pnpm typecheck` covers `apps/web`'s `.test.tsx` suites for the first time.
+   Historic: `main` at `0c97e17` had 1 161. WP6-1's app totals went *down* by two and that was the intended direction — the bespoke "+N more
    with nowhere to tap" case in each suite became `content-not-affordance` running over **every** corpus
    case) and `curl localhost:8787/v1/health` — locally that reports
    `"dataset":"inline"`, which is the expected dev fallback; in production it must read `"kv"` with

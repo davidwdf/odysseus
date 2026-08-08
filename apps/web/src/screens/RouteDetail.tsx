@@ -25,6 +25,7 @@ import { RailBusToken } from '../components/RailBusToken'
 import { RouteChip } from '../components/RouteChip'
 import { RouteFactSheet } from '../components/RouteFactSheet'
 import { RouteStopRow } from '../components/RouteStopRow'
+import { RouteStopSheet } from '../components/RouteStopSheet'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
@@ -188,6 +189,18 @@ export function RouteDetail() {
   const openStop = (row: RouteStopRowView) =>
     navigate(`/stop/${encodeURIComponent(row.stopId)}?pole=${encodeURIComponent(row.stopId)}`)
 
+  /**
+   * Which stop's action sheet is open, if any.
+   *
+   * **A tap on a row opens this rather than navigating**, which is what `route-detail.spec.json` has
+   * declared non-optionally since WP6-6b and what this renderer did not do until WP6-7b's parity audit found
+   * it. The reason is in the spec's own note: the row's primary purpose is saving the route *at that pole*
+   * (ADR-042), and a tap that navigated away made the common action the harder one — in fact impossible,
+   * because ADR-032 makes this sheet the app's only favourite-creating affordance, so this app could not
+   * create a favourite at all.
+   */
+  const [sheetRow, setSheetRow] = useState<RouteStopRowView | null>(null)
+
   // Which fact sheet is open, if any (ADR-044). Held here rather than per pill so only one can be.
   const [factSheet, setFactSheet] = useState<RouteFactKey | null>(null)
 
@@ -269,7 +282,7 @@ export function RouteDetail() {
                 key={`${row.seq}-${row.stopId}`}
                 row={row}
                 index={index}
-                onPress={openStop}
+                onPress={setSheetRow}
                 registerRow={registerRow}
               />
             ))}
@@ -301,6 +314,29 @@ export function RouteDetail() {
               })}
               locale={locale}
               onClose={() => setFactSheet(null)}
+            />
+          ) : null}
+
+          {/* The sheet a stop row opens: save this route at this pole, or go to the place. The route
+              context it prints is the header's own view, so the sheet cannot name the journey differently
+              from the screen behind it. */}
+          {sheetRow !== null && query.data ? (
+            <RouteStopSheet
+              row={sheetRow}
+              // **The payload's route id, never the URL parameter.** `routeDetailView` keys each row's
+              // `saved` on `formatFavoriteRouteKey(pole, route.id)`, so a toggle written under any other
+              // spelling would produce a key the star was not computed from — the favourite would be stored
+              // and then read back as unsaved, silently. The URL param is the same string today; it is
+              // percent-decoded by the router and has no such guarantee tomorrow.
+              routeId={query.data.route.id}
+              routeNo={view.header.routeNo}
+              locale={locale}
+              destination={view.header.destination}
+              onClose={() => setSheetRow(null)}
+              onViewStop={() => {
+                setSheetRow(null)
+                openStop(sheetRow)
+              }}
             />
           ) : null}
         </>

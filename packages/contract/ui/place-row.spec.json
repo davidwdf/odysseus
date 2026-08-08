@@ -159,7 +159,7 @@
     "reducedMotion": "No entrance animation; the content is identical either way."
   },
   "idiom": [
-    "the saved-state star beside the row — present on native, and a **sibling** tap target rather than a nested one (ADR-024); it has no text, so no slot can declare it",
+    "the saved-state star beside the row — **on both renderers now**, and a **sibling** tap target rather than a nested one (ADR-024). It stays idiom for the reason it always did: it has no text, so no slot can declare it and each renderer draws it its own way. What changed is the claim beside it: this entry read *\"present on native\"* until WP6-7b’s parity audit, on the premise that a web rider could favourite somewhere else — and they could not, because WP6-4 ported the screen that *reads* favourites and neither affordance that *writes* one. **An `idiom` entry that names a renderer is a claim about that renderer, and this one had gone stale into a capability gap.** Each suite asserts the star directly, including that it changes not one word of the projection, which is what keeps the classification honest rather than convenient",
     "how the readout is emphasised — size, weight, and the colour ramp `etaUrgency` names",
     "the divider between rows, and whether there is one at all",
     "the pressed-state treatment (opacity here, ripple on Android)",

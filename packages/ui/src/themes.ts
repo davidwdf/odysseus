@@ -16,6 +16,18 @@ export type Mode = ThemeMode
 /** User-facing appearance preference; `auto` follows the OS scheme. */
 export type Appearance = 'auto' | 'light' | 'dark'
 
+/**
+ * Every appearance a rider may pick, in the order the picker offers them — one declaration (WP6-7).
+ *
+ * It lives here, beside the type and beside `resolveMode`, rather than in `packages/core`: the kernel may
+ * not import this package (`layers.json` gives it `use: []`), so a copy there would have restated the
+ * union and *added* a declaration to remove two. There were three before this — the RN Settings screen,
+ * the web shell's scaffolding, and the workbench gallery — and the order is a content decision that a
+ * second renderer could quietly reverse. `settingsView` takes this as an argument and decides only which
+ * of them is lit, which is the part that is a rule.
+ */
+export const APPEARANCES: readonly Appearance[] = ['auto', 'light', 'dark']
+
 export const themes: Record<Mode, ThemeVars> = THEME_VARS
 
 /** Resolve the appearance preference + OS scheme to a concrete mode. */

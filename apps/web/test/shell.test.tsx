@@ -155,13 +155,18 @@ describe('every declared destination opens, and none of them is blank', () => {
     })
   }
 
-  it('shows an unported destination its name and says it is coming, not an empty page', () => {
-    // `/faq` rather than `/favorites`, which WP6-4b ported. A placeholder assertion has to die when its
-    // placeholder does, or it becomes a test asserting that a shipped screen is still missing — the same
-    // churn WP6-3b's `/stop/:id` assertion went through, and the right kind.
-    const text = renderedText(mount('/faq'))
-    expect(text).toContain(t('en', 'settingsFaq'))
-    expect(text).toContain(t('en', 'comingSoon'))
+  it('has no unported destination left, and therefore says "coming soon" nowhere', () => {
+    // **The last of these assertions, and it inverts.** From WP6-0 this test mounted whichever destination
+    // was still a placeholder and asserted it said so — `/stop/:id`, then `/route/:id`, then `/faq`, each
+    // one dying as its screen landed. WP6-7 ports the last three, so what is left to assert is the
+    // absence: no destination in the app draws `comingSoon`, and `Placeholder.tsx` is deleted.
+    //
+    // Asserted over *every* destination rather than over the one that happened to be last, because that is
+    // the claim that cannot go stale — a ninth destination added without a screen fails here.
+    for (const destination of DESTINATIONS) {
+      const path = destination.path.replace(':id', encodeURIComponent('P:KMB:AA+CTB:AB'))
+      expect(renderedText(remount(path)), path).not.toContain(t('en', 'comingSoon'))
+    }
   })
 
   it('has no id-parameterised placeholder left, which is why this assertion is now the absence of one', () => {
@@ -225,8 +230,15 @@ describe('the locale override switches the UI and survives a cold start', () => 
     click(button(TRADITIONAL))
     const text = renderedText(container)
     expect(text).toContain(t('zh-Hant', 'tabSettings'))
-    expect(text).toContain(t('zh-Hant', 'comingSoon'))
-    expect(text).not.toContain(t('en', 'comingSoon'))
+    // A second string, and a section heading rather than the placeholder's `comingSoon` that used to stand
+    // here: WP6-7 replaced the shell's scaffolding with the real Settings screen, so the page now has
+    // headings of its own to switch. Two strings rather than one because the heading and the title come
+    // through different call sites.
+    expect(text).toContain(t('zh-Hant', 'settingsLanguage'))
+    expect(text).not.toContain(t('en', 'settingsLanguage'))
+    // …and the one thing that must NOT follow the locale: a language's own name (`endonym`). A reader who
+    // has set the app to a language they cannot read has to be able to find their way back.
+    expect(text).toContain(endonym('en'))
   })
 
   it('is still in force after a remount', () => {

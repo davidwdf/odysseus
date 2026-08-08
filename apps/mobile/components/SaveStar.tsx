@@ -43,7 +43,11 @@ export function SaveStar({
   return (
     <Pressable
       accessibilityRole="button"
+      // Both props: `accessibilityState` is read on native and dropped by react-native-web;
+      // `aria-pressed` is read on the web and is not a React Native prop at all. See the long note in
+      // `app/(tabs)/settings.tsx` — one fact, two spellings, neither platform reading the other's.
       accessibilityState={{ selected: saved }}
+      aria-pressed={saved}
       accessibilityLabel={t(locale, saved ? 'saved' : 'save')}
       hitSlop={8}
       onPress={() => toggle(stopId, routeId)}

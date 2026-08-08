@@ -23,6 +23,7 @@ import placeDetailSpec from '@nextbus/contract/ui/place-detail.spec.json'
 import placeRowSpec from '@nextbus/contract/ui/place-row.spec.json'
 import {
   CLIENT_POLICY_DEFAULTS,
+  formatFavoriteRouteKey,
   type Locale,
   type PlaceDetailView,
   placeDetailView,
@@ -124,6 +125,9 @@ vi.mock('../src/adapters/datasource', () => ({
 }))
 
 const { PlaceDetail } = await import('../src/screens/PlaceDetail')
+// The preference store is real, not mocked: which routes a rider saved at this place is this screen's
+// input, so a mock of it would be a mock of the thing the star block below is about.
+const { usePreferences } = await import('../src/lib/preferences')
 const { PLACE_PATH } = await import('../src/shell/destinations')
 
 // ── the harness ────────────────────────────────────────────────────────────────────────────────
@@ -357,5 +361,94 @@ describe('apps/web conforms to Place detail’s published spec, state by state',
         diverging.push(c.name)
     }
     expect(diverging).toEqual(['where-the-kerbs-own-names-differ-the-name-is-the-answer'])
+  })
+})
+
+describe('the saved-state star — the other half of WP6-8’s blocker', () => {
+  /**
+   * **Why this exists, and why the spec is right to go on calling the star idiom.**
+   *
+   * `place-row.spec.json` lists the star under `idiom` — *"present on native … it has no text, so no slot
+   * can declare it"* — and the second clause is still true and is exactly why this block is here rather
+   * than in the projection. What was false was the first clause's premise: the star was absent on the web
+   * because favourites were said to be `apps/web`'s at WP6-4, and WP6-4 ported the screen that *reads*
+   * favourites and neither affordance that *writes* one. So a web rider could not see which routes they had
+   * saved at a kerb, and could not unsave one.
+   *
+   * The star adds no text node, so every projected state above is unchanged by it — which is the property
+   * that lets it be idiom and the reason nothing above would have caught its absence.
+   */
+  const CASE = FIXTURE.content as string
+
+  const mountWith = async (saved: string[]) => {
+    const c = caseNamed(CASE)
+    now = Date.parse(c.args.now)
+    locationState =
+      c.args.here === undefined
+        ? { status: 'undetermined' }
+        : { status: 'ready', ...c.args.here, stale: false }
+    const detail = fromCorpus<StopDetail>(c.args.detail)
+    placeId = detail.stop.id
+    stop = () => Promise.resolve(detail)
+    usePreferences.setState({ favoriteRoutes: saved })
+    await mountSettled()
+    return viewFor(c)
+  }
+
+  const stars = () => [...container.querySelectorAll('button[aria-pressed]')]
+
+  it('draws no star at all when nothing at this place is saved', async () => {
+    await mountWith([])
+    expect(stars()).toHaveLength(0)
+  })
+
+  it('draws exactly one, on the row that is saved, and marks it pressed', async () => {
+    const view = await mountWith([])
+    const row = (view.grouped ? view.groups.flatMap((g) => g.rows) : view.rows)[0]
+    if (!row) throw new Error('the fixture has no rows')
+    const key = formatFavoriteRouteKey(row.stopId, row.routeId)
+    await mountWith([key])
+    expect(stars()).toHaveLength(1)
+    expect(stars()[0]?.getAttribute('aria-pressed')).toBe('true')
+    // The name is a word, not a graphic: without it the star is invisible to a screen reader — the same
+    // hole ADR-093 found in the bus token, on a control rather than an indicator.
+    expect(stars()[0]?.getAttribute('aria-label')).toBe(t(LOCALE, 'saved'))
+  })
+
+  it('unsaves on press, and takes the star with it', async () => {
+    const view = await mountWith([])
+    const row = (view.grouped ? view.groups.flatMap((g) => g.rows) : view.rows)[0]
+    if (!row) throw new Error('the fixture has no rows')
+    const key = formatFavoriteRouteKey(row.stopId, row.routeId)
+    await mountWith([key])
+    const star = stars()[0]
+    act(() => {
+      star?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(usePreferences.getState().favoriteRoutes).toEqual([])
+    expect(stars(), 'the star outlived the favourite').toHaveLength(0)
+  })
+
+  it('keeps the star a sibling of the row, never nested inside it', async () => {
+    // ADR-024, and the reason `PlaceRow` returns a flex container rather than a full-width button: a tap
+    // target inside a tap target is ambiguous on every platform and invalid HTML on this one.
+    const view = await mountWith([])
+    const row = (view.grouped ? view.groups.flatMap((g) => g.rows) : view.rows)[0]
+    if (!row) throw new Error('the fixture has no rows')
+    await mountWith([formatFavoriteRouteKey(row.stopId, row.routeId)])
+    const interactive = [...container.querySelectorAll(INTERACTIVE)]
+    expect(interactive.filter((el) => el.parentElement?.closest(INTERACTIVE))).toHaveLength(0)
+  })
+
+  it('changes not one word of the projection, which is what keeps it idiom', async () => {
+    // The control that makes the spec's classification honest rather than convenient: if the star ever
+    // carried text, every Place-row projection would differ between the renderers and this would have to
+    // become a declared slot.
+    const view = await mountWith([])
+    const bare = readTree(container).text
+    const row = (view.grouped ? view.groups.flatMap((g) => g.rows) : view.rows)[0]
+    if (!row) throw new Error('the fixture has no rows')
+    await mountWith([formatFavoriteRouteKey(row.stopId, row.routeId)])
+    expect(readTree(container).text).toEqual(bare)
   })
 })

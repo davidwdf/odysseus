@@ -21,7 +21,7 @@ import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PREFERENCES_STORAGE_KEY } from '../src/lib/preferences'
 import { PERSISTED_CACHE } from '../src/providers/QueryProvider'
-import { DESTINATIONS } from '../src/shell/destinations'
+import { DESTINATIONS, type Destination } from '../src/shell/destinations'
 
 /**
  * `apps/mobile`, found by walking up from the working directory.
@@ -109,17 +109,52 @@ describe('the destination set is identity, and both renderers declare the same o
     for (const path of Object.keys(NOT_A_RIDER_DESTINATION)) expect(actual).toContain(path)
   })
 
-  it('gives every unported destination an owning work package', () => {
-    // A route that renders a placeholder nobody has agreed to replace is a promise, not a plan. So the list
-    // of owner-less destinations is exactly the list of **ported** ones, and it grows one row at a time:
-    // Nearby at WP6-0, Place detail at WP6-3b, Favourites at WP6-4b, Search at WP6-5b, Route detail at
-    // WP6-6b. Asserted as an equality rather than a count, so a destination that quietly loses its owner
-    // without gaining a screen goes red.
-    const unowned = DESTINATIONS.filter((d) => !d.owner).map((d) => d.path)
-    expect(unowned).toEqual(['/', '/favorites', '/search', '/stop/:id', '/route/:id'])
-    for (const d of DESTINATIONS) {
-      if (d.owner) expect(d.owner).toMatch(/^WP6-\d+$/)
-    }
+  it('has no destination left that is a promise rather than a screen', () => {
+    // **This assertion inverted at WP6-7, and the inversion is the point of the row.** From WP6-0 it read
+    // "the owner-less destinations are exactly the ported ones", and it grew one row at a time — Nearby at
+    // WP6-0, Place detail at WP6-3b, Favourites at WP6-4b, Search at WP6-5b, Route detail at WP6-6b. WP6-7
+    // ports the last three, so the two lists are now the same list and the equality is against all eight.
+    expect(DESTINATIONS.filter((d) => !d.owner).map((d) => d.path)).toEqual(
+      DESTINATIONS.map((d) => d.path),
+    )
+  })
+
+  it('still rejects a promise, which is the half that would otherwise have gone vacuous', () => {
+    // The trap this row had to avoid. With no destination carrying an `owner`, the loop that checked the
+    // *format* of one can never execute — a check looking at nothing, wearing the same green tick as a
+    // check that passed. This repo has shipped that shape at least six times and audits for it by name.
+    //
+    // So the rule is exercised against a synthetic destination instead of against the live table: `owner`
+    // survives as a field precisely so the next unported destination can carry one, and what must survive
+    // with it is that a malformed one is caught. If a real `owner` ever returns, the live-table loop below
+    // starts running again and this case keeps it honest in the meantime.
+    const wellFormed: Destination = { path: '/nine', titleKey: 'tabNearby', owner: 'WP6-9' }
+    const malformed: Destination = { path: '/nine', titleKey: 'tabNearby', owner: 'someday' }
+    const owned = (d: Destination) => d.owner !== undefined && /^WP6-\d+$/.test(d.owner)
+    expect(owned(wellFormed)).toBe(true)
+    expect(owned(malformed)).toBe(false)
+    for (const d of DESTINATIONS) if (d.owner) expect(owned(d)).toBe(true)
+  })
+
+  it('renders a real screen at every declared destination', () => {
+    // What `owner` used to promise in prose, asserted mechanically instead — and it is a stronger claim
+    // than the field ever was. `App.tsx`'s `screenFor` is an exhaustive switch over the declared paths
+    // with a throwing default, so a destination added to this table without a screen is a **typecheck**
+    // failure; `shell.test.tsx` then mounts each one and requires a non-empty render, which is where a
+    // screen that compiles and draws nothing would be caught. This case pins the link between the two:
+    // the set those suites walk is this set.
+    expect(DESTINATIONS.map((d) => d.path).sort()).toEqual(
+      [
+        '/',
+        '/favorites',
+        '/settings',
+        '/search',
+        '/stop/:id',
+        '/route/:id',
+        '/about-data',
+        '/faq',
+      ].sort(),
+    )
   })
 })
 
@@ -239,5 +274,65 @@ describe('the two preference stores share one key, so neither may model fewer fi
       expect(source, `${where} does not call the shared rule`).toContain('migrateFavouriteKeys')
       expect(source, `${where} re-implements the rebasing`).not.toContain("kind === 'place'")
     }
+  })
+})
+
+describe('the brand typeface is one declaration, satisfied on both platforms', () => {
+  /**
+   * **The regression test for WP6-8's second blocker.**
+   *
+   * `apps/web` never loaded Inter. `apps/mobile` loads four cuts through `expo-font`, which on web registers
+   * real `FontFace`s — so the Expo PWA has rendered in the brand typeface since Wave 1 and this app rendered
+   * in the OS system stack, undoing ADR-017 on the renderer meant to replace the other. What made it survive
+   * a parity review is that `index.css` carried a comment claiming the stack was *"the same one the RN app
+   * resolves to on web"*, which was a rationalisation rather than a measurement.
+   *
+   * The binding asserted here is the useful one: `packages/ui`'s preset names the families, because that is
+   * what `expo-font` registers on native, and this app has to declare an `@font-face` for **each** of them.
+   * Native satisfies the declaration with four static cuts; the web satisfies it with one variable file
+   * aliased four ways. Same contract, two honest implementations — and a preset that renamed a cut turns
+   * this red rather than silently dropping the web app back to the system stack.
+   */
+  const css = readWeb('src/index.css')
+  const preset = readFileSync(join(dirname(MOBILE), '..', 'packages', 'ui', 'preset.js'), 'utf8')
+
+  /** The first entry of every `fontFamily` stack in the preset — the Inter cut, before the fallbacks. */
+  const presetCuts = [...preset.matchAll(/'(Inter_[A-Za-z0-9]+)'/g)].map((m) => m[1] as string)
+
+  it('found the preset’s cut names at all', () => {
+    // The anti-vacuous control: a restructured preset would make every assertion below pass over an empty
+    // list, which is the shape this repo audits for by name.
+    expect(new Set(presetCuts).size).toBeGreaterThanOrEqual(4)
+  })
+
+  it('declares an @font-face for every cut the preset names', () => {
+    for (const cut of new Set(presetCuts)) {
+      expect(css, `no @font-face for ${cut}, so it falls through to the system stack`).toContain(
+        `font-family: "${cut}"`,
+      )
+    }
+  })
+
+  it('serves them from one self-hosted file rather than a third-party link', () => {
+    // ADR-058 makes this app offline-first and `scripts/pwa`'s precache globs already include `woff2`, so a
+    // bundled font is precached with everything else. A Google Fonts <link> would fail exactly when the rest
+    // of the app is working — and would be a request to a domain the About screen does not credit.
+    const sources = [...css.matchAll(/src:\s*url\("([^"]+)"\)/g)].map((m) => m[1] as string)
+    expect(sources.length).toBeGreaterThanOrEqual(4)
+    expect(new Set(sources).size, 'the cuts should share one variable file').toBe(1)
+    for (const src of sources) {
+      expect(src, 'the font is fetched from a third party').not.toMatch(/^https?:/)
+      expect(src).toContain('.woff2')
+    }
+  })
+
+  it('leaves CJK to the platform, as ADR-019 decided', () => {
+    // The subset is `latin` on purpose: a Noto Sans HK face is megabytes, and ADR-019 declines to bundle one.
+    // So each @font-face is range-limited and Chinese renders in the platform face through the preset's
+    // fallback chain — which is why that chain must not be re-written here.
+    expect(css).toContain('unicode-range')
+    expect(css, 'the fallback stack is the preset’s, not a second copy').toContain(
+      '@apply bg-bg font-sans',
+    )
   })
 })

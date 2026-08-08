@@ -18,6 +18,7 @@
 import routeDetailSpec from '@nextbus/contract/ui/route-detail.spec.json'
 import {
   type CLIENT_POLICY_DEFAULTS,
+  formatFavoriteRouteKey,
   type Locale,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
@@ -138,7 +139,10 @@ const INTERACTIVE = 'button, a[href], [role="button"]'
  */
 function readTree(host: HTMLElement): RenderedTree {
   const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
-  const noise = new Set([t(LOCALE, 'back')])
+  // `Set<string>` explicitly: `t()` returns the branded `LocalizedString`, so an inferred set could not be
+  // queried with the plain strings read out of the tree. Invisible until WP6-7 put `test/**/*.tsx` into
+  // this app's `tsconfig` — seven suites had never been typechecked.
+  const noise = new Set<string>([t(LOCALE, 'back')])
   const text: string[] = []
   let node = walker.nextNode()
   while (node) {
@@ -356,4 +360,126 @@ describe('apps/web conforms to Route detail’s published spec, state by state',
       expect(findings).toEqual([])
     })
   }
+})
+
+/**
+ * jsdom implements `<dialog>` but not `showModal()`/`close()`, so a component that opens itself modally
+ * throws `showModal is not a function` on mount.
+ *
+ * **Worth a paragraph because of what it explains**: this shim did not exist before WP6-8's blocker fix, and
+ * the reason is that **no test in this repo had ever opened a `<dialog>`**. `RouteFactSheet` has been the
+ * four fact sheets' container since WP6-6c and is reached only by pressing a pill, which no suite did — so
+ * the sheets' content is projected from `routeFactSheet` in the corpus and their *container* has never been
+ * mounted. That is the same blind spot this whole row is about: a component behind an interaction is a
+ * component no state projection reaches.
+ *
+ * The shim is deliberately the smallest honest one — `open` on, `open` off — rather than a fake modal: what
+ * these tests assert is which actions the sheet offers and what pressing them writes, and focus trapping and
+ * inertness are the browser's job and not something a stub could prove anything about.
+ */
+function stubDialog(): void {
+  const proto = window.HTMLDialogElement?.prototype
+  if (!proto || typeof proto.showModal === 'function') return
+  proto.showModal = function showModal(this: HTMLDialogElement) {
+    this.setAttribute('open', '')
+  }
+  proto.close = function close(this: HTMLDialogElement) {
+    this.removeAttribute('open')
+  }
+}
+
+describe('a stop row opens the save sheet — the interaction no projection can see', () => {
+  /**
+   * **The regression test for WP6-8's blocker, and it is the shape of the whole finding.**
+   *
+   * `route-detail.spec.json` has declared this interaction non-optionally since WP6-6b — a tap on a stop row
+   * opens a sheet offering to save this route at this stop, *"deliberately not straight to the place"* —
+   * and `apps/web` navigated straight to the place for two waves anyway. **Every suite stayed green**,
+   * because `conformStates` asserts text and nesting and never interaction *destinations*: the sheet is not
+   * rendered until a tap, so no projected state changes either way.
+   *
+   * The cost was not one screen. ADR-032 makes this sheet the app's only favourite-creating affordance, so
+   * `toggleFavoriteRoute` had zero callers and the Favourites tab could never be filled by a web-only rider.
+   * Found by WP6-7b's parity audit, by four auditors independently and by none of the gates.
+   *
+   * These assertions are therefore *direct* rather than projected — the same division `search.spec.json`
+   * makes for a keypad key's `enabled`, and for the same reason: the thing that matters is not text.
+   */
+  const CASE = FIXTURE.content as string
+
+  beforeEach(stubDialog)
+
+  const openFirstStop = async (saved: string[] = []) => {
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    route = () => Promise.resolve(detail)
+    usePreferences.setState({ favoriteRoutes: saved })
+    vi.setSystemTime(Date.parse(c.args.now))
+    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+    const rows = [...container.querySelectorAll('button')].filter((b) =>
+      b.className.includes('w-full'),
+    )
+    const row = rows[0]
+    if (!row) throw new Error('no stop row to press')
+    act(() => {
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    return { detail, dialog: container.querySelector('dialog') }
+  }
+
+  const actionLabelled = (label: string) =>
+    [...container.querySelectorAll('dialog button')].find(
+      (b) => (b.textContent ?? '').trim() === label,
+    )
+
+  it('opens a dialog rather than navigating away', async () => {
+    const { dialog } = await openFirstStop()
+    expect(dialog, 'the row navigated instead of opening the sheet').not.toBeNull()
+    // Still on the route, not on the place — the half that was wrong.
+    expect(container.querySelector('dialog')?.getAttribute('open')).not.toBeNull()
+  })
+
+  it('offers both actions the spec names, in the RN screen’s order', async () => {
+    await openFirstStop()
+    expect(actionLabelled(t(LOCALE, 'addFavorite')), 'no save action').toBeDefined()
+    expect(actionLabelled(t(LOCALE, 'viewStop')), 'no view-stop action').toBeDefined()
+  })
+
+  it('writes the favourite under the same key the kernel computed `saved` from', async () => {
+    // The subtle half. `routeDetailView` keys `saved` on `formatFavoriteRouteKey(pole, route.id)`; a toggle
+    // written under the URL parameter's spelling would be stored and then read back as unsaved, silently.
+    const { detail } = await openFirstStop()
+    const save = actionLabelled(t(LOCALE, 'addFavorite'))
+    act(() => {
+      save?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const saved = usePreferences.getState().favoriteRoutes
+    expect(saved, 'nothing was saved').toHaveLength(1)
+    const [pole] = detail.stops
+    if (!pole) throw new Error('the fixture has no stops')
+    expect(saved[0]).toBe(formatFavoriteRouteKey(pole.stop.id, detail.route.id))
+  })
+
+  it('offers to remove it once it is saved, and the sheet closes on the action', async () => {
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    const [pole] = detail.stops
+    if (!pole) throw new Error('the fixture has no stops')
+    const key = formatFavoriteRouteKey(pole.stop.id, detail.route.id)
+    await openFirstStop([key])
+    expect(actionLabelled(t(LOCALE, 'removeFavorite')), 'still offering to add').toBeDefined()
+    expect(actionLabelled(t(LOCALE, 'addFavorite'))).toBeUndefined()
+    const remove = actionLabelled(t(LOCALE, 'removeFavorite'))
+    act(() => {
+      remove?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(usePreferences.getState().favoriteRoutes).toEqual([])
+    expect(container.querySelector('dialog'), 'the sheet stayed open').toBeNull()
+  })
+
+  it('nests no tap target inside another, sheet included', async () => {
+    await openFirstStop()
+    const interactive = [...container.querySelectorAll(INTERACTIVE)]
+    expect(interactive.filter((el) => el.parentElement?.closest(INTERACTIVE))).toHaveLength(0)
+  })
 })

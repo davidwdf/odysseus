@@ -84,6 +84,15 @@ const POLICED = [
   'apps/web/src/shell/',
   'apps/mobile/app/stop/',
   'apps/mobile/app/route/',
+  // WP6-7's three, and they joined with **no new allowlist entries** — which is the cleanest signal that
+  // nothing derivable was left behind, and the same one WP6-6c's fact sheets gave. Worth knowing why it
+  // was free: a preference screen's derivations are *tables and selectedness* rather than arithmetic, so
+  // none of the six shape rules fires on them even before the hoist. The gate could not have found this
+  // row's work; `settingsView`/`aboutView`/`faqView` exist because a decision was written down twice, not
+  // because a regex caught it. The list is what keeps them from coming back.
+  'apps/mobile/app/(tabs)/settings.tsx',
+  'apps/mobile/app/about-data.tsx',
+  'apps/mobile/app/faq.tsx',
   'apps/mobile/components/MiniMap.tsx',
   'apps/mobile/components/RouteMeta.tsx',
   'apps/mobile/components/RouteFactSheets.tsx',

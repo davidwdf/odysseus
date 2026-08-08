@@ -3,13 +3,18 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router'
 import { useAppearance } from '../lib/appearance'
 import { LocaleProvider } from '../providers/LocaleProvider'
 import { QueryProvider } from '../providers/QueryProvider'
+import { AboutData } from '../screens/AboutData'
+import { Faq } from '../screens/Faq'
 import { Favourites } from '../screens/Favourites'
 import { Nearby } from '../screens/Nearby'
 import { PlaceDetail } from '../screens/PlaceDetail'
 import { RouteDetail } from '../screens/RouteDetail'
 import { Search } from '../screens/Search'
+import { Settings } from '../screens/Settings'
 import {
+  ABOUT_PATH,
   type Destination,
+  FAQ_PATH,
   FAVOURITES_PATH,
   NEARBY_PATH,
   PLACE_PATH,
@@ -20,8 +25,6 @@ import {
   TABS,
 } from './destinations'
 import { CONTENT_INSET } from './layout'
-import { Placeholder } from './Placeholder'
-import { ShellPreferences } from './ShellPreferences'
 import { TabBar } from './TabBar'
 
 /**
@@ -71,7 +74,7 @@ function Shell() {
         ))}
       </Route>
       {PUSHED.map((pushed) => (
-        <Route key={pushed.path} path={pushed.path} element={screenFor(pushed, { back: true })} />
+        <Route key={pushed.path} path={pushed.path} element={screenFor(pushed)} />
       ))}
       {/*
         An unknown path goes to Nearby rather than to a "not found" page, and that is a content decision
@@ -98,28 +101,40 @@ function TabsLayout() {
 }
 
 /**
- * The element a destination renders.
+ * The element a destination renders — **all eight of them, as of WP6-7.**
  *
- * Every path but Nearby is still `apps/mobile`'s screen, so it renders a `Placeholder` — see that file for
- * why "not built" is a state the shell draws rather than a route that 404s. `/settings` additionally
- * carries the shell's own locale and appearance controls, which is what makes WP6-0's *"switches locale"*
- * something that was run rather than something that was wired.
+ * There is no fallback arm and no `Placeholder` any more. From WP6-0 until this row, every unported path
+ * rendered a placeholder naming the work package that owed it, so that "not yet here" was a drawn state
+ * rather than a route that 404s; that file is deleted, and a destination added to the table without a
+ * branch here is now a **typecheck failure** (the switch is exhaustive over a union of literals) rather
+ * than a screen that renders nothing. That is a stronger guarantee than the placeholder gave, and it is
+ * only available because the set is finally complete.
+ *
+ * Every pushed screen brings its own back control, because each has a header in flow rather than chrome
+ * floating over the content — so the shell owes none of them one.
  */
-function screenFor(destination: Destination, opts: { back?: boolean } = {}): ReactNode {
-  if (destination.path === NEARBY_PATH) return <Nearby />
-  // Place detail brings its own back control, because its header is in flow rather than floating over the
-  // content — see the screen. `opts.back` is the placeholder's chrome, not every pushed screen's.
-  if (destination.path === PLACE_PATH) return <PlaceDetail />
-  // Route detail brings its own back control too, for the same reason: its header is in flow and first.
-  if (destination.path === ROUTE_PATH) return <RouteDetail />
-  if (destination.path === FAVOURITES_PATH) return <Favourites />
-  if (destination.path === SEARCH.path) return <Search />
-  if (destination.path === SETTINGS_PATH) {
-    return (
-      <Placeholder destination={destination}>
-        <ShellPreferences />
-      </Placeholder>
-    )
+function screenFor(destination: Destination): ReactNode {
+  switch (destination.path) {
+    case NEARBY_PATH:
+      return <Nearby />
+    case FAVOURITES_PATH:
+      return <Favourites />
+    case SETTINGS_PATH:
+      return <Settings />
+    case SEARCH.path:
+      return <Search />
+    case PLACE_PATH:
+      return <PlaceDetail />
+    case ROUTE_PATH:
+      return <RouteDetail />
+    case ABOUT_PATH:
+      return <AboutData />
+    case FAQ_PATH:
+      return <Faq />
+    default:
+      // Unreachable while `DESTINATIONS` and this switch agree, and `test/shell-parity.test.ts` asserts
+      // that they do — by mounting every declared destination and requiring a non-empty render, which is
+      // what the `owner` field used to promise in words.
+      throw new Error(`no screen for the declared destination \`${destination.path}\``)
   }
-  return <Placeholder destination={destination} back={opts.back} />
 }

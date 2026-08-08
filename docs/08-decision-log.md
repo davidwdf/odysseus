@@ -6930,3 +6930,292 @@ pre-existing and unaddressed; it earned its keep here.
       below it off its node — a live divergence from the RN screen, which re-measures on `onLayout`.
   - **Test totals:** core **931** (+7), edge 149, api-client 71, ui-spec 30, web 154, mobile 132 — **1 467**.
     Corpus 14 files / **107** groups / **915** cases / **5** `knownDefect`.
+
+## ADR-096 — A screen with no data still has five states, and attribution is one of them
+
+- **Status:** **Decided and implemented 2026-08-07** as **WP6-7**, which closes the last unported
+  destination in `apps/web`. Implementation: `packages/core/src/settings.ts` (`settingsView`, `aboutView`,
+  `faqView`, +12 corpus cases in a new `settings.spec.json`), three component specs
+  (`settings`, `about-data`, `faq`), three new `apps/web` screens, six new conformance suites,
+  `apps/web/src/shell/{Placeholder,ShellPreferences}.tsx` **deleted**, and the three RN screens joining
+  `check-no-derivation`'s `POLICED` list — **with no new allowlist entries**.
+- **Context.** `proposals/04` files this row as *"mostly chrome and prose"* and calls it *"Cheap; last."*
+  It is the only screen group in the app with no `DataSource` call anywhere in it, which made two things
+  look optional and made both of them the row's actual content. The five canonical states were designed
+  around a query — they are branches over an async status (ADR-084) — and the spec format **requires** all
+  five. The tempting reading is that they are vacuous here and should all be `unenforced`, which would make
+  three specs decoration: the exact failure `enforcement` exists to prevent.
+- **Decisions:**
+  1. **The five states stop being branches over a fetch and become claims that hold without one, and the
+     mechanism is an inversion of the `slots`/`shows` split.** On a screen with data, `slots` is the thin
+     chrome that survives every branch and each state adds its own content. Here the **whole screen is
+     `slots`**, so a state declaring `shows: []` is declaring *everything* — and a renderer that drew a
+     heading and filled its list in an effect diverges at index 0 rather than passing.
+     `route-detail.spec.json` records the trap this inverts: there, `shows: []` and *"renders nothing at
+     all"* are indistinguishable to a text projection. Here they are opposites.
+  2. **`loading` therefore differs between the three screens, deliberately, and the difference is the
+     answer.** About and FAQ project the *whole page* in `loading`, because their first frame is the
+     finished page — and the claim is kept honest structurally rather than by comment: both drivers mount
+     with **no query client and no `DataSource` in scope**, so a fetch added to either screen breaks the
+     harness instead of quietly weakening the assertion. Settings' `loading` is `unenforced`, because the
+     two renderers close the pre-hydration window by *different* mechanisms (`localStorage` is synchronous,
+     so `persist` has read the blob before `create` returns; AsyncStorage is not, so the RN root holds the
+     splash) and a third renderer would have to choose one.
+  3. **A preference screen's content is a choice, so the choice is a rule.** Which languages are offered,
+     in what order, which one is lit, which sources this app is obliged to credit and where each link goes,
+     which questions it answers and in what order — 35 decisions across the three files, every one a private
+     `const` inside one renderer, and two of them already duplicated three files away in the shell
+     scaffolding this row deletes. Two are traps rather than tables: **a language is selected by the
+     override and never by the resolved locale** (`useLocale()` and `useLocaleOverride()` are in scope four
+     lines apart, either type-checks, and reading the wrong one lights *two* rows for the commonest rider
+     there is), and **an appearance is selected by the raw preference and never by the mode it resolves to**
+     (`resolveMode('auto', true)` is `'dark'`, so a renderer marking the resolved value shows *Dark* to a
+     rider who chose *Auto*, and looks right on every machine whose system theme is light). Both are one
+     `===` away, neither is expressible as a type, and both are corpus rows now.
+  4. **The words are injected and the catalogue *keys* are not.** ADR-054's line — core owns the rule, the
+     catalogue owns the word — puts every label behind an injected function, as `placeDetailView` does. But
+     the ordered table of *keys* the FAQ and the About page are built from stays in the kernel: a key is an
+     opaque string there, and *which questions this app answers, in what order, paired with which answers*
+     is a product decision of the same class as *which sources it credits*. Leaving it with the caller is
+     what left it a literal in one screen for a second renderer to copy. The corpus drives `text` as the
+     **identity**, so every recorded title, body, question and answer *is* its catalogue key — which makes a
+     mis-paired question and answer a byte diff rather than a screen a reader has to notice is strange.
+  5. **The membership of each option list comes from the package that owns its type, and never from a
+     fourth literal.** `SUPPORTED_LOCALES` from `@nextbus/i18n`; a new `APPEARANCES` from `@nextbus/ui`,
+     beside `Appearance` and `resolveMode`. `packages/core` may not import either (`layers.json` gives the
+     kernel `use: []`), so declaring the appearance union there would have **added** a declaration to remove
+     two. `settingsView` takes both as arguments and decides only which one is lit, which is the part that
+     is a rule.
+  6. **Attribution is an obligation rather than content, and three of the six were missing — each of them
+     closing a decision that had been taken, written down, and never actioned.** ADR-049 decision 5 ends
+     *"This extends the ADR-038 'About the data' sources list"* and it never did (the binding credit is the
+     one on the map face, which has always shipped; this is the second half, and the CSDI grant conditions
+     on naming the portal as well as the department). Green minibus shipped as a v1 operator with its own
+     feed and `faqCoverageA` named it, so **the app's own coverage answer contradicted its own attribution
+     page**. And every route, stop, fare and frequency is normalized from a third party's consolidated
+     crawl rather than fetched from the portal — ADR-021's own decision says to attribute it and ADR-038's
+     follow-up list repeats it. A licence obligation living as loose JSX in one renderer is one a second
+     renderer can simply not have, and nothing fails. There are **two licence rows** now, not one: the
+     basemap arrived a wave after ADR-038 built the section for exactly one, under different terms, leaving
+     a single sentence about *"the Government's terms"* standing for two different sets of them.
+  7. **The locale → portal-slug map is the strongest kernel rule on these screens.** The portals' path
+     segments are `en`/`tc`/`sc` and ours are `en`/`zh-Hant`/`zh-Hans`, so it is neither the identity nor a
+     `toLowerCase()` — and a renderer inventing `zh-hant` lands a rider on a 404 in the one place the app
+     sends them to read a licence, in the language most of them use. Two tables rather than one shared one,
+     because these are two organisations' independent schemes and the day CSDI renames `tc` a shared
+     constant would break data.gov.hk's links too. Both are pinned in all three locales, and the drivers
+     assert the rendered `href` — the half no text projection can see.
+  8. **The prose was audited against the code rather than reread, and `faqOfflineA` was not the worst of
+     it.** `faqMergeA` still described ADR-022's cross-operator *pair* merge — a rule ADR-042 replaced with
+     direction-aware N-member clustering and ADR-072 partly reversed — so every clause of it was wrong, and
+     its *question* was widened with it because two companies at one stop is now the minority reason a place
+     has several kerbs. `faqTimingsA` said every figure was *"shown as published"* while the app draws
+     concession fares it works out itself and marks with a `~` (ADR-095 decision 1), which is the one case
+     where the FAQ **contradicted an on-screen honesty label**. `faqFreshnessA` promised figures are *"greyed
+     out"* when the whole shipped treatment is `opacity.etaStale` and ADR-008's *"updated Ns ago"* chip has
+     never been built. `faqMapA` is still literally true — HK open data publishes no vehicle positions and no
+     polylines — but reads as a broader refusal than the app now makes, so it gains one sentence about the
+     schematic rather than a rewrite: *a stop list is not a map, and an inference is not a position.*
+     `faqCoverageA` audits clean and is the only one untouched.
+  9. **Two states are declared as real defects rather than softened.** Settings' `failed` — *the preference
+     could not be saved* — is a `knownDefect`, because both stores write through a wrapper that swallows the
+     throw and zustand's `persist` reports nothing to a component, so the screen shows a choice that will not
+     survive a reload. Settings' `stale` is a `knownDefect` and it is the more interesting one: two stores
+     share one storage key (ADR-089), **neither listens for a `storage` event**, and `persist` writes
+     `partialize`'s output as the *whole* blob — so a second tab holds a stale copy in memory and the next
+     preference it writes silently reverts the first tab's language. It is ADR-082 decision 5's hazard
+     between two *apps*, arriving between two tabs of one. Measured (no listener exists anywhere), owned in
+     `docs/07`, and a `mustNot` about a **producer** for the third time (ADR-090).
+- **Consequences:**
+  - ✅ **`apps/web` has eight ported screens and zero placeholders.** `Placeholder.tsx` and
+    `ShellPreferences.tsx` are deleted, no destination carries an `owner`, and `screenFor` is an exhaustive
+    switch over the declared paths with a throwing default — so a destination added to the table without a
+    screen is now a **typecheck failure**, which is a stronger guarantee than the `owner` field ever was.
+    **WP6-8's stated precondition is met.**
+  - ✅ **The emitter's own line is the evidence these specs are not decoration**: settings 7 states
+    (3 projected, 1 by a slot, 2 known defect, 1 unenforced), about-data 6 (3 / 1 / 0 / 2), faq 8
+    (5 / 1 / 0 / 2). A spec printing *"0 projected, 5 unenforced"* would have meant the row had not answered
+    its question.
+  - 🟠 **`shell-parity.test.ts`'s owner check would have gone vacuous and was rebuilt rather than deleted.**
+    With no destination carrying an `owner`, the loop validating the *format* of one can never execute — a
+    check looking at nothing, wearing the same green tick as a check that passed. The rule is exercised
+    against a synthetic destination instead, so it keeps biting until a real `owner` returns.
+  - ⚪ **The version is a `define`, not an env var.** `__APP_VERSION__` is substituted from
+    `apps/web/package.json` in both the vite and vitest configs, and declared in `src/globals.d.ts` so a
+    missing one is a typecheck failure. A `VITE_*` variable was rejected as a footgun by construction: unset
+    yields `undefined`, the screen prints nothing, and that is indistinguishable from a rider on an old
+    build. Both apps still read `0.0.0`; ADR-038's follow-up to set a real one is still open.
+  - **Test totals:** core **954** (+23), edge 149, api-client 71, ui-spec 30, web **192** (+38), mobile
+    **167** (+35) — **1 563** (+96). Corpus **15** files / **110** groups / **927** cases / 5 `knownDefect`.
+
+## ADR-097 — The conformance walker sees presence, not visibility — and an ARIA state it cannot see is one a rider may not be getting either
+
+- **Status:** **Decided and implemented 2026-08-07**, alongside
+  [ADR-096](#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them), as the
+  half of **WP6-7** that was not in its row. Implementation: the DOM FAQ built as a
+  `<button aria-expanded>` rather than a `<details>`, `faqView` modelling a collapsed answer as **absent**,
+  and **six sites across `apps/mobile` moved from `accessibilityState` to `aria-*`**.
+- **Context.** ADR-093 found that a component spec's vocabulary is *text*, so the conformance walker could
+  not see a bus token **at all** — a graphic carrying information a rider acts on. Writing the FAQ's spec
+  produced the mirror image, and it is the more dangerous of the two because it fails **open**: every driver
+  in this repo reads text with `createTreeWalker(host, NodeFilter.SHOW_TEXT)`, which consults the DOM and
+  never CSS. jsdom applies no stylesheet at all. So a closed `<details>`, a `hidden` node and a
+  `display: none` node are **fully visible** to it.
+- **Decisions:**
+  1. **A disclosure that keeps its content mounted is indistinguishable, to every check in this repo, from
+     one that shows everything.** Measured before any code was written: the exact walk every driver uses,
+     run over `<details><summary>Q</summary><p>A</p></details>`, returns `["Q","A"]`. A `<details>`-based FAQ
+     would therefore project the **collapsed** state — the state a rider *arrives* in — as seven questions
+     and seven answers, and the only escape would be to declare that state without a projection. So
+     `<details>` is ruled out on this screen despite being the DOM-idiomatic answer, and despite WP6-6c
+     reaching for `<dialog>` on exactly that reasoning.
+  2. **A second, independent reason points the same way**, which is what makes it a rule rather than a
+     preference: `<summary>` matches none of the drivers' interactive selectors, so a `<details>` FAQ
+     reports **zero tap targets** and the sibling-not-nested check looks at nothing. And a third: a hidden
+     answer is still read by a screen reader and still found by a page search, so "collapsed" that keeps its
+     content is a claim about pixels rather than about content.
+  3. **So the rule lives in the kernel, not in two renderers' habits.** `faqView` returns `answer` only when
+     the item is expanded — **absent, not empty** — and the spec's `answer` node carries `when: 'expanded'`.
+     Declared unconditional it would be satisfied by a renderer showing every answer at once; declared with
+     no `when` it would be satisfied by one that mounts them all and hides them. Watched failing: making the
+     DOM screen mount every answer behind a `hidden` class turns **7 tests red**.
+  4. **The same blindness caught a divergence from the opposite direction, in a component nobody was
+     looking at.** The DOM Settings screen's navigation chevron was written as a `›` character. That is a
+     **text node** — read by the walker whether or not it is `aria-hidden` — where the RN row draws an SVG,
+     so the web row projected one more string than its twin. It is an SVG now. *A glyph is text; an icon is
+     not.*
+  5. 🔴 **And the mirror of all of it is a live accessibility defect on the shipping PWA.**
+     `accessibilityState` is what six places in `apps/mobile` used to say *selected*, *expanded* or
+     *disabled*. **`react-native-web@0.21` forwards the modern `aria-*` props and drops `accessibilityState`
+     entirely** — no warning, no fallback, no attribute in the emitted DOM. So on the Expo PWA the language
+     picker, the appearance picker, the search chips, the search mode segment, the save star and the FAQ
+     disclosure announced **no state at all**: the selection was a dot and a font weight, and nothing a
+     screen reader could read. Found by writing an assertion that expected to *check* something and found
+     nothing to check; confirmed by a probe that rendered a `Pressable` with each prop and read the emitted
+     attributes back. Watched failing: reverting one turns the RN driver red by two tests.
+
+     ⚠️ **Corrected within the day, by WP6-7b's parity audit, and the correction is the more useful half.**
+     The first fix replaced `accessibilityState` with `aria-*` and was **half right**: RN 0.85 declares
+     fourteen `aria-*` props and **`aria-pressed` is not among them**, so on iOS and Android it is dropped
+     exactly the way `accessibilityState` is dropped on the web — *the same defect, one platform over,
+     introduced by the fix for it*. It type-checks, because `PressableProps` widens; the type system is no
+     help in either direction, which is the whole lesson. The five toggle sites now carry **both** props:
+     `accessibilityState` is read on native and ignored on web, `aria-pressed` is read on web and ignored on
+     native. `aria-selected` would have satisfied both mechanically and is wrong on the web, where
+     `aria-selected` on a `button` is not valid ARIA. The FAQ's `aria-expanded` needed no change — RN
+     declares that one.
+  6. **What a projection cannot see, the suites assert directly — and the flag they assert is the
+     kernel's.** `search.spec.json` established this for a keypad key's `enabled` (*"it is a colour, and the
+     suites assert it directly"*); Settings needs it for `selected`, and About for an `href`. The division is
+     safe **because the value is a field of the view model**: both renderers read one rule rather than each
+     deciding, so the two independent readings (`aria-pressed` on a `<button>`, `aria-pressed` on
+     react-native-web's `Pressable`) are two honest readings of one answer rather than two answers.
+- **Consequences:**
+  - ⚪ **The spec says the edge out loud.** `faq.spec.json`'s `idiom` list names the disclosure mechanism as
+    idiom *with one hard edge* — whatever the mechanism, a collapsed answer must not be in the tree — because
+    an unstated constraint is how the next renderer reaches for `<details>` and passes review.
+  - 🟠 **Two gates were found looking at nothing while this row was being built, and both are closed.**
+    `packages/core/vitest.config.ts`'s coverage `include` is hand-spelled and `src/favourites.ts` was never
+    added when WP6-4 created it — so the module holding the rule a rider's hand-curated list survives on sat
+    **outside** the 100 % branch threshold for a whole wave while the threshold reported green. Adding it
+    revealed **eight untested branches**, now covered (`favourites.ts` is at 100 % on all four axes). And
+    `apps/web/tsconfig.json` included `test/**/*.ts` but not `test/**/*.tsx`, so **seven conformance suites
+    were invisible to `pnpm typecheck`** — two real type errors surfaced the moment they were included.
+  - 🟡 **`conformStates` runs two checks, not three**, and it is worth stating because every screen suite in
+    the repo uses it: exact text equality per projected state, and no nested tap targets. It never calls
+    `render(view, {interactive:false})`, so **`content-not-affordance` is not enforced by any screen spec** —
+    only by the component-level `conform()` that `nearby-projection.test.tsx` drives over `StopRow`. That is
+    a real gap in what a screen spec buys, named here rather than assumed.
+  - ✅ **Verified in a browser on `apps/web`** (2026-08-07, `:8082`): Settings' three sections with
+    *Automatic* and *Auto* lit; the whole UI switched to 繁體中文 with the language list still reading
+    **English · 繁體中文 · 简体中文** and only *Automatic* translated — the endonym rule, on screen; the FAQ's
+    seven questions with **zero answers in the DOM** when collapsed (`document.querySelectorAll('p[id]')` →
+    0, and the answer text absent from `innerHTML`), then two open at once with both chevrons flipped; and
+    About the data with **six credited sources**, **eight anchors** every one of them
+    `target="_blank" rel="noopener noreferrer"`, and the terms link resolving to `data.gov.hk/tc/…` under a
+    Traditional Chinese UI.
+
+## ADR-098 — A spec can declare an interaction and no gate will check where it goes
+
+- **Status:** **Decided and implemented 2026-08-08**, closing WP6-8's first blocker. Implementation:
+  `apps/web/src/components/RouteStopSheet.tsx` and `SaveStar.tsx`, wired into Route detail and `PlaceRow`,
+  with 9 direct assertions across the two web state suites.
+- **Context.** WP6-7b's parity audit found that **`apps/web` could not create or delete a favourite** —
+  `toggleFavoriteRoute` had zero callers. ADR-032 makes the route schematic's stop action sheet the app's
+  only favourite-creating affordance and WP6-4 ported the screen that *reads* favourites and neither
+  affordance that *writes* one, so the Favourites tab could render a curated list and offer no way to change
+  it. Four auditors found it independently; no gate did.
+- **Decisions:**
+  1. **`conformStates` asserts text and nesting, and never interaction destinations — so a declared
+     interaction that goes somewhere else is invisible to the entire spec apparatus.**
+     `route-detail.spec.json` has carried the `stopName` interaction **non-optionally** since WP6-6b, with a
+     note saying *"deliberately not straight to the place"*, and `apps/web` navigated straight to the place
+     for two waves with every suite green. The sheet is not rendered until a tap, so no *projected state*
+     changes either way. This is the sharpest instance yet of the format's boundary: a spec describes what a
+     surface **shows**, and has no vocabulary for **how the content got there**.
+  2. **What a spec cannot check, a driver asserts directly — and the assertion has to be about the key, not
+     about the click.** The sheet writes `formatFavoriteRouteKey(pole, route.id)` using the **payload's**
+     route id rather than the URL parameter, because `routeDetailView` computes each row's `saved` from that
+     spelling: a toggle written under any other would be stored and read back as unsaved, silently. The test
+     asserts the stored key equals the kernel's, not merely that something was saved.
+  3. **An `idiom` entry that names a renderer is a claim about that renderer, and it can go stale into a
+     capability gap.** `place-row.spec.json` called the star idiom, *"present on native"*, on the premise
+     that a web rider could favourite elsewhere. The classification was right — the star has no text, so no
+     slot can declare it — and the premise was false. The entry now says *"on both renderers"*, and each
+     suite asserts that the star **changes not one word of the projection**, which is what keeps "idiom"
+     honest rather than convenient.
+  4. **The star is a sibling of the row's button, never nested** (ADR-024), which is why `PlaceRow` returns a
+     flex container rather than a full-width button. Measured on the live page: 27 interactive elements,
+     0 nested.
+- **Consequences:**
+  - 🟠 **No test in this repo had ever opened a `<dialog>`.** Writing these needed a
+    `HTMLDialogElement.prototype.showModal` shim, because jsdom implements the element and not the method —
+    which means `RouteFactSheet`'s container had never been mounted either since WP6-6c. The sheets' *content*
+    is corpus-projected; their container was unexercised. Same blind spot, one component over.
+  - 🟡 **The sheet's own content is a declared state in neither renderer's spec**, and giving it one would
+    have to spec the native sheet at the same time. Both suites assert it directly instead — the
+    `search.spec.json` division — and `docs/07` carries the follow-up. It would be the first spec for a
+    surface that exists only behind an interaction, which ADR-092 did not answer: that ADR settled what a
+    rider *infers from* an interaction, not what one *opens*.
+  - ✅ **Verified in a browser on live Hong Kong data:** KMB 1A → tap 秀安樓 → the sheet titled with the row's
+    own name, the `1A` chip and the journey → *加入收藏* → `nextbus.preferences` gains
+    `KMB:6F106FD26B684372|KMB:1A:outbound:1` → the Favourites tab draws the card with its southeast-bound
+    caption and a 2-minute reading → Place detail draws exactly one star, labelled `已收藏` and
+    `aria-pressed="true"`. Screenshots `.context/wave6-screenshots/21`–`22`.
+
+## ADR-099 — The same font declaration, four static cuts on native and one variable file on the web
+
+- **Status:** **Decided and implemented 2026-08-08**, closing WP6-8's second blocker. Implementation:
+  `@fontsource-variable/inter@5.3.0` as a devDependency of `apps/web`, four `@font-face` rules in
+  `apps/web/src/index.css`, and four parity assertions in `test/shell-parity.test.ts`.
+- **Context.** WP6-7b's parity audit found that **`apps/web` never loaded Inter**. `apps/mobile` loads four
+  cuts through `expo-font`, which on web registers real `FontFace`s — so the Expo PWA has rendered in the
+  brand typeface since ADR-017 and the renderer meant to replace it rendered in the OS system stack.
+- **Decisions:**
+  1. **The family names are not ours to choose — they are the contract.** `packages/ui`'s preset declares
+     `fontFamily.sans = ['Inter_400Regular', …]` because that is what `expo-font` registers on native, and
+     the preset is one declaration for both platforms. So the web declares an `@font-face` per cut. All four
+     alias the **same** 48 KB variable file over the full `100 900` range: native needs four static cuts
+     because it has no variable-font pipeline here, the web needs one. **Same declaration, two honest
+     implementations** — ADR-075's line, arriving in a place nobody expected it.
+  2. **Self-hosted, never a third-party link.** ADR-058 makes this app offline-first and `scripts/pwa`'s
+     precache globs already included `woff2`, so a font emitted into `dist/` is precached with everything
+     else. A Google Fonts `<link>` would be a request that fails exactly when the rest of the app is working,
+     and a per-rider request to a domain the About screen does not credit.
+  3. **Latin only — ADR-019 is untouched.** That ADR declines to bundle a CJK webfont for size, and the
+     decision stands: each `@font-face` is `unicode-range`-limited, so Chinese renders in the platform face
+     through the preset's fallback chain. Which is also why the body rule is `@apply bg-bg font-sans` rather
+     than a stack written out here — the chain is declared once.
+  4. **A comment is not a measurement.** What stood in `index.css` was a hand-written system stack justified
+     by *"the same stack the RN app resolves to on web, so a glyph difference is not mistaken for a rendering
+     difference while the two are being compared"*. Every clause was wrong, and it read as considered. The
+     four new assertions replace it: they read the preset and require a face per cut, one shared source, and
+     no `https:` URL.
+- **Consequences:**
+  - ⚪ **48 KB for the whole weight range**, against 1.35 MB of TTF for the four native cuts and against a
+    402 KB JS bundle. The precache went from 9 files to 10, 441 kB to 489 kB.
+  - ✅ **Verified in a browser:** all four faces report `loaded`, `<h1>` computes to `Inter_700Bold` at
+    weight 700 and body to `Inter_400Regular`, while 繁體中文 and 简体中文 stay on the platform face.
+    Screenshot `.context/wave6-screenshots/23`.
+  - 🟡 **The first runtime dependency `apps/web` has that `apps/mobile` does not**, which is the direction of
+    travel: WP6-8 removes Expo's font pipeline and this replaces it at a twentieth of the bytes.

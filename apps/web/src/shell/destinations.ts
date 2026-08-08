@@ -16,11 +16,11 @@ import { type LucideIcon, MapPin, Search, Settings, Star } from 'lucide-react'
  * stronger reason to keep it here: a shared destination set means a deep link a rider bookmarked, or a
  * link in a message, resolves the same on either renderer. A URL is not a label.
  *
- * **`owner` is what stops this table becoming a promise.** Every destination except Nearby is still
- * `apps/mobile`'s screen; each names the work package that ports it, and the shell renders a
- * `Placeholder` for it rather than a blank route — declared states, per ADR-075's own "the five states
- * must be distinguishable and non-blank". A destination with no `owner` and no ported screen would be a
- * route that renders nothing and nobody has agreed to fix; the parity test rejects that shape.
+ * **`owner` was what stopped this table becoming a promise, and as of WP6-7 no destination carries one.**
+ * Every one of the eight is a real `apps/web` screen; the field stays declared because it is how the next
+ * destination arrives — a route that renders nothing and nobody has agreed to fix is the shape the parity
+ * test rejects, and it can only reject it if the field exists to be absent. `Placeholder.tsx` was deleted
+ * in the same commit, which is the more honest marker: there is nothing left for it to draw.
  */
 export interface Destination {
   /** The URL path — react-router's syntax, which is expo-router's with `[id]` spelled `:id`. */
@@ -47,14 +47,20 @@ export interface ChromeDestination extends Destination {
 export const TABS: readonly ChromeDestination[] = [
   { path: '/', titleKey: 'tabNearby', icon: MapPin },
   { path: '/favorites', titleKey: 'tabFavorites', icon: Star },
-  { path: '/settings', titleKey: 'tabSettings', icon: Settings, owner: 'WP6-7' },
+  { path: '/settings', titleKey: 'tabSettings', icon: Settings },
 ]
 
-/** Nearby's path, and the one destination WP6-0 renders a real screen for. */
+/** Nearby's path — the first screen ported (WP6-0), and the shell's fallback for an unknown one. */
 export const NEARBY_PATH = '/'
 
-/** The destination whose placeholder carries the shell's own locale + appearance controls. */
+/** Settings' path — the sixth ported screen (WP6-7), and the one that retired `ShellPreferences`. */
 export const SETTINGS_PATH = '/settings'
+
+/** "About the data" — the attribution page, and the app's only screen of outbound links. */
+export const ABOUT_PATH = '/about-data'
+
+/** The FAQ — seven questions, and the eighth and last destination to be ported. */
+export const FAQ_PATH = '/faq'
 
 /** Place detail's path — the second ported screen (WP6-3b), and the one a Nearby card heading opens. */
 export const PLACE_PATH = '/stop/:id'
@@ -88,8 +94,8 @@ export const PUSHED: readonly Destination[] = [
   SEARCH,
   { path: '/stop/:id' },
   { path: ROUTE_PATH },
-  { path: '/about-data', titleKey: 'aboutData', owner: 'WP6-7' },
-  { path: '/faq', titleKey: 'settingsFaq', owner: 'WP6-7' },
+  { path: '/about-data', titleKey: 'aboutData' },
+  { path: '/faq', titleKey: 'settingsFaq' },
 ]
 
 /**

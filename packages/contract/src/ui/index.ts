@@ -1,10 +1,13 @@
 import type { ComponentSpec } from '@nextbus/ui-spec'
+import { ABOUT_DATA_SPEC } from './about-data'
+import { FAQ_SPEC } from './faq'
 import { FAVOURITES_SPEC } from './favourites'
 import { NEARBY_SPEC } from './nearby'
 import { PLACE_DETAIL_SPEC } from './place-detail'
 import { PLACE_ROW_SPEC } from './place-row'
 import { ROUTE_DETAIL_SPEC } from './route-detail'
 import { SEARCH_SPEC } from './search'
+import { SETTINGS_SPEC } from './settings'
 import { STOP_ROW_SPEC } from './stop-row'
 
 /**
@@ -18,12 +21,15 @@ import { STOP_ROW_SPEC } from './stop-row'
  * The map's keys are the emitted file stems, so adding a spec is one entry and a `ui:emit`.
  */
 export const UI_SPECS: Record<string, ComponentSpec> = {
+  'about-data': ABOUT_DATA_SPEC,
+  faq: FAQ_SPEC,
   favourites: FAVOURITES_SPEC,
   nearby: NEARBY_SPEC,
   'place-detail': PLACE_DETAIL_SPEC,
   'place-row': PLACE_ROW_SPEC,
   'route-detail': ROUTE_DETAIL_SPEC,
   search: SEARCH_SPEC,
+  settings: SETTINGS_SPEC,
   'stop-row': STOP_ROW_SPEC,
 }
 
@@ -38,11 +44,14 @@ export const UI_SPEC_REGISTRY: Record<string, ComponentSpec> = Object.fromEntrie
 )
 
 export {
+  ABOUT_DATA_SPEC,
+  FAQ_SPEC,
   FAVOURITES_SPEC,
   NEARBY_SPEC,
   PLACE_DETAIL_SPEC,
   PLACE_ROW_SPEC,
   ROUTE_DETAIL_SPEC,
   SEARCH_SPEC,
+  SETTINGS_SPEC,
   STOP_ROW_SPEC,
 }

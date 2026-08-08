@@ -1,0 +1,423 @@
+{
+  "module": "settings",
+  "source": "src/settings.ts",
+  "version": 1,
+  "doc": "The three rules the Settings section is assembled from (WP6-7) — the preference screen, and the two pages it pushes to. This is the only screen group in the app with no DataSource call anywhere in it, which is exactly why the rules were invisible: a preference screen's content is a CHOICE, and which options exist, in what order, and which one is lit are decisions like any other. Two of them are traps rather than tables and both are pinned below: a language is selected by the OVERRIDE and never by the resolved locale (`null` means follow the device, and a rider on an English device who has never touched the picker must light Automatic and NOT English), and an appearance is selected by the RAW preference and never by the mode it resolves to (`auto` stays selected on a dark system). The words are injected and are FIXTURES here, not the app's catalogue: `text` is the identity function in every About and FAQ case, so what these bytes pin is the composition — which key is paired with which, in what order, and which URL a locale lands on — and a Swift suite reading them supplies its own catalogue. No row here is `knownDefect`.",
+  "groups": {
+    "settingsView": {
+      "doc": "The preference screen: two option groups with exactly one selection each, and the rows it pushes to. The label fixture uses the real endonyms (they are language-neutral by definition — that is why `endonym()` exists) and the identity for everything else.",
+      "cases": [
+        {
+          "name": "following-the-device-selects-automatic-and-no-language",
+          "why": "The commonest rider there is: never touched the picker. `Automatic` is an option rather than the absence of one, it is first, and it is the only one lit. Its pair below differs ONLY in the input and MUST differ in the output — together they are what a renderer reading `useLocale()` instead of `useLocaleOverride()` gets wrong, because on an English device that renderer lights two rows.",
+          "args": {
+            "locales": ["en", "zh-Hant", "zh-Hans"],
+            "localeOverride": null,
+            "appearances": ["auto", "light", "dark"],
+            "appearance": "auto"
+          },
+          "expect": {
+            "languages": [
+              { "value": null, "label": "Automatic", "selected": true },
+              { "value": "en", "label": "English", "selected": false },
+              { "value": "zh-Hant", "label": "繁體中文", "selected": false },
+              { "value": "zh-Hans", "label": "简体中文", "selected": false }
+            ],
+            "appearances": [
+              { "value": "auto", "label": "auto", "selected": true },
+              { "value": "light", "label": "light", "selected": false },
+              { "value": "dark", "label": "dark", "selected": false }
+            ],
+            "about": [
+              { "id": "about-data", "label": "about-data" },
+              { "id": "faq", "label": "faq" }
+            ]
+          }
+        },
+        {
+          "name": "an-override-equal-to-the-device-language-still-selects-that-language",
+          "why": "The other half of the pair. Choosing English explicitly is a DIFFERENT state from following a device that happens to be English — a rider who picked it keeps it when they travel and change their phone's language, and one who did not does not. Clearing the override is therefore a real action with a visible result, which is what makes `Automatic` worth drawing at all.",
+          "args": {
+            "locales": ["en", "zh-Hant", "zh-Hans"],
+            "localeOverride": "en",
+            "appearances": ["auto", "light", "dark"],
+            "appearance": "auto"
+          },
+          "expect": {
+            "languages": [
+              { "value": null, "label": "Automatic", "selected": false },
+              { "value": "en", "label": "English", "selected": true },
+              { "value": "zh-Hant", "label": "繁體中文", "selected": false },
+              { "value": "zh-Hans", "label": "简体中文", "selected": false }
+            ],
+            "appearances": [
+              { "value": "auto", "label": "auto", "selected": true },
+              { "value": "light", "label": "light", "selected": false },
+              { "value": "dark", "label": "dark", "selected": false }
+            ],
+            "about": [
+              { "id": "about-data", "label": "about-data" },
+              { "id": "faq", "label": "faq" }
+            ]
+          }
+        },
+        {
+          "name": "a-chosen-language-and-a-chosen-appearance",
+          "why": "Both groups off their defaults at once, so a rule that read one preference for both groups — or that lit an option by INDEX rather than by value — cannot pass. `zh-Hans` is third in the list and `dark` is third in its own, so the two indices agree and only the values distinguish them.",
+          "args": {
+            "locales": ["en", "zh-Hant", "zh-Hans"],
+            "localeOverride": "zh-Hans",
+            "appearances": ["auto", "light", "dark"],
+            "appearance": "dark"
+          },
+          "expect": {
+            "languages": [
+              { "value": null, "label": "Automatic", "selected": false },
+              { "value": "en", "label": "English", "selected": false },
+              { "value": "zh-Hant", "label": "繁體中文", "selected": false },
+              { "value": "zh-Hans", "label": "简体中文", "selected": true }
+            ],
+            "appearances": [
+              { "value": "auto", "label": "auto", "selected": false },
+              { "value": "light", "label": "light", "selected": false },
+              { "value": "dark", "label": "dark", "selected": true }
+            ],
+            "about": [
+              { "id": "about-data", "label": "about-data" },
+              { "id": "faq", "label": "faq" }
+            ]
+          }
+        },
+        {
+          "name": "auto-appearance-stays-selected-whatever-it-resolves-to",
+          "why": "The appearance trap, pinned on its own because it is invisible on a light machine. `resolveMode('auto', systemIsDark)` is `'dark'`, so a renderer marking the RESOLVED mode shows Dark as chosen to a rider who chose Auto — and it looks right on every system whose theme happens to be light, which is most of them at the moment anyone would test it. This view never learns the system theme, which is how the trap is designed out rather than merely avoided.",
+          "args": {
+            "locales": ["en", "zh-Hant", "zh-Hans"],
+            "localeOverride": "zh-Hant",
+            "appearances": ["auto", "light", "dark"],
+            "appearance": "auto"
+          },
+          "expect": {
+            "languages": [
+              { "value": null, "label": "Automatic", "selected": false },
+              { "value": "en", "label": "English", "selected": false },
+              { "value": "zh-Hant", "label": "繁體中文", "selected": true },
+              { "value": "zh-Hans", "label": "简体中文", "selected": false }
+            ],
+            "appearances": [
+              { "value": "auto", "label": "auto", "selected": true },
+              { "value": "light", "label": "light", "selected": false },
+              { "value": "dark", "label": "dark", "selected": false }
+            ],
+            "about": [
+              { "id": "about-data", "label": "about-data" },
+              { "id": "faq", "label": "faq" }
+            ]
+          }
+        },
+        {
+          "name": "a-build-shipping-one-language-still-offers-automatic",
+          "why": "The degenerate build, and it says something about the shape rather than about a rider: `Automatic` does not come from the locale list, so a build that shipped a single language would still offer following the device. A rule that built the list by mapping over `locales` and prepending nothing would produce three rows here instead of two and would look correct in every other case.",
+          "args": {
+            "locales": ["en"],
+            "localeOverride": null,
+            "appearances": ["auto", "light", "dark"],
+            "appearance": "light"
+          },
+          "expect": {
+            "languages": [
+              { "value": null, "label": "Automatic", "selected": true },
+              { "value": "en", "label": "English", "selected": false }
+            ],
+            "appearances": [
+              { "value": "auto", "label": "auto", "selected": false },
+              { "value": "light", "label": "light", "selected": true },
+              { "value": "dark", "label": "dark", "selected": false }
+            ],
+            "about": [
+              { "id": "about-data", "label": "about-data" },
+              { "id": "faq", "label": "faq" }
+            ]
+          }
+        }
+      ]
+    },
+    "aboutView": {
+      "doc": "The attribution page: which sources this app is obliged to credit, in what order, with which URL — and the two licences it actually ships under. `text` is the identity, so every `title` and `body` below IS the catalogue key, which is what makes a mis-paired title and body a diff rather than a plausible-looking screen. The three locale cases exist for one rule: the portals' path slugs are `en`/`tc`/`sc` and ours are `en`/`zh-Hant`/`zh-Hans`, so the mapping is neither the identity nor a `toLowerCase()`.",
+      "cases": [
+        {
+          "name": "english-links-to-the-english-terms",
+          "why": "The base case, and the only locale where the slug happens to equal the locale — which is exactly why it proves nothing on its own and why the two below exist.",
+          "args": { "locale": "en", "version": "1.4.0" },
+          "expect": {
+            "intro": "aboutIntro",
+            "sources": [
+              {
+                "id": "govhk",
+                "title": "aboutGovHk",
+                "body": "aboutGovHkBody",
+                "url": "https://data.gov.hk"
+              },
+              {
+                "id": "kmb",
+                "title": "aboutKmb",
+                "body": "aboutKmbBody",
+                "url": "https://data.etabus.gov.hk"
+              },
+              {
+                "id": "ctb",
+                "title": "aboutCtb",
+                "body": "aboutCtbBody",
+                "url": "https://rt.data.gov.hk/v2/transport/citybus"
+              },
+              {
+                "id": "gmb",
+                "title": "aboutGmb",
+                "body": "aboutGmbBody",
+                "url": "https://data.etagmb.gov.hk"
+              },
+              {
+                "id": "landsd",
+                "title": "aboutLandsd",
+                "body": "aboutLandsdBody",
+                "url": "https://portal.csdi.gov.hk"
+              },
+              {
+                "id": "hkbus",
+                "title": "aboutHkbus",
+                "body": "aboutHkbusBody",
+                "url": "https://data.hkbus.app"
+              }
+            ],
+            "licences": [
+              {
+                "id": "govhk-terms",
+                "title": "aboutTerms",
+                "body": "aboutTermsBody",
+                "url": "https://data.gov.hk/en/terms-and-conditions"
+              },
+              {
+                "id": "csdi-terms",
+                "title": "aboutCsdiTerms",
+                "body": "aboutCsdiTermsBody",
+                "url": "https://portal.csdi.gov.hk/csdi-webpage/en/terms"
+              }
+            ],
+            "version": { "label": "aboutVersion", "value": "1.4.0" }
+          }
+        },
+        {
+          "name": "traditional-chinese-links-to-the-tc-slug-not-zh-hant",
+          "why": "The rule this group exists for. A renderer that lower-cased the locale, or passed it through, sends a rider to `data.gov.hk/zh-hant/terms-and-conditions` — a 404, in the one place the app sends them to read a licence, in the language of most of its users. Both licence URLs move together here, which is also what makes the two slug tables' independence visible.",
+          "args": { "locale": "zh-Hant", "version": "1.4.0" },
+          "expect": {
+            "intro": "aboutIntro",
+            "sources": [
+              {
+                "id": "govhk",
+                "title": "aboutGovHk",
+                "body": "aboutGovHkBody",
+                "url": "https://data.gov.hk"
+              },
+              {
+                "id": "kmb",
+                "title": "aboutKmb",
+                "body": "aboutKmbBody",
+                "url": "https://data.etabus.gov.hk"
+              },
+              {
+                "id": "ctb",
+                "title": "aboutCtb",
+                "body": "aboutCtbBody",
+                "url": "https://rt.data.gov.hk/v2/transport/citybus"
+              },
+              {
+                "id": "gmb",
+                "title": "aboutGmb",
+                "body": "aboutGmbBody",
+                "url": "https://data.etagmb.gov.hk"
+              },
+              {
+                "id": "landsd",
+                "title": "aboutLandsd",
+                "body": "aboutLandsdBody",
+                "url": "https://portal.csdi.gov.hk"
+              },
+              {
+                "id": "hkbus",
+                "title": "aboutHkbus",
+                "body": "aboutHkbusBody",
+                "url": "https://data.hkbus.app"
+              }
+            ],
+            "licences": [
+              {
+                "id": "govhk-terms",
+                "title": "aboutTerms",
+                "body": "aboutTermsBody",
+                "url": "https://data.gov.hk/tc/terms-and-conditions"
+              },
+              {
+                "id": "csdi-terms",
+                "title": "aboutCsdiTerms",
+                "body": "aboutCsdiTermsBody",
+                "url": "https://portal.csdi.gov.hk/csdi-webpage/tc/terms"
+              }
+            ],
+            "version": { "label": "aboutVersion", "value": "1.4.0" }
+          }
+        },
+        {
+          "name": "simplified-chinese-links-to-the-sc-slug",
+          "why": "The third slug, and the one a two-branch rule (`en` else `tc`) would silently get wrong — a Simplified reader would land on the Traditional terms and never know.",
+          "args": { "locale": "zh-Hans", "version": "0.0.0" },
+          "expect": {
+            "intro": "aboutIntro",
+            "sources": [
+              {
+                "id": "govhk",
+                "title": "aboutGovHk",
+                "body": "aboutGovHkBody",
+                "url": "https://data.gov.hk"
+              },
+              {
+                "id": "kmb",
+                "title": "aboutKmb",
+                "body": "aboutKmbBody",
+                "url": "https://data.etabus.gov.hk"
+              },
+              {
+                "id": "ctb",
+                "title": "aboutCtb",
+                "body": "aboutCtbBody",
+                "url": "https://rt.data.gov.hk/v2/transport/citybus"
+              },
+              {
+                "id": "gmb",
+                "title": "aboutGmb",
+                "body": "aboutGmbBody",
+                "url": "https://data.etagmb.gov.hk"
+              },
+              {
+                "id": "landsd",
+                "title": "aboutLandsd",
+                "body": "aboutLandsdBody",
+                "url": "https://portal.csdi.gov.hk"
+              },
+              {
+                "id": "hkbus",
+                "title": "aboutHkbus",
+                "body": "aboutHkbusBody",
+                "url": "https://data.hkbus.app"
+              }
+            ],
+            "licences": [
+              {
+                "id": "govhk-terms",
+                "title": "aboutTerms",
+                "body": "aboutTermsBody",
+                "url": "https://data.gov.hk/sc/terms-and-conditions"
+              },
+              {
+                "id": "csdi-terms",
+                "title": "aboutCsdiTerms",
+                "body": "aboutCsdiTermsBody",
+                "url": "https://portal.csdi.gov.hk/csdi-webpage/sc/terms"
+              }
+            ],
+            "version": { "label": "aboutVersion", "value": "0.0.0" }
+          }
+        }
+      ]
+    },
+    "faqView": {
+      "doc": "The FAQ, with whichever answers the rider has opened. `text` is the identity, so a `question` below IS its catalogue key and the pairing is pinned by data rather than by a reader noticing that a question has the wrong answer under it. The load-bearing property is that a collapsed answer is ABSENT from the model rather than present and hidden — a conformance projection reads text by presence, not by visibility, so a renderer that keeps every answer mounted and merely hides it is indistinguishable from one that shows them all.",
+      "cases": [
+        {
+          "name": "nothing-open-is-seven-questions-and-not-one-answer",
+          "why": "The state a rider arrives in, and the one that would be unprojectable if a collapsed answer were merely hidden. Seven items, seven questions, zero `answer` keys — a `<details>`-based renderer produces the same pixels and a different model, which is precisely the divergence this shape exists to make visible.",
+          "args": { "expanded": [] },
+          "expect": {
+            "items": [
+              { "id": "freshness", "question": "faqFreshnessQ", "expanded": false },
+              { "id": "timings", "question": "faqTimingsQ", "expanded": false },
+              { "id": "coverage", "question": "faqCoverageQ", "expanded": false },
+              { "id": "merge", "question": "faqMergeQ", "expanded": false },
+              { "id": "offline", "question": "faqOfflineQ", "expanded": false },
+              { "id": "map", "question": "faqMapQ", "expanded": false },
+              { "id": "remarks", "question": "faqRemarksQ", "expanded": false }
+            ]
+          }
+        },
+        {
+          "name": "one-open-carries-its-own-answer-and-nobody-elses",
+          "why": "The pairing, made a diff. `faqMergeQ` must bring `faqMergeA` and not the answer above or below it — a mis-paired FAQ type-checks, renders, and reads as merely a strange one. The opened item is deliberately in the middle of the list, so an off-by-one in either direction is a different set of bytes.",
+          "args": { "expanded": ["merge"] },
+          "expect": {
+            "items": [
+              { "id": "freshness", "question": "faqFreshnessQ", "expanded": false },
+              { "id": "timings", "question": "faqTimingsQ", "expanded": false },
+              { "id": "coverage", "question": "faqCoverageQ", "expanded": false },
+              {
+                "id": "merge",
+                "question": "faqMergeQ",
+                "answer": "faqMergeA",
+                "expanded": true
+              },
+              { "id": "offline", "question": "faqOfflineQ", "expanded": false },
+              { "id": "map", "question": "faqMapQ", "expanded": false },
+              { "id": "remarks", "question": "faqRemarksQ", "expanded": false }
+            ]
+          }
+        },
+        {
+          "name": "several-open-at-once-because-these-are-seven-questions-and-not-a-wizard",
+          "why": "A decision rather than an accident: an accordion that closed the previous answer would make comparing two of them impossible, and 'how fresh are the times' and 'does it work offline' are exactly the pair a rider reads together. Two non-adjacent items, so a rule that kept only the LAST opened — the single-open accordion a second renderer would reach for by default — produces one answer here instead of two.",
+          "args": { "expanded": ["freshness", "offline"] },
+          "expect": {
+            "items": [
+              {
+                "id": "freshness",
+                "question": "faqFreshnessQ",
+                "answer": "faqFreshnessA",
+                "expanded": true
+              },
+              { "id": "timings", "question": "faqTimingsQ", "expanded": false },
+              { "id": "coverage", "question": "faqCoverageQ", "expanded": false },
+              { "id": "merge", "question": "faqMergeQ", "expanded": false },
+              {
+                "id": "offline",
+                "question": "faqOfflineQ",
+                "answer": "faqOfflineA",
+                "expanded": true
+              },
+              { "id": "map", "question": "faqMapQ", "expanded": false },
+              { "id": "remarks", "question": "faqRemarksQ", "expanded": false }
+            ]
+          }
+        },
+        {
+          "name": "an-expanded-id-that-is-not-a-question-opens-nothing",
+          "why": "The open set is the caller's, so it can outlive the list it refers to — a persisted set, or an id renamed by a later edit. The list is this rule's and is never widened by what it is asked to open: an unknown id contributes no row rather than an empty one. Recorded because the obvious alternative implementation, mapping over the EXPANDED set, would produce a row here with no question in it.",
+          "args": { "expanded": ["freshness", "there-is-no-such-question"] },
+          "expect": {
+            "items": [
+              {
+                "id": "freshness",
+                "question": "faqFreshnessQ",
+                "answer": "faqFreshnessA",
+                "expanded": true
+              },
+              { "id": "timings", "question": "faqTimingsQ", "expanded": false },
+              { "id": "coverage", "question": "faqCoverageQ", "expanded": false },
+              { "id": "merge", "question": "faqMergeQ", "expanded": false },
+              { "id": "offline", "question": "faqOfflineQ", "expanded": false },
+              { "id": "map", "question": "faqMapQ", "expanded": false },
+              { "id": "remarks", "question": "faqRemarksQ", "expanded": false }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

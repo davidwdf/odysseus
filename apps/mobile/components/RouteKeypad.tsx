@@ -48,7 +48,6 @@ function Key({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled: !enabled }}
       accessibilityLabel={accessibilityLabel ?? label}
       disabled={!enabled}
       onPress={onPress}

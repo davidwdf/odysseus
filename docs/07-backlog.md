@@ -339,7 +339,147 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 - [ ] **"Ghost bus" flagging** — surface buses that vanish from ETA without arriving (data-quality + oddly satisfying).
 - [ ] **Shareable arrival card** — a "boarding-pass"-style card of a stop + next arrivals to send to friends.
 
+## WP6-8 blockers — the parity audit's findings (2026-08-08)
+
+> **`apps/web` is NOT yet safe to ship as the only renderer.** Eight auditors walked it screen by screen
+> against the `apps/mobile` it replaces; 25 of their claims were adversarially refuted by a second pass
+> (9 refuted as noise, 6 reclassified as intended idiom, 10 confirmed) and 15 were left unverified when the
+> run hit its session limit — those are marked ⚠️ below and were checked by hand instead.
+>
+> **The scoping rule that makes this list short:** ADR-075 deliberately makes idiom free to differ, so a
+> difference in material, motion, gesture or layout is *intended* and is not listed here. What is listed is
+> what a rider **loses**.
+
+- [x] ✅ **BLOCKER CLOSED — the favourite affordance is built on `apps/web`** (2026-08-08). Both RN
+      affordances are ported: the route schematic's **stop action sheet** (a `<dialog>`, the twin of the RN
+      `BottomSheet`, offering *Add/Remove favourite* and *View stop*) and Place detail's **saved-state star**
+      (`apps/web/src/components/SaveStar.tsx`, a **sibling** of the row's button per ADR-024, hidden until the
+      route is saved). The toggle writes under `formatFavoriteRouteKey(pole, route.id)` using the **payload's**
+      route id rather than the URL parameter, so the key can never differ from the one `routeDetailView`
+      computed `saved` from.
+      **Kept as a record because of what it says about the gates:** the original defect — a row tap navigating
+      to the place instead of opening the sheet — violated `route-detail.spec.json`'s **non-optional**
+      `stopName` interaction for two waves and **every suite stayed green**, because `conformStates` asserts
+      text and nesting and never interaction *destinations*, and a sheet behind a tap is in no projected state.
+      Both halves now have direct assertions in `apps/web/test/{route,place}-detail-states.test.tsx`
+      (9 new tests), each watched failing on an injected revert. Writing them also needed a
+      `HTMLDialogElement.prototype.showModal` shim — **no test in this repo had ever opened a `<dialog>`**, so
+      `RouteFactSheet`'s container had never been mounted either.
+      Verified in a browser on live data: KMB 1A → tap 秀安樓 → sheet → 加入收藏 → the key lands in
+      `nextbus.preferences` → the Favourites tab draws the card → Place detail shows exactly one star,
+      `已收藏` / `aria-pressed=true`, with **27 interactive elements and 0 nested**. Screenshots
+      `.context/wave6-screenshots/21`–`22`.
+      **Still owed, and it is why this is checked rather than deleted:** the sheet's own content is a declared
+      state in *neither* renderer's spec — it is an interaction result, and giving it one would have to spec
+      the native sheet at the same time. Both suites assert it directly instead, which is the
+      `search.spec.json` division; a spec for it is the follow-up below.
+- [ ] 🟡 **The stop action sheet has no spec on either renderer.** WP6-8's blocker fix asserts its words and
+      both its actions directly in both suites, which is honest but is the weaker form. A component spec for
+      it would make the two renderers' sheets comparable the way every other surface is — and it would be the
+      first spec for a surface that only exists behind an interaction, which is a genuinely new question for
+      the format (ADR-092 answered *what a rider infers from* an interaction, not *what the interaction
+      opens*).
+- [x] ✅ **BLOCKER CLOSED — `apps/web` loads Inter** (2026-08-08). One **48 KB** variable woff2, latin subset,
+      self-hosted via `@fontsource-variable/inter` and emitted by Vite into `dist/assets/` — where
+      `scripts/pwa`'s precache globs already included `woff2`, so it is precached with everything else and the
+      first offline launch has it. Four `@font-face` rules, named `Inter_400Regular` … `Inter_700Bold` because
+      **those names are `packages/ui`'s preset's**, all aliasing the one file over the full `100 900` range:
+      native satisfies the shared declaration with four static cuts (1.35 MB of TTF), the web satisfies it
+      with one variable file. ADR-019 is untouched — the subset is latin, so Chinese still renders in the
+      platform face through the preset's fallback chain.
+      **What let this survive a parity review is the part worth keeping:** `index.css` carried a hand-written
+      system stack with a comment saying it was *"the same stack the RN app resolves to on web"*. That was a
+      rationalisation, not a measurement — `expo-font` registers real `FontFace`s on web, so the Expo PWA has
+      rendered in Inter since Wave 1 and the DOM app never did. The body rule is `@apply bg-bg font-sans` now,
+      so the fallback chain is the preset's rather than a second copy of it.
+      Bound by four assertions in `apps/web/test/shell-parity.test.ts` that read the preset and require an
+      `@font-face` per cut, one shared self-hosted source, and no third-party URL — each watched failing.
+      Verified in a browser: all four faces `loaded`, `<h1>` computing to `Inter_700Bold` at weight 700, body
+      to `Inter_400Regular`. Screenshot `.context/wave6-screenshots/23`.
+- [ ] 🟠 **`apps/web` opts into `viewport-fit=cover` and compensates only at the bottom.** Confirmed by the
+      refutation pass and by hand: `index.html:5` sets `viewport-fit=cover`, `shell/TabBar.tsx:38` applies
+      `env(safe-area-inset-bottom)`, and **no screen applies `env(safe-area-inset-top)`** — so in an
+      installed iOS PWA the heading and the back control on every pushed screen sit under the status bar.
+      Search's keypad and result list have the same problem at the bottom, outside the tab bar's inset.
+- [ ] 🟠 **A shared deep link will 404 on a first visit unless the host is configured.** ⚠️ *(unverified by
+      the run; confirmed by hand.)* `scripts/pwa/workbox.config.mjs:94`'s `navigateFallback` only helps once
+      the service worker is installed; a first visit to `/route/…` from a message hits the origin, and
+      `apps/web/public/` carries no `_redirects`, `404.html` or equivalent. This is a **WP0-5 precondition**
+      rather than a code defect — there is no host yet — but it must be written into the deploy step or the
+      first shared link a rider sends will be broken.
+- [ ] 🟠 **Route detail's row tap goes to the place on `apps/web`, dropping the action sheet the spec
+      declares non-optionally.** The same finding as the blocker above, from the spec's side rather than the
+      store's: fixing the favourite affordance fixes this, and the two must be fixed together.
+- [ ] 🟡 **Place detail's last kerb can never be highlighted on `apps/web`**, and tapping its map dot scrolls
+      to the bottom and lights a *different* kerb's dot — the DOM list has no tail padding, so the last
+      heading never reaches the scroll-spy line. The RN screen pads for exactly this.
+- [ ] 🟡 **Three Search strings dropped from `--text-muted` to `--text-subtle` in the port** (the recents
+      heading, the clear-recents control, the inactive segment label), which is 3.9:1 in dark mode and fails
+      WCAG AA. A token change, not a redesign.
+- [ ] 🟡 **`apps/web` carries the document scroll position into a pushed screen.** react-router does no
+      scroll management and nothing in the shell adds any; the RN app's per-screen scrollers do it
+      implicitly. Back *does* restore correctly, so this is one direction only.
+- [ ] 🟡 **Route detail's bus tokens keep stale row offsets** when a refetch redistributes arrivals lines
+      without changing the list's overall height — the `ResizeObserver` added in WP6-6c's review pass
+      watches the wrong quantity.
+
+**Found while comparing, broken on BOTH renderers** (so retiring `apps/mobile` neither causes nor fixes
+them; they belong to the hardening list above rather than to WP6-8):
+
+- [ ] 🔴 **An offline, paused fetch renders "No scheduled service"** on Nearby — a false claim, and the exact
+      ADR-073 conflation one screen over from where it was fixed.
+- [ ] 🟠 **`<html lang>` is hard-coded `"en"` and never follows the active locale**, on both renderers.
+- [ ] 🟠 **A stale reading is `opacity` alone on both**, with no relative age anywhere, though
+      `stop-row.spec.json` demands one and `updatedAgo` has sat unused in the catalogue since Wave 1.
+- [ ] 🟡 **Nothing announces or moves focus on a route change** on either renderer.
+
+**Explicitly at parity, recorded so the next reader does not re-audit it:** every screen's content, ordering
+and states (all eight drive the same kernel functions and the same corpus fixtures); the destination set and
+every navigation path; the location controller, the live subscription and the per-kerb outage marker; the
+persisted-cache policy and the shared preferences blob; the six credited sources and both licence rows; and
+i18n key usage, where a full key-by-key diff found only nine keys used on one side, seven of them explained.
+Pull-to-refresh, the collapsing header's tap-to-top, the keypad's collapse-on-scroll, long-press-to-clear and
+the map's label placement were all **claimed as gaps and refuted** — each is declared idiom with the choice
+written down.
+
 ## Infra / hardening
+- [ ] 🔴 **Two tabs of the PWA silently overwrite each other's preferences — including a rider's
+      favourites.** Found by WP6-7 while declaring Settings' `stale` state
+      ([ADR-096](./08-decision-log.md#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them)
+      decision 9), and pinned as that spec's `knownDefect`. Two stores share the `nextbus.preferences` key
+      (ADR-089), **neither listens for a `storage` event** (verified: no listener exists in either store or in
+      `safeLocalStorage`), and zustand's `persist` writes `partialize`'s output as the **whole** blob. So a
+      second tab holds a stale copy in memory from the moment it loaded, and the next thing it writes — a
+      language change, an appearance change, or a starred route — reverts everything the first tab did since.
+      It is ADR-082 decision 5's hazard between two *apps*, arriving between two tabs of one, and the data at
+      stake is the only data in this app a rider made by hand. **The fix is one `storage` listener per store**
+      that re-reads and merges, which is a producer fix rather than anything on the Settings screen (ADR-090,
+      third instance). Reproduction: open `/settings` in two tabs, change the language in the first, then star
+      a route in the second, then reload the first.
+- [ ] 🟠 **A preference that could not be saved is not reported to the rider.** The other `knownDefect` WP6-7
+      declared (ADR-096 decision 9). Storage can refuse — Safari private browsing, a full quota, a wiped
+      profile — and both stores write through a wrapper that swallows the throw so the app keeps running, with
+      zustand's `persist` reporting nothing to a component. The screen then shows a choice that will not
+      survive a reload, which is the honest definition of lying to a rider about their own data. Needs the
+      wrapper to surface a failure and the screen to draw Settings' declared `failed` state.
+- [x] ✅ **`accessibilityState` announced nothing on the shipping PWA** — **fixed by WP6-7**
+      ([ADR-097](./08-decision-log.md#adr-097--the-conformance-walker-sees-presence-not-visibility--and-an-aria-state-it-cannot-see-is-one-a-rider-may-not-be-getting-either)
+      decision 5). `react-native-web@0.21` forwards the modern `aria-*` props and **drops
+      `accessibilityState` entirely**, so six controls — both Settings pickers, the search chips, the search
+      mode segment, the save star and the FAQ disclosure — announced no state at all to a screen reader on the
+      Expo PWA. All six are `aria-*` now, which maps to `accessibilityState` on native. Measured before and
+      after in a live browser: 0 `aria-pressed` elements on `/settings`, then 7 with exactly 2 lit.
+      **Whoever audits `apps/mobile` against `apps/web` should treat this as the template**: the defect was
+      invisible to typecheck, lint, every gate and every existing test, and was found only by writing an
+      assertion that expected to check something.
+- [x] ✅ **`packages/core/src/favourites.ts` was outside the 100 % coverage threshold** — **fixed by WP6-7**
+      (ADR-097). The `include` list in `packages/core/vitest.config.ts` is hand-spelled and the module was
+      never added when WP6-4 created it, so the rule a rider's curated list survives on sat outside the gate
+      for a whole wave while the gate reported green. Adding it revealed **eight untested branches**; all are
+      covered now and the config carries a paragraph about the hazard.
+- [x] ✅ **`apps/web`'s `.test.tsx` suites were invisible to `pnpm typecheck`** — **fixed by WP6-7** (ADR-097).
+      `tsconfig.json` included `test/**/*.ts` and not `test/**/*.tsx`, so seven conformance suites were never
+      typechecked; two real type errors surfaced the moment they were included.
 - [ ] 🔴 **Route detail cannot say "we could not ask", so a Citybus or GMB route reads as "no bus is due".**
       Found by WP6-6a ([ADR-093](./08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry))
       and pinned as the corpus row `a-citybus-route-shows-no-times-anywhere-and-does-not-say-why`

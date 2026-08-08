@@ -6,21 +6,103 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Inter, the brand typeface (ADR-017) — **absent from this app until WP6-7b's parity audit found it.**
+
+  What stood here was a hand-written system stack with a comment saying it was *"the same stack the RN app
+  resolves to on web, so a glyph difference is not mistaken for a rendering difference"*. That was a
+  rationalisation and it was false: `apps/mobile` loads four Inter cuts through `expo-font`, which on web
+  registers real `FontFace`s — so the Expo PWA has always rendered in Inter and this app never did. The two
+  renderers were being compared in different typefaces, and the comment said the opposite.
+
+  ## Four families, one file
+
+  `packages/ui`'s preset names the families `Inter_400Regular` … `Inter_700Bold`, because that is what
+  `expo-font` registers on native and the preset is **one declaration for both platforms**. So the names here
+  are not ours to choose — they are the contract, and four `@font-face` rules is what satisfying it looks
+  like on a platform that has variable fonts. All four point at the **same** 48 KB variable file and declare
+  the full `100 900` range, so the browser downloads it once and renders whatever weight the utility asks
+  for. Native needs four static cuts because native has no variable-font pipeline here; the web needs one
+  file. Same declaration, two honest implementations — which is ADR-075's whole line, arriving somewhere
+  nobody expected it.
+
+  ## Why self-hosted rather than a CDN link
+
+  ADR-058 makes this app offline-first and `scripts/pwa`'s precache globs already include `woff2`, so a font
+  emitted into `dist/` is precached with everything else and the first offline launch has it. A Google Fonts
+  `<link>` would be a third-party request that fails exactly when the rest of the app is working, and it
+  would leak a request per rider to a domain the About screen does not credit.
+
+  ## Latin only, deliberately
+
+  This is the `latin` subset. ADR-019 declines to bundle a CJK webfont for size — a Noto Sans HK face is
+  megabytes — and that decision is untouched: Chinese still renders in the platform face, which is what the
+  fallback chain after each cut is for. So a Chinese UI looks exactly as it did, and an English one gets the
+  typeface the design system has specified since Wave 1.
+*/
+@font-face {
+  font-family: "Inter_400Regular";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: "Inter_500Medium";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: "Inter_600SemiBold";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: "Inter_700Bold";
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
 @layer base {
   :root {
-    /* The same system stack the RN app resolves to on web, so a glyph difference is not mistaken for
-       a rendering difference while the two are being compared. */
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang HK",
-      "Noto Sans CJK HK", "Microsoft JhengHei", sans-serif;
     -webkit-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
     /* `bg-bg` / `text-text` as the document background rather than only on the app root, so an
-       over-scroll does not reveal white in dark mode. */
-    @apply bg-bg text-text;
+       over-scroll does not reveal white in dark mode.
+
+       `font-sans` rather than a stack written out here: it reads `packages/ui`'s preset, so the fallback
+       chain after Inter — Noto Sans HK, PingFang HK, system-ui — is declared once for both renderers rather
+       than twice with a comment claiming they agree. The stack this replaced did not even contain Inter. */
+    @apply bg-bg font-sans text-text;
   }
 }
 

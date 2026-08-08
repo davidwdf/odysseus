@@ -53,11 +53,13 @@ apps/mobile          Expo app (iOS/Android/Web-PWA)
 apps/web             Vite + plain React DOM — the renderer that REPLACES the Expo PWA (ADR-075).
                      Since WP6-0 it is a whole shell: react-router over a declared destination set
                      (`src/shell/destinations.ts`), a persisted query cache, a locale override, an
-                     appearance store, a service worker and an installable manifest (ADR-082) —
-                     with exactly ONE ported screen, Nearby, rendered from the identical
-                     `packages/core` functions. The other seven destinations render a placeholder
-                     naming the work package that ports them. It derives nothing, and a gate
-                     enforces that (ADR-068/069)
+                     appearance store, a service worker and an installable manifest (ADR-082).
+                     Since **WP6-7 all EIGHT destinations are real screens** — Nearby, Place detail,
+                     Favourites, Search, Route detail, Settings, About the data and the FAQ — each
+                     rendered from the identical `packages/core` functions and each measured against
+                     its published spec. There is no `Placeholder` any more: `screenFor` is an
+                     exhaustive switch, so a destination with no screen is a typecheck failure. It
+                     derives nothing, and a gate enforces that (ADR-068/069)
 apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/etas/:id and /v1/etas?ids=… — the
                      batch one round of a live subscription is fetched in, ADR-079 — /v1/tiles,
                      /v1/health; reads precomputed dataset shards from KV/R2 — ADR-055; and /v1/live,
@@ -198,7 +200,15 @@ with zero `knownDefect`s. **WP6-5 (Search) is done too** (ADR-091/092): `searchV
 making, the keypad and the result list are **one filtered set** (the invariant that makes a dimmed key
 honest), Search has been **walked in a browser for the first time**, and its spec answers the row's
 question — *a spec cannot hold an interaction, but it can hold what a rider infers from one*. `apps/web`
-has **four ported screens**. **WP6-6 (Route detail) is next.** `watch()` is a real
+has **four ported screens**. **WP6-6 (Route detail) is done** (ADR-093/094/095), and **WP6-7 (Settings ·
+About · FAQ) is done too** (ADR-096/097) — which makes `apps/web` **complete: eight screens, zero
+placeholders**, and meets WP6-8's precondition. Three things that row found are worth knowing before touching
+either renderer: the five canonical states for a screen with **no data source** are answered by putting the
+whole screen in `slots` so `shows: []` means *everything*; the conformance walker **sees presence, not
+visibility**, so a collapsed `<details>` (or any CSS-hidden node) projects its content and is banned on the
+FAQ; and **`react-native-web@0.21` drops `accessibilityState` silently**, which had left six controls on the
+shipping Expo PWA announcing no state to a screen reader — all six are `aria-*` now. **WP6-7b, a parity audit
+of `apps/web` against the `apps/mobile` it replaces, is next**, ahead of WP6-8. `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

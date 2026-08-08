@@ -111,7 +111,9 @@ const INTERACTIVE = 'button, a[href], [role="button"]'
  */
 function readTree(host: HTMLElement, _query: string): RenderedTree {
   const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
-  const noise = new Set([t(LOCALE, 'back')])
+  // `Set<string>` explicitly — see the twin note in `route-detail-states.test.tsx`. `t()` returns the
+  // branded `LocalizedString`, and this set is queried with plain strings read out of the tree.
+  const noise = new Set<string>([t(LOCALE, 'back')])
   const text: string[] = []
   let node = walker.nextNode()
   while (node) {
