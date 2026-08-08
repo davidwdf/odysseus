@@ -1,6 +1,7 @@
 import type { EtaUrgency, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
 import { Star } from 'lucide-react'
 import { RAIL_WIDTH } from './RailBusToken'
+import { SlideNumber } from './SlideNumber'
 import { StopName } from './StopName'
 
 /**
@@ -154,13 +155,16 @@ function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; first: boo
     <span className={`flex items-baseline gap-1 ${arrival.stale ? 'opacity-45' : ''}`}>
       {label.kind === 'mins' ? (
         <>
-          <span className={`tabular-nums ${size} ${tone}`}>{label.value}</span>
+          {/* `String(...)` because a schematic arrival carries its minutes as a number where the card's
+              `EtaLabelParts` carries a string — the odometer diffs characters, so it takes the rendered
+              form rather than the value's own type. */}
+          <SlideNumber value={String(label.value)} className={`tabular-nums ${size} ${tone}`} />
           <span className={`${first ? 'text-caption' : 'text-caption'} text-muted`}>
             {label.unit}
           </span>
         </>
       ) : label.kind === 'due' ? (
-        <span className={`tabular-nums ${size} ${tone}`}>{label.label}</span>
+        <SlideNumber value={label.label} className={`tabular-nums ${size} ${tone}`} />
       ) : label.kind === 'headway' ? (
         <span className="text-caption text-subtle">{label.text}</span>
       ) : (

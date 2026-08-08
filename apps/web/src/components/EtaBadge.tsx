@@ -1,4 +1,5 @@
 import type { EtaLabelParts, EtaUrgency } from '@nextbus/core'
+import { SlideNumber } from './SlideNumber'
 
 /**
  * Tone by urgency — the client half of ADR-053's line, and the DOM's copy of the *colour* decision
@@ -31,7 +32,10 @@ export function EtaBadge({
     <span className={`flex shrink-0 items-baseline ${stale ? 'opacity-45' : ''}`}>
       {label.kind === 'mins' ? (
         <>
-          <span className={`text-h2 font-semibold tabular-nums ${tone}`}>{label.value}</span>
+          <SlideNumber
+            value={String(label.value)}
+            className={`text-h2 font-semibold tabular-nums ${tone}`}
+          />
           <span className="ml-0.5 text-caption text-muted">{label.unit}</span>
         </>
       ) : label.kind === 'headway' ? (

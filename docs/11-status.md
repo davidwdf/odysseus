@@ -71,6 +71,23 @@
 > states were verified in a browser and nowhere else. And the first `rootMargin: '-96px'` collapsed the
 > header immediately, because an element at y=0 is already outside a root whose top edge has been pushed
 > to 96 — the sentinel sits 96 px down the page now, with default margins.
+> **The arrival odometer (part 5), and the owner extended its scope**: the RN app animates its times in
+> exactly one place — `EtaTimes` on the route schematic — and `EtaBadge`, which Nearby, Favourites and
+> Place detail all draw, has never moved on either renderer. The instruction was that times should behave
+> the same way *wherever* they change, so `apps/web` animates both. **A deliberate divergence, recorded as
+> one**: `apps/mobile` is not being back-ported, since it retires at WP6-8.
+> The numbers are the RN component's — 260 ms, ease-in-out quad, a rise of `0.85em` (its `size * 0.85`
+> expressed relatively, so one CSS rule serves the card's `h2` figure and the schematic's `body` one) — and
+> so is the rule that **only the changed characters slide**: `"52 min"` → `"51 min"` moves the `2`→`1` and
+> leaves the `5` and the ` min` still. `prefers-reduced-motion` is honoured, which the RN odometer does not
+> do.
+> 🟠 **The load-bearing property is that at rest it is a single text node**, and it is load-bearing for a
+> reason specific to this repo: a projection reads text by presence, so a readout that kept both values
+> mounted would make every screen carrying an arrival project **two figures for one bus**, permanently, and
+> no state suite would catch it — they mount settled and never change a value. `test/slide-number.test.tsx`
+> is the only thing standing there, and it earned its place immediately: the first implementation drew a
+> third, invisible copy of the wider value as a sizer, and the test read the mid-flight readout as
+> `"5112 min"`. An inline grid sizes the box instead, so mid-flight is the irreducible two.
 > **Still open from the review, in order:** the bottom sheet with drag gestures (replacing both `<dialog>`s);
 > Route detail's seven items (the `BusGlyph` double-decker and its bob, the odometer, the dividers, the
 > anchored row, the direction icon and its swap animation, the centred badge and its collapsing header, the

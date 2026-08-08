@@ -107,7 +107,9 @@ export function CollapsingHeader({
         data-collapsed={collapsed ? 'true' : 'false'}
         className="collapsing-header fixed inset-x-0 top-0 z-10"
         style={{
-          height: `calc(env(safe-area-inset-top, 0px) + ${expandedHeight}px)`,
+          // The height is a custom property rather than an inline `height`, so the collapsed rule in
+          // `index.css` can override it without `!important` — an inline declaration outranks any class.
+          ['--ch-height' as string]: `calc(env(safe-area-inset-top, 0px) + ${expandedHeight}px)`,
           // Custom properties rather than conditional classes: the two states differ only in numbers, and
           // Tailwind cannot express `env()` arithmetic at build time anyway.
           ['--ch-label-top' as string]: `calc(env(safe-area-inset-top, 0px) + ${labelExpandedTop}px)`,

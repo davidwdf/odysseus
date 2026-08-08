@@ -259,6 +259,8 @@
 */
 .collapsing-header {
   pointer-events: none;
+  height: var(--ch-height);
+  transition: height 200ms ease-out;
 }
 .collapsing-header > * {
   pointer-events: auto;
@@ -272,7 +274,7 @@
   transition: opacity 200ms ease-out;
 }
 .collapsing-header[data-collapsed="true"] {
-  height: calc(env(safe-area-inset-top, 0px) + 60px) !important;
+  height: calc(env(safe-area-inset-top, 0px) + 60px);
 }
 .collapsing-header[data-collapsed="true"] .ch-pill {
   opacity: 1;
@@ -340,6 +342,68 @@
   .ch-badge,
   .ch-label {
     transition: none;
+  }
+}
+
+/*
+  The arrival odometer — `SlideNumber`'s two halves, and `apps/mobile/components/EtaTimes.tsx`'s numbers.
+
+  260 ms, and a rise of `0.85em`, which is the RN `size * 0.85` expressed relatively so one rule serves the
+  card's `h2` figure and the schematic's `body` one without either passing a pixel value down. The old value
+  rises out as the new rises in, both fading, so the two cross at the halfway point like an odometer drum.
+
+  `ease-in-out` quad is `cubic-bezier(.45,0,.55,1)` — the RN `Easing.inOut(Easing.quad)`.
+*/
+@keyframes odo-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.85em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes odo-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.85em);
+  }
+}
+
+/*
+  Both values occupy one grid cell, so the box is as wide as the wider of them and neither clips — which is
+  what a third, invisible "sizer" copy used to do, at the cost of a third copy of the text in the tree.
+*/
+.odo-box {
+  display: inline-grid;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+.odo-box > * {
+  grid-area: 1 / 1;
+}
+
+.odo-in {
+  animation: odo-in 260ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+.odo-out {
+  animation: odo-out 260ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-in {
+    animation: none;
+  }
+  /* The outgoing value is hidden outright rather than left at rest on top of the incoming one — with no
+     animation both would occupy the same box and the readout would render as two values overprinted. */
+  .odo-out {
+    animation: none;
+    opacity: 0;
   }
 }
 
