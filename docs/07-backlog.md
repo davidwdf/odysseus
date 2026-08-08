@@ -339,6 +339,25 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 - [ ] **"Ghost bus" flagging** — surface buses that vanish from ETA without arriving (data-quality + oddly satisfying).
 - [ ] **Shareable arrival card** — a "boarding-pass"-style card of a stop + next arrivals to send to friends.
 
+## Route detail — stop measuring the rail, position the tokens in CSS
+
+The bus tokens are an absolutely positioned overlay whose `top` comes from measured row offsets, kept fresh
+by a `ResizeObserver`. ADR-108 fixed that machinery after it silently stopped re-measuring altogether, but
+the machinery itself is the liability: any future reflow this fails to notice puts a bus somewhere it is
+not.
+
+**It can be deleted.** A token could be a positioned child of the row it belongs to — `top: 13px`
+(`NODE_CENTRE − TOKEN_HALF`) for a bus *at* a node, and `calc(50% + 13px)` for one on the segment leading
+into it, since the midpoint between two adjacent nodes is exactly half a row below the first. Pure CSS, no
+measurement, no observer, and it cannot drift by construction.
+
+**Why it is a row rather than a bug fix:** the tokens would then be interleaved between the rows in document
+order instead of following them, which changes the accessible reading order and therefore the projection
+both renderers are measured against (ADR-093 decision 3 put the tokens' names *in* that projection). That is
+a spec change and an `apps/mobile` change — the RN screen draws its tokens as a deliberate overlay pass,
+after the rows, because the saved-stop stars must paint above them. Worth doing when `route-detail.spec.json`
+is next opened.
+
 ## WP6-8 blockers — the parity audit's findings (2026-08-08)
 
 > **`apps/web` is NOT yet safe to ship as the only renderer.** Eight auditors walked it screen by screen

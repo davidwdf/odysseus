@@ -524,3 +524,85 @@ describe('a stop row opens the save sheet — the interaction no projection can 
     expect(panel.style.transform, 'no exit transform was written at all').not.toBe('')
   })
 })
+
+describe('the rail overlay re-measures when a row changes size, not only when the list does', () => {
+  /**
+   * **The defect the owner saw as "the buses are completely off the targets".**
+   *
+   * The tokens are an absolutely positioned overlay whose `top` comes from measured row offsets, so the
+   * measurement has to re-run whenever a row moves. It did — through a `ResizeObserver` **on the list
+   * container only**. A `ResizeObserver` reports changes to *the element it observes*, so that arrangement
+   * sees nothing when the list's own box is unchanged: a refetch where one stop gains an arrivals line and
+   * another loses one shifts every row between them and leaves the container exactly as tall as it was. No
+   * callback, no re-measure, and the tokens stay where they were **permanently** — until a direction flip or
+   * a navigation happens to re-measure for another reason.
+   *
+   * The direction is what makes it recognisable: a row that *loses* its arrivals line pulls everything below
+   * it up (`min-h-16` puts that at about 12 px a row), so the tokens are left sitting **too low** — a bus
+   * visibly below its node rather than on it.
+   *
+   * `apps/mobile` cannot have this: every row reports its own geometry through its own `onLayout`. That is
+   * the divergence, and it is why native looked right while this did not.
+   *
+   * This asserts the fix at the only level jsdom can reach — **which elements are watched**. jsdom lays
+   * nothing out, so a measurement assertion here would compare zeroes; and the browser could not be used
+   * either, because the automation tab is always `visibilityState: "hidden"` and a hidden tab produces no
+   * frames, so `ResizeObserver` never delivers a callback at all (not even its initial one). What is left
+   * that is worth pinning is the subscription itself, and it is exactly what regressed.
+   */
+  const CASE = FIXTURE.content as string
+
+  /** Records what the screen subscribes to, and with which box. */
+  function stubResizeObserver(): { targets: Set<Element>; boxes: Set<string> } {
+    const targets = new Set<Element>()
+    const boxes = new Set<string>()
+    class Recording {
+      observe(el: Element, options?: ResizeObserverOptions) {
+        targets.add(el)
+        boxes.add(options?.box ?? 'content-box')
+      }
+      unobserve(el: Element) {
+        targets.delete(el)
+      }
+      disconnect() {
+        targets.clear()
+      }
+    }
+    vi.stubGlobal('ResizeObserver', Recording)
+    return { targets, boxes }
+  }
+
+  it('observes every stop row, not just the list that holds them', async () => {
+    const observed = stubResizeObserver()
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    route = () => Promise.resolve(detail)
+    vi.setSystemTime(Date.parse(c.args.now))
+    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+
+    const rowElements = [...container.querySelectorAll('button')].filter((b) =>
+      b.className.includes('min-h-16'),
+    )
+    expect(rowElements.length, 'the fixture rendered no stop rows').toBeGreaterThan(1)
+    const unwatched = rowElements.filter((el) => !observed.targets.has(el))
+    expect(
+      unwatched,
+      `${unwatched.length} of ${rowElements.length} rows are unwatched — a row that changes height will move its node and leave its bus behind`,
+    ).toHaveLength(0)
+    vi.unstubAllGlobals()
+  })
+
+  it('watches the border box, because that is what moves the rows below it', async () => {
+    // `content-box` is the default and it is the wrong one: a row that gained padding or a border would
+    // shift every node under it and report nothing. Caught by re-running the reproduction rather than by
+    // assuming the first fix was complete.
+    const observed = stubResizeObserver()
+    const c = caseNamed(CASE)
+    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+    route = () => Promise.resolve(detail)
+    vi.setSystemTime(Date.parse(c.args.now))
+    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+    expect([...observed.boxes]).toEqual(['border-box'])
+    vi.unstubAllGlobals()
+  })
+})

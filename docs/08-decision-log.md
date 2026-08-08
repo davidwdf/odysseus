@@ -7515,3 +7515,49 @@ pre-existing and unaddressed; it earned its keep here.
     keyframes out of `index.css`, works out what the squash does to the ink centre, and asserts the swing's
     midpoint is the node. Its answer for the old code is 0.237 px against the browser's measured 0.27 px —
     agreement to 0.03 px, which is what makes it a model of the defect rather than a snapshot of it.
+
+## ADR-108 — The rail overlay's re-measure never attached, and a hidden tab hid it
+
+- **Status:** **Fixed 2026-08-08** in `apps/web/src/screens/RouteDetail.tsx`, after the owner sent a
+  screenshot of the bus tokens sitting well below their nodes — *"completely off the targets"* — and
+  confirmed `apps/mobile` renders the same route correctly.
+- **Context.** The tokens are an absolutely positioned overlay whose `top` comes from measured row offsets,
+  so the measurement has to re-run whenever a row moves. Two things were supposed to do that: a
+  `useLayoutEffect` keyed on `stopCount`, and a `ResizeObserver`.
+- **What was wrong — two halves, and the second is the one that mattered.**
+  1. The observer watched **only the list container**. It reports changes to *the element it observes*, so
+     it is blind to any reflow that leaves the list's own box the same size — a refetch in which one stop
+     gains an arrivals line while another loses one shifts every row between them and never moves the
+     container.
+  2. **It never attached at all.** Its only dependency was `measure`, which is stable, and on first mount
+     the query is still loading — so there is no list `<div>`, `list.current` is `null`, and the effect
+     returned early. Nothing then changed to make it run again. After the initial layout-effect measurement,
+     **nothing re-measured for the life of the screen**, so any reflow at all left the tokens permanently
+     stale. `stopCount` in the deps is the fix: it goes 0 → n exactly when the list comes into existence.
+  The direction is what makes it recognisable in a screenshot: a row that *loses* its arrivals line pulls
+  everything below it up (`min-h-16` puts that at about 12 px a row), so the tokens are left sitting **too
+  low**. `apps/mobile` cannot have either half — every row there reports through its own `onLayout`.
+- **Decisions:**
+  1. **Observe every row, not the list**, which is the RN screen's shape. The container stays observed too,
+     for changes that move rows without resizing any of them.
+  2. **Observe the `border-box`.** `ResizeObserver` defaults to the content box, and what displaces the rows
+     below a row is its border box — a row that gained padding or a border would move every node under it
+     and report nothing. Caught by re-running the reproduction rather than by assuming the first fix was
+     complete.
+- **Consequences:**
+  - 🔴 **The tooling actively disguised this, and that is the transferable part.** The browser-automation tab
+    is always `visibilityState: "hidden"`, and a hidden tab produces no frames — so a `ResizeObserver` in one
+    never delivers a callback, **not even its initial one**. "The observer never fires" and "there is no
+    observer" are indistinguishable there, and the first was assumed. Three separate browser measurements
+    reported the tokens perfectly aligned, because each was taken moments after load and before any reflow.
+    The bug was found by a *test*, and confirmed in the browser only by patching `window.ResizeObserver`
+    before forcing a **client-side** remount, so the patch survived (a reload would have discarded it).
+  - ⚠️ **An effect whose element does not exist on first mount, with deps that never change, is a silent
+    no-op.** Worth checking as a class: `MiniMap`'s observer is safe because it renders its own element
+    unconditionally, and Place detail's tail measure is safe because it is a ref callback rather than an
+    effect. This was the only one.
+  - ⚪ **The deeper fix is to stop measuring.** A token could be a positioned child of the row it belongs to
+    (`top: 13px` for a node, `calc(50% + 13px)` for the midpoint between two), which is pure CSS and cannot
+    drift. It is not taken here because it would interleave the tokens between the rows in document order,
+    which changes the projection both renderers are measured against — a spec change, and therefore a row of
+    its own rather than a bug fix. Recorded in `docs/07`.

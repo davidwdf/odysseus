@@ -167,9 +167,30 @@
 > the glyph's rects and the keyframes, works out the squash's displacement and asserts the swing's midpoint
 > is the node. It scores the old code at 0.237 px against the browser's 0.27 px — agreement to 0.03 px.
 >
-> **The owner's review list is now clear.** What is left before WP6-8 is the two items already filed in
-> `docs/07`: Search's results-list scroll offset, and the RN `apps/mobile` back-port question — which
-> ADR-100's odometer note answers with *no*, since that renderer retires at WP6-8.
+> 🔴 **The buses really were off their nodes, and part 8 fixed the wrong thing first**
+> ([ADR-108](./08-decision-log.md#adr-108--the-rail-overlays-re-measure-never-attached-and-a-hidden-tab-hid-it)).
+> The owner sent a screenshot of tokens sitting well below their nodes and confirmed `apps/mobile` renders
+> the same route correctly. The sub-pixel bounce asymmetry of part 8 was real but was **not** what they were
+> seeing.
+> The overlay's `ResizeObserver` had two faults, and the second is the one that mattered: it watched only the
+> **list container**, so it was blind to a reflow that leaves the list the same height (one stop gains an
+> arrivals line as another loses one) — and **it never attached at all**, because its only dependency was the
+> stable `measure` and on first mount the query is loading, so `list.current` was `null` and it returned
+> early with nothing left to make it run again. After the initial layout-effect measurement, *nothing
+> re-measured for the life of the screen*. `stopCount` in the deps is what fixes that; every row is observed
+> now, on its `border-box`, which is the shape `apps/mobile` has always had via per-row `onLayout`.
+> ⚠️ **The tooling disguised it, and this is the part to remember.** The automation tab is always
+> `visibilityState: "hidden"` and a hidden tab produces no frames, so a `ResizeObserver` there never delivers
+> a callback — *not even its initial one*. "The observer never fires" and "there is no observer" look
+> identical, and the first was assumed. Three browser measurements had reported the tokens perfectly aligned
+> because each was taken moments after load, before any reflow. **A test found it**; the browser only
+> confirmed it after patching `window.ResizeObserver` and forcing a *client-side* remount so the patch
+> survived.
+>
+> **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
+> Search's results-list scroll offset, positioning the rail tokens in pure CSS so the measurement can be
+> deleted outright, and the RN `apps/mobile` back-port question — which ADR-100's odometer note answers with
+> *no*, since that renderer retires at WP6-8.
 >
 > Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
 > **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no

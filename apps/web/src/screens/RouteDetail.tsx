@@ -154,9 +154,21 @@ export function RouteDetail() {
    */
   const rows = useRef(new Map<number, HTMLElement>())
   const [tops, setTops] = useState<Map<number, number>>(new Map())
+  /**
+   * One observer for every row, held in a ref so `registerRow` can attach each row as it mounts.
+   *
+   * **Watching the list alone was the bug** — see the note on the effect below.
+   */
+  const rowSizes = useRef<ResizeObserver | null>(null)
   const registerRow = useCallback((index: number, el: HTMLElement | null) => {
-    if (el) rows.current.set(index, el)
-    else rows.current.delete(index)
+    const previous = rows.current.get(index)
+    if (previous !== undefined && previous !== el) rowSizes.current?.unobserve(previous)
+    if (el) {
+      rows.current.set(index, el)
+      rowSizes.current?.observe(el, OBSERVE_BORDER_BOX)
+    } else {
+      rows.current.delete(index)
+    }
   }, [])
   const list = useRef<HTMLDivElement | null>(null)
   // Measure each row's top relative to the list, and publish only on an actual change — the equality skip is
@@ -184,19 +196,47 @@ export function RouteDetail() {
   useLayoutEffect(() => {
     measure()
   }, [stopCount])
-  // Later height changes that do NOT change the stop count re-measure through a `ResizeObserver` on the list.
-  // A stop gaining or losing its arrivals line on a refetch (RouteStopRow renders that block only when it has
-  // one) grows its row and shifts every node below it, so without this the tokens drift off their nodes until
-  // the next flip or navigation — a live divergence from the RN screen, whose rows re-measure on `onLayout`.
-  // The layout-effect-plus-observer shape is `MiniMap`'s; `ResizeObserver` is absent in jsdom (the guard),
-  // where the conformance suite measures nothing anyway.
+  /**
+   * Later height changes re-measure through a `ResizeObserver` — **and this is the bug the owner reported
+   * as the buses being "completely off the targets".** It had two halves, and the second was the serious one.
+   *
+   *  1. It watched **only the list container**. A `ResizeObserver` reports changes to *the element it
+   *     observes*, so that arrangement is blind to any reflow leaving the list's own box the same size —
+   *     a refetch where one stop gains an arrivals line while another loses one shifts every row between
+   *     them and the container never moves. Every row is watched now, which is also the shape the RN screen
+   *     has always had: each of its rows reports through its own `onLayout`.
+   *  2. **It never attached at all.** Its only dependency was `measure`, which is stable — and on first
+   *     mount the query is still loading, so there is no list `<div>`, `list.current` is `null`, and the
+   *     effect returned early. Nothing ever changed to make it run again, so after the initial layout-effect
+   *     measurement *nothing re-measured for the life of the screen*. Any reflow at all left the tokens
+   *     permanently stale. `stopCount` is the dependency that fixes it: it goes 0 → n when the payload
+   *     lands, which is exactly when the list exists.
+   *
+   * The direction is what makes it recognisable in a screenshot: a row that *loses* its arrivals line pulls
+   * everything below it up (`min-h-16` puts that at about 12 px a row), so the tokens are left sitting
+   * **too low** — a bus visibly below its node rather than on it.
+   *
+   * Found by a test rather than in a browser, and only because the browser refused to show it: the
+   * automation tab is always `visibilityState: "hidden"`, a hidden tab produces no frames, and a
+   * `ResizeObserver` in one never delivers a callback — not even its initial one. That looks identical to
+   * "there is no observer", which is what this actually was.
+   *
+   * `ResizeObserver` is absent in jsdom (the guard), where the conformance suite measures nothing anyway.
+   */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `stopCount` is when the list first exists — see above
   useEffect(() => {
     const container = list.current
     if (container === null || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(() => measure())
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [measure])
+    rowSizes.current = observer
+    observer.observe(container, OBSERVE_BORDER_BOX)
+    // Rows that mounted before this effect ran — `registerRow` catches every one after it.
+    for (const el of rows.current.values()) observer.observe(el, OBSERVE_BORDER_BOX)
+    return () => {
+      observer.disconnect()
+      rowSizes.current = null
+    }
+  }, [measure, stopCount])
 
   // The reveal's one beat: bring the boarding row up, once, as soon as it exists. `scrollIntoView` rather than
   // a computed offset, so the browser honours `scroll-behavior` and the rider's reduced-motion setting.
@@ -432,3 +472,13 @@ const DAY_LABEL: Record<
 /** Where a node's centre falls inside a row, and half a token — both layout, both this renderer's. */
 const NODE_CENTRE = 12 + 26 / 2
 const TOKEN_HALF = 12
+
+/**
+ * Watch the **border** box, not the content box.
+ *
+ * `ResizeObserver` defaults to `content-box`, and what shifts the rows below a row is its *border* box — so
+ * a row that gained padding or a border would move every node under it and report nothing. Not a
+ * hypothetical: it is the one case that still drifted after the observer was moved onto the rows, caught by
+ * re-running the reproduction rather than by assuming the first fix was complete.
+ */
+const OBSERVE_BORDER_BOX: ResizeObserverOptions = { box: 'border-box' }
