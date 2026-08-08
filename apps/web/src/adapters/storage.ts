@@ -39,6 +39,33 @@ export const safeLocalStorage = {
 }
 
 /**
+ * `sessionStorage`, wrapped the same way and for the same two reasons — plus a third that only applies
+ * here: **it is deliberately the storage that dies with the tab.**
+ *
+ * The one consumer is `useScrollRestoration`, and where a rider was in a list is a fact about *this*
+ * visit. Putting it in `localStorage` would restore a scroll offset from yesterday against results that
+ * have since changed, which is the same "stale tail" argument that kept the search query out of the
+ * persisted preferences (ADR-102). A history entry's key does not survive a closed tab either, so a
+ * longer-lived store would only ever accumulate offsets nothing can ever read back.
+ */
+export const safeSessionStorage = {
+  getItem(key: string): string | null {
+    try {
+      return window.sessionStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem(key: string, value: string): void {
+    try {
+      window.sessionStorage.setItem(key, value)
+    } catch {
+      // Deliberately swallowed — as above. A lost scroll offset is a rider landing at the top of a list.
+    }
+  },
+}
+
+/**
  * The same storage as `KeyValueStore` — the async port that `@nextbus/api-client`'s location controller
  * takes. Both halves of the port's contract are already satisfied above: a rejection here would be
  * wrong, and a throw would be worse.

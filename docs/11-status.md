@@ -187,10 +187,34 @@
 > confirmed it after patching `window.ResizeObserver` and forcing a *client-side* remount so the patch
 > survived.
 >
+> **Search's results list keeps its place (part 11)**
+> ([ADR-109](./08-decision-log.md#adr-109--scrollrestoration-restores-the-window-and-the-list-that-loses-its-place-is-not-the-window)) —
+> the last open item from the owner's review of Search. ADR-102 restored the query, the mode and the chips
+> from the URL and left the *offset* behind, so a rider who scrolled forty routes down, opened one and pressed
+> Back landed at the top.
+> 🟠 **`docs/07` named the fix and named the wrong one.** It said `<ScrollRestoration>` was *"the obvious fix"*
+> now the shell is a data router — but that component restores `window.scrollY`, and Search does not scroll
+> the window: it is `h-dvh` with the results in an inner `overflow-y-auto` box, **because that is what pins
+> the keypad**. Its document offset is permanently 0, so wiring it would have restored nothing, convincingly —
+> green build, no visible change, item ticked. *When a backlog entry names the fix, check the subject before
+> the mechanism.*
+> 🟢 **`useScrollRestoration` stores the offset against `useLocation().key`** — the history *entry*, not the
+> URL — in `sessionStorage`, saved in a layout-effect cleanup (which runs while the element is still attached
+> and therefore still has a `scrollTop`) and on `pagehide` for the two exits React never sees. It gets the
+> ADR-102 interaction free: a keystroke's `replace: true` mints a new key, so a changed query is an entry that
+> is owed nothing and the list is left alone. A restore **waits** for a render in which the element is
+> genuinely scrollable and then happens once; a mount that never gets there must not write its own 0 over the
+> saved value, which is also what makes it safe under `<StrictMode>`.
+> ⚪ **Nine tests, each watched failing on its own injected defect** — including keying on the path instead of
+> the entry, and dropping the never-applied guard. jsdom lays nothing out, so the suite declares a layout by
+> stubbing two accessors and uses that stub as its control; the router is `createMemoryRouter` and
+> `navigate(-1)` is a real POP, because the whole claim rests on react-router handing back the same key.
+>
 > **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
-> Search's results-list scroll offset, positioning the rail tokens in pure CSS so the measurement can be
-> deleted outright, and the RN `apps/mobile` back-port question — which ADR-100's odometer note answers with
-> *no*, since that renderer retires at WP6-8.
+> positioning the rail tokens in pure CSS so the measurement can be deleted outright, the *document* scroll
+> position that a pushed screen inherits (which genuinely **is** `<ScrollRestoration>`'s job, and is left
+> alone because it changes all eight screens at once), and the RN `apps/mobile` back-port question — which
+> ADR-100's odometer note answers with *no*, since that renderer retires at WP6-8.
 >
 > Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
 > **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no

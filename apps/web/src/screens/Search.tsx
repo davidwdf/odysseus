@@ -6,6 +6,7 @@ import { FilterChips } from '../components/FilterChips'
 import { RouteChip } from '../components/RouteChip'
 import { RouteKeypad } from '../components/RouteKeypad'
 import { StopName } from '../components/StopName'
+import { useScrollRestoration } from '../hooks/useScrollRestoration'
 import { useSearchIndex } from '../hooks/useSearchIndex'
 import { usePreferences } from '../lib/preferences'
 import { formatFilter, parseFilter } from '../lib/searchParams'
@@ -81,6 +82,18 @@ export function Search() {
     }
     setParams(params2, { replace: true })
   }
+
+  /**
+   * Where the rider was in the results, restored when they come back — the last piece of this screen that
+   * an unmount used to throw away.
+   *
+   * ADR-102 put the query, the mode and the chips in the URL for exactly this reason, and left the offset
+   * behind: a rider who scrolled a long route list, opened one and pressed Back returned to the right
+   * search and the top of it. The list is an *element* scroller rather than the document (see the note on
+   * `h-dvh` below), which is why react-router's own `<ScrollRestoration>` is not the answer — it restores
+   * `window.scrollY`, and on this screen that is always 0.
+   */
+  const resultsList = useScrollRestoration<HTMLDivElement>()
 
   const recentRoutes = usePreferences((s) => s.recentRoutes)
   const recentStops = usePreferences((s) => s.recentStops)
@@ -218,7 +231,7 @@ export function Search() {
 
           <FilterChips chips={view.chips} onToggle={toggleChip} />
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={resultsList} className="min-h-0 flex-1 overflow-y-auto">
             {/* Which of the three arms to draw is `view.source`'s answer, never a second reading of the
                 query: "nothing matched" and "nothing searched" are different sentences (ADR-091). */}
             {view.source === 'none' ? (
