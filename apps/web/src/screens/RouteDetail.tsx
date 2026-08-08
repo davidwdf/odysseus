@@ -12,6 +12,7 @@ import {
   ArrowDown,
   ClockFading,
   CreditCard,
+  GitCompareArrows,
   type LucideIcon,
   MapPin,
   Repeat,
@@ -236,7 +237,7 @@ export function RouteDetail() {
                 aria-label={t(locale, 'reverseDirection')}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-text no-underline active:opacity-70"
               >
-                <Repeat size={16} aria-hidden />
+                <GitCompareArrows size={18} aria-hidden />
               </Link>
             ) : null}
           </div>

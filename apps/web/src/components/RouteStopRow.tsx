@@ -39,8 +39,17 @@ export function RouteStopRow({
       // below the sticky header without this screen computing an offset, and honours the rider's
       // reduced-motion setting without owning that decision either (ADR-045 is idiom). 7rem clears the
       // header — measured in a browser at 112 px, where 5rem left the anchored row half under it.
-      className={`relative flex w-full scroll-mt-28 gap-0 border-0 border-border border-b bg-transparent px-0 py-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
-        here ? 'bg-surface-2' : ''
+      // **No divider, and `min-h-16` in its place.** The RN schematic has no rules between stops at all —
+      // the rail *is* the separator — and the 1 px border here was doing two jobs, one of which was holding
+      // the row's rhythm: without a minimum a stop with no arrivals line collapses to about 52 px where the
+      // RN row is a flat 64 (`minHeight: 64`).
+      //
+      // The two backgrounds are mutually exclusive rather than layered. They were `bg-transparent` in the
+      // static list and `bg-surface-2` appended conditionally — two unvariant `background-color` utilities
+      // of equal specificity, so the winner was whichever Tailwind happened to emit last, and it was the
+      // transparent one. That is why the rider's boarding stop had no lighter background.
+      className={`relative flex min-h-16 w-full scroll-mt-28 gap-0 border-0 px-0 py-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
+        here ? 'bg-surface-2' : 'bg-transparent'
       }`}
     >
       {/* The rail gutter: a continuous line behind a top-aligned node. */}
@@ -70,19 +79,31 @@ export function RouteStopRow({
         {row.saved ? (
           // Drawn on the node's corner, and — as on the RN rail — the node itself is unchanged, so a saved
           // stop still scans as an ordinary sequence node with a flag on it (ADR-042).
-          <Star
-            size={13}
-            className="absolute fill-accent text-accent"
-            style={{ top: NODE_TOP - 4, left: (RAIL_WIDTH - NODE) / 2 + NODE - 8 }}
-            aria-hidden
-          />
+          //
+          // **Two stars, not one**: a slightly larger `--surface` one behind the accent one, which is what
+          // gives the flag its outline and makes it read as a bordered sticker over the rail rather than a
+          // disc floating on it. The RN overlay does the same with `BADGE = 15`, and draws it *after* the
+          // bus tokens for a stated reason — a passing bus must not hide a rider's favourite. `z-10` is
+          // this renderer's equivalent, since the star lives inside the row rather than in an overlay pass.
+          <span
+            className="pointer-events-none absolute z-10 flex items-center justify-center"
+            style={{
+              top: NODE_TOP - 6,
+              left: (RAIL_WIDTH - NODE) / 2 + NODE - 9,
+              width: 15,
+              height: 15,
+            }}
+          >
+            <Star size={15} className="absolute fill-surface text-surface" aria-hidden />
+            <Star size={11} className="absolute fill-accent text-accent" aria-hidden />
+          </span>
         ) : null}
       </span>
 
       <span className="min-w-0 flex-1 pt-3 pr-4 pb-4">
         <span className="flex items-start justify-between gap-2">
           <span className="min-w-0 flex-1">
-            <StopName name={row.name} />
+            <StopName name={row.name} emphasis={here} />
           </span>
           {row.fareLabel ? (
             <span className="shrink-0 text-caption text-subtle tabular-nums">{row.fareLabel}</span>

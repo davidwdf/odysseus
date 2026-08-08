@@ -179,6 +179,71 @@
   }
 }
 
+/*
+  The bus token's idle motion — the DOM twin of `apps/mobile/components/BusToken.tsx`.
+
+  The disc stays put; only the glyph moves, exactly as on native. Three nested elements because three
+  transforms run on three different clocks and CSS gives one `transform` per element:
+
+  · `.bus-bob`    ±0.5 px vertically, one leg 550 ms
+  · `.bus-rock`   ±6° lean, one leg 2200 ms — ~4× slower, so it sways rather than wags
+  · `.bus-squash` a 6% vertical squeeze anchored at the wheels (`transform-origin: center bottom`) with a
+                  touch of widen, on the bob's own clock, so a 0.5 px bounce still reads as lively
+
+  `alternate` + `infinite` is reanimated's `withRepeat(…, -1, true)`, and the numbers are the RN constants
+  (`BOB_PX`, `TILT_DEG`, `SQUASH`, `BOB_MS`, `ROCK_MS`) rather than a curve chosen here. The easing is
+  ease-in-out **sine** — `cubic-bezier(.37,0,.63,1)` — not the `ease-in-out` keyword, which is a different
+  curve: velocity has to ease to zero at each turning point or a bounce reads as a mechanical shuttle.
+
+  🟡 **Reduced motion is honoured here and is not on native.** `apps/mobile`'s token bobs regardless, while
+  `route-detail.spec.json` claims everything that moves on that screen respects the setting — so the spec is
+  true of this renderer and false of the other. Recorded rather than quietly matched: copying the gap would
+  make both wrong.
+*/
+@keyframes bus-bob {
+  from {
+    transform: translateY(-0.5px);
+  }
+  to {
+    transform: translateY(0.5px);
+  }
+}
+@keyframes bus-rock {
+  from {
+    transform: rotate(-6deg);
+  }
+  to {
+    transform: rotate(6deg);
+  }
+}
+@keyframes bus-squash {
+  from {
+    transform: scale(1, 1);
+  }
+  to {
+    transform: scale(1.03, 0.94);
+  }
+}
+
+.bus-rock {
+  animation: bus-rock 2200ms cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+.bus-bob {
+  animation: bus-bob 550ms cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+.bus-squash {
+  transform-origin: center bottom;
+  animation: bus-squash 550ms cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bus-rock,
+  .bus-bob,
+  .bus-squash {
+    animation: none;
+  }
+}
+
 /* Turn the light basemap into a dark one: invert the luminance, then hue-rotate 180° so water and parks
    land back near their real colour; trim brightness and contrast so it is not harsh. Applied to the tile
    layer only — the dots and the licence credit above it stay true-colour.

@@ -39,6 +39,18 @@
 > · **`env(safe-area-inset-top)` is read for the first time.** `index.html` has opted into
 >   `viewport-fit=cover` since WP6-0 and nothing on the web side ever compensated at the top; a control fixed
 >   there turned that open amber into a blocker.
+> **Route detail, first pass (part 3):** the app's own **`BusGlyph` double-decker** replaces Lucide's stock
+> `BusFront` — which was never a decision, `docs/09-theme.md` has named the glyph since Wave 1 — and it
+> **bobs**, on the RN token's own constants (±0.5 px at 550 ms, a ±6° lean at 2200 ms, a 6 % squash anchored
+> at the wheels), with `prefers-reduced-motion` honoured, which the RN token does not do. The **dividers are
+> gone** (the rail is the separator; `min-h-16` keeps the rhythm the border was standing in for), the
+> **anchored row is lighter** — it had `bg-transparent` and `bg-surface-2` as two equal-specificity
+> utilities, so the winner was whichever Tailwind emitted last and it was the transparent one — the
+> **direction glyph is `GitCompareArrows`** rather than `Repeat`, which was already the frequency icon on
+> the same screen, and the **saved star has its outline back** (two stars, a `--surface` one behind the
+> accent one, `z-10` so a passing bus cannot hide a rider's favourite). Measured on KMB 1A: 34 rows, **0
+> dividers**, exactly one anchored row at `--surface-2`, two star layers, three animations running at
+> 550/550/2200 ms.
 > **Still open from the review, in order:** the bottom sheet with drag gestures (replacing both `<dialog>`s);
 > Route detail's seven items (the `BusGlyph` double-decker and its bob, the odometer, the dividers, the
 > anchored row, the direction icon and its swap animation, the centred badge and its collapsing header, the
