@@ -11,12 +11,14 @@ import {
   type RouteHeaderNames,
   routeDetailView,
   routeFactSheet,
+  routeStopBoard,
   routeTerminusNames,
   upcoming,
   visibleBusMarkers,
 } from '../src/route-detail'
 import type { BusMarker } from '../src/route-position'
 import type {
+  EtaReport,
   I18nText,
   Locale,
   ResolvedClientPolicy,
@@ -300,6 +302,58 @@ describe('route-detail#routeDetailView', () => {
         .filter(([, hit]) => !hit)
         .map(([arm]) => arm),
     ).toEqual([])
+  })
+})
+
+describe('route-detail#routeStopBoard', () => {
+  interface BoardArgs {
+    report?: EtaReport
+    poleId: string
+    routeId: string
+    now: string
+    locale: Locale
+    policy?: ResolvedClientPolicy
+  }
+  type Board = ReturnType<typeof routeStopBoard>
+
+  const call = (a: BoardArgs) =>
+    routeStopBoard(a.report, {
+      poleId: a.poleId,
+      routeId: a.routeId,
+      now: at(a.now),
+      locale: a.locale,
+      ...(a.policy === undefined ? {} : { policy: a.policy }),
+    })
+
+  for (const c of specCases<BoardArgs, Board>(corpus, 'routeStopBoard')) {
+    it(c.name, () => {
+      expect(call(c.args)).toEqual(c.expect)
+    })
+  }
+
+  it('never answers with a reading for a different pole or a different route', () => {
+    // A property over the whole group rather than a value, and the one that matters on a schematic: a
+    // route's stops are *different rows*, so a time borrowed from the wrong kerb is not a small error —
+    // it tells a rider a bus is coming to a stop it has already passed. The corpus pins the answers; this
+    // pins that no answer can ever come from somewhere else.
+    for (const c of specCases<BoardArgs, Board>(corpus, 'routeStopBoard')) {
+      const got = call(c.args)
+      if (got.arrivals.length === 0) continue
+      const source = (c.args.report?.etas ?? []).filter((e) =>
+        got.arrivals.every((a) => e.arrivals.includes(a.iso)),
+      )
+      expect(source.length, `${c.name}: the readings came from no single reading`).toBe(1)
+      expect(source[0]?.routeId, `${c.name}: a reading for another route`).toBe(c.args.routeId)
+    }
+  })
+
+  it('is incomplete only when this pole is the one that failed', () => {
+    // ADR-077's rule, one level down and easy to get subtly wrong: `failed` is a *place-wide* list, so a
+    // failure at a neighbouring kerb must not make this stop's silence look like an outage.
+    for (const c of specCases<BoardArgs, Board>(corpus, 'routeStopBoard')) {
+      const failedHere = (c.args.report?.failed ?? []).some((f) => f.stopId === c.args.poleId)
+      expect(call(c.args).incomplete, c.name).toBe(failedHere)
+    }
   })
 })
 

@@ -7942,3 +7942,59 @@ pre-existing and unaddressed; it earned its keep here.
   - ⚪ **The schema's own doc comment was the bug, written down.** It claimed `eta: null` means *"we asked and
     there is nothing right now"* and then admitted in the same sentence that Citybus has no feed at all.
     Both cannot be true. Rewritten to say what `null` does **not** tell you.
+
+## ADR-115 — The sheet a rider already opens is where one stop's times go
+
+- **Status:** **Accepted 2026-08-09** in `packages/core/src/route-detail.ts`,
+  `apps/web/src/screens/RouteDetail.tsx`, `components/RouteStopSheet.tsx` and `components/RouteStopRow.tsx`.
+  Option **A** of the brainstorm the owner asked for after ADR-114.
+- **Context.** ADR-114 made a Citybus or GMB route *say* that its times are not a complete answer, which
+  stopped it lying. It did not give a rider a time. Their **per-pole** boards answer perfectly well —
+  `/v1/etas/CTB:001028` returns ten routes with arrivals — so on those routes the times exist and the route
+  view simply never asks (ADR-021: no bulk route-eta endpoint).
+- **The pattern this rejects, and why.** Other apps make the stop list an accordion: tap a row to expand it
+  and load that stop's times. The owner's objection was that it also **conflicts with the affordance already
+  on the row** — a tap opens the save sheet (ADR-032, ADR-098), which is the app's only favourite-creating
+  affordance and cannot be given up for a disclosure control.
+- **Decision: put the times in that sheet.** The conflict dissolves — the menu *is* the load trigger. No
+  accordion, no new control, no change to the list, and the request is scoped to precisely the thing the
+  rider just asked about. One call.
+- **Decisions:**
+  1. **`routeStopBoard` in the kernel, not the screen.** Three decisions live in it: the formatting is the
+     schematic row's (via a hoisted `arrivalsFrom`, so a time cannot read two ways in two places on one
+     screen); `incomplete` comes from `failed` rather than from an empty list, because a board that refused
+     us is not a board with nothing on it (ADR-077); and **which of a report's readings belongs to this
+     pole**, because a board requested for a pole may be resolved to its *place*, whose alias table can
+     return two readings for one route at two kerbs — and on a schematic those are different rows. Exact
+     `stopId` wins; a lone reading for the route is taken as the answer to the question asked; two that are
+     neither is **not** guessed between.
+  2. **Three conditions gate the fetch, and the cost argument is all of them.** The row's own readings win,
+     so a KMB route costs nothing extra and the sheet cannot contradict the list behind it.
+     `liveArrivals !== 'answered'` stops a route that *was* asked and has nothing due from fetching to
+     re-learn the same nothing on every tap for ever. And nothing is fetched until a rider opens a sheet.
+  3. **Four render arms, in an order that is the whole content of the decision:** `loading`, then
+     `incomplete`, then the readings, then "no scheduled service" **last** — the arm only reached when we
+     asked, were answered, and the answer was nothing. `docs/07` still carries a 🔴 for exactly that arm
+     being reached by a paused fetch on Nearby, which is why the order is pinned by a test rather than
+     trusted.
+  4. **`ArrivalSlot` is exported rather than copied.** One renderer of a route arrival, for the reason this
+     sheet's own docblock already recorded about a stop's *name* being written twice eleven lines apart. A
+     time is worse.
+- **Consequences:**
+  - 🟢 **A rider on a Citybus route can get a time again.** Verified live: Citybus 91's schematic shows no
+    times at all, and tapping a stop returns **15 min · 34 min** off exactly one request —
+    `/v1/etas/CTB:002261?routes=CTB:91:outbound:1`.
+  - 🟢 **It composes with the next row of work rather than competing with it.** When the route view starts
+    fanning out per pole over the live socket, the row will carry readings and the fetch goes quiet by
+    itself — because the sheet reads the view first and only asks when there is nothing there.
+  - ⚠️ **One condition was vacuous and an injection said so.** "The row's own readings win" broke no test
+    when removed, because every route the edge emits today is all-or-nothing: the catch empties the whole
+    map and `perStopOnly` never fills it. It stops being redundant the moment a per-pole fan-out lands with
+    a budget — some poles answer, some do not, on one route — so it is kept and pinned against a **partial
+    payload the wire permits and the server does not yet produce**. Written down because "assert it against
+    a payload nothing emits" is a thing to justify, not to do quietly.
+  - ⚠️ **`apps/web` only.** ADR-113 makes `apps/mobile` the reference and owes it no new affordance; this is
+    a new affordance. The RN sheet keeps the two actions and no readout.
+  - ⚪ **The wording follow-up ADR-114 filed is now less pressing.** *"Live times unavailable"* still implies
+    *try later* about something permanent, but a rider is one tap from a real time rather than from nothing,
+    which is most of what the better sentence was for.

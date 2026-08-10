@@ -200,8 +200,13 @@ const TONE: Record<EtaUrgency, string> = {
  *
  * Staleness dims and does not recolour (ADR-008: never colour alone) — and the value itself does not move,
  * because a reading only changes when a fresh one arrives.
+ *
+ * **Exported for the action sheet** (ADR-115), which shows this route's times at one stop when the route view
+ * has none of its own. Not for reuse in general: it is exported so there is exactly ONE renderer of a route
+ * arrival rather than a third copy of the same three arms. The sheet's own docblock records what nearly
+ * happened when a stop's *name* was written twice eleven lines apart; a time is worse.
  */
-function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolean }) {
+export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolean }) {
   const { label } = arrival
   const tone = first ? (TONE[arrival.urgency] ?? TONE.none) : 'text-muted'
   const size = first ? 'text-body font-semibold' : 'text-caption'

@@ -22,6 +22,8 @@ import { type BusMarker, inferBusMarkers } from './route-position'
 import { displayName, type StopCardName } from './stop-card'
 import { isCircular, splitStopCode, stripCircular, titleCaseName } from './stop-name'
 import type {
+  Eta,
+  EtaReport,
   FreqPattern,
   I18nText,
   Locale,
@@ -357,6 +359,81 @@ export interface RouteJourneyHeader {
   reverseId?: string
 }
 
+/**
+ * One board's readings, as row slots — the **one** place a route arrival is turned into text.
+ *
+ * Private on purpose and shared by two callers: every stop row on the schematic, and the board the action
+ * sheet fetches on demand for a single stop (`routeStopBoard`). The sheet's own docblock records what
+ * happens when this sort of thing is written twice — `displayName` was inlined eleven lines from its own
+ * call and the sheet and the row could have disagreed about a stop's *name*. A time is worse: they would
+ * disagree about a bus.
+ *
+ * Staleness is the **board's**, not the arrival's: one `dataTimestamp` per board, so every slot dims
+ * together. A per-slot answer would make the third time look fresher than the first.
+ */
+function arrivalsFrom(
+  eta: Eta | null | undefined,
+  now: number,
+  locale: Locale,
+  policy: ResolvedClientPolicy,
+): RouteStopArrival[] {
+  const stale = eta ? isStale(eta, now, policy.staleAfterMs) : false
+  return upcoming(eta?.arrivals, now, policy.maxArrivals).map((iso) => ({
+    iso,
+    label: etaLabelParts(iso, now, locale, policy.dueUnderSec),
+    urgency: etaUrgency(iso, now, policy),
+    stale,
+  }))
+}
+
+/**
+ * This route's next arrivals at **one** pole, read out of that pole's own board.
+ *
+ * The Route screen shows per-stop times for KMB and LWB only, because those are the operators with a bulk
+ * route-eta feed; on Citybus and GMB `liveArrivals` is `perStopOnly` and every row is blank (ADR-114). Their
+ * *per-pole* boards answer perfectly well though, so a rider who taps one stop can be told about that stop —
+ * which is what the action sheet does, for the cost of one call about the thing they just asked about.
+ *
+ * Three decisions, and they are here rather than in a renderer because two renderers would answer the third
+ * one differently:
+ *
+ *  1. **The formatting is the row's**, via `arrivalsFrom`, so a time in the sheet reads exactly as it would
+ *     in the list.
+ *  2. **`incomplete` is `failed`'s**, not an empty list's. A pole whose board did not answer has no readings
+ *     *and* nothing due, and those are different sentences (ADR-077). Without this the sheet would say "no
+ *     bus due" about a board that refused us — the same conflation ADR-114 just removed one level up.
+ *  3. **Which reading belongs to this pole.** A board is requested for a pole and the server may resolve
+ *     that id to a *place* whose alias table promotes it (ADR-042), so a report can carry two readings for
+ *     one route at two kerbs — and on a schematic those are different rows. So: the reading whose `stopId`
+ *     matches exactly, or — when the route has exactly one reading in the report — that one, because a
+ *     single reading is unambiguously the answer to the question we asked. Never a guess between two.
+ *
+ * @spec route-detail#routeStopBoard
+ */
+export function routeStopBoard(
+  report: EtaReport | undefined,
+  opts: {
+    poleId: string
+    routeId: string
+    now: number
+    locale: Locale
+    policy?: ResolvedClientPolicy
+  },
+): { arrivals: RouteStopArrival[]; incomplete: boolean } {
+  const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
+  if (report === undefined) return { arrivals: [], incomplete: false }
+  const forRoute = report.etas.filter((e) => e.routeId === opts.routeId)
+  const exact = forRoute.find((e) => e.stopId === opts.poleId)
+  const only = forRoute.length === 1 ? forRoute[0] : undefined
+  const eta = exact ?? only
+  return {
+    arrivals: arrivalsFrom(eta, opts.now, opts.locale, policy),
+    // Named for the pole we asked about, so a place-wide failure list does not make one kerb's silence
+    // look like an outage at another.
+    incomplete: (report.failed ?? []).some((f) => f.stopId === opts.poleId),
+  }
+}
+
 /** What a renderer needs to draw the Route screen, with nothing left to decide. */
 export interface RouteDetailView {
   header: RouteJourneyHeader
@@ -478,20 +555,11 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
 
   const saved = new Set(opts.savedRouteKeys ?? [])
   const rows: RouteStopRowView[] = stops.map((s, i) => {
-    const upcomingHere = upcoming(s.eta?.arrivals, now, policy.maxArrivals)
-    // Staleness is the **board's**, not the arrival's: one `dataTimestamp` per stop, so every slot on a
-    // row dims together. A per-slot answer would make the third time look fresher than the first.
-    const stale = s.eta ? isStale(s.eta, now, policy.staleAfterMs) : false
     return {
       seq: s.seq,
       stopId: s.stop.id,
       name: displayName(s.stop.name[locale]),
-      arrivals: upcomingHere.map((iso) => ({
-        iso,
-        label: etaLabelParts(iso, now, locale, policy.dueUnderSec),
-        urgency: etaUrgency(iso, now, policy),
-        stale,
-      })),
+      arrivals: arrivalsFrom(s.eta, now, locale, policy),
       ...(s.fare === undefined ? {} : { fare: s.fare, fareLabel: formatFare(s.fare) }),
       here: i === hereIndex,
       first: i === 0,

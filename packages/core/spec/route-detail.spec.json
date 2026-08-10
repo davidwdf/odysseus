@@ -8969,6 +8969,349 @@
           }
         }
       ]
+    },
+    "routeStopBoard": {
+      "doc": "This route’s next arrivals at ONE pole, read out of that pole’s own board — what the action sheet fetches on demand when the route view has no times of its own (Citybus and GMB, ADR-114/115). Three decisions: the formatting is the schematic row’s so a time cannot read two ways, `incomplete` is `failed`’s rather than an empty list’s, and which of a report’s readings belongs to THIS pole when a place has two kerbs on one route.",
+      "cases": [
+        {
+          "name": "a-pole-board-answers-for-the-route-the-rider-tapped",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:002009",
+                  "operator": "CTB",
+                  "arrivals": [
+                    "2026-08-09T01:03:00.000Z",
+                    "2026-08-09T01:11:00.000Z",
+                    "2026-08-09T01:20:00.000Z"
+                  ],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [
+              {
+                "iso": "2026-08-09T01:03:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-08-09T01:11:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-08-09T01:20:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 20,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "another-route-at-the-same-pole-is-not-this-route",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "CTB:B3:inbound:1",
+                  "stopId": "CTB:002009",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:02:00.000Z"],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "two-kerbs-of-one-place-take-the-pole-that-was-asked-about",
+          "why": "A board requested for a pole may be resolved to its place (ADR-042), so one route can appear twice at two kerbs — and on a schematic those are different rows. The exact `stopId` wins.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:009999",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:01:00.000Z"],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                },
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:002009",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:12:00.000Z"],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [
+              {
+                "iso": "2026-08-09T01:12:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 12,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "a-single-reading-answers-the-question-that-was-asked",
+          "why": "The alias table can promote the requested id, so the reading comes back under the place’s spelling. One reading for the route is unambiguously the answer to the question we asked; two are not.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:009999",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:07:00.000Z"],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [
+              {
+                "iso": "2026-08-09T01:07:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 7,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "two-readings-and-neither-is-this-pole-is-not-a-guess",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:009999",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:01:00.000Z"],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                },
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:008888",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:04:00.000Z"],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "a-pole-whose-board-did-not-answer-is-incomplete-rather-than-empty",
+          "why": "ADR-077, one level down: no readings and nothing due are different sentences, and the sheet must not say \"no bus due\" about a board that refused us.",
+          "args": {
+            "report": {
+              "etas": [],
+              "failed": [
+                {
+                  "stopId": "CTB:002009",
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "no"
+                  }
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [],
+            "incomplete": true
+          }
+        },
+        {
+          "name": "a-failure-at-another-kerb-does-not-make-this-one-look-broken",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:002009",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:05:00.000Z"],
+                  "dataTimestamp": "2026-08-09T09:00:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "CTB:009999",
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "no"
+                  }
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [
+              {
+                "iso": "2026-08-09T01:05:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 5,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "a-stale-board-dims-every-slot-together",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "CTB:962:outbound:1",
+                  "stopId": "CTB:002009",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-09T01:04:00.000Z", "2026-08-09T01:09:00.000Z"],
+                  "dataTimestamp": "2026-08-09T08:57:00+08:00",
+                  "observedAt": "2026-08-09T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en",
+            "policy": {
+              "dueUnderSec": 60,
+              "warnUnderSec": 300,
+              "staleAfterMs": 60000,
+              "refreshAfterMs": 30000,
+              "maxArrivals": 3,
+              "maxRows": 6
+            }
+          },
+          "expect": {
+            "arrivals": [
+              {
+                "iso": "2026-08-09T01:04:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 4,
+                  "unit": "min"
+                },
+                "urgency": "soon",
+                "stale": true
+              },
+              {
+                "iso": "2026-08-09T01:09:00.000Z",
+                "label": {
+                  "kind": "mins",
+                  "value": 9,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": true
+              }
+            ],
+            "incomplete": false
+          }
+        },
+        {
+          "name": "nothing-has-been-fetched-yet",
+          "args": {
+            "poleId": "CTB:002009",
+            "routeId": "CTB:962:outbound:1",
+            "now": "2026-08-09T09:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": {
+            "arrivals": [],
+            "incomplete": false
+          }
+        }
+      ]
     }
   }
 }

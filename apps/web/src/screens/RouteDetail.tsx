@@ -4,6 +4,7 @@ import {
   type RouteStopRowView,
   routeDetailView,
   routeFactSheet,
+  routeStopBoard,
   type ServiceDayType,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
@@ -231,6 +232,33 @@ export function RouteDetail() {
    */
   const [sheetRow, setSheetRow] = useState<RouteStopRowView | null>(null)
 
+  /**
+   * The tapped stop's own board, fetched **only when there is nothing to show** (ADR-115).
+   *
+   * On Citybus and GMB the route view carries no times at all — those operators publish no route-level
+   * feed, which is what `liveArrivals: 'perStopOnly'` says (ADR-114) — but their *per-pole* boards answer
+   * perfectly well. So a rider who taps one stop gets that stop's times, for the cost of one call about
+   * the thing they just asked about, and no accordion: the sheet they already opened is where it goes.
+   *
+   * Three conditions, and each is doing work. **The row's own readings win**, so a KMB route costs no
+   * extra call and the sheet cannot disagree with the list behind it. `liveArrivals !== 'answered'` is the
+   * rest: a route whose round *did* answer and has nothing due must not trigger a fetch that would find
+   * the same nothing — that would be a request per tap, for ever, to re-learn what the payload said.
+   * And `sheetRow` gates it, so nothing is fetched until a rider asks.
+   */
+  const boardPole =
+    sheetRow !== null && sheetRow.arrivals.length === 0 ? sheetRow.stopId : undefined
+  const boardRoute = query.data?.route.id
+  const wantsBoard =
+    boardPole !== undefined && boardRoute !== undefined && view?.liveArrivals !== 'answered'
+  const board = useQuery({
+    queryKey: ['etas', boardPole, boardRoute],
+    enabled: wantsBoard,
+    queryFn: () => dataSource.getEtas(boardPole as string, [boardRoute as string]),
+    // The served cadence, as everywhere else — a sheet left open keeps up with the screen behind it.
+    refetchInterval: policy.refreshAfterMs,
+  })
+
   // Which fact sheet is open, if any (ADR-044). Held here rather than per pill so only one can be.
   const [factSheet, setFactSheet] = useState<RouteFactKey | null>(null)
 
@@ -393,6 +421,20 @@ export function RouteDetail() {
                 setSheetRow(null)
                 openStop(sheetRow)
               }}
+              /* The readout the sheet shows: the row's own if it has any, else the board fetched for this
+                 pole. `routeStopBoard` picks which of a report's readings belongs to *this* pole and
+                 formats it exactly as the row would — a place with two kerbs on one route has two
+                 readings, and on a schematic those are different rows. */
+              {...(sheetRow.arrivals.length > 0
+                ? { arrivals: sheetRow.arrivals, incomplete: false }
+                : routeStopBoard(board.data, {
+                    poleId: sheetRow.stopId,
+                    routeId: query.data.route.id,
+                    now: Date.now(),
+                    locale,
+                    policy,
+                  }))}
+              loading={wantsBoard && board.isFetching && board.data === undefined}
             />
           ) : null}
         </>

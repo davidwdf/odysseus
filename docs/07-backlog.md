@@ -568,8 +568,16 @@ written down.
       **one** upstream call, so a list of poles would invent a granularity the fetch does not have.
       **The half nobody would have noticed missing is the KMB one**: its route feed answers, so the
       `.catch(() => [])` that swallowed an outage made it read as a quiet route — for every rider in the app.
+- [x] ✅ **A rider on a Citybus or GMB route can get a time from the route screen** — **done**
+      ([ADR-115](./08-decision-log.md#adr-115--the-sheet-a-rider-already-opens-is-where-one-stops-times-go)).
+      Tapping a stop opens the save sheet it always opened, and the sheet now carries that stop's times for
+      this route — one request, scoped to the pole and the route, and only when there is nothing already on
+      the row. Verified live on Citybus 91: a schematic with no times anywhere, and 15 min · 34 min in the
+      sheet. The accordion other apps use was rejected because it competes with the affordance the row
+      already has (ADR-032's save sheet); putting the times *in* that sheet makes the menu the load trigger.
 - [ ] 🟡 **A Citybus or GMB route says "Live times unavailable" where it could point at the per-stop
-      boards.** The remaining honesty gap after ADR-114, and it is a wording decision rather than a defect:
+      boards.** *(Less pressing since ADR-115 — a rider is now one tap from a real time rather than from
+      nothing — and it disappears entirely if the route view starts fanning out.)* The remaining honesty gap after ADR-114, and it is a wording decision rather than a defect:
       those operators' **per-pole** boards answer fine (`/v1/etas/CTB:001028` → 10 routes with arrivals), so
       the times a rider wants are one tap away on any stop of that route. "Unavailable" is true, implies
       *try later* about something permanent, and hides where they are. Needs one new catalogue key in three
