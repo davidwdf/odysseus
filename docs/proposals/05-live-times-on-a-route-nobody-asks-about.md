@@ -243,13 +243,24 @@ coalescer dedupes a pole shared with a Nearby watch; and if the tail ever matter
 **stop polling when its last socket closes** (it does — hibernation) and a global ceiling on concurrent route
 objects could shed the rest. Not proposed now: measure first.
 
+> **Measured, and the first measurement was 19× this.** Step 2 opened a real socket on
+> `CTB:11:outbound:1` (18 poles) and counted every upstream call: **350**, not 18 — because `routes=`
+> filtered the *answers* and never the *questions*, so each pole was asked about all ~17 routes it serves
+> and every KMB pole at those places was asked too. 21 s of queued fetching per round, every 45 s, per
+> watched route. Fixed as [ADR-117](../08-decision-log.md) before anything shipped: the same round is now
+> **18 calls in 0.27 s**, and the 41-pole worst case (E22 outbound) is **41 calls, first delta 1.24 s after
+> connect**. The table above is therefore right as written — *one call per pole per round* — and was not
+> true of the code until that rule existed. Nothing in this design was defensible without it, which is the
+> argument for measuring a cost claim rather than deriving it.
+
 ## What changes
 
 | file | change |
 |---|---|
 | ✅ `packages/core/src/live.ts` | **Done.** `routeWatchName(routeId)` and `nextRouteRoundMs(…)`, both with `@spec` tags and corpus groups (9 + 11 rows), plus five constants. Six injections, each reddening only its own assertions. See *What step 1 actually shipped* below. |
-| `apps/edge/src/index.ts` | `/v1/live?route=…` → resolve poles from the dataset → `ETA_HUB.idFromName(routeWatchName(id))` |
-| `apps/edge/src/eta-hub.ts` | a round that takes its targets from a resolved route rather than from sockets' unions; **`LIVE_ROUTE_MAX_POLES` lives here, not in the kernel** (see below); `test/eta-hub-caps.test.ts` grows the route case |
+| ✅ `apps/edge/src/live.ts` | **Done** (not `index.ts` — the router delegates the whole path). `?route=` resolves the poles from the route document, 400s a malformed id before any object exists, 404s an unknown route, and forwards `?targets=` to `getByName(routeWatchName(id))`. |
+| ✅ `apps/edge/src/eta-hub.ts` | **Done, and simpler than planned.** No route-specific round: the object reads `ctx.id.name` (`watchedRoute`) and that alone changes the per-connection cap, the union cap and the narrowing. `LIVE_ROUTE_MAX_POLES = 64` lives here. |
+| ✅ `apps/edge/src/stop-route.ts` | **Done, unplanned.** `boardsFor` — a narrowed read narrows the upstream fan-out too (ADR-117). Not in the plan because the plan assumed the code already did this. |
 | `packages/api-client/src/live/` | a `watchRoute(routeId)` alongside `watch(targets)`; the socket URL builder |
 | `packages/contract` | the `route` query parameter and any frame addition → `asyncapi:emit` |
 | `apps/web/src/screens/RouteDetail.tsx` | subscribe when `perStopOnly`; merge frames into the rows |
@@ -308,11 +319,16 @@ clocks and two different caps in one object.
 
 1. ✅ **Done** — `routeWatchName` + `nextRouteRoundMs` in the kernel, with corpus rows and no behaviour.
    `LIVE_ROUTE_MAX_POLES` moved to step 2, where it belongs.
-2. `/v1/live?route=…` resolving poles server-side, and the hub's route round + cap test. *(edge only,
-   verifiable with a socket client and `curl`)*
+2. ✅ **Done** — `/v1/live?route=…` resolving poles server-side; the route caps; the narrowed fan-out
+   (ADR-117). 11 new cases in `apps/edge/test/live-route-watch.test.ts` plus one in `eta-hub-caps.test.ts`,
+   each watched failing on a deliberate revert, and walked over a real socket against live upstream.
+   **2b, split out:** wire `nextRouteRoundMs` into the hub's cadence, which needs a rounds-completed counter
+   the object does not yet expose (the same counter the filed `live-rounds.test.ts` connect race wants).
 3. `watchRoute` in `packages/api-client`, over the existing transports.
 4. The merge rule in `packages/core`, with corpus rows.
 5. `apps/web` subscribes when `perStopOnly`; the spec state changes with it.
 
 Steps 1–2 are independently reviewable and land no UI, which is the point of splitting there: the cap
-arithmetic gets checked against a real socket before a screen depends on it.
+arithmetic gets checked against a real socket before a screen depends on it. That paid for itself
+immediately — a screen built on step 2 as first written would have made 800 upstream calls a round and
+looked fine doing it.

@@ -74,6 +74,7 @@ import {
   memberStopIds,
   nextLiveCadenceMs,
   retainFailedPoles,
+  routeIdFromWatchName,
   type ServerFrame,
   sameFailures,
   unionFailures,
@@ -164,6 +165,29 @@ export const LIVE_MAX_TARGETS_PER_CONNECTION = 12
  * client must not prune a favourite whose stop is perfectly fine.
  */
 export const LIVE_MAX_TARGETS_PER_SHARD = 48
+
+/**
+ * Poles one **route watch** will poll — the cap that replaces both of the above when this object is a route
+ * rather than a shard (proposals/05).
+ *
+ * Sixty-four, and it is guarding the *dataset* rather than the clock. The two caps above exist because a
+ * place round is expensive per target: Citybus has no per-stop board, so a place costs one upstream call per
+ * `(pole, routeNo)` pair and the heaviest in the shipped dataset costs 32 on its own. **A route watch is the
+ * opposite shape** — many poles, exactly one route each — so its round is numerous and cheap. Measured
+ * 2026-08-10 against the live upstream: real Citybus routes run 13 to 41 poles (788, 1, 5B, 91, 962, E22),
+ * and the whole of E22 is 41 calls in **~0.5 s** at the runtime's six-in-flight limit, against a 45 s cadence
+ * floor. At this cap a round is ~0.8 s, still under 2% of the cadence.
+ *
+ * So the number is not chosen from a time budget; it is chosen so that a pathological dataset row — a
+ * mis-clustered route with three hundred stops — cannot turn one rider's screen into three hundred upstream
+ * calls. Excess poles are **dropped and named** in a `status` frame, which is the treatment this file already
+ * argues for over refusing a whole connection.
+ *
+ * Why it replaces `LIVE_MAX_TARGETS_PER_SHARD` too: a route watch is a whole object, so its "shard union"
+ * *is* its route. Leaving the 48 in place would truncate a 64-pole route at 48 for no reason connected to
+ * either cap's argument.
+ */
+export const LIVE_ROUTE_MAX_POLES = 64
 
 /**
  * CTB routes one round will ask about, per place.
@@ -631,11 +655,31 @@ export class EtaHub extends DurableObject<Env> {
     kept: WatchTarget[]
     dropped: WatchTarget[]
   } {
-    const { accepted, rejected } = acceptTargets(asked)
+    const route = this.watchedRoute
+    // **A route watch narrows every target to its own route, and the object's name is where that comes
+    // from.** Without it a 40-pole Citybus route would poll every line at every one of those poles — the
+    // place-shard shape, at route scale — where what a rider is watching is one route. Narrowing here rather
+    // than in the upgrade URL is not a shortcut: `?targets=` is comma-separated stop ids and cannot express
+    // `routeIds`, so the alternative is a second parameter saying what the object's name already says.
+    const targets =
+      route === undefined ? asked : asked.map((t) => ({ stopId: t.stopId, routeIds: [route] }))
+    const { accepted, rejected } = acceptTargets(targets)
+    const cap = route === undefined ? LIVE_MAX_TARGETS_PER_CONNECTION : LIVE_ROUTE_MAX_POLES
     return {
-      kept: accepted.slice(0, LIVE_MAX_TARGETS_PER_CONNECTION),
-      dropped: [...rejected, ...accepted.slice(LIVE_MAX_TARGETS_PER_CONNECTION)],
+      kept: accepted.slice(0, cap),
+      dropped: [...rejected, ...accepted.slice(cap)],
     }
+  }
+
+  /**
+   * The route this object watches, or `undefined` when it is one of the eight place shards.
+   *
+   * Read from `DurableObjectId.name` rather than from a flag on the connection: three things differ for a
+   * route watch — the per-connection cap, the union cap and the narrowing above — and all three follow from
+   * *which route it is*, which the object's own identity already states. See `routeIdFromWatchName`.
+   */
+  private get watchedRoute(): string | undefined {
+    return routeIdFromWatchName(this.ctx.id.name)
   }
 
   /**
@@ -663,10 +707,15 @@ export class EtaHub extends DurableObject<Env> {
     const others = acceptTargets(
       this.subscribedTargets(this.liveSockets().filter((other) => other !== ws)),
     ).accepted
+    // A route watch's union cap is its own — see `LIVE_ROUTE_MAX_POLES`. The 48 above bounds a shard whose
+    // union is *whatever its subscribers happen to share*; a route object's union is one route, so bounding
+    // it at 48 would truncate a long route for a reason belonging to a different shape of object.
+    const unionCap =
+      this.watchedRoute === undefined ? LIVE_MAX_TARGETS_PER_SHARD : LIVE_ROUTE_MAX_POLES
     const fits: WatchTarget[] = []
     for (const target of kept) {
       const union = acceptTargets([...others, ...fits, target]).accepted
-      if (union.length > LIVE_MAX_TARGETS_PER_SHARD) break
+      if (union.length > unionCap) break
       fits.push(target)
     }
     return { fits, excess: kept.slice(fits.length) }
@@ -756,7 +805,7 @@ export class EtaHub extends DurableObject<Env> {
       refusals.push(
         wireErrorFor(
           'internal',
-          `shard is at capacity (${LIVE_MAX_TARGETS_PER_SHARD} targets), not watching: ${excess
+          `shard is at capacity (${this.watchedRoute === undefined ? LIVE_MAX_TARGETS_PER_SHARD : LIVE_ROUTE_MAX_POLES} targets), not watching: ${excess
             .map((t) => t.stopId)
             .join(', ')}`,
         ),

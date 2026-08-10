@@ -23,6 +23,7 @@ import {
   nextLiveCadenceMs,
   nextRouteRoundMs,
   retainFailedPoles,
+  routeIdFromWatchName,
   routeWatchName,
   sameFailures,
   sameReading,
@@ -269,6 +270,28 @@ describe('live#routeWatchName', () => {
       expect(routeWatchName(c.args.routeId) ?? null).toBe(c.expect)
     })
   }
+
+  it('round-trips through `routeIdFromWatchName`, which is what pins the inverse', () => {
+    // The object reads its own name to learn which route it is for, so the two functions have to agree
+    // exactly. Asserted as a property over this group's rows rather than as a second corpus group
+    // restating the same strings backwards.
+    for (const c of specCases<{ routeId: string }, string | null>(corpus, 'routeWatchName')) {
+      const name = routeWatchName(c.args.routeId)
+      expect(routeIdFromWatchName(name), c.name).toBe(
+        name === undefined ? undefined : c.args.routeId,
+      )
+    }
+  })
+
+  it('reads nothing back out of a name that is not a route watch', () => {
+    // A shard's name, a plausible-looking forgery and the absent case. The validation on the way *out*
+    // matters because by then the name is storage-shaped input, not something this process just made.
+    expect(routeIdFromWatchName('live-3')).toBeUndefined()
+    expect(routeIdFromWatchName('route-not a route id')).toBeUndefined()
+    expect(routeIdFromWatchName('route-')).toBeUndefined()
+    expect(routeIdFromWatchName(undefined)).toBeUndefined()
+    expect(routeIdFromWatchName(null)).toBeUndefined()
+  })
 
   it('never mints a name a shard could also be called', () => {
     // A property over the group rather than a value. The two namespaces share one Durable Object class, so a

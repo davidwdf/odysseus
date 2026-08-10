@@ -1117,7 +1117,30 @@ export function routeWatchName(routeId: string): string | undefined {
 }
 
 /** The `EtaHub` name prefix for a route watch. Distinct from the shards' `live-` by construction. */
-const LIVE_ROUTE_NAME_PREFIX = 'route-'
+export const LIVE_ROUTE_NAME_PREFIX = 'route-'
+
+/**
+ * The route a watch object is for, read back out of its own name — `routeWatchName`'s inverse.
+ *
+ * **Why the object asks its own name instead of being told.** A route watch differs from a place shard in
+ * three ways (its per-connection cap, its round budget and the fact that its readings are narrowed to one
+ * route), and all three follow from *which route it is*. The alternative is plumbing a flag through the
+ * upgrade URL and the socket session, which is a second declaration of something the object's identity
+ * already states — and one that could disagree with it. `DurableObjectId.name` is populated for any object
+ * reached by name, which `getByName` always is.
+ *
+ * Untagged, and deliberately: it is the exact inverse of a tagged rule rather than a rule of its own, so
+ * what pins it is a **round-trip property** over `routeWatchName`'s own corpus rows instead of a second
+ * group asserting the same strings backwards.
+ */
+export function routeIdFromWatchName(name: string | undefined | null): string | undefined {
+  if (name === undefined || name === null || !name.startsWith(LIVE_ROUTE_NAME_PREFIX))
+    return undefined
+  const routeId = name.slice(LIVE_ROUTE_NAME_PREFIX.length)
+  // Validated on the way back too. A name is storage-shaped input by the time an object reads it, and the
+  // hazard `routeWatchName` guards against on the way in does not stop being one on the way out.
+  return parseRouteId(routeId) === null ? undefined : routeId
+}
 
 /**
  * When a route watch should ask again — aligned to **the route's own publish clock** (proposals/05).

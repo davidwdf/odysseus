@@ -382,4 +382,38 @@ describe('a round’s upstream fan-out', () => {
     expect(new Set(ctbCalls).size).toBe(LIVE_CTB_BUDGET)
     for (const call of ctbCalls) expect(call).toMatch(new RegExp(`^${CTB_HEAVY_RAW}\\|9\\d\\d$`))
   })
+
+  it('asks about one route when one route is what was subscribed to', async () => {
+    // **Narrowing has to bound the questions, not just filter the answers.** It did not: `routeIds` reached
+    // `narrowEtasToRoutes` on the way out and nothing on the way in, so a connection watching one route at
+    // this place paid for all twenty. Measured through the real thing before this case existed — a route
+    // watch on `CTB:11:outbound:1`, 18 poles, `wrangler dev` on 2026-08-10 — **350 upstream calls in one
+    // round** where 18 would do, repeating every 45 s per watched route against a free feed. `boardsFor` in
+    // `stop-route.ts` is the rule; this is what it is worth.
+    //
+    // The `subscribe` frame is the door route narrowing arrives through (§8.1), which is why the case is
+    // driven through it rather than through `stopEtas` directly: the *round* is what repeats.
+    const watched = `CTB:900:outbound:1`
+    const { ws, frames } = await connect([CTB_HEAVY_ID])
+    await frames.take(2)
+    ws.send(
+      JSON.stringify({
+        type: 'subscribe',
+        targets: [{ stopId: CTB_HEAVY_ID, routeIds: [watched] }],
+      }),
+    )
+    await frames.take(4)
+    await settle(200)
+    ctbCalls = []
+    resetEtaCache()
+
+    expect(await runDurableObjectAlarm(stubFor([CTB_HEAVY_ID]))).toBe(true)
+    await settle(100)
+
+    expect(ctbCalls, `a round for one route asked upstream ${ctbCalls.length} times`).toEqual([
+      `${CTB_HEAVY_RAW}|900`,
+    ])
+    // …and the fixture could have produced nineteen more, which is the whole point of measuring it here.
+    expect(CTB_ROUTE_COUNT).toBeGreaterThan(1)
+  })
 })

@@ -8005,3 +8005,100 @@ pre-existing and unaddressed; it earned its keep here.
   - ⚪ **The wording follow-up ADR-114 filed is now less pressing.** *"Live times unavailable"* still implies
     *try later* about something permanent, but a rider is one tap from a real time rather than from nothing,
     which is most of what the better sentence was for.
+
+## ADR-116 — A route nobody can ask about in bulk gets one Durable Object of its own
+
+- **Status:** **Accepted 2026-08-10** in `apps/edge/src/live.ts` (`liveUpgrade`'s `?route=` branch),
+  `apps/edge/src/eta-hub.ts` (`watchedRoute`, `LIVE_ROUTE_MAX_POLES`) and `packages/core/src/live.ts`
+  (`routeWatchName`, `routeIdFromWatchName`, `nextRouteRoundMs`). Step 2 of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md) — option **B** of the
+  brainstorm ADR-114 opened and ADR-115 answered the easy half of.
+- **Context.** Citybus and GMB publish no bulk route-eta feed (ADR-021), so a route screen on those
+  operators has no times at all — ADR-114 made it *say* so and ADR-115 gave a rider a time one tap away.
+  Both leave the list itself blank. Their **per-pole** boards answer fine, so the times exist; what is
+  missing is somebody willing to ask ~13–41 questions at once and keep asking.
+- **The owner's constraint, which is the whole shape of this.** Two options were rejected on cost, not on
+  UX: a shared "feed as a service" that polls every route continuously (*"a bit rude to hammer something
+  free like that"*), and an accordion that makes each rider ask (ADR-115 rejects it on affordance grounds
+  too). What was accepted: **poll only the routes somebody is looking at, and poll each of them once no
+  matter how many riders are looking.** That is a statement about object identity, so it is the first
+  decision below rather than a footnote.
+- **Decisions:**
+  1. **The object is named after the route, and everything else follows from the name.** `route-<canonical
+     route id>` via `getByName`, so ten riders on Citybus 91 outbound share one object and therefore one
+     round; the two directions are two names, because their poles barely overlap and unioning them would
+     buy nothing. `EtaHub` then reads `ctx.id.name` back through `routeIdFromWatchName` to learn three
+     things it cannot be told any other way — its per-connection cap, its union cap, and that every
+     reading is narrowed to this one route. A flag on the connection would have to agree with the name;
+     reading the name cannot disagree with it.
+  2. **The poles are resolved server-side, from the route document.** `?route=<id>` and nothing else: the
+     Worker reads the same `/v1/route/:id` document the schematic draws and forwards `?targets=` to the
+     object, so the socket cannot watch a pole the screen does not show, the URL stays short across every
+     reconnect, and a client compiled against a stale rule cannot mint an object of its own choosing. A
+     malformed id is a **400 before any object exists** (`route-` plus arbitrary text is a real Durable
+     Object, and this is the door arbitrary text arrives at); an unknown route is a 404.
+  3. **One door into the shard, not a second protocol.** A route watch is an ordinary `?targets=` upgrade
+     whose object happens to be named for a route. Nothing in `EtaHub.fetch`/`subscribe` is route-specific
+     beyond the three things decision 1 lists.
+  4. **`LIVE_ROUTE_MAX_POLES = 64`, its own number.** A place connection is capped at 12 and a shard's
+     union at 48 — both sized for *whatever a subscriber happens to share with strangers*. A route's union
+     is one route, and the measured real range is 13–41 poles, so 48 would truncate a long route for a
+     reason belonging to a different shape of object. Excess poles are dropped **and named**, as every
+     other cap in that file does it.
+  5. **`nextRouteRoundMs` is in the kernel and not yet wired.** The upstream publishes per route on a ~60 s
+     cycle at a fixed second of the minute, out of phase with the CDN's 45 s TTL, so a phase-aligned round
+     learns something every time where a blind 45 s one learns nothing about one refresh in four. The rule
+     is written and corpus-pinned; the hub still runs the ordinary cadence until step 2b.
+- **Consequences:**
+  - 🟢 **Measured on the real feed, not reasoned about.** Citybus E22 outbound (41 poles — the worst real
+    case): first `delta` **1.24 s** after connect, with a reading for every pole. Citybus 11 outbound (18
+    poles): 269 ms. Both through `wrangler dev` against live upstream on 2026-08-10.
+  - 🟢 **The *n*th rider is free.** Asserted on object identity, which is what decides it, rather than on
+    a counter that could drift from it.
+  - ⚠️ **It found a 19× fan-out that had nothing to do with route watching** — see ADR-117. The first
+    honest measurement of this design was 350 upstream calls for an 18-pole round, and the design would
+    have been indefensible if that had shipped.
+  - ⚪ **No screen subscribes yet.** Steps 3–5 of the proposal are the client transport, the frame→row
+    merge rule and the `apps/web` subscription. The edge half is reviewable on its own, which is why the
+    proposal split there.
+
+## ADR-117 — A narrowed read narrows the questions, not just the answers
+
+- **Status:** **Accepted 2026-08-10** in `apps/edge/src/stop-route.ts` (`boardsFor`, threaded through
+  `stopEtas` → `stopArrivals` → `memberEtaLists`). Found by measuring ADR-116.
+- **Context.** `routes=` on `/v1/etas/:id` — and the `routeIds` an `EtaHub` subscription carries — reached
+  `narrowEtasToRoutes` on the way *out* and nothing on the way *in*. So a caller naming one route still
+  paid for every route at every pole of the place the id resolves to. Nothing had ever measured it because
+  the only narrowing caller was a single HTTP request, where the waste is invisible.
+- **What the first route watch measured.** `CTB:11:outbound:1`, 18 poles, one round: **350 upstream calls**
+  — 312 `CTB-eta` and 38 `kmb-board` — where 18 would do, 21 s of queued fetching, repeating every 45 s per
+  watched route against a free government feed. Per-call latency was 0.14 s; the 5.4 s median was our own
+  queue.
+- **Decisions:**
+  1. **A board whose operator serves none of the requested routes is not called.** A KMB board returns
+     KMB/LWB readings, so asking it about a Citybus route produces readings `narrowEtasToRoutes` discards in
+     *every* case — those were the 38. KMB and LWB fold together because they read the same board.
+  2. **A CTB pole is asked only about the requested route numbers.** CTB has no stop board (ADR-021), so
+     its call key is per (pole, route) and every unwanted route is an individually-priced question — the
+     312.
+  3. **Both tests are on the route id's grammar, never on whether a pole is thought to serve a route.** A
+     pole-membership guess that is wrong drops readings a rider is watching, and there is nothing to gain
+     by guessing: the operator prefix and route number are in the id.
+  4. **An unparseable route id contributes to neither set.** It can match no reading either, so the
+     narrowing that already applied would have discarded whatever it selected.
+- **Consequences:**
+  - 🟢 **Same round, 41 calls instead of ~800.** Re-measured immediately after: Citybus 11's round went
+    350 → **18** calls and 21 s → **0.27 s**; E22's 41-pole round is 41 calls. The fan-out now matches the
+    arithmetic `LIVE_ROUTE_MAX_POLES` and `LIVE_CTB_BUDGET` are both written in terms of.
+  - ⚠️ **`failed` narrows with it, and that is wire-visible.** `stopEtas` documents that `routes=` filters
+    readings and never failures; that stays true of the boards we call, but a board we no longer call cannot
+    refuse. So a narrowed read now reports failures only for what it actually asked about — which is the
+    honest direction, and is what lets a route watch's *"we could not ask"* marker mean the route's own
+    poles (ADR-081, ADR-114).
+  - 🟢 **Every rider benefits, not just a route watch.** ADR-115's sheet fetch is a narrowed read: one tap
+    used to cost a whole place's fan-out and now costs one call.
+  - ⚠️ **Two halves, two tests, because one guard can pass for the other's reason.** The operator skip is
+    pinned in `live-route-watch.test.ts` (a KMB place asked a Citybus question must call nothing) with its
+    own control case (asking about a route it *can* answer must still call something — a narrowing that
+    skipped every board would otherwise pass); the per-route bound is pinned on the heavy CTB fixture in
+    `eta-hub-caps.test.ts`. Each was watched failing on a deliberate revert of its own guard.
