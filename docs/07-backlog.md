@@ -314,6 +314,26 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       Easting/Northing**, so this needs an HK80↔WGS84 conversion in `@nextbus/core`.
 - [ ] **Self-drawing route polyline** animation; animated "progress" fill toward your stop.
 - [ ] **Frequency heat** — visualize which nearby stops have the most buses arriving soon.
+- [ ] 🟢 **Explore hkbus.app's map, which is prettier than ours and cheaper than it looks** — researched
+      2026-08-10 from their GPL-3.0 source and live traffic, written up as
+      [proposals/02 §11](./proposals/02-basemap-and-street-imagery.md#11--addendum--how-hkbusapp-actually-does-it-read-2026-08-10-nothing-decided).
+      **Nothing decided, ADR-049 stands.** The four things worth stealing, none of them a rewrite:
+      **(a)** the whole basemap is the Protomaps→PMTiles fallback ADR-049 parked — MapLibre over a
+      **29.6 MB** archive they build themselves with planetiler in a scheduled GitHub Action, which
+      independently confirms our measured 38 MB (z0–15) was not optimistic; **(b)** their vector style has
+      **zero `symbol` layers** — every name is LandsD's `{lang}` label raster on top, so ADR-049's
+      per-locale label overlay is *orthogonal* to which base sits under it, and the empty-Han-glyph gotcha
+      never arises; **(c)** the between-stops camera flight everyone notices is bare
+      `map.flyTo({ center })` — MapLibre's default curve arcs out and back in for free, and the authored
+      part is only that a new **stop** animates while a new **route** jumps; **(d)** the route line is a
+      6 px casing + 4 px coloured fill + a `symbol` layer of **arrowheads** every 70 px, which answers
+      ADR-080's *"which side of the road do I wait on"* with cartography instead of prose. Two cautions:
+      they block **all** tile rendering for ~5–30 s on a first visit (whole-archive download into Cache
+      Storage — wrong default for a rider on cellular, right shape for the offline pack below), and their
+      route geometry is not open data at all but a community waypoints repo, so **a real route line is a
+      data question before it is a rendering one** (`docs/research/01`: HK publishes no polylines). Against
+      all of it: §4 valued LandsD's survey detail — footbridges, subways, landmark buildings — as *the*
+      feature, and OSM does not carry it. Prettier and less useful is a real possibility, not a rhetorical one.
 
 ### Smart timing (utility that feels magic)
 - [ ] **"Leave now" alerts** — combine walking time to the stop with the ETA: "leave in 3 min to
