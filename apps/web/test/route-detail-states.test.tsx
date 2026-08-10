@@ -612,6 +612,19 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
     })
   })
 
+  it('tells the travel where each bus is on the route, not merely which row it is in', async () => {
+    // `data-bus-at` is what `useRailFlip` matches a moved token to its past by (ADR-111), and a segment is
+    // deliberately the **half**-step between the nodes it spans: a node and the segment leading out of it
+    // are different places half a row apart, and one number has to order them. The row alone cannot — both
+    // of those live in the same row.
+    await mountCase()
+    const view = viewFor(caseNamed(CASE))
+    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    expect(tokens.map((el) => el.getAttribute('data-bus-at'))).toEqual(
+      view.buses.map((bus) => String(bus.kind === 'node' ? bus.index : bus.from + 0.5)),
+    )
+  })
+
   it('projects the tokens in the model’s order', async () => {
     await mountCase()
     const view = viewFor(caseNamed(CASE))

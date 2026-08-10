@@ -73,9 +73,20 @@ export function RailBusToken({ bus, ordinal }: { bus: RailBus; ordinal: number }
       // identity `key` has used since ADR-030. In the DOM rather than in a registry, because a re-parented
       // token is a *different element* and there is nothing else to compare across the move.
       data-bus-ordinal={ordinal}
-      // The node or segment it is on. `useRailFlip` travels only when **this** changes, so a list that
-      // reflows under a stationary bus moves it without animating it.
-      data-bus-at={bus.kind === 'node' ? `n${bus.index}` : `s${bus.from}`}
+      /*
+        **Where it is along the route, as one number** — a node is its own index, a segment is the half-step
+        between the two it spans. `useRailFlip` reads it for two separate questions and it is worth knowing
+        that they are separate:
+
+         · **identity** — unchanged means the list reflowed underneath a stationary bus, not that the bus
+           moved, so there is nothing to animate;
+         · **plausibility** — a bus travels *forward* along a route, so a token that would have to come from
+           much further down the rail is not the same bus. That is what stops the re-index (ADR-030's ordinal
+           identity) from sliding a bus that reached the terminus back up to the origin.
+
+        A single ordered coordinate answers both, where the ordinal answers neither.
+      */
+      data-bus-at={bus.kind === 'node' ? bus.index : bus.from + HALF_STEP}
       className="pointer-events-none absolute flex items-center justify-center rounded-full bg-accent"
       style={{
         top: bus.kind === 'node' ? AT_NODE : ON_SEGMENT,
@@ -118,6 +129,9 @@ export const NODE = 26
 export const NODE_TOP = 12
 export const NODE_CENTRE = NODE_TOP + NODE / 2
 const TOKEN = 24
+
+/** A segment sits midway between the nodes it spans — see `data-bus-at`. */
+const HALF_STEP = 0.5
 
 /**
  * The two resting places, as CSS.

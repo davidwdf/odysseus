@@ -14,8 +14,9 @@
 //    and must not test.
 //  · `offsetParent` — left `null`, which ends the walk after one hop. The real chain is two hops and its
 //    correctness is a browser fact, measured there (delta −104 px against a layout delta of −104 px).
-//  · `animate` — a recorder. What the hook must get right is *which* keyframes it asks for, not what the
-//    compositor then does with them.
+//  · `animate` — a recorder that also returns a controllable stand-in, because an exit removes its own
+//    ghost from `onfinish` and nothing in jsdom will ever fire that. What the hook must get right is
+//    *which* keyframes it asks for on *which* element, not what the compositor then does with them.
 // `matchMedia` is stubbed too, because jsdom has none and `prefersReducedMotion()` answers `true` without
 // it — which would make every assertion below pass vacuously.
 
@@ -31,34 +32,42 @@ interface Recorded {
   target: HTMLElement
   keyframes: Keyframe[]
   options: KeyframeAnimationOptions
+  animation: { onfinish: (() => void) | null; oncancel: (() => void) | null }
 }
 let recorded: Recorded[] = []
 
 /**
  * One token per bus, each parked at the top of the row its `data-row` names.
  *
- * `at` defaults to the row, which is the ordinary case — a bus's target *is* the row it is drawn against.
- * A test passes them apart on purpose to model the one case where they differ: the list reflowing under a
- * bus that has not moved.
+ * `at` — the route coordinate — defaults to the row, which is the ordinary case: a bus's place along the
+ * route *is* the row it is drawn against. A test passes them apart on purpose to model the case where they
+ * differ, the list reflowing under a bus that has not moved.
  */
 interface Bus {
   ordinal: number
   row: number
-  at?: string
+  at?: number
 }
 function Harness({ buses, routeId }: { buses: Bus[]; routeId: string }) {
   const list = useRef<HTMLDivElement | null>(null)
-  useRailFlip(list, routeId)
+  const ghosts = useRef<HTMLDivElement | null>(null)
+  useRailFlip(list, ghosts, routeId)
   return (
     <div ref={list}>
       {buses.map((bus) => (
         <span
           key={bus.ordinal}
+          // Named exactly as `RailBusToken` names itself. Not decoration: the exit clones the token and
+          // strips it, and an unnamed token could not tell a stripped clone from an unstripped one — which
+          // is how an injected defect that kept the ghost's `aria-label` first went unnoticed here.
+          role="img"
+          aria-label={`Bus at stop ${bus.row}`}
           data-bus-ordinal={bus.ordinal}
-          data-bus-at={bus.at ?? `n${bus.row}`}
+          data-bus-at={bus.at ?? bus.row}
           data-row={bus.row}
         />
       ))}
+      <div ref={ghosts} data-ghosts />
     </div>
   )
 }
@@ -72,12 +81,34 @@ function render(buses: Bus[], routeId = 'KMB:1A:outbound:1'): void {
   })
 }
 
+/** A recorded animation is a *travel* when it moves; the two pops scale instead. */
+const isTravel = (r: Recorded) => String(r.keyframes[0]?.transform ?? '').startsWith('translateY')
+const isEnter = (r: Recorded) =>
+  r.keyframes[0]?.opacity === 0 && String(r.keyframes[1]?.transform) === 'scale(1)'
+const isLeave = (r: Recorded) =>
+  r.keyframes[1]?.opacity === 0 && String(r.keyframes[0]?.transform) === 'scale(1)'
+
 /** The keyframe deltas asked for since the last `recorded = []`, in `translateY(…px)` order. */
 function travels(): { ordinal: string | null; from: string; to: string }[] {
-  return recorded.map((r) => ({
+  return recorded.filter(isTravel).map((r) => ({
     ordinal: r.target.getAttribute('data-bus-ordinal'),
     from: String(r.keyframes[0]?.transform ?? ''),
     to: String(r.keyframes[1]?.transform ?? ''),
+  }))
+}
+
+/** Which tokens were popped in, by ordinal. */
+function entrances(): (string | null)[] {
+  return recorded.filter(isEnter).map((r) => r.target.getAttribute('data-bus-ordinal'))
+}
+
+/** The exits: one per departed bus, each on a stripped clone parked in the ghost layer. */
+function exits(): { inGhostLayer: boolean; top: string; announced: boolean }[] {
+  return recorded.filter(isLeave).map((r) => ({
+    inGhostLayer: r.target.parentElement?.hasAttribute('data-ghosts') === true,
+    top: r.target.style.top,
+    announced:
+      r.target.getAttribute('role') !== null || r.target.getAttribute('aria-label') !== null,
   }))
 }
 
@@ -104,8 +135,9 @@ beforeEach(() => {
     keyframes: Keyframe[],
     options: KeyframeAnimationOptions,
   ) {
-    recorded.push({ target: this, keyframes, options })
-    return { cancel: () => {} } as unknown as Animation
+    const animation = { cancel: () => {}, onfinish: null, oncancel: null }
+    recorded.push({ target: this, keyframes, options, animation })
+    return animation as unknown as Animation
   } as typeof window.HTMLElement.prototype.animate
   stubReducedMotion(false)
   document.body.innerHTML = '<div id="host"></div>'
@@ -139,22 +171,29 @@ describe('a bus that moves', () => {
     expect(recorded[0]?.options).toEqual({ duration: 500, easing: 'cubic-bezier(0, 0, 0.2, 1)' })
   })
 
-  it('is matched to its old place by ordinal, not by position in the list', () => {
-    // Two buses whose rows cross over. If the hook paired them up by document order instead of by the
-    // identity `key` has carried since ADR-030, both deltas would come out wrong.
+  it('is matched by where it is on the route, and the ordinal is not consulted', () => {
+    /*
+      Two buses, each advancing one node — with their ordinals **relabelled** between the commits, which is
+      what a re-index does. Matched by ordinal, the deltas would be nonsense; matched by route coordinate,
+      each bus is recognised as itself.
+
+      That the ordinal is now irrelevant here is the point of ADR-111: it is a slot in `view.buses`, and a
+      slot is not a vehicle. It still keys the React element, which is all it was ever good for.
+    */
     render([
-      { ordinal: 0, row: 8 },
-      { ordinal: 1, row: 3 },
+      { ordinal: 0, row: 3 },
+      { ordinal: 1, row: 8 },
     ])
     recorded = []
     render([
-      { ordinal: 1, row: 4 },
-      { ordinal: 0, row: 9 },
+      { ordinal: 4, row: 4 },
+      { ordinal: 5, row: 9 },
     ])
-    expect(travels().sort((a, b) => (a.ordinal ?? '').localeCompare(b.ordinal ?? ''))).toEqual([
-      { ordinal: '0', from: `translateY(${-ROW}px)`, to: 'translateY(0px)' },
-      { ordinal: '1', from: `translateY(${-ROW}px)`, to: 'translateY(0px)' },
+    expect(travels()).toEqual([
+      { ordinal: '4', from: `translateY(${-ROW}px)`, to: 'translateY(0px)' },
+      { ordinal: '5', from: `translateY(${-ROW}px)`, to: 'translateY(0px)' },
     ])
+    expect(entrances(), 'a bus that only advanced a node was treated as a new one').toEqual([])
   })
 
   it('does not move when the render changed nothing about where it is', () => {
@@ -184,9 +223,9 @@ describe('a bus that moves', () => {
 
       So the record carries the *target* as well as the offset, and only a change of target is a move.
     */
-    render([{ ordinal: 0, row: 6, at: 'n6' }])
+    render([{ ordinal: 0, row: 6, at: 6 }])
     recorded = []
-    render([{ ordinal: 0, row: 8, at: 'n6' }])
+    render([{ ordinal: 0, row: 8, at: 6 }])
     expect(travels(), 'the bus travelled a distance it did not travel').toEqual([])
   })
 
@@ -198,6 +237,112 @@ describe('a bus that moves', () => {
     recorded = []
     render([{ ordinal: 0, row: 30 }])
     expect(travels()).toEqual([])
+  })
+})
+
+describe('a bus that enters or leaves the rail', () => {
+  it('pops in rather than appearing, and pops out rather than vanishing', () => {
+    recorded = []
+    render([{ ordinal: 0, row: 3 }])
+    expect(entrances(), 'a bus arriving on the rail was not drawn arriving').toEqual(['0'])
+    expect(travels()).toEqual([])
+
+    recorded = []
+    render([])
+    const out = exits()
+    expect(out, 'a bus leaving the rail was not drawn leaving').toHaveLength(1)
+    // Positioned against the list at the offset it last occupied, because the row it left from may not be
+    // there any more — and stripped, because a bus that has left must not be announced or projected.
+    expect(out[0]).toEqual({ inGhostLayer: true, top: `${3 * ROW}px`, announced: false })
+  })
+
+  it('does not slide a bus that reached the terminus back to the origin', () => {
+    /*
+      **The owner's report, and ADR-030's ordinal identity meeting its limit.** When the lead bus leaves the
+      rail every bus behind it shifts up one ordinal, so the k-th token is a different vehicle — and matched
+      by ordinal it travels the whole length of the schematic the wrong way. Measured in the lab at 1120 px
+      on a 17-stop rail.
+
+      A bus travels *forward*, so a candidate further along the route than the token cannot be that token's
+      past. What is left over is the pair of events a rider should actually see.
+    */
+    render([{ ordinal: 0, row: 16 }])
+    recorded = []
+    render([{ ordinal: 0, row: 0 }])
+    expect(travels(), 'the bus slid back up the rail').toEqual([])
+    expect(entrances(), 'the bus at the origin did not pop in').toEqual(['0'])
+    expect(exits(), 'the bus that reached the terminus did not pop out').toHaveLength(1)
+  })
+
+  it('re-lets the ordinals correctly when the lead of three departs', () => {
+    // The routine case: three buses, the lead reaches the terminus. The two behind it each advance one
+    // node, and each should be recognised as itself rather than as the ordinal it inherited.
+    render([
+      { ordinal: 0, row: 4 },
+      { ordinal: 1, row: 9 },
+      { ordinal: 2, row: 15 },
+    ])
+    recorded = []
+    render([
+      { ordinal: 0, row: 5 },
+      { ordinal: 1, row: 10 },
+    ])
+    expect(travels().map((t) => t.from)).toEqual([`translateY(${-ROW}px)`, `translateY(${-ROW}px)`])
+    expect(entrances(), 'a surviving bus was treated as a new one').toEqual([])
+    expect(exits(), 'the departed lead was not drawn leaving').toHaveLength(1)
+  })
+
+  it('lets an ETA revision nudge a bus back a node without re-minting it', () => {
+    // A stop's estimate grows, so the bus that was reaching it is now only approaching it. That is a move
+    // backwards, and a real one — the tolerance exists for exactly this and for nothing longer.
+    render([{ ordinal: 0, row: 7, at: 7 }])
+    recorded = []
+    render([{ ordinal: 0, row: 6, at: 6.5 }])
+    expect(travels().map((t) => t.from)).toEqual([`translateY(${ROW}px)`])
+    expect(entrances()).toEqual([])
+    expect(exits()).toEqual([])
+  })
+
+  it('does not take its own ghost for a bus on the next round', () => {
+    /*
+      The ghost layer lives **inside** the list, which is the element this hook queries — so a clone that
+      kept `data-bus-ordinal` would be counted as a bus for the 220 ms of its exit: a phantom at the
+      terminus, entering the rail every round until it faded. Which is why the clone is stripped of both
+      data attributes and not only of its accessible name.
+    */
+    render([
+      { ordinal: 0, row: 3 },
+      { ordinal: 1, row: 9 },
+    ])
+    render([{ ordinal: 0, row: 4 }]) // the bus at row 9 leaves; its ghost is parked in the layer
+    expect(exits()).toHaveLength(1)
+
+    recorded = []
+    render([{ ordinal: 0, row: 5 }])
+    expect(travels().map((t) => t.from)).toEqual([`translateY(${-ROW}px)`])
+    expect(entrances(), 'the departed bus’s ghost was counted as a bus arriving').toEqual([])
+  })
+
+  it('travels half a row when a bus leaves a node for the segment out of it', () => {
+    // A node and the segment leading out of it are different places, half a row apart — which is why a
+    // segment's coordinate is the *half*-step between the nodes it spans. Were the two the same number, the
+    // identity rule would read this as a reflow and the bus would cover the half-row without moving.
+    render([{ ordinal: 0, row: 6, at: 6 }])
+    recorded = []
+    render([{ ordinal: 0, row: 6.5, at: 6.5 }])
+    expect(travels().map((t) => t.from)).toEqual([`translateY(${-ROW / 2}px)`])
+  })
+
+  it('draws neither pop when the rider has asked for less motion', () => {
+    render([{ ordinal: 0, row: 3 }])
+    stubReducedMotion(true)
+    recorded = []
+    render([
+      { ordinal: 0, row: 3 },
+      { ordinal: 1, row: 9 },
+    ])
+    render([])
+    expect(recorded).toEqual([])
   })
 })
 
@@ -219,6 +364,8 @@ describe('a direction flip', () => {
     // Commit 2: the reverse's payload lands, and its buses are somewhere else entirely.
     render([{ ordinal: 0, row: 26 }], 'KMB:1A:inbound:1')
     expect(travels()).toEqual([])
+    // And no exit, either: nothing left the rail, the whole rail was replaced.
+    expect(exits(), 'a flip drew an exit for a bus that did not go anywhere').toEqual([])
   })
 
   it('still travels normally once the new direction is the one on screen', () => {

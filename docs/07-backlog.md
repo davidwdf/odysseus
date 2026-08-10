@@ -361,6 +361,15 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       flip the saved-stop star's `z-10` was trapped inside its row and a passing bus painted over a rider's
       favourite.
 
+      **And a third defect, older than either renderer**
+      ([ADR-111](./08-decision-log.md#adr-111--an-ordinal-is-a-slot-not-a-bus-the-rail-gains-an-entrance-and-an-exit)):
+      the ordinal `view.buses` gives a token is a *slot*, not a vehicle, so when the lead bus reached the
+      terminus every bus behind it inherited an ordinal and slid the length of the schematic the wrong way —
+      1120 px on a 17-stop rail, and the same in the overlay this replaced. Tokens are matched by their place
+      along the route now, under the rule that a bus travels forward, and what the rule leaves unmatched is
+      exactly the two events worth drawing: a bus **entering** the rail and one **leaving** it. Both pop.
+      `apps/mobile` still has the re-index defect and is not being fixed — it retires at WP6-8.
+
 ## WP6-8 blockers — the parity audit's findings (2026-08-08)
 
 > **`apps/web` is NOT yet safe to ship as the only renderer.** Eight auditors walked it screen by screen

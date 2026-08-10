@@ -7738,3 +7738,64 @@ pre-existing and unaddressed; it earned its keep here.
      where it was private. A media query reaches CSS animations and transitions and reaches no
      `element.animate()` call, so the JavaScript reading is not optional here — and two copies of it is how
      two pieces of one screen come to disagree about a rider's setting.
+
+## ADR-111 — An ordinal is a slot, not a bus: the rail gains an entrance and an exit
+
+- **Status:** **Accepted 2026-08-09** in `apps/web/src/hooks/useRailFlip.ts`,
+  `components/RailBusToken.tsx` and `screens/RouteDetail.tsx`, after the owner watched the ADR-110 travel in
+  the motion lab and reported that a bus starting the route *"slide[s] all the way up from the bottom"* and
+  should instead pop into existence at the first stop — and pop out again after the last.
+- **Context.** `routeDetailView.buses` is in route order and a token's React `key` is its ordinal, which
+  ADR-030 states deliberately and which reconciles correctly. ADR-110's FLIP inherited that identity for its
+  travel, and the `transition-[top]` overlay before it had done the same. **The ordinal is not an identity.**
+  When the lead bus reaches the terminus and leaves the rail, every bus behind it shifts *up* one ordinal, so
+  the k-th token is now a different vehicle several stops back — and matched by ordinal it travels the entire
+  length of the schematic the wrong way. Reproduced in the lab on a 17-stop rail at **1120 px**, and present
+  in every renderer that has ever drawn this screen.
+- **Decisions:**
+  1. **A token carries its place along the route as one ordered number** (`data-bus-at`: a node is its index,
+     a segment the half-step between the two it spans), and that number answers two separate questions —
+     *identity* (unchanged means the list reflowed under a stationary bus, ADR-110 decision 3a) and *order*
+     (which is what the matching needs). The ordinal answers neither; it still keys the element, which is all
+     it was ever good for.
+  2. **Tokens are matched to the previous commit's by coordinate, under one physical rule: a bus travels
+     forward.** Both sequences are ascending — `view.buses` is in route order and so is the DOM — so a single
+     pointer walks them and the matching cannot cross. A candidate more than **one node** further along than
+     the token cannot be it: an ETA revision genuinely nudges a bus back a stop and that is a move worth
+     drawing, while ten stops backwards is the ordinal being re-let.
+  3. **What the rule leaves unmatched *is* the pair of events.** A token with no plausible candidate has
+     **entered** the rail; a candidate no token claimed has **left** it. That is the whole of it — nothing
+     else has to detect "a bus started the route", because the matching already knows.
+  4. **Both events are a pop, and that is a deliberate divergence.** `apps/mobile` wraps its token in
+     Reanimated's `FadeIn`/`FadeOut`, so parity would be a plain fade. A bus entering service is a discrete
+     event, and scale is already this token's own vocabulary (`bus-squash` is a scale anchored at the wheels),
+     so the entrance grows in over 320 ms on `cubic-bezier(0.34, 1.56, 0.64, 1)` — the only easing in this app
+     that leaves its own range, which is what makes it read as *pop* rather than *appear* — and the exit
+     shrinks away over 220 ms easing **in**, so a departed bus accelerates off a rail it has left rather than
+     lingering on it. Not back-ported, per ADR-100's odometer call.
+  5. **The exit is drawn on a stripped clone in a layer React renders empty.** The element that carried the
+     bus is gone by the time the effect runs, and the row it left from may be gone too — so the ghost is
+     positioned against the *list* at the offset the bus last occupied. A clone rather than the original
+     because the original is often still on screen carrying a **different** bus: when the lead departs React
+     re-uses its element for the bus behind it, and re-adopting that element would tear a live token out of
+     its row. `role`, `aria-label` and both data attributes come off the clone, which matters twice — a
+     screen reader must not announce a bus that has left, and the next commit's `querySelectorAll` must not
+     find it and take it for a bus.
+- **Consequences:**
+  - 🟢 **The projection is still unchanged.** The ghost layer is an empty `<div>` — no text nodes, nothing
+     interactive — and a ghost inside it has neither `role` nor `aria-label`, so neither pass of either
+     conformance driver can see it. No spec edit.
+  - 🟢 **A direction flip stays silent.** The reset clears the record, so the reverse's buses *arrive* rather
+     than sliding in from the outbound's places — and it deliberately draws **no** exits, because nothing left
+     the rail; the whole rail was replaced.
+  - ⚠️ **React must never reconcile the ghost layer's children.** It does not, because the element is rendered
+     with no children at all — but that is a property of the JSX, not a guarantee of the API, so the layer
+     must stay childless in the tree. Written on it at the call site.
+  - ⚠️ **`apps/mobile` has the same re-index defect** and is not being fixed: it retires at WP6-8. Worth
+     knowing if anyone compares the two renderers on a route whose lead bus is about to terminate — the RN one
+     will slide and this one will not.
+  - ⚪ **A lab paid for itself twice.** ADR-110 decision 3a and all of this came out of a local-only page that
+     steps a bus on a timer over the real components; both were invisible to eleven tests and four rounds of
+     browser measurement, because every one of them asked whether the motion was *correct* and none asked
+     whether it fired on the right **occasions**. The page is not committed and cannot be: it sits under
+     `info/exclude`, outside `tsconfig`, and `build:web` does not see it.

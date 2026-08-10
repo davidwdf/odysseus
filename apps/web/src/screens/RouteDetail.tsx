@@ -165,7 +165,8 @@ export function RouteDetail() {
 
   /**
    * What a re-parent costs, bought back: a token that moves between rows is a **new element**, and no CSS
-   * transition survives that, so the travel is `element.animate()` over a measured delta (`useRailFlip`).
+   * transition survives that, so the travel is `element.animate()` over a measured delta (`useRailFlip`) —
+   * as are the pops a bus makes entering and leaving the rail (ADR-111).
    *
    * The reset is keyed on **the payload's** route, not on the URL's — and that distinction is a defect
    * caught in a browser rather than a nicety. `placeholderData: keepPreviousData` holds the current
@@ -176,7 +177,8 @@ export function RouteDetail() {
    * payload, the reset lands on exactly the commit the buses change in. Measured: one token animated
    * across a 1A flip before, none after.
    */
-  useRailFlip(list, query.data?.route.id)
+  const ghosts = useRef<HTMLDivElement | null>(null)
+  useRailFlip(list, ghosts, query.data?.route.id)
 
   /**
    * Which row draws which bus — a bus **at** node N belongs to row N, and a bus on the segment *into* node N
@@ -327,6 +329,16 @@ export function RouteDetail() {
                 registerRow={registerRow}
               />
             ))}
+            {/* Where a departed bus is drawn out (ADR-111). Rendered **empty and never filled by React**,
+                which is the whole point: `useRailFlip` appends a stripped clone of the token here for the
+                220 ms of its exit, and React does not reconcile the children of an element it renders with
+                none. `aria-hidden` because a bus that has left must not be announced — the clone loses its
+                `role` and `aria-label` too, so the conformance walker cannot see it either. */}
+            <div
+              ref={ghosts}
+              aria-hidden
+              className="pointer-events-none absolute inset-0 overflow-hidden"
+            />
           </div>
 
           {/* The sheet a pill opens — one call, the same one the RN screen makes, handed the **view** rather

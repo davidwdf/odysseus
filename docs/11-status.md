@@ -237,6 +237,28 @@
 > `translateY(−104px)` against a layout delta of exactly −104. What it cannot show is the feel, and nobody
 > has yet watched this move.
 >
+> **A bus enters and leaves the rail (part 13)**
+> ([ADR-111](./08-decision-log.md#adr-111--an-ordinal-is-a-slot-not-a-bus-the-rail-gains-an-entrance-and-an-exit)) —
+> the owner watched part 12's travel in the lab and reported that a bus starting the route slides all the way
+> up from the bottom, and should pop in at the first stop and pop out after the last.
+> 🔴 **They were describing a defect older than either renderer.** An ordinal is a **slot** in `view.buses`,
+> not a vehicle: when the lead bus reaches the terminus, every bus behind it shifts up one ordinal, so the
+> k-th token is a different bus several stops back — and matched by ordinal it travels the length of the
+> schematic the wrong way. **Measured at 1120 px on a 17-stop rail**, and the `transition-[top]` overlay did
+> the same for two waves.
+> 🟢 **A token carries its place along the route as one ordered number**, and tokens are matched by *that*
+> under one physical rule: a bus travels forward, give or take the one node an ETA revision can nudge it
+> back. What the rule leaves unmatched **is** the pair of events — a bus that entered the rail and one that
+> left it — so nothing extra has to detect them.
+> 🟢 **Both are a pop**: 320 ms growing in with the only overshoot easing in the app, 220 ms shrinking away
+> easing *in* so a departed bus accelerates off a rail it has left. A deliberate divergence — `apps/mobile`
+> uses a plain `FadeIn`/`FadeOut` — recorded rather than matched, and not back-ported per ADR-100.
+> The exit is drawn on a **stripped clone** in a layer React renders empty, because the element that carried
+> the bus is usually still on screen carrying the *next* one.
+> ⚪ **The lab has now paid for itself twice**, and both times for the same reason: every assertion and every
+> measurement asked whether the motion was *correct*, and none asked whether it fired on the right
+> **occasions**.
+>
 > **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
 > the *document* scroll position that a pushed screen inherits (which genuinely **is**
 > `<ScrollRestoration>`'s job, and is left alone because it changes all eight screens at once), and the RN
