@@ -138,6 +138,64 @@ export const LIVE_CADENCE_RAMP_ROUNDS = 3
 export const LIVE_SHARD_COUNT = 8
 
 /**
+ * The upstream's own publish period, and the two numbers that align a route round to it (proposals/05).
+ *
+ * **Measured 2026-08-10, and it is not the 45 s the CDN advertises.** `cache-control: max-age=45` on
+ * `rt.data.gov.hk` is CloudFront's TTL; the *data* behind it moves on a ~60 s cycle. The two drift, so about
+ * one CDN refresh in four returns an identical `data_timestamp` — observed directly: a refetch at 21:28:10
+ * returned the 21:27:12 publish it already had, three seconds before 21:28:13 was written.
+ *
+ * The clock worth following is in the payload. `data_timestamp` is **per route**, shared by every pole on it,
+ * and lands on a fixed second of the minute — six (stop, route) pairs sampled together gave every E22 stop
+ * `:12–:13` and every route-91 stop `:09–:10`, ~60 s apart, with E22 still on `:13` twenty-five minutes
+ * earlier. So a watcher of one route can learn its route's phase from its own responses, which is what
+ * `nextRouteRoundMs` does.
+ *
+ * The margin is small and deliberately not zero: the phases above carry ~1 s of jitter, and asking *before*
+ * the publish lands is the one outcome guaranteed to waste the round.
+ */
+export const LIVE_ROUTE_PUBLISH_PERIOD_MS = 60_000
+/** How long after the expected publish to ask — see `LIVE_ROUTE_PUBLISH_PERIOD_MS`. */
+export const LIVE_ROUTE_PUBLISH_MARGIN_MS = 3_000
+/**
+ * How soon to retry a round that learned nothing.
+ *
+ * **Alignment improves the odds and cannot guarantee**, because the CDN entry is shared with every other
+ * consumer of the API: whoever's request created it set its phase, not us, so a still-valid copy can be older
+ * than the newest publish (measured worst case in the same sample: 78 s). When `data_timestamp` has not
+ * advanced we know the round taught us nothing, and one short retry is cheaper than waiting out a full period
+ * — 15 s, because the entry that misled us expires within 45 s of its own creation and a third of that is a
+ * reasonable first look.
+ *
+ * A deliberate non-decision: there is **no quiet-route ramp** here, unlike `nextLiveCadenceMs`. A route with
+ * nothing on it returns no `data_timestamp` at all and simply ticks at the period. Adding a ramp would have to
+ * interact with this retry arm, and the case for its shape should come from measuring how often the
+ * not-advanced arm actually fires — which cannot be known until this runs.
+ */
+export const LIVE_ROUTE_RETRY_MS = 15_000
+/**
+ * The CDN's advertised TTL — and the **one** thing `45 − age` is the right answer for.
+ *
+ * Following it as a *cadence* is the mistake `LIVE_ROUTE_PUBLISH_PERIOD_MS` documents. But when a round has
+ * been handed a copy older than the newest publish, the question is no longer "when does the data change" —
+ * it is "when does *this entry* turn over", and that is exactly what the `age` header answers. So a
+ * not-advanced round with a known age waits `(ttl − age)` rather than guessing `LIVE_ROUTE_RETRY_MS`.
+ */
+export const LIVE_ROUTE_CDN_TTL_MS = 45_000
+/**
+ * Never ask more often than this, whatever the arithmetic says.
+ *
+ * Ten seconds, and deliberately **not** the same number as `LIVE_ROUTE_RETRY_MS`: they do different jobs, and
+ * a floor that equals a chosen delay is a floor nobody can tell is working. This one exists to stop any
+ * arithmetic mistake — a skewed clock, a bad TTL, a future timestamp — becoming a tight loop against somebody
+ * else's free API. It binds when a round finishes *after* the publish it was aiming at, where asking soon is
+ * the correct answer anyway.
+ */
+export const LIVE_ROUTE_MIN_GAP_MS = 10_000
+/** …and never wait longer than this, so a skewed or absurd timestamp cannot park a watch indefinitely. */
+export const LIVE_ROUTE_MAX_GAP_MS = 90_000
+
+/**
  * The reconnect schedule: where it starts, how fast it widens, and where it stops widening.
  *
  * **Why these live in the kernel when the timer that uses them does not.** The numbers used to sit in
@@ -1027,6 +1085,106 @@ export function liveSocketUrl(apiBaseUrl: string): string {
   if (base.startsWith('https://')) return `wss://${base.slice('https://'.length)}${LIVE_PATH}`
   if (base.startsWith('http://')) return `ws://${base.slice('http://'.length)}${LIVE_PATH}`
   return `${base}${LIVE_PATH}`
+}
+
+/**
+ * Which `EtaHub` object owns a **route** watch — its name, not a shard index (proposals/05).
+ *
+ * A place watch is spread over `LIVE_SHARD_COUNT` shards by `liveShardFor`, which hashes the lowest target
+ * id so that two clients watching the same places share a poll. A route watch does not need the hash: the
+ * route id **is** the identity, so every rider on Citybus 962 lands on `route-CTB:962:outbound:1` and one
+ * round serves all of them. That is the property this whole feature is for, and naming rather than hashing is
+ * what makes it exact rather than probable.
+ *
+ * Its own namespace, and not a raised `LIVE_MAX_TARGETS_PER_CONNECTION`, for three reasons — the first two
+ * about *bounding* and the third one discovered later:
+ *  · a route's ~40 poles would otherwise union with strangers' Favourites sets on one of eight shards, and
+ *    `LIVE_MAX_SHARD_TARGETS`' arithmetic is already at 87% of its cadence;
+ *  · a route round is cheap *per pole* and numerous, where a place round is the opposite, so one cap cannot
+ *    describe both;
+ *  · they run on **different clocks** — see `nextRouteRoundMs`.
+ *
+ * **`undefined` for an id that is not a route id**, and that is the whole of the validation here. The reason
+ * is written out on `liveShardFor`: a `NaN` shard index once produced the Durable Object name `live-NaN`, *"a
+ * real object that silently collects every client"*. `route-` plus arbitrary text is the same hazard with a
+ * friendlier face — a route id arrives from a query string, so the caller must be able to answer 400 rather
+ * than mint an object for `route-<script>`. Returning a name for garbage would make that impossible.
+ *
+ * @spec live#routeWatchName
+ */
+export function routeWatchName(routeId: string): string | undefined {
+  return parseRouteId(routeId) === null ? undefined : `${LIVE_ROUTE_NAME_PREFIX}${routeId}`
+}
+
+/** The `EtaHub` name prefix for a route watch. Distinct from the shards' `live-` by construction. */
+const LIVE_ROUTE_NAME_PREFIX = 'route-'
+
+/**
+ * When a route watch should ask again — aligned to **the route's own publish clock** (proposals/05).
+ *
+ * The upstream advertises `max-age=45`, and following that number is the mistake this function exists to
+ * avoid: 45 s is CloudFront's TTL, while the data behind it moves on a ~60 s cycle at a per-route second of
+ * the minute (`LIVE_ROUTE_PUBLISH_PERIOD_MS` carries the measurement). Poll on the CDN's clock and roughly one
+ * round in four re-reads a publish it already had. Poll on the *data's* clock and every round lands just after
+ * a new one — **fewer calls and fresher answers**, which is the rare direction for that trade.
+ *
+ * Four arms, and each is a different thing to know:
+ *  1. **No publish timestamp** — an out-of-service route returns no rows at all, so there is no phase to
+ *     align to. Tick at the period; there is nothing cleverer to do and pretending otherwise would invent a
+ *     schedule from absent data.
+ *  2. **It did not advance, and we know how old the copy was** — the round was handed a shared CDN entry
+ *     older than the newest publish. Here, and only here, `ttl − age` is the right signal: the question is
+ *     not when the *data* changes but when *this entry* turns over, which the `age` header answers exactly.
+ *  3. **It did not advance and the age is unknown** — the same situation with the measurement missing, so
+ *     `LIVE_ROUTE_RETRY_MS` is the blind guess. Kept separate from arm 2 rather than folded into it, because
+ *     a guess and a measurement should not read the same in a schedule.
+ *  4. **It advanced** — aim at `published + period + margin`. If that is already past, the floor handles it:
+ *     a slow round does not earn a negative delay, and a skewed clock does not earn an hour.
+ *
+ * `now` is a number and the timestamps are ISO strings **because that is how they arrive**: `now` from a
+ * clock, `data_timestamp` from the wire, `age` from a response header. An unparseable timestamp is treated as
+ * absent rather than as zero, which is the difference between arm 1 and a 90 s clamp on garbage.
+ *
+ * @spec live#nextRouteRoundMs
+ */
+export function nextRouteRoundMs(input: {
+  /** The newest `data_timestamp` this round saw, across every pole of the route. */
+  publishedAt?: string
+  /** …and the newest the round before it saw, so this function decides "advanced" rather than its caller. */
+  previousPublishedAt?: string
+  /** The `age` header on the response that misled us, in **seconds**, when the round has one to offer. */
+  cacheAgeSec?: number
+  now: number
+}): number {
+  const published = epochOrUndefined(input.publishedAt)
+  if (published === undefined) return LIVE_ROUTE_PUBLISH_PERIOD_MS
+
+  const previous = epochOrUndefined(input.previousPublishedAt)
+  if (previous !== undefined && published <= previous) {
+    const age = input.cacheAgeSec
+    if (age === undefined || !Number.isFinite(age) || age < 0) return LIVE_ROUTE_RETRY_MS
+    // The margin again, for the same reason as arm 4: asking at the exact instant of turnover is the one
+    // timing guaranteed to be too early.
+    return clamp(
+      LIVE_ROUTE_CDN_TTL_MS - age * 1000 + LIVE_ROUTE_PUBLISH_MARGIN_MS,
+      LIVE_ROUTE_MIN_GAP_MS,
+      LIVE_ROUTE_MAX_GAP_MS,
+    )
+  }
+
+  const target = published + LIVE_ROUTE_PUBLISH_PERIOD_MS + LIVE_ROUTE_PUBLISH_MARGIN_MS
+  return clamp(target - input.now, LIVE_ROUTE_MIN_GAP_MS, LIVE_ROUTE_MAX_GAP_MS)
+}
+
+/** An ISO timestamp as epoch ms, or `undefined` when it is absent or unreadable — never `NaN`. */
+function epochOrUndefined(iso: string | undefined): number | undefined {
+  if (iso === undefined) return undefined
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? ms : undefined
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
 // ── Merging live readings into what a screen holds ───────────────────────────────────────────

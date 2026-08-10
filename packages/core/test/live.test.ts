@@ -10,6 +10,8 @@ import {
   LIVE_CADENCE_FLOOR_MS,
   LIVE_CADENCE_RAMP_ROUNDS,
   LIVE_RECONNECT_INITIAL_MS,
+  LIVE_ROUTE_MAX_GAP_MS,
+  LIVE_ROUTE_MIN_GAP_MS,
   LIVE_SESSION_START,
   type LiveApplyResult,
   type LiveSession,
@@ -19,7 +21,9 @@ import {
   liveTargetsKey,
   narrowEtasToRoutes,
   nextLiveCadenceMs,
+  nextRouteRoundMs,
   retainFailedPoles,
+  routeWatchName,
   sameFailures,
   sameReading,
   unionFailures,
@@ -33,7 +37,7 @@ import type {
   StopDetail,
   WatchTarget,
 } from '../src/types'
-import { specCases } from './corpus'
+import { at, specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/live.spec.json. JSON `null` becomes the language's absent
 // value at the boundary (see test/corpus.ts) — here that is an absent subscriber count and an absent
@@ -255,6 +259,77 @@ describe('live#liveShardFor', () => {
       expect(liveShardFor(c.args.targets, c.args.shardCount ?? undefined)).toBe(c.expect)
     })
   }
+})
+
+describe('live#routeWatchName', () => {
+  for (const c of specCases<{ routeId: string }, string | null>(corpus, 'routeWatchName')) {
+    it(c.name, () => {
+      // `?? null` at the boundary: JSON has no `undefined`, so the corpus writes the absent answer as
+      // `null` and the translation belongs here rather than in the signature (see test/corpus.ts).
+      expect(routeWatchName(c.args.routeId) ?? null).toBe(c.expect)
+    })
+  }
+
+  it('never mints a name a shard could also be called', () => {
+    // A property over the group rather than a value. The two namespaces share one Durable Object class, so a
+    // name collision would silently put a route watch and a place shard in the same object — with two
+    // different clocks and two different caps. `liveShardFor` names its objects `live-<n>`.
+    for (const c of specCases<{ routeId: string }, string | null>(corpus, 'routeWatchName')) {
+      const name = routeWatchName(c.args.routeId)
+      if (name === undefined) continue
+      expect(name.startsWith('live-'), `${c.name}: could collide with a shard`).toBe(false)
+      expect(name).not.toBe(c.args.routeId)
+    }
+  })
+})
+
+describe('live#nextRouteRoundMs', () => {
+  interface RoundArgs {
+    publishedAt?: string
+    previousPublishedAt?: string
+    cacheAgeSec?: number
+    now: string
+  }
+  const call = (a: RoundArgs) =>
+    nextRouteRoundMs({
+      ...(a.publishedAt === undefined ? {} : { publishedAt: a.publishedAt }),
+      ...(a.previousPublishedAt === undefined
+        ? {}
+        : { previousPublishedAt: a.previousPublishedAt }),
+      ...(a.cacheAgeSec === undefined ? {} : { cacheAgeSec: a.cacheAgeSec }),
+      now: at(a.now),
+    })
+
+  for (const c of specCases<RoundArgs, number>(corpus, 'nextRouteRoundMs')) {
+    it(c.name, () => {
+      expect(call(c.args)).toBe(c.expect)
+    })
+  }
+
+  it('never schedules outside its own floor and ceiling', () => {
+    // The property the clamp exists for, asserted across every row rather than trusted per row: whatever the
+    // arithmetic, a watch must not become a tight loop against somebody else's free API, and must not park
+    // itself for so long that a rider watches a dead screen.
+    for (const c of specCases<RoundArgs, number>(corpus, 'nextRouteRoundMs')) {
+      const ms = call(c.args)
+      expect(ms, `${c.name}: below the floor`).toBeGreaterThanOrEqual(LIVE_ROUTE_MIN_GAP_MS)
+      expect(ms, `${c.name}: above the ceiling`).toBeLessThanOrEqual(LIVE_ROUTE_MAX_GAP_MS)
+    }
+  })
+
+  it('asks sooner after a round that learned nothing than after one that did', () => {
+    // The whole point of the not-advanced arms, stated as a comparison so it cannot be satisfied by two
+    // numbers that happen to be equal. A round with news can afford to wait for the next publish; a round
+    // without it should not wait a full period for news it already failed to get.
+    const base = { publishedAt: '2026-08-10T21:29:12+08:00', now: '2026-08-10T21:29:20+08:00' }
+    const advanced = call({ ...base, previousPublishedAt: '2026-08-10T21:28:13+08:00' })
+    const stalled = call({ ...base, previousPublishedAt: base.publishedAt })
+    const measured = call({ ...base, previousPublishedAt: base.publishedAt, cacheAgeSec: 30 })
+    expect(stalled).toBeLessThan(advanced)
+    expect(measured).toBeLessThan(advanced)
+    // …and a measured turnover is its own answer, not the blind guess dressed up.
+    expect(measured).not.toBe(stalled)
+  })
 })
 
 describe('live#liveSocketUrl', () => {

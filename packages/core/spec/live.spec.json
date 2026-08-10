@@ -9043,6 +9043,191 @@
           ]
         }
       ]
+    },
+    "routeWatchName": {
+      "doc": "Which `EtaHub` object owns a route watch. The route id IS the identity, so every rider on one route shares one object and one upstream round — and an id that is not a route id must mint no object at all, because it arrives from a query string and `route-<anything>` would be a real Durable Object (the `live-NaN` hazard `liveShardFor` records). `null` in a fixture is the language’s absent value.",
+      "cases": [
+        {
+          "name": "a-citybus-route-owns-the-object-named-after-it",
+          "args": {
+            "routeId": "CTB:962:outbound:1"
+          },
+          "expect": "route-CTB:962:outbound:1"
+        },
+        {
+          "name": "the-reverse-direction-is-a-different-route-and-a-different-object",
+          "why": "Both bounds are watched independently and their poles barely overlap, so sharing one object would union two rounds for no benefit.",
+          "args": {
+            "routeId": "CTB:962:inbound:1"
+          },
+          "expect": "route-CTB:962:inbound:1"
+        },
+        {
+          "name": "a-green-minibus-route-too",
+          "args": {
+            "routeId": "GMB:1A:outbound:2009119"
+          },
+          "expect": "route-GMB:1A:outbound:2009119"
+        },
+        {
+          "name": "a-service-type-variant-is-its-own-route",
+          "args": {
+            "routeId": "KMB:1A:outbound:2"
+          },
+          "expect": "route-KMB:1A:outbound:2"
+        },
+        {
+          "name": "a-stop-id-is-not-a-route-id",
+          "why": "The id arrives from a query string, so the caller must be able to answer 400 — see the `live-NaN` hazard on `liveShardFor`.",
+          "args": {
+            "routeId": "KMB:6F106FD26B684372"
+          },
+          "expect": null
+        },
+        {
+          "name": "a-place-id-is-not-a-route-id",
+          "args": {
+            "routeId": "P:22.31+114.16"
+          },
+          "expect": null
+        },
+        {
+          "name": "text-that-is-not-an-id-at-all-mints-no-object",
+          "why": "The whole point of the validation: `route-<script>` would be a real Durable Object.",
+          "args": {
+            "routeId": "<script>alert(1)</script>"
+          },
+          "expect": null
+        },
+        {
+          "name": "the-empty-string-mints-no-object",
+          "args": {
+            "routeId": ""
+          },
+          "expect": null
+        },
+        {
+          "name": "a-route-id-with-the-wrong-field-count",
+          "args": {
+            "routeId": "CTB:962:outbound"
+          },
+          "expect": null
+        }
+      ]
+    },
+    "nextRouteRoundMs": {
+      "doc": "When a route watch asks again, aligned to the ROUTE’s own publish clock rather than to the CDN’s TTL. The upstream advertises `max-age=45` but its data moves on a ~60 s cycle at a per-route second of the minute, so polling on the advertised number re-reads a publish it already had about one round in four (measured 2026-08-10, proposals/05). Four arms: no publish to align to; one that did not advance with a readable `age` (the one question `45 − age` genuinely answers — when does THIS entry turn over); the same without an age; and one that did advance.",
+      "cases": [
+        {
+          "name": "a-fresh-publish-aims-just-after-the-next-one",
+          "why": "E22 published at :12–:13 in the measurement, so a round at 21:29:20 that saw 21:29:12 should next ask at 21:30:15 — the period plus the margin, 55 s away. Deliberately not a multiple of any constant, so this answer can only come from the arithmetic.",
+          "args": {
+            "publishedAt": "2026-08-10T21:29:12+08:00",
+            "previousPublishedAt": "2026-08-10T21:28:13+08:00",
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 55000
+        },
+        {
+          "name": "the-first-round-of-a-watch-has-nothing-to-compare-against",
+          "why": "No previous publish is not the same as an unadvanced one: the first round of a watch has news by definition, so it aligns rather than retries.",
+          "args": {
+            "publishedAt": "2026-08-10T21:29:12+08:00",
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 55000
+        },
+        {
+          "name": "a-stale-copy-waits-for-that-entry-to-turn-over",
+          "why": "The publish did not advance and the response carried `age: 30`, so this entry expires in 15 s — the one question `45 − age` genuinely answers. 18 s with the margin, which is distinct from the blind retry.",
+          "args": {
+            "publishedAt": "2026-08-10T21:29:12+08:00",
+            "previousPublishedAt": "2026-08-10T21:29:12+08:00",
+            "cacheAgeSec": 30,
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 18000
+        },
+        {
+          "name": "a-nearly-expired-stale-copy-is-floored-rather-than-chased",
+          "why": "age 44 leaves 1 s, plus 3 s of margin, which is under the floor. The floor is what stops a turnover race becoming a tight loop.",
+          "args": {
+            "publishedAt": "2026-08-10T21:29:12+08:00",
+            "previousPublishedAt": "2026-08-10T21:29:12+08:00",
+            "cacheAgeSec": 44,
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 10000
+        },
+        {
+          "name": "a-stale-copy-with-no-age-to-read-falls-back-to-the-blind-retry",
+          "why": "Same situation, measurement missing. Kept as its own answer so a guess and a measurement do not read alike in a schedule.",
+          "args": {
+            "publishedAt": "2026-08-10T21:29:12+08:00",
+            "previousPublishedAt": "2026-08-10T21:29:12+08:00",
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 15000
+        },
+        {
+          "name": "a-nonsense-age-is-no-age-at-all",
+          "why": "A negative or unusable header falls back to the blind retry rather than computing a delay from it — the same call `resolveClientPolicy` makes about unusable numbers.",
+          "args": {
+            "publishedAt": "2026-08-10T21:29:12+08:00",
+            "previousPublishedAt": "2026-08-10T21:29:12+08:00",
+            "cacheAgeSec": -5,
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 15000
+        },
+        {
+          "name": "a-publish-older-than-the-one-before-it-is-also-no-news",
+          "why": "Two CDN edges can disagree, so a round can be handed something older. It is still nothing new.",
+          "args": {
+            "publishedAt": "2026-08-10T21:28:13+08:00",
+            "previousPublishedAt": "2026-08-10T21:29:12+08:00",
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 15000
+        },
+        {
+          "name": "an-out-of-service-route-reports-no-publish-at-all",
+          "why": "Citybus 962 returned zero rows outside its morning hours. There is no phase to align to, so tick at the period.",
+          "args": {
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 60000
+        },
+        {
+          "name": "an-unreadable-timestamp-is-absent-rather-than-zero",
+          "why": "Treating it as epoch zero would clamp to the maximum wait on garbage; treating it as absent ticks at the period.",
+          "args": {
+            "publishedAt": "not a timestamp",
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 60000
+        },
+        {
+          "name": "a-round-that-took-so-long-the-next-publish-has-been-and-gone",
+          "why": "The target is already past. A slow round must not earn a negative delay — the floor is what stops a tight loop.",
+          "args": {
+            "publishedAt": "2026-08-10T21:26:13+08:00",
+            "previousPublishedAt": "2026-08-10T21:25:12+08:00",
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 10000
+        },
+        {
+          "name": "a-skewed-clock-cannot-park-a-watch-for-an-hour",
+          "why": "A timestamp far in the future would otherwise compute an enormous delay. The ceiling is the answer.",
+          "args": {
+            "publishedAt": "2026-08-10T23:30:00+08:00",
+            "previousPublishedAt": "2026-08-10T21:29:12+08:00",
+            "now": "2026-08-10T21:29:20+08:00"
+          },
+          "expect": 90000
+        }
+      ]
     }
   }
 }

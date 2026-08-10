@@ -247,14 +247,49 @@ objects could shed the rest. Not proposed now: measure first.
 
 | file | change |
 |---|---|
-| `packages/core/src/live.ts` | `LIVE_ROUTE_MAX_POLES`; a `routeWatchName(routeId)` helper (the DO name, portable arithmetic like `liveShardFor`); `@spec live#routeWatchName` + corpus |
+| ✅ `packages/core/src/live.ts` | **Done.** `routeWatchName(routeId)` and `nextRouteRoundMs(…)`, both with `@spec` tags and corpus groups (9 + 11 rows), plus five constants. Six injections, each reddening only its own assertions. See *What step 1 actually shipped* below. |
 | `apps/edge/src/index.ts` | `/v1/live?route=…` → resolve poles from the dataset → `ETA_HUB.idFromName(routeWatchName(id))` |
-| `apps/edge/src/eta-hub.ts` | a round that takes its targets from a resolved route rather than from sockets' unions; the new cap; `test/eta-hub-caps.test.ts` grows the route case |
+| `apps/edge/src/eta-hub.ts` | a round that takes its targets from a resolved route rather than from sockets' unions; **`LIVE_ROUTE_MAX_POLES` lives here, not in the kernel** (see below); `test/eta-hub-caps.test.ts` grows the route case |
 | `packages/api-client/src/live/` | a `watchRoute(routeId)` alongside `watch(targets)`; the socket URL builder |
 | `packages/contract` | the `route` query parameter and any frame addition → `asyncapi:emit` |
 | `apps/web/src/screens/RouteDetail.tsx` | subscribe when `perStopOnly`; merge frames into the rows |
 | `packages/core` | the merge rule (which reading updates which row) as a kernel function with corpus rows — **not** in a screen |
 | `packages/contract/ui/route-detail.spec.json` | `noLiveBoard` stops being a state a rider sees on Citybus; what replaces it needs declaring |
+
+## What step 1 actually shipped, and two places the plan above was wrong
+
+Landed in `packages/core/src/live.ts` with corpus rows and no behaviour, as intended. Two corrections to the
+plan, both found by writing it:
+
+**1. `LIVE_ROUTE_MAX_POLES` does not belong in the kernel.** The plan put it beside `routeWatchName`. It is a
+*server* budget — a client never computes it — so it belongs with its siblings `LIVE_MAX_TARGETS_PER_CONNECTION`
+and `LIVE_CTB_BUDGET` in `apps/edge/src/eta-hub.ts`. The kernel holds what three platforms must compute
+identically; the hub holds what only the hub decides. It moves to step 2.
+
+**2. `45 − age` turned out to be the right answer to a narrower question than it looked, and the rule grew a
+fourth arm for it.** The cadence section above establishes that following the CDN's TTL as a *cadence* is the
+mistake. But when a round is handed a copy older than the newest publish, the question changes from *"when does
+the data change"* to *"when does **this entry** turn over"* — and that is exactly what `age` answers, exactly.
+So `nextRouteRoundMs` has four arms, not three:
+
+| the round saw | it waits |
+|---|---|
+| no publish at all (out of service) | the period — there is no phase to align to |
+| an unadvanced publish, **and an `age` header** | `ttl − age + margin` — a measured turnover |
+| an unadvanced publish, no age | `LIVE_ROUTE_RETRY_MS` — the same situation, blind |
+| a fresh publish | `published + period + margin`, clamped |
+
+Keeping the last two arms separate is deliberate: a guess and a measurement should not read alike in a
+schedule, and a fixture proved the point — with the floor and the blind retry both set to 15 s, three arms
+produced the same number for three different reasons and no test could tell them apart. The floor is 10 s now,
+which is a different job (stopping any arithmetic mistake becoming a tight loop) and is now visibly doing it.
+
+`routeWatchName` returns **`undefined` for an id that is not a route id**, which is the whole of its
+validation and is not decoration: a route id arrives from a query string, and `route-` plus arbitrary text
+would mint a real Durable Object — the same hazard `liveShardFor` records as having produced `live-NaN`, *"a
+real object that silently collects every client"*. A property test also asserts no route name can ever collide
+with a shard's `live-<n>`, since both namespaces share one class and a collision would put two different
+clocks and two different caps in one object.
 
 ## What this is not
 
@@ -271,7 +306,8 @@ objects could shed the rest. Not proposed now: measure first.
 
 ## Order of work
 
-1. `routeWatchName` + `LIVE_ROUTE_MAX_POLES` in the kernel, with corpus rows. *(no behaviour)*
+1. ✅ **Done** — `routeWatchName` + `nextRouteRoundMs` in the kernel, with corpus rows and no behaviour.
+   `LIVE_ROUTE_MAX_POLES` moved to step 2, where it belongs.
 2. `/v1/live?route=…` resolving poles server-side, and the hub's route round + cap test. *(edge only,
    verifiable with a socket client and `curl`)*
 3. `watchRoute` in `packages/api-client`, over the existing transports.
