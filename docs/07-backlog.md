@@ -491,6 +491,18 @@ written down.
       `sessionStorage`.
 
 ## Infra / hardening
+- [ ] 🟠 **`apps/edge`'s KV/R2 endpoint sweep times out on a cold CI runner, and a flaky gate is a gate
+      nobody reads.** `test/dataset-kv.test.ts > a full endpoint sweep against a seeded build` failed on
+      2026-08-09 with *"Test timed out in 5000ms"* — vitest's default — on a run with **0 cached tasks** and
+      a 38 s cold import, and passed on an immediate re-run of the same commit with nothing changed. It is
+      one `it` that walks every endpoint against a seeded build inside workerd, so it is the slowest
+      assertion in the repo and the one nearest the default limit; locally the whole file takes ~17 s with a
+      warm cache and never trips.
+      The fix is a `timeout` on that test (or on the edge project) chosen from what it actually costs cold,
+      **not** a global bump — the point of a 5 s default is that a test which suddenly needs 30 s has
+      usually broken rather than slowed. Until then a red `gates (clean checkout)` on this file alone, with
+      a *timeout* rather than an assertion, is very likely this and not the change under review: re-run it
+      once before reading further.
 - [ ] 🔴 **Two tabs of the PWA silently overwrite each other's preferences — including a rider's
       favourites.** Found by WP6-7 while declaring Settings' `stale` state
       ([ADR-096](./08-decision-log.md#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them)
