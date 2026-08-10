@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The React Native Route screen's conformance suite: **the same published spec the DOM screen drives**
-// (WP6-6b, ADR-094) — `packages/contract/ui/route-detail.spec.json`, nineteen states, seventeen projected.
+// (WP6-6b, ADR-094) — `packages/contract/ui/route-detail.spec.json`, twenty states, nineteen projected.
 //
 // WHY BOTH SIDES OF THIS EXIST
 // ADR-069's honest gap was a projection suite on one renderer and none on the other, pointing the wrong way:
@@ -73,6 +73,10 @@ const FIXTURE: Record<string, string> = {
   noFacts: 'a-route-with-no-service-block-has-no-facts-strip-at-all',
   holidayFare: 'a-holiday-fare-is-a-note-on-the-fare-pill-never-a-pill-of-its-own',
   empty: 'an-empty-sequence-still-names-the-route-from-its-own-labels',
+  // ADR-114's two arms. Same sentence today and two states deliberately: one is worth retrying and the
+  // other never will be, so giving either its own words later is an edit to one `shows`.
+  noLiveBoard: 'a-citybus-route-says-its-times-are-per-stop-rather-than-reading-as-empty',
+  arrivalsUnavailable: 'a-round-the-route-feed-did-not-answer-is-not-a-route-with-no-buses',
 }
 
 function caseNamed(name: string): CorpusCase {
@@ -386,11 +390,11 @@ beforeEach(() => {
 describe('apps/mobile conforms to Route detail’s published spec, state by state', () => {
   it('has the states the spec declares, and a corpus case for each projected one', () => {
     expect(routeDetailSpec.component).toBe('RouteDetail')
-    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(19)
+    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(20)
     const projected = Object.entries(routeDetailSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(17)
+    expect(projected.length).toBeGreaterThanOrEqual(19)
     for (const state of projected) {
       expect(
         FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',

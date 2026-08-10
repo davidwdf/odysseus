@@ -33,7 +33,7 @@ import { CollapsingHeader } from '../shell/CollapsingHeader'
  * name/code/fare/readouts, which rows are the rider's saved ones, the boarding anchor, and **which node each
  * bus is at** — once, for both.
  *
- * `packages/contract/ui/route-detail.spec.json` declares what it must show in each of nineteen states, and
+ * `packages/contract/ui/route-detail.spec.json` declares what it must show in each of twenty states, and
  * `test/route-detail-states.test.tsx` drives every projected one — as does
  * `apps/mobile/test/route-detail-states.test.tsx`, from the same file and the same corpus fixtures.
  *
@@ -313,6 +313,21 @@ export function RouteDetail() {
                 </button>
               ))}
             </div>
+          ) : null}
+
+          {/* **Live times are not the whole truth on this route, said once** (ADR-114).
+              `liveArrivals` distinguishes three things `eta: null` on every row could not: the round
+              answered and nothing is due, the round did not answer, and this operator publishes no
+              route-level feed at all (Citybus, GMB). The last is permanent, and its honest upgrade is to
+              point at the per-pole boards that *do* answer — a string of its own, and the owner's call.
+
+              Above the schematic and never per row: a rider cannot act on *which* rows, and 34 copies of
+              one sentence is not more honest than one. `text-muted`, not a warning colour — nothing is
+              wrong with the route. */}
+          {view.liveArrivals !== 'answered' ? (
+            <p className="m-0 px-4 pt-2 pb-1 text-label text-muted">
+              {t(locale, 'etasUnavailable')}
+            </p>
           ) : null}
 
           {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read

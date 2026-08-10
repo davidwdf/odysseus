@@ -281,6 +281,19 @@ describe('route-detail#routeDetailView', () => {
         v.stops.some((s) => s.name.code !== undefined),
       ),
       'a name with none': views.some((v) => v.stops.some((s) => s.name.code === undefined)),
+      // ADR-114's three arms. The second and third are what a route with an empty rail *means*, and until
+      // this row they were one thing: `arrivals: []` on every stop, with nothing anywhere saying whether
+      // anybody had been asked. All three are needed because `src/route-detail.ts` is held to 100% branches.
+      'a round that answered': views.some((v) => v.liveArrivals === 'answered'),
+      'a round that did not answer': views.some((v) => v.liveArrivals === 'unavailable'),
+      'an operator with no route-level feed': views.some((v) => v.liveArrivals === 'perStopOnly'),
+      // …and the pairing that makes the point: an empty rail is not evidence either way.
+      'an empty rail that was answered': views.some(
+        (v) => v.buses.length === 0 && v.liveArrivals === 'answered',
+      ),
+      'an empty rail that was never asked about': views.some(
+        (v) => v.buses.length === 0 && v.liveArrivals !== 'answered',
+      ),
     }
     expect(
       Object.entries(arms)

@@ -382,6 +382,21 @@ export interface RouteDetailView {
    * the alternative is two renderers summing the same haversines in two languages.
    */
   distanceM: number
+  /**
+   * Whether the per-stop readings on this schematic are a complete answer, and if not, why not (ADR-114).
+   *
+   * **`'answered'` where the wire says nothing**, which is the one piece of work this field does rather
+   * than merely restating `RouteDetail.liveArrivals`: the wire omits the field when there is nothing to
+   * report (the convention `failed` set — *"every board answered" and "we have nothing to say" should not
+   * be the same bytes*), and a spec's `oneOf` discriminant has to be **total** or it throws. Turning
+   * absence into a named arm here is what lets `route-detail.spec.json` declare all three.
+   *
+   * Every stop having `eta: null` is not a statement that no bus is due — it is also what a route nobody
+   * asked about looks like, and telling those apart is the whole of this field. A renderer says it **once
+   * for the screen**, never per row: a rider cannot act on *which* rows, and 34 copies of one sentence is
+   * not more honest than one.
+   */
+  liveArrivals: 'answered' | 'unavailable' | 'perStopOnly'
 }
 
 /** The words this view composes with, supplied by the caller's catalogue. */
@@ -522,6 +537,9 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
     buses,
     hereIndex,
     distanceM: routeDistanceM(stops.map((s) => s.stop.location)),
+    // Absence is an answer here and it is the *good* one — see the field's own note. `?? 'answered'` is
+    // therefore not a defensive default; it is the wire's convention being read.
+    liveArrivals: detail.liveArrivals ?? 'answered',
   }
 }
 

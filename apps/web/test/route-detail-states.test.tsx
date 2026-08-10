@@ -1,5 +1,5 @@
 // The DOM renderer's Route detail conformance suite: it drives the published spec (WP6-6b, ADR-094) —
-// `packages/contract/ui/route-detail.spec.json`, nineteen states, seventeen of them projected.
+// `packages/contract/ui/route-detail.spec.json`, twenty states, nineteen of them projected.
 //
 // WHAT IS DIFFERENT ABOUT THIS SCREEN
 // `proposals/04` picked it as *"the motion test"*, and the answer is narrower than "motion is idiom": **motion
@@ -82,6 +82,10 @@ const FIXTURE: Record<string, string> = {
   noFacts: 'a-route-with-no-service-block-has-no-facts-strip-at-all',
   holidayFare: 'a-holiday-fare-is-a-note-on-the-fare-pill-never-a-pill-of-its-own',
   empty: 'an-empty-sequence-still-names-the-route-from-its-own-labels',
+  // ADR-114's two arms. Same sentence today and two states deliberately: one is worth retrying and the
+  // other never will be, so giving either its own words later is an edit to one `shows`.
+  noLiveBoard: 'a-citybus-route-says-its-times-are-per-stop-rather-than-reading-as-empty',
+  arrivalsUnavailable: 'a-round-the-route-feed-did-not-answer-is-not-a-route-with-no-buses',
 }
 
 function caseNamed(name: string): CorpusCase {
@@ -271,11 +275,11 @@ beforeEach(() => {
 describe('apps/web conforms to Route detail’s published spec, state by state', () => {
   it('has the states the spec declares, and a fixture for each projected one', () => {
     expect(routeDetailSpec.component).toBe('RouteDetail')
-    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(18)
+    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(20)
     const projected = Object.entries(routeDetailSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(16)
+    expect(projected.length).toBeGreaterThanOrEqual(18)
     for (const state of projected) {
       expect(
         FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',

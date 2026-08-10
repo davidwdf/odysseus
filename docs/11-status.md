@@ -275,6 +275,30 @@
 >   owes — *what the RN app does that the web never got*, which is **not** the question the parity audit asked
 >   — is filed in `docs/07`.
 >
+> **A Citybus route can say why it has no times (2026-08-09)**
+> ([ADR-114](./08-decision-log.md#adr-114--eta-null-on-every-stop-meant-three-different-things-and-the-route-view-could-not-say-which)) —
+> the oldest 🔴 in `docs/07`, pinned as a `knownDefect` corpus row since WP6-6a and now closed. `eta: null` on
+> every stop meant **three** different things — no bus is due anywhere, the round did not answer, or nobody
+> was ever going to ask — and a schematic rendered identically for all three.
+> 🔴 **The half nobody would have noticed missing is the KMB one.** Citybus and GMB are the visible symptom,
+> but KMB's route feed *does* answer and its failure was swallowed by `.catch(() => [])` — so an upstream
+> outage read as a quiet route, for every rider in the app.
+> 🟢 **`liveArrivals` on the wire, absent when the round answered** (the convention `failed` set), and
+> deliberately **not** the `EtaFailure[]` ADR-077 gave `/v1/nearby`: a route is *one* upstream call, so naming
+> 34 poles would invent a granularity the fetch does not have. The kernel turns absence into a named arm
+> because a spec's `oneOf` discriminant must be total.
+> 🟢 **Two spec states, one sentence, no new string.** `noLiveBoard` and `arrivalsUnavailable` both show the
+> `etasUnavailable` line `StopRow` already uses — two states because one is worth retrying and the other never
+> will be, so giving either its own words later is an edit to one `shows`. `route-detail.spec.json` now has
+> **zero** `knownDefect` states and its corpus zero `knownDefect` rows.
+> ⚠️ **The plan for this row was wrong twice and is corrected in place**: it prescribed a `CONTRACT_VERSION`
+> minor bump, which ADR-052 §5 and three precedents forbid for an additive-optional field, and it prescribed
+> the wrong shape. Worth knowing because the `oasdiff` gate that would have caught a bad bump still does not
+> exist.
+> ⚪ **Left, named, and the owner's call:** those operators' per-pole boards answer fine, so the times are one
+> tap away — "Live times unavailable" is true but implies *try later* about something permanent. One catalogue
+> key in three locales and one `shows` edit.
+>
 > **The owner's review list is now clear.** What is left is the items filed in `docs/07`:
 > the *document* scroll position that a pushed screen inherits (which genuinely **is**
 > `<ScrollRestoration>`'s job, and is left alone because it changes all eight screens at once), and the RN

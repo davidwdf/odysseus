@@ -2392,9 +2392,302 @@
     },
     "noLiveBoard": {
       "must": "One line saying live times are unavailable for this route — once for the screen, not per row.",
-      "mustNot": "Reading as \"no bus is due at any stop\", which is what both renderers currently draw. It is the arrivals-path failure ADR-073 is named for, arriving through an operator that was never asked.",
+      "mustNot": "Reading as \"no bus is due at any stop\", which is what both renderers drew until ADR-114. It is the arrivals-path failure ADR-073 is named for, arriving through an operator that was never asked.",
+      "why": "Most routes are KMB, whose route-level feed does answer — so most of the time there is nothing to say and saying it anyway would be noise on the screen a rider uses most.",
       "enforcement": {
-        "knownDefect": "The wire carries no failure field for this endpoint, so `routeDetailView` has nothing to expose and no renderer can satisfy this. The fix is three parts and is in `docs/07`: `RouteDetailSchema` gains `failed` (additive, a `CONTRACT_VERSION` minor), the view gains the `incomplete` boolean `StopCardView` and `PlaceDetailView` already have, and both renderers say it once. Pinned meanwhile as the corpus row `a-citybus-route-shows-no-times-anywhere-and-does-not-say-why` (`knownDefect`), so the two renderers stay wrong in the same way. Owner: WP5-13’s successor."
+        "shows": [
+          {
+            "name": "facts",
+            "each": "facts",
+            "of": [
+              {
+                "name": "factValue",
+                "invariant": "Printed **verbatim**, and the strip is the pills the model hands over — in its order, with nothing added. Which facts exist, the fare’s fallback from a sectional span to the origin’s full fare, and the omission of the whole-route journey time were all inside `RouteMeta.tsx` until WP6-6a (ADR-093 decision 10). A route whose dataset carries no service block gets **no strip at all** rather than four pills reading \"—\".",
+                "text": {
+                  "field": "value"
+                }
+              },
+              {
+                "name": "factNoteSeparator",
+                "when": "note",
+                "why": "There is no qualifier to separate. Upstream publishes a holiday fare only where it differs.",
+                "text": {
+                  "literal": "·",
+                  "why": "The renderer’s glyph between a fare and its holiday qualifier, in its own node — React emits an expression and an adjacent literal as separate text nodes (ADR-092), so this is what the RN strip already produces and what the projection can therefore see. What it pins is the **order**: the fare, then the separator, then the qualifier."
+                }
+              },
+              {
+                "name": "factNote",
+                "when": "note",
+                "why": "Only where upstream published a holiday fare that differs from the ordinary one.",
+                "invariant": "A **note on the fare pill, never a pill of its own** — it qualifies the fare rather than standing beside it as a fifth fact. The qualifier word is the catalogue’s and the `$` is the kernel’s.",
+                "text": {
+                  "field": "note"
+                }
+              }
+            ]
+          },
+          {
+            "name": "noLiveBoard",
+            "why": "The operator publishes a route-level feed and it answered, so the readings on the schematic are the whole truth.",
+            "invariant": "Once, above the schematic — not per row. A rider cannot act on *which* rows, and 34 copies of one sentence is not more honest than one. Never a warning colour: nothing is wrong with the route, and nothing about it will change if they wait.",
+            "text": {
+              "message": "etasUnavailable"
+            }
+          },
+          {
+            "name": "stops",
+            "each": "stops",
+            "of": [
+              {
+                "name": "seq",
+                "invariant": "The stop’s **1-based position on the route**, as the wire numbers it — not the row’s index. They agree today and a payload that skipped a sequence number would make them differ, at which point the node a bus is drawn beside and the number printed in it would disagree.",
+                "text": {
+                  "field": "seq"
+                }
+              },
+              {
+                "name": "stopName",
+                "invariant": "Title-cased with its printed code split off by `displayName`, never by the renderer (ADR-034). This is also the string the tapped-stop sheet is titled with — the screen used to compute that separately as `titleCaseName(splitStopCode(…).label)`, eleven lines away, which is one answer written twice (ADR-093 decision 11).",
+                "text": {
+                  "field": "name.label"
+                }
+              },
+              {
+                "name": "stopCode",
+                "when": "name.code",
+                "why": "A stop whose upstream name carries no parenthetical — common for GMB poles, and for a Citybus stop whose name is a plain place.",
+                "invariant": "What is printed on the physical flag, which is what a rider standing at the kerb is matching against. Latin letters and digits, so it is the same string in every locale — **except** where the parenthetical is a translated place phrase rather than a code, which `splitStopCode` cannot tell apart and does not try to: it understands ASCII parentheses only, so an English `CENTRAL (EXCHANGE SQUARE)` splits and a Chinese `中環（交易廣場）` does not. Pinned in `stop-name.spec.json`, and both renderers must reproduce it identically.",
+                "text": {
+                  "field": "name.code"
+                }
+              },
+              {
+                "name": "stopFare",
+                "when": "fareLabel",
+                "why": "The dataset carries no boarding fare for this stop — usually the last one, where boarding is not possible.",
+                "invariant": "The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.",
+                "text": {
+                  "field": "fareLabel"
+                }
+              },
+              {
+                "name": "stopArrivals",
+                "invariant": "Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.",
+                "each": "arrivals",
+                "of": [
+                  {
+                    "name": "arrival",
+                    "oneOf": "label.kind",
+                    "cases": {
+                      "mins": [
+                        {
+                          "name": "arrivalValue",
+                          "text": {
+                            "field": "label.value"
+                          }
+                        },
+                        {
+                          "name": "arrivalUnit",
+                          "invariant": "The unit rides **every** numeric slot, so the row reads \"12 min  27 min  42 min\" rather than \"12  27  42 min\". It is a separate node because the two are styled differently — the figure is tabular and emphasised on the first slot, the unit is muted — which is also why they are two fields on the model.",
+                          "text": {
+                            "field": "label.unit"
+                          }
+                        }
+                      ],
+                      "due": [
+                        {
+                          "name": "arrivalDue",
+                          "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
+                          "text": {
+                            "field": "label.label"
+                          }
+                        }
+                      ],
+                      "headway": [
+                        {
+                          "name": "arrivalHeadway",
+                          "invariant": "Unreachable on this screen and declared anyway, because the union carries the arm: `upcoming` yields arrivals and a published frequency is not one. Declared rather than omitted so that a renderer falling through to the dash — losing a real sentence — is a spec failure rather than a silent one. The screen-level equivalent is the facts strip’s `freq` pill.",
+                          "text": {
+                            "field": "label.text"
+                          }
+                        }
+                      ],
+                      "departed": [
+                        {
+                          "name": "arrivalDeparted",
+                          "text": {
+                            "literal": "—",
+                            "why": "The em dash a renderer draws where there is nothing to count down. Also unreachable here — `upcoming` filters departed readings out before they reach a row — and declared for the same reason as `headway`."
+                          }
+                        }
+                      ],
+                      "none": [
+                        {
+                          "name": "arrivalNone",
+                          "text": {
+                            "literal": "—",
+                            "why": "As `departed`: the same dash, and the arm a row reaches by having no reading at all rather than a spent one. A row with no arrivals shows **nothing** on its right, which is a different thing again — see the `noReading` state."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "arrivalsUnavailable": {
+      "must": "One line saying live times are unavailable, above an otherwise complete schematic.",
+      "mustNot": "Losing the static half. The stops, the fares and the facts strip did not fail and are the reason the fetch is caught rather than thrown — a screen that dropped them would be a worse answer than the one the failure allows.",
+      "why": "The round answered, which is the ordinary case.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "facts",
+            "each": "facts",
+            "of": [
+              {
+                "name": "factValue",
+                "invariant": "Printed **verbatim**, and the strip is the pills the model hands over — in its order, with nothing added. Which facts exist, the fare’s fallback from a sectional span to the origin’s full fare, and the omission of the whole-route journey time were all inside `RouteMeta.tsx` until WP6-6a (ADR-093 decision 10). A route whose dataset carries no service block gets **no strip at all** rather than four pills reading \"—\".",
+                "text": {
+                  "field": "value"
+                }
+              },
+              {
+                "name": "factNoteSeparator",
+                "when": "note",
+                "why": "There is no qualifier to separate. Upstream publishes a holiday fare only where it differs.",
+                "text": {
+                  "literal": "·",
+                  "why": "The renderer’s glyph between a fare and its holiday qualifier, in its own node — React emits an expression and an adjacent literal as separate text nodes (ADR-092), so this is what the RN strip already produces and what the projection can therefore see. What it pins is the **order**: the fare, then the separator, then the qualifier."
+                }
+              },
+              {
+                "name": "factNote",
+                "when": "note",
+                "why": "Only where upstream published a holiday fare that differs from the ordinary one.",
+                "invariant": "A **note on the fare pill, never a pill of its own** — it qualifies the fare rather than standing beside it as a fifth fact. The qualifier word is the catalogue’s and the `$` is the kernel’s.",
+                "text": {
+                  "field": "note"
+                }
+              }
+            ]
+          },
+          {
+            "name": "arrivalsUnavailable",
+            "why": "The round answered, so the readings are complete and there is nothing to say about them.",
+            "invariant": "The same line, in the same place, as `noLiveBoard` — a rider is told what they can act on (no live times here) and not which of our two reasons produced it.",
+            "text": {
+              "message": "etasUnavailable"
+            }
+          },
+          {
+            "name": "stops",
+            "each": "stops",
+            "of": [
+              {
+                "name": "seq",
+                "invariant": "The stop’s **1-based position on the route**, as the wire numbers it — not the row’s index. They agree today and a payload that skipped a sequence number would make them differ, at which point the node a bus is drawn beside and the number printed in it would disagree.",
+                "text": {
+                  "field": "seq"
+                }
+              },
+              {
+                "name": "stopName",
+                "invariant": "Title-cased with its printed code split off by `displayName`, never by the renderer (ADR-034). This is also the string the tapped-stop sheet is titled with — the screen used to compute that separately as `titleCaseName(splitStopCode(…).label)`, eleven lines away, which is one answer written twice (ADR-093 decision 11).",
+                "text": {
+                  "field": "name.label"
+                }
+              },
+              {
+                "name": "stopCode",
+                "when": "name.code",
+                "why": "A stop whose upstream name carries no parenthetical — common for GMB poles, and for a Citybus stop whose name is a plain place.",
+                "invariant": "What is printed on the physical flag, which is what a rider standing at the kerb is matching against. Latin letters and digits, so it is the same string in every locale — **except** where the parenthetical is a translated place phrase rather than a code, which `splitStopCode` cannot tell apart and does not try to: it understands ASCII parentheses only, so an English `CENTRAL (EXCHANGE SQUARE)` splits and a Chinese `中環（交易廣場）` does not. Pinned in `stop-name.spec.json`, and both renderers must reproduce it identically.",
+                "text": {
+                  "field": "name.code"
+                }
+              },
+              {
+                "name": "stopFare",
+                "when": "fareLabel",
+                "why": "The dataset carries no boarding fare for this stop — usually the last one, where boarding is not possible.",
+                "invariant": "The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.",
+                "text": {
+                  "field": "fareLabel"
+                }
+              },
+              {
+                "name": "stopArrivals",
+                "invariant": "Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.",
+                "each": "arrivals",
+                "of": [
+                  {
+                    "name": "arrival",
+                    "oneOf": "label.kind",
+                    "cases": {
+                      "mins": [
+                        {
+                          "name": "arrivalValue",
+                          "text": {
+                            "field": "label.value"
+                          }
+                        },
+                        {
+                          "name": "arrivalUnit",
+                          "invariant": "The unit rides **every** numeric slot, so the row reads \"12 min  27 min  42 min\" rather than \"12  27  42 min\". It is a separate node because the two are styled differently — the figure is tabular and emphasised on the first slot, the unit is muted — which is also why they are two fields on the model.",
+                          "text": {
+                            "field": "label.unit"
+                          }
+                        }
+                      ],
+                      "due": [
+                        {
+                          "name": "arrivalDue",
+                          "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
+                          "text": {
+                            "field": "label.label"
+                          }
+                        }
+                      ],
+                      "headway": [
+                        {
+                          "name": "arrivalHeadway",
+                          "invariant": "Unreachable on this screen and declared anyway, because the union carries the arm: `upcoming` yields arrivals and a published frequency is not one. Declared rather than omitted so that a renderer falling through to the dash — losing a real sentence — is a spec failure rather than a silent one. The screen-level equivalent is the facts strip’s `freq` pill.",
+                          "text": {
+                            "field": "label.text"
+                          }
+                        }
+                      ],
+                      "departed": [
+                        {
+                          "name": "arrivalDeparted",
+                          "text": {
+                            "literal": "—",
+                            "why": "The em dash a renderer draws where there is nothing to count down. Also unreachable here — `upcoming` filters departed readings out before they reach a row — and declared for the same reason as `headway`."
+                          }
+                        }
+                      ],
+                      "none": [
+                        {
+                          "name": "arrivalNone",
+                          "text": {
+                            "literal": "—",
+                            "why": "As `departed`: the same dash, and the arm a row reaches by having no reading at all rather than a spent one. A row with no arrivals shows **nothing** on its right, which is a different thing again — see the `noReading` state."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     "offline": {

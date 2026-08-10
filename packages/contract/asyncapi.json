@@ -786,6 +786,14 @@
               ]
             }
           },
+          "liveArrivals": {
+            "description": "Why the per-stop `eta`s on this route are **not** a complete answer; **absent when they are** (ADR-114). Without it, `eta: null` on every stop means two different things — no bus is due anywhere, or nobody was asked — and a schematic renders identically for both. Not an `EtaFailure[]` like the other endpoints carry, and deliberately: a route is fetched in ONE upstream call, so naming 34 poles would invent a granularity the fetch does not have, and the UI is required to say this once for the screen rather than per row. `unavailable` = the route feed was asked and did not answer, so it is worth retrying. `perStopOnly` = this operator publishes no route-level arrivals feed (Citybus, GMB — ADR-021), so the route view will never carry them however long a rider waits; their per-pole boards do answer, and `/v1/etas/{poleId}` is where those times are.",
+            "type": "string",
+            "enum": [
+              "unavailable",
+              "perStopOnly"
+            ]
+          },
           "reverse": {
             "allOf": [
               {

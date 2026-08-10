@@ -12,11 +12,13 @@ import { StopSchema } from './stop'
  * next arrival *there* (`eta`), so a route view can show per-stop times and infer bus positions
  * (ADR-030).
  *
- * **`eta` is `null`, not absent, where no live reading is available** — the distinction is
- * load-bearing and the two must not be conflated: `null` means "we asked and there is nothing
- * right now" (Citybus, for instance, has no bulk route-eta feed at all), which is a legitimate
- * state to render as "no service info", whereas a missing key would mean the server never
- * populated the field.
+ * **`eta` is `null`, not absent, where this stop has no live reading** — a missing key would mean the
+ * server never populated the field, where `null` is an answer. What `null` does **not** tell you is
+ * *why*, and this comment used to claim it did: it said `null` means "we asked and there is nothing
+ * right now" and then admitted in the same sentence that Citybus has no bulk route-eta feed at all.
+ * Both cannot be true, and the second one is — which is why a Citybus route rendered as "no bus is due
+ * at any stop" for two waves. **`liveArrivals` is where the reason lives now** (ADR-114); `eta: null`
+ * is per-stop and says nothing about the round.
  *
  * `route` is the **full** service tier (`Route` → `RouteServiceInfo`): this is the one endpoint
  * that carries `patterns` (ADR-065).
@@ -32,6 +34,12 @@ export const RouteDetailSchema = z
         fare: z.string().optional().describe('Boarding fare at this stop, HK$ decimal string.'),
       }),
     ),
+    liveArrivals: z
+      .enum(['unavailable', 'perStopOnly'])
+      .optional()
+      .describe(
+        'Why the per-stop `eta`s on this route are **not** a complete answer; **absent when they are** (ADR-114). Without it, `eta: null` on every stop means two different things — no bus is due anywhere, or nobody was asked — and a schematic renders identically for both. Not an `EtaFailure[]` like the other endpoints carry, and deliberately: a route is fetched in ONE upstream call, so naming 34 poles would invent a granularity the fetch does not have, and the UI is required to say this once for the screen rather than per row. `unavailable` = the route feed was asked and did not answer, so it is worth retrying. `perStopOnly` = this operator publishes no route-level arrivals feed (Citybus, GMB — ADR-021), so the route view will never carry them however long a rider waits; their per-pole boards do answer, and `/v1/etas/{poleId}` is where those times are.',
+      ),
     reverse: RouteRefSchema.optional().describe(
       'The same route number in the opposite direction, when the dataset carries one — lets the UI offer a direction toggle. Absent for circular / single-direction routes (ADR-046). Server-resolved with the correct service-type variant, so the client never guesses the id.',
     ),

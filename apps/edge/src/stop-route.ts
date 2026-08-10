@@ -575,18 +575,35 @@ export async function routeDetail(ds: DatasetSource, id: string): Promise<RouteD
   // route view — the stop list, the geometry and the fares are all static — whereas erroring the
   // screen would lose them. That is a genuinely different answer from `/v1/etas`', which is why the
   // cache is no longer the one deciding it for both. The failure is still not cached, so the next
-  // request retries. Route detail has no per-stop failure field of its own; whoever gives it one is
-  // WP5-13, and it should come from here.
+  // request retries.
+  //
+  // **And the catch now reports itself** (ADR-114). It used to swallow the failure completely, which
+  // made an upstream outage indistinguishable from a quiet route — on KMB, where every rider is. The
+  // comment that stood here said route detail had no failure field of its own, that WP5-13 owed it one,
+  // and that "it should come from here". WP5-13 shipped without it; this is it, and it does come from
+  // here — but not as the `EtaFailure[]` the other endpoints carry. A route is **one** upstream call, so
+  // there is no per-pole granularity to report and inventing one would be a lie about the fetch.
   const etaBySeq = new Map<number, Eta>()
+  let liveArrivals: RouteDetail['liveArrivals']
   if (route.operator === 'KMB' || route.operator === 'LWB') {
     const entries = await coalesce(`kmb-route-eta|${route.routeNo}|${route.serviceType}`, () =>
       fetchKmbRouteEta(route.routeNo, route.serviceType),
-    ).catch(() => [])
+    ).catch(() => {
+      liveArrivals = 'unavailable'
+      return []
+    })
     for (const entry of entries) {
       if (entry.eta.routeId === id && entry.eta.arrivals.length > 0) {
         etaBySeq.set(entry.seq, entry.eta)
       }
     }
+  } else {
+    // No bulk route-eta endpoint exists for this operator — Citybus publishes none (ADR-021) and GMB is
+    // not wired — so this is not a failure and never will be one: it is a permanent property of the feed.
+    // Their per-pole boards *do* answer, which is why the field names where the times are rather than
+    // merely saying they are missing. Fanning out one call per pole to fetch them here was considered and
+    // is a separate decision: a 34-stop route is 34 subrequests, every 30 s, per rider.
+    liveArrivals = 'perStopOnly'
   }
 
   return {
@@ -607,6 +624,9 @@ export async function routeDetail(ds: DatasetSource, id: string): Promise<RouteD
         fare: s.fare,
       }
     }),
+    // Omitted when the round answered, which is the convention `failed` set: "every board answered" and
+    // "we have nothing to say" must not be the same bytes on the wire.
+    ...(liveArrivals === undefined ? {} : { liveArrivals }),
     ...(doc.reverse ? { reverse: doc.reverse } : {}),
   }
 }

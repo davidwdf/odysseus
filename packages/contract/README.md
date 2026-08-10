@@ -27,8 +27,8 @@ One framing to start with, because it decides how you spend your first week:
 | `packages/contract/openapi.json` | OpenAPI 3.1, v2.0.0 — **8 paths, 38 component schemas** | Generate your models. This is the only artefact you *must* consume. |
 | `packages/contract/asyncapi.json` | AsyncAPI 3.0.0 for the `/v1/live` socket — **6 frames, 49 component schemas** | Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7. |
 | `packages/contract/src/ids/id-grammar.abnf` | ABNF (RFC 5234) for every id that crosses the wire | Hand-write a parser against it. The `ids` corpus below is what proves your parser agrees with ours. |
-| `packages/core/spec/` | **15 corpora, 110 groups, 930 cases, 5 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
-| `packages/contract/ui/` | **10 component spec(s)** — AboutData, Faq, Favourites, Nearby, PlaceDetail, PlaceRow, RouteDetail, Search, Settings, StopRow; each declares its slots and their order, all five states with what each must *not* look like, its interaction targets and its a11y role (6 state(s) marked `knownDefect`) | The **view** half of the port, and the newest thing here — read §7 before you rely on it. Two renderers drive these today; yours would be the third and the first independent one. |
+| `packages/core/spec/` | **15 corpora, 110 groups, 931 cases, 4 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
+| `packages/contract/ui/` | **10 component spec(s)** — AboutData, Faq, Favourites, Nearby, PlaceDetail, PlaceRow, RouteDetail, Search, Settings, StopRow; each declares its slots and their order, all five states with what each must *not* look like, its interaction targets and its a11y role (5 state(s) marked `knownDefect`) | The **view** half of the port, and the newest thing here — read §7 before you rely on it. Two renderers drive these today; yours would be the third and the first independent one. |
 | `packages/contract/native/ios/CorpusConformanceTests.swift` | **Template — never compiled, never run** | Copy into your test target on day one and make it build. See §6. |
 | `packages/contract/native/android/CorpusConformanceTest.kt` | **Template — never compiled, never run** | Ditto, for `src/test/kotlin`. |
 | `packages/ui/generated/NextBusTokens.swift` | 122 design tokens — **never compiled** | Compile it. A compile error here is a bug in the emitter, not something to patch in place. |
@@ -232,14 +232,14 @@ one rot check covers them all.
 | `live.spec.json` | `packages/core/src/live.ts` | 15 | 177 | — |
 | `mercator.spec.json` | `packages/core/src/mercator.ts` | 6 | 37 | 1 |
 | `policy.spec.json` | `packages/core/src/policy.ts` | 1 | 7 | — |
-| `route-detail.spec.json` | `packages/core/src/route-detail.ts` | 6 | 70 | 3 |
+| `route-detail.spec.json` | `packages/core/src/route-detail.ts` | 6 | 71 | 2 |
 | `route-position.spec.json` | `packages/core/src/route-position.ts` | 1 | 14 | — |
 | `search.spec.json` | `packages/core/src/search.ts` | 16 | 134 | — |
 | `settings.spec.json` | `packages/core/src/settings.ts` | 3 | 12 | — |
 | `stop-card.spec.json` | `packages/core/src/stop-card.ts` | 4 | 34 | — |
 | `stop-detail.spec.json` | `packages/core/src/stop-detail.ts` | 8 | 70 | 1 |
 | `stop-name.spec.json` | `packages/core/src/stop-name.ts` | 6 | 58 | — |
-| **total** |  | **110** | **930** | **5** |
+| **total** |  | **110** | **931** | **4** |
 <!-- END GENERATED: corpus -->
 
 Each file is `{module, source, version, doc, groups}`; each group is `{doc, cases[]}`; each case is

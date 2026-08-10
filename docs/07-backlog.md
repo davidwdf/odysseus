@@ -554,21 +554,31 @@ written down.
 - [x] ✅ **`apps/web`'s `.test.tsx` suites were invisible to `pnpm typecheck`** — **fixed by WP6-7** (ADR-097).
       `tsconfig.json` included `test/**/*.ts` and not `test/**/*.tsx`, so seven conformance suites were never
       typechecked; two real type errors surfaced the moment they were included.
-- [ ] 🔴 **Route detail cannot say "we could not ask", so a Citybus or GMB route reads as "no bus is due".**
-      Found by WP6-6a ([ADR-093](./08-decision-log.md#adr-093--which-node-a-bus-is-at-is-content-where-that-node-is-on-screen-is-geometry))
-      and pinned as the corpus row `a-citybus-route-shows-no-times-anywhere-and-does-not-say-why`
-      (`knownDefect`). `/v1/route/:id` fetches live arrivals for **KMB and LWB only** — Citybus publishes no
-      bulk route-eta endpoint at all ([ADR-021](./08-decision-log.md)) and GMB is not wired — so on a CTB or
-      GMB route **every** stop row carries `eta: null`, for ever, and the screen renders exactly what a route
-      with nothing currently due renders. A rider cannot tell a route the app never asks about from a route
-      with no buses coming. This is the same hole [ADR-077](./08-decision-log.md#adr-077--a-card-can-say-we-could-not-ask-and-a-failure-list-must-not-outlive-its-round)
-      closed for `/v1/nearby` and `/v1/stop` by putting `failed` on the wire, and
-      `apps/edge/src/stop-route.ts` says so in a comment on the very call: *"Route detail has no per-stop
-      failure field of its own; whoever gives it one is WP5-13, and it should come from here."* WP5-13 shipped
-      without it. **The fix has three parts:** `RouteDetailSchema` gains `failed` (a `CONTRACT_VERSION` minor,
-      since it is additive), `routeDetailView` gains the `incomplete` boolean `StopCardView` and
-      `PlaceDetailView` already have, and both renderers say it **once for the screen** rather than per row —
-      a rider cannot act on which rows. Reproduction: open `/route/CTB:962:outbound:1` on either app.
+- [x] ✅ **Route detail cannot say "we could not ask"** — **fixed**
+      ([ADR-114](./08-decision-log.md#adr-114--eta-null-on-every-stop-meant-three-different-things-and-the-route-view-could-not-say-which)).
+      `eta: null` on every stop meant three different things — no bus is due anywhere, the round did not
+      answer, or nobody was ever going to ask — and a schematic rendered identically for all three, which is
+      how every Citybus and GMB route read as "no bus is due" for two waves. `RouteDetail.liveArrivals` is
+      the difference, `routeDetailView` exposes it as a total three-way arm, and both renderers say it once
+      above the schematic.
+      **Two things this row had wrong, corrected there rather than quietly:** it prescribed a
+      `CONTRACT_VERSION` **minor bump** *"since it is additive"* — the opposite of ADR-052 §5 and of the
+      constant's own note, which say an additive-optional change must not touch it (three precedents:
+      ADR-065, 079, 081); and it prescribed `failed`, an `EtaFailure[]`, copied from `/v1/nearby`. A route is
+      **one** upstream call, so a list of poles would invent a granularity the fetch does not have.
+      **The half nobody would have noticed missing is the KMB one**: its route feed answers, so the
+      `.catch(() => [])` that swallowed an outage made it read as a quiet route — for every rider in the app.
+- [ ] 🟡 **A Citybus or GMB route says "Live times unavailable" where it could point at the per-stop
+      boards.** The remaining honesty gap after ADR-114, and it is a wording decision rather than a defect:
+      those operators' **per-pole** boards answer fine (`/v1/etas/CTB:001028` → 10 routes with arrivals), so
+      the times a rider wants are one tap away on any stop of that route. "Unavailable" is true, implies
+      *try later* about something permanent, and hides where they are. Needs one new catalogue key in three
+      locales and one `shows` edit — `noLiveBoard` and `arrivalsUnavailable` are already two states sharing
+      one sentence precisely so that this is that small. **Owner's call on the wording.**
+- [ ] ⚪ **Fetching them per pole, considered and not done.** The edge could fan out one call per pole and
+      give a Citybus route real live times. A 34-stop route is 34 subrequests, every 30 s, per rider, against
+      the Workers subrequest budget — so it is a decision about cost and load, not a bug, and it is
+      deliberately not a side effect of ADR-114.
 - [x] ✅ **The four route fact sheets still derive** — **done as WP6-6c**
       ([ADR-095](./08-decision-log.md#adr-095--the-estimate-mark-is-content-and-so-is-the-separator-between-two-day-names)).
       All eight decisions are `routeFactSheet`'s, with 15 corpus cases; both renderers project it, `apps/web`

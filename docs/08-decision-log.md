@@ -7880,3 +7880,65 @@ pre-existing and unaddressed; it earned its keep here.
     made it — which is what ADR-100's table and the specs' `idiom` lists are for.
   - ⚪ **An inventory is owed, and is filed rather than done:** *what the RN app does that `apps/web` never
     got*. Distinct from the parity audit, which looked only for loss. In `docs/07`.
+
+## ADR-114 — `eta: null` on every stop meant three different things, and the route view could not say which
+
+- **Status:** **Accepted 2026-08-09**, implemented in `packages/contract/src/wire/detail.ts`,
+  `packages/contract/src/ui/route-detail.ts`, `packages/core/src/route-detail.ts`,
+  `apps/edge/src/stop-route.ts`, `apps/web/src/screens/RouteDetail.tsx` and
+  `apps/mobile/app/route/[id].tsx`. Closes `docs/07`'s row *"Route detail cannot say we could not ask"*, the
+  corpus row it was pinned as, and `route-detail.spec.json`'s last `knownDefect` state.
+- **Context.** `/v1/route/:id` fetched live arrivals for KMB and LWB only — Citybus publishes no bulk
+  route-eta endpoint (ADR-021) and GMB is not wired — and the one operator it *did* fetch had its failure
+  swallowed by `.catch(() => [])`. So `eta: null` on every stop meant **three** different things: no bus is
+  due anywhere, the round did not answer, or nobody was ever going to ask. A schematic renders identically
+  for all three. Verified against the running worker before the change:
+  `/v1/route/CTB:962:outbound:1` → 36 stops, 0 with an eta, nothing anywhere saying why.
+- **The finding that shaped the fix.** Citybus's **per-pole** boards answer perfectly well —
+  `/v1/etas/CTB:001028` returns 10 routes with arrivals — so the live times a rider wants *exist* and are one
+  tap away on any stop of that route. The screen was not failing to get them; it was not looking, while
+  implying there were none.
+- **Decisions:**
+  1. **The wire carries `liveArrivals`, and it is not an `EtaFailure[]`.** ADR-077 gave `/v1/nearby` and
+     `/v1/stop` a *list* of poles that did not answer, because their fan-out is per pole. A route is **one**
+     upstream call, so naming 34 poles would invent a granularity the fetch does not have — and the UI is
+     required to say this once for the screen anyway. Two values, `'unavailable'` and `'perStopOnly'`, and
+     **absent when the round answered**: the convention `failed` set, where *"every board answered"* and
+     *"we have nothing to say"* must not be the same bytes.
+  2. **`CONTRACT_VERSION` does not move — and both the backlog row and the spec's own `knownDefect` text
+     said it should.** They instructed a "minor bump, since it is additive", which contradicts ADR-052 §5
+     (*additive-optional is free*) and the constant's own note (*"must not touch this"*), and three ADR
+     precedents (065, 079, 081). Corrected in both places. The mistake is worth recording because the
+     `oasdiff` gate ADR-052 names still does not exist, so nothing mechanical would have caught a wrong bump
+     in either direction.
+  3. **The kernel turns absence into a named arm.** `RouteDetailView.liveArrivals` is always one of
+     `'answered' | 'unavailable' | 'perStopOnly'`. That is the one piece of work it does beyond restating the
+     wire, and it is load-bearing: a spec's `oneOf` discriminant has to be **total** or it throws, so
+     "absent" cannot be a case.
+  4. **Two spec states, one sentence.** `noLiveBoard` (this operator has no route-level feed) and
+     `arrivalsUnavailable` (the round did not answer) both show `etasUnavailable` — the line `StopRow`
+     already uses, so **no new string in any locale**. They are two states rather than two arms of one
+     because one is worth retrying and the other never will be; giving either its own words later is an edit
+     to one `shows` and to nothing else. Both declare `FACTS` and `STOP_ROWS` around the line, so the
+     projection pins *where* it appears and not merely that it does.
+  5. **The static half is asserted, not assumed.** The catch stays (ADR-073: a route view without live times
+     is still a route view — the stops, the geometry and the fares are static, and erroring would lose them),
+     and the edge test now asserts the stop list, the fares and the route survive an upstream failure. That
+     is the whole reason the catch exists and nothing checked it.
+- **Consequences:**
+  - 🟢 **`route-detail.spec.json` has zero `knownDefect` states**, down from one, and
+    `packages/core/spec/route-detail.spec.json` zero `knownDefect` rows, down from one. The repo total drops
+    to 5 states / 4 rows.
+  - 🟢 **The KMB half matters more than the Citybus half, and was invisible.** Every rider is on KMB, whose
+    route feed *does* answer — so the arm this fix adds for *them* is the one nobody would have noticed
+    missing: an upstream outage now says so instead of reading as a quiet route.
+  - ⚠️ **The honest upgrade is left undone and named.** `perStopOnly` shows "Live times unavailable", which
+    is true but implies *try later* about something permanent — and worse, hides that the times are one tap
+    away. Pointing at the per-pole boards needs a sentence of its own in three locales and is the owner's
+    call, not this change's. Filed in `docs/07`.
+  - ⚠️ **Fetching them was considered and rejected here.** The edge could fan out one call per pole and give
+    a Citybus route real live times; a 34-stop route is 34 subrequests, every 30 s, per rider, against the
+    Workers budget. A separate decision, not a side effect of this one.
+  - ⚪ **The schema's own doc comment was the bug, written down.** It claimed `eta: null` means *"we asked and
+    there is nothing right now"* and then admitted in the same sentence that Citybus has no feed at all.
+    Both cannot be true. Rewritten to say what `null` does **not** tell you.
