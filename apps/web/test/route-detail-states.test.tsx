@@ -32,6 +32,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { RailBusToken } from '../src/components/RailBusToken'
+import { RouteStopRow } from '../src/components/RouteStopRow'
 
 const LOCALE: Locale = 'en'
 
@@ -539,84 +541,130 @@ describe('a stop row opens the save sheet — the interaction no projection can 
   })
 })
 
-describe('the rail overlay re-measures when a row changes size, not only when the list does', () => {
+describe('a bus rides inside its own row, and nothing measures where it goes', () => {
   /**
-   * **The defect the owner saw as "the buses are completely off the targets".**
+   * **The replacement for a registry that put a bus in the wrong place twice.**
    *
-   * The tokens are an absolutely positioned overlay whose `top` comes from measured row offsets, so the
-   * measurement has to re-run whenever a row moves. It did — through a `ResizeObserver` **on the list
-   * container only**. A `ResizeObserver` reports changes to *the element it observes*, so that arrangement
-   * sees nothing when the list's own box is unchanged: a refetch where one stop gains an arrivals line and
-   * another loses one shifts every row between them and leaves the container exactly as tall as it was. No
-   * callback, no re-measure, and the tokens stay where they were **permanently** — until a direction flip or
-   * a navigation happens to re-measure for another reason.
+   * Until ADR-110 the tokens were an overlay whose `top` came from measured row offsets, kept fresh by a
+   * `ResizeObserver`; the two tests that used to live here pinned that subscription, because it had stopped
+   * seeing things — first watching only the list container (blind to a reflow that leaves the list the same
+   * height), then never attaching at all (ADR-108). They are gone with the mechanism they guarded, and what
+   * replaces them is stronger than what they could assert: **no measured number reaches the DOM at all.**
    *
-   * The direction is what makes it recognisable: a row that *loses* its arrivals line pulls everything below
-   * it up (`min-h-16` puts that at about 12 px a row), so the tokens are left sitting **too low** — a bus
-   * visibly below its node rather than on it.
-   *
-   * `apps/mobile` cannot have this: every row reports its own geometry through its own `onLayout`. That is
-   * the divergence, and it is why native looked right while this did not.
-   *
-   * This asserts the fix at the only level jsdom can reach — **which elements are watched**. jsdom lays
-   * nothing out, so a measurement assertion here would compare zeroes; and the browser could not be used
-   * either, because the automation tab is always `visibilityState: "hidden"` and a hidden tab produces no
-   * frames, so `ResizeObserver` never delivers a callback at all (not even its initial one). What is left
-   * that is worth pinning is the subscription itself, and it is exactly what regressed.
+   * jsdom lays nothing out, so a positional assertion here would compare zeroes either way — but structure
+   * and a literal CSS expression are things it *can* see, and they are the whole of the new invariant. A
+   * token in the wrong row, or a token whose `top` is a computed pixel value, is the defect; both are read
+   * straight off the tree.
    */
-  const CASE = FIXTURE.content as string
+  const CASE = FIXTURE.busMidRoute as string
 
-  /** Records what the screen subscribes to, and with which box. */
-  function stubResizeObserver(): { targets: Set<Element>; boxes: Set<string> } {
-    const targets = new Set<Element>()
-    const boxes = new Set<string>()
-    class Recording {
-      observe(el: Element, options?: ResizeObserverOptions) {
-        targets.add(el)
-        boxes.add(options?.box ?? 'content-box')
-      }
-      unobserve(el: Element) {
-        targets.delete(el)
-      }
-      disconnect() {
-        targets.clear()
-      }
-    }
-    vi.stubGlobal('ResizeObserver', Recording)
-    return { targets, boxes }
+  /** The stop rows, in document order. */
+  function rowElements(): HTMLElement[] {
+    return [...container.querySelectorAll('button')].filter((b) => b.className.includes('min-h-16'))
   }
 
-  it('observes every stop row, not just the list that holds them', async () => {
-    const observed = stubResizeObserver()
+  async function mountCase(): Promise<void> {
     const c = caseNamed(CASE)
     const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
     route = () => Promise.resolve(detail)
     vi.setSystemTime(Date.parse(c.args.now))
     await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+  }
 
-    const rowElements = [...container.querySelectorAll('button')].filter((b) =>
-      b.className.includes('min-h-16'),
-    )
-    expect(rowElements.length, 'the fixture rendered no stop rows').toBeGreaterThan(1)
-    const unwatched = rowElements.filter((el) => !observed.targets.has(el))
-    expect(
-      unwatched,
-      `${unwatched.length} of ${rowElements.length} rows are unwatched — a row that changes height will move its node and leave its bus behind`,
-    ).toHaveLength(0)
-    vi.unstubAllGlobals()
+  it('draws each token inside the row the kernel names, not in an overlay', async () => {
+    await mountCase()
+    const rows = rowElements()
+    const view = viewFor(caseNamed(CASE))
+    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    expect(tokens.length, 'the fixture drew no bus tokens').toBe(view.buses.length)
+    view.buses.forEach((bus, ordinal) => {
+      // A bus AT node N belongs to row N; a bus on the segment INTO node N belongs to row N−1, whose
+      // bottom half it rides. `railBus` only ever emits `from: toIndex − 1`, so there is no third case.
+      const owner = bus.kind === 'node' ? bus.index : bus.from
+      // The row button's **sibling**, not its descendant: a labelled `role="img"` inside a button is folded
+      // into that button's accessible name, so the wrapper is what the token is positioned against.
+      expect(
+        tokens[ordinal]?.parentElement === rows[owner]?.parentElement,
+        `bus ${ordinal} (${bus.kind}) does not belong to row ${owner} — its position is not that row's any more`,
+      ).toBe(true)
+      expect(
+        rows[owner]?.contains(tokens[ordinal] ?? null),
+        `bus ${ordinal} is inside the row's button, which folds its label into the button's name`,
+      ).toBe(false)
+    })
   })
 
-  it('watches the border box, because that is what moves the rows below it', async () => {
-    // `content-box` is the default and it is the wrong one: a row that gained padding or a border would
-    // shift every node under it and report nothing. Caught by re-running the reproduction rather than by
-    // assuming the first fix was complete.
-    const observed = stubResizeObserver()
-    const c = caseNamed(CASE)
-    const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
-    route = () => Promise.resolve(detail)
-    vi.setSystemTime(Date.parse(c.args.now))
-    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
-    expect([...observed.boxes]).toEqual(['border-box'])
-    vi.unstubAllGlobals()
+  it('positions it with a constant expression, so no reflow can leave it behind', async () => {
+    await mountCase()
+    const view = viewFor(caseNamed(CASE))
+    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    view.buses.forEach((bus, ordinal) => {
+      const token = tokens[ordinal]
+      if (!(token instanceof window.HTMLElement))
+        throw new Error(`bus ${ordinal} is not an element`)
+      // `13px` is NODE_CENTRE (25) less half a token (12). The segment case adds half of the *from* row,
+      // and it is a percentage rather than a number precisely so a row that grows an arrivals line takes
+      // its bus with it — which is the reflow the observer used to have to notice.
+      expect(
+        token.style.top,
+        `bus ${ordinal} is positioned by a computed value — that is a number that can go stale`,
+      ).toBe(bus.kind === 'node' ? '13px' : 'calc(50% + 13px)')
+    })
+  })
+
+  it('projects the tokens in the model’s order', async () => {
+    await mountCase()
+    const view = viewFor(caseNamed(CASE))
+    const labels = [...container.querySelectorAll('[role="img"][aria-label]')].map((el) =>
+      el.getAttribute('aria-label'),
+    )
+    expect(labels).toEqual(view.buses.map((bus) => bus.label))
+  })
+
+  it('draws two buses on one row in the model’s order, not its own', () => {
+    /*
+      The tie the overlay never had to think about, and no corpus case reaches: a bus held on the origin
+      node while the one behind it approaches stop 1 puts a **node** token and a **segment** token in row 0.
+      (`railBus` makes stop 0 a node token even when it is not due, and `ORIGIN_BUS_DEPARTS_WITHIN_SEC`
+      keeps it visible for two minutes.)
+
+      It matters because document order is what both conformance suites project. With an overlay the order
+      was `view.buses`' by construction — one map, one parent. Per-row parenting makes it the row's job, so
+      the row is driven directly here rather than through a payload that cannot produce the case.
+    */
+    const row = caseNamed(CASE)
+    const view = viewFor(row)
+    const first = view.stops[0]
+    if (first === undefined) throw new Error('the fixture has no first stop')
+    root = createRoot(container)
+    act(() => {
+      root?.render(
+        <RouteStopRow
+          row={first}
+          index={0}
+          animateIn={false}
+          tokens={[
+            <RailBusToken
+              key={0}
+              ordinal={0}
+              bus={{ kind: 'node', index: 0, label: 'at the terminus' }}
+            />,
+            <RailBusToken
+              key={1}
+              ordinal={1}
+              bus={{ kind: 'segment', from: 0, to: 1, label: 'approaching stop 1' }}
+            />,
+          ]}
+          onPress={() => {}}
+          registerRow={() => {}}
+        />,
+      )
+    })
+    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    expect(tokens.map((el) => el.getAttribute('aria-label'))).toEqual([
+      'at the terminus',
+      'approaching stop 1',
+    ])
+    expect(tokens.map((el) => (el as HTMLElement).style.top)).toEqual(['13px', 'calc(50% + 13px)'])
   })
 })

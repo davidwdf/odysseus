@@ -341,42 +341,25 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 
 ## Route detail — stop measuring the rail, position the tokens in CSS
 
-The bus tokens are an absolutely positioned overlay whose `top` comes from measured row offsets, kept fresh
-by a `ResizeObserver`. ADR-108 fixed that machinery after it silently stopped re-measuring altogether, but
-the machinery itself is the liability: any future reflow this fails to notice puts a bus somewhere it is
-not.
+- [x] ✅ **Done** ([ADR-110](./08-decision-log.md#adr-110--the-rails-resting-place-is-css-only-its-travel-is-measured)).
+      The tokens were an absolutely positioned overlay whose `top` came from measured row offsets kept fresh
+      by a `ResizeObserver`; ADR-108 fixed that machinery twice and the machinery itself was the liability.
+      A token is a positioned sibling of its own row's button now — `top: 13px` at a node,
+      `calc(50% + 13px)` on the segment into the next one — so nothing is measured and nothing can go stale.
+      The travel a re-parent costs is `element.animate()` over a delta read at the instant of the move.
 
-**It can be deleted.** A token could be a positioned child of the row it belongs to — `top: 13px`
-(`NODE_CENTRE − TOKEN_HALF`) for a bus *at* a node, and `calc(50% + 13px)` for one on the segment leading
-into it, since the midpoint between two adjacent nodes is exactly half a row below the first. Pure CSS, no
-measurement, no observer, and it cannot drift by construction.
+      **Three things this row's own description had wrong**, each found by doing it:
+      · the token cannot be a *child* of the row — a labelled `role="img"` inside a `<button>` is folded into
+        that button's accessible name, and no suite here can see it;
+      · *"stays inside its row's box for any row taller than 50 px"* is the threshold for the token's
+        **centre**; its box needs 74 px, and `min-h-16` gives 64, so a segment token overhangs by 5 px and
+        needs a `z-index` to keep the next row's rail line from slicing it;
+      · `railBusFor` is called `railBus`.
 
-`railBusFor` only ever emits `from: marker.toIndex - 1`, so a segment is always between **adjacent** nodes
-and its midpoint is exactly half a row below the first — which is what makes the second expression possible.
-The token also stays inside its row's box for any row taller than 50 px, and `min-h-16` guarantees 64, so
-nothing needs to overflow.
-
-**It does not change the projection**, which was this entry's first claim and was wrong. Both conformance
-suites collect the tokens separately from the text walk — `querySelectorAll('[role="img"][aria-label]')`,
-appended after the body text — and `RouteDetailView.buses` is in route order, so interleaving them between
-the rows leaves the projected sequence byte-identical. **No spec edit, no `apps/mobile` change**; the RN
-screen keeps its overlay pass, which it needs anyway so the saved-stop stars paint above the tokens.
-
-**What it actually costs is the travel animation.** A token that moves from one row to another changes
-parent, and no CSS transition survives a DOM move — the bus would teleport where today it slides for 500 ms
-(ADR-030: *a bus that moved is a bus that moved*). So the slide has to be re-implemented as FLIP: record the
-rect either side of the commit and `element.animate()` the delta. That reintroduces a measurement, but of a
-different kind and a much better failure mode — a momentary pair of rects taken at the instant of a move,
-where a wrong answer is one half-second animation that self-corrects, against today's standing registry
-where a wrong answer is a bus in the wrong place forever.
-
-View Transitions would also survive the DOM move and were considered instead. Rejected: a same-document
-transition snapshots and freezes the page for its duration, and this screen re-renders on a 30 s refetch
-cadence, so it would stutter the whole page every round — and Firefox has none (ADR-101).
-
-**Estimate: about half a day.** The CSS and the deletions are an hour or two; FLIP and its test are the rest,
-and are where the risk sits. The correctness win is structural: the resting position stops being computed
-at all.
+      It also closed a live defect next door: `.row-rise` used `animation-fill-mode: both`, which leaves a
+      finished row holding `transform: matrix(1,0,0,1,0,0)` — a stacking context — so after any direction
+      flip the saved-stop star's `z-10` was trapped inside its row and a passing bus painted over a rider's
+      favourite.
 
 ## WP6-8 blockers — the parity audit's findings (2026-08-08)
 
@@ -461,9 +444,11 @@ at all.
       `<ScrollRestoration>`'s job** — unlike the Search item below, the quantity is `window.scrollY` — and it
       is deliberately not bundled with ADR-109 because it changes behaviour on all eight screens at once,
       including Route detail's `scrollIntoView` reveal and both collapsing headers' sentinels.
-- [ ] 🟡 **Route detail's bus tokens keep stale row offsets** when a refetch redistributes arrivals lines
-      without changing the list's overall height — the `ResizeObserver` added in WP6-6c's review pass
-      watches the wrong quantity.
+- [x] ✅ **Route detail's bus tokens keep stale row offsets** — **fixed twice, and the second one removed the
+      mechanism**: ADR-108 made the observer watch every row's border box, and
+      [ADR-110](./08-decision-log.md#adr-110--the-rails-resting-place-is-css-only-its-travel-is-measured)
+      deleted the observer, the offset registry and the arithmetic outright. A token is positioned against
+      its own row in CSS, so a refetch that redistributes arrivals lines moves the row and its bus together.
 
 **Found while comparing, broken on BOTH renderers** (so retiring `apps/mobile` neither causes nor fixes
 them; they belong to the hardening list above rather than to WP6-8):

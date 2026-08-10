@@ -210,11 +210,38 @@
 > stubbing two accessors and uses that stub as its control; the router is `createMemoryRouter` and
 > `navigate(-1)` is a real POP, because the whole claim rests on react-router handing back the same key.
 >
+> **The rail stops being measured (part 12)**
+> ([ADR-110](./08-decision-log.md#adr-110--the-rails-resting-place-is-css-only-its-travel-is-measured)) —
+> the deeper fix ADR-108 pointed at. A bus token is a positioned sibling of its own row now, at `top: 13px`
+> on a node and `calc(50% + 13px)` on the segment into the next one, so the registry, the `ResizeObserver`,
+> the layout effect and the arithmetic are all deleted. **Measured: a token's centre sits on its node to
+> 0.000 px, and a travel lands to 0.000 px.**
+> 🟢 **The travel is FLIP**, because a token that changes row is a *different element* and no CSS transition
+> survives that. It is still a measurement, and that is the trade: two numbers read at the instant of a move,
+> where a wrong answer is half a second of wrong animation, against a standing registry where a wrong answer
+> was a bus in the wrong place for the life of the screen.
+> 🔴 **A nested token would have polluted every row's accessible name** — a labelled `role="img"` inside a
+> `<button>` is folded into that button's name, so *"Nathan Road · 3 min"* becomes *"Nathan Road · 3 min ·
+> Bus approaching Nathan Road"*. The projection reads text nodes and token labels in two separate passes, so
+> **no suite here could see it**; the token is the row button's sibling under a `relative` wrapper.
+> 🔴 **`.row-rise` used `animation-fill-mode: both`**, which leaves a finished row holding a transform matrix
+> rather than `none` — a stacking context, which trapped the saved-stop star's `z-10` inside its row. So
+> after any direction flip a passing bus painted over a rider's favourite, which is exactly what ADR-042
+> forbids. `backwards` fixes it: 34 of 34 rows cascade, 0 left holding a transform.
+> ⚠️ **`keepPreviousData` means the URL changes one commit before the buses do**, so the FLIP's reset is keyed
+> on the *payload's* route id. Keyed on `:id` it fires too early and the commit that swaps the directions
+> then slides the k-th outbound bus into the k-th inbound one's place. Found in a browser: one token animated
+> across a 1A flip before, none after.
+> ⚪ **The hidden tab was useful for once.** `document.timeline.currentTime` is 0 there, so a travel sits
+> frozen at its first keyframe — which is what makes it *inspectable*: the animation read back
+> `translateY(−104px)` against a layout delta of exactly −104. What it cannot show is the feel, and nobody
+> has yet watched this move.
+>
 > **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
-> positioning the rail tokens in pure CSS so the measurement can be deleted outright, the *document* scroll
-> position that a pushed screen inherits (which genuinely **is** `<ScrollRestoration>`'s job, and is left
-> alone because it changes all eight screens at once), and the RN `apps/mobile` back-port question — which
-> ADR-100's odometer note answers with *no*, since that renderer retires at WP6-8.
+> the *document* scroll position that a pushed screen inherits (which genuinely **is**
+> `<ScrollRestoration>`'s job, and is left alone because it changes all eight screens at once), and the RN
+> `apps/mobile` back-port question — which ADR-100's odometer note answers with *no*, since that renderer
+> retires at WP6-8.
 >
 > Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
 > **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no

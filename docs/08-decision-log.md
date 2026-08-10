@@ -7644,3 +7644,97 @@ pre-existing and unaddressed; it earned its keep here.
     alone here because it changes behaviour on all eight screens at once, including Route detail's
     `scrollIntoView` reveal and both collapsing headers, which is a sitting of its own rather than a rider
     on this one.
+
+## ADR-110 — The rail's resting place is CSS; only its travel is measured
+
+- **Status:** **Accepted 2026-08-09**, implemented in `apps/web/src/components/RailBusToken.tsx`,
+  `RouteStopRow.tsx`, `screens/RouteDetail.tsx`, `hooks/useRailFlip.ts`, `lib/motion.ts` and `index.css`.
+  Closes the `docs/07` row *"Route detail — stop measuring the rail, position the tokens in CSS"*, and with it
+  the ADR-108 machinery.
+- **Context.** A bus token used to be an absolutely positioned child of the *list*, with a `top` taken from
+  every row's measured offset and kept fresh by a `ResizeObserver`. That registry put a bus in the wrong
+  place twice: once watching the wrong quantity, once by never attaching at all — which shipped for a whole
+  wave and is what the owner photographed (ADR-108). The registry is the liability, not the two bugs: **a
+  standing set of numbers whose staleness is invisible.**
+- **What replaces it.** A token is positioned against **its own row**, and its `top` is one of two constant
+  expressions: `13px` for a bus at that row's node (`NODE_CENTRE` 25 less half a 24 px token), and
+  `calc(50% + 13px)` for a bus on the segment leading into the *next* node — because `railBus` only ever
+  emits `from: toIndex − 1`, so a segment is always between **adjacent** nodes and its midpoint is exactly
+  half a row below the first. There is no third case, nothing is measured, and what a refetch reflows the
+  token reflows with. Measured in a browser: a node token's centre sits on its node to **0.000 px**, and a
+  travel lands to **0.000 px**.
+- **Decisions:**
+  1. **The token is the row button's *sibling*, under a `relative` wrapper — not its child.** This is the
+     one structural cost and it is an accessibility fix rather than a layout convenience: a labelled
+     `role="img"` inside a `<button>` is folded into that button's accessible name, so a nested token turns
+     *"Nathan Road · 3 min"* into *"Nathan Road · 3 min · Bus approaching Nathan Road"*. **No suite here
+     could have caught it** — the projection reads text nodes and token labels in two separate passes, so
+     both stay byte-identical while every row beside a bus announces it twice. The wrapper's height *is* the
+     button's, which is what keeps `calc(50%…)` resolving against the row's own box.
+  2. **The travel is FLIP, and the trade is the point.** A token that moves between rows is a *different
+     element*, and no CSS transition survives a DOM move — so the 500 ms slide is `element.animate()` over a
+     delta read at the instant of the move. That is still a measurement, but not the one deleted: a wrong
+     answer here is half a second of wrong animation that self-corrects on the next commit, against a
+     standing registry where a wrong answer was a bus in the wrong place until something else happened to
+     re-measure. ADR-030 decision 4 asks only for *"a one-shot ease to the new lane"*, which this is.
+  3. **Identity is the ordinal, and it lives in the DOM** (`data-bus-ordinal`). There is no
+     `getSnapshotBeforeUpdate` for a function component and the old element is gone, so the "first" position
+     has to be an external record keyed by something that survives the move. The ordinal is what `key` has
+     meant since ADR-030.
+  3a. **A change of *position* is not a move; a change of *target* is.** Each token also carries the node or
+     segment it sits on (`data-bus-at`), and the travel runs only when **that** changed. Without it a
+     refetch that gives a stop two rows up an arrivals line displaces every bus below it, and each one eases
+     down 16 px it never travelled — visibly lagging its own node for half a second while the rail moved
+     instantly. **The `transition-[top]` overlay this replaces had the identical fault**, and nobody had
+     watched for it; it was found by building a throwaway page that steps a bus on a timer, and measured
+     there as a 32 px travel fired by a reflow above a stationary bus.
+  4. **Position is the `offsetTop` chain, never a rect.** `getBoundingClientRect` includes transforms and is
+     viewport-relative, so a travel still in flight would poison the next commit's "first" and an ordinary
+     scroll between two commits would read as *every* bus moving at once. The offset walk is pure layout and
+     immune to both — and in jsdom it answers 0 for everything, so the hook is inert there before it reaches
+     an API jsdom lacks.
+  5. **Three idle clocks are anchored to the document timeline** (`getAnimations({ subtree: true })`,
+     `startTime = 0`). A CSS animation starts when its element does, so a re-parented token would restart
+     from its `from` keyframes — the rock snapping 12° in one frame, at exactly the moment the eye is on it.
+     It also closes a wart that predates this change: a bus appearing mid-session used to bob out of step
+     with the ones already on the rail, permanently.
+  6. **`z-index: 5` on the token, and `row-rise` changes `both` → `backwards`.** A segment token overhangs a
+     64 px row by 5 px — correct geometry, since the midpoint of two node centres genuinely falls below the
+     first row's box — and without a z-index the next row's rail connector slices the disc flat. The upper
+     bound is ADR-042's rule (a passing bus must not hide a favourite, which is why `apps/mobile` draws its
+     stars in a later overlay pass), and the star's `z-10` only outranks it while no row is a stacking
+     context. **`both` made every flipped row one**, because a filled animation keeps applying
+     `transform: translateY(0)` — which computes to a matrix, not `none` — for the life of the mount. That
+     was a live defect before this change: after any direction flip, a bus painted over a rider's favourite.
+     Measured after the fix: 34 of 34 rows cascade, **0** left holding a transform, and with the token parked
+     on the star the star wins even from a *later* row.
+- **Consequences:**
+  - 🟢 **The projection is unchanged and no spec moved.** Both conformance drivers collect tokens in a
+     separate pass appended after the body text walk, and `view.buses` is in route order, so interleaving
+     them among the rows leaves the projected sequence byte-identical. The two tests that pinned the
+     observer's subscription are deleted with it, and what replaces them is stronger than what they could
+     assert: **each token is inside the row the kernel names, and its `top` is a literal** — no measured
+     number reaches the DOM at all.
+  - ⚠️ **`keepPreviousData` means the URL changes one commit before the buses do.** The FLIP's reset is
+     keyed on the **payload's** route id, not on `:id`. Keyed on the URL it fires against the *old*
+     direction's tokens, has nothing to forget, and the commit that actually swaps them then slides the k-th
+     outbound bus into the k-th inbound one's place — a journey that never happened. Found in a browser, not
+     in a suite: measured one token animating across a 1A flip before the change and none after.
+  - ⚠️ **`apps/web/src/hooks/` joins `check-no-derivation`'s policed list**, with no new allowlist entry.
+     Not about `useRailFlip` in particular: a screen's logic that moves into a hook must not thereby leave
+     the gate's sight, or *"hoist it into a hook"* becomes the way past the check.
+  - ⚪ **The hidden-tab trap again, and this time it was useful.** `document.timeline.currentTime` is **0**
+     in the automation tab — no frames, so nothing advances and a travel sits frozen at its first keyframe.
+     That is what makes the mechanism *inspectable*: reading the animation's keyframes back gave
+     `translateY(−104px)` against a layout delta of exactly −104. What it cannot show is the feel.
+  - ⚠️ **The feel needed a page, and the page found the defect the measurements could not.** Decision 3a came
+     out of a throwaway local-only lab — the real `RouteStopRow`, `RailBusToken` and `useRailFlip` driven by
+     a timer over hand-written rows, with toggles for row raggedness, a second bus, a reflow above the bus
+     and a direction flip. Everything structural had already been verified to 0.000 px; what no assertion
+     asked was whether the animation fires on the right *occasions*. Worth repeating for the next piece of
+     signature motion: a lab that makes a change happen on demand is cheaper than a fixture that describes
+     it, and it asks a different question.
+  - ⚪ **`prefersReducedMotion` is now one declaration** (`lib/motion.ts`), lifted out of `JourneyLines`
+     where it was private. A media query reaches CSS animations and transitions and reaches no
+     `element.animate()` call, so the JavaScript reading is not optional here — and two copies of it is how
+     two pieces of one screen come to disagree about a rider's setting.

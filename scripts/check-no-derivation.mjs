@@ -82,6 +82,11 @@ const POLICED = [
   'apps/web/src/components/',
   'apps/web/src/screens/',
   'apps/web/src/shell/',
+  // Added with `useRailFlip` (ADR-110), and the reason is the standing rule above rather than that hook in
+  // particular: a screen's logic that moves into a hook must not thereby leave the gate's sight, or
+  // "hoist it into a hook" becomes the way past the check. It joined with **no new allowlist entries** —
+  // none of the six shape rules fires on any of the seven files already here.
+  'apps/web/src/hooks/',
   'apps/mobile/app/stop/',
   'apps/mobile/app/route/',
   // WP6-7's three, and they joined with **no new allowlist entries** — which is the cleanest signal that

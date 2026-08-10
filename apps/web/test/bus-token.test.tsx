@@ -124,7 +124,7 @@ describe('the bus token’s bounce', () => {
     // something that should only ever move vertically.
     act(() => {
       root?.render(
-        <RailBusToken bus={{ kind: 'node', index: 0, label: 'Bus at a stop' }} top={0} />,
+        <RailBusToken bus={{ kind: 'node', index: 0, label: 'Bus at a stop' }} ordinal={0} />,
       )
     })
     const bob = container.querySelector('.bus-bob')
