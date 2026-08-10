@@ -8410,6 +8410,2764 @@
         }
       ]
     },
+    "applyLiveEtasToRouteDetail": {
+      "doc": "`applyLiveEtasToRouteDetail` — the third frame→payload merge (ADR-116). Rows are keyed on the pole exactly; the screen-level notice is cleared the moment anything answers and kept when nothing did; and the failure set is replaced or cleared, never carried.",
+      "cases": [
+        {
+          "name": "a-reading-lands-on-the-pole-it-was-read-at",
+          "why": "The base case, and the whole reason a route watch exists: a Citybus route arrives with `eta: null` everywhere and the readings come per pole. Matching is `stops[].stop.id === eta.stopId` and nothing else — both are canonical, and the socket's targets ARE this stop list.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              },
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:002261",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:41:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001028",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:35:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:002261",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:41:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-row-the-round-did-not-mention-goes-back-to-null",
+          "why": "A row with no matching reading must NOT keep its previous value: a bus that has left is worse than no time at all, and the round's reading list is the complete current set rather than a patch. Same rule both sibling merges state, and the same footgun — passing a delta's `changed` here blanks every other row.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": {
+                    "routeId": "CTB:91:outbound:1",
+                    "stopId": "CTB:001028",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-10T22:35:00+08:00"],
+                    "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                    "observedAt": "2026-08-10T14:29:20.000Z"
+                  }
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": {
+                    "routeId": "CTB:91:outbound:1",
+                    "stopId": "CTB:002261",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-10T22:41:00+08:00"],
+                    "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                    "observedAt": "2026-08-10T14:29:20.000Z"
+                  }
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:002261",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:41:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:002261",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:41:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "the-notice-goes-the-moment-anything-answers",
+          "why": "`liveArrivals` is the sentence a rider reads — *Live times unavailable* — so leaving it standing over rows that now show minutes would make the screen contradict itself. Cleared rather than set to a fourth enum member, because absence IS 'answered' once `routeDetailView` totalises it.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001028",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:35:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "the-notice-stays-when-nothing-answered-at-all",
+          "why": "A subscription that has connected and heard nothing has not made this route's times available. Clearing the notice here would replace one dishonesty (nothing is due anywhere) with a worse one (we asked and there is nothing), which is exactly the confusion ADR-114 was filed to end.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "etas": [],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ],
+            "liveArrivals": "perStopOnly"
+          }
+        },
+        {
+          "name": "a-reading-for-another-route-at-a-pole-on-this-one-is-ignored",
+          "why": "A Citybus pole serves a dozen lines. The socket narrows server-side, so this should never arrive — but a listener is a public seam and the row it would land on is a different service entirely, so the guard is on the reading's own `routeId` rather than on trust.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "etas": [
+              {
+                "routeId": "CTB:5B:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ],
+            "liveArrivals": "perStopOnly"
+          }
+        },
+        {
+          "name": "one-answering-pole-does-not-speak-for-the-other-forty",
+          "why": "`routeStopBoard` may take a lone reading as the answer for the pole a rider tapped, because an alias table can return it under a neighbouring id (ADR-115). A route frame covers every pole at once, so 'exactly one answered' is an outage rather than an identification: attaching it to all four rows would put a bus at three kerbs it is not coming to.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001406",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:58:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001406",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:58:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "the-kerbs-that-refused-are-replaced-and-sorted",
+          "why": "Ordered by `stopId` so two producers of one failure set serialize identically (D1), and REPLACED rather than merged with the document's own — a route document never carries `failed` from the server, but a merged one does, and a previous round's list must not survive into this one.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "CTB:002261",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "upstream did not answer",
+                  "retryable": true
+                }
+              },
+              {
+                "stopId": "CTB:002166",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "upstream did not answer",
+                  "retryable": true
+                }
+              }
+            ]
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001028",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:35:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ],
+            "failed": [
+              {
+                "stopId": "CTB:002166",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "upstream did not answer",
+                  "retryable": true
+                }
+              },
+              {
+                "stopId": "CTB:002261",
+                "error": {
+                  "code": "upstream_unavailable",
+                  "message": "upstream did not answer",
+                  "retryable": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "an-absent-failure-set-clears-the-one-already-there",
+          "why": "The direction that fails safe (ADR-077/081). A caller with no failure information must not preserve a lie: a screen that saw one kerb refuse and then heard a clean round would otherwise keep saying so for as long as it stayed open.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": {
+                    "routeId": "CTB:91:outbound:1",
+                    "stopId": "CTB:001028",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-10T22:35:00+08:00"],
+                    "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                    "observedAt": "2026-08-10T14:29:20.000Z"
+                  }
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "CTB:002261",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "upstream did not answer",
+                    "retryable": true
+                  }
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001028",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:35:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-route-whose-feed-already-worked-is-left-alone",
+          "why": "The KMB path, which must be a no-op in the field that matters: a route with a working bulk feed arrives with no `liveArrivals` at all, and a live round simply refreshes its readings. Pinned because the clearing rule is written as a conditional and a conditional that fires unconditionally would look identical here.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001028",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:35:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-route-that-could-not-be-asked-stops-saying-so-once-it-can",
+          "why": "`unavailable` is the retryable arm — the bulk feed was asked and refused (ADR-114) — so a live round answering is precisely the recovery it was waiting for. The same clearing rule, on the other enum member, because a rule pinned on one arm of a two-arm enum is half pinned.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "unavailable"
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              },
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:002261",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:41:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001028",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:35:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:002261",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:41:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "two-readings-for-one-kerb-take-the-first",
+          "why": "A caller could hand this seam two readings for one (pole, route) — neither producer emits it, but a listener is public and a bus cannot be at one kerb twice. The frame's order is canonical `(stopId, routeId)` (D1), so 'first' is a deterministic answer across both engines where 'last' would depend on how a caller happened to concatenate its rounds.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:91:outbound:1",
+                "operator": "CTB",
+                "routeNo": "91",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "CLEAR WATER BAY",
+                  "zh-Hant": "清水灣",
+                  "zh-Hans": "清水湾"
+                },
+                "destination": {
+                  "en": "DIAMOND HILL STATION",
+                  "zh-Hant": "鑽石山站",
+                  "zh-Hans": "钻石山站"
+                }
+              },
+              "stops": [
+                {
+                  "seq": 0,
+                  "stop": {
+                    "id": "CTB:001028",
+                    "name": {
+                      "en": "Choi Hung Estate",
+                      "zh-Hant": "彩虹邨",
+                      "zh-Hans": "彩虹邨"
+                    },
+                    "location": {
+                      "lat": 22.334,
+                      "lng": 114.208
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001028"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "CTB:002166",
+                    "name": {
+                      "en": "Ngau Chi Wan",
+                      "zh-Hant": "牛池灣",
+                      "zh-Hans": "牛池湾"
+                    },
+                    "location": {
+                      "lat": 22.338,
+                      "lng": 114.214
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002166"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "CTB:002261",
+                    "name": {
+                      "en": "Clear Water Bay Road",
+                      "zh-Hant": "清水灣道",
+                      "zh-Hans": "清水湾道"
+                    },
+                    "location": {
+                      "lat": 22.342,
+                      "lng": 114.22
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "002261"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "CTB:001406",
+                    "name": {
+                      "en": "Ha Yeung Village",
+                      "zh-Hant": "下洋村",
+                      "zh-Hans": "下洋村"
+                    },
+                    "location": {
+                      "lat": 22.346,
+                      "lng": 114.226
+                    },
+                    "sources": [
+                      {
+                        "operator": "CTB",
+                        "operatorStopId": "001406"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "etas": [
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:35:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              },
+              {
+                "routeId": "CTB:91:outbound:1",
+                "stopId": "CTB:001028",
+                "operator": "CTB",
+                "arrivals": ["2026-08-10T22:52:00+08:00"],
+                "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                "observedAt": "2026-08-10T14:29:20.000Z"
+              }
+            ],
+            "failed": null
+          },
+          "expect": {
+            "route": {
+              "id": "CTB:91:outbound:1",
+              "operator": "CTB",
+              "routeNo": "91",
+              "bound": "outbound",
+              "serviceType": "1",
+              "origin": {
+                "en": "CLEAR WATER BAY",
+                "zh-Hant": "清水灣",
+                "zh-Hans": "清水湾"
+              },
+              "destination": {
+                "en": "DIAMOND HILL STATION",
+                "zh-Hant": "鑽石山站",
+                "zh-Hans": "钻石山站"
+              }
+            },
+            "stops": [
+              {
+                "seq": 0,
+                "stop": {
+                  "id": "CTB:001028",
+                  "name": {
+                    "en": "Choi Hung Estate",
+                    "zh-Hant": "彩虹邨",
+                    "zh-Hans": "彩虹邨"
+                  },
+                  "location": {
+                    "lat": 22.334,
+                    "lng": 114.208
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001028"
+                    }
+                  ]
+                },
+                "eta": {
+                  "routeId": "CTB:91:outbound:1",
+                  "stopId": "CTB:001028",
+                  "operator": "CTB",
+                  "arrivals": ["2026-08-10T22:35:00+08:00"],
+                  "dataTimestamp": "2026-08-10T22:29:12+08:00",
+                  "observedAt": "2026-08-10T14:29:20.000Z"
+                }
+              },
+              {
+                "seq": 1,
+                "stop": {
+                  "id": "CTB:002166",
+                  "name": {
+                    "en": "Ngau Chi Wan",
+                    "zh-Hant": "牛池灣",
+                    "zh-Hans": "牛池湾"
+                  },
+                  "location": {
+                    "lat": 22.338,
+                    "lng": 114.214
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002166"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 2,
+                "stop": {
+                  "id": "CTB:002261",
+                  "name": {
+                    "en": "Clear Water Bay Road",
+                    "zh-Hant": "清水灣道",
+                    "zh-Hans": "清水湾道"
+                  },
+                  "location": {
+                    "lat": 22.342,
+                    "lng": 114.22
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "002261"
+                    }
+                  ]
+                },
+                "eta": null
+              },
+              {
+                "seq": 3,
+                "stop": {
+                  "id": "CTB:001406",
+                  "name": {
+                    "en": "Ha Yeung Village",
+                    "zh-Hant": "下洋村",
+                    "zh-Hans": "下洋村"
+                  },
+                  "location": {
+                    "lat": 22.346,
+                    "lng": 114.226
+                  },
+                  "sources": [
+                    {
+                      "operator": "CTB",
+                      "operatorStopId": "001406"
+                    }
+                  ]
+                },
+                "eta": null
+              }
+            ]
+          }
+        }
+      ]
+    },
     "narrowEtasToRoutes": {
       "doc": "The `routes=` narrowing, as one rule rather than as two filters (WP5-7). It runs in the edge's `stopEtas` for `/v1/etas/:id?routes=` and in the poll emulator for a target that named routes — the batch endpoint carries no per-id route list, because `,` is a legal `idchar` and there is no safe delimiter for a nested one, so the client narrows one hop after the batch answers while the `EtaHub` shard goes on narrowing server-side. Written twice the two would eventually disagree about a route id that no longer parses or about the empty list, and identical listener output on both engines is exactly what the live-rounds corpus asserts. It narrows READINGS and never failures, and it preserves the caller's order rather than canonicalising.",
       "cases": [

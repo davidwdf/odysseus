@@ -303,6 +303,20 @@ export interface RouteStopRowView {
   last: boolean
   /** This route, saved at this pole (ADR-042) — the node gets a star. */
   saved: boolean
+  /**
+   * **We could not ask about this kerb** — so an empty `arrivals` here is not "no bus due" (ADR-116).
+   *
+   * Absent in every case but one: a live route watch asks each of the route's 13–41 poles separately, so
+   * one board can refuse while the rest answer, and `applyLiveEtasToRouteDetail` puts that pole in the
+   * payload's `failed`. The server never populates it — a route is fetched in one upstream call, which is
+   * what `liveArrivals` says once for the whole screen — so on an HTTP-only render this is always absent.
+   *
+   * A row and not the screen, deliberately: `liveArrivals` cannot express "38 of 41 answered" and would
+   * have to choose between claiming the screen has no times (false for 38 rows) and saying nothing (false
+   * for 3). It is the same distinction `StopCardView.incomplete` (ADR-077) and `routeStopBoard`'s
+   * `incomplete` (ADR-115) already draw, at the one granularity a live round actually has.
+   */
+  incomplete?: boolean
 }
 
 /**
@@ -554,6 +568,10 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
       : stops.findIndex((s) => isOriginStop(s.stop.id, opts.arrivedFromStop))
 
   const saved = new Set(opts.savedRouteKeys ?? [])
+  // The kerbs the round could not ask about, as a set, so a 41-row walk is not 41 array scans. Read from
+  // the payload rather than passed in as an option: it arrives on the same document the readings do, which
+  // is what keeps a failure from outliving the round that produced it (`applyLiveEtasToRouteDetail`).
+  const refused = new Set((detail.failed ?? []).map((f) => f.stopId))
   const rows: RouteStopRowView[] = stops.map((s, i) => {
     return {
       seq: s.seq,
@@ -565,6 +583,9 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
       first: i === 0,
       last: i === stops.length - 1,
       saved: saved.has(formatFavoriteRouteKey(s.stop.id, route.id)),
+      // Only when true, so an HTTP-only render is byte-identical to what it always was — which is what the
+      // 18 existing corpus rows and both renderers' 19 projected states are measured against.
+      ...(refused.has(s.stop.id) ? { incomplete: true } : {}),
     }
   })
 

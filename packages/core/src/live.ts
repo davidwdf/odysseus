@@ -43,6 +43,7 @@ import type {
   EtaRef,
   LiveState,
   NearbyStop,
+  RouteDetail,
   ServerFrame,
   SnapshotFrame,
   StopDetail,
@@ -1287,6 +1288,85 @@ export function applyLiveEtasToStopDetail(
         ) ??
         null,
     })),
+  }
+}
+
+/**
+ * Replace the per-stop ETAs on a `RouteDetail` with the live ones — the **third** merge rule, and the one
+ * that gives a Citybus or GMB route times at all (ADR-116, proposals/05).
+ *
+ * ## What it is for
+ *
+ * Those operators publish no bulk route-eta feed (ADR-021), so `/v1/route/:id` serves `eta: null` on every
+ * stop and says why in `liveArrivals: 'perStopOnly'` (ADR-114). Their **per-pole** boards answer fine, so a
+ * `/v1/live?route=` subscription asks every pole of the route and pushes what it finds. This is what turns
+ * those readings back into the payload the screen derives from, so `routeDetailView` needs to know nothing
+ * about where a reading came from.
+ *
+ * ## The key is the pole, exactly, and there is no fallback
+ *
+ * `row.stop.id === eta.stopId`. Both are canonical — the socket's targets are resolved as
+ * `doc.stops.map(s => s.id)` and every reading is stamped with the pole it was read at — and the two
+ * fallbacks its siblings need are wrong here rather than merely unnecessary:
+ *
+ *  · **No "the only reading for this route wins".** `routeStopBoard` may do that (ADR-115) because it is
+ *    answering about *one* pole a rider tapped, and an alias table can return that pole's reading under a
+ *    neighbouring id. A route frame covers all 41 poles at once, so "exactly one answered" is an outage,
+ *    not an identification — and attaching that one reading to all 41 rows would put a bus at 40 kerbs it
+ *    is not coming to.
+ *  · **No service-type-variant fallback.** `applyLiveEtasToStopDetail` needs one because a board publishes
+ *    whichever variant is running; here the narrowing to one exact route id has already happened
+ *    server-side (`acceptForConnection`, `narrowEtasToRoutes`), so a reading naming another variant never
+ *    arrives. Writing the branch anyway would be unreachable code, which this package's 100 % branch
+ *    threshold would refuse and rightly.
+ *
+ * A row with no matching reading becomes `null`, never its previous value — the same honesty rule its
+ * siblings state, with the same footgun: pass the session's `etas`, never a `delta`'s `changed`, or every
+ * row the delta did not mention blanks.
+ *
+ * ## Two fields besides the readings, and both are load-bearing
+ *
+ * **`liveArrivals` is cleared when anything answered.** It is the sentence a rider reads — *"Live times
+ * unavailable"* — and leaving it standing over rows that now show minutes would make the screen contradict
+ * itself. Cleared rather than set to a fourth enum member because absence *is* `'answered'`
+ * (`routeDetailView` totalises it), so the merged payload is exactly what a route with a working bulk feed
+ * would have served. It is left **untouched** when nothing answered at all: a subscription that has
+ * connected and heard nothing has not made the route's times available, and saying otherwise would replace
+ * one dishonesty with a worse one.
+ *
+ * **`failed` is replaced from the argument and cleared without one**, the rule its siblings learnt the hard
+ * way (ADR-077/081). Here it is what makes a per-row *"we could not ask"* possible at all: the route
+ * document has no per-pole failure vocabulary because the server fetches a route in one call, but a live
+ * round asks each pole separately, so one kerb refusing while the others answer is a real state — and a row
+ * that shows nothing for that reason must not read as a row with no bus due.
+ *
+ * @spec live#applyLiveEtasToRouteDetail
+ */
+export function applyLiveEtasToRouteDetail(
+  detail: RouteDetail,
+  etas: readonly Eta[],
+  failed?: readonly EtaFailure[],
+): RouteDetail {
+  const byPole = new Map<string, Eta>()
+  for (const eta of etas) {
+    if (eta.routeId !== detail.route.id) continue
+    // First wins, and the order is the frame's — which is canonical `(stopId, routeId)` (D1), so "first"
+    // is deterministic across both engines. Two readings for one (pole, route) is not something either
+    // producer emits; if it ever became one, taking the first is stable rather than arbitrary.
+    if (!byPole.has(eta.stopId)) byPole.set(eta.stopId, eta)
+  }
+
+  // **Both fields are destructured OUT of the spread, not conditionally overwritten in it**, and the
+  // difference is not stylistic: `...detail` copies them, so a conditional that only *adds* a replacement
+  // leaves the original standing on exactly the calls that have nothing to say — which for `failed` is the
+  // stale-outage bug ADR-077 fixed in the siblings, and for `liveArrivals` would be a screen showing
+  // minutes under a line that says it has none.
+  const { failed: _stale, liveArrivals, ...rest } = detail
+  return {
+    ...rest,
+    ...(failed !== undefined && failed.length > 0 ? { failed: sortFailures(failed) } : {}),
+    ...(byPole.size > 0 || liveArrivals === undefined ? {} : { liveArrivals }),
+    stops: detail.stops.map((stop) => ({ ...stop, eta: byPole.get(stop.stop.id) ?? null })),
   }
 }
 

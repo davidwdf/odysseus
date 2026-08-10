@@ -153,6 +153,40 @@ describe('route-detail#routeDetailView', () => {
   const viewFor = (c: { args: Args }) => routeDetailView(c.args.detail, optionsFor(c.args))
 
   /**
+   * The live-fed Citybus case, asserted by **property** as well as by bytes.
+   *
+   * Its `expect` was computed by running this function, which is how a 200-line view model gets pinned at
+   * all — and is also how a wrong composition would get pinned as correct. So the three claims that case
+   * exists to make are restated here in a form that does not depend on those bytes: the notice is gone, the
+   * kerb that refused says so on its own row, and every row the round answered has a readout. All three
+   * were watched failing on a deliberate revert.
+   */
+  it('a live route watch answers the rows and marks only the kerb that refused', () => {
+    const c = rows().find((row) => row.name.startsWith('a-live-route-watch-fills')) as {
+      args: Args
+    }
+    expect(c, 'the live-fed corpus case has moved or been renamed').toBeTruthy()
+    const view = viewFor(c)
+    const refused = new Set((c.args.detail.failed ?? []).map((f) => f.stopId))
+    expect(refused.size, 'the case no longer carries a refusing kerb').toBe(1)
+
+    expect(view.liveArrivals).toBe('answered')
+    for (const row of view.stops) {
+      if (refused.has(row.stopId)) {
+        expect(row.incomplete, `${row.stopId} refused and the row does not say so`).toBe(true)
+        expect(row.arrivals, 'a refused kerb cannot also have a reading').toEqual([])
+      } else {
+        expect(
+          row.incomplete,
+          `${row.stopId} answered and the row calls it incomplete`,
+        ).toBeUndefined()
+      }
+    }
+    // …and the readings really arrived, or the two assertions above would hold over a screen of blanks.
+    expect(view.stops.filter((row) => row.arrivals.length > 0).length).toBeGreaterThanOrEqual(2)
+  })
+
+  /**
    * How close two languages have to agree about the route's length.
    *
    * `distanceM` is a sum of haversines, and the geo corpus already states the rule for that class of

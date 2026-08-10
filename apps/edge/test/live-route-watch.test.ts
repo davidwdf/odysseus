@@ -21,7 +21,7 @@
 
 import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
 import { LIVE_PATH } from '@nextbus/contract'
-import { LIVE_ROUTE_NAME_PREFIX, liveShardFor, routeWatchName } from '@nextbus/core'
+import { LIVE_ROUTE_NAME_PREFIX, liveShardFor, parseStopId, routeWatchName } from '@nextbus/core'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
@@ -330,7 +330,12 @@ function inRouteObject<T>(
 async function connectToRouteObject(
   routeId: string,
   targets: readonly string[],
-): Promise<{ ws: WebSocket; statuses: () => string[] }> {
+): Promise<{
+  ws: WebSocket
+  statuses: () => string[]
+  acceptedTargets: () => string[]
+  awaitSnapshot: () => Promise<void>
+}> {
   const stub = (env.ETA_HUB as NonNullable<typeof env.ETA_HUB>).getByName(
     routeWatchName(routeId) as string,
   )
@@ -349,7 +354,43 @@ async function connectToRouteObject(
   })
   ws.accept()
   track(ws, routeId)
-  return { ws, statuses: () => messages.filter((m) => m.includes('"status"')) }
+  return {
+    ws,
+    statuses: () => messages.filter((m) => m.includes('"status"')),
+    /**
+     * The accepted set, off the `snapshot` — which is what a cap has to be asserted on.
+     *
+     * **Not the socket's stored attachment**, and the difference was a flake this file shipped for one
+     * commit. These cases hand the object synthetic pole ids to reach a cap no real route reaches, and a
+     * synthetic id resolves to no place — so the first round answers `not_found`, which is
+     * `retryable: false`, which means *the target has left the subscription* and the attachment legitimately
+     * empties. In isolation the assertion won that race; under a full-suite load the round did, and the
+     * failure read as "the cap kept nothing". The snapshot is sent inside the upgrade, before any round can
+     * run, and it is the accepted set by definition.
+     */
+    /**
+     * Wait for the `snapshot` to be *dispatched*.
+     *
+     * It is queued inside the upgrade — the object sends it before returning the 101 — but a queued frame
+     * reaches a listener on a later turn of the event loop, so reading `messages` synchronously after
+     * `accept()` finds nothing. The previous version of these cases only worked because an unrelated
+     * `await` happened to give the loop that turn.
+     */
+    awaitSnapshot: async () => {
+      const deadline = Date.now() + 2_000
+      while (Date.now() < deadline) {
+        if (messages.some((m) => m.includes('"snapshot"'))) return
+        await new Promise<void>((resolve) => setTimeout(resolve, 5))
+      }
+      throw new Error('no snapshot arrived')
+    },
+    acceptedTargets: () => {
+      const snapshot = messages.find((m) => m.includes('"snapshot"'))
+      if (snapshot === undefined) return []
+      const frame = JSON.parse(snapshot) as { targets?: { stopId: string }[] }
+      return (frame.targets ?? []).map((t) => t.stopId)
+    },
+  }
 }
 
 /** How many targets the object is actually watching, summed over its sockets. */
@@ -375,8 +416,12 @@ describe('the route cap is the route’s own', () => {
     const long = synthetic(20, 'LONG')
     expect(long.length).toBeGreaterThan(LIVE_MAX_TARGETS_PER_CONNECTION)
     expect(long.length).toBeLessThan(LIVE_ROUTE_MAX_POLES)
-    const { statuses } = await connectToRouteObject('KMB:LONG:outbound:1', long)
-    expect(await keptTargets('KMB:LONG:outbound:1')).toBe(long.length)
+    const { statuses, acceptedTargets, awaitSnapshot } = await connectToRouteObject(
+      'KMB:LONG:outbound:1',
+      long,
+    )
+    await awaitSnapshot()
+    expect(acceptedTargets()).toEqual(long)
     expect(statuses().filter((s) => s.includes('not watching'))).toEqual([])
   })
 
@@ -386,8 +431,10 @@ describe('the route cap is the route’s own', () => {
     // argument for the number, not for leaving the arithmetic unchecked.
     const absurd = synthetic(LIVE_ROUTE_MAX_POLES + 6, 'HUGE')
     const routeId = 'KMB:HUGE:outbound:1'
-    const { statuses } = await connectToRouteObject(routeId, absurd)
-    expect(await keptTargets(routeId)).toBe(LIVE_ROUTE_MAX_POLES)
+    const { statuses, acceptedTargets, awaitSnapshot } = await connectToRouteObject(routeId, absurd)
+    await awaitSnapshot()
+    expect(acceptedTargets().length).toBe(LIVE_ROUTE_MAX_POLES)
+    expect(acceptedTargets()).toEqual(absurd.slice(0, LIVE_ROUTE_MAX_POLES))
     // Dropped **and named**, which is the treatment this file's caps all get: a client that asked about 70
     // kerbs and got 64 readings cannot otherwise tell a dropped target from a stop with no buses due.
     const named = statuses().filter((s) => s.includes('not watching'))
@@ -685,7 +732,10 @@ describe('the phase a mixed-age round aligns to', () => {
     // and re-ask on a phase the operator has already left.
     const newest = new Date(Date.now() - 20_000)
     const stalest = new Date(Date.now() - 50_000)
-    const rawOf = (poleId: string) => poleId.split(':')[1] as string
+    // The operator's own id, through the one parser (`check-no-adhoc-id-parsing` polices this, and caught
+    // a hand-rolled `split(':')` here) — it is what the upstream URL carries and therefore what the stub
+    // keys its per-pole answer on.
+    const rawOf = (poleId: string) => (parseStopId(poleId) as { rawId: string }).rawId
     boardPublishedAtByPole = {
       [rawOf(ROUTE_POLES[0] as string)]: stalest.toISOString(),
       [rawOf(ROUTE_POLES[1] as string)]: newest.toISOString(),

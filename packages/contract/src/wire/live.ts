@@ -336,13 +336,24 @@ export interface LiveChannel {
   serverFrames: readonly LiveMessage[]
   /** The connect URL's query parameters, all `in: 'query'`. */
   query: readonly WireParam[]
+  /**
+   * Groups of `query` names of which **exactly one group must be satisfied** — the shape a `required`
+   * list cannot express.
+   *
+   * Needed the moment a second way to declare a subscription existed (`?route=`, ADR-116). Marking both
+   * parameters `required` would publish a document saying a legal connect URL must carry both, and
+   * marking neither would publish one saying a URL with *neither* is fine; the Worker answers
+   * `bad_request` to both of those. Emitted as JSON Schema `oneOf` over `required`, which with two
+   * single-name branches means exactly what it says: one or the other, never both, never neither.
+   */
+  queryOneOf?: readonly (readonly string[])[]
 }
 
 export const LIVE_CHANNEL = {
   address: LIVE_PATH,
   title: 'Live ETA stream',
   summary:
-    'One socket per client. The client declares its targets in the connect URL and again in a `subscribe` frame; the Worker routes it to a shard, and the shard pushes a `snapshot` then `delta`s on an adaptive alarm cadence (~45–60 s, which is the measured upstream refresh interval — a faster cadence buys no newer data).',
+    "One socket per client, declared **entirely in the connect URL**: either `?targets=` (the stops this client cares about) or `?route=` (every pole of one route). The Worker routes the connection accordingly — `?targets=` to one of N hashed shards, `?route=` to a single object named for that route so every client watching it shares one round — and the object pushes a `snapshot` then `delta`s on an alarm cadence. A `subscribe` frame may re-declare a `?targets=` set later, with per-stop route narrowing the URL cannot express; a route watch needs no frame at all, because the object narrows every reading to its own route. Cadence: ~45–60 s adaptive for a stop watch (the measured upstream refresh interval — faster buys no newer data), and for a route watch aligned to that route's own publish clock instead.",
   clientFrames: [
     {
       name: 'Subscribe',
@@ -379,10 +390,22 @@ export const LIVE_CHANNEL = {
     {
       name: 'targets',
       in: 'query',
-      required: true,
+      // Not `required`: `?route=` is the other way to declare a subscription, and `queryOneOf` below is
+      // what says a URL must carry exactly one of the two. A `required: true` here would publish a
+      // document contradicting the Worker.
+      required: false,
       type: 'string',
       description:
-        'Comma-separated canonical stop or place ids. **Percent-encode the value** — place ids contain "+", which a query string decodes as a space, so an unencoded `P:KMB:a+KMB:b` arrives as a malformed id and is dropped; this is the same requirement `/v1/stop/{id}` states for the same reason. The **server** derives the shard from this list (sorted ids → FNV-1a over the lowest → `% shardCount`, `liveShardFor` in `@nextbus/core`), so a client with a stale shard count cannot silently land on a different shard — it does not compute one. The `subscribe` frame re-declares the same set, with optional per-stop route narrowing this parameter cannot express.',
+        'Comma-separated canonical stop or place ids. **Percent-encode the value** — place ids contain "+", which a query string decodes as a space, so an unencoded `P:KMB:a+KMB:b` arrives as a malformed id and is dropped; this is the same requirement `/v1/stop/{id}` states for the same reason. The **server** derives the shard from this list (sorted ids → FNV-1a over the lowest → `% shardCount`, `liveShardFor` in `@nextbus/core`), so a client with a stale shard count cannot silently land on a different shard — it does not compute one. The `subscribe` frame re-declares the same set, with optional per-stop route narrowing this parameter cannot express. **Exactly one of `targets` and `route` is given**; `route` wins if both are, and neither is a `bad_request`.',
+    },
+    {
+      name: 'route',
+      in: 'query',
+      required: false,
+      type: 'string',
+      description:
+        "One canonical route id (`CTB:91:outbound:1`) — **the alternative to `targets`, not an addition to it**. The server resolves that route's poles from the same route document `/v1/route/{id}` serves and watches all of them, so the client never names a pole: the URL stays one id long across every reconnect, the watched set cannot disagree with the schematic a rider is looking at, and a client compiled against a stale rule cannot pick which object it lands on. **Percent-encode it** — a route id contains `:`. Why it exists: Citybus and GMB publish no bulk route-eta feed, so a route screen on those operators has no times at all while their per-pole boards answer fine; one object per route means every client watching that route shares one round of ~13–41 upstream calls rather than each paying for their own. A malformed id is `bad_request`, a route the dataset does not carry is `not_found`, and poles past the object's cap are dropped and named in a `status` frame. A `subscribe` frame is neither needed nor expected on such a connection — the object narrows every reading to its own route from its own name — though re-declaring the accepted set the `snapshot` echoed is legal and is how a client recovers from a `seq` gap.",
     },
   ],
+  queryOneOf: [['targets'], ['route']],
 } as const satisfies LiveChannel

@@ -8160,3 +8160,65 @@ pre-existing and unaddressed; it earned its keep here.
     answered" fallback already stores. The comment now states the real reason (coupling: retention exists to
     keep times on screen, the clock to decide when to ask) and the episode is left in it.
   - ⚪ **Still no `apps/mobile` or screen involvement.** Steps 3–5 are next.
+
+## ADR-119 — The client can watch a route, and the two engines get there differently on purpose
+
+- **Status:** **Accepted 2026-08-10** in `packages/api-client/src/index.ts` (`watchRoute`, `etaListenerDoor`),
+  `src/live/socket.ts`, `src/live/controller.ts`, `src/live/engine.ts`;
+  `packages/core/src/live.ts` (`applyLiveEtasToRouteDetail`) and `src/route-detail.ts`
+  (`RouteStopRowView.incomplete`); `packages/contract/src/wire/live.ts` (`?route=`, `queryOneOf`) and
+  `src/wire/detail.ts` (`RouteDetail.failed`). Steps **3 and 4** of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md).
+- **Context.** ADR-116/117/118 gave the edge a route watch. Nothing could ask for one: `DataSource` had no
+  route-watch method, no transport knew about `?route=`, there was no rule for turning a frame into a
+  `RouteDetail`, and — found while writing this — **`?route=` was live and undeclared in the contract**,
+  because `LIVE_CHANNEL.query`'s only reader is the AsyncAPI emitter and no gate compares it against what
+  the Worker parses.
+- **Decisions:**
+  1. **`watchRoute(routeId, …)` is its own method, not `watch(poles)`.** Two of the three things it does
+     could be done by naming the poles; the third cannot. A `?route=` socket lands on the object **named for
+     the route**, so the *n*th rider costs nothing upstream, and that property lives in which object the URL
+     selects.
+  2. **The socket names the route; the poll emulator resolves the poles.** The socket connects on `open()`
+     (no `subscribe` frame is coming) and its URL stays one id long across every reconnect. The emulator has
+     no route endpoint to emulate, so `watchRoute` reads `/v1/route/:id` once and then *is* `watch()` — every
+     rule about rounds, retention, ordering and failures stays in one place. The asymmetry is in how a round
+     is fetched, never in what a listener receives, which is the line ADR-074 draws. Stated plainly because
+     it is a real cost: `poll` is still the default engine, so a poll-emulated route watch does **not** share
+     a round with anybody.
+  3. **A route watch must not send its `subscribe` frame, and that is a hazard rather than a saving.** An
+     empty `subscribe` is *legal* and means "stop sending me readings" — so a route watch that declared its
+     (empty, because it does not know the poles) target set on connect would switch its own round off, and
+     the symptom would be a screen that connects perfectly and never updates. Recovery from a `seq` gap
+     re-declares **the accepted set the server echoed**, which the object re-narrows to its own route; before
+     the first snapshot there is nothing to recover to and nothing is sent.
+  4. **`applyLiveEtasToRouteDetail` keys on the pole exactly, with neither fallback its siblings need.** No
+     "the only reading wins" (that is right for `routeStopBoard`, which answers about one tapped pole, and
+     catastrophic for a 41-pole frame — one reading would land on forty rows it is not coming to) and no
+     service-type-variant fallback (the narrowing already happened server-side, so the branch would be
+     unreachable and this package's 100 % branch threshold refuses those).
+  5. **The merge clears `liveArrivals` when anything answered, and keeps it when nothing did.** Absence *is*
+     `'answered'` once `routeDetailView` totalises it, so a merged payload is exactly what a route with a
+     working bulk feed would have served. Keeping it when the round was empty matters as much: a
+     subscription that has connected and heard nothing has not made the times available, and clearing it
+     would replace ADR-114's dishonesty with a worse one.
+  6. **`RouteDetail.failed` exists for the live path only, and the row says it, not the screen.** The server
+     never populates it — a route is one upstream call, which is why `liveArrivals` says it once — but a live
+     round asks each pole separately, so one kerb refusing while 38 answer is a real state that
+     `liveArrivals` cannot express without lying in one direction or the other. `RouteStopRowView.incomplete`
+     is the same distinction `StopCardView.incomplete` (ADR-077) and `routeStopBoard` (ADR-115) already draw.
+  7. **`queryOneOf` on the channel, so the published document is true.** `targets` and `route` are
+     alternatives; a flat `required` list can only say "both" or "no constraint", and the Worker contradicts
+     both. Emitted as `oneOf` over `required`, which for two single-name branches means one or the other.
+- **Consequences:**
+  - 🟢 **Additive-optional throughout, so `CONTRACT_VERSION` stays 2.0.0** (ADR-052 §5): one optional query
+    parameter, one optional payload field, one optional view field.
+  - 🟢 **Eleven corpus rows for the merge and one for the view**, plus a hand-written property check beside
+    the generated one — because a view-model `expect` computed by running the function is how a 200-line
+    composition gets pinned *and* how a wrong one would get pinned as correct.
+  - ⚠️ **A cap test of mine was timing-dependent and the full suite found it.** It read the socket's stored
+    attachment, and the synthetic pole ids those cases use to reach a 64-pole cap resolve to no place — so
+    the first round answers `not_found`, which is non-retryable, which legitimately empties the
+    subscription. In isolation the assertion won the race; under load the round did. It now asserts the
+    `snapshot`'s accepted-set echo, which is sent inside the upgrade before any round can run.
+  - ⚠️ **No screen subscribes yet.** Step 5 is next, and it needs the spec state that says what a rider sees.

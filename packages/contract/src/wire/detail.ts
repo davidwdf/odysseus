@@ -43,6 +43,12 @@ export const RouteDetailSchema = z
     reverse: RouteRefSchema.optional().describe(
       'The same route number in the opposite direction, when the dataset carries one — lets the UI offer a direction toggle. Absent for circular / single-direction routes (ADR-046). Server-resolved with the correct service-type variant, so the client never guesses the id.',
     ),
+    failed: z
+      .array(EtaFailureSchema)
+      .optional()
+      .describe(
+        "Poles of this route whose upstream board did not answer, ordered by `stopId`; **absent when none did** (the same field, shape and ordering `/v1/stop/{id}` and `/v1/nearby` carry — ADR-077). **The server never populates this**, and that is not an oversight: a route is fetched in one upstream call, which is the reason `liveArrivals` exists and says it once for the screen. It is here for a **live route watch** (ADR-116), where the granularity is real — a `/v1/live?route=` round asks each of the route's 13–41 poles separately, so one kerb can refuse while the rest answer, and a row whose `eta` is `null` because we could not ask must not read as a row with no bus due. `applyLiveEtasToRouteDetail` replaces it from its own argument and clears it when the argument is absent, exactly as the other two merges do, so a stale list cannot outlive the round that produced it.",
+      ),
   })
   .meta({ id: 'RouteDetail' })
 

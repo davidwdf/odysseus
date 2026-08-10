@@ -3,6 +3,7 @@ import corpus from '../spec/live.spec.json'
 import {
   acceptTargets,
   applyLiveEtasToNearby,
+  applyLiveEtasToRouteDetail,
   applyLiveEtasToStopDetail,
   applyLiveFrame,
   diffEtas,
@@ -34,6 +35,7 @@ import type {
   EtaFailure,
   EtaRef,
   NearbyStop,
+  RouteDetail,
   ServerFrame,
   StopDetail,
   WatchTarget,
@@ -378,6 +380,37 @@ describe('live#applyLiveEtasToStopDetail', () => {
       ).toEqual(c.expect)
     })
   }
+})
+
+describe('live#applyLiveEtasToRouteDetail', () => {
+  // Same boundary translation as the sibling above: `failed: null` in the corpus is the caller passing
+  // nothing, which is the case that must CLEAR a stale list rather than preserve it.
+  for (const c of specCases<
+    { detail: RouteDetail; etas: Eta[]; failed: EtaFailure[] | null },
+    RouteDetail
+  >(corpus, 'applyLiveEtasToRouteDetail')) {
+    it(c.name, () => {
+      expect(
+        applyLiveEtasToRouteDetail(c.args.detail, c.args.etas, c.args.failed ?? undefined),
+      ).toEqual(c.expect)
+    })
+  }
+
+  it('leaves the payload it was handed untouched', () => {
+    // The screen derives its view from the *merged* payload and react-query holds the original; a merge
+    // that mutated its argument would write live readings into the cached HTTP document, and the next
+    // refetch would look like it had answered. Asserted structurally rather than by identity, because a
+    // spread that reused a nested object would still pass an identity check on the root.
+    const c = specCases<
+      { detail: RouteDetail; etas: Eta[]; failed: EtaFailure[] | null },
+      RouteDetail
+    >(corpus, 'applyLiveEtasToRouteDetail')[0] as {
+      args: { detail: RouteDetail; etas: Eta[]; failed: EtaFailure[] | null }
+    }
+    const before = JSON.parse(JSON.stringify(c.args.detail)) as RouteDetail
+    applyLiveEtasToRouteDetail(c.args.detail, c.args.etas, c.args.failed ?? undefined)
+    expect(c.args.detail).toEqual(before)
+  })
 })
 
 describe('live#applyLiveEtasToNearby', () => {

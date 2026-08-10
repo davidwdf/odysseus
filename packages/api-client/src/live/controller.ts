@@ -86,6 +86,19 @@ export interface LiveEtaControllerDeps {
   transport: LiveEtaEngine
   /** What to watch. Declared once, in one frame, and re-declared verbatim on every resync. */
   targets: readonly WatchTarget[]
+  /**
+   * The subscription is the transport's connect URL, not a frame — a **route watch** (ADR-116).
+   *
+   * `targets` is then empty and must stay empty: the client does not know the route's poles, which is the
+   * point of naming the route instead. Sending the usual declaration would be actively wrong rather than
+   * merely redundant — a `subscribe` frame **replaces** the accepted set and an empty one is the legal way
+   * to say *"stop sending me readings"*, so it would switch the round off on connect.
+   *
+   * Recovery still re-declares, because that is the only thing that fetches a fresh `snapshot`: what it
+   * re-declares is the accepted set the **server** echoed, which the route object then re-narrows to its
+   * own route. Before the first snapshot there is nothing to re-declare and nothing to recover.
+   */
+  declaredInUrl?: boolean
   /** Called on every applied frame, in order. */
   emit(update: LiveEtaUpdate): void
   /**
@@ -126,7 +139,9 @@ export function createLiveEtaController(deps: LiveEtaControllerDeps): LiveEtaCon
    * idempotent and is exactly what a reconnect has to send anyway. Building a fresh frame per resync
    * would open the door to sending a *different* set than the one the snapshot echo is compared against.
    */
-  const subscription: SubscribeFrame = { type: 'subscribe', targets: [...deps.targets] }
+  const subscription: SubscribeFrame | null = deps.declaredInUrl
+    ? null
+    : { type: 'subscribe', targets: [...deps.targets] }
 
   let session: LiveSession = LIVE_SESSION_START
   let started = false
@@ -166,10 +181,18 @@ export function createLiveEtaController(deps: LiveEtaControllerDeps): LiveEtaCon
           // `applyLiveFrame` never reports `resyncNeeded` for a snapshot — it applies whatever `seq` it
           // carries, deliberately, because the snapshot is the recovery path (see the kernel's rules). So
           // the sequence terminates in one step by construction rather than by a counter or a cooldown.
-          if (result.resyncNeeded) deps.transport.send(subscription)
+          // For a route watch there is no frame of our own to re-send, so the accepted set the server just
+          // told us about is what goes back. Empty means no snapshot has arrived yet — nothing to recover
+          // to, and an empty `subscribe` would mean "stop sending me readings".
+          if (result.resyncNeeded) {
+            if (subscription !== null) deps.transport.send(subscription)
+            else if (session.targets.length > 0) {
+              deps.transport.send({ type: 'subscribe', targets: [...session.targets] })
+            }
+          }
         },
       })
-      deps.transport.send(subscription)
+      if (subscription !== null) deps.transport.send(subscription)
     },
 
     stop() {
