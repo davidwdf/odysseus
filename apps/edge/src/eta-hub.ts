@@ -131,6 +131,19 @@ export const LIVE_MAX_TARGETS_PER_CONNECTION = 12
  * hibernation-eligible. Four riders with twelve Central-class places each is exactly 48 — the load this
  * cap was chosen to *permit*.
  *
+ * **Two corrections to the model above, from checking it against Cloudflare's docs (2026-08-10). Neither
+ * moves a cap; both make the numbers upper bounds rather than estimates.**
+ *  · The six is *"connections simultaneously waiting for response **headers**"*, and since 2026-04-09 a slot
+ *    is freed when headers arrive rather than when the body finishes being read. For ETA JSON the two are
+ *    nearly the same, so 67 s and 39 s stand as ceilings — but they are ceilings now, not forecasts.
+ *  · The limit counts **`fetch()` calls in flight, not sockets.** Worth stating because the opposite is
+ *    tempting and was briefly believed here: `rt.data.gov.hk` speaks HTTP/2, and 41 requests to it travel
+ *    down **one** TCP connection (measured with `curl`). That makes the transport cheap and does *not* raise
+ *    the concurrency — six in flight is six in flight however few pipes they share.
+ *  Also documented and **not** available as an escape hatch: whether the six applies per Durable Object
+ *  instance is stated nowhere in Cloudflare's docs, so sharding a poll across objects to get more in flight
+ *  is unverified. It is settleable only on deployed Cloudflare, since local dev does not enforce the limit.
+ *
  * At `LIVE_CTB_BUDGET = 12` the same 48 places cost **785 calls** ≈ 131 batches ≈ **39 s**, inside the
  * floor, with the heaviest single place at 20 calls and the subrequest budget (10,000 on Paid) an order of
  * magnitude clear. 39 s is not a comfortable margin and is stated rather than rounded: if the cap or the

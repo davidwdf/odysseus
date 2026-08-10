@@ -3,11 +3,17 @@
 > **Status:** proposal, **not built**. Drafted 2026-08-10 after the owner's brainstorm, which settled the
 > shape: *"load all the stops in parallel for a route, update them to the user through the live socket… if
 > user A and user B are both viewing the same CTB/GMB route, ideally I'd like to only do that fan-out once."*
+>
+> ⚠️ **The measurements were rewritten the same day**, after the owner asked why looking up 41 stops took
+> seconds. It does not: the first attempt was a **method** error, off by 5×, and the corrected working is in
+> [The numbers](#the-numbers). The design is unchanged and its margin is wider.
 > Options **A** (times in the action sheet) shipped as
 > [ADR-115](../08-decision-log.md#adr-115--the-sheet-a-rider-already-opens-is-where-one-stops-times-go);
-> this is **B**. The numbers below are **measured**, not estimated — the `EtaHub` cap's own docblock records
-> what happened the one time they were estimated from a fixture instead, and it was wrong by an order of
-> magnitude.
+> this is **B**. The numbers below are **measured** — and the first set of them was still wrong, which is the
+> more useful lesson than the one this paragraph originally carried: the `EtaHub` cap's docblock records being
+> wrong by an order of magnitude from estimating off a fixture, and this document then managed to be wrong by
+> 5× from measuring badly. Both failures are visible in it on purpose. **Every platform limit quoted here has
+> been checked against Cloudflare's documentation rather than recalled.**
 >
 > **Nothing here is a licence to poll harder.** The whole design exists so that the *n*th rider on a route
 > costs nothing upstream, and the review question is whether the caps hold that promise.
@@ -42,28 +48,77 @@ emitted and drift-gated.
 
 ## The numbers
 
-**Measured 2026-08-10 against the live upstream**, not the fixture:
+**Measured 2026-08-10 against the live upstream**, and then **re-measured after the first attempt was wrong
+by 5×** — which is worth leaving in, because the error was a method error and the method is the only part of
+a measurement worth reviewing.
+
+### One lookup, and where its time goes
 
 | | |
 |---|---|
-| `rt.data.gov.hk` Citybus ETA response headers | `cache-control: max-age=45`, `x-cache: Hit from cloudfront`, `age: 31` |
-| one call | ~0.37 s |
-| real Citybus route sizes (distinct poles) | 788: **13** · 1: **18** · 5B: **29** · 91: **33** · 962: **36** · E22: **41** |
-| **a full E22 round — 41 calls, 6 at a time as the runtime allows** | **2.56 s** |
+| find the address (DNS) | 0.072 s |
+| open the connection (TCP) | 0.113 s cumulative |
+| secure it (TLS) | 0.161 s cumulative |
+| **total, cold** | **0.215 s** |
+| **the same lookup again on the open connection** | **0.045 s** |
 
-Two things follow, and they are the argument:
+So **dialling costs ~0.16 s and asking costs ~0.045 s.** `rt.data.gov.hk` speaks **HTTP/2**, so many
+requests share one connection: measured, 41 requests opened **one** TCP connection whether the client allowed
+6 in flight or 41.
 
-1. **The publisher is asking to be cached for 45 s and has a CDN in front.** Our own `coalesce` TTL is 30 s
-   — *tighter* than they ask for. A repeat call is absorbed twice over before it reaches an origin.
-2. **A route round is cheap where a place round is not.** The expensive term in a shard's round is CTB
-   `(pole, routeNo)` pairs, because Citybus has no per-*stop* board. A **place** needs every route at every
-   pole (the shipped dataset's heaviest costs 32 calls at `DEFAULT_CTB_BUDGET`); a **route** needs exactly
-   one routeNo per pole. So the whole of E22 is 41 calls where twelve Central-class places are 785.
+### The whole route, three ways
+
+| method | 41 poles of Citybus E22 |
+|---|---|
+| a fresh connection per lookup, in lockstep groups of six *(the first attempt — **wrong**)* | 2.56–3.47 s |
+| **6 in flight, one reused connection — the model that matches Workers** | **0.46 s** |
+| 41 in flight *(not available to us — see below)* | 0.27 s |
+
+**The first row measured the method, not the API.** It redialled 41 times, paying ~0.16 s of handshake each
+time, and made every group of six wait for its slowest member. Neither is what a Worker does.
+
+### Why the middle row is the honest one
+
+Checked against Cloudflare's own docs rather than remembered:
+
+- The limit is *"up to six connections simultaneously waiting for response headers"*, **per invocation**, and a
+  seventh **queues** rather than failing — so the fan-out completes, it just paces itself.
+- **It counts `fetch()` calls in flight, not sockets.** The HTTP/2 finding above makes the transport cheap and
+  buys **no** extra concurrency; six in flight is six in flight however few pipes they share. (This was briefly
+  believed to be an escape from the limit. It is not.)
+- Since **2026-04-09** a slot frees when *headers* arrive rather than when the body finishes reading. For ETA
+  JSON that is nearly the same, so it changes nothing here beyond making older estimates upper bounds.
+
+`curl --parallel-max 6` holds six in flight, which is why the middle row models a Worker well: 41 ÷ 6 ×
+0.045 s ≈ 0.31 s against 0.46 s measured.
+
+### Cost against the cadence
 
 | | work per round | against the 45 s cadence floor |
 |---|---|---|
-| a shared shard at its cap today (48 place-targets, budget 12) | 785 calls ≈ 39 s *(measured, `eta-hub.ts`)* | **87%** — its own docblock: *"not a comfortable margin"* |
-| **the longest real Citybus route** | **41 calls ≈ 2.56 s** *(measured here)* | **5.7%** |
+| a shared shard at its cap today (48 place-targets, budget 12) | 785 calls ≈ 39 s *(ceiling, `eta-hub.ts`)* | **87%** — its own docblock: *"not a comfortable margin"* |
+| **the longest real Citybus route** | **41 calls ≈ 0.5 s** *(measured here)* | **~1%** |
+
+Real Citybus route sizes, for scale: 788: **13** · 1: **18** · 5B: **29** · 91: **33** · 962: **36** ·
+E22: **41** distinct poles.
+
+The reason a route round is so much cheaper than a place round is structural, not incidental: the expensive
+term is CTB `(pole, routeNo)` pairs, because Citybus has no per-*stop* board. A **place** needs every route at
+every pole (the shipped dataset's heaviest costs 32 calls); a **route** needs exactly one routeNo per pole.
+
+### And a correction to the caching claim
+
+An earlier draft of this document said the upstream's `cache-control: max-age=45` and its CloudFront hit mean
+*"a repeat call is absorbed twice over before it reaches an origin."* **That is wrong and is the sort of
+comfort worth deleting rather than softening.** The `x-cache: Hit from cloudfront` is *their* cache, on the far
+side of the connection: the Worker still opens a connection and still waits for headers, and the hit only makes
+the wait shorter. For **Cloudflare's** cache to intercept, the response would have to be cacheable to it — and
+Cloudflare does not cache JSON by default, and the ETA path never sets `cacheEverything` (only the tile path
+does). So there is exactly one layer of sharing on our side and it is ours: `coalesce` at a 30 s TTL, plus the
+one round per route that this proposal is for.
+
+What the upstream's 45 s *does* legitimately tell us is that **asking more often than that buys nothing** — the
+answer would be identical — which is the argument for the cadence floor rather than for the load being free.
 
 ## The design
 
@@ -107,13 +162,21 @@ So the whole feature is bounded to Citybus and GMB, which is also the only place
 
 | constant | proposed | why |
 |---|---|---|
-| `LIVE_ROUTE_MAX_POLES` | **64** | Above the longest real route measured (41) with headroom, and a hard stop so a pathological dataset row cannot mint a 300-call round. Excess poles are **dropped and named** in the `status` frame, the treatment `eta-hub.ts` already argues for over refusing a whole connection. |
+| `LIVE_ROUTE_MAX_POLES` | **64** | Above the longest real route measured (41) with headroom, and a hard stop so a pathological dataset row cannot mint a 300-call round. At 64 poles a round is ~0.8 s — still under 2% of the cadence — so this cap is guarding the *dataset*, not the clock. Excess poles are **dropped and named** in the `status` frame, the treatment `eta-hub.ts` already argues for over refusing a whole connection. |
 | `LIVE_ROUTE_MAX_SOCKETS` | **64** | Unchanged from `LIVE_MAX_SOCKETS_PER_SHARD`. Sockets on a route object cost nothing extra: they all want the same round. |
-| cadence | **unchanged** (45 s floor / 60 s ceiling) | 2.56 s of work inside 45 s. The ramp stays as-is. |
+| cadence | **unchanged** (45 s floor / 60 s ceiling) | ~0.5 s of work inside 45 s, and the upstream refreshes only every 45 s anyway, so a faster cadence would re-read identical answers. The ramp stays as-is. |
 | `LIVE_CTB_BUDGET` | **not applied here** | It bounds *routes per pole*, which on a route watch is always one. Applying it would silently truncate a 36-stop route to 12 stops — the failure mode this proposal exists to remove. |
 
-**The number a reviewer should push on** is `LIVE_ROUTE_MAX_POLES = 64`: 64 poles is a 4 s round, still 9% of
-the cadence, but it is the one place a bad dataset row turns into upstream load.
+**The number a reviewer should push on** is `LIVE_ROUTE_MAX_POLES = 64`: it is the one place a bad dataset row
+turns into upstream load, and the clock is no longer the thing arguing for it.
+
+**And one documented hole, named rather than filled.** Whether the six-in-flight limit applies *per Durable
+Object instance* — so that sharding a route's poles across objects would genuinely raise throughput — **is
+stated nowhere in Cloudflare's docs**. Two sentences point opposite ways: the Durable Object limits row is
+labelled per *request* and an alarm is its own invocation, but the runtime is documented as measuring from
+"the top-level request" and Service bindings are called out as *sharing* the limit while DO stubs are not
+mentioned at all. Nothing here depends on it. If it is ever needed, it is settleable only on **deployed**
+Cloudflare, because local dev does not enforce the limit.
 
 ### 5. Aggregate cost, stated plainly
 

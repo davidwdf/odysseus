@@ -292,8 +292,15 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Context:** Adding Citybus to nearby/stop/route needs a CTB stop index (coords + route-stops). The
   official CTB ETA API has **no bulk stop or route-stop endpoint** (verified: `/stop` and `/route-stop`
   both 422 without an id/route) — building the index from it means ~6,800 calls (1 route list + ~806
-  route-stop + ~6,000 per-stop). That's infeasible at request time *and* can't run in a Worker cron (the
-  ~1,000-subrequest cap is why hk-bus-crawling runs as an external GitHub Action).
+  route-stop + ~6,000 per-stop). That's infeasible at request time *and* can't run in a Worker cron — the
+  subrequest cap is why hk-bus-crawling runs as an external GitHub Action.
+  **The number in this line was wrong and is corrected here (2026-08-10), checked against Cloudflare's
+  own docs:** it said *"the ~1,000-subrequest cap"*. The real per-invocation caps are **50 on Free and
+  10,000 on Paid** (raisable via wrangler's `limits.subrequests`); 1,000 is a different limit — Free's cap on
+  subrequests to *internal services*. So the conclusion survives on Free and is **not** obvious on Paid,
+  where 6,800 calls is inside 10,000; what actually keeps the crawl outside the Worker is wall-clock and the
+  6-connections-in-flight ceiling, not the subrequest count. Found while checking a figure in
+  `proposals/05`, which had inherited the same habit of quoting a platform limit from memory.
 - **Decision:** Source the static layer for **both KMB and CTB** from the **hkbus/hk-bus-crawling**
   consolidated dataset (`hkbus.github.io/hk-bus-crawling/routeFareList.min.json`, ~8 MB, daily-updated) in a
   **single fetch**, memoized per isolate (`apps/edge/src/static-index.ts`), parsed into a multi-operator
