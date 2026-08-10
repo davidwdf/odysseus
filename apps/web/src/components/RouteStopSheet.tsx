@@ -117,7 +117,12 @@ export function RouteStopSheet({
             answered, and the answer was nothing. `docs/07` still carries a 🔴 for exactly this arm being
             reached by a paused fetch on Nearby.
           */}
-          <div className="flex min-h-9 items-baseline gap-3 pb-1">
+          {/* `px-3` is **`SheetAction`'s own padding**, not a number chosen to look right. The body is
+              `px-2` and every action inside it is `px-3`, which puts their icons — and the header's, and its
+              route chip — on a 20 px line; a readout with no padding of its own sat at 8 px and broke the
+              one vertical edge the sheet has. Same token as the rows above and below it, so it cannot drift
+              from them. */}
+          <div className="flex min-h-9 items-baseline gap-3 px-3 pb-1">
             {loading ? (
               <span className="h-5 w-24 animate-pulse rounded-sm bg-surface-2" />
             ) : incomplete ? (
