@@ -1745,6 +1745,40 @@ than any in its own row.
 
 ## 🔜 Next steps (priority order)
 
+> **New, 2026-08-11 — a Citybus or GMB route shows live times, and the whole of `proposals/05` is done
+> except its default engine.** ADRs **116–120**. The oldest 🔴 in `docs/07` is closed: those operators publish
+> no bulk route-eta feed (ADR-021), so their route screens read as *"no bus due anywhere"* for two waves —
+> ADR-114 made them say why, ADR-115 put one stop's times in the sheet a rider taps, and this row gives them
+> **every** stop's times.
+>
+> · **`/v1/live?route=<id>`** lands on one Durable Object per route (`route-<id>`), which resolves the route's
+>   poles server-side from the same document the schematic draws. Every rider on a route therefore shares one
+>   round — the property the whole cost argument rests on, and it lives in which object the URL selects.
+> · **The round is 41 calls, not 800.** Measuring the first one found that a narrowed read narrowed the
+>   *answers* and never the *questions*: an 18-pole round made **350 upstream calls**, 21 s of queued
+>   fetching, every 45 s, against a free feed. `boardsFor` (ADR-117) fixed it from the route id's own grammar,
+>   and every narrowed read got faster with it — ADR-115's sheet tap used to cost a whole interchange.
+> · **It polls on the operator's clock** (ADR-118), which the upstream publishes at a fixed second of the
+>   minute, out of phase with the CDN's 45 s TTL. The counter that made that testable also closed `docs/07`'s
+>   filed `live-rounds` connect race, and *proved* the fix by making the race deterministic.
+> · **The screen merges at render, not into the query cache** (ADR-120) — the opposite of its two sibling
+>   hooks, because refetching a Citybus route brings `eta: null` back and would blank every time on screen.
+> · **A row says "we could not ask"**, because a live round asks each pole separately and `liveArrivals`
+>   cannot say "38 of 41 answered" without being wrong about most of the route.
+>
+> **Verified in a browser on the real feed:** Citybus **N171 outbound** at 00:20 HK — 31 rows of live times,
+> notice gone, one socket. Two defects came out of that walk and **neither was reachable from the layer that
+> caused it**: the socket selector copied context fields by hand and silently dropped `route`, so the watch
+> connected to nothing (invisible to every unit test, which construct the transport directly); and the hook's
+> first version returned an empty *session* from mount, which to a merge means *"nothing is due anywhere"*,
+> so every KMB route rendered blank (the conformance suite caught that one).
+>
+> **What is left of `proposals/05`: the default engine.** `poll` still is one, so this ships as a per-rider
+> fan-out — correct, and without the shared round. Turning `VITE_LIVE_TRANSPORT` / `EXPO_PUBLIC_LIVE_TRANSPORT`
+> to `socket` by default is a decision, not a task: it wants WP0-5's deploy story and a look at what a
+> Durable Object per watched route costs in production.
+
+
 > **New, 2026-08-03 — the renderer decision, and it changes what Phase 3 is.**
 > [**ADR-075**](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)
 > supersedes ADR-002: **web becomes plain React**, iOS and Android become **hand-written** and
