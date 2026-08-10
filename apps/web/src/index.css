@@ -458,8 +458,20 @@
     transform: translateY(0);
   }
 }
+/*
+  `backwards`, not `both` — and the difference is a defect rather than a preference.
+
+  `both` leaves the finished animation applying its `to` keyframe for the life of the mount, and that
+  keyframe is `transform: translateY(0)` — which computes to `matrix(1, 0, 0, 1, 0, 0)`, not `none`. A
+  transformed element is a **stacking context**, so after any direction flip every row trapped the saved-stop
+  star's `z-10` inside itself and a passing bus painted over a rider's favourite: exactly what ADR-042 says
+  must not happen, and what `apps/mobile` draws its stars in a later overlay pass to prevent.
+
+  `backwards` still applies the `from` keyframe through each row's `animationDelay`, which is the whole of
+  the cascade's mechanism, and its end state is the row's resting style — so nothing else changes.
+*/
 .row-rise {
-  animation: row-rise 300ms cubic-bezier(0.5, 1, 0.89, 1) both;
+  animation: row-rise 300ms cubic-bezier(0.5, 1, 0.89, 1) backwards;
 }
 @media (prefers-reduced-motion: reduce) {
   .row-rise,

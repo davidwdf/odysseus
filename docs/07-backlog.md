@@ -341,42 +341,34 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 
 ## Route detail — stop measuring the rail, position the tokens in CSS
 
-The bus tokens are an absolutely positioned overlay whose `top` comes from measured row offsets, kept fresh
-by a `ResizeObserver`. ADR-108 fixed that machinery after it silently stopped re-measuring altogether, but
-the machinery itself is the liability: any future reflow this fails to notice puts a bus somewhere it is
-not.
+- [x] ✅ **Done** ([ADR-110](./08-decision-log.md#adr-110--the-rails-resting-place-is-css-only-its-travel-is-measured)).
+      The tokens were an absolutely positioned overlay whose `top` came from measured row offsets kept fresh
+      by a `ResizeObserver`; ADR-108 fixed that machinery twice and the machinery itself was the liability.
+      A token is a positioned sibling of its own row's button now — `top: 13px` at a node,
+      `calc(50% + 13px)` on the segment into the next one — so nothing is measured and nothing can go stale.
+      The travel a re-parent costs is `element.animate()` over a delta read at the instant of the move.
 
-**It can be deleted.** A token could be a positioned child of the row it belongs to — `top: 13px`
-(`NODE_CENTRE − TOKEN_HALF`) for a bus *at* a node, and `calc(50% + 13px)` for one on the segment leading
-into it, since the midpoint between two adjacent nodes is exactly half a row below the first. Pure CSS, no
-measurement, no observer, and it cannot drift by construction.
+      **Three things this row's own description had wrong**, each found by doing it:
+      · the token cannot be a *child* of the row — a labelled `role="img"` inside a `<button>` is folded into
+        that button's accessible name, and no suite here can see it;
+      · *"stays inside its row's box for any row taller than 50 px"* is the threshold for the token's
+        **centre**; its box needs 74 px, and `min-h-16` gives 64, so a segment token overhangs by 5 px and
+        needs a `z-index` to keep the next row's rail line from slicing it;
+      · `railBusFor` is called `railBus`.
 
-`railBusFor` only ever emits `from: marker.toIndex - 1`, so a segment is always between **adjacent** nodes
-and its midpoint is exactly half a row below the first — which is what makes the second expression possible.
-The token also stays inside its row's box for any row taller than 50 px, and `min-h-16` guarantees 64, so
-nothing needs to overflow.
+      It also closed a live defect next door: `.row-rise` used `animation-fill-mode: both`, which leaves a
+      finished row holding `transform: matrix(1,0,0,1,0,0)` — a stacking context — so after any direction
+      flip the saved-stop star's `z-10` was trapped inside its row and a passing bus painted over a rider's
+      favourite.
 
-**It does not change the projection**, which was this entry's first claim and was wrong. Both conformance
-suites collect the tokens separately from the text walk — `querySelectorAll('[role="img"][aria-label]')`,
-appended after the body text — and `RouteDetailView.buses` is in route order, so interleaving them between
-the rows leaves the projected sequence byte-identical. **No spec edit, no `apps/mobile` change**; the RN
-screen keeps its overlay pass, which it needs anyway so the saved-stop stars paint above the tokens.
-
-**What it actually costs is the travel animation.** A token that moves from one row to another changes
-parent, and no CSS transition survives a DOM move — the bus would teleport where today it slides for 500 ms
-(ADR-030: *a bus that moved is a bus that moved*). So the slide has to be re-implemented as FLIP: record the
-rect either side of the commit and `element.animate()` the delta. That reintroduces a measurement, but of a
-different kind and a much better failure mode — a momentary pair of rects taken at the instant of a move,
-where a wrong answer is one half-second animation that self-corrects, against today's standing registry
-where a wrong answer is a bus in the wrong place forever.
-
-View Transitions would also survive the DOM move and were considered instead. Rejected: a same-document
-transition snapshots and freezes the page for its duration, and this screen re-renders on a 30 s refetch
-cadence, so it would stutter the whole page every round — and Firefox has none (ADR-101).
-
-**Estimate: about half a day.** The CSS and the deletions are an hour or two; FLIP and its test are the rest,
-and are where the risk sits. The correctness win is structural: the resting position stops being computed
-at all.
+      **And a third defect, older than either renderer**
+      ([ADR-111](./08-decision-log.md#adr-111--an-ordinal-is-a-slot-not-a-bus-the-rail-gains-an-entrance-and-an-exit)):
+      the ordinal `view.buses` gives a token is a *slot*, not a vehicle, so when the lead bus reached the
+      terminus every bus behind it inherited an ordinal and slid the length of the schematic the wrong way —
+      1120 px on a 17-stop rail, and the same in the overlay this replaced. Tokens are matched by their place
+      along the route now, under the rule that a bus travels forward, and what the rule leaves unmatched is
+      exactly the two events worth drawing: a bus **entering** the rail and one **leaving** it. Both pop.
+      `apps/mobile` still has the re-index defect and is not being fixed — it retires at WP6-8.
 
 ## WP6-8 blockers — the parity audit's findings (2026-08-08)
 
@@ -457,10 +449,15 @@ at all.
       WCAG AA. A token change, not a redesign.
 - [ ] 🟡 **`apps/web` carries the document scroll position into a pushed screen.** react-router does no
       scroll management and nothing in the shell adds any; the RN app's per-screen scrollers do it
-      implicitly. Back *does* restore correctly, so this is one direction only.
-- [ ] 🟡 **Route detail's bus tokens keep stale row offsets** when a refetch redistributes arrivals lines
-      without changing the list's overall height — the `ResizeObserver` added in WP6-6c's review pass
-      watches the wrong quantity.
+      implicitly. Back *does* restore correctly, so this is one direction only. **This one genuinely is
+      `<ScrollRestoration>`'s job** — unlike the Search item below, the quantity is `window.scrollY` — and it
+      is deliberately not bundled with ADR-109 because it changes behaviour on all eight screens at once,
+      including Route detail's `scrollIntoView` reveal and both collapsing headers' sentinels.
+- [x] ✅ **Route detail's bus tokens keep stale row offsets** — **fixed twice, and the second one removed the
+      mechanism**: ADR-108 made the observer watch every row's border box, and
+      [ADR-110](./08-decision-log.md#adr-110--the-rails-resting-place-is-css-only-its-travel-is-measured)
+      deleted the observer, the offset registry and the arithmetic outright. A token is positioned against
+      its own row in CSS, so a refetch that redistributes arrivals lines moves the row and its bus together.
 
 **Found while comparing, broken on BOTH renderers** (so retiring `apps/mobile` neither causes nor fixes
 them; they belong to the hardening list above rather than to WP6-8):
@@ -481,13 +478,31 @@ Pull-to-refresh, the collapsing header's tap-to-top, the keypad's collapse-on-sc
 the map's label placement were all **claimed as gaps and refuted** — each is declared idiom with the choice
 written down.
 
-- [ ] 🟡 **Search's results list loses its scroll offset on back.** The query, the mode and the chips are
-      restored from the URL since ADR-102, and the offset is not — react-router unmounts the screen where
-      the RN stack keeps it, and no scroll restoration is wired. A rider who scrolls a long route list,
-      opens one and comes back lands at the top. `ScrollRestoration` is available now the shell is a data
-      router (ADR-101), which is the obvious fix.
+- [x] ✅ **Search's results list loses its scroll offset on back** — **fixed**
+      ([ADR-109](./08-decision-log.md#adr-109--scrollrestoration-restores-the-window-and-the-list-that-loses-its-place-is-not-the-window)).
+      The query, the mode and the chips had been restored from the URL since ADR-102 and the offset was not,
+      so a rider who scrolled a long route list, opened one and came back landed at the top.
+      **This entry named the wrong fix, and the correction is the useful part:** it said `ScrollRestoration`
+      was the obvious one now the shell is a data router (ADR-101) — but that component restores
+      `window.scrollY`, and Search does not scroll the window. It is `h-dvh` with the results in an inner
+      `overflow-y-auto` box, because that is what pins the keypad, so its document offset is permanently 0
+      and wiring it would have restored nothing while looking done. `useScrollRestoration` stores an
+      element's offset against `useLocation().key` — the history entry rather than the URL — in
+      `sessionStorage`.
 
 ## Infra / hardening
+- [ ] 🟠 **`apps/edge`'s KV/R2 endpoint sweep times out on a cold CI runner, and a flaky gate is a gate
+      nobody reads.** `test/dataset-kv.test.ts > a full endpoint sweep against a seeded build` failed on
+      2026-08-09 with *"Test timed out in 5000ms"* — vitest's default — on a run with **0 cached tasks** and
+      a 38 s cold import, and passed on an immediate re-run of the same commit with nothing changed. It is
+      one `it` that walks every endpoint against a seeded build inside workerd, so it is the slowest
+      assertion in the repo and the one nearest the default limit; locally the whole file takes ~17 s with a
+      warm cache and never trips.
+      The fix is a `timeout` on that test (or on the edge project) chosen from what it actually costs cold,
+      **not** a global bump — the point of a 5 s default is that a test which suddenly needs 30 s has
+      usually broken rather than slowed. Until then a red `gates (clean checkout)` on this file alone, with
+      a *timeout* rather than an assertion, is very likely this and not the change under review: re-run it
+      once before reading further.
 - [ ] 🔴 **Two tabs of the PWA silently overwrite each other's preferences — including a rider's
       favourites.** Found by WP6-7 while declaring Settings' `stale` state
       ([ADR-096](./08-decision-log.md#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them)

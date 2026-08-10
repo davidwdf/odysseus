@@ -187,10 +187,83 @@
 > confirmed it after patching `window.ResizeObserver` and forcing a *client-side* remount so the patch
 > survived.
 >
+> **Search's results list keeps its place (part 11)**
+> ([ADR-109](./08-decision-log.md#adr-109--scrollrestoration-restores-the-window-and-the-list-that-loses-its-place-is-not-the-window)) —
+> the last open item from the owner's review of Search. ADR-102 restored the query, the mode and the chips
+> from the URL and left the *offset* behind, so a rider who scrolled forty routes down, opened one and pressed
+> Back landed at the top.
+> 🟠 **`docs/07` named the fix and named the wrong one.** It said `<ScrollRestoration>` was *"the obvious fix"*
+> now the shell is a data router — but that component restores `window.scrollY`, and Search does not scroll
+> the window: it is `h-dvh` with the results in an inner `overflow-y-auto` box, **because that is what pins
+> the keypad**. Its document offset is permanently 0, so wiring it would have restored nothing, convincingly —
+> green build, no visible change, item ticked. *When a backlog entry names the fix, check the subject before
+> the mechanism.*
+> 🟢 **`useScrollRestoration` stores the offset against `useLocation().key`** — the history *entry*, not the
+> URL — in `sessionStorage`, saved in a layout-effect cleanup (which runs while the element is still attached
+> and therefore still has a `scrollTop`) and on `pagehide` for the two exits React never sees. It gets the
+> ADR-102 interaction free: a keystroke's `replace: true` mints a new key, so a changed query is an entry that
+> is owed nothing and the list is left alone. A restore **waits** for a render in which the element is
+> genuinely scrollable and then happens once; a mount that never gets there must not write its own 0 over the
+> saved value, which is also what makes it safe under `<StrictMode>`.
+> ⚪ **Nine tests, each watched failing on its own injected defect** — including keying on the path instead of
+> the entry, and dropping the never-applied guard. jsdom lays nothing out, so the suite declares a layout by
+> stubbing two accessors and uses that stub as its control; the router is `createMemoryRouter` and
+> `navigate(-1)` is a real POP, because the whole claim rests on react-router handing back the same key.
+>
+> **The rail stops being measured (part 12)**
+> ([ADR-110](./08-decision-log.md#adr-110--the-rails-resting-place-is-css-only-its-travel-is-measured)) —
+> the deeper fix ADR-108 pointed at. A bus token is a positioned sibling of its own row now, at `top: 13px`
+> on a node and `calc(50% + 13px)` on the segment into the next one, so the registry, the `ResizeObserver`,
+> the layout effect and the arithmetic are all deleted. **Measured: a token's centre sits on its node to
+> 0.000 px, and a travel lands to 0.000 px.**
+> 🟢 **The travel is FLIP**, because a token that changes row is a *different element* and no CSS transition
+> survives that. It is still a measurement, and that is the trade: two numbers read at the instant of a move,
+> where a wrong answer is half a second of wrong animation, against a standing registry where a wrong answer
+> was a bus in the wrong place for the life of the screen.
+> 🔴 **A nested token would have polluted every row's accessible name** — a labelled `role="img"` inside a
+> `<button>` is folded into that button's name, so *"Nathan Road · 3 min"* becomes *"Nathan Road · 3 min ·
+> Bus approaching Nathan Road"*. The projection reads text nodes and token labels in two separate passes, so
+> **no suite here could see it**; the token is the row button's sibling under a `relative` wrapper.
+> 🔴 **`.row-rise` used `animation-fill-mode: both`**, which leaves a finished row holding a transform matrix
+> rather than `none` — a stacking context, which trapped the saved-stop star's `z-10` inside its row. So
+> after any direction flip a passing bus painted over a rider's favourite, which is exactly what ADR-042
+> forbids. `backwards` fixes it: 34 of 34 rows cascade, 0 left holding a transform.
+> ⚠️ **`keepPreviousData` means the URL changes one commit before the buses do**, so the FLIP's reset is keyed
+> on the *payload's* route id. Keyed on `:id` it fires too early and the commit that swaps the directions
+> then slides the k-th outbound bus into the k-th inbound one's place. Found in a browser: one token animated
+> across a 1A flip before, none after.
+> ⚪ **The hidden tab was useful for once.** `document.timeline.currentTime` is 0 there, so a travel sits
+> frozen at its first keyframe — which is what makes it *inspectable*: the animation read back
+> `translateY(−104px)` against a layout delta of exactly −104. What it cannot show is the feel, and nobody
+> has yet watched this move.
+>
+> **A bus enters and leaves the rail (part 13)**
+> ([ADR-111](./08-decision-log.md#adr-111--an-ordinal-is-a-slot-not-a-bus-the-rail-gains-an-entrance-and-an-exit)) —
+> the owner watched part 12's travel in the lab and reported that a bus starting the route slides all the way
+> up from the bottom, and should pop in at the first stop and pop out after the last.
+> 🔴 **They were describing a defect older than either renderer.** An ordinal is a **slot** in `view.buses`,
+> not a vehicle: when the lead bus reaches the terminus, every bus behind it shifts up one ordinal, so the
+> k-th token is a different bus several stops back — and matched by ordinal it travels the length of the
+> schematic the wrong way. **Measured at 1120 px on a 17-stop rail**, and the `transition-[top]` overlay did
+> the same for two waves.
+> 🟢 **A token carries its place along the route as one ordered number**, and tokens are matched by *that*
+> under one physical rule: a bus travels forward, give or take the one node an ETA revision can nudge it
+> back. What the rule leaves unmatched **is** the pair of events — a bus that entered the rail and one that
+> left it — so nothing extra has to detect them.
+> 🟢 **Both are a pop**: 320 ms growing in with the only overshoot easing in the app, 220 ms shrinking away
+> easing *in* so a departed bus accelerates off a rail it has left. A deliberate divergence — `apps/mobile`
+> uses a plain `FadeIn`/`FadeOut` — recorded rather than matched, and not back-ported per ADR-100.
+> The exit is drawn on a **stripped clone** in a layer React renders empty, because the element that carried
+> the bus is usually still on screen carrying the *next* one.
+> ⚪ **The lab has now paid for itself twice**, and both times for the same reason: every assertion and every
+> measurement asked whether the motion was *correct*, and none asked whether it fired on the right
+> **occasions**.
+>
 > **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
-> Search's results-list scroll offset, positioning the rail tokens in pure CSS so the measurement can be
-> deleted outright, and the RN `apps/mobile` back-port question — which ADR-100's odometer note answers with
-> *no*, since that renderer retires at WP6-8.
+> the *document* scroll position that a pushed screen inherits (which genuinely **is**
+> `<ScrollRestoration>`'s job, and is left alone because it changes all eight screens at once), and the RN
+> `apps/mobile` back-port question — which ADR-100's odometer note answers with *no*, since that renderer
+> retires at WP6-8.
 >
 > Previously — snapshot **2026-08-07**. **WP6-7 is done** — Settings, About the data and the FAQ are ported, and
 > **`apps/web` has zero unported destinations**: `Placeholder.tsx` and `ShellPreferences.tsx` are deleted, no

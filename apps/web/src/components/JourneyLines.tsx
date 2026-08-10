@@ -1,5 +1,6 @@
 import { ArrowDown, RotateCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { prefersReducedMotion } from '../lib/motion'
 
 /**
  * The route header's from/to lines, and **the lyrics-style swap they run on a direction flip** — the DOM
@@ -163,13 +164,3 @@ const BOX_H = DEST_TOP + DEST_LINE
 const GLYPH_SIZE = 14
 /** `apps/mobile`'s swap duration, value for value. */
 const SWAP_MS = 380
-
-/**
- * Whether the rider has asked for less motion. Guarded like `lib/appearance.ts`'s dark-mode query, and for
- * the same two reasons: `matchMedia` is absent in some embedded WebViews and in jsdom, where every
- * conformance suite runs — and there, *not* animating is the safe answer.
- */
-function prefersReducedMotion(): boolean {
-  if (typeof window.matchMedia !== 'function') return true
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}

@@ -9,7 +9,7 @@ import {
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat, Star } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
@@ -20,6 +20,7 @@ import { RouteFactSheet } from '../components/RouteFactSheet'
 import { RouteStopRow } from '../components/RouteStopRow'
 import { RouteStopSheet } from '../components/RouteStopSheet'
 import { useClientPolicy } from '../hooks/useClientPolicy'
+import { useRailFlip } from '../hooks/useRailFlip'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
@@ -144,99 +145,63 @@ export function RouteDetail() {
   }, [journey])
 
   /**
-   * Where each row sits, so the rail overlay can put a bus at a node — **geometry, and the one measurement
-   * this screen makes.**
+   * The row elements, so the reveal below can scroll to the boarding one. **That is all this screen keeps
+   * now, and it is not a measurement** — it hands the element to `scrollIntoView`.
    *
-   * A token is absolutely positioned over the list because a bus rides the rail *between* rows as often as on
-   * one, which no flow layout expresses. Which node it is at is the kernel's (`RailBus`); turning that into a
-   * `top` is this renderer's, and a 44 px DOM gutter and a 52 px RN rail arrive at different numbers from the
-   * same answer — which is the whole point of the model carrying an index rather than a pixel (ADR-093).
+   * Until ADR-110 there was a second registry here: every row's `top`, taken with `getBoundingClientRect`
+   * and kept fresh by a `ResizeObserver`, so an absolutely positioned overlay could put a bus at a node. It
+   * is gone, along with the observer, the layout effect, the equality guard and two constants. Where a bus
+   * sits is now two constant CSS expressions on a token that lives *inside* its own row (see
+   * `RailBusToken`), which cannot go stale for the reason a measurement always can: there is nothing left to
+   * refresh. That registry put a bus in the wrong place twice, once for a whole wave (ADR-108).
    */
   const rows = useRef(new Map<number, HTMLElement>())
-  const [tops, setTops] = useState<Map<number, number>>(new Map())
-  /**
-   * One observer for every row, held in a ref so `registerRow` can attach each row as it mounts.
-   *
-   * **Watching the list alone was the bug** — see the note on the effect below.
-   */
-  const rowSizes = useRef<ResizeObserver | null>(null)
   const registerRow = useCallback((index: number, el: HTMLElement | null) => {
-    const previous = rows.current.get(index)
-    if (previous !== undefined && previous !== el) rowSizes.current?.unobserve(previous)
-    if (el) {
-      rows.current.set(index, el)
-      rowSizes.current?.observe(el, OBSERVE_BORDER_BOX)
-    } else {
-      rows.current.delete(index)
-    }
+    if (el === null) rows.current.delete(index)
+    else rows.current.set(index, el)
   }, [])
   const list = useRef<HTMLDivElement | null>(null)
-  // Measure each row's top relative to the list, and publish only on an actual change — the equality skip is
-  // what lets the observer below drive this without a render loop, the same guard the RN screen's `setTop`
-  // makes at [id].tsx.
-  const measure = useCallback(() => {
-    const container = list.current
-    if (container === null) return
-    const base = container.getBoundingClientRect().top
-    setTops((prev) => {
-      const next = new Map<number, number>()
-      for (const [index, el] of rows.current) {
-        next.set(index, el.getBoundingClientRect().top - base)
-      }
-      let changed = prev.size !== next.size
-      for (const [index, top] of next) if (prev.get(index) !== top) changed = true
-      return changed ? next : prev
-    })
-  }, [])
-  // The synchronous first measure, and a re-measure whenever the row set changes — a flip, a new route, or
-  // the first payload. A layout effect rather than an effect: measuring after paint would draw every token at
-  // the top of the list for one frame.
   const stopCount = view?.stops.length ?? 0
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `measure` is stable; `stopCount` is the row-set change that needs a synchronous re-measure
-  useLayoutEffect(() => {
-    measure()
-  }, [stopCount])
+
   /**
-   * Later height changes re-measure through a `ResizeObserver` — **and this is the bug the owner reported
-   * as the buses being "completely off the targets".** It had two halves, and the second was the serious one.
+   * What a re-parent costs, bought back: a token that moves between rows is a **new element**, and no CSS
+   * transition survives that, so the travel is `element.animate()` over a measured delta (`useRailFlip`) —
+   * as are the pops a bus makes entering and leaving the rail (ADR-111).
    *
-   *  1. It watched **only the list container**. A `ResizeObserver` reports changes to *the element it
-   *     observes*, so that arrangement is blind to any reflow leaving the list's own box the same size —
-   *     a refetch where one stop gains an arrivals line while another loses one shifts every row between
-   *     them and the container never moves. Every row is watched now, which is also the shape the RN screen
-   *     has always had: each of its rows reports through its own `onLayout`.
-   *  2. **It never attached at all.** Its only dependency was `measure`, which is stable — and on first
-   *     mount the query is still loading, so there is no list `<div>`, `list.current` is `null`, and the
-   *     effect returned early. Nothing ever changed to make it run again, so after the initial layout-effect
-   *     measurement *nothing re-measured for the life of the screen*. Any reflow at all left the tokens
-   *     permanently stale. `stopCount` is the dependency that fixes it: it goes 0 → n when the payload
-   *     lands, which is exactly when the list exists.
-   *
-   * The direction is what makes it recognisable in a screenshot: a row that *loses* its arrivals line pulls
-   * everything below it up (`min-h-16` puts that at about 12 px a row), so the tokens are left sitting
-   * **too low** — a bus visibly below its node rather than on it.
-   *
-   * Found by a test rather than in a browser, and only because the browser refused to show it: the
-   * automation tab is always `visibilityState: "hidden"`, a hidden tab produces no frames, and a
-   * `ResizeObserver` in one never delivers a callback — not even its initial one. That looks identical to
-   * "there is no observer", which is what this actually was.
-   *
-   * `ResizeObserver` is absent in jsdom (the guard), where the conformance suite measures nothing anyway.
+   * The reset is keyed on **the payload's** route, not on the URL's — and that distinction is a defect
+   * caught in a browser rather than a nicety. `placeholderData: keepPreviousData` holds the current
+   * direction on screen while the reverse loads (ADR-046), so a flip changes `:id` in one commit and the
+   * buses one or more commits later. Keyed on `id`, the reset fires against the *old* direction's tokens
+   * and has nothing to forget; the commit that actually swaps them then reads a stale record and slides
+   * the k-th outbound bus into the k-th inbound one's place — a journey that never happened. Keyed on the
+   * payload, the reset lands on exactly the commit the buses change in. Measured: one token animated
+   * across a 1A flip before, none after.
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `stopCount` is when the list first exists — see above
-  useEffect(() => {
-    const container = list.current
-    if (container === null || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => measure())
-    rowSizes.current = observer
-    observer.observe(container, OBSERVE_BORDER_BOX)
-    // Rows that mounted before this effect ran — `registerRow` catches every one after it.
-    for (const el of rows.current.values()) observer.observe(el, OBSERVE_BORDER_BOX)
-    return () => {
-      observer.disconnect()
-      rowSizes.current = null
-    }
-  }, [measure, stopCount])
+  const ghosts = useRef<HTMLDivElement | null>(null)
+  useRailFlip(list, ghosts, query.data?.route.id)
+
+  /**
+   * Which row draws which bus — a bus **at** node N belongs to row N, and a bus on the segment *into* node N
+   * belongs to row **N−1**, whose bottom half it rides.
+   *
+   * A grouping rather than a lookup, because both can land on one row: the origin bus is held on node 0
+   * until it is nearly leaving (`ORIGIN_BUS_DEPARTS_WITHIN_SEC`), so a rail can carry a bus on node 0 and
+   * another approaching node 1 at the same time. The order within a row is `view.buses`' own, which is what
+   * keeps the sequence both conformance suites read — the tokens in document order — byte-identical to the
+   * overlay's.
+   */
+  const busesByRow = new Map<number, ReactNode[]>()
+  view?.buses.forEach((bus, ordinal) => {
+    const owner = bus.kind === 'node' ? bus.index : bus.from
+    // Ordinal identity is intentional and unchanged — buses keep order, so the k-th token travels to its new
+    // position (ADR-030). It is carried explicitly now rather than left implicit in a map's index, because a
+    // row renders only its own and `useRailFlip` matches a moved token to its old place by it.
+    // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is the point — see above and ADR-030
+    const token = <RailBusToken key={ordinal} ordinal={ordinal} bus={bus} />
+    const carried = busesByRow.get(owner)
+    if (carried === undefined) busesByRow.set(owner, [token])
+    else carried.push(token)
+  })
 
   // The reveal's one beat: bring the boarding row up, once, as soon as it exists. `scrollIntoView` rather than
   // a computed offset, so the browser honours `scroll-behavior` and the rider's reduced-motion setting.
@@ -350,6 +315,8 @@ export function RouteDetail() {
             </div>
           ) : null}
 
+          {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read
+              against — the only thing left on this element now the overlay is gone. */}
           <div ref={list} className="relative mt-2">
             {view.stops.map((row, index) => (
               <RouteStopRow
@@ -357,22 +324,21 @@ export function RouteDetail() {
                 row={row}
                 index={index}
                 animateIn={swapNonce > 0}
+                tokens={busesByRow.get(index)}
                 onPress={setSheetRow}
                 registerRow={registerRow}
               />
             ))}
-            {/* The buses, over the rail. A token whose row has not reported its offset yet draws nothing
-                rather than at zero — the first paint of a fresh route, and one frame long. */}
-            {view.buses.map((bus, i) => {
-              const to = bus.kind === 'node' ? bus.index : bus.to
-              const near = tops.get(to)
-              const behind = bus.kind === 'node' ? near : tops.get(bus.from)
-              if (near === undefined || behind === undefined) return null
-              const top =
-                bus.kind === 'node' ? near + NODE_CENTRE : (near + behind) / 2 + NODE_CENTRE
-              // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is intentional — buses keep order, so the k-th token transitions to its new position (ADR-030)
-              return <RailBusToken key={i} bus={bus} top={top - TOKEN_HALF} />
-            })}
+            {/* Where a departed bus is drawn out (ADR-111). Rendered **empty and never filled by React**,
+                which is the whole point: `useRailFlip` appends a stripped clone of the token here for the
+                220 ms of its exit, and React does not reconcile the children of an element it renders with
+                none. `aria-hidden` because a bus that has left must not be announced — the clone loses its
+                `role` and `aria-label` too, so the conformance walker cannot see it either. */}
+            <div
+              ref={ghosts}
+              aria-hidden
+              className="pointer-events-none absolute inset-0 overflow-hidden"
+            />
           </div>
 
           {/* The sheet a pill opens — one call, the same one the RN screen makes, handed the **view** rather
@@ -468,17 +434,3 @@ const DAY_LABEL: Record<
   daily: 'dayDaily',
   other: 'dayOther',
 }
-
-/** Where a node's centre falls inside a row, and half a token — both layout, both this renderer's. */
-const NODE_CENTRE = 12 + 26 / 2
-const TOKEN_HALF = 12
-
-/**
- * Watch the **border** box, not the content box.
- *
- * `ResizeObserver` defaults to `content-box`, and what shifts the rows below a row is its *border* box — so
- * a row that gained padding or a border would move every node under it and report nothing. Not a
- * hypothetical: it is the one case that still drifted after the observer was moved onto the rows, caught by
- * re-running the reproduction rather than by assuming the first fix was complete.
- */
-const OBSERVE_BORDER_BOX: ResizeObserverOptions = { box: 'border-box' }
