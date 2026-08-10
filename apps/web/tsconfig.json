@@ -11,5 +11,19 @@
     "tsconfig has always included both extensions, so the two renderers' suites were held to different",
     "standards — in the direction that matters least, since `apps/web` is what survives WP6-8."
   ],
-  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx", "*.ts", "*.config.ts"]
+  "//lab": [
+    "`lab/**` is the dev-only motion page (ADR-112). It is typechecked and linted like everything else —",
+    "a dev tool that has rotted is worse than none — and it is kept out of the production bundle by",
+    "`test/dev-pages.test.mjs` rather than by being excluded from here."
+  ],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "lab/**/*.ts",
+    "lab/**/*.tsx",
+    "*.ts",
+    "*.config.ts"
+  ]
 }

@@ -490,6 +490,20 @@ written down.
       element's offset against `useLocation().key` — the history entry rather than the URL — in
       `sessionStorage`.
 
+## `apps/mobile` as the reference — the inventory ADR-113 owes
+
+- [ ] 🟡 **What the RN app does that `apps/web` never got.** WP6-7b's parity audit asked one question — *what
+      does a rider **lose** if `apps/mobile` retires* — and answered it well. It never asked the other one:
+      *what does the RN app do **better**, or merely differently, that nobody carried over.* The owner has
+      that list in their head and wants to work through it later
+      ([ADR-113](./08-decision-log.md#adr-113--appsmobile-is-not-retired-at-the-end-of-wave-6-it-becomes-the-reference)),
+      which is most of why WP6-8 is deferred.
+      **Do it as a read of `apps/mobile`, not a diff of the two**, and separate three things a diff runs
+      together: a *decision* the RN app made and the web never faced; an *affordance* the web dropped; and a
+      difference that is genuinely platform idiom under ADR-100's line. The first two are candidates, the
+      third is closed. Only worth starting when the owner wants to spend the sitting — an inventory nobody
+      acts on is a document that ages.
+
 ## Infra / hardening
 - [ ] 🟠 **`apps/edge`'s KV/R2 endpoint sweep times out on a cold CI runner, and a flaky gate is a gate
       nobody reads.** `test/dataset-kv.test.ts > a full endpoint sweep against a seeded build` failed on

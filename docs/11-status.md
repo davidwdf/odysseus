@@ -259,7 +259,23 @@
 > measurement asked whether the motion was *correct*, and none asked whether it fired on the right
 > **occasions**.
 >
-> **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
+> **Two standing decisions taken 2026-08-09, and the second changes the plan's order:**
+> · **The motion lab stays, as a dev page**
+>   ([ADR-112](./08-decision-log.md#adr-112--a-dev-page-lives-in-the-app-and-a-gate-keeps-it-out-of-the-app)) —
+>   `apps/web/lab/`, served by `pnpm dev:dom` at `/lab/`, typechecked and linted like everything else and kept
+>   out of production by three separate assertions rather than by anyone remembering. It has found two defects
+>   in two sittings; what it is *for* is not correctness but **occasions** — which events fire a transition —
+>   and a green suite that has only ever seen the settled state is exactly what it catches.
+> · **`apps/mobile` is not being retired** ([ADR-113](./08-decision-log.md#adr-113--appsmobile-is-not-retired-at-the-end-of-wave-6-it-becomes-the-reference)).
+>   **WP6-8 is deferred and WP6-9 is next.** The RN app becomes the *reference*: the owner has UI/UX decisions
+>   in it that were never carried to `apps/web` and wants to work through them later, and keeping it also
+>   declines the risk `proposals/04` already flags — that between WP6-8 and WP6-9 exactly one renderer is
+>   measured against the spec. **The specs still bind it; idiom does not**, so the not-back-ported list
+>   (ADR-100, 107, 108, 110, 111) is now the rule rather than an exception argued each time. The inventory it
+>   owes — *what the RN app does that the web never got*, which is **not** the question the parity audit asked
+>   — is filed in `docs/07`.
+>
+> **The owner's review list is now clear.** What is left is the items filed in `docs/07`:
 > the *document* scroll position that a pushed screen inherits (which genuinely **is**
 > `<ScrollRestoration>`'s job, and is left alone because it changes all eight screens at once), and the RN
 > `apps/mobile` back-port question — which ADR-100's odometer note answers with *no*, since that renderer

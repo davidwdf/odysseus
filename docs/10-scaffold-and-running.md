@@ -54,6 +54,15 @@ pnpm dev:edge                       # Cloudflare Worker on http://localhost:8787
 pnpm dev:mobile                     # Expo (press w = web/PWA, i = iOS, a = Android)
 pnpm dev:web                        # Expo straight to web/PWA
 pnpm dev:dom                        # apps/web — the plain React (Vite) renderer on http://localhost:8082
+`pnpm dev:dom` also serves **`http://localhost:8082/lab/`** — the rail motion lab, a dev-only page
+([ADR-112](./08-decision-log.md#adr-112--a-dev-page-lives-in-the-app-and-a-gate-keeps-it-out-of-the-app)).
+It drives the real `RouteStopRow`, `RailBusToken` and `useRailFlip` from a timer over mock rows, so the one
+thing no test and no headless browser can answer — *does the bus move nicely, and does it move on the right
+occasions?* — can be answered by looking. Buttons for stepping a bus by hand, ragged row heights, a reflow
+above the bus, spawn/despawn and a direction flip. **It is never built:** `vite build`'s only entry is the
+root `index.html`, and two gates say so (`apps/web/test/dev-pages.test.mjs`, and `build:web` over the emitted
+`dist/`).
+
 ```
 `dev:web` and `dev:dom` are **two different apps serving the same screens**, which is the whole of Wave 6:
 `dev:web` is the Expo/`react-native-web` PWA that WP0-5 ships, `dev:dom` is the plain-React app that

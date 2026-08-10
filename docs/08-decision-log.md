@@ -7799,3 +7799,84 @@ pre-existing and unaddressed; it earned its keep here.
      browser measurement, because every one of them asked whether the motion was *correct* and none asked
      whether it fired on the right **occasions**. The page is not committed and cannot be: it sits under
      `info/exclude`, outside `tsconfig`, and `build:web` does not see it.
+
+## ADR-112 — A dev page lives in the app, and a gate keeps it out of the app
+
+- **Status:** **Accepted 2026-08-09** at the owner's request — *"happy to keep it in the repo as a separate
+  section as a dev page. I just don't necessarily want it making its way into production code."*
+  `apps/web/lab/`, gated by `apps/web/test/dev-pages.test.mjs` and by `scripts/build-web.mjs`.
+- **Context.** The rail motion lab was written as throwaway scaffolding: `apps/web/lab/` drives the real
+  `RouteStopRow`, `RailBusToken` and `useRailFlip` from a timer over hand-written rows, with toggles for row
+  raggedness, a second bus, a reflow above the bus, a spawn/despawn and a direction flip. It found **two
+  defects in two sittings** — the reflow that animated a stationary bus (ADR-110 decision 3a) and the
+  re-index that slid a terminating bus 1120 px back up the rail (ADR-111) — both of which eleven tests and
+  four rounds of browser measurement had passed over, because every one of them asked whether the motion was
+  *correct* and none asked whether it fired on the right **occasions**.
+- **Decision: keep it, in the app, and prove it cannot ship.** A page that drives the real components is
+  worth more than a fixture that describes them, and rebuilding it from scratch each time a motion question
+  comes up is how it stops being used. Keeping it *outside* the app was tried first (a local `info/exclude`
+  stanza and its own `tsconfig`) and is the worse trade: it survives one workspace, nothing typechecks it,
+  and it rots unseen.
+- **How it is kept out of production, in three parts, none of which is "we remembered":**
+  1. **It is not a build input.** `vite build`'s default input is the root `index.html` and nothing else, so a
+     second HTML file is served by `vite dev` — which serves files — and never built. That is a default, not
+     a promise: `test/dev-pages.test.mjs` asserts `vite.config.ts` declares no `rollupOptions`, because one
+     `input` array would bundle the lab *and* have the very next build step precache it into the service
+     worker.
+  2. **The app may not import it.** This is the failure that actually happens — a helper written for a dev
+     page looks generally useful, a screen imports it, and a dev page becomes a dependency. The rule is
+     directional: the lab imports `src/` (that is the point) and `src/` may never import the lab.
+  3. **The emitted `dist/` is checked.** `build:web` fails if any artefact's path contains a dev directory,
+     which is the assertion over the *artefact* rather than over the source — the one the other two cannot
+     make. CI does not run a web build, so it is the weakest of the three and deliberately not the only one.
+- **Consequences:**
+  - 🟢 **It is typechecked and linted like everything else.** `lab/**` is in `apps/web/tsconfig.json`'s
+    `include` and biome already covered it. A dev tool that has rotted is worse than no dev tool, because it
+    answers questions with stale confidence.
+  - ⚠️ **The list of dev directories is declared twice** — once in the test and once in `build-web.mjs` — and
+    they are three characters each. Named `DEV_DIRS` in both, with a pointer; not worth a shared module, and
+    if a second dev page appears both must learn its name.
+  - ⚪ **What a lab is *for*, stated for the next one.** Not correctness: the tests and the measurements had
+    correctness covered and still missed both defects. A lab answers *when* — which occasions fire a
+    transition, and what a rider sees on the ones nobody thought to enumerate. Reach for one when the thing
+    under test is motion or timing, and be suspicious of a green suite that has only ever seen the settled
+    state.
+
+## ADR-113 — `apps/mobile` is not retired at the end of Wave 6; it becomes the reference
+
+- **Status:** **Accepted 2026-08-09** at the owner's request, superseding WP6-8's scheduling (not its
+  content): *"I'm happy to keep it around a bit longer while allowing it to fall behind — there were some
+  UI/UX decisions there that were not carried over to `/web` that I might want to follow up on later."*
+- **Context.** WP6-8 is *"retire `apps/mobile`"* and its stated precondition has been met since WP6-7:
+  `apps/web` has all eight screens and no placeholders, and both blockers WP6-7b's parity audit found are
+  closed (ADR-098, ADR-099). The row was next.
+- **Decision: defer it, and give the deferral a job.** `apps/mobile` stays in the repo as the **reference
+  implementation** — the thing a question about *"what did the RN app do here?"* is answered by reading
+  rather than by `git log`. Two independent reasons, and the second is the stronger one:
+  1. The owner has unported UI/UX decisions to revisit. The parity audit answered *what does a rider lose*;
+     it never asked *what does the RN app do better that nobody carried over*, and that list only exists
+     while the app does.
+  2. **`proposals/04` already flagged the risk this removes.** Between WP6-8 and WP6-9 there is exactly one
+     renderer measured against the spec, *"which is weaker than today"*. Every finding of this wave that
+     mattered came from having a second implementation to disagree with — the favourite affordance that did
+     not exist, the token that polluted every row's accessible name, the re-index slide. Deferring WP6-8
+     until WP6-9 lands does not accept that risk, it declines it.
+- **What "allowed to fall behind" means, precisely — because otherwise it means "the gates lie":**
+  - **The specs still bind it.** `apps/mobile` keeps passing its conformance suites and the shared corpus. If
+    a spec changes, both renderers move; that is ADR-075's thesis and it is not what is being relaxed.
+  - **Idiom does not.** No new signature motion, no new affordance and no fix is owed to it. The odometer
+    (ADR-100), the bounce re-centring (ADR-107), the row-observer fix (ADR-108), the CSS rail (ADR-110) and
+    the enter/leave pops (ADR-111) are all already recorded as not back-ported, and that list is now expected
+    to grow rather than being an exception each time.
+  - **A defect it shares is still a defect.** Anything in `docs/07` marked `defect-both` is fixed in the
+    kernel and therefore in both, because the kernel is where it lives.
+- **Consequences:**
+  - 🟢 **The `defect-both` work gets cheaper, and the Route detail `failed` fix is the first case.** Two
+    renderers means a kernel change is checked twice for the cost of writing it once.
+  - 🟠 **The lockfile keeps `expo`, `react-native`, `nativewind`, `reanimated` and `gesture-handler`**, and
+    CI keeps running 167 RN tests. That was WP6-8's whole payoff and it is being spent deliberately.
+  - ⚠️ **The divergence is one-directional and will widen**, so `apps/mobile` is a record of *decisions*, not
+    a second product. Nobody should read a difference as a bug in either app without checking the ADR that
+    made it — which is what ADR-100's table and the specs' `idiom` lists are for.
+  - ⚪ **An inventory is owed, and is filed rather than done:** *what the RN app does that `apps/web` never
+    got*. Distinct from the parity audit, which looked only for loss. In `docs/07`.
