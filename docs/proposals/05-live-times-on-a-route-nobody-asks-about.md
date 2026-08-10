@@ -324,9 +324,20 @@ clocks and two different caps in one object.
    each watched failing on a deliberate revert, and walked over a real socket against live upstream.
    **2b, split out:** wire `nextRouteRoundMs` into the hub's cadence, which needs a rounds-completed counter
    the object does not yet expose (the same counter the filed `live-rounds.test.ts` connect race wants).
-3. `watchRoute` in `packages/api-client`, over the existing transports.
-4. The merge rule in `packages/core`, with corpus rows.
-5. `apps/web` subscribes when `perStopOnly`; the spec state changes with it.
+3. ✅ **Done** — `watchRoute` in `packages/api-client` over both transports, plus the `?route=` contract
+   declaration step 2 had shipped without (ADR-119).
+4. ✅ **Done** — `applyLiveEtasToRouteDetail` in `packages/core`, 11 corpus rows, and
+   `RouteStopRowView.incomplete` so a refused kerb is a row's statement rather than the screen's (ADR-119).
+5. ✅ **Done** — `apps/web` subscribes when the wire says `perStopOnly`, the spec gained `liveRouteTimes`,
+   and both renderers draw the row marker (ADR-120). **Verified in a browser on the real feed**: Citybus
+   N171 outbound, 31 rows of live times, notice gone. Two defects came out of that step and neither was
+   reachable from the layer that caused it — the socket selector dropped the `route` field (found only by
+   opening a browser) and the hook's empty-session default blanked every KMB route (found by the
+   conformance suite).
+
+**What is left:** the default engine. `poll` still is one, so this ships as a per-rider fan-out; the
+shared-round economy — the whole cost argument — needs `VITE_LIVE_TRANSPORT=socket` /
+`EXPO_PUBLIC_LIVE_TRANSPORT=socket` and a decision about turning it on by default.
 
 Steps 1–2 are independently reviewable and land no UI, which is the point of splitting there: the cap
 arithmetic gets checked against a real socket before a screen depends on it. That paid for itself

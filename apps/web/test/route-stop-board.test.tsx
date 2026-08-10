@@ -68,6 +68,11 @@ let etas: () => Promise<EtaReport> = () => Promise.resolve({ etas: [] })
 vi.mock('../src/adapters/datasource', () => ({
   dataSource: {
     getRoute: () => route(),
+    // Declared because the screen now subscribes when the wire says its times are per-stop (ADR-116/119).
+    // A no-op subscription rather than a fake round: this suite is about what the screen *draws* for a given
+    // payload, and a live round would make the payload under test a moving target. The subscription itself is
+    // covered in `route-live-times.test.tsx`.
+    watchRoute: () => ({ unsubscribe: () => {} }),
     getEtas: (stopId: string, routeIds?: string[]) => {
       etaCalls.push({ stopId, ...(routeIds === undefined ? {} : { routeIds }) })
       return etas()

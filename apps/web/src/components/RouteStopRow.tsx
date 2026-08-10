@@ -1,6 +1,8 @@
 import type { EtaUrgency, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
+import { t } from '@nextbus/i18n'
 import { Star } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+import { useLocale } from '../providers/LocaleProvider'
 import { NODE, NODE_CENTRE, NODE_TOP, RAIL_WIDTH } from './RailBusToken'
 import { SlideNumber } from './SlideNumber'
 import { StopName } from './StopName'
@@ -50,6 +52,7 @@ export function RouteStopRow({
   registerRow: (index: number, el: HTMLElement | null) => void
 }) {
   const { here, first, last } = row
+  const locale = useLocale()
   // **Read once, at mount** — `useState`'s initial value is ignored on every later render, which is exactly
   // what the RN row gets from `useSharedValue(animateIn ? 0 : 1)` plus an effect with empty deps.
   //
@@ -170,6 +173,13 @@ export function RouteStopRow({
                 <ArrivalSlot key={arrival.iso} arrival={arrival} first={slot === 0} />
               ))}
             </span>
+          ) : row.incomplete ? (
+            // **Why a row says this and the screen does not.** A live route watch asks each pole separately, so
+            // one kerb can refuse while the other forty answer (ADR-116) — and `liveArrivals`, which is the
+            // screen-level sentence, cannot express that without lying in one direction or the other. The same
+            // words a card uses for the same fact (ADR-077), in the same muted label as every other secondary
+            // line here, because it is an explanation and not an alarm.
+            <span className="mt-1 block text-label text-muted">{t(locale, 'etasUnavailable')}</span>
           ) : null}
         </span>
       </button>

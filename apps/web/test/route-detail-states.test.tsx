@@ -86,6 +86,9 @@ const FIXTURE: Record<string, string> = {
   // other never will be, so giving either its own words later is an edit to one `shows`.
   noLiveBoard: 'a-citybus-route-says-its-times-are-per-stop-rather-than-reading-as-empty',
   arrivalsUnavailable: 'a-round-the-route-feed-did-not-answer-is-not-a-route-with-no-buses',
+  // ADR-116's answer to the first of those two: the same Citybus route, once a live route watch has
+  // answered it. Reached from a payload a round produced, which is what a driver is allowed to do.
+  liveRouteTimes: 'a-live-route-watch-fills-the-rows-a-citybus-route-cannot-fill-itself',
 }
 
 function caseNamed(name: string): CorpusCase {
@@ -121,6 +124,11 @@ let route: () => Promise<RouteDetailPayload> = () => Promise.reject(new Error('n
 vi.mock('../src/adapters/datasource', () => ({
   dataSource: {
     getRoute: () => route(),
+    // Declared because the screen now subscribes when the wire says its times are per-stop (ADR-116/119).
+    // A no-op subscription rather than a fake round: this suite is about what the screen *draws* for a given
+    // payload, and a live round would make the payload under test a moving target. The subscription itself is
+    // covered in `route-live-times.test.tsx`.
+    watchRoute: () => ({ unsubscribe: () => {} }),
     getClientPolicy: () => Promise.resolve(undefined),
   },
 }))
@@ -275,11 +283,11 @@ beforeEach(() => {
 describe('apps/web conforms to Route detail’s published spec, state by state', () => {
   it('has the states the spec declares, and a fixture for each projected one', () => {
     expect(routeDetailSpec.component).toBe('RouteDetail')
-    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(20)
+    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(21)
     const projected = Object.entries(routeDetailSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(18)
+    expect(projected.length).toBeGreaterThanOrEqual(19)
     for (const state of projected) {
       expect(
         FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',

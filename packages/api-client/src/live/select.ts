@@ -71,13 +71,24 @@ export function liveEngineFrom(spelling: string | undefined): LiveEngine {
  *  · **`ctx.clock`, not `Date.now`.** The frames' `at` stamps come from the client's injected clock, so
  *    a test that pinned the clock and got real timestamps anyway would be comparing two engines with
  *    one of them ignoring the pin.
+ *  · **`ctx.route`, when the subscription is a whole route** (ADR-116/119). Forwarded rather than
+ *    defaulted, and this line is here because its absence was a real defect: this factory is where a
+ *    `LiveTransportContext` becomes `SocketTransportDeps`, so a field the context grew and this call did
+ *    not copy is silently dropped — `watchRoute` built its controller, called `open()`, and connected to
+ *    nothing at all. Every unit test passed, because they construct `createSocketTransport` directly with
+ *    the field. Found by opening a Citybus route in a browser, which is the only place the two halves meet.
  *  · **Nothing else.** `timers`, `socketFactory`, `keepaliveMs`, `backoff` and `random` all default —
  *    and `browserSocketFactory` is the platform `WebSocket`, which React Native ships too, so one
  *    adapter serves both renderers and no app shell ever names a socket.
  */
 export function liveTransportFor(engine: LiveEngine): (ctx: LiveTransportContext) => LiveEtaEngine {
   if (engine === 'socket') {
-    return (ctx) => createSocketTransport({ url: ctx.endpoints.socketUrl, clock: ctx.clock })
+    return (ctx) =>
+      createSocketTransport({
+        url: ctx.endpoints.socketUrl,
+        clock: ctx.clock,
+        ...(ctx.route === undefined ? {} : { route: ctx.route }),
+      })
   }
   return createPollTransport
 }

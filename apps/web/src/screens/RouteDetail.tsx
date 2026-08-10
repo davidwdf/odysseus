@@ -1,4 +1,6 @@
 import {
+  applyLiveEtasToRouteDetail,
+  type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
   type RouteFactKey,
   type RouteStopRowView,
@@ -21,6 +23,7 @@ import { RouteFactSheet } from '../components/RouteFactSheet'
 import { RouteStopRow } from '../components/RouteStopRow'
 import { RouteStopSheet } from '../components/RouteStopSheet'
 import { useClientPolicy } from '../hooks/useClientPolicy'
+import { useLiveRoute } from '../hooks/useLiveRoute'
 import { useRailFlip } from '../hooks/useRailFlip'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
@@ -99,9 +102,11 @@ export function RouteDetail() {
     queryKey: ['route', id],
     enabled: !!id,
     queryFn: () => dataSource.getRoute(id as string),
-    // The served cadence (ADR-053), matched to the edge's coalescing TTL. Unlike Place detail this screen has
-    // no subscription — `/v1/live` carries per-pole targets and a route is 34 of them — so the refetch is
-    // both the fetch and the clock, exactly as the RN screen's is.
+    // The served cadence (ADR-053), matched to the edge's coalescing TTL. It stays the fetch **and** the
+    // clock even when a route watch is running (ADR-116/119): the live readings are merged at render rather
+    // than written into this entry, so a refetch replaces only the static half — the stops, the fares, the
+    // patterns — and cannot blank a time on screen. That is the whole reason `useLiveRoute` hands its
+    // readings back instead of calling `setQueryData` the way its two siblings do.
     refetchInterval: policy.refreshAfterMs,
     // Holds the current direction on screen while a flip's payload loads, so a not-yet-cached reverse never
     // flashes the skeleton (ADR-046).
@@ -116,10 +121,45 @@ export function RouteDetail() {
    * to the reverse direction rather than swapping it in, so there is no state in which the rider has flipped
    * *and* the arrived-from stop belongs to the other bound — the URL carries whichever pair is true.
    */
-  const view: RouteDetailView | undefined = query.data
-    ? routeDetailView(query.data, {
+  /**
+   * The live route watch (ADR-116/119), and the merge that puts its readings on the schematic.
+   *
+   * `wanted` is the wire's own statement that this route's embedded times are not a complete answer — which is
+   * exactly the condition ADR-114 invented the field for. Read off the **cached** payload rather than off the
+   * view, and that is what keeps it stable: the merge below clears the field (absence is what *answered*
+   * means), so a request derived from the merged document would switch itself off on its first success.
+   *
+   * A KMB route never asks: its bulk feed answers, no subscription opens, and the only cost is one
+   * `setInterval` for the clock — which this screen needed anyway.
+   */
+  const wantsLive = query.data?.liveArrivals !== undefined
+  const { round, now } = useLiveRoute(query.data?.route.id, {
+    wanted: wantsLive,
+    refreshAfterMs: policy.refreshAfterMs,
+  })
+
+  /**
+   * The payload the screen renders: whatever was fetched, with whatever the round has said since.
+   *
+   * Merged **at render** rather than into the query cache, and both halves of that matter: a refetch cannot
+   * blank a live time (see the `refetchInterval` above), and the kernel decides every question about which
+   * reading belongs to which row — this line joins two `@nextbus/core` calls and answers nothing itself.
+   *
+   * `round` is `null` until a frame has landed, and the merge is skipped for exactly that long. It has to be:
+   * the reading list a merge is handed is the *complete current set*, so an empty one means "nothing is due
+   * anywhere" — true of a live round that found nothing, and false of a screen that has not been told
+   * anything yet. Merging `[]` on first paint blanked every time on every KMB route, which the conformance
+   * suite caught before a rider could.
+   */
+  const detail: RouteDetailPayload | undefined =
+    query.data && round
+      ? applyLiveEtasToRouteDetail(query.data, round.etas, round.failed)
+      : query.data
+
+  const view: RouteDetailView | undefined = detail
+    ? routeDetailView(detail, {
         locale,
-        now: Date.now(),
+        now,
         policy,
         savedRouteKeys: favouriteRoutes,
         ...(arrivedFromStop === undefined ? {} : { arrivedFromStop }),

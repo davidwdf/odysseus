@@ -8222,3 +8222,53 @@ pre-existing and unaddressed; it earned its keep here.
     subscription. In isolation the assertion won the race; under load the round did. It now asserts the
     `snapshot`'s accepted-set echo, which is sent inside the upgrade before any round can run.
   - ⚠️ **No screen subscribes yet.** Step 5 is next, and it needs the spec state that says what a rider sees.
+
+## ADR-120 — A Citybus route shows live times, and the readings are merged at render rather than cached
+
+- **Status:** **Accepted 2026-08-11** in `apps/web/src/hooks/useLiveRoute.ts`, `src/screens/RouteDetail.tsx`,
+  `src/components/RouteStopRow.tsx`; `apps/mobile/app/route/[id].tsx` (the row marker only);
+  `packages/contract/src/ui/route-detail.ts` (`stopIncomplete`, the `liveRouteTimes` state);
+  `packages/core/src/datasource.ts` (`watchRoute` on the seam);
+  `packages/api-client/src/live/select.ts`. Step **5** of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md) — the last one, and the
+  first that a rider can see.
+- **Context.** ADR-114 let a Citybus or GMB route *say* it had no times; ADR-115 put one stop's times in the
+  sheet a rider taps; ADR-116–119 built the route watch and the rule that merges it. Nothing was subscribed.
+- **Decisions:**
+  1. **The readings are handed to the screen and merged at render — not written into the query cache.** Its
+     two sibling hooks (`useLiveEtas`, `useLiveNearby`) use `setQueryData`, and that is right for them: a
+     Place or Nearby payload carries readings of its own, so a refetch replaces live values with fresh ones.
+     A Citybus route payload carries `eta: null` on every stop — the entire problem — so the same shape
+     would blank every time on screen at each refetch and refill it one frame later. Merging at render makes
+     that impossible, and it dissolves a second problem with it: the request is read off the **cached**
+     payload, which the merge never touches, so `liveArrivals` stays `perStopOnly` there and no latch is
+     needed to stop a successful round unsubscribing itself.
+     The honest cost: ADR-058's persisted copy holds the HTTP payload, so a cold start replays *"live times
+     unavailable"* and subscribes, rather than replaying yesterday's minutes as current.
+  2. **A row says "we could not ask", the screen no longer can.** `stopIncomplete` in the spec, from
+     `RouteStopRowView.incomplete`, from the payload's `failed`. `liveArrivals` cannot express "38 of 41
+     answered" without being wrong about most of the route; the row can. Same words as the card (ADR-077)
+     and the sheet (ADR-115), so no new catalogue key and no wording decision taken out of the owner's hands.
+  3. **One new spec state, `liveRouteTimes`, and `apps/mobile` implements the marker for it.** ADR-113 owes
+     the reference renderer no new *affordance*, and a subscription is one — but the specs still bind both
+     renderers, and a state one of them cannot draw is a state neither is measured on. The RN driver reaches
+     it by being handed the payload a round would have produced, which is what a driver is for: it owns *how*
+     to get there and the spec owns what must be there.
+- **Consequences:**
+  - 🟢 **Verified in a browser on the real feed.** Citybus **N171 outbound** at 00:20 HK: 31 rows carrying
+    live times (`7 min · 37 min` at stop 1, `9 min · 39 min` at stop 2), the ADR-114 notice gone, over one
+    `?route=` socket. Route 91 was tried first and showed nothing — correctly: its service had ended for the
+    night, which is worth recording as the reason a screenshot at the wrong hour proves nothing either way.
+  - 🔴 **The browser found a defect no unit test could.** `liveTransportFor('socket')` builds
+    `SocketTransportDeps` by copying two fields by hand, so the `route` the context grew was **silently
+    dropped**: `watchRoute` built its controller, called `open()` and connected to nothing, because a route
+    watch has no `subscribe` frame to trigger a connection with. Every unit test passed — they construct
+    `createSocketTransport` directly and pass `route` themselves. Fixed, and pinned at the seam that lost it
+    with a case that asserts `open()` alone connects to `?route=`.
+  - ⚠️ **And one defect the conformance suite found.** The first version of the hook returned
+    `{ etas: [] }` from mount, and an empty reading list means *"nothing is due anywhere"* to a merge whose
+    contract is that it receives the complete current set — so every KMB route rendered with no times at all.
+    The hook now offers a session or `null`, and merging `null` is a type error rather than a blank screen.
+  - ⚪ **`poll` is still the default engine**, so this ships as a per-rider fan-out (one `/v1/route/:id` plus
+    a batch per round) until the socket is switched on; the shared-round economy needs
+    `VITE_LIVE_TRANSPORT=socket`. Proposal 05's remaining row.

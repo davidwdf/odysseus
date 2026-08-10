@@ -115,6 +115,14 @@ const STOP_ROWS: SlotNode = {
         'The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.',
     },
     {
+      name: 'stopIncomplete',
+      text: { message: 'etasUnavailable' },
+      when: 'incomplete',
+      why: 'Nothing refused. Absent on every payload the server builds — a route is fetched in one upstream call — and present only where a **live route watch** asked this kerb separately and it would not answer (ADR-116).',
+      invariant:
+        'The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of. It is what stops an empty row reading as *no bus is due*: `liveArrivals` cannot express "38 of 41 answered" without being wrong about most of the route, and a rider standing at the one kerb that refused is the person who most needs to know. Muted, never a warning colour, for the same reason the screen-level line is: nothing is wrong with the route.',
+    },
+    {
       name: 'stopArrivals',
       each: 'arrivals',
       of: [
@@ -234,6 +242,34 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The route number, both ends of the journey, the facts strip, and one row per stop in sequence with its printed code, its boarding fare and its upcoming times.',
       mustNot:
         'A row for a stop the route does not call at, or a sequence number that is the row’s index rather than the wire’s. A rider counts stops to know when to get off.',
+      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+    },
+
+    /**
+     * **A route whose times arrived over a live watch** — the state this whole feature exists to reach
+     * (ADR-116/119, proposals/05).
+     *
+     * Citybus and GMB publish no bulk route-eta feed, so `noLiveBoard` above is what a rider saw on those
+     * routes for two waves: a complete schematic with no times anywhere and one line explaining why. A
+     * `/v1/live?route=` subscription asks each of the route's 13–41 poles separately and pushes what it
+     * finds, and `applyLiveEtasToRouteDetail` merges that back onto the payload — which is why this state's
+     * projection is `content`'s and **not** `noLiveBoard`'s: the explanation is gone, because there is
+     * nothing left to explain.
+     *
+     * What makes it a state of its own rather than the same one is the two things it pins that no other
+     * fixture can: that the notice **disappears** when readings arrive (a renderer that kept drawing it
+     * would contradict the times beside it), and that a kerb the round could not ask about says so **on its
+     * own row**. Both are reachable only from a payload a live round produced.
+     *
+     * `apps/mobile` does not subscribe (ADR-113 owes the reference renderer no new affordance) and can still
+     * be put in this state, because a driver owns *how* it gets there — here, by being handed the payload a
+     * round would have produced. The spec owns what must be there.
+     */
+    liveRouteTimes: {
+      must: 'Times on the rows the round answered, no screen-level explanation at all, and the sentence on any row whose kerb would not answer.',
+      mustNot:
+        'Keeping the "live times unavailable" line above rows that now show minutes — the screen contradicting itself — or leaving a refused kerb looking like a stop with no bus due, which is the ADR-073 confusion one level down from where ADR-114 fixed it.',
+      why: 'Most routes are KMB, whose bulk feed answers, so most of the time no subscription is wanted and this state is never entered.',
       enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
     },
 

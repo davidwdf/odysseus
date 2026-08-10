@@ -181,6 +181,10 @@ function fakeSocketDataSource(): DataSource {
     },
     getNearby: unsupported('getNearby'),
     getRoute: unsupported('getRoute'),
+    // Unsupported for the same reason as the rest: this fake exists to prove the Place screen reaches the
+    // seam and nothing else, and a route watch is a different screen's subscription (ADR-116). If one ever
+    // appeared on this path, this is what would say so.
+    watchRoute: unsupported('watchRoute'),
     getEtas: unsupported('getEtas'),
     // Unsupported on purpose, and it is the *proof* rather than a stub: this fake drives the screen from
     // a scripted socket, so if the seam were leaking an HTTP call the batch endpoint would be reached and

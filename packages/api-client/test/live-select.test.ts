@@ -135,6 +135,40 @@ describe('liveTransportFor', () => {
       `wss://two.test/v1/live?targets=${encodeURIComponent('KMB:B')}`,
     ])
   })
+
+  it('forwards a route watch’s route, which is the whole of its connect URL', () => {
+    // **The defect this case exists for shipped and was found in a browser.** This factory is where a
+    // `LiveTransportContext` becomes `SocketTransportDeps`, and it copied two fields by hand: when the
+    // context grew `route` (ADR-116/119) the new field was silently dropped, so `watchRoute` built its
+    // controller, called `open()` — and connected to nothing, because a route watch has no `subscribe`
+    // frame to trigger a connection with. Every unit test still passed: they construct
+    // `createSocketTransport` directly and pass `route` themselves. Asserted here, at the seam that lost it.
+    const opened: string[] = []
+    const realWebSocket = globalThis.WebSocket
+    // biome-ignore lint/suspicious/noExplicitAny: a minimal stand-in for the platform global
+    ;(globalThis as any).WebSocket = class {
+      onopen: unknown = null
+      onmessage: unknown = null
+      onclose: unknown = null
+      onerror: unknown = null
+      constructor(url: string) {
+        opened.push(url)
+      }
+      send() {}
+      close() {}
+    }
+    try {
+      const transport = liveTransportFor('socket')({ ...ctx, route: 'CTB:91:outbound:1' })
+      // No `send` — that is the point. The URL is the subscription, so `open()` alone must connect.
+      transport.open({ frame: () => {} })
+      transport.close()
+    } finally {
+      globalThis.WebSocket = realWebSocket
+    }
+    expect(opened).toEqual([
+      `${ctx.endpoints.socketUrl}?route=${encodeURIComponent('CTB:91:outbound:1')}`,
+    ])
+  })
 })
 
 describe('liveTransportFromEnv', () => {
