@@ -505,8 +505,17 @@ written down.
       acts on is a document that ages.
 
 ## Infra / hardening
-- [ ] 🟠 **`live-rounds.test.ts`'s connect round is a race, and `a-refusing-board-is-not-a-departure` is where
-      it shows.** Distinct from the timeout entry below, which is **fixed** — raising the edge project's hook
+- [x] ✅ **`live-rounds.test.ts`'s connect round was a race, and `a-refusing-board-is-not-a-departure` was
+      where it showed** — **fixed 2026-08-10** by the counter this entry asked for, added for the route
+      cadence in the same sitting (WP6-B step 2b, ADR-118). `EtaHub` now keeps a monotonic
+      `roundsCompleted`, incremented as the **last** statement of `round()` — so `n` rounds counted means
+      `n` rounds' frames are already queued — and the driver waits on it before `settle()`. The counter says
+      *the round is done*; quiet still says *and nothing more is coming*.
+      **Proved, rather than declared fixed because it stopped flaking:** delaying every board by 300 ms (past
+      `QUIET_MS`) makes the race deterministic, and with the wait removed **10 of the 21 rows fail**,
+      including the row named above; with it, all 21 pass. **No time cost** — the file runs in 6.3 s, against
+      the 8 s it took before and the 27 s the rejected wider-quiet-window fix cost.
+      The original diagnosis is kept below because the two rejected fixes are worth not repeating. Distinct from the timeout entry below, which is **fixed** — raising the edge project's hook
       timeout stopped the file dying in its `beforeAll` and let CI run it for the first time in three
       attempts, at which point one row failed on an *assertion*:
 
@@ -542,8 +551,8 @@ written down.
       the connect round alarm-driven, which would also make the second fix above work. Either is a change to
       `eta-hub.ts`, so it wants care and its own sitting rather than being bolted onto an unrelated branch.
 
-      Until then this row can fail on a slow runner, roughly one run in several. It is a **test** race and not
-      a product defect: the three-line shape is the test mis-reading a correct shard.
+      It was a **test** race and not a product defect: the three-line shape was the test mis-reading a
+      correct shard.
 - [x] ✅ **`apps/edge`'s workerd suites timed out on a cold CI runner** — **fixed 2026-08-10** by giving that
       project its own `testTimeout`/`hookTimeout` in `apps/edge/vitest.config.ts`, after a **third** sighting
       blocked two pushes in a row.

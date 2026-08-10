@@ -8102,3 +8102,61 @@ pre-existing and unaddressed; it earned its keep here.
     own control case (asking about a route it *can* answer must still call something — a narrowing that
     skipped every board would otherwise pass); the per-route bound is pinned on the heavy CTB fixture in
     `eta-hub-caps.test.ts`. Each was watched failing on a deliberate revert of its own guard.
+
+## ADR-118 — A route watch polls on the operator's clock, and the counter that proves a round happened
+
+- **Status:** **Accepted 2026-08-10** in `apps/edge/src/eta-hub.ts` (`publishClock`, `writePublishClock`,
+  `newestPublish`, `roundsCompleted`, the `reschedule` branch). Step **2b** of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md); completes ADR-116
+  decision 5, whose rule was written and corpus-pinned but not wired.
+- **Context.** A place shard polls on a 45 s floor that widens to 60 s while nothing changes. Measured on
+  the real feed, that is the wrong clock for a route: the upstream publishes a given route on a ~60 s cycle
+  at a **fixed second of the minute** (E22 on :12–:13, route 91 on :09–:10) and the CDN in front of it holds
+  45 s, so a blind 45 s poll walks in and out of phase and learns nothing on roughly one refresh in four —
+  paying full price each time. The owner's constraint from the start was to poll politely; polling *often
+  and pointlessly* is the same rudeness in a different shape.
+- **Decisions:**
+  1. **The kernel decides *whether* to poll; for a route watch it does not decide *when*.** `reschedule`
+     asks `nextLiveCadenceMs` first and never bypasses it, because its `null` is the **teardown** decision
+     (no subscribers → no alarm, forget the readings) and that is the same decision for both shapes of
+     object. `nextRouteRoundMs` answers a cadence, never `null`, so putting it first would mean restating
+     the teardown rule in the edge where it could drift.
+  2. **The phase comes from `dataTimestamp`, which the round already has.** No new plumbing: every reading
+     carries the operator's publish time, and for a route watch every pole is answered from the same route
+     feed. The `age` header the rule can *optionally* use is **not** available — every fetch helper in
+     `packages/data-normalize` parses the body and drops the `Response` — so `cacheAgeSec` is omitted and
+     the rule's own retry arm covers it. Recorded rather than worked around: surfacing a CDN age would mean
+     changing five fetch helpers, the coalesced value type and either the wire schema or an edge-internal
+     side channel, to sharpen a 15 s retry into a ~1 s one.
+  3. **The newest publish the round heard, not the stalest pole.** Same feed means same timestamp in the
+     healthy case; when the CDN serves one pole from an older entry, the newest is the one that says the
+     publish has landed. Aligning to the oldest would hold the route back to its stalest edge.
+  4. **One write rule, four behaviours.** After each round: a newer publish stores `{at: new, prev: old}`
+     (aligned); the same publish or a round where nothing answered stores `{at: old, prev: old}` (the 15 s
+     retry — *"we learnt nothing about the clock"* is the same fact whether the bytes were stale or absent);
+     nothing ever stores `{}` (the blind 60 s tick). The clock is **forgotten on teardown** along with the
+     readings it describes, or the next watch's first round would meet its own timestamp as the previous
+     one and retry on perfectly fresh data.
+  5. **`roundsCompleted` is a counter no product behaviour reads, and it is justified by what it replaces.**
+     `docs/07-backlog.md` had a filed 🟠: `live-rounds.test.ts` could not await the connect round (armed at
+     `Date.now()` and fired by the runtime, so `runDurableObjectAlarm` returns `false` — tried, for all 21
+     scenarios) and waited on *frame quiet* instead, which a slow fan-out could satisfy mid-round. It is
+     incremented as the last statement of `round()`, so *n* counted means *n* rounds' frames are queued, and
+     it is monotonic across teardown because it is history rather than state.
+  6. **The KV keys are exported as one list.** Four suites reset a shard by deleting `'unchangedRounds'` as
+     a hard-coded string; two new keys would have leaked between cases in all four silently.
+- **Consequences:**
+  - 🟢 **The filed race is fixed and the fix is proved, not asserted.** Delaying every board by 300 ms makes
+    the race deterministic: with the wait removed **10 of 21 rows fail**, including the row the entry named;
+    with it, all 21 pass. The file runs in **6.3 s** against 8 s before, where the rejected wider-quiet-window
+    fix cost 27 s.
+  - 🟢 **Six cases pin the cadence, each watched failing on a revert of its own guard** — including a control
+    proving a *place* shard still gets 45 s, which is what makes the branch the object's name rather than a
+    global change.
+  - ⚠️ **A comment claimed more than a test could support, and an injection said so.** The publish clock is
+    read from the round's results rather than from the merged readings; the docblock asserted that reading
+    the merged ones would misalign an outage, and an injected defect that did exactly that **passed every
+    case** — because the merged map can only hold this round's readings or older ones, which the "nothing
+    answered" fallback already stores. The comment now states the real reason (coupling: retention exists to
+    keep times on screen, the clock to decide when to ask) and the episode is left in it.
+  - ⚪ **Still no `apps/mobile` or screen involvement.** Steps 3–5 are next.

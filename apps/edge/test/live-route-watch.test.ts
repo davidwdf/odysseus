@@ -19,13 +19,20 @@
 // Not asserted here: the phase-aligned cadence (`nextRouteRoundMs` is pinned by corpus in `packages/core`
 // and is not wired into the hub until step 2b), and anything about a screen.
 
-import { env, runInDurableObject } from 'cloudflare:test'
+import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
 import { LIVE_PATH } from '@nextbus/contract'
-import { LIVE_ROUTE_NAME_PREFIX, routeWatchName } from '@nextbus/core'
+import { LIVE_ROUTE_NAME_PREFIX, liveShardFor, routeWatchName } from '@nextbus/core'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
-import { LIVE_MAX_TARGETS_PER_CONNECTION, LIVE_ROUTE_MAX_POLES } from '../src/eta-hub'
+import type { EtaHub } from '../src/eta-hub'
+import {
+  LIVE_HUB_KV_KEYS,
+  LIVE_MAX_TARGETS_PER_CONNECTION,
+  LIVE_ROUTE_MAX_POLES,
+  ROUNDS_COMPLETED_KEY,
+} from '../src/eta-hub'
 import worker from '../src/index'
+import { liveShardName } from '../src/live'
 import { datasetJson, ORIGIN } from './fixtures'
 
 const DATASET = /routeFareList\.min\.json$/
@@ -41,14 +48,66 @@ const jsonResponse = (body: unknown): Response =>
 /** Every upstream board this file asked for, in order — what the narrowing rule is measured on. */
 let boardCalls: string[] = []
 
-/** Every board answers with nothing due — this file is about routing, caps and cost, not readings. */
+/**
+ * What every board answers with. `null` is "nothing due" — the default, because most of this file is
+ * about routing and cost rather than readings. The cadence cases set it to a reading carrying a chosen
+ * `data_timestamp`, which is the operator's publish clock and the only input the route cadence has.
+ */
+let boardPublishedAt: string | null = null
+
+/** `true` while every board should refuse, so a round produces failures and no fresh reading. */
+let boardsRefuse = false
+
+/**
+ * A `data_timestamp` for one pole in particular, overriding `boardPublishedAt`.
+ *
+ * The one case that needs it: the CDN can serve two poles of one route from cache entries of different
+ * ages, and which of the two the cadence aligns to is a real decision (`newestPublish`).
+ */
+let boardPublishedAtByPole: Record<string, string> = {}
+
+/** One KMB board's answer, with a `data_timestamp` this test chose — per pole when it chose two. */
+function boardJson(rawId: string): unknown {
+  const publishedAt = boardPublishedAtByPole[rawId] ?? boardPublishedAt
+  if (publishedAt === null || publishedAt === undefined) {
+    return { generated_timestamp: new Date().toISOString(), data: [] }
+  }
+  return {
+    generated_timestamp: publishedAt,
+    data: [
+      {
+        co: 'KMB',
+        route: 'R00',
+        dir: 'O',
+        service_type: 1,
+        seq: 1,
+        dest_en: 'EAST TERMINUS',
+        dest_tc: '東總站',
+        dest_sc: '东总站',
+        eta_seq: 1,
+        // Far enough ahead that the reading is never "due" and never expires mid-case.
+        eta: new Date(Date.now() + 9 * 60_000).toISOString(),
+        rmk_en: '',
+        rmk_tc: '',
+        rmk_sc: '',
+        // **The field the whole cadence turns on.** `dataTimestamp` carries the upstream's `+08:00`
+        // offset in production; written as an offset here rather than `Z` so the parse this exercises is
+        // the parse that runs in production.
+        data_timestamp: publishedAt,
+      },
+    ],
+  }
+}
+
 function stubUpstream(): void {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (DATASET.test(url)) return jsonResponse(datasetJson())
-    if (KMB_STOP_ETA.test(url) || KMB_ROUTE_ETA.test(url)) {
+    const board = KMB_STOP_ETA.exec(url)
+    if (board || KMB_ROUTE_ETA.test(url)) {
       boardCalls.push(url)
-      return jsonResponse({ generated_timestamp: new Date().toISOString(), data: [] })
+      if (boardsRefuse) return new Response('upstream is having a day', { status: 503 })
+      return jsonResponse(boardJson(board?.[1] ?? ''))
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof fetch
@@ -97,6 +156,9 @@ beforeAll(async () => {
 beforeEach(() => {
   resetEtaCache()
   boardCalls = []
+  boardPublishedAt = null
+  boardsRefuse = false
+  boardPublishedAtByPole = {}
   stubUpstream()
 })
 
@@ -136,13 +198,20 @@ afterEach(async () => {
     while (Date.now() < deadline) {
       remaining = await runInDurableObject(
         stub,
-        async (instance) =>
-          (instance as unknown as { ctx: DurableObjectState }).ctx.getWebSockets().length,
+        async (_instance: EtaHub, state) => state.getWebSockets().length,
       )
       if (remaining === 0) break
       await new Promise<void>((resolve) => setTimeout(resolve, 10))
     }
     expect(remaining, `${routeId} still holds sockets, which would leak into the next case`).toBe(0)
+    // …and the object's own state goes with the socket. A Durable Object outlives a case, so a publish
+    // clock or a cadence ramp left behind would set the *next* case's first cadence — which for the
+    // cadence cases below is the thing under test.
+    await runInDurableObject(stub, async (_instance, state) => {
+      await state.storage.deleteAlarm()
+      state.storage.sql.exec('DELETE FROM readings')
+      for (const key of LIVE_HUB_KV_KEYS) state.storage.kv.delete(key)
+    })
   }
 })
 
@@ -168,9 +237,9 @@ describe('a route watch is one object, named for the route', () => {
     // The claim that matters most: the socket's target set IS the schematic's stop list. A pole the route
     // does not call at would be an upstream call nobody asked for; a missing one is a row that never updates.
     await openRouteWatch(ROUTE_ID)
-    const watched = await inRouteObject(ROUTE_ID, async (instance) => {
+    const watched = await inRouteObject(ROUTE_ID, async (_instance, state) => {
       const seen = new Set<string>()
-      for (const ws of (instance as unknown as { ctx: DurableObjectState }).ctx.getWebSockets()) {
+      for (const ws of state.getWebSockets()) {
         const raw = ws.deserializeAttachment() as { targets?: { stopId: string }[] } | null
         for (const t of raw?.targets ?? []) seen.add(t.stopId)
       }
@@ -183,9 +252,9 @@ describe('a route watch is one object, named for the route', () => {
     // A place shard watches every line at a pole; a route watch wants one. Without this a 40-pole route
     // would poll every line at all forty — the place shape at route scale.
     await openRouteWatch(ROUTE_ID)
-    const narrowings = await inRouteObject(ROUTE_ID, async (instance) => {
+    const narrowings = await inRouteObject(ROUTE_ID, async (_instance, state) => {
       const out: (string[] | undefined)[] = []
-      for (const ws of (instance as unknown as { ctx: DurableObjectState }).ctx.getWebSockets()) {
+      for (const ws of state.getWebSockets()) {
         const raw = ws.deserializeAttachment() as { targets?: { routeIds?: string[] }[] } | null
         for (const t of raw?.targets ?? []) out.push(t.routeIds)
       }
@@ -206,8 +275,7 @@ describe('a route watch is one object, named for the route', () => {
     await openRouteWatch(ROUTE_ID)
     const sockets = await inRouteObject(
       ROUTE_ID,
-      async (instance) =>
-        (instance as unknown as { ctx: DurableObjectState }).ctx.getWebSockets().length,
+      async (_instance, state) => state.getWebSockets().length,
     )
     expect(sockets, 'two clients on one route did not share an object').toBe(2)
 
@@ -249,7 +317,10 @@ async function openRouteWatch(routeId: string): Promise<WebSocket> {
 }
 
 /** Look inside the object a route watch lands on. */
-function inRouteObject<T>(routeId: string, read: (instance: unknown) => Promise<T>): Promise<T> {
+function inRouteObject<T>(
+  routeId: string,
+  read: (instance: EtaHub, state: DurableObjectState) => Promise<T>,
+): Promise<T> {
   const stub = (env.ETA_HUB as NonNullable<typeof env.ETA_HUB>).getByName(
     routeWatchName(routeId) as string,
   )
@@ -283,9 +354,9 @@ async function connectToRouteObject(
 
 /** How many targets the object is actually watching, summed over its sockets. */
 function keptTargets(routeId: string): Promise<number> {
-  return inRouteObject(routeId, async (instance) => {
+  return inRouteObject(routeId, async (_instance, state) => {
     let n = 0
-    for (const ws of (instance as unknown as { ctx: DurableObjectState }).ctx.getWebSockets()) {
+    for (const ws of state.getWebSockets()) {
       const raw = ws.deserializeAttachment() as { targets?: unknown[] } | null
       n += raw?.targets?.length ?? 0
     }
@@ -369,5 +440,263 @@ describe('what a narrowed read costs upstream', () => {
     )
     expect(res.status).toBe(200)
     expect(boardCalls.length, `narrowing to ${ROUTE_ID} asked nothing upstream`).toBeGreaterThan(0)
+  })
+})
+
+// ── The cadence (step 2b) ────────────────────────────────────────────────────────────────────────
+//
+// A place shard polls on a 45 s floor that widens to 60 s when nothing is changing. A route watch does
+// not: the operator publishes that route on a ~60 s cycle at a fixed second of the minute (measured —
+// E22 on :12–:13, route 91 on :09–:10) and the CDN in front of it holds 45 s, so a blind 45 s poll walks
+// in and out of phase and learns nothing on about one refresh in four. `nextRouteRoundMs` is the rule and
+// its arithmetic is corpus-pinned in `packages/core`; what these cases assert is that a route object
+// *uses* it and a place shard does not — which is the half a corpus cannot see.
+
+/** How many rounds an object has finished. The one observable that says a round happened. */
+function roundsCompleted(routeId: string): Promise<number> {
+  return inRouteObject(routeId, async (_instance, state) =>
+    state.storage.kv.get<number>(ROUNDS_COMPLETED_KEY),
+  ).then((n) => (typeof n === 'number' ? n : 0))
+}
+
+/** The instant an object's next round is armed for, or `null` if it is not armed at all. */
+function alarmAt(routeId: string): Promise<number | null> {
+  return inRouteObject(routeId, async (_instance, state) => state.storage.getAlarm())
+}
+
+/**
+ * Wait until the object has finished at least `n` rounds.
+ *
+ * **This is why `roundsCompleted` exists.** The connect round is armed at `Date.now()` and fired by the
+ * runtime, so `runDurableObjectAlarm` returns `false` for it and there is nothing to await; the
+ * alternative — waiting for the frames to go quiet — was measured on `live-rounds.test.ts` and cost that
+ * file 8 s → 27 s to be safe, or a flake to be fast (`docs/07-backlog.md`).
+ */
+async function awaitRounds(routeId: string, n: number): Promise<void> {
+  const deadline = Date.now() + 5_000
+  let seen = 0
+  while (Date.now() < deadline) {
+    seen = await roundsCompleted(routeId)
+    if (seen >= n) return
+    await new Promise<void>((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`waited for ${n} round(s) on ${routeId}, saw ${seen}`)
+}
+
+describe('a route watch polls on the operator’s clock', () => {
+  it('aligns the next round to the publish it just saw, not to a fixed interval', async () => {
+    // A publish 20 s ago, on a 60 s cycle: the next one is due in 40 s, and `LIVE_ROUTE_PUBLISH_MARGIN_MS`
+    // says ask 3 s after it rather than at the instant of turnover. So ~43 s — which is *below* the place
+    // floor of 45 s and therefore cannot be the place rule accidentally agreeing.
+    const published = new Date(Date.now() - 20_000)
+    boardPublishedAt = published.toISOString()
+
+    await openRouteWatch(ROUTE_ID)
+    await awaitRounds(ROUTE_ID, 1)
+
+    const armed = await alarmAt(ROUTE_ID)
+    expect(armed, 'no next round was armed').not.toBeNull()
+    // Asserted as an **absolute instant** rather than a delay, because that is what the rule computes:
+    // `published + period + margin`. A delay assertion would pass on a rule that had merely picked a
+    // similar number.
+    const expected = published.getTime() + 60_000 + 3_000
+    expect(Math.abs((armed as number) - expected)).toBeLessThan(2_000)
+  })
+
+  it('retries sooner when the publish did not advance, instead of waiting out a cadence', async () => {
+    // Two rounds off the same `data_timestamp` — which is what the CDN serving us bytes we already had
+    // looks like from here. The rule's answer is `LIVE_ROUTE_RETRY_MS` (15 s): we know the publish is due
+    // and we know we have not seen it, so waiting a full period would mean sitting on stale times for a
+    // minute. 15 s is also unmistakably neither the place floor (45 s) nor an aligned answer.
+    boardPublishedAt = new Date(Date.now() - 90_000).toISOString()
+
+    await openRouteWatch(ROUTE_ID)
+    await awaitRounds(ROUTE_ID, 1)
+    // Round 2, from the same board. `resetEtaCache` is what makes it a real second round: `coalesce`
+    // would otherwise answer it from the 30 s window and no upstream call would happen at all.
+    resetEtaCache()
+    expect(
+      await runDurableObjectAlarm(
+        (env.ETA_HUB as NonNullable<typeof env.ETA_HUB>).getByName(
+          routeWatchName(ROUTE_ID) as string,
+        ),
+      ),
+      'no alarm was pending for a second round',
+    ).toBe(true)
+    await awaitRounds(ROUTE_ID, 2)
+
+    const armed = await alarmAt(ROUTE_ID)
+    expect(armed).not.toBeNull()
+    const delay = (armed as number) - Date.now()
+    expect(delay).toBeGreaterThan(15_000 - 3_000)
+    expect(delay).toBeLessThanOrEqual(15_000)
+  })
+
+  it('ticks at the publish period when it has no clock to align to', async () => {
+    // Every board answered with nothing due, so no reading carries a `data_timestamp` and there is no
+    // phase. The honest answer is the period itself — 60 s — and notably *not* the 15 s retry: we have
+    // learnt nothing, but we have also not missed anything we know about.
+    boardPublishedAt = null
+
+    await openRouteWatch(ROUTE_ID)
+    await awaitRounds(ROUTE_ID, 1)
+
+    const armed = await alarmAt(ROUTE_ID)
+    expect(armed).not.toBeNull()
+    const delay = (armed as number) - Date.now()
+    expect(delay).toBeGreaterThan(60_000 - 3_000)
+    expect(delay).toBeLessThanOrEqual(60_000)
+  })
+
+  it('leaves a place shard on the place cadence, which is what makes the branch the object’s name', async () => {
+    // The control. Same fixture, same boards, same publish timestamp — the only difference is that this
+    // socket names its targets instead of a route, so it lands on a `live-<n>` shard. If the cadence had
+    // been changed for everybody rather than for a route watch, this is the case that says so.
+    boardPublishedAt = new Date(Date.now() - 20_000).toISOString()
+    const targets = ROUTE_POLES.slice(0, 2)
+    const res = await get(`${LIVE_PATH}?targets=${encodeURIComponent(targets.join(','))}`, {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(res.status).toBe(101)
+    const ws = res.webSocket
+    if (!ws) throw new Error('a 101 with no webSocket')
+    ws.accept()
+
+    const shard = (env.ETA_HUB as NonNullable<typeof env.ETA_HUB>).getByName(
+      liveShardName(liveShardFor(targets.map((stopId) => ({ stopId })))),
+    )
+    const deadline = Date.now() + 5_000
+    let rounds = 0
+    while (Date.now() < deadline && rounds < 1) {
+      rounds = await runInDurableObject(shard, async (_instance, state) => {
+        const n = state.storage.kv.get<number>(ROUNDS_COMPLETED_KEY)
+        return typeof n === 'number' ? n : 0
+      })
+      if (rounds < 1) await new Promise<void>((resolve) => setTimeout(resolve, 10))
+    }
+    expect(rounds, 'the place shard never finished a round').toBeGreaterThanOrEqual(1)
+
+    const armed = await runInDurableObject(shard, async (_instance, state) =>
+      state.storage.getAlarm(),
+    )
+    expect(armed).not.toBeNull()
+    const delay = (armed as number) - Date.now()
+    // The place floor, and the aligned answer for this same publish would have been ~43 s — so this
+    // assertion fails if a route rule leaked onto a shard.
+    expect(delay).toBeGreaterThan(45_000 - 3_000)
+    expect(delay).toBeLessThanOrEqual(45_000)
+
+    ws.close(1000, 'done')
+    await runInDurableObject(shard, async (_instance, state) => {
+      for (const openSocket of state.getWebSockets()) openSocket.close(1000, 'test reset')
+      await state.storage.deleteAlarm()
+      state.storage.sql.exec('DELETE FROM readings')
+      for (const key of LIVE_HUB_KV_KEYS) state.storage.kv.delete(key)
+    })
+  })
+})
+
+describe('a round that learns nothing does not pretend it did', () => {
+  /** Fire the object's pending alarm and wait for the round it starts. */
+  async function nextRound(routeId: string, expectRounds: number): Promise<void> {
+    resetEtaCache()
+    expect(
+      await runDurableObjectAlarm(
+        (env.ETA_HUB as NonNullable<typeof env.ETA_HUB>).getByName(
+          routeWatchName(routeId) as string,
+        ),
+      ),
+      'no alarm was pending',
+    ).toBe(true)
+    await awaitRounds(routeId, expectRounds)
+  }
+
+  it('retries after an outage instead of aligning to a phase it never saw', async () => {
+    // **The case that pins where the publish clock is read from.** A failed round carries the *previous*
+    // readings forward — `retainFailedPoles` and the retryable-target branch both do it, on purpose, so a
+    // rider's times do not blank because we could not ask. Those readings still carry their old
+    // `dataTimestamp`. Draw the clock from them and an outage looks like a fresh publish: the object aligns
+    // its next round to a phase that has already gone by and asks a whole minute late. Drawing it from what
+    // the round actually *heard* gives the 15 s retry instead. Both numbers are unmistakable.
+    boardPublishedAt = new Date(Date.now() - 20_000).toISOString()
+    await openRouteWatch(ROUTE_ID)
+    await awaitRounds(ROUTE_ID, 1)
+    // The healthy round aligned, which is the control: without this the case could pass on a rule that
+    // never aligns at all.
+    const aligned = (await alarmAt(ROUTE_ID)) as number
+    expect(aligned - Date.now()).toBeGreaterThan(30_000)
+
+    boardsRefuse = true
+    await nextRound(ROUTE_ID, 2)
+
+    const armed = await alarmAt(ROUTE_ID)
+    expect(armed).not.toBeNull()
+    const delay = (armed as number) - Date.now()
+    expect(delay, 'an outage was treated as a publish').toBeGreaterThan(15_000 - 3_000)
+    expect(delay).toBeLessThanOrEqual(15_000)
+  })
+
+  it('forgets the publish clock when the last rider leaves, so the next one is not told a stale phase', async () => {
+    // Teardown drops the readings; the clock describes those readings and has to go with them. If it
+    // survived, the next watch's very first round would meet its own `publishedAt` as
+    // `previousPublishedAt` — "the publish did not advance", which that round cannot possibly know — and
+    // take the 15 s retry arm on perfectly fresh data.
+    //
+    // This case also pins that `roundsCompleted` does **not** reset on teardown: `awaitRounds(…, 2)` below
+    // would wait for ever if it did, since the reopened object's first round would count as round 1.
+    boardPublishedAt = new Date(Date.now() - 20_000).toISOString()
+    const first = await openRouteWatch(ROUTE_ID)
+    await awaitRounds(ROUTE_ID, 1)
+
+    first.close(1000, 'the rider left')
+    const gone = Date.now() + 2_000
+    while (Date.now() < gone) {
+      const sockets = await inRouteObject(
+        ROUTE_ID,
+        async (_instance, state) => state.getWebSockets().length,
+      )
+      if (sockets === 0) break
+      await new Promise<void>((resolve) => setTimeout(resolve, 10))
+    }
+    expect(
+      await inRouteObject(ROUTE_ID, async (_instance, state) => state.storage.getAlarm()),
+      'a rider-less route object kept an alarm',
+    ).toBeNull()
+
+    // A new rider, the same board, the same publish timestamp.
+    resetEtaCache()
+    await openRouteWatch(ROUTE_ID)
+    await awaitRounds(ROUTE_ID, 2)
+
+    const armed = await alarmAt(ROUTE_ID)
+    expect(armed).not.toBeNull()
+    // Aligned, not the retry arm — the first round of a watch has nothing to compare against.
+    const expected = Date.parse(boardPublishedAt) + 60_000 + 3_000
+    expect(Math.abs((armed as number) - expected)).toBeLessThan(2_000)
+  })
+})
+
+describe('the phase a mixed-age round aligns to', () => {
+  it('is the newest publish it heard, not the stalest pole on the route', async () => {
+    // Every pole of one route is answered from the same upstream route feed, so in the healthy case all
+    // 41 readings carry the same `data_timestamp` and this decision is invisible. It stops being invisible
+    // when the CDN serves one pole from an older entry than another: the newest is the one that says the
+    // publish has landed, and aligning to the oldest would hold the whole route back to its stalest edge
+    // and re-ask on a phase the operator has already left.
+    const newest = new Date(Date.now() - 20_000)
+    const stalest = new Date(Date.now() - 50_000)
+    const rawOf = (poleId: string) => poleId.split(':')[1] as string
+    boardPublishedAtByPole = {
+      [rawOf(ROUTE_POLES[0] as string)]: stalest.toISOString(),
+      [rawOf(ROUTE_POLES[1] as string)]: newest.toISOString(),
+    }
+
+    await openRouteWatch(ROUTE_ID)
+    await awaitRounds(ROUTE_ID, 1)
+
+    const armed = await alarmAt(ROUTE_ID)
+    expect(armed).not.toBeNull()
+    // The two answers are 30 s apart, so this cannot pass on the wrong one by tolerance.
+    expect(Math.abs((armed as number) - (newest.getTime() + 60_000 + 3_000))).toBeLessThan(2_000)
   })
 })
