@@ -13,6 +13,11 @@
 > they're on, which is the hardest part of finding an HK stop. So we take the **raster** path (z10–20, no
 > renderer change) and the dark-restyle spike (§9 Q1) drops off the critical path. Protomaps becomes the
 > documented fallback, not the frontrunner.
+>
+> **§11 is a later addendum (2026-08-10):** hkbus.app ships that documented fallback today — Protomaps
+> vector PMTiles it builds itself, with **LandsD's label raster on top and no text in the vector style
+> at all** — plus the route line and the between-stops camera flight. Recorded to explore later;
+> **it decides nothing and ADR-049 stands.**
 
 ## 0. Why this doc exists
 
@@ -443,6 +448,106 @@ here gates starting the migration. Remaining, in priority order:
 | 3 | Spike Q1 (dark restyle) and Q2 (Streetscape 360) | — |
 | 4 | Interactive map: MapLibre + whichever source wins Q1 | Q1 |
 | 5 | Bonus: pedestrian routing for honest walk times; district names from Search Nearby | HK80 conversion in `@nextbus/core` |
+
+## 11. Addendum — how hkbus.app actually does it (read 2026-08-10, **nothing decided**)
+
+The prompt was a plain observation: hkbus.app's map *looks nicer than LandsD's*. It does, and the
+reason is worth recording, because they ship the exact configuration §8 costed as our fallback — and
+they combine it with the labels-overlay pattern ADR-049 already chose. Read off their source
+([`hkbus/hk-independent-bus-eta`](https://github.com/hkbus/hk-independent-bus-eta), GPL-3.0,
+`src/components/map/maplibre/`) and their live traffic, on **2026-08-10**. **This changes no decision;
+it is a shopping list for the day we revisit one.**
+
+### 11.1 The basemap: Protomaps vector, self-built, self-hosted
+
+| Piece | What they do |
+|---|---|
+| Renderer | `maplibre-gl@5` + `react-map-gl@8`. (Leaflet only survives in their older heat-map repos.) |
+| Style | Protomaps "basic", vendored as `styles/light.json` + `styles/dark.json`, 57 layers. Light/dark is a **style** swap over one dataset — the file comment says so explicitly. Glyphs/sprites from `protomaps.github.io/basemaps-assets`. |
+| Data | one archive: `https://pmtiles.hkbus.app/hong-kong.pmtiles`. **Measured 29.6 MB** (`content-length` 0x1c6058f = 29,624,207), `last-modified` 2026-05-25, GitHub Pages behind Cloudflare, R2 optional. |
+| Build | [`hkbus/hk-pmtiles-generation`](https://github.com/hkbus/hk-pmtiles-generation) — a scheduled GitHub Action: clone `protomaps/basemaps`, fetch Geofabrik `hong-kong-latest.osm.pbf` + Natural Earth + QRank, run **planetiler** `--area=hong-kong`. The same workflow also renders raster light/dark WebP z0–17 and a labels-only tileset (`tippecanoe tile-join -l places -l pois -l roads`), and converts with `go-pmtiles`. |
+
+Our §8 measured **38 MB for z0–15** from the Protomaps daily build; their planetiler build of the
+Geofabrik extract is **29.6 MB**. Same order, and it confirms §8's numbers were not optimistic.
+
+### 11.2 The part we did not anticipate: **their vector style draws no text at all**
+
+`styles/light.json` contains **zero `symbol` layers**. Every place name on hkbus.app's map comes from
+LandsD's transparent **label** raster, laid over the vector basemap and switched by locale:
+
+```
+VITE_MAP_LABEL_URL=https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/{lang}/WGS84/{z}/{x}/{y}.png
+                                                                            ↑ "tc" | "en"
+```
+
+`buildStyle({ colorMode, labelTileUrl })` appends that as a raster source + layer at runtime, and
+attribution credits **both** OSM and Lands Department. So: **geometry and colour from OSM, names from
+the government.** That is ADR-049's per-locale label overlay with the base swapped underneath it — the
+half of ADR-049 we chose is orthogonal to the half we might revisit, which is the useful finding here.
+
+It also dissolves §8's CJK-glyph gotcha for free: if the vector style renders no text, the empty Han
+range in the Protomaps glyph server never matters.
+
+### 11.3 The honest tension, stated plainly
+
+The top-of-doc status note says LandsD's dense survey cartography **is the feature** — footbridges,
+subways and landmark buildings are what tell a rider which side of a road they are on. hkbus.app is
+prettier **and loses exactly that**, because OSM's HK coverage of pedestrian infrastructure is not the
+Lands Department's survey. Both statements are true at once, and any revisit has to price that
+trade-off rather than treat "prettier" as strictly better.
+
+### 11.4 Their loading strategy — the one thing to copy carefully, or not at all
+
+`CachedPMTilesSource.ts` does **not** use HTTP range requests. It downloads the **entire 29.6 MB
+archive once**, persists it via the Cache Storage API (`pmtiles-v1`), and serves every subsequent
+`getBytes` as an `ArrayBuffer.slice`. Their own comment states the trade:
+
+- first visit: **all** tile rendering blocked for ~5–30 s;
+- afterwards: **zero** network for tiles, forever;
+- invalidation is by URL, so a new tileset means a new filename (`…-v2.pmtiles`).
+
+For a rider standing at a pole on cellular, blocking the map for up to 30 s is the wrong default for
+us — §8's R2 + range-request path gets the same cartography with per-tile latency instead. Their
+approach is the right one for an *offline pack*, which is a different feature (see `docs/07`).
+
+### 11.5 The two interaction features that prompted this, and how they work
+
+Both live in `RouteMap.tsx` + `useImperativeMap.ts`, and both are cheaper than they look:
+
+1. **The zoom-out-then-in flight between stops** is `map.flyTo({ center })` with **no options** —
+   MapLibre's default flight curve (`curve: 1.42`) arcs out and back in on its own. The deliberate
+   part is *when*: a change of `stopIdx` within the same stop list animates (`flyTo`), while a change
+   of **route** jumps (`jumpTo`, their `setView`) with no animation. Any user drag clears
+   geolocation-follow mode. Nothing bespoke, no easing curve authored.
+2. **The route line** is a GeoJSON `LineString` source drawn as **three** layers: a 6 px black casing,
+   a 4 px operator-coloured fill on top, then a `symbol` layer of **arrowheads** at
+   `symbol-spacing: 70` with `symbol-placement: line` — the comment says the arrows exist so a rider
+   knows *which side of the road to wait on*, which is our ADR-080 problem answered with cartography
+   instead of prose. Jointly-operated routes cross-fade the fill between KMB red and CTB orange on a
+   5 s interval in JS (paint properties are reactive; CSS keyframes cannot reach a canvas). Stop
+   markers render after the line layers so they sit on top, and past/current/future stops get
+   different marker art.
+
+**Where the line geometry comes from matters to us.** `docs/research/01` established there is **no
+official route polyline anywhere in HK open data** — GTFS has no `shapes.txt`, TD's GeoJSON is
+Point-only. hkbus.app does not solve that; it *sidesteps* it with a community dataset,
+[`hkbus/route-waypoints`](https://github.com/hkbus/route-waypoints) — observed live as
+`https://hkbus.github.io/route-waypoints/1371-I.json`, one file per route+direction. So a real route
+line for us is a **data** question first and a rendering question second. Drawing arrowheads along
+ordered stop coordinates is the version that needs no new dataset, and is honest as long as we do not
+imply the line follows the road.
+
+### 11.6 What a revisit would have to answer
+
+1. 🟢 Does OSM HK carry enough footbridge/subway detail to replace what §4 valued in LandsD — or is
+   the answer a **vector base with the LandsD labels *and* a pedestrian-infrastructure overlay**?
+2. 🟢 Range-requested PMTiles on R2 (§8) vs. hkbus's download-once — and whether download-once is the
+   right shape for a deliberate **offline pack** rather than the default path.
+3. 🟢 Route-line geometry: ordered stop coordinates (no new dataset, must not imply road-following),
+   road-snapping against TD's road network, or consuming `hkbus/route-waypoints` (**check its licence
+   and attribution before assuming**).
+4. 🟢 Their build is a fork-and-run GitHub Action. If we ever self-host tiles, that workflow is the
+   cheapest starting point — but it publishes to GitHub Pages, and ours would publish to R2.
 
 Steps 0–2 are small, unblock nothing, and take us from *"ships something we're not licensed for"* to
 *"ships the government's own map, in the rider's own language, for free."*
