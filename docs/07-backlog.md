@@ -505,26 +505,24 @@ written down.
       acts on is a document that ages.
 
 ## Infra / hardening
-- [ ] 🟠 **`apps/edge`'s workerd suites time out on a cold CI runner, and a flaky gate is a gate nobody
-      reads.** Two files so far, both *timeouts* rather than assertions, both green on an immediate re-run of
-      the same commit with nothing changed:
-      · **2026-08-09** — `test/dataset-kv.test.ts > a full endpoint sweep against a seeded build`,
-        *"Test timed out in 5000ms"* (vitest's default). One `it` walking every endpoint against a seeded
-        build inside workerd: the slowest assertion in the repo and the one nearest the limit.
-      · **2026-08-10** — `test/live-rounds.test.ts`, *"Hook timed out in 10000ms"*. On a commit range that
-        **touched nothing under `apps/edge/` at all** (verified with `git diff --name-only`), and the suite
-        passed locally at 153/153.
-      Locally the whole edge package takes ~17 s warm and never trips, so the variable is the runner: 0
-      cached turbo tasks and a ~38 s cold import before a single test runs.
-      **The narrow reading was wrong and is corrected here:** this entry used to say "a red gate on *this
-      file alone*", which sent the next reader looking for a second cause. It is the *package* that is close
-      to its limits, not one test.
-      The fix is a `timeout` on the slow suites — or on the edge vitest project — chosen from what they
-      actually cost cold, **not** a global bump: the point of a small default is that a test which suddenly
-      needs 30 s has usually broken rather than slowed. Until then, a red `gates (clean checkout)` whose only
-      failure is an `apps/edge` **timeout** is very likely this and not the change under review. Check
-      `git diff --name-only <last-green>..HEAD` for anything under `apps/edge/`, run the package locally, and
-      re-run CI before reading further.
+- [x] ✅ **`apps/edge`'s workerd suites timed out on a cold CI runner** — **fixed 2026-08-10** by giving that
+      project its own `testTimeout`/`hookTimeout` in `apps/edge/vitest.config.ts`, after a **third** sighting
+      blocked two pushes in a row.
+      Three failures, all *timeouts* rather than assertions, and the last two on commit ranges that touched
+      **nothing** under `apps/edge/` (verified with `git diff --name-only`, package green locally):
+      `dataset-kv.test.ts` at the 5 s **test** default, and `live-rounds.test.ts` twice at the 10 s **hook**
+      default.
+      **What made it diagnosable was measuring the hooks rather than guessing:** `live-rounds`' `beforeAll`
+      seeds a whole dataset build into simulated KV and costs **~1 s locally**; each `beforeEach` is
+      **≤22 ms**; the slowest single test in the package is **643 ms**. So a hook blowing 10 s on CI is a
+      **>10× cold-runner blowup** — zero turbo cache, a ~38 s cold import, contended disk — and not a slow
+      hook. The fix is therefore sized (60 s and 20 s, ~60× and ~30× measured) rather than picked, and
+      **scoped to this project**: every other package's suites are node-speed, where a 5 s default is doing
+      real work.
+      **The lesson worth keeping is about the entry, not the timeout.** It was filed twice as "flake,
+      re-run", and the second time it was narrowed wrongly to one file. A gate that needs a re-run to pass
+      is a gate people stop reading — which this entry itself said — so the third sighting should have been
+      the first fix, not the third filing.
 - [ ] 🔴 **Two tabs of the PWA silently overwrite each other's preferences — including a rider's
       favourites.** Found by WP6-7 while declaring Settings' `stale` state
       ([ADR-096](./08-decision-log.md#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them)
