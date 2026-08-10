@@ -505,6 +505,45 @@ written down.
       acts on is a document that ages.
 
 ## Infra / hardening
+- [ ] 🟠 **`live-rounds.test.ts`'s connect round is a race, and `a-refusing-board-is-not-a-departure` is where
+      it shows.** Distinct from the timeout entry below, which is **fixed** — raising the edge project's hook
+      timeout stopped the file dying in its `beforeAll` and let CI run it for the first time in three
+      attempts, at which point one row failed on an *assertion*:
+
+      ```
+      - "live etas=[A/R1@+2 A/R6@+7] watching=[A] failed=[]"      ← expected
+      + "live etas=[] watching=[A] failed=[]"                     ← received
+      - "retrying!upstream_unavailable etas=[A/R1@+2 A/R6@+7] …"
+      + "retrying!upstream_unavailable etas=[] …"
+        "live etas=[A/R1@+5 A/R6@+7] watching=[A] failed=[]"      ← round 3 correct
+      ```
+
+      **The mechanism, and the file's own preamble names the assumption it breaks.** It says silence is safe
+      to infer because *"nothing in this object defers a send"* — true, but the *work between* two sends is
+      not free. Rounds 1..n are driven by `runDurableObjectAlarm`, which is awaited, so their frames are all
+      queued before `settle()` looks. **Round 0 is not**: the upgrade returns as soon as the socket exists and
+      the shard's first fan-out (one `fetch` per pole, through Miniflare) runs after it. So the snapshot can
+      land, then the readings, with real work in between — and `QUIET_MS`'s 150 ms of quiet can fall in that
+      gap. Round 2 then retains the nothing round 1 recorded, and round 3 recovers, which is exactly the
+      three-line shape above.
+
+      **Two fixes tried and rejected, with their measurements, so nobody repeats them:**
+      · *A wider quiet window for round 0.* Correct but expensive: `settle()` pays its window at least twice
+        per call, so a 1 s connect window took the file from **8 s to 27 s** locally.
+      · *Driving round 0 through `runDurableObjectAlarm` like the others.* **A no-op** — it returns `false`
+        for all 21 scenarios, because no alarm is pending at connect. `round()` is reachable only from
+        `alarm()` (`eta-hub.ts:572`), so the connect round is a floating promise inside the upgrade that the
+        test cannot observe. Verified with a temporary assertion rather than assumed; shipping this would
+        have been a fake fix that left the race untouched.
+
+      **What a real fix looks like:** give the test something *observable* to wait on instead of quiet — the
+      shard already keeps per-round state for its cadence ramp, so a "rounds completed" counter read through
+      `runInDurableObject` would let round 0 be awaited deterministically, at no time cost. Alternatively make
+      the connect round alarm-driven, which would also make the second fix above work. Either is a change to
+      `eta-hub.ts`, so it wants care and its own sitting rather than being bolted onto an unrelated branch.
+
+      Until then this row can fail on a slow runner, roughly one run in several. It is a **test** race and not
+      a product defect: the three-line shape is the test mis-reading a correct shard.
 - [x] ✅ **`apps/edge`'s workerd suites timed out on a cold CI runner** — **fixed 2026-08-10** by giving that
       project its own `testTimeout`/`hookTimeout` in `apps/edge/vitest.config.ts`, after a **third** sighting
       blocked two pushes in a row.
