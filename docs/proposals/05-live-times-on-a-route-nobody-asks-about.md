@@ -118,7 +118,58 @@ does). So there is exactly one layer of sharing on our side and it is ours: `coa
 one round per route that this proposal is for.
 
 What the upstream's 45 s *does* legitimately tell us is that **asking more often than that buys nothing** — the
-answer would be identical — which is the argument for the cadence floor rather than for the load being free.
+answer would be identical. It is not, however, an argument for polling *at* 45 s either, which the next section
+is about: the 45 s is the CDN's TTL and the data moves on a different clock.
+
+### The cadence should follow the route's own publish clock, not the CDN's
+
+**Measured 2026-08-10, and it changes the cadence.** The owner asked whether we can tell when the upstream
+will next update, and poll just after it rather than at a random phase. We can — but the obvious signal is a
+red herring.
+
+`age` on the response does exactly what it looks like: it climbs 0 → 44 and resets, so `45 − age` is a real
+countdown to the next cached copy. **The data, however, does not update on that 45 s clock.** Caught directly
+on one stop:
+
+```
+21:28:05  age 41   data_timestamp 21:27:12
+21:28:10  age  0   data_timestamp 21:27:12   ← the CDN refetched and got nothing new
+21:28:57  age  0   data_timestamp 21:28:13   ← this refetch was the fresh one
+```
+
+That refetch landed three seconds before the origin published. So **roughly one CDN refresh in four returns
+identical data** — a round paid for and nothing learned.
+
+**The clock that matters is in the payload.** `data_timestamp` is *per route*, shared by every pole on it, and
+lands on a fixed second of the minute. Six (stop, route) pairs sampled at the same instant, twice:
+
+| route | three stops, first sample | …second sample | publishes at |
+|---|---|---|---|
+| E22 | all `21:29:12` | all `21:30:13` | **:12–:13** |
+| 91 | both `21:29:09` | both `21:30:10` | **:09–:10** |
+
+~60 s apart, phases **differing per route**, and E22 was still on :13 in samples 25 minutes earlier. Every pole
+on one route publishes together.
+
+**Which is exactly the shape of the per-route object below**: one object, one route, one clock — and it can
+learn its own route's phase from its own responses. Schedule the next round for `newest data_timestamp + 60 s
++ a small margin` rather than a fixed 45 s tick. That is **25% fewer upstream calls** than a 45 s cadence *and*
+fresher data, because every round lands just after a publish instead of three in four landing anywhere.
+
+**The catch, stated rather than smoothed:** the CDN entry is shared with every other consumer of this API, so
+whoever's request created the current entry set its phase — not us. We can therefore be handed a still-valid
+copy older than the newest publish; the worst case in this sample was **78-second-old data on a cache hit**.
+Alignment improves the odds and cannot guarantee. What it *can* do is **notice**: if `data_timestamp` has not
+advanced, the round learned nothing, and retrying once a few seconds later is cheaper than waiting out another
+minute. The frame protocol already diffs, so a no-change round pushes nothing to a client either way.
+
+**Rejected, explicitly:** a cache-buster query parameter would guarantee freshness by bypassing the shared
+cache — moving our load from CloudFront onto the origin, for about ten seconds of freshness. That is the
+behaviour this whole proposal exists to avoid.
+
+**Consequence for the constants:** `LIVE_CADENCE_FLOOR_MS` stays as the floor for *place* watches, and a route
+watch gets a phase-aligned schedule of its own (~60 s) instead. That is a second reason the route namespace is
+separate rather than a raised cap: the two have different clocks, not just different budgets.
 
 ## The design
 
@@ -164,7 +215,7 @@ So the whole feature is bounded to Citybus and GMB, which is also the only place
 |---|---|---|
 | `LIVE_ROUTE_MAX_POLES` | **64** | Above the longest real route measured (41) with headroom, and a hard stop so a pathological dataset row cannot mint a 300-call round. At 64 poles a round is ~0.8 s — still under 2% of the cadence — so this cap is guarding the *dataset*, not the clock. Excess poles are **dropped and named** in the `status` frame, the treatment `eta-hub.ts` already argues for over refusing a whole connection. |
 | `LIVE_ROUTE_MAX_SOCKETS` | **64** | Unchanged from `LIVE_MAX_SOCKETS_PER_SHARD`. Sockets on a route object cost nothing extra: they all want the same round. |
-| cadence | **unchanged** (45 s floor / 60 s ceiling) | ~0.5 s of work inside 45 s, and the upstream refreshes only every 45 s anyway, so a faster cadence would re-read identical answers. The ramp stays as-is. |
+| cadence | **phase-aligned ~60 s**, not the 45 s floor | ~0.5 s of work per round. The upstream publishes once a ~60 s cycle on a per-route second-of-minute, so a 45 s tick returns identical data about one round in four — see the section above. Fewer calls *and* fresher data. |
 | `LIVE_CTB_BUDGET` | **not applied here** | It bounds *routes per pole*, which on a route watch is always one. Applying it would silently truncate a 36-stop route to 12 stops — the failure mode this proposal exists to remove. |
 
 **The number a reviewer should push on** is `LIVE_ROUTE_MAX_POLES = 64`: it is the one place a bad dataset row
