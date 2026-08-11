@@ -22,10 +22,10 @@ import { classifyFailure } from './errors'
 import {
   createLiveEtaController,
   DEFAULT_LIVE_ENGINE,
-  liveTransportFor,
   type LiveEtaEngine,
   type LiveEtaUpdate,
   type LiveTransportContext,
+  liveTransportFor,
 } from './live'
 
 export interface EdgeClientOptions {
