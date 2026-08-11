@@ -28,13 +28,17 @@ const ctx: LiveTransportContext = {
 }
 
 describe('liveEngineFrom', () => {
-  it('defaults to the poll emulator when nothing is configured', () => {
-    expect(DEFAULT_LIVE_ENGINE).toBe('poll')
-    expect(liveEngineFrom(undefined)).toBe('poll')
+  it('defaults to the socket when nothing is configured', () => {
+    // **Flipped 2026-08-11 (ADR-121), and the reason is measured**: the poll emulator asks
+    // `/v1/etas?ids=…`, which cannot carry a per-id route list, so every pole it names is asked about every
+    // route calling there. One chunk of twelve poles on Citybus 182 cost 153 upstream calls and 19.9 s
+    // against the same twelve narrowed costing 12 and 0.49 s.
+    expect(DEFAULT_LIVE_ENGINE).toBe('socket')
+    expect(liveEngineFrom(undefined)).toBe('socket')
     // An empty string is what an env file with a bare `VITE_LIVE_TRANSPORT=` produces, and what Expo's
     // inliner leaves behind for an unset variable in some configurations. It is "unset", not a typo, so
     // it must not warn.
-    expect(liveEngineFrom('')).toBe('poll')
+    expect(liveEngineFrom('')).toBe('socket')
   })
 
   it('selects each legal spelling, and there are exactly two', () => {
@@ -43,15 +47,17 @@ describe('liveEngineFrom', () => {
     // **No `auto`.** An automatic choice implies a socket→poll fallback and none exists —
     // `createSocketTransport` reconnects for ever rather than degrading. Asserted rather than left to
     // the comment, because `auto` is the value somebody will reach for first.
-    expect(liveEngineFrom('auto')).toBe('poll')
+    expect(liveEngineFrom('auto')).toBe(DEFAULT_LIVE_ENGINE)
   })
 
   it('falls back loudly on a spelling it does not recognise', () => {
     // The two failure modes are both real and neither is free: throwing breaks first paint over an
-    // optional knob, and silently polling is this repo's recurring shape — somebody sets the variable,
-    // sees ordinary behaviour, and concludes the socket works. So: fall back, and say so once.
+    // optional knob, and silently falling back is this repo's recurring shape — somebody sets the variable,
+    // sees ordinary behaviour, and concludes it took effect. So: fall back, and say so once. Note the
+    // fallback is now the *socket*, so a typo no longer quietly costs a rider the fan-out it was meant to
+    // avoid — it costs them the engine they were trying to opt out of, which is the safer direction.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(liveEngineFrom('websocket')).toBe('poll')
+    expect(liveEngineFrom('websocket')).toBe(DEFAULT_LIVE_ENGINE)
     expect(warn).toHaveBeenCalledTimes(1)
     const message = String(warn.mock.calls[0]?.[0])
     // The message has to carry the value it rejected and the values it accepts, or it is a warning that
@@ -65,7 +71,7 @@ describe('liveEngineFrom', () => {
     // `SOCKET` is a typo, not a synonym. Normalising case would mean the set of accepted spellings is
     // larger than the documented one, and `.env.example` would stop being the whole answer.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(liveEngineFrom('SOCKET')).toBe('poll')
+    expect(liveEngineFrom('SOCKET')).toBe(DEFAULT_LIVE_ENGINE)
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
   })
@@ -173,17 +179,19 @@ describe('liveTransportFor', () => {
 
 describe('liveTransportFromEnv', () => {
   it('returns undefined for the default, so the client stays the one place that names it', () => {
-    // Both `undefined` and `createPollTransport` produce the poll emulator — `EdgeClient` is
-    // `opts.transport ?? createPollTransport`. Only `undefined` leaves the *client* holding the answer
-    // to "what is the default", instead of two app shells each restating it.
+    // `undefined` leaves *the client* holding the answer to "what is the default", instead of two app
+    // shells each restating it. That mechanism was tested the day the default changed: flipping
+    // `DEFAULT_LIVE_ENGINE` to `'socket'` moved both shells and neither shell was edited.
     expect(liveTransportFromEnv(undefined)).toBeUndefined()
-    expect(liveTransportFromEnv('poll')).toBeUndefined()
+    expect(liveTransportFromEnv('socket')).toBeUndefined()
   })
 
-  it('returns a socket factory only when the socket was asked for', () => {
-    const factory = liveTransportFromEnv('socket')
+  it('returns a poll factory only when polling was asked for', () => {
+    // The other way round since ADR-121. `poll` is still selectable and still supported — it is what an
+    // environment with no WebSocket path has — so it is a factory rather than a default now.
+    const factory = liveTransportFromEnv('poll')
     expect(factory).toBeDefined()
-    expect(factory?.(ctx).engine).toBe('socket')
+    expect(factory?.(ctx).engine).toBe('poll')
   })
 
   it('returns undefined for an unrecognised spelling, having warned', () => {

@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
-import { createLiveEtaController, createMemoryTransport, EdgeClient } from '@nextbus/api-client'
+import {
+  createLiveEtaController,
+  createMemoryTransport,
+  createPollTransport,
+  EdgeClient,
+} from '@nextbus/api-client'
 import {
   applyLiveEtasToStopDetail,
   type DataSource,
@@ -139,7 +144,14 @@ function pollingDataSource(): DataSource {
       headers: { 'content-type': 'application/json' },
     })
   }) as typeof fetch
-  return new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+  // **`transport` named explicitly since ADR-121.** The default engine is the socket now, so a client built
+  // without one would open a WebSocket here — against a fixture that answers HTTP — and this suite's whole
+  // subject is the poll emulator being indistinguishable from a socket at the seam.
+  return new EdgeClient({
+    baseUrl: 'http://localhost:8787',
+    fetchImpl,
+    transport: createPollTransport,
+  })
 }
 
 /**

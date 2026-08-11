@@ -21,7 +21,8 @@ import { type Endpoints, resolveEndpoints } from './endpoint'
 import { classifyFailure } from './errors'
 import {
   createLiveEtaController,
-  createPollTransport,
+  DEFAULT_LIVE_ENGINE,
+  liveTransportFor,
   type LiveEtaEngine,
   type LiveEtaUpdate,
   type LiveTransportContext,
@@ -84,7 +85,11 @@ export class EdgeClient implements DataSource {
     // Bind to the global: browsers throw "Illegal invocation" if native fetch is
     // called with a receiver other than window (e.g. as this.fetchImpl(...)).
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis)
-    this.transport = opts.transport ?? createPollTransport
+    // **The client is the one place that names the default**, and it names it by asking `select.ts` rather
+    // than by spelling an engine — so `DEFAULT_LIVE_ENGINE` is a single declaration and flipping it moves
+    // every caller at once. It used to read `?? createPollTransport`, which was a second spelling of the
+    // same answer and would have had to be found by hand on the day the default changed (ADR-121).
+    this.transport = opts.transport ?? liveTransportFor(DEFAULT_LIVE_ENGINE)
   }
 
   private async getJson<T>(path: string): Promise<T> {

@@ -8277,3 +8277,60 @@ pre-existing and unaddressed; it earned its keep here.
     and lets `LIVE_CTB_BUDGET` drop the watched route's own board with no failure entry at all. Filed with
     reproductions and three candidate fixes in `docs/07`; the shared-round economy needs
     `VITE_LIVE_TRANSPORT=socket`, which is proposal 05's remaining row and the fix the other two point at.
+
+## ADR-121 — The socket is the default engine, because polling a route costs 19× what it should
+
+- **Status:** **Accepted 2026-08-11** in `packages/api-client/src/live/select.ts` (`DEFAULT_LIVE_ENGINE`),
+  `packages/api-client/src/index.ts` (the client reads that constant instead of spelling an engine),
+  `.env.example`, and the four suites that encoded the old default. Supersedes ADR-076's choice of `poll`
+  as the shipped default; **ADR-076's reasoning is untouched** — it argued for making the engine
+  *configurable from a build* and for there being no `auto`, both of which still hold.
+- **Context.** The owner opened Citybus **182** (31 poles) on the shipping build and reported it slow, with
+  "a backlog of queries building up". That is a symptom with an exact cause.
+- **The measurement, on that route, against the live feed** (`wrangler dev`, 2026-08-11):
+
+  | the question the engine asks | upstream calls | wall |
+  |---|---|---|
+  | `poll` — 12 poles, un-narrowed (one of its three chunks) | **153** | **19.9 s** |
+  | `socket` — the same 12 poles, narrowed to route 182 | **12** | **0.49 s** |
+  | `poll` — a whole round, 31 poles in 3 concurrent chunks | ~395 | **75.7 s** |
+  | `socket` — a whole round, 31 poles | **31** | **~1.2 s** |
+
+  **A 75.7 s round against a 30 s cadence is the backlog**, exactly as reported: `createPollTransport`
+  schedules on a fixed interval measured from the *start* of the previous round (`Timers.every`, chosen in
+  ADR-076 to preserve the old shim's semantics), so when a round overruns the cadence, rounds overlap and
+  queue for as long as the screen stays open.
+- **Why the gap exists at all.** `/v1/etas?ids=…` carries **no per-id route list** — there is no safe
+  delimiter, since `,` is a legal `idchar` — so the poll emulator's questions cannot be narrowed and every
+  pole is asked about every route calling there. ADR-117 removed exactly this fan-out from the socket path
+  by narrowing at `boardsFor`, which the Durable Object can do because it knows its route from its own name.
+  So this is not "sockets are faster than HTTP": it is the batch endpoint being unable to express the
+  question, which `docs/07` filed and this ADR resolves by changing which engine ships.
+- **Decisions:**
+  1. **`DEFAULT_LIVE_ENGINE = 'socket'`, and `EdgeClient` now *reads* it** rather than spelling
+     `?? createPollTransport`. That second spelling would have had to be found by hand today; the
+     indirection ADR-076 built for exactly this occasion did its job — both app shells moved and neither
+     was edited.
+  2. **`poll` stays selectable and stays tested.** It is what an environment with no WebSocket path gets —
+     a proxy that strips upgrades, a runtime with no `WebSocket` — and it is the engine ADR-074's shared
+     corpus compares the socket *against*, so an engine nobody could observe would be an engine nobody
+     could trust. `edge-client-watch.test.ts` now names it explicitly, which is a real loss of coverage
+     (those cases used to exercise the unconfigured path) and is recorded in that file's header.
+  3. **Still no `auto`.** ADR-076's argument holds and gets sharper teeth: there is no socket→poll fallback,
+     so a rider behind a WebSocket-hostile proxy now gets *nothing* where before they got slow-but-working
+     data. That is the real cost of this change and the reason `VITE_LIVE_TRANSPORT=poll` /
+     `EXPO_PUBLIC_LIVE_TRANSPORT=poll` is documented as the escape hatch rather than left implicit.
+- **Consequences:**
+  - 🟢 **Verified in a browser with nothing configured** — route 182, the new default doing the work: 18 rows
+    of live times, notice gone, one `?route=` socket. A direct probe on the same page measured the
+    subscription delivering **18 readings in 8 ms** warm (the object already had a round stored).
+  - 🟢 **The fan-out moves to the edge.** A rider on a slow or distant connection — the owner is on a
+    Singapore VPN — now pays for one WebSocket and small frames rather than three batch requests per round,
+    each waiting on ~130 upstream calls.
+  - 🟢 **Every client watching one route shares one round**, which polling structurally cannot do.
+  - ⚠️ **The blast radius is every screen, not just Route detail.** Nearby, Place and Favourites all move to
+    the socket. They have been driven over a real `EtaHub` by the shared corpus since WP5-4 (ADR-074) and
+    the socket's own review is ADR-056 decisions 13–19, but this is the first time they *ship* that way.
+  - ⚠️ **`docs/07`'s poll-path 🟠 is not closed, it is demoted.** The un-narrowed fan-out, the cross-route
+    `failed` and the `LIVE_CTB_BUDGET` silent drop are all still true of `poll` — they now affect only
+    someone who selects it deliberately.

@@ -505,10 +505,14 @@ written down.
       acts on is a document that ages.
 
 ## Infra / hardening
-- [ ] 🟠 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
+- [ ] 🟡 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
       the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
-      defect in the route watch, but in what the *default* engine can express**, which is why it is filed
-      rather than patched in that row. `poll` is still the shipped engine, so this is what riders get today.
+      defect in the route watch, but in what the batch endpoint can express**. **Demoted from 🟠 the same
+      day: `socket` is the default engine now (ADR-121)**, measured on the route that prompted it — Citybus
+      182's round was 395 upstream calls and 75.7 s on `poll` against 31 calls and ~1.2 s on the socket, and
+      75.7 s against a 30 s cadence is why rounds queued. Everything below is still true of `poll`; it now
+      affects only somebody who selects it deliberately, which is what an environment with no WebSocket path
+      has to do.
 
       **Two distinct consequences, both traced to one cause** — `/v1/etas?ids=…` carries no per-id route
       list (there is no safe delimiter; `,` is a legal `idchar`), so `watchRoute`'s poll path asks each pole

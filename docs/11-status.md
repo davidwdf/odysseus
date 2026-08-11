@@ -1773,10 +1773,15 @@ than any in its own row.
 > first version returned an empty *session* from mount, which to a merge means *"nothing is due anywhere"*,
 > so every KMB route rendered blank (the conformance suite caught that one).
 >
-> **What is left of `proposals/05`: the default engine.** `poll` still is one, so this ships as a per-rider
-> fan-out — correct, and without the shared round. Turning `VITE_LIVE_TRANSPORT` / `EXPO_PUBLIC_LIVE_TRANSPORT`
-> to `socket` by default is a decision, not a task: it wants WP0-5's deploy story and a look at what a
-> Durable Object per watched route costs in production.
+>
+> **`proposals/05` is now complete, including its last row: the socket is the default engine** (ADR-121,
+> 2026-08-11). The owner opened Citybus 182 on the shipping build, found it slow with queries backing up, and
+> the measurement was unambiguous: a `poll` round of that route's 31 poles is **~395 upstream calls / 75.7 s**
+> against a 30 s cadence — so rounds overlapped and queued — where the socket's is **31 calls / ~1.2 s**. The
+> cause is not the transport but the batch endpoint: `/v1/etas?ids=…` cannot carry a per-id route list, so
+> every pole is asked about every route calling there, which is precisely the fan-out ADR-117 removed from the
+> socket path. `poll` stays selectable for an environment with no WebSocket path — and there is still no
+> `auto`, so that environment must say so, which is the honest cost of the change.
 
 
 > **New, 2026-08-03 — the renderer decision, and it changes what Phase 3 is.**
