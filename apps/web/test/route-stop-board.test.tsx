@@ -170,6 +170,36 @@ async function tapRow(index: number): Promise<void> {
 
 const tapFirstRow = () => tapRow(0)
 
+/** The clock every hand-built payload below is read against. */
+const NOW = '2026-08-09T09:00:00+08:00'
+
+/** Mount a payload this file built rather than one the corpus carries, after unmounting what is there. */
+async function mountPayloadFresh(detail: RouteDetailPayload, nowIso: string): Promise<void> {
+  act(() => {
+    root?.unmount()
+    root = null
+  })
+  document.body.innerHTML = '<div id="host"></div>'
+  const host = document.getElementById('host')
+  if (!host) throw new Error('unreachable: the host div was just written')
+  container = host
+  etaCalls = []
+  await mountPayload(detail, nowIso)
+}
+
+/** A reading on a pole, far enough out that it is never "due" and never expires mid-case. */
+function readingFor(routeId: string, stopId: string) {
+  const at = new Date(Date.parse(NOW) + 11 * 60_000).toISOString()
+  return {
+    routeId,
+    stopId,
+    operator: 'CTB' as const,
+    arrivals: [at],
+    dataTimestamp: NOW,
+    observedAt: new Date(Date.parse(NOW)).toISOString(),
+  }
+}
+
 // ── when it asks ───────────────────────────────────────────────────────────────────────────────
 
 describe('the sheet asks for one stop’s board, and only when there is nothing to show', () => {
@@ -248,6 +278,45 @@ describe('the sheet asks for one stop’s board, and only when there is nothing 
     await mountCase(UNAVAILABLE)
     await tapFirstRow()
     expect(etaCalls.length, 'a failed round is the case a retry is for').toBe(1)
+  })
+
+  it('does ask about the one kerb a live round could not reach', async () => {
+    /*
+      **The case a route watch creates and nothing else can.** Once a round answers, the merge clears
+      `liveArrivals` — so the screen-level "we could not ask" sentence is gone and `view.liveArrivals` reads
+      `'answered'`. But a round asks each pole separately, so one kerb can still have refused, and its row
+      says so (ADR-120). A rider tapping *that* row is the person who most wants an answer, and the gate
+      that stops a quiet route from re-asking for ever must not also stop this one: without
+      `sheetRow.incomplete` in it, the board is never fetched, `routeStopBoard(undefined, …)` reports
+      nothing, and the sheet's last arm prints **"No scheduled service"** directly under a row that just
+      said we could not ask — the ADR-073 conflation this whole feature exists to remove, one level down.
+    */
+    const detail = await mountCase(PER_STOP_ONLY)
+    const refused = detail.stops[0]?.stop.id as string
+    // The payload a live round produces: readings elsewhere, this kerb in `failed`, and therefore no
+    // screen-level notice at all.
+    await mountPayloadFresh(
+      {
+        ...detail,
+        liveArrivals: undefined,
+        failed: [
+          {
+            stopId: refused,
+            error: { code: 'upstream_unavailable', message: 'no', retryable: true },
+          },
+        ],
+        stops: detail.stops.map((stop, i) =>
+          i === 0
+            ? { ...stop, eta: null }
+            : { ...stop, eta: readingFor(detail.route.id, stop.stop.id) },
+        ),
+      },
+      NOW,
+    )
+    await tapFirstRow()
+    expect(etaCalls, 'the kerb that refused was not asked again').toEqual([
+      { stopId: refused, routeIds: [detail.route.id] },
+    ])
   })
 })
 

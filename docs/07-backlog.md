@@ -505,6 +505,42 @@ written down.
       acts on is a document that ages.
 
 ## Infra / hardening
+- [ ] 🟠 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
+      the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
+      defect in the route watch, but in what the *default* engine can express**, which is why it is filed
+      rather than patched in that row. `poll` is still the shipped engine, so this is what riders get today.
+
+      **Two distinct consequences, both traced to one cause** — `/v1/etas?ids=…` carries no per-id route
+      list (there is no safe delimiter; `,` is a legal `idchar`), so `watchRoute`'s poll path asks each pole
+      **un-narrowed** and narrows the readings client-side afterwards:
+
+      · **The fan-out is the one ADR-117 removed.** A narrowed read narrows the *questions* only when
+        `routeIds` reaches `boardsFor` — which the socket path supplies from the object's name and the batch
+        endpoint cannot. ADR-117 measured the un-narrowed shape at **350 upstream calls per round for an
+        18-pole route** against 18 narrowed. So the poll path reintroduces exactly that, per rider, on free
+        government feeds. *(ADR-120's stated cost, "one `/v1/route/:id` plus a batch per round", is wrong on
+        both counts — 41 poles is four batches at `ETAS_BATCH_MAX_IDS = 12`, each fanning out un-narrowed.
+        Corrected in the ADR.)*
+      · **`failed` names the wrong outage, and a departed bus can stick.** A pole's failure is recorded per
+        **pole**, not per (pole, route), so a sibling route's board timing out at a shared kerb marks that
+        kerb `failed` for a subscription that only asked about *this* route. `retainFailedPoles` then keeps
+        the previous reading — a bus that has left stays on the schematic while any sibling route at that
+        pole keeps failing — and `RouteStopRowView.incomplete` prints *"Live times unavailable"* on a row we
+        did ask about and did get an answer for. The socket path cannot do either: `boardsFor` restricts the
+        calls to the one route, so only that route's own call can fail.
+      · **And `LIVE_CTB_BUDGET` can drop the watched route entirely.** At a place with more than 12 distinct
+        CTB (pole, routeNo) pairs — `eta-hub.ts` records **347 real places** — `memberEtaLists` walks in
+        document order and `break`s; a route past the twelfth is never called, which produces **no** `failed`
+        entry and **no** reading. The row renders as an ordinary "no bus due". Silent, and invisible to the
+        socket path for the same reason as above.
+
+      **What a fix looks like, in ascending order of cost:** (a) `watchRoute`'s poll path calls
+      `/v1/etas/:id?routes=…` per pole instead of the batch — narrow and correct, 41 requests per round
+      instead of 4, and the edge already coalesces them; (b) the batch endpoint learns a per-id route list
+      with a delimiter the id grammar can spare; (c) turn the socket on by default and let the poll emulator
+      remain what its name says. **(c) is the direction `proposals/05` already points**, so the honest
+      sequencing is to decide that first — this row exists so nobody reads ADR-120's cost line and believes
+      the shipped default is cheap.
 - [x] ✅ **`live-rounds.test.ts`'s connect round was a race, and `a-refusing-board-is-not-a-departure` was
       where it showed** — **fixed 2026-08-10** by the counter this entry asked for, added for the route
       cadence in the same sitting (WP6-B step 2b, ADR-118). `EtaHub` now keeps a monotonic

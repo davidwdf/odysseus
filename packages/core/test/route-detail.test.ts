@@ -168,21 +168,29 @@ describe('route-detail#routeDetailView', () => {
     expect(c, 'the live-fed corpus case has moved or been renamed').toBeTruthy()
     const view = viewFor(c)
     const refused = new Set((c.args.detail.failed ?? []).map((f) => f.stopId))
-    expect(refused.size, 'the case no longer carries a refusing kerb').toBe(1)
+    expect(refused.size, 'the case no longer carries two refusing kerbs').toBe(2)
 
     expect(view.liveArrivals).toBe('answered')
     for (const row of view.stops) {
-      if (refused.has(row.stopId)) {
-        expect(row.incomplete, `${row.stopId} refused and the row does not say so`).toBe(true)
-        expect(row.arrivals, 'a refused kerb cannot also have a reading').toEqual([])
-      } else {
-        expect(
-          row.incomplete,
-          `${row.stopId} answered and the row calls it incomplete`,
-        ).toBeUndefined()
-      }
+      expect(
+        row.incomplete === true,
+        `${row.stopId} is marked incomplete iff its kerb refused`,
+      ).toBe(refused.has(row.stopId))
     }
-    // …and the readings really arrived, or the two assertions above would hold over a screen of blanks.
+    // **Both row shapes a live round produces**, which is why one fixture is enough for the state: a kerb
+    // that refused with nothing to show, and one that refused while `retainFailedPoles` kept its last
+    // reading — the row that has to carry the sentence *and* the time, and the shape a review found the
+    // spec demanding and neither renderer drawing.
+    const marked = view.stops.filter((row) => row.incomplete === true)
+    expect(
+      marked.some((row) => row.arrivals.length === 0),
+      'no refused kerb is empty',
+    ).toBe(true)
+    expect(
+      marked.some((row) => row.arrivals.length > 0),
+      'no refused kerb kept a reading, so nothing pins the marker sitting beside a time',
+    ).toBe(true)
+    // …and the readings really arrived, or every assertion above would hold over a screen of blanks.
     expect(view.stops.filter((row) => row.arrivals.length > 0).length).toBeGreaterThanOrEqual(2)
   })
 

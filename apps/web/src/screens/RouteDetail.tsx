@@ -145,6 +145,12 @@ export function RouteDetail() {
    * blank a live time (see the `refetchInterval` above), and the kernel decides every question about which
    * reading belongs to which row — this line joins two `@nextbus/core` calls and answers nothing itself.
    *
+   * The round is merged only onto **its own** route: the hook clears it in an effect, and an effect runs
+   * after paint, so on a direction flip or a Back navigation the id and the payload change one frame before
+   * the clear. Comparing here costs nothing and removes the frame in which the previous route's readings
+   * would be filtered out of this one — 41 blank rows — and its `failed` would mark kerbs on a route nobody
+   * asked about.
+   *
    * `round` is `null` until a frame has landed, and the merge is skipped for exactly that long. It has to be:
    * the reading list a merge is handed is the *complete current set*, so an empty one means "nothing is due
    * anywhere" — true of a live round that found nothing, and false of a screen that has not been told
@@ -152,7 +158,7 @@ export function RouteDetail() {
    * suite caught before a rider could.
    */
   const detail: RouteDetailPayload | undefined =
-    query.data && round
+    query.data && round?.routeId === query.data.route.id
       ? applyLiveEtasToRouteDetail(query.data, round.etas, round.failed)
       : query.data
 
@@ -290,7 +296,15 @@ export function RouteDetail() {
     sheetRow !== null && sheetRow.arrivals.length === 0 ? sheetRow.stopId : undefined
   const boardRoute = query.data?.route.id
   const wantsBoard =
-    boardPole !== undefined && boardRoute !== undefined && view?.liveArrivals !== 'answered'
+    boardPole !== undefined &&
+    boardRoute !== undefined &&
+    // …**or this kerb in particular refused.** Once a live round answers, the merge clears `liveArrivals`
+    // — the screen-level sentence is gone and this reads `'answered'` — but a round asks each pole
+    // separately, so one kerb can still have refused and its row says so (ADR-120). The rider tapping
+    // *that* row is the one who most wants an answer, and a retry is exactly what a retryable failure is
+    // for. Without this clause the board is never fetched and the sheet's last arm prints "No scheduled
+    // service" under a row that just said we could not ask.
+    (view?.liveArrivals !== 'answered' || sheetRow?.incomplete === true)
   const board = useQuery({
     queryKey: ['etas', boardPole, boardRoute],
     enabled: wantsBoard,

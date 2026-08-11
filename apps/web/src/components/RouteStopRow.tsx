@@ -173,12 +173,18 @@ export function RouteStopRow({
                 <ArrivalSlot key={arrival.iso} arrival={arrival} first={slot === 0} />
               ))}
             </span>
-          ) : row.incomplete ? (
+          ) : null}
+          {row.incomplete ? (
             // **Why a row says this and the screen does not.** A live route watch asks each pole separately, so
             // one kerb can refuse while the other forty answer (ADR-116) — and `liveArrivals`, which is the
             // screen-level sentence, cannot express that without lying in one direction or the other. The same
             // words a card uses for the same fact (ADR-077), in the same muted label as every other secondary
             // line here, because it is an explanation and not an alarm.
+            //
+            // **Beside the times rather than instead of them**, which is not a layout choice: a refused pole
+            // keeps its *previous* readings (`retainFailedPoles`, ADR-073), so the honest render is the ageing
+            // time and the reason it is not moving. Drawing only the time hides the outage; drawing only the
+            // sentence throws away the rider's last known bus.
             <span className="mt-1 block text-label text-muted">{t(locale, 'etasUnavailable')}</span>
           ) : null}
         </span>

@@ -126,7 +126,7 @@ async function mountCase(name: string): Promise<RouteDetailPayload> {
   return detail
 }
 
-/** Push one round into the open watch, as the transport would. */
+/** Push one round into the open watch, as the transport would. A reading may name any route. */
 async function pushRound(etas: Eta[], failed: EtaFailure[] = []): Promise<void> {
   const watch = watches.at(-1)
   if (!watch) throw new Error('no route watch is open')
@@ -233,5 +233,28 @@ describe('a route whose times only a live watch can supply', () => {
       root = null
     })
     expect(watches.every((w) => w.unsubscribed)).toBe(true)
+  })
+
+  it('ignores a reading for another line, and says so again when a round matches nothing', async () => {
+    // Two rules in one round, both the kernel's. A Citybus pole serves a dozen routes and the socket narrows
+    // server-side, so a foreign reading should never arrive — but the listener is a public seam and the row
+    // it would land on is a different service entirely. And a round that matched *nothing* leaves
+    // `liveArrivals` standing, so the screen goes back to explaining itself rather than silently showing an
+    // empty schematic.
+    //
+    // (This case does **not** pin the round's route tag: the round is tagged with the *watched* route, which
+    // is unchanged here. That is `useLiveRoute`'s own suite — see `live-route-tag.test.tsx`.)
+    const detail = await mountCase(PER_STOP_ONLY)
+    const first = detail.stops[0]?.stop.id as string
+    await pushRound([reading(detail.route.id, first, 8)])
+    expect(text()).toContain('8')
+
+    await pushRound(
+      [reading('CTB:5B:outbound:1', first, 3)],
+      [{ stopId: first, error: { code: 'upstream_unavailable', message: 'no', retryable: true } }],
+    )
+    // The stale round is ignored whole: no other route's time, and no marker from its failure set.
+    expect(text()).not.toContain('3 min')
+    expect(text()).toContain(NOTICE)
   })
 })

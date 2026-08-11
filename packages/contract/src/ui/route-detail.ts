@@ -115,14 +115,6 @@ const STOP_ROWS: SlotNode = {
         'The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.',
     },
     {
-      name: 'stopIncomplete',
-      text: { message: 'etasUnavailable' },
-      when: 'incomplete',
-      why: 'Nothing refused. Absent on every payload the server builds — a route is fetched in one upstream call — and present only where a **live route watch** asked this kerb separately and it would not answer (ADR-116).',
-      invariant:
-        'The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of. It is what stops an empty row reading as *no bus is due*: `liveArrivals` cannot express "38 of 41 answered" without being wrong about most of the route, and a rider standing at the one kerb that refused is the person who most needs to know. Muted, never a warning colour, for the same reason the screen-level line is: nothing is wrong with the route.',
-    },
-    {
       name: 'stopArrivals',
       each: 'arrivals',
       of: [
@@ -178,6 +170,14 @@ const STOP_ROWS: SlotNode = {
       ],
       invariant:
         'Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.',
+    },
+    {
+      name: 'stopIncomplete',
+      text: { message: 'etasUnavailable' },
+      when: 'incomplete',
+      why: 'Nothing refused at this kerb — or the **screen** is already saying it, which is the case when a round answered nothing at all and `liveArrivals` still stands. Absent on every payload the server builds: a route is fetched in one upstream call, so only a **live route watch** (ADR-116) has a per-pole answer to give.',
+      invariant:
+        'The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of — and never both at once, which is what the kernel’s `refused` set enforces: 42 copies of one sentence down a screen is what `noLiveBoard`’s own invariant forbids. **After the arrivals, not instead of them.** A refused pole keeps its previous readings (`retainFailedPoles`, ADR-073), so a row can honestly carry an ageing time *and* the reason it is not moving; a renderer that showed only the time would hide the outage, and one that showed only the sentence would throw away the rider’s last known bus. Muted, never a warning colour: nothing is wrong with the route.',
     },
   ],
 }

@@ -14,8 +14,14 @@ export interface LiveRoute {
    * returned `{ etas: [] }` from the moment it mounted made every KMB route render with no times at all.
    * The conformance suite caught it, which is what it is for. `null` says *"I have no session"*, and a caller
    * that merges it anyway has a type error rather than a silent screen of blanks.
+   *
+   * **Tagged with the route it came from**, because `setRound(null)` runs in an effect and an effect runs
+   * after paint. Browser Back from a Citybus route to a KMB one, or the direction toggle: the route id and
+   * the payload change in the same commit, so without the tag one painted frame merges the previous route's
+   * round onto the new route's document — every reading filtered out as another route's, every row blank,
+   * and the old route's `failed` marking kerbs on a route nothing asked about. The caller compares.
    */
-  round: { etas: readonly Eta[]; failed: readonly EtaFailure[] } | null
+  round: { routeId: string; etas: readonly Eta[]; failed: readonly EtaFailure[] } | null
   /** The screen's clock, ticking at the served cadence. */
   now: number
   /** Whether a subscription is open. The screen draws nothing different for it; a test can see it. */
@@ -81,7 +87,7 @@ export function useLiveRoute(
     setRound(null)
     const subscription = source.watchRoute(
       routeId,
-      (etas, failed) => setRound({ etas, failed: failed ?? [] }),
+      (etas, failed) => setRound({ routeId, etas, failed: failed ?? [] }),
       { refreshAfterMs },
     )
     return () => {

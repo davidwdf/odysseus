@@ -315,6 +315,17 @@ export interface RouteStopRowView {
    * have to choose between claiming the screen has no times (false for 38 rows) and saying nothing (false
    * for 3). It is the same distinction `StopCardView.incomplete` (ADR-077) and `routeStopBoard`'s
    * `incomplete` (ADR-115) already draw, at the one granularity a live round actually has.
+   *
+   * **Only when the screen is not already saying it**, which is the half a review found missing. A round in
+   * which *every* pole refused leaves `liveArrivals` standing — correctly, nothing was answered — and
+   * marking all 41 rows as well would print one sentence 42 times down a screen, which is exactly what
+   * `noLiveBoard`'s own invariant forbids ("34 copies of one sentence is not more honest than one"). So the
+   * row speaks only when the screen is silent.
+   *
+   * **It can sit beside a reading, and that is not a contradiction.** `retainFailedPoles` keeps a refused
+   * pole's *previous* times rather than blanking the row (ADR-073), so the honest render is the ageing time
+   * **and** the sentence: the reading is real, and we could not re-ask. A renderer that showed only one of
+   * the two would be dropping either the rider's last known time or the reason it is not moving.
    */
   incomplete?: boolean
 }
@@ -571,7 +582,13 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
   // The kerbs the round could not ask about, as a set, so a 41-row walk is not 41 array scans. Read from
   // the payload rather than passed in as an option: it arrives on the same document the readings do, which
   // is what keeps a failure from outliving the round that produced it (`applyLiveEtasToRouteDetail`).
-  const refused = new Set((detail.failed ?? []).map((f) => f.stopId))
+  //
+  // **Empty while the screen is speaking.** `liveArrivals` present means the screen draws its own one-line
+  // notice, and a round in which every pole refused is exactly that case — so marking the rows too would
+  // print the same sentence once per row underneath it. See `RouteStopRowView.incomplete`.
+  const refused = new Set(
+    detail.liveArrivals === undefined ? (detail.failed ?? []).map((f) => f.stopId) : [],
+  )
   const rows: RouteStopRowView[] = stops.map((s, i) => {
     return {
       seq: s.seq,

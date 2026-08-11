@@ -8269,6 +8269,11 @@ pre-existing and unaddressed; it earned its keep here.
     `{ etas: [] }` from mount, and an empty reading list means *"nothing is due anywhere"* to a merge whose
     contract is that it receives the complete current set — so every KMB route rendered with no times at all.
     The hook now offers a session or `null`, and merging `null` is a type error rather than a blank screen.
-  - ⚪ **`poll` is still the default engine**, so this ships as a per-rider fan-out (one `/v1/route/:id` plus
-    a batch per round) until the socket is switched on; the shared-round economy needs
-    `VITE_LIVE_TRANSPORT=socket`. Proposal 05's remaining row.
+  - 🟠 **`poll` is still the default engine, and this line originally understated what that costs.** It said
+    "one `/v1/route/:id` plus a batch per round"; an adversarial review showed that is wrong twice over. A
+    41-pole route is **four** batches (`ETAS_BATCH_MAX_IDS = 12`), and — because `/v1/etas?ids=…` carries no
+    per-id route list — each one asks its poles **un-narrowed**, which is precisely the ~19× fan-out ADR-117
+    removed from the socket path. The same gap makes `failed` name a sibling route's outage at a shared kerb,
+    and lets `LIVE_CTB_BUDGET` drop the watched route's own board with no failure entry at all. Filed with
+    reproductions and three candidate fixes in `docs/07`; the shared-round economy needs
+    `VITE_LIVE_TRANSPORT=socket`, which is proposal 05's remaining row and the fix the other two point at.

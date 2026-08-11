@@ -604,15 +604,16 @@ function RouteStopRow({
               </Text>
             ) : null}
           </View>
-          {row.arrivals.length > 0 ? (
-            <EtaTimes arrivals={row.arrivals} />
-          ) : row.incomplete ? (
+          {row.arrivals.length > 0 ? <EtaTimes arrivals={row.arrivals} /> : null}
+          {row.incomplete ? (
             // **A kerb we could not ask about, said on the row rather than for the screen** (ADR-116). A live
             // route watch asks each pole separately, so one board can refuse while the rest answer, and
             // `liveArrivals` — the one-line notice above the schematic — cannot say that without being wrong
             // about most of the route. This renderer does not subscribe (ADR-113 owes it no new affordance),
             // so it will not reach this in the field; it is here because the **spec** binds both renderers,
-            // and a state one of them cannot draw is a state neither is measured on.
+            // and a state one of them cannot draw is a state neither is measured on. Beside the times rather
+            // than instead of them: a refused pole keeps its previous readings, so the ageing time and the
+            // reason it is not moving are both true.
             <Text variant="label" className="mt-1 text-muted">
               {t(locale, 'etasUnavailable')}
             </Text>

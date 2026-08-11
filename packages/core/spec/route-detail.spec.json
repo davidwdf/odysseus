@@ -6230,7 +6230,7 @@
         },
         {
           "name": "a-live-route-watch-fills-the-rows-a-citybus-route-cannot-fill-itself",
-          "why": "What a rider sees once `/v1/live?route=` is answering (ADR-116): the per-stop times are there, the screen-level notice is gone because an absent `liveArrivals` IS 'answered', and the one kerb whose board refused says so on its own row rather than reading as a stop with no bus due. The payload is exactly what `applyLiveEtasToRouteDetail` produces, so the two rules are pinned against one document.",
+          "why": "What a rider sees once `/v1/live?route=` is answering (ADR-116): the per-stop times are there and the screen-level notice is gone, because an absent `liveArrivals` IS 'answered'. **Both row shapes a live round produces are here**, which is what makes this one fixture enough: a kerb that refused with nothing to show, and a kerb that refused while keeping its last reading (`retainFailedPoles`, ADR-073) — the second says its sentence *beside* an ageing time rather than instead of it. The payload is exactly what `applyLiveEtasToRouteDetail` produces, so the two rules are pinned against one document.",
           "args": {
             "detail": {
               "route": {
@@ -6396,12 +6396,27 @@
                       }
                     ]
                   },
-                  "eta": null
+                  "eta": {
+                    "routeId": "CTB:962:outbound:1",
+                    "stopId": "KMB:9E2A7C1F3B4D5E60",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-05T14:07:00+08:00"],
+                    "dataTimestamp": "2026-08-05T13:58:12+08:00",
+                    "observedAt": "2026-08-05T05:59:20.000Z"
+                  }
                 }
               ],
               "failed": [
                 {
                   "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "board did not answer",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:9E2A7C1F3B4D5E60",
                   "error": {
                     "code": "upstream_unavailable",
                     "message": "board did not answer",
@@ -6541,6 +6556,375 @@
                   "label": "Central",
                   "code": "EXCHANGE SQUARE"
                 },
+                "arrivals": [
+                  {
+                    "iso": "2026-08-05T14:07:00+08:00",
+                    "label": {
+                      "kind": "mins",
+                      "value": 7,
+                      "unit": "min"
+                    },
+                    "urgency": "normal",
+                    "stale": true
+                  }
+                ],
+                "here": false,
+                "first": false,
+                "last": true,
+                "saved": false,
+                "incomplete": true
+              }
+            ],
+            "buses": [
+              {
+                "kind": "segment",
+                "from": 2,
+                "to": 3,
+                "label": "Bus approaching Tsuen Wan Station"
+              },
+              {
+                "kind": "segment",
+                "from": 3,
+                "to": 4,
+                "label": "Bus approaching Central"
+              }
+            ],
+            "hereIndex": -1,
+            "distanceM": 27667.212574335084,
+            "liveArrivals": "answered"
+          }
+        },
+        {
+          "name": "a-kerb-that-refused-keeps-its-last-time-and-says-why-beside-it",
+          "why": "`retainFailedPoles` keeps a refused pole's previous readings rather than blanking the row (ADR-073), so a row can carry an ageing time AND be a kerb we could not re-ask. Both are true and both must show: the time alone hides the outage, the sentence alone throws away the rider's last known bus. This is the row shape a review found the spec demanding and neither renderer drawing.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:962:outbound:1",
+                "operator": "CTB",
+                "routeNo": "962",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CAUSEWAY BAY",
+                  "zh-Hant": "銅鑼灣",
+                  "zh-Hans": "銅鑼灣"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": {
+                    "routeId": "CTB:962:outbound:1",
+                    "stopId": "KMB:AFB9321F7CD2C2E4",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-05T14:04:00+08:00"],
+                    "dataTimestamp": "2026-08-05T13:59:12+08:00",
+                    "observedAt": "2026-08-05T05:59:20.000Z"
+                  },
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": {
+                    "routeId": "CTB:962:outbound:1",
+                    "stopId": "KMB:18492910339E23AA",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-05T14:11:00+08:00"],
+                    "dataTimestamp": "2026-08-05T13:59:12+08:00",
+                    "observedAt": "2026-08-05T05:59:20.000Z"
+                  },
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": {
+                    "routeId": "CTB:962:outbound:1",
+                    "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-05T14:09:00+08:00"],
+                    "dataTimestamp": "2026-08-05T13:58:12+08:00",
+                    "observedAt": "2026-08-05T05:59:20.000Z"
+                  },
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": {
+                    "routeId": "CTB:962:outbound:1",
+                    "stopId": "KMB:AC7B0FE9E1D5A1B7",
+                    "operator": "CTB",
+                    "arrivals": ["2026-08-05T14:26:00+08:00"],
+                    "dataTimestamp": "2026-08-05T13:59:12+08:00",
+                    "observedAt": "2026-08-05T05:59:20.000Z"
+                  },
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "board did not answer",
+                    "retryable": true
+                  }
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "header": {
+              "operator": "CTB",
+              "routeNo": "962",
+              "origin": "Tin Shui Wai Station",
+              "destination": "Central",
+              "circular": false,
+              "label": "Tin Shui Wai Station → Central",
+              "collapsedLabel": "→ Central"
+            },
+            "facts": [
+              {
+                "key": "fare",
+                "value": "$13.4 → $6.9"
+              },
+              {
+                "key": "freq",
+                "value": "every 10 – 25 min"
+              },
+              {
+                "key": "hours",
+                "value": "05:30 – 00:15"
+              },
+              {
+                "key": "stops",
+                "value": "5 stops"
+              }
+            ],
+            "stops": [
+              {
+                "seq": 1,
+                "stopId": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "label": "Tin Shui Wai Station",
+                  "code": "TN511"
+                },
+                "arrivals": [
+                  {
+                    "iso": "2026-08-05T14:04:00+08:00",
+                    "label": {
+                      "kind": "mins",
+                      "value": 4,
+                      "unit": "min"
+                    },
+                    "urgency": "normal",
+                    "stale": false
+                  }
+                ],
+                "fare": "13.4",
+                "fareLabel": "$13.4",
+                "here": false,
+                "first": true,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 2,
+                "stopId": "KMB:18492910339E23AA",
+                "name": {
+                  "label": "Tin Shui Wai Park",
+                  "code": "TN510"
+                },
+                "arrivals": [
+                  {
+                    "iso": "2026-08-05T14:11:00+08:00",
+                    "label": {
+                      "kind": "mins",
+                      "value": 11,
+                      "unit": "min"
+                    },
+                    "urgency": "normal",
+                    "stale": false
+                  }
+                ],
+                "fare": "13.4",
+                "fareLabel": "$13.4",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 3,
+                "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                "name": {
+                  "label": "Kingswood Richly Plaza"
+                },
+                "arrivals": [
+                  {
+                    "iso": "2026-08-05T14:09:00+08:00",
+                    "label": {
+                      "kind": "mins",
+                      "value": 9,
+                      "unit": "min"
+                    },
+                    "urgency": "normal",
+                    "stale": true
+                  }
+                ],
+                "fare": "11.2",
+                "fareLabel": "$11.2",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false,
+                "incomplete": true
+              },
+              {
+                "seq": 4,
+                "stopId": "KMB:AC7B0FE9E1D5A1B7",
+                "name": {
+                  "label": "Tsuen Wan Station"
+                },
+                "arrivals": [
+                  {
+                    "iso": "2026-08-05T14:26:00+08:00",
+                    "label": {
+                      "kind": "mins",
+                      "value": 26,
+                      "unit": "min"
+                    },
+                    "urgency": "normal",
+                    "stale": false
+                  }
+                ],
+                "fare": "6.9",
+                "fareLabel": "$6.9",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 5,
+                "stopId": "KMB:9E2A7C1F3B4D5E60",
+                "name": {
+                  "label": "Central",
+                  "code": "EXCHANGE SQUARE"
+                },
                 "arrivals": [],
                 "here": false,
                 "first": false,
@@ -6551,14 +6935,318 @@
             "buses": [
               {
                 "kind": "segment",
-                "from": 2,
-                "to": 3,
-                "label": "Bus approaching Tsuen Wan Station"
+                "from": 1,
+                "to": 2,
+                "label": "Bus approaching Kingswood Richly Plaza"
               }
             ],
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
+          }
+        },
+        {
+          "name": "a-round-where-every-kerb-refused-is-the-screens-sentence-not-forty-one-rows",
+          "why": "Nothing answered, so `liveArrivals` still stands and the screen draws its one-line notice. Marking every row as well would print that sentence 42 times down one screen — which `noLiveBoard`'s own invariant forbids in as many words. The row speaks only when the screen is silent.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "CTB:962:outbound:1",
+                "operator": "CTB",
+                "routeNo": "962",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "CAUSEWAY BAY",
+                  "zh-Hant": "銅鑼灣",
+                  "zh-Hans": "銅鑼灣"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "13.4"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "11.2"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AC7B0FE9E1D5A1B7",
+                    "name": {
+                      "en": "TSUEN WAN STATION",
+                      "zh-Hant": "荃灣站",
+                      "zh-Hans": "荃灣站"
+                    },
+                    "location": {
+                      "lat": 22.3687,
+                      "lng": 114.1156
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AC7B0FE9E1D5A1B7"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "6.9"
+                },
+                {
+                  "seq": 5,
+                  "stop": {
+                    "id": "KMB:9E2A7C1F3B4D5E60",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中環（交易廣場）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "9E2A7C1F3B4D5E60"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ],
+              "failed": [
+                {
+                  "stopId": "KMB:AFB9321F7CD2C2E4",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "board did not answer",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:18492910339E23AA",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "board did not answer",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "board did not answer",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:AC7B0FE9E1D5A1B7",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "board did not answer",
+                    "retryable": true
+                  }
+                },
+                {
+                  "stopId": "KMB:9E2A7C1F3B4D5E60",
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "board did not answer",
+                    "retryable": true
+                  }
+                }
+              ],
+              "liveArrivals": "perStopOnly"
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "header": {
+              "operator": "CTB",
+              "routeNo": "962",
+              "origin": "Tin Shui Wai Station",
+              "destination": "Central",
+              "circular": false,
+              "label": "Tin Shui Wai Station → Central",
+              "collapsedLabel": "→ Central"
+            },
+            "facts": [
+              {
+                "key": "fare",
+                "value": "$13.4 → $6.9"
+              },
+              {
+                "key": "freq",
+                "value": "every 10 – 25 min"
+              },
+              {
+                "key": "hours",
+                "value": "05:30 – 00:15"
+              },
+              {
+                "key": "stops",
+                "value": "5 stops"
+              }
+            ],
+            "stops": [
+              {
+                "seq": 1,
+                "stopId": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "label": "Tin Shui Wai Station",
+                  "code": "TN511"
+                },
+                "arrivals": [],
+                "fare": "13.4",
+                "fareLabel": "$13.4",
+                "here": false,
+                "first": true,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 2,
+                "stopId": "KMB:18492910339E23AA",
+                "name": {
+                  "label": "Tin Shui Wai Park",
+                  "code": "TN510"
+                },
+                "arrivals": [],
+                "fare": "13.4",
+                "fareLabel": "$13.4",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 3,
+                "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                "name": {
+                  "label": "Kingswood Richly Plaza"
+                },
+                "arrivals": [],
+                "fare": "11.2",
+                "fareLabel": "$11.2",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 4,
+                "stopId": "KMB:AC7B0FE9E1D5A1B7",
+                "name": {
+                  "label": "Tsuen Wan Station"
+                },
+                "arrivals": [],
+                "fare": "6.9",
+                "fareLabel": "$6.9",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 5,
+                "stopId": "KMB:9E2A7C1F3B4D5E60",
+                "name": {
+                  "label": "Central",
+                  "code": "EXCHANGE SQUARE"
+                },
+                "arrivals": [],
+                "here": false,
+                "first": false,
+                "last": true,
+                "saved": false
+              }
+            ],
+            "buses": [],
+            "hereIndex": -1,
+            "distanceM": 27667.212574335084,
+            "liveArrivals": "perStopOnly"
           }
         }
       ]

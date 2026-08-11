@@ -443,6 +443,14 @@ describe('apps/mobile conforms to Route detail’s published spec, state by stat
       'no fixture has a saved row',
     ).toBe(true)
     expect(
+      views.some((v) => v.stops.some((s) => s.incomplete === true)),
+      'no fixture has a kerb the round could not ask about, so `stopIncomplete` is declared and driven by nothing',
+    ).toBe(true)
+    expect(
+      views.some((v) => v.stops.some((s) => s.incomplete === true && s.arrivals.length > 0)),
+      'no fixture has a refused kerb that kept its last reading — the row shape where the marker and a time must both show',
+    ).toBe(true)
+    expect(
       views.some((v) => v.header.circular),
       'no fixture is a loop',
     ).toBe(true)
