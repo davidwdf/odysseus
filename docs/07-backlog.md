@@ -505,27 +505,55 @@ written down.
       acts on is a document that ages.
 
 ## Infra / hardening
-- [ ] 🟠 **Once a route has loaded, a failing refetch is invisible — the screen keeps counting down.** Found
-      by the owner with the local Worker down (2026-08-11, screenshot on route 86K): every row kept ageing
-      its times normally and nothing said the data had stopped arriving. **The countdown itself is correct
-      and must stay** — arrival times are absolute instants, so the minute labels recompute against a ticking
-      clock with no new data, which is exactly why staleness is read off `dataTimestamp` (ADR-058, ADR-122).
-      What is missing is the *statement*.
+- [ ] 🟠 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
+      Asked for by the owner 2026-08-11 after finding it with the local Worker down (screenshot, route 86K):
+      every row kept ageing its times normally and nothing said the data had stopped arriving.
 
-      **Why the existing signals do not cover it.** `apps/web/src/screens/RouteDetail.tsx` renders
+      **The countdown itself is correct and must stay.** Arrival times are absolute instants, so the minute
+      labels recompute against a ticking clock with no new data — which is exactly why staleness is read off
+      `dataTimestamp` rather than off "did a fetch succeed" (ADR-058, ADR-122). What is missing is the
+      *statement*, not the behaviour.
+
+      **Why nothing covers it today.** `apps/web/src/screens/RouteDetail.tsx` renders
       `view ? … : query.isError ? … : skeleton`, so the error arm is only reachable when there is **no view
       at all**; with `keepPreviousData` and ADR-058's persisted cache there almost always is one. The only
-      remaining signal is the per-row stale dimming, which is subtle by design, per-row rather than
-      per-screen, and now lands at 120 s (ADR-122). A rider on a dead connection sees a normal-looking
-      screen for two minutes and a slightly dim one after that.
+      remaining signal is the per-row stale dimming — subtle by design, per-row rather than per-screen, and
+      since ADR-122 it lands at 120 s. A rider on a dead connection sees a normal-looking screen for two
+      minutes and a slightly dim one after that. Note the shape it shares with ADR-114: there, silence read
+      as data; **here, stale data reads as live.**
 
-      Note the shape it shares with ADR-114: silence reading as data. This is the mirror image — **stale data
-      reading as live** — and the same argument applies, which is why it is filed rather than improvised.
+      **Four states, four sentences, and collapsing them is the trap.** They differ in what a rider should
+      *do*, which is the only test that matters:
 
-      **What a fix needs:** one screen-level statement (a "not updating" / "last updated HH:MM" line), which
-      is a new user-facing string in three locales and therefore **the owner's call on wording**, plus a
-      decision about which query states count (`isError`, a paused retry, `isFetching` overdue). The same
-      question applies to Place and Nearby, so whatever it says should be one component.
+      | state | how it is detected | what it means to a rider |
+      |---|---|---|
+      | **stale, nothing failed** | last successful fetch is older than the cadence; no error | *"Last updated 14:19"* — the data is old and we are still trying |
+      | **no connectivity** | `navigator.onLine` false, or a fetch that failed with no response | *"You're offline"* — their problem to fix, and the times on screen are the last we had |
+      | **our edge unreachable / erroring** | fetch rejected against a reachable network, or a 5xx from our own Worker | *"Can't reach NextBus"* — our problem, retrying |
+      | **upstream refused** | the edge answered, and said so: `EtaFailure` / `liveArrivals` / an `upstream_unavailable`\|`upstream_timeout` code | already has vocabulary — *"Live times unavailable"* (ADR-073/077/081/114) — **do not rebuild it here** |
+
+      The last row is the important one: three quarters of this work is new, and one quarter already exists
+      and must not be duplicated with a second sentence that can disagree with the first.
+
+      **What it needs, in the order it should be built:**
+      1. **The kernel decides which state a screen is in**, from what it is handed — not a screen writing
+         `isError ? … : isPaused ? …`. That is a view function with corpus rows, in the shape
+         `placeDetailView`/`routeDetailView` already have, and it is what stops four screens each guessing.
+      2. **One component**, because Nearby, Place, Route detail and Favourites all need the same line and a
+         second copy is a second wording. Both renderers draw it, so it is a **spec** addition and both
+         conformance suites hold it.
+      3. **Catalogue keys in three locales** (en / zh-Hant / zh-Hans) plus the generated native strings.
+         **Owner's call on the wording** — the four sentences above are placeholders, and the same
+         reservation as ADR-114's applies.
+      4. **A clock question worth settling deliberately:** *"Last updated 14:19"* is an absolute time, which
+         ADR-008 prefers to a fabricated relative one ("2 minutes ago" ages while nobody re-renders) — but it
+         needs the locale's time format, and a reading fetched yesterday should say so rather than reading as
+         today. Cheaper alternative: show it only while stale.
+
+      Related and deliberately separate: the **`retryable` half of the taxonomy already tells a client
+      whether to keep asking** (`ERROR_CODES` in `packages/contract`), so this line should render that
+      distinction rather than invent one — a permanent failure and a transient one are different sentences,
+      which is the same argument ADR-114 made for `unavailable` versus `perStopOnly`.
 - [ ] 🟡 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
       the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
       defect in the route watch, but in what the batch endpoint can express**. **Demoted from 🟠 the same

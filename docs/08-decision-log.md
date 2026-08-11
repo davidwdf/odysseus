@@ -8383,5 +8383,7 @@ pre-existing and unaddressed; it earned its keep here.
     instants, so the minute labels recompute against a ticking clock with no new data at all, which is
     correct and is *why* staleness must be read off `dataTimestamp`. But the screen's error arm is only
     reachable when there is no view at all (`view ? … : query.isError ? …`), so once a route has loaded a
-    failed refetch is invisible except through this cue. Filed in `docs/07`; the sentence a rider should see
-    is the owner's call, as ADR-114's was.
+    failed refetch is invisible except through this cue. **Filed in `docs/07` and since expanded at the
+    owner's request** into the four states that need four different sentences — stale-but-trying
+    ("last updated 14:19"), the rider offline, our edge unreachable, and the upstream refusing (which
+    already has vocabulary and must not be rebuilt). The wording is the owner's call, as ADR-114's was.
