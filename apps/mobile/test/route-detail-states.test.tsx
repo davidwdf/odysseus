@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The React Native Route screen's conformance suite: **the same published spec the DOM screen drives**
-// (WP6-6b, ADR-094) — `packages/contract/ui/route-detail.spec.json`, nineteen states, seventeen projected.
+// (WP6-6b, ADR-094) — `packages/contract/ui/route-detail.spec.json`, twenty states, nineteen projected.
 //
 // WHY BOTH SIDES OF THIS EXIST
 // ADR-069's honest gap was a projection suite on one renderer and none on the other, pointing the wrong way:
@@ -73,6 +73,13 @@ const FIXTURE: Record<string, string> = {
   noFacts: 'a-route-with-no-service-block-has-no-facts-strip-at-all',
   holidayFare: 'a-holiday-fare-is-a-note-on-the-fare-pill-never-a-pill-of-its-own',
   empty: 'an-empty-sequence-still-names-the-route-from-its-own-labels',
+  // ADR-114's two arms. Same sentence today and two states deliberately: one is worth retrying and the
+  // other never will be, so giving either its own words later is an edit to one `shows`.
+  noLiveBoard: 'a-citybus-route-says-its-times-are-per-stop-rather-than-reading-as-empty',
+  arrivalsUnavailable: 'a-round-the-route-feed-did-not-answer-is-not-a-route-with-no-buses',
+  // ADR-116's answer to the first of those two: the same Citybus route, once a live route watch has
+  // answered it. Reached from a payload a round produced, which is what a driver is allowed to do.
+  liveRouteTimes: 'a-live-route-watch-fills-the-rows-a-citybus-route-cannot-fill-itself',
 }
 
 function caseNamed(name: string): CorpusCase {
@@ -386,11 +393,11 @@ beforeEach(() => {
 describe('apps/mobile conforms to Route detail’s published spec, state by state', () => {
   it('has the states the spec declares, and a corpus case for each projected one', () => {
     expect(routeDetailSpec.component).toBe('RouteDetail')
-    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(19)
+    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(21)
     const projected = Object.entries(routeDetailSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(17)
+    expect(projected.length).toBeGreaterThanOrEqual(20)
     for (const state of projected) {
       expect(
         FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',
@@ -434,6 +441,14 @@ describe('apps/mobile conforms to Route detail’s published spec, state by stat
     expect(
       views.some((v) => v.stops.some((s) => s.saved)),
       'no fixture has a saved row',
+    ).toBe(true)
+    expect(
+      views.some((v) => v.stops.some((s) => s.incomplete === true)),
+      'no fixture has a kerb the round could not ask about, so `stopIncomplete` is declared and driven by nothing',
+    ).toBe(true)
+    expect(
+      views.some((v) => v.stops.some((s) => s.incomplete === true && s.arrivals.length > 0)),
+      'no fixture has a refused kerb that kept its last reading — the row shape where the marker and a time must both show',
     ).toBe(true)
     expect(
       views.some((v) => v.header.circular),

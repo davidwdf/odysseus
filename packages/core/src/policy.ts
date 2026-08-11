@@ -36,9 +36,22 @@ export const CLIENT_POLICY_DEFAULTS: ResolvedClientPolicy = {
   // Three minutes is roughly the point at which "there is a bus coming" becomes "run". Nothing reads
   // this yet — see the note at the bottom of this file.
   warnUnderSec: 180,
-  // Upstream refreshes roughly once a minute (docs/01), so 90 s is the first moment a reading is
-  // certainly not merely between refreshes.
-  staleAfterMs: 90_000,
+  // **120 s, raised from 90 on 2026-08-11 (ADR-122) because 90 fired on healthy data.**
+  //
+  // The number has to exceed the worst age a *working* feed can hand us, or the cue means "this feed is
+  // slow" rather than "something is wrong" — and two delays stack before a reading reaches anybody:
+  // the operator regenerates a route's board on a **~60 s cycle**, and the CDN in front of it serves that
+  // response for up to **45 s** (`cache-control: max-age=45`, with an `age:` header measured climbing
+  // 8 → 41 across successive requests). So a healthy Citybus reading is 0–105 s old on arrival — measured
+  // on route 182: **median 63 s, max 102 s, and 5 of 18 readings already past 90 s the moment they
+  // landed**. KMB, whose per-pole board refreshes faster, arrives at 26–27 s, which is why 90 looked right
+  // when it was chosen and why only one operator's riders saw the cue misfire.
+  //
+  // 120 clears the 105 s ceiling with a small margin and still fires well inside the two-minute window
+  // where a countdown has genuinely stopped being trustworthy. It is **not** derived from the cadence at
+  // runtime — see the note at the bottom of this file for why one number, served, beats a formula nobody
+  // can see the inputs of.
+  staleAfterMs: 120_000,
   // The edge coalesces live ETA calls for 30 s and serves that same `max-age` (ADR-057). Polling
   // faster cannot produce a newer reading — it returns the byte-identical cached response — so this
   // is the cadence, and `apps/edge/src/eta-cache.ts` derives its TTL from it rather than restating

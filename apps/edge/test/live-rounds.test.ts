@@ -72,6 +72,7 @@ import {
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
+import { LIVE_HUB_KV_KEYS, ROUNDS_COMPLETED_KEY } from '../src/eta-hub'
 import worker from '../src/index'
 import { liveShardName } from '../src/live'
 import { datasetJson, ORIGIN, poles } from './fixtures'
@@ -264,7 +265,10 @@ async function resetShards(): Promise<void> {
       for (const ws of state.getWebSockets()) ws.close(1000, 'test reset')
       await state.storage.deleteAlarm()
       state.storage.sql.exec('DELETE FROM readings')
-      state.storage.kv.delete('unchangedRounds')
+      // Every key the object owns, from its own declaration: this line used to name `'unchangedRounds'`
+      // as a literal in four suites at once, so a fifth key would have leaked between cases in all of
+      // them without a word (WP6-B step 2b added two).
+      for (const key of LIVE_HUB_KV_KEYS) state.storage.kv.delete(key)
     })
   }
 }
@@ -425,11 +429,52 @@ function loadBoards(scenario: LiveRoundsScenario, round: number): void {
  * first `settle()` here covers the handshake and the first round together — which is exactly the state
  * the client driver's first round settles to.
  */
+/**
+ * Wait until a shard has *finished* at least `n` rounds.
+ *
+ * **This is what the connect round could not be waited on with.** Rounds 1..n are driven by
+ * `runDurableObjectAlarm`, which is awaited, so their frames are queued before anything looks. Round 0 is
+ * not: the upgrade returns as soon as the socket exists and the shard's first fan-out — one `fetch` per
+ * pole through Miniflare — runs *after* it. So the snapshot could land, then real work happen, then the
+ * readings; and `QUIET_MS`'s 150 ms of quiet could fall in that gap, which made `a refusing board is not a
+ * departure` fail on a slow runner roughly one run in several (`docs/07-backlog.md`, filed with its
+ * three-line diff). Two fixes were tried and rejected first: a wider quiet window took this file from 8 s
+ * to 27 s, and driving round 0 through `runDurableObjectAlarm` is a no-op because no alarm is pending at
+ * connect.
+ *
+ * `roundsCompleted` is incremented as the **last** statement of `round()`, after every `sendRound`, so
+ * `n` rounds counted means `n` rounds' frames are already queued. `settle()` still runs after this — the
+ * counter says "the round is done", quiet says "and nothing more is coming" — but it can no longer be
+ * satisfied by a gap in the middle of a round.
+ */
+async function awaitShardRounds(targets: readonly string[], n: number): Promise<void> {
+  const deadline = Date.now() + 5_000
+  let seen = 0
+  while (Date.now() < deadline) {
+    seen = await runInDurableObject(shardStub(targets), async (_instance: EtaHub, state) => {
+      const stored = state.storage.kv.get<number>(ROUNDS_COMPLETED_KEY)
+      return typeof stored === 'number' ? stored : 0
+    })
+    if (seen >= n) return
+    await new Promise<void>((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error(`waited for ${n} shard round(s), saw ${seen}`)
+}
+
 async function throughShard(scenario: LiveRoundsScenario): Promise<string[]> {
   const labelOf = labeller(scenario)
   const targets = scenario.targets.map((place) => placeIds.get(place) as string)
 
   loadBoards(scenario, 0)
+  // Read before the connect: a scenario is one `it`, but `resetShards()` is what zeroes the counter and
+  // this way the wait below is correct whether or not it ran for this call.
+  const roundsBefore = await runInDurableObject(
+    shardStub(targets),
+    async (_instance: EtaHub, state) => {
+      const stored = state.storage.kv.get<number>(ROUNDS_COMPLETED_KEY)
+      return typeof stored === 'number' ? stored : 0
+    },
+  )
   const res = await get(`${LIVE_PATH}?targets=${encodeURIComponent(targets.join(','))}`, {
     headers: { Upgrade: 'websocket' },
   })
@@ -452,6 +497,7 @@ async function throughShard(scenario: LiveRoundsScenario): Promise<string[]> {
       resetEtaCache()
       await runDurableObjectAlarm(shardStub(targets))
     }
+    await awaitShardRounds(targets, roundsBefore + round + 1)
     await frames.settle()
     const arrived = frames.take()
     let applied = 0

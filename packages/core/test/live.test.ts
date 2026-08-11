@@ -3,6 +3,7 @@ import corpus from '../spec/live.spec.json'
 import {
   acceptTargets,
   applyLiveEtasToNearby,
+  applyLiveEtasToRouteDetail,
   applyLiveEtasToStopDetail,
   applyLiveFrame,
   diffEtas,
@@ -10,6 +11,8 @@ import {
   LIVE_CADENCE_FLOOR_MS,
   LIVE_CADENCE_RAMP_ROUNDS,
   LIVE_RECONNECT_INITIAL_MS,
+  LIVE_ROUTE_MAX_GAP_MS,
+  LIVE_ROUTE_MIN_GAP_MS,
   LIVE_SESSION_START,
   type LiveApplyResult,
   type LiveSession,
@@ -19,7 +22,10 @@ import {
   liveTargetsKey,
   narrowEtasToRoutes,
   nextLiveCadenceMs,
+  nextRouteRoundMs,
   retainFailedPoles,
+  routeIdFromWatchName,
+  routeWatchName,
   sameFailures,
   sameReading,
   unionFailures,
@@ -29,11 +35,12 @@ import type {
   EtaFailure,
   EtaRef,
   NearbyStop,
+  RouteDetail,
   ServerFrame,
   StopDetail,
   WatchTarget,
 } from '../src/types'
-import { specCases } from './corpus'
+import { at, specCases } from './corpus'
 
 // One `describe` per `@spec` group in ../spec/live.spec.json. JSON `null` becomes the language's absent
 // value at the boundary (see test/corpus.ts) — here that is an absent subscriber count and an absent
@@ -257,6 +264,99 @@ describe('live#liveShardFor', () => {
   }
 })
 
+describe('live#routeWatchName', () => {
+  for (const c of specCases<{ routeId: string }, string | null>(corpus, 'routeWatchName')) {
+    it(c.name, () => {
+      // `?? null` at the boundary: JSON has no `undefined`, so the corpus writes the absent answer as
+      // `null` and the translation belongs here rather than in the signature (see test/corpus.ts).
+      expect(routeWatchName(c.args.routeId) ?? null).toBe(c.expect)
+    })
+  }
+
+  it('round-trips through `routeIdFromWatchName`, which is what pins the inverse', () => {
+    // The object reads its own name to learn which route it is for, so the two functions have to agree
+    // exactly. Asserted as a property over this group's rows rather than as a second corpus group
+    // restating the same strings backwards.
+    for (const c of specCases<{ routeId: string }, string | null>(corpus, 'routeWatchName')) {
+      const name = routeWatchName(c.args.routeId)
+      expect(routeIdFromWatchName(name), c.name).toBe(
+        name === undefined ? undefined : c.args.routeId,
+      )
+    }
+  })
+
+  it('reads nothing back out of a name that is not a route watch', () => {
+    // A shard's name, a plausible-looking forgery and the absent case. The validation on the way *out*
+    // matters because by then the name is storage-shaped input, not something this process just made.
+    expect(routeIdFromWatchName('live-3')).toBeUndefined()
+    expect(routeIdFromWatchName('route-not a route id')).toBeUndefined()
+    expect(routeIdFromWatchName('route-')).toBeUndefined()
+    expect(routeIdFromWatchName(undefined)).toBeUndefined()
+    expect(routeIdFromWatchName(null)).toBeUndefined()
+  })
+
+  it('never mints a name a shard could also be called', () => {
+    // A property over the group rather than a value. The two namespaces share one Durable Object class, so a
+    // name collision would silently put a route watch and a place shard in the same object — with two
+    // different clocks and two different caps. `liveShardFor` names its objects `live-<n>`.
+    for (const c of specCases<{ routeId: string }, string | null>(corpus, 'routeWatchName')) {
+      const name = routeWatchName(c.args.routeId)
+      if (name === undefined) continue
+      expect(name.startsWith('live-'), `${c.name}: could collide with a shard`).toBe(false)
+      expect(name).not.toBe(c.args.routeId)
+    }
+  })
+})
+
+describe('live#nextRouteRoundMs', () => {
+  interface RoundArgs {
+    publishedAt?: string
+    previousPublishedAt?: string
+    cacheAgeSec?: number
+    now: string
+  }
+  const call = (a: RoundArgs) =>
+    nextRouteRoundMs({
+      ...(a.publishedAt === undefined ? {} : { publishedAt: a.publishedAt }),
+      ...(a.previousPublishedAt === undefined
+        ? {}
+        : { previousPublishedAt: a.previousPublishedAt }),
+      ...(a.cacheAgeSec === undefined ? {} : { cacheAgeSec: a.cacheAgeSec }),
+      now: at(a.now),
+    })
+
+  for (const c of specCases<RoundArgs, number>(corpus, 'nextRouteRoundMs')) {
+    it(c.name, () => {
+      expect(call(c.args)).toBe(c.expect)
+    })
+  }
+
+  it('never schedules outside its own floor and ceiling', () => {
+    // The property the clamp exists for, asserted across every row rather than trusted per row: whatever the
+    // arithmetic, a watch must not become a tight loop against somebody else's free API, and must not park
+    // itself for so long that a rider watches a dead screen.
+    for (const c of specCases<RoundArgs, number>(corpus, 'nextRouteRoundMs')) {
+      const ms = call(c.args)
+      expect(ms, `${c.name}: below the floor`).toBeGreaterThanOrEqual(LIVE_ROUTE_MIN_GAP_MS)
+      expect(ms, `${c.name}: above the ceiling`).toBeLessThanOrEqual(LIVE_ROUTE_MAX_GAP_MS)
+    }
+  })
+
+  it('asks sooner after a round that learned nothing than after one that did', () => {
+    // The whole point of the not-advanced arms, stated as a comparison so it cannot be satisfied by two
+    // numbers that happen to be equal. A round with news can afford to wait for the next publish; a round
+    // without it should not wait a full period for news it already failed to get.
+    const base = { publishedAt: '2026-08-10T21:29:12+08:00', now: '2026-08-10T21:29:20+08:00' }
+    const advanced = call({ ...base, previousPublishedAt: '2026-08-10T21:28:13+08:00' })
+    const stalled = call({ ...base, previousPublishedAt: base.publishedAt })
+    const measured = call({ ...base, previousPublishedAt: base.publishedAt, cacheAgeSec: 30 })
+    expect(stalled).toBeLessThan(advanced)
+    expect(measured).toBeLessThan(advanced)
+    // …and a measured turnover is its own answer, not the blind guess dressed up.
+    expect(measured).not.toBe(stalled)
+  })
+})
+
 describe('live#liveSocketUrl', () => {
   for (const c of specCases<{ apiBaseUrl: string }, string>(corpus, 'liveSocketUrl')) {
     it(c.name, () => {
@@ -280,6 +380,37 @@ describe('live#applyLiveEtasToStopDetail', () => {
       ).toEqual(c.expect)
     })
   }
+})
+
+describe('live#applyLiveEtasToRouteDetail', () => {
+  // Same boundary translation as the sibling above: `failed: null` in the corpus is the caller passing
+  // nothing, which is the case that must CLEAR a stale list rather than preserve it.
+  for (const c of specCases<
+    { detail: RouteDetail; etas: Eta[]; failed: EtaFailure[] | null },
+    RouteDetail
+  >(corpus, 'applyLiveEtasToRouteDetail')) {
+    it(c.name, () => {
+      expect(
+        applyLiveEtasToRouteDetail(c.args.detail, c.args.etas, c.args.failed ?? undefined),
+      ).toEqual(c.expect)
+    })
+  }
+
+  it('leaves the payload it was handed untouched', () => {
+    // The screen derives its view from the *merged* payload and react-query holds the original; a merge
+    // that mutated its argument would write live readings into the cached HTTP document, and the next
+    // refetch would look like it had answered. Asserted structurally rather than by identity, because a
+    // spread that reused a nested object would still pass an identity check on the root.
+    const c = specCases<
+      { detail: RouteDetail; etas: Eta[]; failed: EtaFailure[] | null },
+      RouteDetail
+    >(corpus, 'applyLiveEtasToRouteDetail')[0] as {
+      args: { detail: RouteDetail; etas: Eta[]; failed: EtaFailure[] | null }
+    }
+    const before = JSON.parse(JSON.stringify(c.args.detail)) as RouteDetail
+    applyLiveEtasToRouteDetail(c.args.detail, c.args.etas, c.args.failed ?? undefined)
+    expect(c.args.detail).toEqual(before)
+  })
 })
 
 describe('live#applyLiveEtasToNearby', () => {

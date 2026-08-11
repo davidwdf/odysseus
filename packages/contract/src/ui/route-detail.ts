@@ -1,7 +1,7 @@
 import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
 
 /**
- * **The Route screen** (WP6-6b) — the vertical schematic, its bus tokens, and the nineteen states it can be
+ * **The Route screen** (WP6-6b) — the vertical schematic, its bus tokens, and the twenty states it can be
  * in. The row `proposals/04` calls *"the motion test — the first screen where 'motion is idiom' is a real
  * claim rather than a slogan"*.
  *
@@ -171,6 +171,14 @@ const STOP_ROWS: SlotNode = {
       invariant:
         'Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.',
     },
+    {
+      name: 'stopIncomplete',
+      text: { message: 'etasUnavailable' },
+      when: 'incomplete',
+      why: 'Nothing refused at this kerb — or the **screen** is already saying it, which is the case when a round answered nothing at all and `liveArrivals` still stands. Absent on every payload the server builds: a route is fetched in one upstream call, so only a **live route watch** (ADR-116) has a per-pole answer to give.',
+      invariant:
+        'The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of — and never both at once, which is what the kernel’s `refused` set enforces: 42 copies of one sentence down a screen is what `noLiveBoard`’s own invariant forbids. **After the arrivals, not instead of them.** A refused pole keeps its previous readings (`retainFailedPoles`, ADR-073), so a row can honestly carry an ageing time *and* the reason it is not moving; a renderer that showed only the time would hide the outage, and one that showed only the sentence would throw away the rider’s last known bus. Muted, never a warning colour: nothing is wrong with the route.',
+    },
   ],
 }
 
@@ -234,6 +242,34 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The route number, both ends of the journey, the facts strip, and one row per stop in sequence with its printed code, its boarding fare and its upcoming times.',
       mustNot:
         'A row for a stop the route does not call at, or a sequence number that is the row’s index rather than the wire’s. A rider counts stops to know when to get off.',
+      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+    },
+
+    /**
+     * **A route whose times arrived over a live watch** — the state this whole feature exists to reach
+     * (ADR-116/119, proposals/05).
+     *
+     * Citybus and GMB publish no bulk route-eta feed, so `noLiveBoard` above is what a rider saw on those
+     * routes for two waves: a complete schematic with no times anywhere and one line explaining why. A
+     * `/v1/live?route=` subscription asks each of the route's 13–41 poles separately and pushes what it
+     * finds, and `applyLiveEtasToRouteDetail` merges that back onto the payload — which is why this state's
+     * projection is `content`'s and **not** `noLiveBoard`'s: the explanation is gone, because there is
+     * nothing left to explain.
+     *
+     * What makes it a state of its own rather than the same one is the two things it pins that no other
+     * fixture can: that the notice **disappears** when readings arrive (a renderer that kept drawing it
+     * would contradict the times beside it), and that a kerb the round could not ask about says so **on its
+     * own row**. Both are reachable only from a payload a live round produced.
+     *
+     * `apps/mobile` does not subscribe (ADR-113 owes the reference renderer no new affordance) and can still
+     * be put in this state, because a driver owns *how* it gets there — here, by being handed the payload a
+     * round would have produced. The spec owns what must be there.
+     */
+    liveRouteTimes: {
+      must: 'Times on the rows the round answered, no screen-level explanation at all, and the sentence on any row whose kerb would not answer.',
+      mustNot:
+        'Keeping the "live times unavailable" line above rows that now show minutes — the screen contradicting itself — or leaving a refused kerb looking like a stop with no bus due, which is the ADR-073 confusion one level down from where ADR-114 fixed it.',
+      why: 'Most routes are KMB, whose bulk feed answers, so most of the time no subscription is wanted and this state is never entered.',
       enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
     },
 
@@ -408,25 +444,73 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
     },
 
     /**
-     * 🔴 **A route whose operator publishes no board at all** — declared, and satisfied by neither renderer.
+     * **A route whose operator publishes no route-level board** — enforced since ADR-114, `knownDefect`
+     * before it.
      *
      * `/v1/route/:id` fetches live arrivals for KMB and LWB only: Citybus has no bulk route-eta endpoint
      * (ADR-021) and GMB is not wired. So on a CTB or GMB route **every** row carries no reading, for ever,
-     * and both renderers draw exactly what a route with nothing currently due draws. A rider cannot tell a
-     * route the app never asks about from a route with no buses coming.
+     * and both renderers drew exactly what a route with nothing currently due draws — a rider could not tell
+     * a route the app never asks about from a route with no buses coming.
      *
-     * ADR-077 closed this shape for `/v1/nearby` and `/v1/stop` by putting `failed` on the wire, and
-     * `apps/edge/src/stop-route.ts` says on the very call that route detail's equivalent *"should come from
-     * here"*. It was WP5-13's and did not land, so the view has no field to read and the sentence below
-     * cannot be enforced by anything yet — which is precisely what `knownDefect` is for.
+     * What made it unenforceable was that the wire said nothing, so the view had nothing to expose. It says
+     * `liveArrivals` now, and note what shape it is **not**: not the `EtaFailure[]` ADR-077 gave
+     * `/v1/nearby` and `/v1/stop`. A route is fetched in one upstream call, so naming 34 poles would invent a
+     * granularity the fetch does not have — which is also why `must` says *once for the screen*.
+     *
+     * The sentence is `etasUnavailable`, the one `StopRow` already uses, and it is honest but not the best
+     * this could be: these operators' **per-pole** boards do answer, so the times a rider wants are one tap
+     * away on any stop. Saying so needs a string of its own and is the owner's call, not this file's.
      */
     noLiveBoard: {
       must: 'One line saying live times are unavailable for this route — once for the screen, not per row.',
       mustNot:
-        'Reading as "no bus is due at any stop", which is what both renderers currently draw. It is the arrivals-path failure ADR-073 is named for, arriving through an operator that was never asked.',
+        'Reading as "no bus is due at any stop", which is what both renderers drew until ADR-114. It is the arrivals-path failure ADR-073 is named for, arriving through an operator that was never asked.',
+      why: 'Most routes are KMB, whose route-level feed does answer — so most of the time there is nothing to say and saying it anyway would be noise on the screen a rider uses most.',
       enforcement: {
-        knownDefect:
-          'The wire carries no failure field for this endpoint, so `routeDetailView` has nothing to expose and no renderer can satisfy this. The fix is three parts and is in `docs/07`: `RouteDetailSchema` gains `failed` (additive, a `CONTRACT_VERSION` minor), the view gains the `incomplete` boolean `StopCardView` and `PlaceDetailView` already have, and both renderers say it once. Pinned meanwhile as the corpus row `a-citybus-route-shows-no-times-anywhere-and-does-not-say-why` (`knownDefect`), so the two renderers stay wrong in the same way. Owner: WP5-13’s successor.',
+        shows: [
+          FACTS,
+          {
+            name: 'noLiveBoard',
+            text: { message: 'etasUnavailable' },
+            why: 'The operator publishes a route-level feed and it answered, so the readings on the schematic are the whole truth.',
+            invariant:
+              'Once, above the schematic — not per row. A rider cannot act on *which* rows, and 34 copies of one sentence is not more honest than one. Never a warning colour: nothing is wrong with the route, and nothing about it will change if they wait.',
+          },
+          STOP_ROWS,
+        ],
+      },
+    },
+
+    /**
+     * **A round that did not answer**, which is the same silence for a different reason — and the reason
+     * this is a second state rather than a second sentence in the one above.
+     *
+     * `/v1/route/:id` wraps the KMB route-eta fetch in a catch, deliberately: a route view without live
+     * times is still a route view, because the stop list, the geometry and the fares are all static and
+     * erroring the screen would lose them (ADR-073). What the catch also did, until ADR-114, was make an
+     * upstream outage indistinguishable from a quiet route — **on KMB, where nearly every rider is.**
+     *
+     * It shows the same line as `noLiveBoard` today and it is not the same fact: this one is worth retrying
+     * and that one never will be. Two states, one sentence, so that giving either its own words later is an
+     * edit to one `shows` and to nothing else.
+     */
+    arrivalsUnavailable: {
+      must: 'One line saying live times are unavailable, above an otherwise complete schematic.',
+      mustNot:
+        'Losing the static half. The stops, the fares and the facts strip did not fail and are the reason the fetch is caught rather than thrown — a screen that dropped them would be a worse answer than the one the failure allows.',
+      why: 'The round answered, which is the ordinary case.',
+      enforcement: {
+        shows: [
+          FACTS,
+          {
+            name: 'arrivalsUnavailable',
+            text: { message: 'etasUnavailable' },
+            why: 'The round answered, so the readings are complete and there is nothing to say about them.',
+            invariant:
+              'The same line, in the same place, as `noLiveBoard` — a rider is told what they can act on (no live times here) and not which of our two reasons produced it.',
+          },
+          STOP_ROWS,
+        ],
       },
     },
 

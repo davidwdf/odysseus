@@ -11,12 +11,14 @@ import {
   type RouteHeaderNames,
   routeDetailView,
   routeFactSheet,
+  routeStopBoard,
   routeTerminusNames,
   upcoming,
   visibleBusMarkers,
 } from '../src/route-detail'
 import type { BusMarker } from '../src/route-position'
 import type {
+  EtaReport,
   I18nText,
   Locale,
   ResolvedClientPolicy,
@@ -151,6 +153,48 @@ describe('route-detail#routeDetailView', () => {
   const viewFor = (c: { args: Args }) => routeDetailView(c.args.detail, optionsFor(c.args))
 
   /**
+   * The live-fed Citybus case, asserted by **property** as well as by bytes.
+   *
+   * Its `expect` was computed by running this function, which is how a 200-line view model gets pinned at
+   * all — and is also how a wrong composition would get pinned as correct. So the three claims that case
+   * exists to make are restated here in a form that does not depend on those bytes: the notice is gone, the
+   * kerb that refused says so on its own row, and every row the round answered has a readout. All three
+   * were watched failing on a deliberate revert.
+   */
+  it('a live route watch answers the rows and marks only the kerb that refused', () => {
+    const c = rows().find((row) => row.name.startsWith('a-live-route-watch-fills')) as {
+      args: Args
+    }
+    expect(c, 'the live-fed corpus case has moved or been renamed').toBeTruthy()
+    const view = viewFor(c)
+    const refused = new Set((c.args.detail.failed ?? []).map((f) => f.stopId))
+    expect(refused.size, 'the case no longer carries two refusing kerbs').toBe(2)
+
+    expect(view.liveArrivals).toBe('answered')
+    for (const row of view.stops) {
+      expect(
+        row.incomplete === true,
+        `${row.stopId} is marked incomplete iff its kerb refused`,
+      ).toBe(refused.has(row.stopId))
+    }
+    // **Both row shapes a live round produces**, which is why one fixture is enough for the state: a kerb
+    // that refused with nothing to show, and one that refused while `retainFailedPoles` kept its last
+    // reading — the row that has to carry the sentence *and* the time, and the shape a review found the
+    // spec demanding and neither renderer drawing.
+    const marked = view.stops.filter((row) => row.incomplete === true)
+    expect(
+      marked.some((row) => row.arrivals.length === 0),
+      'no refused kerb is empty',
+    ).toBe(true)
+    expect(
+      marked.some((row) => row.arrivals.length > 0),
+      'no refused kerb kept a reading, so nothing pins the marker sitting beside a time',
+    ).toBe(true)
+    // …and the readings really arrived, or every assertion above would hold over a screen of blanks.
+    expect(view.stops.filter((row) => row.arrivals.length > 0).length).toBeGreaterThanOrEqual(2)
+  })
+
+  /**
    * How close two languages have to agree about the route's length.
    *
    * `distanceM` is a sum of haversines, and the geo corpus already states the rule for that class of
@@ -281,12 +325,77 @@ describe('route-detail#routeDetailView', () => {
         v.stops.some((s) => s.name.code !== undefined),
       ),
       'a name with none': views.some((v) => v.stops.some((s) => s.name.code === undefined)),
+      // ADR-114's three arms. The second and third are what a route with an empty rail *means*, and until
+      // this row they were one thing: `arrivals: []` on every stop, with nothing anywhere saying whether
+      // anybody had been asked. All three are needed because `src/route-detail.ts` is held to 100% branches.
+      'a round that answered': views.some((v) => v.liveArrivals === 'answered'),
+      'a round that did not answer': views.some((v) => v.liveArrivals === 'unavailable'),
+      'an operator with no route-level feed': views.some((v) => v.liveArrivals === 'perStopOnly'),
+      // …and the pairing that makes the point: an empty rail is not evidence either way.
+      'an empty rail that was answered': views.some(
+        (v) => v.buses.length === 0 && v.liveArrivals === 'answered',
+      ),
+      'an empty rail that was never asked about': views.some(
+        (v) => v.buses.length === 0 && v.liveArrivals !== 'answered',
+      ),
     }
     expect(
       Object.entries(arms)
         .filter(([, hit]) => !hit)
         .map(([arm]) => arm),
     ).toEqual([])
+  })
+})
+
+describe('route-detail#routeStopBoard', () => {
+  interface BoardArgs {
+    report?: EtaReport
+    poleId: string
+    routeId: string
+    now: string
+    locale: Locale
+    policy?: ResolvedClientPolicy
+  }
+  type Board = ReturnType<typeof routeStopBoard>
+
+  const call = (a: BoardArgs) =>
+    routeStopBoard(a.report, {
+      poleId: a.poleId,
+      routeId: a.routeId,
+      now: at(a.now),
+      locale: a.locale,
+      ...(a.policy === undefined ? {} : { policy: a.policy }),
+    })
+
+  for (const c of specCases<BoardArgs, Board>(corpus, 'routeStopBoard')) {
+    it(c.name, () => {
+      expect(call(c.args)).toEqual(c.expect)
+    })
+  }
+
+  it('never answers with a reading for a different pole or a different route', () => {
+    // A property over the whole group rather than a value, and the one that matters on a schematic: a
+    // route's stops are *different rows*, so a time borrowed from the wrong kerb is not a small error —
+    // it tells a rider a bus is coming to a stop it has already passed. The corpus pins the answers; this
+    // pins that no answer can ever come from somewhere else.
+    for (const c of specCases<BoardArgs, Board>(corpus, 'routeStopBoard')) {
+      const got = call(c.args)
+      if (got.arrivals.length === 0) continue
+      const source = (c.args.report?.etas ?? []).filter((e) =>
+        got.arrivals.every((a) => e.arrivals.includes(a.iso)),
+      )
+      expect(source.length, `${c.name}: the readings came from no single reading`).toBe(1)
+      expect(source[0]?.routeId, `${c.name}: a reading for another route`).toBe(c.args.routeId)
+    }
+  })
+
+  it('is incomplete only when this pole is the one that failed', () => {
+    // ADR-077's rule, one level down and easy to get subtly wrong: `failed` is a *place-wide* list, so a
+    // failure at a neighbouring kerb must not make this stop's silence look like an outage.
+    for (const c of specCases<BoardArgs, Board>(corpus, 'routeStopBoard')) {
+      const failedHere = (c.args.report?.failed ?? []).some((f) => f.stopId === c.args.poleId)
+      expect(call(c.args).incomplete, c.name).toBe(failedHere)
+    }
   })
 })
 

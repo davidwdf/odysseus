@@ -21,9 +21,11 @@ import { type Endpoints, resolveEndpoints } from './endpoint'
 import { classifyFailure } from './errors'
 import {
   createLiveEtaController,
-  createPollTransport,
+  DEFAULT_LIVE_ENGINE,
   type LiveEtaEngine,
+  type LiveEtaUpdate,
   type LiveTransportContext,
+  liveTransportFor,
 } from './live'
 
 export interface EdgeClientOptions {
@@ -83,7 +85,11 @@ export class EdgeClient implements DataSource {
     // Bind to the global: browsers throw "Illegal invocation" if native fetch is
     // called with a receiver other than window (e.g. as this.fetchImpl(...)).
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis)
-    this.transport = opts.transport ?? createPollTransport
+    // **The client is the one place that names the default**, and it names it by asking `select.ts` rather
+    // than by spelling an engine — so `DEFAULT_LIVE_ENGINE` is a single declaration and flipping it moves
+    // every caller at once. It used to read `?? createPollTransport`, which was a second spelling of the
+    // same answer and would have had to be found by hand on the day the default changed (ADR-121).
+    this.transport = opts.transport ?? liveTransportFor(DEFAULT_LIVE_ENGINE)
   }
 
   private async getJson<T>(path: string): Promise<T> {
@@ -170,9 +176,6 @@ export class EdgeClient implements DataSource {
      * comparison holds a `createLiveEtaController` directly, which is what `useLiveEtas` becomes when
      * Favourites adopts it (WP5-0 watches one target per screen, so there is nothing to diff yet).
      */
-    let last: readonly Eta[] | null = null
-    /** The failure set already handed over. See the guard below for why `etas` alone is not enough. */
-    let lastFailed: readonly EtaFailure[] = []
     const controller = createLiveEtaController({
       transport: this.transport({
         endpoints: this.endpoints,
@@ -186,25 +189,129 @@ export class EdgeClient implements DataSource {
         clock: this.clock,
       }),
       targets,
-      emit: ({ etas, failed }) => {
-        // **Two things can be news, and the second one was being swallowed here** (WP5-14, ADR-081).
-        // `applyLiveFrame`'s `status` case passes `etas` through by reference, so identity is exactly the
-        // right test for "the readings did not move" — but the failure set moves independently, and the
-        // round that matters most is a kerb starting to refuse while every reading stands still. Until
-        // `EtaListener` could carry `failed`, that round carried no information through this door and the
-        // guard was right to drop it; now it carries the one thing a card needs to stop reading as a quiet
-        // stop. `sameFailures` is the kernel's predicate, so the door and the producers agree about what
-        // counts as a change.
-        if (etas === last && sameFailures(lastFailed, failed)) return
-        last = etas
-        lastFailed = failed
-        onUpdate([...etas], [...failed])
-      },
+      emit: this.etaListenerDoor(onUpdate),
     })
     controller.start()
     return {
       unsubscribe() {
         controller.stop()
+      },
+    }
+  }
+
+  /**
+   * The `EtaListener` door: which updates are worth waking a caller for.
+   *
+   * One declaration, used by `watch()` and `watchRoute()` alike, because it is the place two things are
+   * deliberately dropped and a second copy would eventually drop different ones.
+   *
+   * **Two things can be news, and the second one was being swallowed here** (WP5-14, ADR-081).
+   * `applyLiveFrame`'s `status` case passes `etas` through by reference, so identity is exactly the right
+   * test for "the readings did not move" — but the failure set moves independently, and the round that
+   * matters most is a kerb starting to refuse while every reading stands still. Until `EtaListener` could
+   * carry `failed`, that round carried no information through this door and the guard was right to drop it;
+   * now it carries the one thing a card needs to stop reading as a quiet stop. `sameFailures` is the
+   * kernel's predicate, so the door and the producers agree about what counts as a change.
+   *
+   * The **accepted target set** stops here too, and it is the more consequential omission:
+   * `LiveEtaUpdate.targets` is what a caller compares against what it asked for to notice that a saved pole
+   * has stopped resolving, and `EtaListener` has no room for it. Widening the signature is not the fix —
+   * ADR-004 fixes `watch()` as `(targets, onUpdate) => Subscription`. A caller that needs it holds a
+   * `createLiveEtaController` directly. For a **route** watch the omission is sharper: the accepted set is
+   * the only place the server says which poles it resolved, so a caller wanting to know that a 70-pole
+   * route was capped at 64 needs the controller rather than this door.
+   */
+  private etaListenerDoor(onUpdate: EtaListener): (update: LiveEtaUpdate) => void {
+    let last: readonly Eta[] | null = null
+    let lastFailed: readonly EtaFailure[] = []
+    return ({ etas, failed }) => {
+      if (etas === last && sameFailures(lastFailed, failed)) return
+      last = etas
+      lastFailed = failed
+      onUpdate([...etas], [...failed])
+    }
+  }
+
+  /**
+   * Live ETAs for **every pole of one route** — the times a Citybus or GMB route screen has no other way
+   * to get (ADR-116, proposals/05).
+   *
+   * ## Why this is a second method rather than `watch(poles)`
+   *
+   * Two of the three things it does could be done by naming the poles: subscribing to 13–41 targets, and
+   * narrowing each to one route. The third cannot. A `?route=` socket lands on a Durable Object **named for
+   * the route**, so ten riders looking at Citybus 91 share one round of upstream calls; the same poles named
+   * as `?targets=` hash to a shard shared with strangers and each rider pays for their own fan-out. That
+   * property is the whole reason this is affordable, and it lives in which object the URL selects.
+   *
+   * ## The two engines differ here, and the difference is honest
+   *
+   * The socket engine names the route and the **server** resolves the poles from the same route document the
+   * schematic draws, so the client never learns them and the URL stays one id long across every reconnect.
+   * The poll emulator has no route endpoint to emulate — `/v1/etas?ids=…` takes ids — so it resolves the
+   * poles itself, once, and then *is* `watch()`: every rule about rounds, retention, ordering and failures
+   * stays in one place rather than being written twice. What a listener receives is identical either way,
+   * which is the invariant ADR-074's shared corpus exists to protect.
+   *
+   * A poll-emulated route watch therefore costs one `/v1/route/:id` read at subscribe time and does not
+   * share a round with anybody. Stated rather than hidden: `poll` is still the default engine
+   * (`EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`), so that is what ships until the socket is
+   * switched on, and it is the same cost the screen's own refetch already pays.
+   */
+  watchRoute(routeId: string, onUpdate: EtaListener, opts?: WatchOptions): Subscription {
+    const transport = this.transport({
+      endpoints: this.endpoints,
+      getEtasBatch: (ids) => this.getEtasBatch(ids),
+      pollMs: opts?.refreshAfterMs ?? this.pollMs,
+      clock: this.clock,
+      route: routeId,
+    })
+
+    // An engine that speaks a real socket has already been handed the route (`LiveTransportContext.route`)
+    // and connects on `open()`. Anything else is emulating, and an emulator that cannot resolve poles must
+    // be given them.
+    if (transport.engine === 'socket') {
+      const controller = createLiveEtaController({
+        transport,
+        targets: [],
+        declaredInUrl: true,
+        emit: this.etaListenerDoor(onUpdate),
+      })
+      controller.start()
+      return {
+        unsubscribe() {
+          controller.stop()
+        },
+      }
+    }
+
+    // The emulated path. `transport` was constructed and never opened, so it is released rather than left
+    // holding a sink; `watch()` builds its own.
+    transport.close()
+    let inner: Subscription | null = null
+    let cancelled = false
+    void this.getRoute(routeId).then(
+      (detail) => {
+        if (cancelled) return
+        // Narrowed per target, because a pole on this route serves others: without `routeIds` the emulator
+        // would deliver every line at all 41 kerbs and the screen would attach the wrong times to a row.
+        inner = this.watch(
+          detail.stops.map((stop) => ({ stopId: stop.stop.id, routeIds: [routeId] })),
+          onUpdate,
+          opts,
+        )
+      },
+      () => {
+        // A route that will not load is the screen's problem and it already has it: this method's caller
+        // renders from the *same* route document, so an unreachable one means there is no schematic to put
+        // times on. Swallowed rather than thrown, because an unhandled rejection from a subscription
+        // nobody awaited would take a screen down for a fetch it is already retrying.
+      },
+    )
+    return {
+      unsubscribe() {
+        cancelled = true
+        inner?.unsubscribe()
       },
     }
   }

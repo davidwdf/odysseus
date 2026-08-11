@@ -131,6 +131,21 @@ export interface DataSource {
   /** Subscribe to live updates for the given targets. */
   watch(targets: WatchTarget[], onUpdate: EtaListener, opts?: WatchOptions): Subscription
   /**
+   * Subscribe to live updates for **every pole of one route** (ADR-116).
+   *
+   * Its own method rather than `watch(theRoutesPoles)`, because the property that makes it affordable is
+   * not the target list: a route watch lands on one shared object per route, so the *n*th rider watching
+   * Citybus 91 costs nothing upstream. A caller that named the poles instead would land on the hashed
+   * shards and pay for its own fan-out.
+   *
+   * The listener receives exactly what `watch` delivers — the reduced session, canonically ordered, with
+   * the kerbs that would not answer — so `applyLiveEtasToRouteDetail` is what turns it back into the
+   * payload a screen derives from. What differs between the engines is only *how* a round is fetched (the
+   * socket names the route and the server resolves its poles; the poll emulator resolves them itself),
+   * which is the line ADR-074 draws and the reason this is one method rather than two.
+   */
+  watchRoute(routeId: string, onUpdate: EtaListener, opts?: WatchOptions): Subscription
+  /**
    * The compact static route + stop index for on-device search and the smart keypad
    * (ADR-037). Large but cacheable; clients persist it and redownload only when its
    * `version` changes. v1 fetches it from the edge; v2 may bundle or push it.

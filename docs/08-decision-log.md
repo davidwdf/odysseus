@@ -292,8 +292,15 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 - **Context:** Adding Citybus to nearby/stop/route needs a CTB stop index (coords + route-stops). The
   official CTB ETA API has **no bulk stop or route-stop endpoint** (verified: `/stop` and `/route-stop`
   both 422 without an id/route) — building the index from it means ~6,800 calls (1 route list + ~806
-  route-stop + ~6,000 per-stop). That's infeasible at request time *and* can't run in a Worker cron (the
-  ~1,000-subrequest cap is why hk-bus-crawling runs as an external GitHub Action).
+  route-stop + ~6,000 per-stop). That's infeasible at request time *and* can't run in a Worker cron — the
+  subrequest cap is why hk-bus-crawling runs as an external GitHub Action.
+  **The number in this line was wrong and is corrected here (2026-08-10), checked against Cloudflare's
+  own docs:** it said *"the ~1,000-subrequest cap"*. The real per-invocation caps are **50 on Free and
+  10,000 on Paid** (raisable via wrangler's `limits.subrequests`); 1,000 is a different limit — Free's cap on
+  subrequests to *internal services*. So the conclusion survives on Free and is **not** obvious on Paid,
+  where 6,800 calls is inside 10,000; what actually keeps the crawl outside the Worker is wall-clock and the
+  6-connections-in-flight ceiling, not the subrequest count. Found while checking a figure in
+  `proposals/05`, which had inherited the same habit of quoting a platform limit from memory.
 - **Decision:** Source the static layer for **both KMB and CTB** from the **hkbus/hk-bus-crawling**
   consolidated dataset (`hkbus.github.io/hk-bus-crawling/routeFareList.min.json`, ~8 MB, daily-updated) in a
   **single fetch**, memoized per isolate (`apps/edge/src/static-index.ts`), parsed into a multi-operator
@@ -7799,3 +7806,584 @@ pre-existing and unaddressed; it earned its keep here.
      browser measurement, because every one of them asked whether the motion was *correct* and none asked
      whether it fired on the right **occasions**. The page is not committed and cannot be: it sits under
      `info/exclude`, outside `tsconfig`, and `build:web` does not see it.
+
+## ADR-112 — A dev page lives in the app, and a gate keeps it out of the app
+
+- **Status:** **Accepted 2026-08-09** at the owner's request — *"happy to keep it in the repo as a separate
+  section as a dev page. I just don't necessarily want it making its way into production code."*
+  `apps/web/lab/`, gated by `apps/web/test/dev-pages.test.mjs` and by `scripts/build-web.mjs`.
+- **Context.** The rail motion lab was written as throwaway scaffolding: `apps/web/lab/` drives the real
+  `RouteStopRow`, `RailBusToken` and `useRailFlip` from a timer over hand-written rows, with toggles for row
+  raggedness, a second bus, a reflow above the bus, a spawn/despawn and a direction flip. It found **two
+  defects in two sittings** — the reflow that animated a stationary bus (ADR-110 decision 3a) and the
+  re-index that slid a terminating bus 1120 px back up the rail (ADR-111) — both of which eleven tests and
+  four rounds of browser measurement had passed over, because every one of them asked whether the motion was
+  *correct* and none asked whether it fired on the right **occasions**.
+- **Decision: keep it, in the app, and prove it cannot ship.** A page that drives the real components is
+  worth more than a fixture that describes them, and rebuilding it from scratch each time a motion question
+  comes up is how it stops being used. Keeping it *outside* the app was tried first (a local `info/exclude`
+  stanza and its own `tsconfig`) and is the worse trade: it survives one workspace, nothing typechecks it,
+  and it rots unseen.
+- **How it is kept out of production, in three parts, none of which is "we remembered":**
+  1. **It is not a build input.** `vite build`'s default input is the root `index.html` and nothing else, so a
+     second HTML file is served by `vite dev` — which serves files — and never built. That is a default, not
+     a promise: `test/dev-pages.test.mjs` asserts `vite.config.ts` declares no `rollupOptions`, because one
+     `input` array would bundle the lab *and* have the very next build step precache it into the service
+     worker.
+  2. **The app may not import it.** This is the failure that actually happens — a helper written for a dev
+     page looks generally useful, a screen imports it, and a dev page becomes a dependency. The rule is
+     directional: the lab imports `src/` (that is the point) and `src/` may never import the lab.
+  3. **The emitted `dist/` is checked.** `build:web` fails if any artefact's path contains a dev directory,
+     which is the assertion over the *artefact* rather than over the source — the one the other two cannot
+     make. CI does not run a web build, so it is the weakest of the three and deliberately not the only one.
+- **Consequences:**
+  - 🟢 **It is typechecked and linted like everything else.** `lab/**` is in `apps/web/tsconfig.json`'s
+    `include` and biome already covered it. A dev tool that has rotted is worse than no dev tool, because it
+    answers questions with stale confidence.
+  - ⚠️ **The list of dev directories is declared twice** — once in the test and once in `build-web.mjs` — and
+    they are three characters each. Named `DEV_DIRS` in both, with a pointer; not worth a shared module, and
+    if a second dev page appears both must learn its name.
+  - ⚪ **What a lab is *for*, stated for the next one.** Not correctness: the tests and the measurements had
+    correctness covered and still missed both defects. A lab answers *when* — which occasions fire a
+    transition, and what a rider sees on the ones nobody thought to enumerate. Reach for one when the thing
+    under test is motion or timing, and be suspicious of a green suite that has only ever seen the settled
+    state.
+
+## ADR-113 — `apps/mobile` is not retired at the end of Wave 6; it becomes the reference
+
+- **Status:** **Accepted 2026-08-09** at the owner's request, superseding WP6-8's scheduling (not its
+  content): *"I'm happy to keep it around a bit longer while allowing it to fall behind — there were some
+  UI/UX decisions there that were not carried over to `/web` that I might want to follow up on later."*
+- **Context.** WP6-8 is *"retire `apps/mobile`"* and its stated precondition has been met since WP6-7:
+  `apps/web` has all eight screens and no placeholders, and both blockers WP6-7b's parity audit found are
+  closed (ADR-098, ADR-099). The row was next.
+- **Decision: defer it, and give the deferral a job.** `apps/mobile` stays in the repo as the **reference
+  implementation** — the thing a question about *"what did the RN app do here?"* is answered by reading
+  rather than by `git log`. Two independent reasons, and the second is the stronger one:
+  1. The owner has unported UI/UX decisions to revisit. The parity audit answered *what does a rider lose*;
+     it never asked *what does the RN app do better that nobody carried over*, and that list only exists
+     while the app does.
+  2. **`proposals/04` already flagged the risk this removes.** Between WP6-8 and WP6-9 there is exactly one
+     renderer measured against the spec, *"which is weaker than today"*. Every finding of this wave that
+     mattered came from having a second implementation to disagree with — the favourite affordance that did
+     not exist, the token that polluted every row's accessible name, the re-index slide. Deferring WP6-8
+     until WP6-9 lands does not accept that risk, it declines it.
+- **What "allowed to fall behind" means, precisely — because otherwise it means "the gates lie":**
+  - **The specs still bind it.** `apps/mobile` keeps passing its conformance suites and the shared corpus. If
+    a spec changes, both renderers move; that is ADR-075's thesis and it is not what is being relaxed.
+  - **Idiom does not.** No new signature motion, no new affordance and no fix is owed to it. The odometer
+    (ADR-100), the bounce re-centring (ADR-107), the row-observer fix (ADR-108), the CSS rail (ADR-110) and
+    the enter/leave pops (ADR-111) are all already recorded as not back-ported, and that list is now expected
+    to grow rather than being an exception each time.
+  - **A defect it shares is still a defect.** Anything in `docs/07` marked `defect-both` is fixed in the
+    kernel and therefore in both, because the kernel is where it lives.
+- **Consequences:**
+  - 🟢 **The `defect-both` work gets cheaper, and the Route detail `failed` fix is the first case.** Two
+    renderers means a kernel change is checked twice for the cost of writing it once.
+  - 🟠 **The lockfile keeps `expo`, `react-native`, `nativewind`, `reanimated` and `gesture-handler`**, and
+    CI keeps running 167 RN tests. That was WP6-8's whole payoff and it is being spent deliberately.
+  - ⚠️ **The divergence is one-directional and will widen**, so `apps/mobile` is a record of *decisions*, not
+    a second product. Nobody should read a difference as a bug in either app without checking the ADR that
+    made it — which is what ADR-100's table and the specs' `idiom` lists are for.
+  - ⚪ **An inventory is owed, and is filed rather than done:** *what the RN app does that `apps/web` never
+    got*. Distinct from the parity audit, which looked only for loss. In `docs/07`.
+
+## ADR-114 — `eta: null` on every stop meant three different things, and the route view could not say which
+
+- **Status:** **Accepted 2026-08-09**, implemented in `packages/contract/src/wire/detail.ts`,
+  `packages/contract/src/ui/route-detail.ts`, `packages/core/src/route-detail.ts`,
+  `apps/edge/src/stop-route.ts`, `apps/web/src/screens/RouteDetail.tsx` and
+  `apps/mobile/app/route/[id].tsx`. Closes `docs/07`'s row *"Route detail cannot say we could not ask"*, the
+  corpus row it was pinned as, and `route-detail.spec.json`'s last `knownDefect` state.
+- **Context.** `/v1/route/:id` fetched live arrivals for KMB and LWB only — Citybus publishes no bulk
+  route-eta endpoint (ADR-021) and GMB is not wired — and the one operator it *did* fetch had its failure
+  swallowed by `.catch(() => [])`. So `eta: null` on every stop meant **three** different things: no bus is
+  due anywhere, the round did not answer, or nobody was ever going to ask. A schematic renders identically
+  for all three. Verified against the running worker before the change:
+  `/v1/route/CTB:962:outbound:1` → 36 stops, 0 with an eta, nothing anywhere saying why.
+- **The finding that shaped the fix.** Citybus's **per-pole** boards answer perfectly well —
+  `/v1/etas/CTB:001028` returns 10 routes with arrivals — so the live times a rider wants *exist* and are one
+  tap away on any stop of that route. The screen was not failing to get them; it was not looking, while
+  implying there were none.
+- **Decisions:**
+  1. **The wire carries `liveArrivals`, and it is not an `EtaFailure[]`.** ADR-077 gave `/v1/nearby` and
+     `/v1/stop` a *list* of poles that did not answer, because their fan-out is per pole. A route is **one**
+     upstream call, so naming 34 poles would invent a granularity the fetch does not have — and the UI is
+     required to say this once for the screen anyway. Two values, `'unavailable'` and `'perStopOnly'`, and
+     **absent when the round answered**: the convention `failed` set, where *"every board answered"* and
+     *"we have nothing to say"* must not be the same bytes.
+  2. **`CONTRACT_VERSION` does not move — and both the backlog row and the spec's own `knownDefect` text
+     said it should.** They instructed a "minor bump, since it is additive", which contradicts ADR-052 §5
+     (*additive-optional is free*) and the constant's own note (*"must not touch this"*), and three ADR
+     precedents (065, 079, 081). Corrected in both places. The mistake is worth recording because the
+     `oasdiff` gate ADR-052 names still does not exist, so nothing mechanical would have caught a wrong bump
+     in either direction.
+  3. **The kernel turns absence into a named arm.** `RouteDetailView.liveArrivals` is always one of
+     `'answered' | 'unavailable' | 'perStopOnly'`. That is the one piece of work it does beyond restating the
+     wire, and it is load-bearing: a spec's `oneOf` discriminant has to be **total** or it throws, so
+     "absent" cannot be a case.
+  4. **Two spec states, one sentence.** `noLiveBoard` (this operator has no route-level feed) and
+     `arrivalsUnavailable` (the round did not answer) both show `etasUnavailable` — the line `StopRow`
+     already uses, so **no new string in any locale**. They are two states rather than two arms of one
+     because one is worth retrying and the other never will be; giving either its own words later is an edit
+     to one `shows` and to nothing else. Both declare `FACTS` and `STOP_ROWS` around the line, so the
+     projection pins *where* it appears and not merely that it does.
+  5. **The static half is asserted, not assumed.** The catch stays (ADR-073: a route view without live times
+     is still a route view — the stops, the geometry and the fares are static, and erroring would lose them),
+     and the edge test now asserts the stop list, the fares and the route survive an upstream failure. That
+     is the whole reason the catch exists and nothing checked it.
+- **Consequences:**
+  - 🟢 **`route-detail.spec.json` has zero `knownDefect` states**, down from one, and
+    `packages/core/spec/route-detail.spec.json` zero `knownDefect` rows, down from one. The repo total drops
+    to 5 states / 4 rows.
+  - 🟢 **The KMB half matters more than the Citybus half, and was invisible.** Every rider is on KMB, whose
+    route feed *does* answer — so the arm this fix adds for *them* is the one nobody would have noticed
+    missing: an upstream outage now says so instead of reading as a quiet route.
+  - ⚠️ **The honest upgrade is left undone and named.** `perStopOnly` shows "Live times unavailable", which
+    is true but implies *try later* about something permanent — and worse, hides that the times are one tap
+    away. Pointing at the per-pole boards needs a sentence of its own in three locales and is the owner's
+    call, not this change's. Filed in `docs/07`.
+  - ⚠️ **Fetching them was considered and rejected here.** The edge could fan out one call per pole and give
+    a Citybus route real live times; a 34-stop route is 34 subrequests, every 30 s, per rider, against the
+    Workers budget. A separate decision, not a side effect of this one.
+  - ⚪ **The schema's own doc comment was the bug, written down.** It claimed `eta: null` means *"we asked and
+    there is nothing right now"* and then admitted in the same sentence that Citybus has no feed at all.
+    Both cannot be true. Rewritten to say what `null` does **not** tell you.
+
+## ADR-115 — The sheet a rider already opens is where one stop's times go
+
+- **Status:** **Accepted 2026-08-09** in `packages/core/src/route-detail.ts`,
+  `apps/web/src/screens/RouteDetail.tsx`, `components/RouteStopSheet.tsx` and `components/RouteStopRow.tsx`.
+  Option **A** of the brainstorm the owner asked for after ADR-114.
+- **Context.** ADR-114 made a Citybus or GMB route *say* that its times are not a complete answer, which
+  stopped it lying. It did not give a rider a time. Their **per-pole** boards answer perfectly well —
+  `/v1/etas/CTB:001028` returns ten routes with arrivals — so on those routes the times exist and the route
+  view simply never asks (ADR-021: no bulk route-eta endpoint).
+- **The pattern this rejects, and why.** Other apps make the stop list an accordion: tap a row to expand it
+  and load that stop's times. The owner's objection was that it also **conflicts with the affordance already
+  on the row** — a tap opens the save sheet (ADR-032, ADR-098), which is the app's only favourite-creating
+  affordance and cannot be given up for a disclosure control.
+- **Decision: put the times in that sheet.** The conflict dissolves — the menu *is* the load trigger. No
+  accordion, no new control, no change to the list, and the request is scoped to precisely the thing the
+  rider just asked about. One call.
+- **Decisions:**
+  1. **`routeStopBoard` in the kernel, not the screen.** Three decisions live in it: the formatting is the
+     schematic row's (via a hoisted `arrivalsFrom`, so a time cannot read two ways in two places on one
+     screen); `incomplete` comes from `failed` rather than from an empty list, because a board that refused
+     us is not a board with nothing on it (ADR-077); and **which of a report's readings belongs to this
+     pole**, because a board requested for a pole may be resolved to its *place*, whose alias table can
+     return two readings for one route at two kerbs — and on a schematic those are different rows. Exact
+     `stopId` wins; a lone reading for the route is taken as the answer to the question asked; two that are
+     neither is **not** guessed between.
+  2. **Three conditions gate the fetch, and the cost argument is all of them.** The row's own readings win,
+     so a KMB route costs nothing extra and the sheet cannot contradict the list behind it.
+     `liveArrivals !== 'answered'` stops a route that *was* asked and has nothing due from fetching to
+     re-learn the same nothing on every tap for ever. And nothing is fetched until a rider opens a sheet.
+  3. **Four render arms, in an order that is the whole content of the decision:** `loading`, then
+     `incomplete`, then the readings, then "no scheduled service" **last** — the arm only reached when we
+     asked, were answered, and the answer was nothing. `docs/07` still carries a 🔴 for exactly that arm
+     being reached by a paused fetch on Nearby, which is why the order is pinned by a test rather than
+     trusted.
+  4. **`ArrivalSlot` is exported rather than copied.** One renderer of a route arrival, for the reason this
+     sheet's own docblock already recorded about a stop's *name* being written twice eleven lines apart. A
+     time is worse.
+- **Consequences:**
+  - 🟢 **A rider on a Citybus route can get a time again.** Verified live: Citybus 91's schematic shows no
+    times at all, and tapping a stop returns **15 min · 34 min** off exactly one request —
+    `/v1/etas/CTB:002261?routes=CTB:91:outbound:1`.
+  - 🟢 **It composes with the next row of work rather than competing with it.** When the route view starts
+    fanning out per pole over the live socket, the row will carry readings and the fetch goes quiet by
+    itself — because the sheet reads the view first and only asks when there is nothing there.
+  - ⚠️ **One condition was vacuous and an injection said so.** "The row's own readings win" broke no test
+    when removed, because every route the edge emits today is all-or-nothing: the catch empties the whole
+    map and `perStopOnly` never fills it. It stops being redundant the moment a per-pole fan-out lands with
+    a budget — some poles answer, some do not, on one route — so it is kept and pinned against a **partial
+    payload the wire permits and the server does not yet produce**. Written down because "assert it against
+    a payload nothing emits" is a thing to justify, not to do quietly.
+  - ⚠️ **`apps/web` only.** ADR-113 makes `apps/mobile` the reference and owes it no new affordance; this is
+    a new affordance. The RN sheet keeps the two actions and no readout.
+  - ⚪ **The wording follow-up ADR-114 filed is now less pressing.** *"Live times unavailable"* still implies
+    *try later* about something permanent, but a rider is one tap from a real time rather than from nothing,
+    which is most of what the better sentence was for.
+
+## ADR-116 — A route nobody can ask about in bulk gets one Durable Object of its own
+
+- **Status:** **Accepted 2026-08-10** in `apps/edge/src/live.ts` (`liveUpgrade`'s `?route=` branch),
+  `apps/edge/src/eta-hub.ts` (`watchedRoute`, `LIVE_ROUTE_MAX_POLES`) and `packages/core/src/live.ts`
+  (`routeWatchName`, `routeIdFromWatchName`, `nextRouteRoundMs`). Step 2 of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md) — option **B** of the
+  brainstorm ADR-114 opened and ADR-115 answered the easy half of.
+- **Context.** Citybus and GMB publish no bulk route-eta feed (ADR-021), so a route screen on those
+  operators has no times at all — ADR-114 made it *say* so and ADR-115 gave a rider a time one tap away.
+  Both leave the list itself blank. Their **per-pole** boards answer fine, so the times exist; what is
+  missing is somebody willing to ask ~13–41 questions at once and keep asking.
+- **The owner's constraint, which is the whole shape of this.** Two options were rejected on cost, not on
+  UX: a shared "feed as a service" that polls every route continuously (*"a bit rude to hammer something
+  free like that"*), and an accordion that makes each rider ask (ADR-115 rejects it on affordance grounds
+  too). What was accepted: **poll only the routes somebody is looking at, and poll each of them once no
+  matter how many riders are looking.** That is a statement about object identity, so it is the first
+  decision below rather than a footnote.
+- **Decisions:**
+  1. **The object is named after the route, and everything else follows from the name.** `route-<canonical
+     route id>` via `getByName`, so ten riders on Citybus 91 outbound share one object and therefore one
+     round; the two directions are two names, because their poles barely overlap and unioning them would
+     buy nothing. `EtaHub` then reads `ctx.id.name` back through `routeIdFromWatchName` to learn three
+     things it cannot be told any other way — its per-connection cap, its union cap, and that every
+     reading is narrowed to this one route. A flag on the connection would have to agree with the name;
+     reading the name cannot disagree with it.
+  2. **The poles are resolved server-side, from the route document.** `?route=<id>` and nothing else: the
+     Worker reads the same `/v1/route/:id` document the schematic draws and forwards `?targets=` to the
+     object, so the socket cannot watch a pole the screen does not show, the URL stays short across every
+     reconnect, and a client compiled against a stale rule cannot mint an object of its own choosing. A
+     malformed id is a **400 before any object exists** (`route-` plus arbitrary text is a real Durable
+     Object, and this is the door arbitrary text arrives at); an unknown route is a 404.
+  3. **One door into the shard, not a second protocol.** A route watch is an ordinary `?targets=` upgrade
+     whose object happens to be named for a route. Nothing in `EtaHub.fetch`/`subscribe` is route-specific
+     beyond the three things decision 1 lists.
+  4. **`LIVE_ROUTE_MAX_POLES = 64`, its own number.** A place connection is capped at 12 and a shard's
+     union at 48 — both sized for *whatever a subscriber happens to share with strangers*. A route's union
+     is one route, and the measured real range is 13–41 poles, so 48 would truncate a long route for a
+     reason belonging to a different shape of object. Excess poles are dropped **and named**, as every
+     other cap in that file does it.
+  5. **`nextRouteRoundMs` is in the kernel and not yet wired.** The upstream publishes per route on a ~60 s
+     cycle at a fixed second of the minute, out of phase with the CDN's 45 s TTL, so a phase-aligned round
+     learns something every time where a blind 45 s one learns nothing about one refresh in four. The rule
+     is written and corpus-pinned; the hub still runs the ordinary cadence until step 2b.
+- **Consequences:**
+  - 🟢 **Measured on the real feed, not reasoned about.** Citybus E22 outbound (41 poles — the worst real
+    case): first `delta` **1.24 s** after connect, with a reading for every pole. Citybus 11 outbound (18
+    poles): 269 ms. Both through `wrangler dev` against live upstream on 2026-08-10.
+  - 🟢 **The *n*th rider is free.** Asserted on object identity, which is what decides it, rather than on
+    a counter that could drift from it.
+  - ⚠️ **It found a 19× fan-out that had nothing to do with route watching** — see ADR-117. The first
+    honest measurement of this design was 350 upstream calls for an 18-pole round, and the design would
+    have been indefensible if that had shipped.
+  - ⚪ **No screen subscribes yet.** Steps 3–5 of the proposal are the client transport, the frame→row
+    merge rule and the `apps/web` subscription. The edge half is reviewable on its own, which is why the
+    proposal split there.
+
+## ADR-117 — A narrowed read narrows the questions, not just the answers
+
+- **Status:** **Accepted 2026-08-10** in `apps/edge/src/stop-route.ts` (`boardsFor`, threaded through
+  `stopEtas` → `stopArrivals` → `memberEtaLists`). Found by measuring ADR-116.
+- **Context.** `routes=` on `/v1/etas/:id` — and the `routeIds` an `EtaHub` subscription carries — reached
+  `narrowEtasToRoutes` on the way *out* and nothing on the way *in*. So a caller naming one route still
+  paid for every route at every pole of the place the id resolves to. Nothing had ever measured it because
+  the only narrowing caller was a single HTTP request, where the waste is invisible.
+- **What the first route watch measured.** `CTB:11:outbound:1`, 18 poles, one round: **350 upstream calls**
+  — 312 `CTB-eta` and 38 `kmb-board` — where 18 would do, 21 s of queued fetching, repeating every 45 s per
+  watched route against a free government feed. Per-call latency was 0.14 s; the 5.4 s median was our own
+  queue.
+- **Decisions:**
+  1. **A board whose operator serves none of the requested routes is not called.** A KMB board returns
+     KMB/LWB readings, so asking it about a Citybus route produces readings `narrowEtasToRoutes` discards in
+     *every* case — those were the 38. KMB and LWB fold together because they read the same board.
+  2. **A CTB pole is asked only about the requested route numbers.** CTB has no stop board (ADR-021), so
+     its call key is per (pole, route) and every unwanted route is an individually-priced question — the
+     312.
+  3. **Both tests are on the route id's grammar, never on whether a pole is thought to serve a route.** A
+     pole-membership guess that is wrong drops readings a rider is watching, and there is nothing to gain
+     by guessing: the operator prefix and route number are in the id.
+  4. **An unparseable route id contributes to neither set.** It can match no reading either, so the
+     narrowing that already applied would have discarded whatever it selected.
+- **Consequences:**
+  - 🟢 **Same round, 41 calls instead of ~800.** Re-measured immediately after: Citybus 11's round went
+    350 → **18** calls and 21 s → **0.27 s**; E22's 41-pole round is 41 calls. The fan-out now matches the
+    arithmetic `LIVE_ROUTE_MAX_POLES` and `LIVE_CTB_BUDGET` are both written in terms of.
+  - ⚠️ **`failed` narrows with it, and that is wire-visible.** `stopEtas` documents that `routes=` filters
+    readings and never failures; that stays true of the boards we call, but a board we no longer call cannot
+    refuse. So a narrowed read now reports failures only for what it actually asked about — which is the
+    honest direction, and is what lets a route watch's *"we could not ask"* marker mean the route's own
+    poles (ADR-081, ADR-114).
+  - 🟢 **Every rider benefits, not just a route watch.** ADR-115's sheet fetch is a narrowed read: one tap
+    used to cost a whole place's fan-out and now costs one call.
+  - ⚠️ **Two halves, two tests, because one guard can pass for the other's reason.** The operator skip is
+    pinned in `live-route-watch.test.ts` (a KMB place asked a Citybus question must call nothing) with its
+    own control case (asking about a route it *can* answer must still call something — a narrowing that
+    skipped every board would otherwise pass); the per-route bound is pinned on the heavy CTB fixture in
+    `eta-hub-caps.test.ts`. Each was watched failing on a deliberate revert of its own guard.
+
+## ADR-118 — A route watch polls on the operator's clock, and the counter that proves a round happened
+
+- **Status:** **Accepted 2026-08-10** in `apps/edge/src/eta-hub.ts` (`publishClock`, `writePublishClock`,
+  `newestPublish`, `roundsCompleted`, the `reschedule` branch). Step **2b** of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md); completes ADR-116
+  decision 5, whose rule was written and corpus-pinned but not wired.
+- **Context.** A place shard polls on a 45 s floor that widens to 60 s while nothing changes. Measured on
+  the real feed, that is the wrong clock for a route: the upstream publishes a given route on a ~60 s cycle
+  at a **fixed second of the minute** (E22 on :12–:13, route 91 on :09–:10) and the CDN in front of it holds
+  45 s, so a blind 45 s poll walks in and out of phase and learns nothing on roughly one refresh in four —
+  paying full price each time. The owner's constraint from the start was to poll politely; polling *often
+  and pointlessly* is the same rudeness in a different shape.
+- **Decisions:**
+  1. **The kernel decides *whether* to poll; for a route watch it does not decide *when*.** `reschedule`
+     asks `nextLiveCadenceMs` first and never bypasses it, because its `null` is the **teardown** decision
+     (no subscribers → no alarm, forget the readings) and that is the same decision for both shapes of
+     object. `nextRouteRoundMs` answers a cadence, never `null`, so putting it first would mean restating
+     the teardown rule in the edge where it could drift.
+  2. **The phase comes from `dataTimestamp`, which the round already has.** No new plumbing: every reading
+     carries the operator's publish time, and for a route watch every pole is answered from the same route
+     feed. The `age` header the rule can *optionally* use is **not** available — every fetch helper in
+     `packages/data-normalize` parses the body and drops the `Response` — so `cacheAgeSec` is omitted and
+     the rule's own retry arm covers it. Recorded rather than worked around: surfacing a CDN age would mean
+     changing five fetch helpers, the coalesced value type and either the wire schema or an edge-internal
+     side channel, to sharpen a 15 s retry into a ~1 s one.
+  3. **The newest publish the round heard, not the stalest pole.** Same feed means same timestamp in the
+     healthy case; when the CDN serves one pole from an older entry, the newest is the one that says the
+     publish has landed. Aligning to the oldest would hold the route back to its stalest edge.
+  4. **One write rule, four behaviours.** After each round: a newer publish stores `{at: new, prev: old}`
+     (aligned); the same publish or a round where nothing answered stores `{at: old, prev: old}` (the 15 s
+     retry — *"we learnt nothing about the clock"* is the same fact whether the bytes were stale or absent);
+     nothing ever stores `{}` (the blind 60 s tick). The clock is **forgotten on teardown** along with the
+     readings it describes, or the next watch's first round would meet its own timestamp as the previous
+     one and retry on perfectly fresh data.
+  5. **`roundsCompleted` is a counter no product behaviour reads, and it is justified by what it replaces.**
+     `docs/07-backlog.md` had a filed 🟠: `live-rounds.test.ts` could not await the connect round (armed at
+     `Date.now()` and fired by the runtime, so `runDurableObjectAlarm` returns `false` — tried, for all 21
+     scenarios) and waited on *frame quiet* instead, which a slow fan-out could satisfy mid-round. It is
+     incremented as the last statement of `round()`, so *n* counted means *n* rounds' frames are queued, and
+     it is monotonic across teardown because it is history rather than state.
+  6. **The KV keys are exported as one list.** Four suites reset a shard by deleting `'unchangedRounds'` as
+     a hard-coded string; two new keys would have leaked between cases in all four silently.
+- **Consequences:**
+  - 🟢 **The filed race is fixed and the fix is proved, not asserted.** Delaying every board by 300 ms makes
+    the race deterministic: with the wait removed **10 of 21 rows fail**, including the row the entry named;
+    with it, all 21 pass. The file runs in **6.3 s** against 8 s before, where the rejected wider-quiet-window
+    fix cost 27 s.
+  - 🟢 **Six cases pin the cadence, each watched failing on a revert of its own guard** — including a control
+    proving a *place* shard still gets 45 s, which is what makes the branch the object's name rather than a
+    global change.
+  - ⚠️ **A comment claimed more than a test could support, and an injection said so.** The publish clock is
+    read from the round's results rather than from the merged readings; the docblock asserted that reading
+    the merged ones would misalign an outage, and an injected defect that did exactly that **passed every
+    case** — because the merged map can only hold this round's readings or older ones, which the "nothing
+    answered" fallback already stores. The comment now states the real reason (coupling: retention exists to
+    keep times on screen, the clock to decide when to ask) and the episode is left in it.
+  - ⚪ **Still no `apps/mobile` or screen involvement.** Steps 3–5 are next.
+
+## ADR-119 — The client can watch a route, and the two engines get there differently on purpose
+
+- **Status:** **Accepted 2026-08-10** in `packages/api-client/src/index.ts` (`watchRoute`, `etaListenerDoor`),
+  `src/live/socket.ts`, `src/live/controller.ts`, `src/live/engine.ts`;
+  `packages/core/src/live.ts` (`applyLiveEtasToRouteDetail`) and `src/route-detail.ts`
+  (`RouteStopRowView.incomplete`); `packages/contract/src/wire/live.ts` (`?route=`, `queryOneOf`) and
+  `src/wire/detail.ts` (`RouteDetail.failed`). Steps **3 and 4** of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md).
+- **Context.** ADR-116/117/118 gave the edge a route watch. Nothing could ask for one: `DataSource` had no
+  route-watch method, no transport knew about `?route=`, there was no rule for turning a frame into a
+  `RouteDetail`, and — found while writing this — **`?route=` was live and undeclared in the contract**,
+  because `LIVE_CHANNEL.query`'s only reader is the AsyncAPI emitter and no gate compares it against what
+  the Worker parses.
+- **Decisions:**
+  1. **`watchRoute(routeId, …)` is its own method, not `watch(poles)`.** Two of the three things it does
+     could be done by naming the poles; the third cannot. A `?route=` socket lands on the object **named for
+     the route**, so the *n*th rider costs nothing upstream, and that property lives in which object the URL
+     selects.
+  2. **The socket names the route; the poll emulator resolves the poles.** The socket connects on `open()`
+     (no `subscribe` frame is coming) and its URL stays one id long across every reconnect. The emulator has
+     no route endpoint to emulate, so `watchRoute` reads `/v1/route/:id` once and then *is* `watch()` — every
+     rule about rounds, retention, ordering and failures stays in one place. The asymmetry is in how a round
+     is fetched, never in what a listener receives, which is the line ADR-074 draws. Stated plainly because
+     it is a real cost: `poll` is still the default engine, so a poll-emulated route watch does **not** share
+     a round with anybody.
+  3. **A route watch must not send its `subscribe` frame, and that is a hazard rather than a saving.** An
+     empty `subscribe` is *legal* and means "stop sending me readings" — so a route watch that declared its
+     (empty, because it does not know the poles) target set on connect would switch its own round off, and
+     the symptom would be a screen that connects perfectly and never updates. Recovery from a `seq` gap
+     re-declares **the accepted set the server echoed**, which the object re-narrows to its own route; before
+     the first snapshot there is nothing to recover to and nothing is sent.
+  4. **`applyLiveEtasToRouteDetail` keys on the pole exactly, with neither fallback its siblings need.** No
+     "the only reading wins" (that is right for `routeStopBoard`, which answers about one tapped pole, and
+     catastrophic for a 41-pole frame — one reading would land on forty rows it is not coming to) and no
+     service-type-variant fallback (the narrowing already happened server-side, so the branch would be
+     unreachable and this package's 100 % branch threshold refuses those).
+  5. **The merge clears `liveArrivals` when anything answered, and keeps it when nothing did.** Absence *is*
+     `'answered'` once `routeDetailView` totalises it, so a merged payload is exactly what a route with a
+     working bulk feed would have served. Keeping it when the round was empty matters as much: a
+     subscription that has connected and heard nothing has not made the times available, and clearing it
+     would replace ADR-114's dishonesty with a worse one.
+  6. **`RouteDetail.failed` exists for the live path only, and the row says it, not the screen.** The server
+     never populates it — a route is one upstream call, which is why `liveArrivals` says it once — but a live
+     round asks each pole separately, so one kerb refusing while 38 answer is a real state that
+     `liveArrivals` cannot express without lying in one direction or the other. `RouteStopRowView.incomplete`
+     is the same distinction `StopCardView.incomplete` (ADR-077) and `routeStopBoard` (ADR-115) already draw.
+  7. **`queryOneOf` on the channel, so the published document is true.** `targets` and `route` are
+     alternatives; a flat `required` list can only say "both" or "no constraint", and the Worker contradicts
+     both. Emitted as `oneOf` over `required`, which for two single-name branches means one or the other.
+- **Consequences:**
+  - 🟢 **Additive-optional throughout, so `CONTRACT_VERSION` stays 2.0.0** (ADR-052 §5): one optional query
+    parameter, one optional payload field, one optional view field.
+  - 🟢 **Eleven corpus rows for the merge and one for the view**, plus a hand-written property check beside
+    the generated one — because a view-model `expect` computed by running the function is how a 200-line
+    composition gets pinned *and* how a wrong one would get pinned as correct.
+  - ⚠️ **A cap test of mine was timing-dependent and the full suite found it.** It read the socket's stored
+    attachment, and the synthetic pole ids those cases use to reach a 64-pole cap resolve to no place — so
+    the first round answers `not_found`, which is non-retryable, which legitimately empties the
+    subscription. In isolation the assertion won the race; under load the round did. It now asserts the
+    `snapshot`'s accepted-set echo, which is sent inside the upgrade before any round can run.
+  - ⚠️ **No screen subscribes yet.** Step 5 is next, and it needs the spec state that says what a rider sees.
+
+## ADR-120 — A Citybus route shows live times, and the readings are merged at render rather than cached
+
+- **Status:** **Accepted 2026-08-11** in `apps/web/src/hooks/useLiveRoute.ts`, `src/screens/RouteDetail.tsx`,
+  `src/components/RouteStopRow.tsx`; `apps/mobile/app/route/[id].tsx` (the row marker only);
+  `packages/contract/src/ui/route-detail.ts` (`stopIncomplete`, the `liveRouteTimes` state);
+  `packages/core/src/datasource.ts` (`watchRoute` on the seam);
+  `packages/api-client/src/live/select.ts`. Step **5** of
+  [`docs/proposals/05`](./proposals/05-live-times-on-a-route-nobody-asks-about.md) — the last one, and the
+  first that a rider can see.
+- **Context.** ADR-114 let a Citybus or GMB route *say* it had no times; ADR-115 put one stop's times in the
+  sheet a rider taps; ADR-116–119 built the route watch and the rule that merges it. Nothing was subscribed.
+- **Decisions:**
+  1. **The readings are handed to the screen and merged at render — not written into the query cache.** Its
+     two sibling hooks (`useLiveEtas`, `useLiveNearby`) use `setQueryData`, and that is right for them: a
+     Place or Nearby payload carries readings of its own, so a refetch replaces live values with fresh ones.
+     A Citybus route payload carries `eta: null` on every stop — the entire problem — so the same shape
+     would blank every time on screen at each refetch and refill it one frame later. Merging at render makes
+     that impossible, and it dissolves a second problem with it: the request is read off the **cached**
+     payload, which the merge never touches, so `liveArrivals` stays `perStopOnly` there and no latch is
+     needed to stop a successful round unsubscribing itself.
+     The honest cost: ADR-058's persisted copy holds the HTTP payload, so a cold start replays *"live times
+     unavailable"* and subscribes, rather than replaying yesterday's minutes as current.
+  2. **A row says "we could not ask", the screen no longer can.** `stopIncomplete` in the spec, from
+     `RouteStopRowView.incomplete`, from the payload's `failed`. `liveArrivals` cannot express "38 of 41
+     answered" without being wrong about most of the route; the row can. Same words as the card (ADR-077)
+     and the sheet (ADR-115), so no new catalogue key and no wording decision taken out of the owner's hands.
+  3. **One new spec state, `liveRouteTimes`, and `apps/mobile` implements the marker for it.** ADR-113 owes
+     the reference renderer no new *affordance*, and a subscription is one — but the specs still bind both
+     renderers, and a state one of them cannot draw is a state neither is measured on. The RN driver reaches
+     it by being handed the payload a round would have produced, which is what a driver is for: it owns *how*
+     to get there and the spec owns what must be there.
+- **Consequences:**
+  - 🟢 **Verified in a browser on the real feed.** Citybus **N171 outbound** at 00:20 HK: 31 rows carrying
+    live times (`7 min · 37 min` at stop 1, `9 min · 39 min` at stop 2), the ADR-114 notice gone, over one
+    `?route=` socket. Route 91 was tried first and showed nothing — correctly: its service had ended for the
+    night, which is worth recording as the reason a screenshot at the wrong hour proves nothing either way.
+  - 🔴 **The browser found a defect no unit test could.** `liveTransportFor('socket')` builds
+    `SocketTransportDeps` by copying two fields by hand, so the `route` the context grew was **silently
+    dropped**: `watchRoute` built its controller, called `open()` and connected to nothing, because a route
+    watch has no `subscribe` frame to trigger a connection with. Every unit test passed — they construct
+    `createSocketTransport` directly and pass `route` themselves. Fixed, and pinned at the seam that lost it
+    with a case that asserts `open()` alone connects to `?route=`.
+  - ⚠️ **And one defect the conformance suite found.** The first version of the hook returned
+    `{ etas: [] }` from mount, and an empty reading list means *"nothing is due anywhere"* to a merge whose
+    contract is that it receives the complete current set — so every KMB route rendered with no times at all.
+    The hook now offers a session or `null`, and merging `null` is a type error rather than a blank screen.
+  - 🟠 **`poll` is still the default engine, and this line originally understated what that costs.** It said
+    "one `/v1/route/:id` plus a batch per round"; an adversarial review showed that is wrong twice over. A
+    41-pole route is **four** batches (`ETAS_BATCH_MAX_IDS = 12`), and — because `/v1/etas?ids=…` carries no
+    per-id route list — each one asks its poles **un-narrowed**, which is precisely the ~19× fan-out ADR-117
+    removed from the socket path. The same gap makes `failed` name a sibling route's outage at a shared kerb,
+    and lets `LIVE_CTB_BUDGET` drop the watched route's own board with no failure entry at all. Filed with
+    reproductions and three candidate fixes in `docs/07`; the shared-round economy needs
+    `VITE_LIVE_TRANSPORT=socket`, which is proposal 05's remaining row and the fix the other two point at.
+
+## ADR-121 — The socket is the default engine, because polling a route costs 19× what it should
+
+- **Status:** **Accepted 2026-08-11** in `packages/api-client/src/live/select.ts` (`DEFAULT_LIVE_ENGINE`),
+  `packages/api-client/src/index.ts` (the client reads that constant instead of spelling an engine),
+  `.env.example`, and the four suites that encoded the old default. Supersedes ADR-076's choice of `poll`
+  as the shipped default; **ADR-076's reasoning is untouched** — it argued for making the engine
+  *configurable from a build* and for there being no `auto`, both of which still hold.
+- **Context.** The owner opened Citybus **182** (31 poles) on the shipping build and reported it slow, with
+  "a backlog of queries building up". That is a symptom with an exact cause.
+- **The measurement, on that route, against the live feed** (`wrangler dev`, 2026-08-11):
+
+  | the question the engine asks | upstream calls | wall |
+  |---|---|---|
+  | `poll` — 12 poles, un-narrowed (one of its three chunks) | **153** | **19.9 s** |
+  | `socket` — the same 12 poles, narrowed to route 182 | **12** | **0.49 s** |
+  | `poll` — a whole round, 31 poles in 3 concurrent chunks | ~395 | **75.7 s** |
+  | `socket` — a whole round, 31 poles | **31** | **~1.2 s** |
+
+  **A 75.7 s round against a 30 s cadence is the backlog**, exactly as reported: `createPollTransport`
+  schedules on a fixed interval measured from the *start* of the previous round (`Timers.every`, chosen in
+  ADR-076 to preserve the old shim's semantics), so when a round overruns the cadence, rounds overlap and
+  queue for as long as the screen stays open.
+- **Why the gap exists at all.** `/v1/etas?ids=…` carries **no per-id route list** — there is no safe
+  delimiter, since `,` is a legal `idchar` — so the poll emulator's questions cannot be narrowed and every
+  pole is asked about every route calling there. ADR-117 removed exactly this fan-out from the socket path
+  by narrowing at `boardsFor`, which the Durable Object can do because it knows its route from its own name.
+  So this is not "sockets are faster than HTTP": it is the batch endpoint being unable to express the
+  question, which `docs/07` filed and this ADR resolves by changing which engine ships.
+- **Decisions:**
+  1. **`DEFAULT_LIVE_ENGINE = 'socket'`, and `EdgeClient` now *reads* it** rather than spelling
+     `?? createPollTransport`. That second spelling would have had to be found by hand today; the
+     indirection ADR-076 built for exactly this occasion did its job — both app shells moved and neither
+     was edited.
+  2. **`poll` stays selectable and stays tested.** It is what an environment with no WebSocket path gets —
+     a proxy that strips upgrades, a runtime with no `WebSocket` — and it is the engine ADR-074's shared
+     corpus compares the socket *against*, so an engine nobody could observe would be an engine nobody
+     could trust. `edge-client-watch.test.ts` now names it explicitly, which is a real loss of coverage
+     (those cases used to exercise the unconfigured path) and is recorded in that file's header.
+  3. **Still no `auto`.** ADR-076's argument holds and gets sharper teeth: there is no socket→poll fallback,
+     so a rider behind a WebSocket-hostile proxy now gets *nothing* where before they got slow-but-working
+     data. That is the real cost of this change and the reason `VITE_LIVE_TRANSPORT=poll` /
+     `EXPO_PUBLIC_LIVE_TRANSPORT=poll` is documented as the escape hatch rather than left implicit.
+- **Consequences:**
+  - 🟢 **Verified in a browser with nothing configured** — route 182, the new default doing the work: 18 rows
+    of live times, notice gone, one `?route=` socket. A direct probe on the same page measured the
+    subscription delivering **18 readings in 8 ms** warm (the object already had a round stored).
+  - 🟢 **The fan-out moves to the edge.** A rider on a slow or distant connection — the owner is on a
+    Singapore VPN — now pays for one WebSocket and small frames rather than three batch requests per round,
+    each waiting on ~130 upstream calls.
+  - 🟢 **Every client watching one route shares one round**, which polling structurally cannot do.
+  - ⚠️ **The blast radius is every screen, not just Route detail.** Nearby, Place and Favourites all move to
+    the socket. They have been driven over a real `EtaHub` by the shared corpus since WP5-4 (ADR-074) and
+    the socket's own review is ADR-056 decisions 13–19, but this is the first time they *ship* that way.
+  - ⚠️ **`docs/07`'s poll-path 🟠 is not closed, it is demoted.** The un-narrowed fan-out, the cross-route
+    `failed` and the `LIVE_CTB_BUDGET` silent drop are all still true of `poll` — they now affect only
+    someone who selects it deliberately.
+
+## ADR-122 — The stale cue fired on healthy data, because 90 s is shorter than a Citybus reading's age
+
+- **Status:** **Accepted 2026-08-11** in `packages/core/src/policy.ts` (`CLIENT_POLICY_DEFAULTS.staleAfterMs`,
+  90 s → **120 s**). One constant: `/v1/policy` serves `CLIENT_POLICY_DEFAULTS` verbatim
+  (`apps/edge/src/index.ts`), so this moves the compiled-in default *and* the served one, and reaches clients
+  within the policy document's 5-minute `max-age` rather than a store release.
+- **Context.** The owner asked why some times go grey soon after appearing. The cue is `isStale`:
+  `now - dataTimestamp > staleAfterMs`, read off the **operator's** clock (ADR-058's reason: a reading
+  replayed from the offline cache must age by the operator's clock rather than look fresh because we just
+  read it from disk). So it fires on the *data's* age and not on whether a fetch succeeded.
+- **The measurement, on Citybus 182 and one KMB place** (2026-08-11):
+
+  | | age of a reading **when it arrives** |
+  |---|---|
+  | KMB stop board | 26–27 s |
+  | **Citybus 182 (one round, 18 readings)** | min 43 s, **median 63 s**, max **102 s** — **5 already past 90 s** |
+
+  Two delays stack, and neither is ours: the operator regenerates a route's board on a **~60 s cycle**, and
+  the CDN in front of it serves that response for up to **45 s** — observed directly as
+  `cache-control: max-age=45` with an `age:` header climbing 8 → 16 → 24 → 33 → 41 across successive
+  requests. **So a healthy Citybus reading is 0–105 s old on arrival, and a 90 s threshold sits below that
+  ceiling.**
+- **Decision: 120 s, one number, for every operator.** It clears the 105 s ceiling with a margin and still
+  fires inside the two-minute window where a countdown has genuinely stopped being trustworthy.
+  - **Why not per-operator** (KMB 90 / CTB 120), which was offered and declined: it buys ~30 s of
+    sensitivity on one operator in exchange for a second dimension in a served policy document, and a cue
+    whose meaning depends on which operator a rider is looking at is harder to explain than one that is
+    always "this is over two minutes old".
+  - **Why not derived from the cadence at runtime**: the inputs (publish period, CDN TTL) are upstream facts
+    we do not measure per feed, so a formula would look principled while quietly depending on two constants
+    nobody could see. The number is the derivation, written down where it can be read.
+- **Consequences:**
+  - 🟢 **The cue stops crying wolf.** 90 s was guaranteed to fire on working Citybus data every cycle, and a
+    cue that fires while everything works is one riders learn to ignore before the day it matters.
+  - ⚠️ **~30 s less sensitivity on KMB**, where readings arrive at 27 s and 90 s genuinely meant something.
+    Accepted deliberately per the decision above.
+  - ⚠️ **Six corpus rows were re-aged rather than re-expected**, which is the part worth copying: rows whose
+    *name* is the threshold (`exactly-at-the-threshold-is-still-fresh`,
+    `one-second-past-the-threshold-is-stale`, `a-reading-older-than-the-stale-threshold-is-marked-stale`) had
+    their fixtures moved so they still sit at 120 s and 121 s. Flipping their `expect` instead would have
+    kept the suite green while deleting the boundary they exist to pin. `live-clock.test.tsx` gained a step
+    for the same reason: 90 s is now an interior point and is kept as one, so a port that hard-codes 90
+    fails there rather than somewhere vaguer.
+  - 🟠 **It does not fix what the owner's screenshot showed.** With the Worker down, Route detail kept
+    counting 86K's times down and said nothing about the failing refetch — the arrival times are absolute
+    instants, so the minute labels recompute against a ticking clock with no new data at all, which is
+    correct and is *why* staleness must be read off `dataTimestamp`. But the screen's error arm is only
+    reachable when there is no view at all (`view ? … : query.isError ? …`), so once a route has loaded a
+    failed refetch is invisible except through this cue. **Filed in `docs/07` and since expanded at the
+    owner's request** into the four states that need four different sentences — stale-but-trying
+    ("last updated 14:19"), the rider offline, our edge unreachable, and the upstream refusing (which
+    already has vocabulary and must not be rebuilt). The wording is the owner's call, as ADR-114's was.

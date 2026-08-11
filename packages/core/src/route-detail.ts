@@ -22,6 +22,8 @@ import { type BusMarker, inferBusMarkers } from './route-position'
 import { displayName, type StopCardName } from './stop-card'
 import { isCircular, splitStopCode, stripCircular, titleCaseName } from './stop-name'
 import type {
+  Eta,
+  EtaReport,
   FreqPattern,
   I18nText,
   Locale,
@@ -301,6 +303,31 @@ export interface RouteStopRowView {
   last: boolean
   /** This route, saved at this pole (ADR-042) — the node gets a star. */
   saved: boolean
+  /**
+   * **We could not ask about this kerb** — so an empty `arrivals` here is not "no bus due" (ADR-116).
+   *
+   * Absent in every case but one: a live route watch asks each of the route's 13–41 poles separately, so
+   * one board can refuse while the rest answer, and `applyLiveEtasToRouteDetail` puts that pole in the
+   * payload's `failed`. The server never populates it — a route is fetched in one upstream call, which is
+   * what `liveArrivals` says once for the whole screen — so on an HTTP-only render this is always absent.
+   *
+   * A row and not the screen, deliberately: `liveArrivals` cannot express "38 of 41 answered" and would
+   * have to choose between claiming the screen has no times (false for 38 rows) and saying nothing (false
+   * for 3). It is the same distinction `StopCardView.incomplete` (ADR-077) and `routeStopBoard`'s
+   * `incomplete` (ADR-115) already draw, at the one granularity a live round actually has.
+   *
+   * **Only when the screen is not already saying it**, which is the half a review found missing. A round in
+   * which *every* pole refused leaves `liveArrivals` standing — correctly, nothing was answered — and
+   * marking all 41 rows as well would print one sentence 42 times down a screen, which is exactly what
+   * `noLiveBoard`'s own invariant forbids ("34 copies of one sentence is not more honest than one"). So the
+   * row speaks only when the screen is silent.
+   *
+   * **It can sit beside a reading, and that is not a contradiction.** `retainFailedPoles` keeps a refused
+   * pole's *previous* times rather than blanking the row (ADR-073), so the honest render is the ageing time
+   * **and** the sentence: the reading is real, and we could not re-ask. A renderer that showed only one of
+   * the two would be dropping either the rider's last known time or the reason it is not moving.
+   */
+  incomplete?: boolean
 }
 
 /**
@@ -357,6 +384,81 @@ export interface RouteJourneyHeader {
   reverseId?: string
 }
 
+/**
+ * One board's readings, as row slots — the **one** place a route arrival is turned into text.
+ *
+ * Private on purpose and shared by two callers: every stop row on the schematic, and the board the action
+ * sheet fetches on demand for a single stop (`routeStopBoard`). The sheet's own docblock records what
+ * happens when this sort of thing is written twice — `displayName` was inlined eleven lines from its own
+ * call and the sheet and the row could have disagreed about a stop's *name*. A time is worse: they would
+ * disagree about a bus.
+ *
+ * Staleness is the **board's**, not the arrival's: one `dataTimestamp` per board, so every slot dims
+ * together. A per-slot answer would make the third time look fresher than the first.
+ */
+function arrivalsFrom(
+  eta: Eta | null | undefined,
+  now: number,
+  locale: Locale,
+  policy: ResolvedClientPolicy,
+): RouteStopArrival[] {
+  const stale = eta ? isStale(eta, now, policy.staleAfterMs) : false
+  return upcoming(eta?.arrivals, now, policy.maxArrivals).map((iso) => ({
+    iso,
+    label: etaLabelParts(iso, now, locale, policy.dueUnderSec),
+    urgency: etaUrgency(iso, now, policy),
+    stale,
+  }))
+}
+
+/**
+ * This route's next arrivals at **one** pole, read out of that pole's own board.
+ *
+ * The Route screen shows per-stop times for KMB and LWB only, because those are the operators with a bulk
+ * route-eta feed; on Citybus and GMB `liveArrivals` is `perStopOnly` and every row is blank (ADR-114). Their
+ * *per-pole* boards answer perfectly well though, so a rider who taps one stop can be told about that stop —
+ * which is what the action sheet does, for the cost of one call about the thing they just asked about.
+ *
+ * Three decisions, and they are here rather than in a renderer because two renderers would answer the third
+ * one differently:
+ *
+ *  1. **The formatting is the row's**, via `arrivalsFrom`, so a time in the sheet reads exactly as it would
+ *     in the list.
+ *  2. **`incomplete` is `failed`'s**, not an empty list's. A pole whose board did not answer has no readings
+ *     *and* nothing due, and those are different sentences (ADR-077). Without this the sheet would say "no
+ *     bus due" about a board that refused us — the same conflation ADR-114 just removed one level up.
+ *  3. **Which reading belongs to this pole.** A board is requested for a pole and the server may resolve
+ *     that id to a *place* whose alias table promotes it (ADR-042), so a report can carry two readings for
+ *     one route at two kerbs — and on a schematic those are different rows. So: the reading whose `stopId`
+ *     matches exactly, or — when the route has exactly one reading in the report — that one, because a
+ *     single reading is unambiguously the answer to the question we asked. Never a guess between two.
+ *
+ * @spec route-detail#routeStopBoard
+ */
+export function routeStopBoard(
+  report: EtaReport | undefined,
+  opts: {
+    poleId: string
+    routeId: string
+    now: number
+    locale: Locale
+    policy?: ResolvedClientPolicy
+  },
+): { arrivals: RouteStopArrival[]; incomplete: boolean } {
+  const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
+  if (report === undefined) return { arrivals: [], incomplete: false }
+  const forRoute = report.etas.filter((e) => e.routeId === opts.routeId)
+  const exact = forRoute.find((e) => e.stopId === opts.poleId)
+  const only = forRoute.length === 1 ? forRoute[0] : undefined
+  const eta = exact ?? only
+  return {
+    arrivals: arrivalsFrom(eta, opts.now, opts.locale, policy),
+    // Named for the pole we asked about, so a place-wide failure list does not make one kerb's silence
+    // look like an outage at another.
+    incomplete: (report.failed ?? []).some((f) => f.stopId === opts.poleId),
+  }
+}
+
 /** What a renderer needs to draw the Route screen, with nothing left to decide. */
 export interface RouteDetailView {
   header: RouteJourneyHeader
@@ -382,6 +484,21 @@ export interface RouteDetailView {
    * the alternative is two renderers summing the same haversines in two languages.
    */
   distanceM: number
+  /**
+   * Whether the per-stop readings on this schematic are a complete answer, and if not, why not (ADR-114).
+   *
+   * **`'answered'` where the wire says nothing**, which is the one piece of work this field does rather
+   * than merely restating `RouteDetail.liveArrivals`: the wire omits the field when there is nothing to
+   * report (the convention `failed` set — *"every board answered" and "we have nothing to say" should not
+   * be the same bytes*), and a spec's `oneOf` discriminant has to be **total** or it throws. Turning
+   * absence into a named arm here is what lets `route-detail.spec.json` declare all three.
+   *
+   * Every stop having `eta: null` is not a statement that no bus is due — it is also what a route nobody
+   * asked about looks like, and telling those apart is the whole of this field. A renderer says it **once
+   * for the screen**, never per row: a rider cannot act on *which* rows, and 34 copies of one sentence is
+   * not more honest than one.
+   */
+  liveArrivals: 'answered' | 'unavailable' | 'perStopOnly'
 }
 
 /** The words this view composes with, supplied by the caller's catalogue. */
@@ -462,26 +579,30 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
       : stops.findIndex((s) => isOriginStop(s.stop.id, opts.arrivedFromStop))
 
   const saved = new Set(opts.savedRouteKeys ?? [])
+  // The kerbs the round could not ask about, as a set, so a 41-row walk is not 41 array scans. Read from
+  // the payload rather than passed in as an option: it arrives on the same document the readings do, which
+  // is what keeps a failure from outliving the round that produced it (`applyLiveEtasToRouteDetail`).
+  //
+  // **Empty while the screen is speaking.** `liveArrivals` present means the screen draws its own one-line
+  // notice, and a round in which every pole refused is exactly that case — so marking the rows too would
+  // print the same sentence once per row underneath it. See `RouteStopRowView.incomplete`.
+  const refused = new Set(
+    detail.liveArrivals === undefined ? (detail.failed ?? []).map((f) => f.stopId) : [],
+  )
   const rows: RouteStopRowView[] = stops.map((s, i) => {
-    const upcomingHere = upcoming(s.eta?.arrivals, now, policy.maxArrivals)
-    // Staleness is the **board's**, not the arrival's: one `dataTimestamp` per stop, so every slot on a
-    // row dims together. A per-slot answer would make the third time look fresher than the first.
-    const stale = s.eta ? isStale(s.eta, now, policy.staleAfterMs) : false
     return {
       seq: s.seq,
       stopId: s.stop.id,
       name: displayName(s.stop.name[locale]),
-      arrivals: upcomingHere.map((iso) => ({
-        iso,
-        label: etaLabelParts(iso, now, locale, policy.dueUnderSec),
-        urgency: etaUrgency(iso, now, policy),
-        stale,
-      })),
+      arrivals: arrivalsFrom(s.eta, now, locale, policy),
       ...(s.fare === undefined ? {} : { fare: s.fare, fareLabel: formatFare(s.fare) }),
       here: i === hereIndex,
       first: i === 0,
       last: i === stops.length - 1,
       saved: saved.has(formatFavoriteRouteKey(s.stop.id, route.id)),
+      // Only when true, so an HTTP-only render is byte-identical to what it always was — which is what the
+      // 18 existing corpus rows and both renderers' 19 projected states are measured against.
+      ...(refused.has(s.stop.id) ? { incomplete: true } : {}),
     }
   })
 
@@ -522,6 +643,9 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
     buses,
     hereIndex,
     distanceM: routeDistanceM(stops.map((s) => s.stop.location)),
+    // Absence is an answer here and it is the *good* one — see the field's own note. `?? 'answered'` is
+    // therefore not a defensive default; it is the wire's convention being read.
+    liveArrivals: detail.liveArrivals ?? 'answered',
   }
 }
 

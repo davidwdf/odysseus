@@ -33,6 +33,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetDatasetState } from '../src/dataset'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
+import { LIVE_HUB_KV_KEYS } from '../src/eta-hub'
 import worker from '../src/index'
 import { liveShardName } from '../src/live'
 import { buildSearchIndex } from '../src/search-index'
@@ -272,7 +273,10 @@ async function resetShards(): Promise<void> {
       for (const ws of state.getWebSockets()) ws.close(1000, 'test reset')
       await state.storage.deleteAlarm()
       state.storage.sql.exec('DELETE FROM readings')
-      state.storage.kv.delete('unchangedRounds')
+      // Every key the object owns, from its own declaration: this line used to name `'unchangedRounds'`
+      // as a literal in four suites at once, so a fifth key would have leaked between cases in all of
+      // them without a word (WP6-B step 2b added two).
+      for (const key of LIVE_HUB_KV_KEYS) state.storage.kv.delete(key)
     })
   }
 }

@@ -150,6 +150,64 @@ function boardCalls(place: PlaceDoc): BoardCall[] {
 type BoardResult = { poleId: string; etas: Eta[] } | { poleId: string; error: EtaFailure['error'] }
 
 /**
+ * Which upstream boards a **narrowed** read can possibly need — decided from the route ids' grammar
+ * alone, and `undefined` when nothing was narrowed.
+ *
+ * ## Why this exists: a narrowed read used to cost the same as an unnarrowed one
+ *
+ * `routeIds` filtered the *answer* (`narrowEtasToRoutes`) and not the *questions*, so a caller naming one
+ * route still paid for every route at every pole of the place. Measured on a real route watch of
+ * `CTB:11:outbound:1` (18 poles, `wrangler dev`, 2026-08-10): **350 upstream calls for one round** — 312
+ * `CTB-eta` and 38 `kmb-board` — where 18 would do. A round every 45 s per watched route, at ~19× the
+ * necessary rate, against feeds that are free and that we have no business hammering. With this rule the
+ * same round is 18 calls, and the fan-out finally matches the cost argument `LIVE_ROUTE_MAX_POLES` and
+ * `LIVE_CTB_BUDGET` are both written in terms of.
+ *
+ * ## The two savings, and why each is safe by construction rather than by inference
+ *
+ * **A board whose operator serves none of the requested routes cannot answer any of them.** A KMB board
+ * returns KMB/LWB readings; asking it for `CTB:11:outbound:1` returns readings that
+ * `narrowEtasToRoutes` then discards *in every case*. So skipping it removes a call whose entire output
+ * was guaranteed to be thrown away — that is the 38 above. KMB and LWB fold together because they read the
+ * same board (see `boardCalls`), which is the one place in this rule where two operator ids are one call.
+ *
+ * **A CTB pole is asked only about the requested route numbers.** CTB has no stop board (ADR-021), so its
+ * call key is per (pole, route) and a narrowed caller's unwanted routes are individually-priced questions.
+ * That is the 312 → 18.
+ *
+ * Both tests are on the *route id*, never on whether a pole is thought to serve a route: a pole-membership
+ * guess that is wrong drops readings a rider was watching, and there is no need to guess. An unparseable
+ * route id contributes nothing to either set — it can match no reading either, so `narrowEtasToRoutes`
+ * would have dropped everything it selected anyway.
+ *
+ * **What this changes about `failed`, stated because it is wire-visible.** `stopEtas` documents that
+ * `routes=` filters readings and never failures; that is still true of the boards we call. But a board we
+ * no longer call can no longer refuse, so a narrowed read reports failures only for the poles and routes it
+ * actually asked about. That is the honest direction — the alternative is a `failed` entry for a kerb whose
+ * outage could not have affected the rider's answer — and it is what makes a route watch's *"we could not
+ * ask"* marker mean the route's own poles (ADR-114, ADR-081).
+ */
+function boardsFor(
+  routeIds: readonly string[] | undefined,
+): { operators: Set<string>; ctbRouteNos: Set<string> } | undefined {
+  if (!routeIds?.length) return undefined
+  const operators = new Set<string>()
+  const ctbRouteNos = new Set<string>()
+  for (const id of routeIds) {
+    const parts = parseRouteId(id)
+    if (!parts) continue
+    operators.add(parts.operator)
+    // Either operator's route may be read off the other's pole, because both are the KMB board.
+    if (parts.operator === 'KMB' || parts.operator === 'LWB') {
+      operators.add('KMB')
+      operators.add('LWB')
+    }
+    if (parts.operator === 'CTB') ctbRouteNos.add(parts.routeNo)
+  }
+  return { operators, ctbRouteNos }
+}
+
+/**
  * Raw (call-deduped, not yet rider-deduped) ETAs across every upstream pole of a place
  * (ADR-042, WP5-11), **and the poles that would not answer** (ADR-073). Each KMB or GMB pole is ONE
  * stop-board call (all its routes); CTB is per-route, bounded by a per-place budget. Poles and CTB
@@ -181,9 +239,11 @@ type BoardResult = { poleId: string; etas: Eta[] } | { poleId: string; error: Et
 async function memberEtaLists(
   place: PlaceDoc,
   ctbBudget = DEFAULT_CTB_BUDGET,
+  routeIds?: readonly string[],
 ): Promise<{ etas: Eta[]; failed: EtaFailure[] }> {
   const tasks: Array<Promise<BoardResult>> = []
   let ctbRemaining = ctbBudget
+  const wanted = boardsFor(routeIds)
   /** Every board call's answer, tagged with the pole, so a rejection cannot look like an empty board. */
   const board = (poleId: string, etas: Promise<Eta[]>): Promise<BoardResult> =>
     atPole(poleId, etas).then(
@@ -198,8 +258,11 @@ async function memberEtaLists(
   // `boardCalls` already drops a pole named twice (an overlapping caller, a malformed doc), so the
   // CTB budget isn't spent on a repeat we'd only coalesce away.
   for (const call of boardCalls(place)) {
+    // A board that cannot answer any requested route is not called at all — see `boardsFor`.
+    if (wanted && !wanted.operators.has(call.operator)) continue
     if (call.operator === 'CTB') {
       for (const routeNo of ctbRoutesAt(place, call.poleId)) {
+        if (wanted && !wanted.ctbRouteNos.has(routeNo)) continue
         if (ctbRemaining <= 0) break
         ctbRemaining--
         // CTB has no per-stop board (ADR-021), so the call key is per (pole, route).
@@ -373,8 +436,9 @@ function withRemarkKind(eta: Eta): Eta {
 export async function stopArrivals(
   place: PlaceDoc,
   ctbBudget = DEFAULT_CTB_BUDGET,
+  routeIds?: readonly string[],
 ): Promise<EtaReport> {
-  const { etas: raw, failed } = await memberEtaLists(place, ctbBudget)
+  const { etas: raw, failed } = await memberEtaLists(place, ctbBudget, routeIds)
   const all = dedupeEtas(raw)
   const { fareByRouteAndPole, destinationByRoute, destinationByBoardingLine } = stampTables(place)
   // Stamp each reading with its route's destination + boarding fare so flat ETA lists can show
@@ -496,7 +560,10 @@ export async function stopEtas(
 ): Promise<EtaReport> {
   const place = await requirePlace(ds, id)
 
-  const report = await stopArrivals(place, ctbBudget)
+  // The narrowing goes **in** as well as being applied on the way out: `boardsFor` bounds which upstream
+  // boards are called at all, and this line's `narrowEtasToRoutes` is what makes the answer exact (a KMB
+  // board returns every route at the pole whatever we asked). One is the cost, the other the contract.
+  const report = await stopArrivals(place, ctbBudget, routeIds)
   if (!routeIds?.length) return report
   // **The kernel's rule, not a `Set` and a `.filter` here** (WP5-7). It used to be three lines in this
   // function, which was fine while the edge was the only narrower. The batch endpoint carries no
@@ -575,18 +642,35 @@ export async function routeDetail(ds: DatasetSource, id: string): Promise<RouteD
   // route view — the stop list, the geometry and the fares are all static — whereas erroring the
   // screen would lose them. That is a genuinely different answer from `/v1/etas`', which is why the
   // cache is no longer the one deciding it for both. The failure is still not cached, so the next
-  // request retries. Route detail has no per-stop failure field of its own; whoever gives it one is
-  // WP5-13, and it should come from here.
+  // request retries.
+  //
+  // **And the catch now reports itself** (ADR-114). It used to swallow the failure completely, which
+  // made an upstream outage indistinguishable from a quiet route — on KMB, where every rider is. The
+  // comment that stood here said route detail had no failure field of its own, that WP5-13 owed it one,
+  // and that "it should come from here". WP5-13 shipped without it; this is it, and it does come from
+  // here — but not as the `EtaFailure[]` the other endpoints carry. A route is **one** upstream call, so
+  // there is no per-pole granularity to report and inventing one would be a lie about the fetch.
   const etaBySeq = new Map<number, Eta>()
+  let liveArrivals: RouteDetail['liveArrivals']
   if (route.operator === 'KMB' || route.operator === 'LWB') {
     const entries = await coalesce(`kmb-route-eta|${route.routeNo}|${route.serviceType}`, () =>
       fetchKmbRouteEta(route.routeNo, route.serviceType),
-    ).catch(() => [])
+    ).catch(() => {
+      liveArrivals = 'unavailable'
+      return []
+    })
     for (const entry of entries) {
       if (entry.eta.routeId === id && entry.eta.arrivals.length > 0) {
         etaBySeq.set(entry.seq, entry.eta)
       }
     }
+  } else {
+    // No bulk route-eta endpoint exists for this operator — Citybus publishes none (ADR-021) and GMB is
+    // not wired — so this is not a failure and never will be one: it is a permanent property of the feed.
+    // Their per-pole boards *do* answer, which is why the field names where the times are rather than
+    // merely saying they are missing. Fanning out one call per pole to fetch them here was considered and
+    // is a separate decision: a 34-stop route is 34 subrequests, every 30 s, per rider.
+    liveArrivals = 'perStopOnly'
   }
 
   return {
@@ -607,6 +691,9 @@ export async function routeDetail(ds: DatasetSource, id: string): Promise<RouteD
         fare: s.fare,
       }
     }),
+    // Omitted when the round answered, which is the convention `failed` set: "every board answered" and
+    // "we have nothing to say" must not be the same bytes on the wire.
+    ...(liveArrivals === undefined ? {} : { liveArrivals }),
     ...(doc.reverse ? { reverse: doc.reverse } : {}),
   }
 }

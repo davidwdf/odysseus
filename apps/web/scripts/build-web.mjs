@@ -21,7 +21,7 @@
  * bundle did would produce a service worker that caches nothing, with no error anywhere.
  */
 import { execFileSync } from 'node:child_process'
-import { rmSync, statSync } from 'node:fs'
+import { readdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_API_URL } from '@nextbus/api-client'
@@ -31,6 +31,8 @@ import { assertServiceWorker, workboxConfig } from '../../../scripts/pwa/workbox
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const distDir = join(appDir, 'dist')
 const apiUrl = process.env.VITE_API_URL ?? DEFAULT_API_URL
+/** Directories under `apps/web/` that are dev-only pages — the same list `test/dev-pages.test.mjs` holds. */
+const DEV_DIRS = ['lab']
 
 console.log(`▸ vite build   (API: ${apiUrl})`)
 rmSync(distDir, { recursive: true, force: true })
@@ -42,6 +44,26 @@ execFileSync('npx', ['vite', 'build'], {
 
 // Fail loudly rather than shipping a service worker whose precache manifest is empty.
 statSync(join(distDir, 'index.html'))
+
+/*
+  And fail loudly if a **dev page** made it into the output (ADR-112). `apps/web/lab/` is a real page in
+  this app — it drives the rail components from a timer, which is the only way to see whether their motion
+  fires on the right occasions — and `vite build` leaves it out only because its single entry is the root
+  `index.html`. That is a default, not a promise: one `rollupOptions.input` and the lab would be bundled,
+  precached by the very next line, and served to riders offline.
+
+  `test/dev-pages.test.mjs` asserts the same claim from the other side, over the source, and that is the one
+  CI runs. This is the one that reads the artefact.
+*/
+const shipped = readdirSync(distDir, { recursive: true }).map(String)
+const leaked = shipped.filter((f) => DEV_DIRS.some((dev) => f.split(/[\\/]/).includes(dev)))
+if (leaked.length > 0) {
+  console.error(`✗ a dev page reached the production build:\n    ${leaked.join('\n    ')}\n`)
+  console.error(
+    '  Dev pages are served by `vite dev` and must never be a build input — see ADR-112.',
+  )
+  process.exit(1)
+}
 
 console.log('▸ workbox generateSW')
 const { count, size, warnings } = await generateSW(

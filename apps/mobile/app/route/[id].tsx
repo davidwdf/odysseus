@@ -246,6 +246,21 @@ export default function RouteDetail() {
                 First child so each stop row's measured `y` includes its height, keeping the
                 bus-token + auto-scroll math (which use `topSpacer + tops[i]`) consistent. */}
             <RouteMeta facts={view.facts} onFactPress={(key) => setFactSheet(key)} />
+            {/* **Live times are not the whole truth on this route, said once** (ADR-114).
+                `liveArrivals` distinguishes three things `eta: null` on every row could not: the round
+                answered and nothing is due, the round did not answer, and this operator publishes no
+                route-level feed at all (Citybus, GMB) — which is permanent, and which made a whole
+                operator's routes read as "no bus is due" for two waves.
+
+                Above the schematic and never per row: a rider cannot act on *which* rows. Same variant
+                and token as `StopRow`'s `incomplete` line, and for the same reason — `text-muted`, never
+                a warning colour, because nothing is wrong with the route. Inside this `View` and above the
+                rows, so every row's measured `y` includes it and the token math stays consistent. */}
+            {view.liveArrivals !== 'answered' ? (
+              <Text variant="label" className="px-4 pb-1 pt-2 text-muted">
+                {t(locale, 'etasUnavailable')}
+              </Text>
+            ) : null}
             {view.stops.map((row, i) => (
               <RouteStopRow
                 key={`${row.seq}-${row.stopId}`}
@@ -507,6 +522,7 @@ function RouteStopRow({
 }) {
   const lineX = RAIL_W / 2 - 1
   const { here, first, last } = row
+  const locale = useLocale()
 
   // Direction-flip cascade: on a flip the reverse rows mount fresh, each fading + rising into place
   // a beat after the one above (delay capped so a long route doesn't drag). Makes the swap read as
@@ -589,6 +605,19 @@ function RouteStopRow({
             ) : null}
           </View>
           {row.arrivals.length > 0 ? <EtaTimes arrivals={row.arrivals} /> : null}
+          {row.incomplete ? (
+            // **A kerb we could not ask about, said on the row rather than for the screen** (ADR-116). A live
+            // route watch asks each pole separately, so one board can refuse while the rest answer, and
+            // `liveArrivals` — the one-line notice above the schematic — cannot say that without being wrong
+            // about most of the route. This renderer does not subscribe (ADR-113 owes it no new affordance),
+            // so it will not reach this in the field; it is here because the **spec** binds both renderers,
+            // and a state one of them cannot draw is a state neither is measured on. Beside the times rather
+            // than instead of them: a refused pole keeps its previous readings, so the ageing time and the
+            // reason it is not moving are both true.
+            <Text variant="label" className="mt-1 text-muted">
+              {t(locale, 'etasUnavailable')}
+            </Text>
+          ) : null}
         </View>
       </Pressable>
     </Animated.View>

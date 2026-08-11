@@ -1,9 +1,12 @@
 import {
+  applyLiveEtasToRouteDetail,
+  type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
   type RouteFactKey,
   type RouteStopRowView,
   routeDetailView,
   routeFactSheet,
+  routeStopBoard,
   type ServiceDayType,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
@@ -20,6 +23,7 @@ import { RouteFactSheet } from '../components/RouteFactSheet'
 import { RouteStopRow } from '../components/RouteStopRow'
 import { RouteStopSheet } from '../components/RouteStopSheet'
 import { useClientPolicy } from '../hooks/useClientPolicy'
+import { useLiveRoute } from '../hooks/useLiveRoute'
 import { useRailFlip } from '../hooks/useRailFlip'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
@@ -33,7 +37,7 @@ import { CollapsingHeader } from '../shell/CollapsingHeader'
  * name/code/fare/readouts, which rows are the rider's saved ones, the boarding anchor, and **which node each
  * bus is at** — once, for both.
  *
- * `packages/contract/ui/route-detail.spec.json` declares what it must show in each of nineteen states, and
+ * `packages/contract/ui/route-detail.spec.json` declares what it must show in each of twenty states, and
  * `test/route-detail-states.test.tsx` drives every projected one — as does
  * `apps/mobile/test/route-detail-states.test.tsx`, from the same file and the same corpus fixtures.
  *
@@ -98,9 +102,11 @@ export function RouteDetail() {
     queryKey: ['route', id],
     enabled: !!id,
     queryFn: () => dataSource.getRoute(id as string),
-    // The served cadence (ADR-053), matched to the edge's coalescing TTL. Unlike Place detail this screen has
-    // no subscription — `/v1/live` carries per-pole targets and a route is 34 of them — so the refetch is
-    // both the fetch and the clock, exactly as the RN screen's is.
+    // The served cadence (ADR-053), matched to the edge's coalescing TTL. It stays the fetch **and** the
+    // clock even when a route watch is running (ADR-116/119): the live readings are merged at render rather
+    // than written into this entry, so a refetch replaces only the static half — the stops, the fares, the
+    // patterns — and cannot blank a time on screen. That is the whole reason `useLiveRoute` hands its
+    // readings back instead of calling `setQueryData` the way its two siblings do.
     refetchInterval: policy.refreshAfterMs,
     // Holds the current direction on screen while a flip's payload loads, so a not-yet-cached reverse never
     // flashes the skeleton (ADR-046).
@@ -115,10 +121,51 @@ export function RouteDetail() {
    * to the reverse direction rather than swapping it in, so there is no state in which the rider has flipped
    * *and* the arrived-from stop belongs to the other bound — the URL carries whichever pair is true.
    */
-  const view: RouteDetailView | undefined = query.data
-    ? routeDetailView(query.data, {
+  /**
+   * The live route watch (ADR-116/119), and the merge that puts its readings on the schematic.
+   *
+   * `wanted` is the wire's own statement that this route's embedded times are not a complete answer — which is
+   * exactly the condition ADR-114 invented the field for. Read off the **cached** payload rather than off the
+   * view, and that is what keeps it stable: the merge below clears the field (absence is what *answered*
+   * means), so a request derived from the merged document would switch itself off on its first success.
+   *
+   * A KMB route never asks: its bulk feed answers, no subscription opens, and the only cost is one
+   * `setInterval` for the clock — which this screen needed anyway.
+   */
+  const wantsLive = query.data?.liveArrivals !== undefined
+  const { round, now } = useLiveRoute(query.data?.route.id, {
+    wanted: wantsLive,
+    refreshAfterMs: policy.refreshAfterMs,
+  })
+
+  /**
+   * The payload the screen renders: whatever was fetched, with whatever the round has said since.
+   *
+   * Merged **at render** rather than into the query cache, and both halves of that matter: a refetch cannot
+   * blank a live time (see the `refetchInterval` above), and the kernel decides every question about which
+   * reading belongs to which row — this line joins two `@nextbus/core` calls and answers nothing itself.
+   *
+   * The round is merged only onto **its own** route: the hook clears it in an effect, and an effect runs
+   * after paint, so on a direction flip or a Back navigation the id and the payload change one frame before
+   * the clear. Comparing here costs nothing and removes the frame in which the previous route's readings
+   * would be filtered out of this one — 41 blank rows — and its `failed` would mark kerbs on a route nobody
+   * asked about.
+   *
+   * `round` is `null` until a frame has landed, and the merge is skipped for exactly that long. It has to be:
+   * the reading list a merge is handed is the *complete current set*, so an empty one means "nothing is due
+   * anywhere" — true of a live round that found nothing, and false of a screen that has not been told
+   * anything yet. Merging `[]` on first paint blanked every time on every KMB route, which the conformance
+   * suite caught before a rider could.
+   */
+  const detail: RouteDetailPayload | undefined =
+    query.data && round?.routeId === query.data.route.id
+      ? applyLiveEtasToRouteDetail(query.data, round.etas, round.failed)
+      : query.data
+
+  const view: RouteDetailView | undefined = detail
+    ? routeDetailView(detail, {
         locale,
-        now: Date.now(),
+        now,
         policy,
         savedRouteKeys: favouriteRoutes,
         ...(arrivedFromStop === undefined ? {} : { arrivedFromStop }),
@@ -231,6 +278,41 @@ export function RouteDetail() {
    */
   const [sheetRow, setSheetRow] = useState<RouteStopRowView | null>(null)
 
+  /**
+   * The tapped stop's own board, fetched **only when there is nothing to show** (ADR-115).
+   *
+   * On Citybus and GMB the route view carries no times at all — those operators publish no route-level
+   * feed, which is what `liveArrivals: 'perStopOnly'` says (ADR-114) — but their *per-pole* boards answer
+   * perfectly well. So a rider who taps one stop gets that stop's times, for the cost of one call about
+   * the thing they just asked about, and no accordion: the sheet they already opened is where it goes.
+   *
+   * Three conditions, and each is doing work. **The row's own readings win**, so a KMB route costs no
+   * extra call and the sheet cannot disagree with the list behind it. `liveArrivals !== 'answered'` is the
+   * rest: a route whose round *did* answer and has nothing due must not trigger a fetch that would find
+   * the same nothing — that would be a request per tap, for ever, to re-learn what the payload said.
+   * And `sheetRow` gates it, so nothing is fetched until a rider asks.
+   */
+  const boardPole =
+    sheetRow !== null && sheetRow.arrivals.length === 0 ? sheetRow.stopId : undefined
+  const boardRoute = query.data?.route.id
+  const wantsBoard =
+    boardPole !== undefined &&
+    boardRoute !== undefined &&
+    // …**or this kerb in particular refused.** Once a live round answers, the merge clears `liveArrivals`
+    // — the screen-level sentence is gone and this reads `'answered'` — but a round asks each pole
+    // separately, so one kerb can still have refused and its row says so (ADR-120). The rider tapping
+    // *that* row is the one who most wants an answer, and a retry is exactly what a retryable failure is
+    // for. Without this clause the board is never fetched and the sheet's last arm prints "No scheduled
+    // service" under a row that just said we could not ask.
+    (view?.liveArrivals !== 'answered' || sheetRow?.incomplete === true)
+  const board = useQuery({
+    queryKey: ['etas', boardPole, boardRoute],
+    enabled: wantsBoard,
+    queryFn: () => dataSource.getEtas(boardPole as string, [boardRoute as string]),
+    // The served cadence, as everywhere else — a sheet left open keeps up with the screen behind it.
+    refetchInterval: policy.refreshAfterMs,
+  })
+
   // Which fact sheet is open, if any (ADR-044). Held here rather than per pill so only one can be.
   const [factSheet, setFactSheet] = useState<RouteFactKey | null>(null)
 
@@ -315,6 +397,21 @@ export function RouteDetail() {
             </div>
           ) : null}
 
+          {/* **Live times are not the whole truth on this route, said once** (ADR-114).
+              `liveArrivals` distinguishes three things `eta: null` on every row could not: the round
+              answered and nothing is due, the round did not answer, and this operator publishes no
+              route-level feed at all (Citybus, GMB). The last is permanent, and its honest upgrade is to
+              point at the per-pole boards that *do* answer — a string of its own, and the owner's call.
+
+              Above the schematic and never per row: a rider cannot act on *which* rows, and 34 copies of
+              one sentence is not more honest than one. `text-muted`, not a warning colour — nothing is
+              wrong with the route. */}
+          {view.liveArrivals !== 'answered' ? (
+            <p className="m-0 px-4 pt-2 pb-1 text-label text-muted">
+              {t(locale, 'etasUnavailable')}
+            </p>
+          ) : null}
+
           {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read
               against — the only thing left on this element now the overlay is gone. */}
           <div ref={list} className="relative mt-2">
@@ -378,6 +475,20 @@ export function RouteDetail() {
                 setSheetRow(null)
                 openStop(sheetRow)
               }}
+              /* The readout the sheet shows: the row's own if it has any, else the board fetched for this
+                 pole. `routeStopBoard` picks which of a report's readings belongs to *this* pole and
+                 formats it exactly as the row would — a place with two kerbs on one route has two
+                 readings, and on a schematic those are different rows. */
+              {...(sheetRow.arrivals.length > 0
+                ? { arrivals: sheetRow.arrivals, incomplete: false }
+                : routeStopBoard(board.data, {
+                    poleId: sheetRow.stopId,
+                    routeId: query.data.route.id,
+                    now: Date.now(),
+                    locale,
+                    policy,
+                  }))}
+              loading={wantsBoard && board.isFetching && board.data === undefined}
             />
           ) : null}
         </>

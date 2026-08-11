@@ -29,8 +29,23 @@ import { createSocketTransport } from './socket'
  */
 export const LIVE_ENGINES: readonly LiveEngine[] = ['poll', 'socket']
 
-/** The shipped default. `watch()` polls `/v1/etas/:id` per target per cadence unless told otherwise. */
-export const DEFAULT_LIVE_ENGINE: LiveEngine = 'poll'
+/**
+ * The shipped default — **the socket since 2026-08-11**, and the reason is a measurement rather than a
+ * preference (ADR-121).
+ *
+ * The poll emulator asks `/v1/etas?ids=…`, which carries no per-id route list, so every pole it names is
+ * asked about **every route that calls there**. Measured on Citybus 182 (31 poles, `wrangler dev` against
+ * the live feed): one chunk of twelve poles cost **153 upstream calls and 19.9 s**, where the same twelve
+ * narrowed to route 182 cost **12 calls and 0.49 s** — and a whole round was **~395 calls / 75.7 s** against
+ * a 30 s cadence, so rounds overlapped and queued behind each other for as long as the screen stayed open.
+ * The socket's round is one call per pole because the Durable Object narrows from its own name (ADR-116/117).
+ *
+ * Two more things follow from where the work happens rather than from how fast it is. The fan-out runs **at
+ * the edge**, so a rider on a slow or distant connection pays for one WebSocket and some small frames
+ * instead of three batch requests per round. And every client watching one route shares **one** round, which
+ * is the property the whole design was built for and which polling cannot have.
+ */
+export const DEFAULT_LIVE_ENGINE: LiveEngine = 'socket'
 
 /**
  * A configured spelling → the engine it names. Anything unrecognised is the default, **loudly**.
@@ -71,13 +86,24 @@ export function liveEngineFrom(spelling: string | undefined): LiveEngine {
  *  · **`ctx.clock`, not `Date.now`.** The frames' `at` stamps come from the client's injected clock, so
  *    a test that pinned the clock and got real timestamps anyway would be comparing two engines with
  *    one of them ignoring the pin.
+ *  · **`ctx.route`, when the subscription is a whole route** (ADR-116/119). Forwarded rather than
+ *    defaulted, and this line is here because its absence was a real defect: this factory is where a
+ *    `LiveTransportContext` becomes `SocketTransportDeps`, so a field the context grew and this call did
+ *    not copy is silently dropped — `watchRoute` built its controller, called `open()`, and connected to
+ *    nothing at all. Every unit test passed, because they construct `createSocketTransport` directly with
+ *    the field. Found by opening a Citybus route in a browser, which is the only place the two halves meet.
  *  · **Nothing else.** `timers`, `socketFactory`, `keepaliveMs`, `backoff` and `random` all default —
  *    and `browserSocketFactory` is the platform `WebSocket`, which React Native ships too, so one
  *    adapter serves both renderers and no app shell ever names a socket.
  */
 export function liveTransportFor(engine: LiveEngine): (ctx: LiveTransportContext) => LiveEtaEngine {
   if (engine === 'socket') {
-    return (ctx) => createSocketTransport({ url: ctx.endpoints.socketUrl, clock: ctx.clock })
+    return (ctx) =>
+      createSocketTransport({
+        url: ctx.endpoints.socketUrl,
+        clock: ctx.clock,
+        ...(ctx.route === undefined ? {} : { route: ctx.route }),
+      })
   }
   return createPollTransport
 }
@@ -85,11 +111,11 @@ export function liveTransportFor(engine: LiveEngine): (ctx: LiveTransportContext
 /**
  * The whole of WP5-6 at a call site: a configured spelling → a transport, or `undefined` for the default.
  *
- * `undefined` rather than `createPollTransport` for the default case on purpose. `EdgeClient`'s
- * constructor is `opts.transport ?? createPollTransport`, so both produce the poll emulator — but only
- * `undefined` leaves *the client* holding the answer to "what is the default", which is where the two
- * app shells and every test agree it lives. An app shell that spelled the default itself would be a
- * second declaration of it, and the day the default changes it would be the one that did not.
+ * `undefined` rather than a factory for the default case on purpose: it leaves *the client* holding the
+ * answer to "what is the default", which is where the two app shells and every test agree it lives. An app
+ * shell that spelled the default itself would be a second declaration of it, and the day the default changes
+ * it would be the one that did not — which is exactly the day this comment was rewritten, so the mechanism
+ * earned its keep: flipping `DEFAULT_LIVE_ENGINE` moved both shells and neither was edited.
  */
 export function liveTransportFromEnv(
   spelling: string | undefined,

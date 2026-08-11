@@ -24,7 +24,8 @@
 // untouched.
 
 import { LIVE_PATH } from '@nextbus/contract'
-import { acceptTargets, liveShardFor, type WatchTarget } from '@nextbus/core'
+import { acceptTargets, liveShardFor, routeWatchName, type WatchTarget } from '@nextbus/core'
+import { getDataset } from './dataset'
 import type { Env } from './env'
 import { fail as failWith } from './errors'
 
@@ -176,11 +177,54 @@ export async function liveUpgrade(
     return fail('bad_request', 'origin not allowed')
   }
 
-  const raw = new URL(request.url).searchParams.get('targets')
+  const url = new URL(request.url)
+
+  /*
+    **`?route=` — the whole route, resolved here rather than named by the client** (proposals/05).
+
+    Citybus and GMB publish no bulk route-eta feed, so a route screen has no times at all (ADR-114) while
+    their per-pole boards answer perfectly well. A route watch subscribes to every pole of one route, which
+    is ~13–41 of them, and three things follow from resolving that server-side:
+
+     · **the URL stays short** — 41 percent-encoded ids in a query string, on every reconnect, versus one
+       route id;
+     · **the target set has one source of truth** — the same route document `/v1/route/:id` reads, so the
+       socket cannot watch a pole the schematic does not draw;
+     · **the client cannot pick the object.** As with `liveShardFor`, the Worker derives the name, so a
+       client compiled against a stale rule lands nowhere unexpected.
+
+    Everything about *being* a route watch then follows from the object's name, which is why nothing else is
+    passed: see `routeIdFromWatchName` and `EtaHub.watchedRoute`.
+  */
+  const routeId = url.searchParams.get('route')
+  if (routeId !== null) {
+    const name = routeWatchName(routeId)
+    // Refused before a stub exists, for the reason `routeWatchName` documents: `route-` plus arbitrary text
+    // is a real Durable Object, and this is the door that arbitrary text arrives at.
+    if (name === undefined) return fail('bad_request', `not a route id: ${routeId}`)
+
+    const doc = await (await getDataset(env)).route(routeId)
+    // Absent is nobody's fault and not worth retrying — the same split `routeDetail` makes between a
+    // malformed id and an unknown one.
+    if (!doc) return fail('not_found', `unknown route: ${routeId}`)
+
+    const poles = doc.stops.map((stop) => stop.id)
+    if (poles.length === 0) return fail('not_found', `route has no stops: ${routeId}`)
+
+    // The object is told what to watch through `?targets=`, exactly as a place watch is — one door into the
+    // shard, so a route watch is not a second protocol. What makes it a *route* watch is its name: the
+    // object reads that to narrow every reading to this route and to use its own caps. Excess poles are
+    // dropped and named by the shard, not silently truncated here.
+    const forwarded = new URL(url)
+    forwarded.searchParams.set('targets', poles.join(','))
+    return env.ETA_HUB.getByName(name).fetch(new Request(forwarded, request))
+  }
+
+  const raw = url.searchParams.get('targets')
   if (raw === null) {
     return fail(
       'bad_request',
-      `usage: ${LIVE_PATH}?targets=<comma-separated canonical stop or place ids, percent-encoded>`,
+      `usage: ${LIVE_PATH}?targets=<comma-separated canonical stop or place ids, percent-encoded> — or ${LIVE_PATH}?route=<canonical route id> for every pole of one route`,
     )
   }
 

@@ -1,6 +1,8 @@
 import type { EtaUrgency, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
+import { t } from '@nextbus/i18n'
 import { Star } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+import { useLocale } from '../providers/LocaleProvider'
 import { NODE, NODE_CENTRE, NODE_TOP, RAIL_WIDTH } from './RailBusToken'
 import { SlideNumber } from './SlideNumber'
 import { StopName } from './StopName'
@@ -50,6 +52,7 @@ export function RouteStopRow({
   registerRow: (index: number, el: HTMLElement | null) => void
 }) {
   const { here, first, last } = row
+  const locale = useLocale()
   // **Read once, at mount** — `useState`'s initial value is ignored on every later render, which is exactly
   // what the RN row gets from `useSharedValue(animateIn ? 0 : 1)` plus an effect with empty deps.
   //
@@ -171,6 +174,19 @@ export function RouteStopRow({
               ))}
             </span>
           ) : null}
+          {row.incomplete ? (
+            // **Why a row says this and the screen does not.** A live route watch asks each pole separately, so
+            // one kerb can refuse while the other forty answer (ADR-116) — and `liveArrivals`, which is the
+            // screen-level sentence, cannot express that without lying in one direction or the other. The same
+            // words a card uses for the same fact (ADR-077), in the same muted label as every other secondary
+            // line here, because it is an explanation and not an alarm.
+            //
+            // **Beside the times rather than instead of them**, which is not a layout choice: a refused pole
+            // keeps its *previous* readings (`retainFailedPoles`, ADR-073), so the honest render is the ageing
+            // time and the reason it is not moving. Drawing only the time hides the outage; drawing only the
+            // sentence throws away the rider's last known bus.
+            <span className="mt-1 block text-label text-muted">{t(locale, 'etasUnavailable')}</span>
+          ) : null}
         </span>
       </button>
       {tokens}
@@ -200,8 +216,13 @@ const TONE: Record<EtaUrgency, string> = {
  *
  * Staleness dims and does not recolour (ADR-008: never colour alone) — and the value itself does not move,
  * because a reading only changes when a fresh one arrives.
+ *
+ * **Exported for the action sheet** (ADR-115), which shows this route's times at one stop when the route view
+ * has none of its own. Not for reuse in general: it is exported so there is exactly ONE renderer of a route
+ * arrival rather than a third copy of the same three arms. The sheet's own docblock records what nearly
+ * happened when a stop's *name* was written twice eleven lines apart; a time is worse.
  */
-function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolean }) {
+export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolean }) {
   const { label } = arrival
   const tone = first ? (TONE[arrival.urgency] ?? TONE.none) : 'text-muted'
   const size = first ? 'text-body font-semibold' : 'text-caption'

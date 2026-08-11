@@ -73,7 +73,9 @@ import {
   LIVE_CADENCE_RAMP_ROUNDS,
   memberStopIds,
   nextLiveCadenceMs,
+  nextRouteRoundMs,
   retainFailedPoles,
+  routeIdFromWatchName,
   type ServerFrame,
   sameFailures,
   unionFailures,
@@ -131,6 +133,19 @@ export const LIVE_MAX_TARGETS_PER_CONNECTION = 12
  * hibernation-eligible. Four riders with twelve Central-class places each is exactly 48 — the load this
  * cap was chosen to *permit*.
  *
+ * **Two corrections to the model above, from checking it against Cloudflare's docs (2026-08-10). Neither
+ * moves a cap; both make the numbers upper bounds rather than estimates.**
+ *  · The six is *"connections simultaneously waiting for response **headers**"*, and since 2026-04-09 a slot
+ *    is freed when headers arrive rather than when the body finishes being read. For ETA JSON the two are
+ *    nearly the same, so 67 s and 39 s stand as ceilings — but they are ceilings now, not forecasts.
+ *  · The limit counts **`fetch()` calls in flight, not sockets.** Worth stating because the opposite is
+ *    tempting and was briefly believed here: `rt.data.gov.hk` speaks HTTP/2, and 41 requests to it travel
+ *    down **one** TCP connection (measured with `curl`). That makes the transport cheap and does *not* raise
+ *    the concurrency — six in flight is six in flight however few pipes they share.
+ *  Also documented and **not** available as an escape hatch: whether the six applies per Durable Object
+ *  instance is stated nowhere in Cloudflare's docs, so sharding a poll across objects to get more in flight
+ *  is unverified. It is settleable only on deployed Cloudflare, since local dev does not enforce the limit.
+ *
  * At `LIVE_CTB_BUDGET = 12` the same 48 places cost **785 calls** ≈ 131 batches ≈ **39 s**, inside the
  * floor, with the heaviest single place at 20 calls and the subrequest budget (10,000 on Paid) an order of
  * magnitude clear. 39 s is not a comfortable margin and is stated rather than rounded: if the cap or the
@@ -151,6 +166,29 @@ export const LIVE_MAX_TARGETS_PER_CONNECTION = 12
  * client must not prune a favourite whose stop is perfectly fine.
  */
 export const LIVE_MAX_TARGETS_PER_SHARD = 48
+
+/**
+ * Poles one **route watch** will poll — the cap that replaces both of the above when this object is a route
+ * rather than a shard (proposals/05).
+ *
+ * Sixty-four, and it is guarding the *dataset* rather than the clock. The two caps above exist because a
+ * place round is expensive per target: Citybus has no per-stop board, so a place costs one upstream call per
+ * `(pole, routeNo)` pair and the heaviest in the shipped dataset costs 32 on its own. **A route watch is the
+ * opposite shape** — many poles, exactly one route each — so its round is numerous and cheap. Measured
+ * 2026-08-10 against the live upstream: real Citybus routes run 13 to 41 poles (788, 1, 5B, 91, 962, E22),
+ * and the whole of E22 is 41 calls in **~0.5 s** at the runtime's six-in-flight limit, against a 45 s cadence
+ * floor. At this cap a round is ~0.8 s, still under 2% of the cadence.
+ *
+ * So the number is not chosen from a time budget; it is chosen so that a pathological dataset row — a
+ * mis-clustered route with three hundred stops — cannot turn one rider's screen into three hundred upstream
+ * calls. Excess poles are **dropped and named** in a `status` frame, which is the treatment this file already
+ * argues for over refusing a whole connection.
+ *
+ * Why it replaces `LIVE_MAX_TARGETS_PER_SHARD` too: a route watch is a whole object, so its "shard union"
+ * *is* its route. Leaving the 48 in place would truncate a 64-pole route at 48 for no reason connected to
+ * either cap's argument.
+ */
+export const LIVE_ROUTE_MAX_POLES = 64
 
 /**
  * CTB routes one round will ask about, per place.
@@ -200,6 +238,43 @@ export const LIVE_MAX_CLIENT_FRAME_BYTES = 8_192
 
 /** Where the consecutive-quiet-round counter lives. See `unchangedRounds`. */
 const UNCHANGED_ROUNDS_KEY = 'unchangedRounds'
+
+/** Where a **route watch's** publish clock lives. See `publishClock`. */
+const PUBLISH_CLOCK_KEY = 'routePublishClock'
+
+/** Where the completed-round count lives. See `roundsCompleted`. Exported for the tests that wait on it. */
+export const ROUNDS_COMPLETED_KEY = 'roundsCompleted'
+
+/**
+ * Every `ctx.storage.kv` key this object owns — exported so a test's reset cannot drift from it.
+ *
+ * Four suites reset a shard between cases by deleting `'unchangedRounds'` **as a hard-coded string**, and
+ * a fifth key added here would have leaked into all four silently: a case would inherit the previous
+ * one's cadence state and pass or fail for a reason nothing names. Exporting the list is the smallest fix
+ * that cannot go stale, and it is why this is a `const` array rather than three loose constants.
+ * `roundsCompleted` is in it because a *test* reset is not a teardown — see `forgetReadings`, which
+ * deliberately keeps the count.
+ */
+export const LIVE_HUB_KV_KEYS = [
+  UNCHANGED_ROUNDS_KEY,
+  PUBLISH_CLOCK_KEY,
+  ROUNDS_COMPLETED_KEY,
+] as const
+
+/**
+ * What the last round learnt about **when the operator published**, which is what a route watch's
+ * cadence is a function of (ADR-116 decision 5, proposals/05).
+ *
+ * Two fields rather than one because `nextRouteRoundMs` decides *"did it advance"* itself rather than
+ * being told — so it needs the round before's answer as well as this round's, and `reschedule()` runs
+ * from four places (a round, a subscribe, a close, an error) with no round results in hand. Persisted
+ * for the same reason `unchangedRounds` is: hibernation discards memory, and a route object that forgot
+ * the publish clock on every wake would fall back to a blind tick for ever.
+ */
+interface PublishClock {
+  publishedAt?: string
+  previousPublishedAt?: string
+}
 
 // ── Per-connection state ────────────────────────────────────────────────────────────────────────
 
@@ -319,6 +394,35 @@ export function sessionChanged(previous: Session, next: Session): boolean {
  * the number of subscribers watching a stop, which is precisely the number that is large when a stop
  * is worth watching.
  */
+/**
+ * The newest `dataTimestamp` a round heard, or `undefined` if nothing answered — a route watch's phase.
+ *
+ * **Newest and not oldest, over the whole route rather than per pole.** Every pole of one route is
+ * answered from the same upstream route feed, so in the healthy case all 41 readings carry the *same*
+ * `dataTimestamp` and the choice is moot; it stops being moot when the CDN serves some poles from an
+ * older cache entry than others, and then the newest is the one that tells us the publish has landed.
+ * Taking the oldest would hold the whole route back to its stalest edge and re-ask on a phase the
+ * operator has already left.
+ *
+ * Compared as instants (`Date.parse`), never lexically: `dataTimestamp` carries the upstream's `+08:00`
+ * offset and `EtaSchema` says so in as many words. An unparseable one is skipped rather than allowed to
+ * win as `NaN`.
+ */
+function newestPublish(results: readonly RoundResult[]): string | undefined {
+  let newest: string | undefined
+  let newestMs = Number.NEGATIVE_INFINITY
+  for (const result of results) {
+    if (!('etas' in result)) continue
+    for (const eta of result.etas) {
+      const ms = Date.parse(eta.dataTimestamp)
+      if (!Number.isFinite(ms) || ms <= newestMs) continue
+      newestMs = ms
+      newest = eta.dataTimestamp
+    }
+  }
+  return newest
+}
+
 function readingsFor(
   targets: readonly WatchTarget[],
   stored: ReadonlyMap<string, readonly Eta[]>,
@@ -618,11 +722,31 @@ export class EtaHub extends DurableObject<Env> {
     kept: WatchTarget[]
     dropped: WatchTarget[]
   } {
-    const { accepted, rejected } = acceptTargets(asked)
+    const route = this.watchedRoute
+    // **A route watch narrows every target to its own route, and the object's name is where that comes
+    // from.** Without it a 40-pole Citybus route would poll every line at every one of those poles — the
+    // place-shard shape, at route scale — where what a rider is watching is one route. Narrowing here rather
+    // than in the upgrade URL is not a shortcut: `?targets=` is comma-separated stop ids and cannot express
+    // `routeIds`, so the alternative is a second parameter saying what the object's name already says.
+    const targets =
+      route === undefined ? asked : asked.map((t) => ({ stopId: t.stopId, routeIds: [route] }))
+    const { accepted, rejected } = acceptTargets(targets)
+    const cap = route === undefined ? LIVE_MAX_TARGETS_PER_CONNECTION : LIVE_ROUTE_MAX_POLES
     return {
-      kept: accepted.slice(0, LIVE_MAX_TARGETS_PER_CONNECTION),
-      dropped: [...rejected, ...accepted.slice(LIVE_MAX_TARGETS_PER_CONNECTION)],
+      kept: accepted.slice(0, cap),
+      dropped: [...rejected, ...accepted.slice(cap)],
     }
+  }
+
+  /**
+   * The route this object watches, or `undefined` when it is one of the eight place shards.
+   *
+   * Read from `DurableObjectId.name` rather than from a flag on the connection: three things differ for a
+   * route watch — the per-connection cap, the union cap and the narrowing above — and all three follow from
+   * *which route it is*, which the object's own identity already states. See `routeIdFromWatchName`.
+   */
+  private get watchedRoute(): string | undefined {
+    return routeIdFromWatchName(this.ctx.id.name)
   }
 
   /**
@@ -650,10 +774,15 @@ export class EtaHub extends DurableObject<Env> {
     const others = acceptTargets(
       this.subscribedTargets(this.liveSockets().filter((other) => other !== ws)),
     ).accepted
+    // A route watch's union cap is its own — see `LIVE_ROUTE_MAX_POLES`. The 48 above bounds a shard whose
+    // union is *whatever its subscribers happen to share*; a route object's union is one route, so bounding
+    // it at 48 would truncate a long route for a reason belonging to a different shape of object.
+    const unionCap =
+      this.watchedRoute === undefined ? LIVE_MAX_TARGETS_PER_SHARD : LIVE_ROUTE_MAX_POLES
     const fits: WatchTarget[] = []
     for (const target of kept) {
       const union = acceptTargets([...others, ...fits, target]).accepted
-      if (union.length > LIVE_MAX_TARGETS_PER_SHARD) break
+      if (union.length > unionCap) break
       fits.push(target)
     }
     return { fits, excess: kept.slice(fits.length) }
@@ -743,7 +872,7 @@ export class EtaHub extends DurableObject<Env> {
       refusals.push(
         wireErrorFor(
           'internal',
-          `shard is at capacity (${LIVE_MAX_TARGETS_PER_SHARD} targets), not watching: ${excess
+          `shard is at capacity (${this.watchedRoute === undefined ? LIVE_MAX_TARGETS_PER_SHARD : LIVE_ROUTE_MAX_POLES} targets), not watching: ${excess
             .map((t) => t.stopId)
             .join(', ')}`,
         ),
@@ -887,6 +1016,19 @@ export class EtaHub extends DurableObject<Env> {
 
     this.writeReadings(before, after)
     this.writeUnchangedRounds(quiet ? this.unchangedRounds() + 1 : 0)
+    // **From the results — what this round *heard* — and not from `after`, which is what the screen is
+    // still showing.** The two agree today, and the honest reason to write it this way anyway is coupling
+    // rather than a bug: `after` holds two kinds of carried-forward reading (`retainFailedPoles`' survivors
+    // and a retryable target failure's previous list), so it can only ever contain this round's readings or
+    // *older* ones — and `writePublishClock`'s "nothing answered" fallback stores the previous value, which
+    // is exactly what an older reading would have produced. An injected defect that drew the clock from
+    // `after` therefore passed every case in `live-route-watch.test.ts`, which is recorded here because it
+    // is the sort of claim a comment is tempted to make and a test cannot support. What the results-based
+    // read buys is that a future change to *why* a reading is retained cannot silently become a change to
+    // the publish clock: retention exists to keep a rider's times on screen, and the clock exists to decide
+    // when to ask again.
+    if (this.watchedRoute !== undefined) this.writePublishClock(newestPublish(results))
+    this.ctx.storage.kv.put(ROUNDS_COMPLETED_KEY, this.roundsCompleted() + 1)
   }
 
   /**
@@ -1125,6 +1267,79 @@ export class EtaHub extends DurableObject<Env> {
     this.ctx.storage.kv.put(UNCHANGED_ROUNDS_KEY, clamped)
   }
 
+  /**
+   * Rounds this object has finished, ever — **the only thing outside it that can tell whether a round
+   * happened.**
+   *
+   * Not needed by any product behaviour, and that is stated up front because a counter nothing reads is
+   * usually dead weight. This one is read by tests, and it exists because the alternative was measured
+   * and is worse: `live-rounds.test.ts` had no way to await round 0 (the connect round is armed at
+   * `Date.now()` and fired by the runtime, so `runDurableObjectAlarm` returns `false` — it was tried, for
+   * all 21 scenarios), and waited on *quiet* instead. Widening that quiet window to be safe took the file
+   * from 8 s to 27 s; leaving it narrow is a flake that reads as a product failure. A monotonic count is
+   * what a test can wait for deterministically, at no time cost. `docs/07-backlog.md` filed exactly this.
+   *
+   * Monotonic and never reset — including by `forgetReadings()`, deliberately. A torn-down object that
+   * came back with the counter at zero would let a waiter see round 0 twice; the readings are state, this
+   * is history.
+   */
+  private roundsCompleted(): number {
+    const stored = this.ctx.storage.kv.get<number>(ROUNDS_COMPLETED_KEY)
+    return typeof stored === 'number' && Number.isFinite(stored) && stored > 0 ? stored : 0
+  }
+
+  /**
+   * What the last round learnt about the operator's publish clock, guarded on the way out.
+   *
+   * Guarded rather than trusted for the same reason `routeIdFromWatchName` validates a name it minted:
+   * this is storage-shaped input by the time it is read, and `nextRouteRoundMs` treats an unparseable
+   * timestamp as *absent* — which is the safe arm (a blind 60 s tick), but only if what reaches it is
+   * either a string or nothing at all rather than, say, a number that `Date.parse` would read as a year.
+   */
+  private publishClock(): PublishClock {
+    const stored = this.ctx.storage.kv.get<PublishClock>(PUBLISH_CLOCK_KEY)
+    if (stored === undefined || stored === null || typeof stored !== 'object') return {}
+    const at = typeof stored.publishedAt === 'string' ? stored.publishedAt : undefined
+    const previous =
+      typeof stored.previousPublishedAt === 'string' ? stored.previousPublishedAt : undefined
+    return {
+      ...(at === undefined ? {} : { publishedAt: at }),
+      ...(previous === undefined ? {} : { previousPublishedAt: previous }),
+    }
+  }
+
+  /**
+   * Advance the publish clock from what this round actually saw.
+   *
+   * **One rule, and its four behaviours are the whole cadence.** `seen` is the newest `dataTimestamp`
+   * across every board that answered this round, or `undefined` if none did:
+   *
+   * | this round | stored | `nextRouteRoundMs` takes | why that is right |
+   * |---|---|---|---|
+   * | a newer publish | `{at: new, previous: old}` | arm 4 — aligned to `new + 60 s + margin` | we know the phase |
+   * | the same publish | `{at: old, previous: old}` | arm 2 — retry in 15 s | the CDN served us bytes we already had |
+   * | nothing answered | `{at: old, previous: old}` | arm 2 — retry in 15 s | an outage is worth re-asking sooner than a tick |
+   * | nothing, ever | `{}` | arm 1 — tick at 60 s | no phase to align to |
+   *
+   * The middle two collapsing to one arm is not a coincidence being exploited: *"we learnt nothing about
+   * the clock"* is the same fact whether the bytes were stale or absent, and 15 s is `nextRouteRoundMs`'s
+   * answer to it either way.
+   *
+   * **Only a route watch writes this.** A place shard's cadence is `nextLiveCadenceMs` and always will
+   * be — its targets are whatever its subscribers happen to share, so there is no single publish clock to
+   * align to — and a per-round KV write on all eight shards to store something nothing reads is a real
+   * cost (`LIVE_MAX_TARGETS_PER_SHARD`'s docblock counts row writes for exactly this reason).
+   */
+  private writePublishClock(seen: string | undefined): void {
+    const previous = this.publishClock().publishedAt
+    const next: PublishClock = {
+      ...((seen ?? previous) ? { publishedAt: seen ?? previous } : {}),
+      ...(previous === undefined ? {} : { previousPublishedAt: previous }),
+    }
+    if (next.publishedAt === undefined && next.previousPublishedAt === undefined) return
+    this.ctx.storage.kv.put(PUBLISH_CLOCK_KEY, next)
+  }
+
   // ── The alarm ─────────────────────────────────────────────────────────────────────────────────
 
   /**
@@ -1150,13 +1365,30 @@ export class EtaHub extends DurableObject<Env> {
     const subscribers = this.liveSockets(opts.excluding).filter(
       (ws) => (sessionOf(ws)?.targets.length ?? 0) > 0,
     ).length
-    const delay = nextLiveCadenceMs({ subscribers, unchangedRounds: this.unchangedRounds() })
+    // **The kernel decides *whether* to poll; for a route watch it does not decide *when*.** Two rules,
+    // and the order matters: `nextLiveCadenceMs`'s `null` is the teardown decision (no subscribers → no
+    // alarm, forget the readings) and it is the *same* decision for both shapes of object, so it is asked
+    // first and never bypassed. `nextRouteRoundMs` never returns `null` — it answers a cadence, not a
+    // question about whether to have one — so putting it first would mean restating the teardown rule in
+    // this file, where it could drift from the kernel's.
+    //
+    // Why a route watch needs its own clock at all: the upstream publishes per route on a ~60 s cycle at a
+    // fixed second of the minute (measured — E22 on :12–:13, route 91 on :09–:10) and the CDN in front of
+    // it holds 45 s. Those two numbers are coprime enough that a blind 45 s poll learns nothing on about
+    // one refresh in four, and pays full price for it. A place shard has no such clock to align to: its
+    // targets are whatever its subscribers happen to share, published by up to four operators.
+    const teardown = nextLiveCadenceMs({ subscribers, unchangedRounds: this.unchangedRounds() })
 
-    if (delay === null) {
+    if (teardown === null) {
       await this.ctx.storage.deleteAlarm()
       this.forgetReadings()
       return
     }
+
+    const delay =
+      this.watchedRoute === undefined
+        ? teardown
+        : nextRouteRoundMs({ ...this.publishClock(), now: Date.now() })
 
     const at = opts.pollNow ? Date.now() : Date.now() + delay
     // Inside `alarm()` this reads `null` unless `setAlarm` has already been called since the handler
@@ -1178,5 +1410,10 @@ export class EtaHub extends DurableObject<Env> {
   private forgetReadings(): void {
     this.ctx.storage.sql.exec('DELETE FROM readings')
     this.ctx.storage.kv.delete(UNCHANGED_ROUNDS_KEY)
+    // The publish clock goes with them, and it has to: it describes readings that are being dropped. A
+    // surviving `publishedAt` would meet the next watch's first round as its own `previousPublishedAt`,
+    // and "the publish did not advance" is exactly what that round cannot know yet. `roundsCompleted`
+    // deliberately does **not** go — see its docblock; it is history, not state.
+    this.ctx.storage.kv.delete(PUBLISH_CLOCK_KEY)
   }
 }

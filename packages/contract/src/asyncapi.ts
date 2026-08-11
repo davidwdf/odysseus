@@ -219,9 +219,20 @@ function wsBinding(): unknown {
     properties[param.name] = { type: param.type, description: param.description }
     if (param.required) required.push(param.name)
   }
+  // **`oneOf` over `required`, when the channel declares alternatives.** A connect URL may carry
+  // `?targets=` or `?route=` and must carry exactly one; a flat `required` list can only say "both" or
+  // "no constraint", and both of those publish something the Worker contradicts. Two single-name branches
+  // under `oneOf` mean one or the other — a URL with both matches two branches and so fails, which is the
+  // rule (`route` wins server-side, but a client should not rely on being forgiven).
+  const oneOf = (LIVE_CHANNEL.queryOneOf ?? []).map((names) => ({ required: [...names] }))
   return {
     method: 'GET',
-    query: { type: 'object', properties, ...(required.length > 0 ? { required } : {}) },
+    query: {
+      type: 'object',
+      properties,
+      ...(required.length > 0 ? { required } : {}),
+      ...(oneOf.length > 0 ? { oneOf } : {}),
+    },
     bindingVersion: WS_BINDING_VERSION,
   }
 }

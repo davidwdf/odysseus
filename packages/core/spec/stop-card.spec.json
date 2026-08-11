@@ -1808,7 +1808,7 @@
                   "stopId": "548DAB3A4F71EB68",
                   "operator": "KMB",
                   "arrivals": ["2026-07-29T11:54:30+08:00"],
-                  "dataTimestamp": "2026-07-29T11:48:59+08:00",
+                  "dataTimestamp": "2026-07-29T11:48:29+08:00",
                   "observedAt": "2026-07-29T03:50:29.622Z",
                   "destination": {
                     "en": "SHATIN STATION",

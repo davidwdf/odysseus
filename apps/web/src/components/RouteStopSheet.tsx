@@ -1,8 +1,9 @@
-import type { Locale, RouteStopRowView } from '@nextbus/core'
+import type { Locale, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { MapPin, Star } from 'lucide-react'
 import { usePreferences } from '../lib/preferences'
 import { BottomSheet, SheetAction } from './BottomSheet'
+import { ArrivalSlot } from './RouteStopRow'
 
 /**
  * What a tap on a stop row opens — the DOM twin of the action sheet in `apps/mobile/app/route/[id].tsx`,
@@ -45,6 +46,9 @@ export function RouteStopSheet({
   routeNo,
   destination,
   locale,
+  arrivals,
+  incomplete,
+  loading,
   onClose,
   onViewStop,
 }: {
@@ -53,6 +57,16 @@ export function RouteStopSheet({
   routeNo?: string
   destination: string
   locale: Locale
+  /**
+   * This route's next times **at this stop** — the row's own where it has them, otherwise the board the
+   * screen fetched for this pole (ADR-115). Already formatted by `routeStopBoard`, so nothing here decides
+   * anything: the sheet and the row behind it read a time the same way because it is the same function.
+   */
+  arrivals: RouteStopArrival[]
+  /** This pole's board did not answer — which is not the same as nothing being due (ADR-077). */
+  incomplete: boolean
+  /** The board is on its way. Its own arm, because "waiting" must never render as "nothing due". */
+  loading: boolean
   onClose: () => void
   onViewStop: () => void
 }) {
@@ -94,6 +108,33 @@ export function RouteStopSheet({
     >
       {(close) => (
         <>
+          {/*
+            **The times for this stop, which on Citybus and GMB are the only ones a rider can get from this
+            screen** (ADR-114/115). The four arms are ordered deliberately, and the ordering is the whole
+            content of ADR-088's lesson: `loading` first, because a board on its way must never render as
+            nothing due; then `incomplete`, because a board that refused us is not an empty one; then the
+            readings; and `noService` **last**, as the arm that is only reached when we asked, were
+            answered, and the answer was nothing. `docs/07` still carries a 🔴 for exactly this arm being
+            reached by a paused fetch on Nearby.
+          */}
+          {/* `px-3` is **`SheetAction`'s own padding**, not a number chosen to look right. The body is
+              `px-2` and every action inside it is `px-3`, which puts their icons — and the header's, and its
+              route chip — on a 20 px line; a readout with no padding of its own sat at 8 px and broke the
+              one vertical edge the sheet has. Same token as the rows above and below it, so it cannot drift
+              from them. */}
+          <div className="flex min-h-9 items-baseline gap-3 px-3 pb-1">
+            {loading ? (
+              <span className="h-5 w-24 animate-pulse rounded-sm bg-surface-2" />
+            ) : incomplete ? (
+              <span className="text-label text-muted">{t(locale, 'etasUnavailable')}</span>
+            ) : arrivals.length > 0 ? (
+              arrivals.map((arrival, slot) => (
+                <ArrivalSlot key={arrival.iso} arrival={arrival} first={slot === 0} />
+              ))
+            ) : (
+              <span className="text-label text-muted">{t(locale, 'noService')}</span>
+            )}
+          </div>
           <SheetAction
             icon={Star}
             filled={saved}

@@ -149,6 +149,20 @@ export interface SocketTransportDeps {
   backoff?: Partial<SocketBackoff>
   /** Jitter source. `Math.random` in production; a constant in a test asserting the schedule. */
   random?: () => number
+  /**
+   * Watch **one whole route** instead of a named target set — `?route=<canonical route id>` (ADR-116).
+   *
+   * When this is set the connect URL is the complete subscription and this transport connects on `open()`
+   * rather than waiting for a `subscribe` frame, because none is coming: the client deliberately does not
+   * know the route's poles. The server resolves them from the route document and the object it lands on is
+   * named for the route, so every client watching that route shares one round.
+   *
+   * A `subscribe` frame is still *sendable* on such a connection and the controller sends one to recover
+   * from a `seq` gap — re-declaring the accepted set the `snapshot` echoed, which the object re-narrows to
+   * its own route anyway. What must never happen is a frame declaring the *empty* set on connect: that is
+   * a legal frame meaning "stop sending me readings", and it would silently switch off the round.
+   */
+  route?: string
 }
 
 /**
@@ -202,7 +216,11 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
    * telling a rider a favourite was dropped — describe a set the client had already filtered.
    */
   const connectUrl = (targets: readonly WatchTarget[]): string =>
-    `${deps.url}?targets=${encodeURIComponent(targets.map((t) => t.stopId).join(','))}`
+    deps.route === undefined
+      ? `${deps.url}?targets=${encodeURIComponent(targets.map((t) => t.stopId).join(','))}`
+      : // One id, whatever the route's length, on every reconnect — and percent-encoded because a route id
+        // is full of `:`. The server resolves the poles, so there is nothing else to say.
+        `${deps.url}?route=${encodeURIComponent(deps.route)}`
 
   const teardownConnection = () => {
     stopKeepalive?.()
@@ -213,14 +231,16 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
   }
 
   const connect = () => {
-    if (released || stopped || subscription === null) return
+    // A route watch has no `subscription` to wait for — its URL is the subscription — so the guard is
+    // "nothing to connect *with*" rather than "no subscribe frame yet".
+    if (released || stopped || (subscription === null && deps.route === undefined)) return
     // Whatever was queued is superseded: a subscription is a replacement, so re-declaring the latest one
     // is both necessary and sufficient. Anything else in the queue was written for a connection that no
-    // longer exists.
-    queued = [subscription]
+    // longer exists. For a route watch there is nothing to re-declare: the URL does it.
+    queued = subscription === null ? [] : [subscription]
     let settled = false
     ready = false
-    connection = socketFactory(connectUrl(subscription.targets), {
+    connection = socketFactory(connectUrl(subscription?.targets ?? []), {
       onOpen() {
         if (released) return
         ready = true
@@ -287,7 +307,10 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
     engine: 'socket',
     open(nextSink) {
       sink = nextSink
-      // Nothing to connect to yet: the connect URL carries the target set (D4). See `createSocketTransport`.
+      // A stop watch has nothing to connect to yet — the connect URL carries the target set (D4), which the
+      // client has not declared. A **route** watch has everything it needs from `deps.route`, and waiting
+      // for a `subscribe` frame that will never arrive would mean never connecting at all.
+      if (deps.route !== undefined) connect()
     },
     send(frame: ClientFrame) {
       if (released || stopped) return

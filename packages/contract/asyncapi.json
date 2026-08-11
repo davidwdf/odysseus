@@ -19,7 +19,7 @@
     "live": {
       "address": "/v1/live",
       "title": "Live ETA stream",
-      "summary": "One socket per client. The client declares its targets in the connect URL and again in a `subscribe` frame; the Worker routes it to a shard, and the shard pushes a `snapshot` then `delta`s on an adaptive alarm cadence (~45–60 s, which is the measured upstream refresh interval — a faster cadence buys no newer data).",
+      "summary": "One socket per client, declared **entirely in the connect URL**: either `?targets=` (the stops this client cares about) or `?route=` (every pole of one route). The Worker routes the connection accordingly — `?targets=` to one of N hashed shards, `?route=` to a single object named for that route so every client watching it shares one round — and the object pushes a `snapshot` then `delta`s on an alarm cadence. A `subscribe` frame may re-declare a `?targets=` set later, with per-stop route narrowing the URL cannot express; a route watch needs no frame at all, because the object narrows every reading to its own route. Cadence: ~45–60 s adaptive for a stop watch (the measured upstream refresh interval — faster buys no newer data), and for a route watch aligned to that route's own publish clock instead.",
       "messages": {
         "Subscribe": {
           "$ref": "#/components/messages/Subscribe"
@@ -48,11 +48,24 @@
             "properties": {
               "targets": {
                 "type": "string",
-                "description": "Comma-separated canonical stop or place ids. **Percent-encode the value** — place ids contain \"+\", which a query string decodes as a space, so an unencoded `P:KMB:a+KMB:b` arrives as a malformed id and is dropped; this is the same requirement `/v1/stop/{id}` states for the same reason. The **server** derives the shard from this list (sorted ids → FNV-1a over the lowest → `% shardCount`, `liveShardFor` in `@nextbus/core`), so a client with a stale shard count cannot silently land on a different shard — it does not compute one. The `subscribe` frame re-declares the same set, with optional per-stop route narrowing this parameter cannot express."
+                "description": "Comma-separated canonical stop or place ids. **Percent-encode the value** — place ids contain \"+\", which a query string decodes as a space, so an unencoded `P:KMB:a+KMB:b` arrives as a malformed id and is dropped; this is the same requirement `/v1/stop/{id}` states for the same reason. The **server** derives the shard from this list (sorted ids → FNV-1a over the lowest → `% shardCount`, `liveShardFor` in `@nextbus/core`), so a client with a stale shard count cannot silently land on a different shard — it does not compute one. The `subscribe` frame re-declares the same set, with optional per-stop route narrowing this parameter cannot express. **Exactly one of `targets` and `route` is given**; `route` wins if both are, and neither is a `bad_request`."
+              },
+              "route": {
+                "type": "string",
+                "description": "One canonical route id (`CTB:91:outbound:1`) — **the alternative to `targets`, not an addition to it**. The server resolves that route's poles from the same route document `/v1/route/{id}` serves and watches all of them, so the client never names a pole: the URL stays one id long across every reconnect, the watched set cannot disagree with the schematic a rider is looking at, and a client compiled against a stale rule cannot pick which object it lands on. **Percent-encode it** — a route id contains `:`. Why it exists: Citybus and GMB publish no bulk route-eta feed, so a route screen on those operators has no times at all while their per-pole boards answer fine; one object per route means every client watching that route shares one round of ~13–41 upstream calls rather than each paying for their own. A malformed id is `bad_request`, a route the dataset does not carry is `not_found`, and poles past the object's cap are dropped and named in a `status` frame. A `subscribe` frame is neither needed nor expected on such a connection — the object narrows every reading to its own route from its own name — though re-declaring the accepted set the `snapshot` echoed is legal and is how a client recovers from a `seq` gap."
               }
             },
-            "required": [
-              "targets"
+            "oneOf": [
+              {
+                "required": [
+                  "targets"
+                ]
+              },
+              {
+                "required": [
+                  "route"
+                ]
+              }
             ]
           },
           "bindingVersion": "0.1.0"
@@ -786,6 +799,14 @@
               ]
             }
           },
+          "liveArrivals": {
+            "description": "Why the per-stop `eta`s on this route are **not** a complete answer; **absent when they are** (ADR-114). Without it, `eta: null` on every stop means two different things — no bus is due anywhere, or nobody was asked — and a schematic renders identically for both. Not an `EtaFailure[]` like the other endpoints carry, and deliberately: a route is fetched in ONE upstream call, so naming 34 poles would invent a granularity the fetch does not have, and the UI is required to say this once for the screen rather than per row. `unavailable` = the route feed was asked and did not answer, so it is worth retrying. `perStopOnly` = this operator publishes no route-level arrivals feed (Citybus, GMB — ADR-021), so the route view will never carry them however long a rider waits; their per-pole boards do answer, and `/v1/etas/{poleId}` is where those times are.",
+            "type": "string",
+            "enum": [
+              "unavailable",
+              "perStopOnly"
+            ]
+          },
           "reverse": {
             "allOf": [
               {
@@ -795,6 +816,13 @@
                 "description": "The same route number in the opposite direction, when the dataset carries one — lets the UI offer a direction toggle. Absent for circular / single-direction routes (ADR-046). Server-resolved with the correct service-type variant, so the client never guesses the id."
               }
             ]
+          },
+          "failed": {
+            "description": "Poles of this route whose upstream board did not answer, ordered by `stopId`; **absent when none did** (the same field, shape and ordering `/v1/stop/{id}` and `/v1/nearby` carry — ADR-077). **The server never populates this**, and that is not an oversight: a route is fetched in one upstream call, which is the reason `liveArrivals` exists and says it once for the screen. It is here for a **live route watch** (ADR-116), where the granularity is real — a `/v1/live?route=` round asks each of the route's 13–41 poles separately, so one kerb can refuse while the rest answer, and a row whose `eta` is `null` because we could not ask must not read as a row with no bus due. `applyLiveEtasToRouteDetail` replaces it from its own argument and clears it when the argument is absent, exactly as the other two merges do, so a stale list cannot outlive the round that produced it.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
           }
         },
         "required": [

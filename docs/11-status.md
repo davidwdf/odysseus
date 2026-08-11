@@ -259,7 +259,47 @@
 > measurement asked whether the motion was *correct*, and none asked whether it fired on the right
 > **occasions**.
 >
-> **The owner's review list is now clear.** What is left before WP6-8 is the items filed in `docs/07`:
+> **Two standing decisions taken 2026-08-09, and the second changes the plan's order:**
+> · **The motion lab stays, as a dev page**
+>   ([ADR-112](./08-decision-log.md#adr-112--a-dev-page-lives-in-the-app-and-a-gate-keeps-it-out-of-the-app)) —
+>   `apps/web/lab/`, served by `pnpm dev:dom` at `/lab/`, typechecked and linted like everything else and kept
+>   out of production by three separate assertions rather than by anyone remembering. It has found two defects
+>   in two sittings; what it is *for* is not correctness but **occasions** — which events fire a transition —
+>   and a green suite that has only ever seen the settled state is exactly what it catches.
+> · **`apps/mobile` is not being retired** ([ADR-113](./08-decision-log.md#adr-113--appsmobile-is-not-retired-at-the-end-of-wave-6-it-becomes-the-reference)).
+>   **WP6-8 is deferred and WP6-9 is next.** The RN app becomes the *reference*: the owner has UI/UX decisions
+>   in it that were never carried to `apps/web` and wants to work through them later, and keeping it also
+>   declines the risk `proposals/04` already flags — that between WP6-8 and WP6-9 exactly one renderer is
+>   measured against the spec. **The specs still bind it; idiom does not**, so the not-back-ported list
+>   (ADR-100, 107, 108, 110, 111) is now the rule rather than an exception argued each time. The inventory it
+>   owes — *what the RN app does that the web never got*, which is **not** the question the parity audit asked
+>   — is filed in `docs/07`.
+>
+> **A Citybus route can say why it has no times (2026-08-09)**
+> ([ADR-114](./08-decision-log.md#adr-114--eta-null-on-every-stop-meant-three-different-things-and-the-route-view-could-not-say-which)) —
+> the oldest 🔴 in `docs/07`, pinned as a `knownDefect` corpus row since WP6-6a and now closed. `eta: null` on
+> every stop meant **three** different things — no bus is due anywhere, the round did not answer, or nobody
+> was ever going to ask — and a schematic rendered identically for all three.
+> 🔴 **The half nobody would have noticed missing is the KMB one.** Citybus and GMB are the visible symptom,
+> but KMB's route feed *does* answer and its failure was swallowed by `.catch(() => [])` — so an upstream
+> outage read as a quiet route, for every rider in the app.
+> 🟢 **`liveArrivals` on the wire, absent when the round answered** (the convention `failed` set), and
+> deliberately **not** the `EtaFailure[]` ADR-077 gave `/v1/nearby`: a route is *one* upstream call, so naming
+> 34 poles would invent a granularity the fetch does not have. The kernel turns absence into a named arm
+> because a spec's `oneOf` discriminant must be total.
+> 🟢 **Two spec states, one sentence, no new string.** `noLiveBoard` and `arrivalsUnavailable` both show the
+> `etasUnavailable` line `StopRow` already uses — two states because one is worth retrying and the other never
+> will be, so giving either its own words later is an edit to one `shows`. `route-detail.spec.json` now has
+> **zero** `knownDefect` states and its corpus zero `knownDefect` rows.
+> ⚠️ **The plan for this row was wrong twice and is corrected in place**: it prescribed a `CONTRACT_VERSION`
+> minor bump, which ADR-052 §5 and three precedents forbid for an additive-optional field, and it prescribed
+> the wrong shape. Worth knowing because the `oasdiff` gate that would have caught a bad bump still does not
+> exist.
+> ⚪ **Left, named, and the owner's call:** those operators' per-pole boards answer fine, so the times are one
+> tap away — "Live times unavailable" is true but implies *try later* about something permanent. One catalogue
+> key in three locales and one `shows` edit.
+>
+> **The owner's review list is now clear.** What is left is the items filed in `docs/07`:
 > the *document* scroll position that a pushed screen inherits (which genuinely **is**
 > `<ScrollRestoration>`'s job, and is left alone because it changes all eight screens at once), and the RN
 > `apps/mobile` back-port question — which ADR-100's odometer note answers with *no*, since that renderer
@@ -1704,6 +1744,45 @@ than any in its own row.
    and will meet both.
 
 ## 🔜 Next steps (priority order)
+
+> **New, 2026-08-11 — a Citybus or GMB route shows live times, and the whole of `proposals/05` is done
+> except its default engine.** ADRs **116–120**. The oldest 🔴 in `docs/07` is closed: those operators publish
+> no bulk route-eta feed (ADR-021), so their route screens read as *"no bus due anywhere"* for two waves —
+> ADR-114 made them say why, ADR-115 put one stop's times in the sheet a rider taps, and this row gives them
+> **every** stop's times.
+>
+> · **`/v1/live?route=<id>`** lands on one Durable Object per route (`route-<id>`), which resolves the route's
+>   poles server-side from the same document the schematic draws. Every rider on a route therefore shares one
+>   round — the property the whole cost argument rests on, and it lives in which object the URL selects.
+> · **The round is 41 calls, not 800.** Measuring the first one found that a narrowed read narrowed the
+>   *answers* and never the *questions*: an 18-pole round made **350 upstream calls**, 21 s of queued
+>   fetching, every 45 s, against a free feed. `boardsFor` (ADR-117) fixed it from the route id's own grammar,
+>   and every narrowed read got faster with it — ADR-115's sheet tap used to cost a whole interchange.
+> · **It polls on the operator's clock** (ADR-118), which the upstream publishes at a fixed second of the
+>   minute, out of phase with the CDN's 45 s TTL. The counter that made that testable also closed `docs/07`'s
+>   filed `live-rounds` connect race, and *proved* the fix by making the race deterministic.
+> · **The screen merges at render, not into the query cache** (ADR-120) — the opposite of its two sibling
+>   hooks, because refetching a Citybus route brings `eta: null` back and would blank every time on screen.
+> · **A row says "we could not ask"**, because a live round asks each pole separately and `liveArrivals`
+>   cannot say "38 of 41 answered" without being wrong about most of the route.
+>
+> **Verified in a browser on the real feed:** Citybus **N171 outbound** at 00:20 HK — 31 rows of live times,
+> notice gone, one socket. Two defects came out of that walk and **neither was reachable from the layer that
+> caused it**: the socket selector copied context fields by hand and silently dropped `route`, so the watch
+> connected to nothing (invisible to every unit test, which construct the transport directly); and the hook's
+> first version returned an empty *session* from mount, which to a merge means *"nothing is due anywhere"*,
+> so every KMB route rendered blank (the conformance suite caught that one).
+>
+>
+> **`proposals/05` is now complete, including its last row: the socket is the default engine** (ADR-121,
+> 2026-08-11). The owner opened Citybus 182 on the shipping build, found it slow with queries backing up, and
+> the measurement was unambiguous: a `poll` round of that route's 31 poles is **~395 upstream calls / 75.7 s**
+> against a 30 s cadence — so rounds overlapped and queued — where the socket's is **31 calls / ~1.2 s**. The
+> cause is not the transport but the batch endpoint: `/v1/etas?ids=…` cannot carry a per-id route list, so
+> every pole is asked about every route calling there, which is precisely the fan-out ADR-117 removed from the
+> socket path. `poll` stays selectable for an environment with no WebSocket path — and there is still no
+> `auto`, so that environment must say so, which is the honest cost of the change.
+
 
 > **New, 2026-08-03 — the renderer decision, and it changes what Phase 3 is.**
 > [**ADR-075**](./08-decision-log.md#adr-075--three-renderers-one-executable-spec-and-drift-defined-on-the-spec-rather-than-the-pixels)

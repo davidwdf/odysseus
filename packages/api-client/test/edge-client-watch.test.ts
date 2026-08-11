@@ -1,11 +1,16 @@
-// **Today's behaviour is the default.** This is the file that establishes it.
+// **The poll emulator's behaviour, which used to be the default and is now what `poll` selects.**
 //
 // `watch()` was rewritten over a frame protocol and a pluggable transport, and the whole point of the
-// rewrite is that a screen cannot tell: with no transport configured, `EdgeClient` builds a poll
-// emulator, so the requests, their URLs and their cadence must be exactly what the old `setInterval`
-// shim issued. That is asserted here against the *real* default path — no injected transport, no
-// injected timers, the host's own `setInterval` under `vi.useFakeTimers()` — because a test that
-// supplied a transport would be testing the thing the default is supposed to be indistinguishable from.
+// rewrite was that a screen cannot tell: the requests, their URLs and their cadence had to be exactly what
+// the old `setInterval` shim issued. This file establishes that, and it still does — but it now names
+// `createPollTransport` explicitly, because **ADR-121 made the socket the default**. That is a real loss of
+// coverage, stated rather than glossed: these cases used to exercise the path an unconfigured client takes,
+// and they now exercise a path somebody has to ask for. What replaces it is the assertion in
+// `live-select.test.ts` that the default *is* the socket, plus the socket's own suite.
+//
+// It stays worth having. `poll` is what an environment with no WebSocket path gets — a corporate proxy that
+// strips upgrades, a runtime without `WebSocket` — and it is the engine the shared corpus compares the
+// socket against (ADR-074), so an engine nobody could observe would be an engine nobody could trust.
 //
 // Two behaviours deliberately differ, and both are asserted here.
 //
@@ -19,7 +24,7 @@
 
 import { CLIENT_POLICY_DEFAULTS, type Eta } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EdgeClient } from '../src'
+import { createPollTransport, EdgeClient } from '../src'
 
 const STOP_A = 'KMB:A'
 const STOP_B = 'KMB:B'
@@ -71,14 +76,18 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('EdgeClient.watch() with no transport configured', () => {
+describe('EdgeClient.watch() on the poll emulator', () => {
   it('issues ONE /v1/etas request for the whole round and hands the listener a flat list', async () => {
     const answers = new Map([
       [STOP_A, [eta(STOP_A, '10:02')]],
       [STOP_B, [eta(STOP_B, '10:09')]],
     ])
     const { urls, fetchImpl } = stubFetch(answers)
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const seen: Eta[][] = []
     const sub = client.watch([{ stopId: STOP_A }, { stopId: STOP_B }], (etas) => seen.push(etas))
     await vi.advanceTimersByTimeAsync(0)
@@ -100,7 +109,11 @@ describe('EdgeClient.watch() with no transport configured', () => {
     // anything above 1 here is a request-count regression a rider pays for a feature they cannot see.
     const ids = ['KMB:1', 'KMB:2', 'KMB:3', 'CTB:4', 'GMB:5', 'P:KMB:6+CTB:7']
     const { urls, fetchImpl } = stubFetch(new Map(ids.map((id) => [id, [eta(id, '10:02')]])))
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const sub = client.watch(
       ids.map((stopId) => ({ stopId })),
       () => {},
@@ -126,7 +139,11 @@ describe('EdgeClient.watch() with no transport configured', () => {
     const { urls, fetchImpl } = stubFetch(
       new Map([[STOP_A, [eta(STOP_A, '10:02'), { ...eta(STOP_A, '10:09'), routeId: ROUTE_6 }]]]),
     )
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const seen: Eta[][] = []
     const sub = client.watch([{ stopId: STOP_A, routeIds: [ROUTE_1] }], (etas) => seen.push(etas))
     await vi.advanceTimersByTimeAsync(0)
@@ -138,7 +155,11 @@ describe('EdgeClient.watch() with no transport configured', () => {
   it('polls on the served cadence, and on nothing faster', async () => {
     const answers = new Map([[STOP_A, [eta(STOP_A, '10:02')]]])
     const { urls, fetchImpl } = stubFetch(answers)
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const sub = client.watch([{ stopId: STOP_A }], () => {})
     await vi.advanceTimersByTimeAsync(0)
     expect(urls.length).toBe(1)
@@ -168,7 +189,11 @@ describe('EdgeClient.watch() with no transport configured', () => {
 
     const answers = new Map([[STOP_A, [eta(STOP_A, '10:02')]]])
     const { urls, fetchImpl } = stubFetch(answers)
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const sub = client.watch([{ stopId: STOP_A }], () => {}, { refreshAfterMs: served })
     await vi.advanceTimersByTimeAsync(0)
     expect(urls.length).toBe(1)
@@ -185,7 +210,12 @@ describe('EdgeClient.watch() with no transport configured', () => {
     // once". A cold start genuinely has no served policy, so a caller omitting it is the ordinary case.
     const answers = new Map([[STOP_A, [eta(STOP_A, '10:02')]]])
     const { urls, fetchImpl } = stubFetch(answers)
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl, pollMs: 5_000 })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      pollMs: 5_000,
+      transport: createPollTransport,
+    })
     const sub = client.watch([{ stopId: STOP_A }], () => {}, {})
     await vi.advanceTimersByTimeAsync(0)
     expect(urls.length).toBe(1)
@@ -197,7 +227,11 @@ describe('EdgeClient.watch() with no transport configured', () => {
   it('calls the listener only when the reading changed', async () => {
     const answers = new Map([[STOP_A, [eta(STOP_A, '10:02')]]])
     const { fetchImpl } = stubFetch(answers)
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const seen: Eta[][] = []
     const sub = client.watch([{ stopId: STOP_A }], (etas) => seen.push(etas))
     await vi.advanceTimersByTimeAsync(0)
@@ -238,7 +272,11 @@ describe('EdgeClient.watch() with no transport configured', () => {
         headers: { 'content-type': 'application/json' },
       })
     }) as typeof fetch
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const seen: Eta[][] = []
     const sub = client.watch([{ stopId: STOP_A }, { stopId: STOP_B }], (etas) => seen.push(etas))
     await vi.advanceTimersByTimeAsync(0)
@@ -268,7 +306,11 @@ describe('EdgeClient.watch() with no transport configured', () => {
         headers: { 'content-type': 'application/json' },
       })
     }) as typeof fetch
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const seen: Eta[][] = []
     const sub = client.watch([{ stopId: STOP_A }, { stopId: STOP_B }], (etas) => seen.push(etas))
     await vi.advanceTimersByTimeAsync(0)
@@ -288,11 +330,156 @@ describe('EdgeClient.watch() with no transport configured', () => {
 
   it('stops fetching on unsubscribe', async () => {
     const { urls, fetchImpl } = stubFetch(new Map([[STOP_A, [eta(STOP_A, '10:02')]]]))
-    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
     const sub = client.watch([{ stopId: STOP_A }], () => {})
     await vi.advanceTimersByTimeAsync(0)
     sub.unsubscribe()
     await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs * 3)
     expect(urls.length).toBe(1)
+  })
+})
+
+// ── watchRoute() on the poll emulator ────────────────────────────────────────────────────────────
+//
+// The socket half is asserted in `live-socket.test.ts` (the URL, the absent frame, the resync). This is the
+// emulated half: it has no route endpoint to emulate, so it must resolve the route's poles itself and then
+// be an ordinary `watch()` — the one thing the socket path never does.
+//
+// **It is no longer what ships** (ADR-121 made the socket the default), and the measurement that moved it is
+// worth carrying here too, because these cases look cheap and are not: one round of Citybus 182's 31 poles
+// through this path is ~395 upstream calls and 75.7 s, against 31 calls and 1.2 s over the socket. What this
+// path is *for* is an environment that cannot open a WebSocket at all.
+
+/** A `fetch` that answers `/v1/route/:id` from a stop list, and `/v1/etas` from a per-stop table. */
+function stubRouteAndEtas(routeId: string, poles: string[], answers: Map<string, Eta[]>) {
+  const urls: string[] = []
+  const fetchImpl = (async (input: string | URL | Request) => {
+    const url = String(input)
+    urls.push(url)
+    if (url.includes('/v1/route/')) {
+      return new Response(
+        JSON.stringify({
+          route: {
+            id: routeId,
+            operator: 'CTB',
+            routeNo: '91',
+            bound: 'outbound',
+            serviceType: '1',
+          },
+          stops: poles.map((id, seq) => ({ seq, stop: { id }, eta: null })),
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }
+    const reports = idsOf(url).map((id) => ({ id, etas: answers.get(id) ?? [] }))
+    return new Response(JSON.stringify({ reports }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }) as typeof fetch
+  return { urls, fetchImpl }
+}
+
+describe('EdgeClient.watchRoute() on the poll emulator', () => {
+  const ROUTE = 'CTB:91:outbound:1'
+  const POLES = ['CTB:001', 'CTB:002', 'CTB:003']
+
+  it('resolves the route’s poles once, then watches them narrowed to that route', async () => {
+    const answers = new Map(POLES.map((id) => [id, [{ ...eta(id, '10:02'), routeId: ROUTE }]]))
+    const { urls, fetchImpl } = stubRouteAndEtas(ROUTE, POLES, answers)
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
+    const seen: Eta[][] = []
+    const sub = client.watchRoute(ROUTE, (etas) => seen.push(etas))
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The route document first — the emulator has no route endpoint to poll, so this is what stands in for
+    // the resolution the socket gets server-side — and then one batch for the whole route.
+    expect(urls[0]).toBe(`http://localhost:8787/v1/route/${encodeURIComponent(ROUTE)}`)
+    expect(urls.length).toBe(2)
+    expect(idsOf(urls[1] as string)).toEqual(POLES)
+    expect(seen[0]?.map((e) => e.stopId)).toEqual(POLES)
+
+    // …and **once**: the poles are resolved at subscribe time, not per round. A route document re-read
+    // every 30 s would be a bigger payload than the readings it exists to address.
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
+    expect(urls.filter((u) => u.includes('/v1/route/')).length).toBe(1)
+    expect(urls.length).toBe(3)
+    sub.unsubscribe()
+  })
+
+  it('narrows every target to the route, so a shared pole cannot bring another line’s times', async () => {
+    // A Citybus pole serves a dozen routes. Without `routeIds` per target the batch would answer with all
+    // of them and the screen would attach another line's bus to this route's row — which is the exact
+    // failure `narrowEtasToRoutes` exists for, one level down.
+    const other = 'CTB:5B:outbound:1'
+    const answers = new Map(
+      POLES.map((id) => [
+        id,
+        [
+          { ...eta(id, '10:02'), routeId: ROUTE },
+          { ...eta(id, '10:04'), routeId: other },
+        ],
+      ]),
+    )
+    const { fetchImpl } = stubRouteAndEtas(ROUTE, POLES, answers)
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
+    const seen: Eta[][] = []
+    const sub = client.watchRoute(ROUTE, (etas) => seen.push(etas))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(seen[0]?.length).toBe(POLES.length)
+    expect(new Set(seen[0]?.map((e) => e.routeId))).toEqual(new Set([ROUTE]))
+    sub.unsubscribe()
+  })
+
+  it('asks nothing at all when unsubscribed before the route resolves', async () => {
+    // A screen that navigates away during the resolve must not start a round afterwards. The subscription
+    // returns synchronously while the resolution is still in flight, so this is the ordinary case on a slow
+    // connection rather than a corner one.
+    const { urls, fetchImpl } = stubRouteAndEtas(ROUTE, POLES, new Map())
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
+    const sub = client.watchRoute(ROUTE, () => {})
+    sub.unsubscribe()
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs * 2)
+    expect(urls.filter((u) => u.includes('/v1/etas'))).toEqual([])
+  })
+
+  it('survives a route document that will not load', async () => {
+    // The screen renders from the same document, so an unreachable one means there is no schematic to put
+    // times on and it is already retrying. What must not happen is an unhandled rejection from a
+    // subscription nobody awaited.
+    const fetchImpl = (async (input: string | URL | Request) => {
+      if (String(input).includes('/v1/route/')) return new Response('nope', { status: 502 })
+      return new Response(JSON.stringify({ reports: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
+    const seen: Eta[][] = []
+    const sub = client.watchRoute(ROUTE, (etas) => seen.push(etas))
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
+    expect(seen).toEqual([])
+    sub.unsubscribe()
   })
 })

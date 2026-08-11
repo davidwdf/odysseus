@@ -78,36 +78,38 @@ async function probe(value: string | undefined): Promise<Probe> {
   expect(
     [fetched.length > 0, sockets.length > 0],
     `fetched ${JSON.stringify(fetched)}, opened ${JSON.stringify(sockets)}`,
-  ).toEqual(value === 'socket' ? [false, true] : [true, false])
+  ).toEqual(value === 'poll' ? [true, false] : [false, true])
   return { engine: sockets.length > 0 ? 'socket' : 'poll', fetched, sockets }
 }
 
 describe('apps/mobile selects its live engine from the environment', () => {
-  it('polls when nothing is configured — the shipped default', async () => {
-    const { engine, fetched } = await probe(undefined)
-    expect(engine).toBe('poll')
-    // The endpoint, not just "something was fetched": this is also the assertion that the default engine
-    // is the poll *emulator* rather than the pre-Wave-5 shim (which fetched `/v1/stop/:id`) and that it
-    // asks the **batch** endpoint, which since WP5-7 is one request per round rather than one per target.
-    expect(fetched[0]).toContain('/v1/etas?ids=')
-  })
-
-  it('opens the socket when EXPO_PUBLIC_LIVE_TRANSPORT=socket', async () => {
-    // The assertion the whole work package exists for: `/v1/live` is reachable from a build without a
-    // source edit. It is also the line that un-latches five confirmed `eta-hub.ts` findings, which is why
-    // the default above stays `poll` and why ADR-076 records what convinced us the shard was sound.
-    const { engine, sockets } = await probe('socket')
+  it('opens the socket when nothing is configured — the shipped default', async () => {
+    // **Flipped by ADR-121**, on a measurement rather than a preference: the poll emulator asks
+    // `/v1/etas?ids=…`, which carries no per-id route list, so every pole is asked about every route
+    // calling there — 153 upstream calls and 19.9 s for twelve poles of Citybus 182, against 12 and
+    // 0.49 s narrowed. A whole round was 75.7 s against a 30 s cadence, so rounds queued.
+    const { engine, sockets } = await probe(undefined)
     expect(engine).toBe('socket')
-    // `ws:` and not `wss:` because the default API URL is `http://localhost:8787` — which is the half of
-    // `liveSocketUrl` that ships a rider's location in cleartext when it is forgotten, works perfectly in
-    // dev, and shows no symptom. Asserted here as well as in the kernel corpus because this is the first
-    // place the derivation is exercised end to end from a real configuration.
+    // The endpoint, not just "a socket was opened": `ws:` and not `wss:` because the default API URL is
+    // `http://localhost:8787` — the half of `liveSocketUrl` that ships a rider's location in cleartext
+    // when it is forgotten, works perfectly in dev, and shows no symptom.
     expect(sockets[0]).toBe(`ws://localhost:8787/v1/live?targets=${encodeURIComponent('KMB:A')}`)
   })
 
-  it('polls, loudly, when the value is a typo', async () => {
+  it('polls when it is asked to, which is what an environment with no WebSocket path needs', async () => {
+    // Still real configuration, in the other direction now: a proxy that strips upgrades or a runtime with
+    // no `WebSocket` global has nothing else to fall back to, because there is deliberately no automatic
+    // detection (see the typo case below).
+    const { engine, fetched } = await probe('poll')
+    expect(engine).toBe('poll')
+    // The **batch** endpoint, which since WP5-7 is one request per round rather than one per target — and
+    // the endpoint whose missing per-id route list is why this is no longer the default.
+    expect(fetched[0]).toContain('/v1/etas?ids=')
+  })
+
+  it('falls back to the default, loudly, when the value is a typo', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect((await probe('websockets')).engine).toBe('poll')
+    expect((await probe('websockets')).engine).toBe('socket')
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
@@ -118,6 +120,6 @@ describe('apps/mobile selects its live engine from the environment', () => {
     // and the reason `liveTransportFromEnv` is exported at all.
     const api = await import('@nextbus/api-client')
     expect(typeof api.liveTransportFromEnv).toBe('function')
-    expect(api.DEFAULT_LIVE_ENGINE).toBe('poll')
+    expect(api.DEFAULT_LIVE_ENGINE).toBe('socket')
   })
 })

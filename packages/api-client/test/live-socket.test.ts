@@ -105,7 +105,9 @@ const snapshotFrame: ServerFrame = {
 }
 
 /** A transport wired to a controller, which is the only way it is ever used. */
-function harness(options: { random?: () => number; backoff?: { maxMs: number } } = {}) {
+function harness(
+  options: { random?: () => number; backoff?: { maxMs: number }; route?: string } = {},
+) {
   const net = fakeSockets()
   const clocks = manualTimers()
   const transport = createSocketTransport({
@@ -117,11 +119,13 @@ function harness(options: { random?: () => number; backoff?: { maxMs: number } }
     // half-jitter at its ceiling, which is the deterministic upper edge of the real policy.
     random: options.random ?? (() => 1),
     backoff: options.backoff,
+    ...(options.route === undefined ? {} : { route: options.route }),
   })
   const updates: Array<string> = []
   const controller = createLiveEtaController({
     transport,
-    targets: [{ stopId: STOP_A }],
+    targets: options.route === undefined ? [{ stopId: STOP_A }] : [],
+    ...(options.route === undefined ? {} : { declaredInUrl: true }),
     emit: (u) => updates.push(`${u.status.state}:${u.etas.length}`),
   })
   return { ...net, ...clocks, transport, controller, updates }
@@ -316,5 +320,91 @@ describe('createSocketTransport', () => {
     // guarantee if the callback had already been scheduled by the host.
     h.fireOnce()
     expect(h.sockets.length).toBe(1)
+  })
+})
+
+// ── A route watch (ADR-116) ──────────────────────────────────────────────────────────────────────
+//
+// The subscription is the connect URL and nothing else, because the client deliberately does not know the
+// route's poles — the server resolves them from the route document, and the object the URL selects is named
+// for the route so every client watching it shares one round. Everything below is about that difference and
+// the one hazard it creates.
+
+describe('createSocketTransport, watching a route', () => {
+  const ROUTE = 'CTB:91:outbound:1'
+
+  it('connects on open, because no subscribe frame is coming', () => {
+    const h = harness({ route: ROUTE })
+    h.transport.open({ frame: () => {} })
+    // The mirror image of the stop-watch case above: there, waiting for `subscribe` is what makes the URL
+    // buildable; here it would mean never connecting at all.
+    expect(h.sockets.length).toBe(1)
+    expect(h.latest()?.url).toBe('wss://api.example.test/v1/live?route=CTB%3A91%3Aoutbound%3A1')
+  })
+
+  it('sends no frame on connect, which is the hazard and not a saving', () => {
+    const h = harness({ route: ROUTE })
+    h.controller.start()
+    h.latest()?.handlers.onOpen()
+    // **An empty `subscribe` is a legal frame meaning "stop sending me readings"** (the shard treats a
+    // subscription as a replacement of the accepted set). So a route watch that declared its empty target
+    // list on connect would switch its own round off, and the symptom would be a screen that connects
+    // perfectly and never updates. Only the keepalive may be on the wire.
+    expect(h.latest()?.sent.filter((frame) => frame.includes('subscribe'))).toEqual([])
+  })
+
+  it('keeps the one-id URL across a reconnect', () => {
+    const h = harness({ route: ROUTE })
+    h.controller.start()
+    h.latest()?.handlers.onOpen()
+    h.latest()?.handlers.onClose('socket closed (1006)')
+    h.fireOnce()
+    expect(h.sockets.length).toBe(2)
+    // A 41-pole route would otherwise put ~1.5 kB of percent-encoded ids into every reconnect, and a
+    // reconnect storm is exactly when that matters.
+    expect(h.latest()?.url).toBe('wss://api.example.test/v1/live?route=CTB%3A91%3Aoutbound%3A1')
+  })
+
+  it('recovers from a seq gap by re-declaring the set the server itself echoed', () => {
+    const h = harness({ route: ROUTE })
+    h.controller.start()
+    const socket = h.latest() as NonNullable<ReturnType<typeof h.latest>>
+    socket.handlers.onOpen()
+    // A snapshot tells this client, for the first time, which poles it is watching.
+    socket.handlers.onMessage(JSON.stringify(snapshotFrame))
+    socket.sent.length = 0
+    // Then a delta whose `seq` skips one: the kernel says the session has a hole and asks for a resync.
+    socket.handlers.onMessage(
+      JSON.stringify({
+        type: 'delta',
+        seq: 9,
+        at: '2026-07-30T02:01:00.000Z',
+        changed: [],
+        gone: [],
+      }),
+    )
+    // What goes back is the *accepted* set, not an empty frame and not a guess at the poles. The route
+    // object re-narrows it to its own route, so this is idempotent.
+    expect(socket.sent).toEqual(['{"type":"subscribe","targets":[{"stopId":"KMB:A"}]}'])
+  })
+
+  it('asks for nothing when the gap arrives before any snapshot', () => {
+    const h = harness({ route: ROUTE })
+    h.controller.start()
+    const socket = h.latest() as NonNullable<ReturnType<typeof h.latest>>
+    socket.handlers.onOpen()
+    socket.sent.length = 0
+    socket.handlers.onMessage(
+      JSON.stringify({
+        type: 'delta',
+        seq: 4,
+        at: '2026-07-30T02:01:00.000Z',
+        changed: [],
+        gone: [],
+      }),
+    )
+    // There is nothing to re-declare yet, and the empty frame that would otherwise be sent is the one
+    // frame that must never be sent. Silence is correct: the connection is already the declaration.
+    expect(socket.sent.filter((frame) => frame.includes('subscribe'))).toEqual([])
   })
 })

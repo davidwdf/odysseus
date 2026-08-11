@@ -75,6 +75,18 @@ export interface LiveTransportContext {
   /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
   pollMs: number
   clock: Clock
+  /**
+   * One canonical route id, when the subscription is **a whole route** rather than a named target set
+   * (ADR-116) — and a transport is free to ignore it.
+   *
+   * The socket engine uses it as the connect URL (`?route=…`), which is what lands the connection on the
+   * Durable Object named for that route so every client watching it shares one round. The poll emulator
+   * ignores it, exactly as it already ignores `endpoints`: it has no route endpoint to emulate, so
+   * `EdgeClient.watchRoute` resolves the poles for it and hands them over as ordinary targets. The
+   * asymmetry is in *how a round is fetched* and not in what a listener receives, which is the line ADR-074
+   * draws.
+   */
+  route?: string
 }
 
 /**
