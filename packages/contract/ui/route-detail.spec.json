@@ -121,6 +121,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -135,6 +145,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -286,6 +306,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -300,6 +330,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -451,6 +491,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -465,6 +515,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -615,6 +675,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -629,6 +699,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -780,6 +860,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -794,6 +884,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -945,6 +1045,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -959,6 +1069,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -1109,6 +1229,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -1123,6 +1253,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -1273,6 +1413,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -1287,6 +1437,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -1437,6 +1597,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -1451,6 +1621,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -1602,6 +1782,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -1616,6 +1806,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -1766,6 +1966,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -1780,6 +1990,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -1848,9 +2068,9 @@
       }
     },
     "stale": {
-      "must": "The readings we have, dimmed, with the fresh rows beside them undimmed.",
-      "mustNot": "Colour alone (ADR-008), or a whole-screen staleness banner. Staleness is the **board’s** — one `dataTimestamp` per stop — so one row can be old while the next is current, and a screen-level cue would be wrong about both.",
-      "why": "The projection cannot see opacity, so what it pins is that a stale row shows the **same text** as a fresh one: the value does not change, because a reading only changes when a fresh one arrives, and there is no client-side countdown. That is the honest half of the assertion, and each suite asserts the dimming itself.",
+      "must": "The readings we have, each preceded by a muted `~`, with the fresh rows beside them unmarked.",
+      "mustNot": "Colour alone (ADR-008), or a whole-screen staleness banner. Staleness is the **board’s** — one `dataTimestamp` per stop — so one row can be old while the next is current, and a screen-level cue would be wrong about both. And never a cue that moves the figure: on a rail of forty rows, a stale board that shifted its own times sideways would read as a value that had changed.",
+      "why": "This used to say *\"the projection cannot see opacity, so what it pins is that a stale row shows the **same text** as a fresh one\"* — the honest half of an assertion whose other half no suite could make. The `~` moved the whole thing into the text: a stale row now shows text a fresh one does not, per arrival, and the same projection that could only pin the value’s constancy pins the mark as well. The value’s constancy is still pinned, because the figure is still the kernel’s and there is still no client-side countdown.",
       "enforcement": {
         "shows": [
           {
@@ -1931,6 +2151,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -1945,6 +2175,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -2095,6 +2335,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -2109,6 +2359,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -2259,6 +2519,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -2273,6 +2543,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -2423,6 +2703,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -2437,6 +2727,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -2587,6 +2887,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -2601,6 +2911,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -2782,6 +3102,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -2796,6 +3126,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
@@ -2941,6 +3281,16 @@
                     "cases": {
                       "mins": [
                         {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
+                        {
                           "name": "arrivalValue",
                           "text": {
                             "field": "label.value"
@@ -2955,6 +3305,16 @@
                         }
                       ],
                       "due": [
+                        {
+                          "name": "arrivalStale",
+                          "when": "stale",
+                          "why": "This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.",
+                          "invariant": "Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.",
+                          "text": {
+                            "literal": "~",
+                            "why": "The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name."
+                          }
+                        },
                         {
                           "name": "arrivalDue",
                           "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",

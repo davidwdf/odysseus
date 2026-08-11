@@ -1,4 +1,10 @@
 <!doctype html>
+<!-- `lang` is the pre-bundle DEFAULT, not the app's answer: `providers/LocaleProvider.tsx` sets it from
+     the active locale (the manual override, else the browser's) as soon as it mounts, so a Chinese reader
+     gets `zh-Hant`/`zh-Hans` a frame in. It stays declared here because a document with no `lang` is worse
+     than one with a stated guess — and it is not read from localStorage by an inline script for the same
+     reason `main.tsx` refuses to do that for the appearance class: that would be a second declaration of
+     the storage key and of the fallback rule, in a file no gate reads. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />

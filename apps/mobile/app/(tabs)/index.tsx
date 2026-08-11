@@ -101,9 +101,18 @@ export default function Nearby() {
             {loc.message}
           </Text>
         </Centered>
-      ) : loc.status === 'loading' || query.isLoading ? (
+      ) : /* **`isPending`, never `isLoading`.** `isLoading` is `isPending && isFetching`, so it excludes a
+             query whose fetch TanStack has *parked* — offline under `networkMode`, or between retries
+             while the document is hidden. A parked query matched neither this arm nor the error arm and
+             fell through to the list, where an empty `cards` reads **"No scheduled service"**: our silence
+             rendered as a fact about Hong Kong, the ADR-073 conflation one screen over from where it was
+             fixed. The same edit is on `apps/web/src/screens/Nearby.tsx`; the provider half is
+             `networkMode: 'always'` in `providers/QueryProvider.tsx`. */
+      loc.status === 'loading' || query.isPending ? (
         <LoadingList label={t(locale, 'locating')} />
-      ) : query.isError ? (
+      ) : /* An error **with** data is a board we could not refresh, not a board that failed. Showing the
+             reason instead of the last known list is what the spec's `offline` state forbids. */
+      query.isError && query.data === undefined ? (
         <Centered>
           <Text variant="body" className="text-danger">
             {(query.error as Error).message}

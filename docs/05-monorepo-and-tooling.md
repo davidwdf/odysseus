@@ -91,11 +91,13 @@ it was written down before — so a session that needs it re-derives it. It is h
 handoff note because it is a property of the tooling, not of any one wave.
 
 **The gate chain.** `pnpm test` is `turbo run test && pnpm run boundaries`, and `boundaries` runs, in
-order: `boundaries:check` → `boundaries:selftest` → `check:no-adhoc-id-parsing` →
-`check:vm-no-styling:selftest` → `check:vm-no-styling` → `check:no-raw-colours` →
-`check:view-transport-free:selftest` → `check:view-transport-free` → `check:one-endpoint:selftest` →
-`check:one-endpoint` → `check:docs-freshness:selftest`. Several packages' own `test` scripts *are* gates
-too (above), and `packages/core`'s runs `check-spec-coverage.mjs` twice — `--selftest` first, then live.
+order: `boundaries:check` → `boundaries:selftest` → `check:no-derivation:selftest` →
+`check:no-derivation` → `check:no-adhoc-id-parsing` → `check:vm-no-styling:selftest` →
+`check:vm-no-styling` → `check:no-raw-colours` → `check:view-transport-free:selftest` →
+`check:view-transport-free` → `check:one-endpoint:selftest` → `check:one-endpoint` →
+`check:adr-index:selftest` → `check:adr-index` → `check:docs-freshness:selftest`. Several packages' own
+`test` scripts *are* gates too (above), and `packages/core`'s runs `check-spec-coverage.mjs` twice —
+`--selftest` first, then live.
 
 **One gate in that chain runs only its selftest, and that is not an omission.**
 `check:docs-freshness` (ADR-078) needs a *commit range*, and there is no canonical one locally — on `main`
@@ -164,6 +166,7 @@ findings (four of its eight rule scenarios), and a hard failure when it examined
 | `check-no-adhoc-id-parsing.mjs` | the whole repo | `.split(':')`, `.split('+')`, `.split('\|')`, `.startsWith('P:')` |
 | `check-spec-coverage.mjs` | `packages/core/{src,spec}` | a `@spec` tag with no corpus group and a corpus group with no tag, **both directions**, plus `REQUIRED_ROWS` |
 | `scripts/check-no-derivation.mjs` | `apps/web/src/{components,screens,shell}/` **plus** `apps/mobile`'s Place screen, its `MiniMap` and its five leaf projections — `adapters/`, `hooks/`, `lib/` and `providers/` are exempt, and so are the RN surfaces WP4-0 has not reached (route, search, workbench, favourites) and its chrome (`CollapsingHeader`, `StopHeader`, `GlassView`) | a renderer computing anything the kernel should. Carries a per-site `ALLOWLIST` since WP6-3b, because the RN screen has real geometry — *geometry is presentation, a list is a decision* |
+| `check-adr-index.mjs` | `docs/08-decision-log.md`, plus **every tracked file** for its citations | a stale or missing generated index; a `Status` outside the three-word vocabulary (`Accepted` / `Amended by ADR-NNN` / `Superseded by ADR-NNN`); a duplicate ADR number; a supersede/amend claim written on **one side only**; an `ADR-NNN` citation or an `#adr-NNN--slug` anchor that resolves to nothing. Run `pnpm check:adr-index:write` to regenerate the index — it is an emit-and-gate artefact like `openapi.json` and the component specs |
 | `precommit-docs-check.mjs` | **commits, not files** — the index in hook mode, each commit in `--range` mode | a commit changing `apps`/`packages`/`scripts` or any `.ts`/`.js` file with no `docs/`, `*.md` or `README` change and no `[docs-ok]` |
 
 **Two layer facts that decide where a test can live.** `layers.json` gives `server` the dirs

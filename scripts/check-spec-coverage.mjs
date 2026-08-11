@@ -116,6 +116,16 @@ const REQUIRED_ROWS = [
   'eta#formatClock:crosses-midnight-into-the-next-hong-kong-day',
   'eta#formatClock:sub-minute-precision-is-truncated-not-rounded',
   'eta#formatClock:an-unparseable-string-has-no-clock-time',
+  // The merge's **temporal** precondition, and the one row that records a wrong fix as wrong
+  // (ADR-125). `mergeSavedKeys` reads `base \ theirs` as "the other writer deleted it", which is
+  // correct arithmetic and must not be softened — dropping that half would leave a rider with two
+  // tabs unable to delete a favourite at all, which is the bug `base` exists to prevent. What has to
+  // hold is the *caller's* sequencing: an ancestor ahead of `theirs` reads an addition as a deletion.
+  // That precondition cannot be expressed in the signature (it is about the order two I/O operations
+  // happened in, not about values), so this row is the whole of its enforcement. Both defects the
+  // first attempt at this fix shipped — a favourite erased, and an un-starred one resurrected — were
+  // this row.
+  'favourites#mergeSavedKeys:an-ancestor-ahead-of-theirs-reads-an-addition-as-a-deletion',
 ]
 
 // ── Collection ──────────────────────────────────────────────────────────────

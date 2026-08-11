@@ -52,6 +52,28 @@ const FIXTURE: Record<string, string> = {
   content: 'two-saved-poles-of-one-place-are-one-card',
   quietRoute: 'a-saved-route-with-no-reading-is-still-a-row',
   bothKerbs: 'one-line-saved-at-two-kerbs-is-two-rows',
+  // **The same payload as `content`, one whole stale window later on the clock** — the same fixture the DOM
+  // suite uses, for the same reason: a synthetic view with `stale: true` set by hand would only prove that
+  // the card draws a flag it was handed, where running `content`'s own readings past `staleAfterMs` proves
+  // that `isStale` fires and the card says so, through the identical kernel call the screen makes. The two
+  // states share a case on purpose — the only difference in the projection is the `~` in front of each
+  // figure, so `content` passing and `stale` failing can mean one thing.
+  stale: 'two-saved-poles-of-one-place-are-one-card',
+}
+
+/**
+ * How far past a case's own `now` the `stale` fixture's clock runs: one stale window and a second.
+ *
+ * Read from the policy rather than written as 121_000, so a served `staleAfterMs` that moves (ADR-122 moved
+ * it once already, 90 s -> 120 s) moves this with it instead of leaving a fixture that no longer reaches the
+ * state it is named after. That failure would be **silent**: a card with no mark still matches a projection
+ * with no mark. The control at the bottom of this file is what makes it loud.
+ */
+const STALE_OFFSET_MS = CLIENT_POLICY_DEFAULTS.staleAfterMs + 1_000
+
+/** The clock a state's fixture runs at - the case's own, except in `stale`. */
+function clockFor(state: string, c: CorpusCase): number {
+  return Date.parse(c.args.now) + (state === 'stale' ? STALE_OFFSET_MS : 0)
 }
 
 function caseNamed(name: string): CorpusCase {
@@ -190,17 +212,18 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     return { view: { error: FETCH_FAILURE }, tree: await mountSettled() }
   }
   const name = FIXTURE[state]
-  // `null` for the two states declared without a projection (`stale`, `offline`) — `conformStates` skips
-  // those itself, and never silently: a projected state with no fixture is a finding.
+  // `null` for the one state declared without a projection (`offline`) — `conformStates` skips it itself,
+  // and never silently: a projected state with no fixture is a finding.
   if (name === undefined) return null
   const c = caseNamed(name)
+  const now = clockFor(state, c)
   const places = fromCorpus<StopDetail[]>(c.args.places)
   // **The screen's clock is the system clock, so the suite has to own it.** Favourites reads `Date.now()` in
   // its render body — correctly, because it still fetches on `refetchInterval` and re-renders every cadence
   // — so there is no seam to inject through. The corpus re-times every reading against a fixed `now`, and
   // without this the arrivals are months past and every readout renders `—`: a divergence for the wrong
   // reason, which is the same class of harness mistake WP6-2 and WP6-3b each found once.
-  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(c.args.now))
+  vi.spyOn(Date, 'now').mockReturnValue(now)
   usePreferences.setState({ favoriteRoutes: [...c.args.saved] })
   // Every saved pole of these fixtures resolves to the same place document, which is the shape the corpus
   // records: `getStop` promotes a member id to its place.
@@ -209,7 +232,7 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     view: {
       cards: favouritesView(
         { saved: c.args.saved, places },
-        { locale: c.args.locale, now: Date.parse(c.args.now), policy: CLIENT_POLICY_DEFAULTS },
+        { locale: c.args.locale, now, policy: CLIENT_POLICY_DEFAULTS },
       ),
     },
     tree: await mountSettled(),
@@ -291,6 +314,34 @@ describe('apps/mobile conforms to Favourites’ published spec, state by state',
     expect(both[0]?.rows.length, 'the two kerbs collapsed back into one row').toBe(2)
     const lines = new Set((both[0]?.rows ?? []).map((row) => `${row.operator}|${row.routeNo}`))
     expect(lines.size, 'the two rows are not the same line, so this fixture proves nothing').toBe(1)
+  })
+
+  it('reaches `stale` by ageing the clock, and every row it produces actually carries the mark', () => {
+    // **The control the `stale` state cannot do without.** Its fixture is `content`'s payload seen 121 s
+    // later, so the whole difference between the two projections is a `~` per row — and if the ageing
+    // stopped working (a corpus case re-timed, `staleAfterMs` served differently, an arrival that drifts
+    // into `departed` as the clock advances) the cards would come back *unmarked* and the conformance run
+    // would still be green, because a projection with no mark matches a render with no mark. Vacuous in
+    // exactly the way this repo keeps rediscovering. So the fixture is asserted to be the state it claims.
+    const c = caseNamed(FIXTURE.stale as string)
+    const at = (now: number) =>
+      favouritesView(
+        { saved: c.args.saved, places: fromCorpus<StopDetail[]>(c.args.places) },
+        { locale: c.args.locale, now, policy: CLIENT_POLICY_DEFAULTS },
+      )
+    const rows = at(clockFor('stale', c)).flatMap((card) => card.rows)
+    expect(
+      at(clockFor('content', c))
+        .flatMap((card) => card.rows)
+        .some((row) => row.stale),
+    ).toBe(false)
+    expect(rows.length, 'the aged fixture has no rows to mark').toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.stale, `${row.routeNo} did not age past the stale threshold`).toBe(true)
+      // The mark rides a figure and only a figure, so a row whose reading has drifted into `departed` (a
+      // dash) would be stale and *unmarked* — true of the renderer and useless as a fixture.
+      expect(['mins', 'due'], `${row.routeNo} aged past its own arrival`).toContain(row.label.kind)
+    }
   })
 
   it('draws something under the heading in every state a rider can reach', () => {

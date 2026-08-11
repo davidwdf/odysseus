@@ -8,6 +8,14 @@ import type { KeyValueStore } from '@nextbus/ports'
  * a partitioned third-party context. A failed write means "the preference did not stick this time"; it
  * is never a broken screen, and it must never be an unhandled rejection either.
  *
+ * **`setItem` returns whether the bytes landed, and one caller must not ignore it** (ADR-125). The
+ * preferences store advances its merge ancestor to "the last state this writer put on disk" — so a
+ * *swallowed* write that still moved the ancestor would leave it naming something the disk does not
+ * hold, which is precisely the precondition violation `mergeSavedKeys` cannot survive: this writer's own
+ * addition becomes indistinguishable from the other writer's deletion, and the next merge deletes a
+ * rider's favourite. Swallowing the throw is still right; **swallowing the fact of it was not.** Callers
+ * with nothing to reconcile (the query persister, `localStorageStore`) may keep ignoring the result.
+ *
  * This is the **synchronous** shape, which three consumers need and the async port cannot give them:
  * zustand's `persist` (a sync storage is what lets the appearance be known *before* the first paint
  * rather than flashing the wrong theme and correcting it), TanStack Query's sync persister, and
@@ -22,11 +30,15 @@ export const safeLocalStorage = {
       return null
     }
   },
-  setItem(key: string, value: string): void {
+  /** `true` if the bytes landed. See the note above: one caller reconciles against disk and needs this. */
+  setItem(key: string, value: string): boolean {
     try {
       window.localStorage.setItem(key, value)
+      return true
     } catch {
-      // Deliberately swallowed — see above. The in-memory value is still correct.
+      // The throw is deliberately swallowed — see above; the in-memory value is still correct and no
+      // screen breaks. What is *reported* is that the disk did not take it.
+      return false
     }
   },
   removeItem(key: string): void {

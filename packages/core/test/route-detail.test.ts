@@ -473,6 +473,85 @@ describe('route-detail#routeFactSheet', () => {
     }
   })
 
+  it('never opens an empty fare sheet under a pill that shows a fare', () => {
+    // **The defect this row's fix was about, as a property over every fare case rather than one value.** A
+    // rider reaches this sheet by tapping the fare pill, so a sheet with nothing in it is the strip
+    // contradicting itself one tap later — and the two answers came from two functions with the same guard
+    // (`fareRange` and `fareStages` reject an identical set), which is the shape a value-only corpus row
+    // cannot police. Stated as *the sheet opens with the figure the pill leads with*: a sectional pill reads
+    // "$24.2 → $2.3" and its dearest stage is $24.2; a fallback pill reads "$13.4" and its single
+    // whole-route stage is $13.4. A port that fell back to some other figure keeps both sides non-empty and
+    // still fails here.
+    for (const c of rows()) {
+      const view = routeDetailView(c.args.detail, {
+        locale: c.args.locale,
+        now: at(c.args.now),
+        labels: VIEW_LABELS,
+      })
+      const sheet = sheetFor(c.args)
+      if (sheet.kind !== 'fare') continue
+      const pill = view.facts.find((fact) => fact.key === 'fare')
+      if (pill === undefined) continue // No pill, so nothing promised and nothing to agree with.
+      // The one exception, and it is written down rather than left to be rediscovered: a route with no stops
+      // has no boarding point to name, so there is no stage to be had. See the corpus row of that name.
+      if (view.stops.length === 0) continue
+      const first = sheet.stages[0]
+      expect(
+        first,
+        `${c.name}: a fare pill reading "${pill.value}" over an empty sheet`,
+      ).toBeDefined()
+      expect(
+        pill.value.startsWith(first?.fare ?? ''),
+        `${c.name}: the pill reads "${pill.value}" and the sheet opens with "${first?.fare}"`,
+      ).toBe(true)
+    }
+  })
+
+  it('prices the fallback stage through the same concession helper, cap and all', () => {
+    // ADR-107's $2-Scheme cap — `min(adult, max($2, 20%))` — must not be re-spelled on the fallback path.
+    // No corpus row can catch a second copy of that arithmetic at $13.4, because a copy *without* the cap
+    // agrees there; the cap only binds below $2. So this is a constructed row at **$1.50**, the figure
+    // ADR-107 names: an elderly rider is estimated $1.50, not the $2.00 an uncapped `max($2, 20%)` invents,
+    // and a fallback that priced its own stage would pass every other assertion in this file and fail here.
+    const base = fallbackCase()
+    const detail = structuredClone(base.args.detail)
+    const service = detail.route.service
+    if (service === undefined) throw new Error('unreachable: the fallback case has a service block')
+    service.fareFull = '1.5'
+    const view = routeDetailView(detail, {
+      locale: base.args.locale,
+      now: at(base.args.now),
+      labels: VIEW_LABELS,
+    })
+    const sheet = routeFactSheet('fare', view, service, {
+      locale: base.args.locale,
+      labels: LABELS,
+    })
+    if (sheet.kind !== 'fare') throw new Error('unreachable: a fare sheet was asked for')
+    expect(sheet.stages.map((stage) => stage.concessions)).toEqual([
+      [
+        { class: 'child', fare: '~$0.8' },
+        { class: 'elderly', fare: '~$1.5' },
+      ],
+    ])
+  })
+
+  /**
+   * The case the fallback fires on, found by its shape rather than by its name: stops that exist but carry
+   * no fare `Number()` can read, and a service block that does carry a whole-route one.
+   */
+  const fallbackCase = () => {
+    const found = rows().find(
+      (c) =>
+        c.args.kind === 'fare' &&
+        c.args.detail.stops.length > 0 &&
+        c.args.detail.route.service?.fareFull !== undefined &&
+        c.args.detail.stops.every((s) => s.fare === undefined || Number.isNaN(Number(s.fare))),
+    )
+    if (found === undefined) throw new Error('no corpus case reaches the whole-route fare fallback')
+    return found
+  }
+
   it('explains exactly the concession classes that appear, and never one that does not', () => {
     // The legend's honesty, as a property rather than a value: a class explained but never shown is a promise
     // the sheet did not keep, and a class shown but not explained is an unlabelled estimate — which ADR-044
@@ -561,10 +640,19 @@ describe('route-detail#routeFactSheet', () => {
   it('exercises every arm its own declarations have', () => {
     // The coverage control, as on `routeDetailView` and for the same reason (WP6-3b): a case nothing drives
     // is a specification looking at nothing.
-    const sheets = rows().map((c) => sheetFor(c.args))
+    const cases = rows()
+    const sheets = cases.map((c) => sheetFor(c.args))
     const arms: Record<string, boolean> = {
       'a fare timeline with stages': sheets.some((s) => s.kind === 'fare' && s.stages.length > 0),
       'a fare timeline with none': sheets.some((s) => s.kind === 'fare' && s.stages.length === 0),
+      // One stage reaching the **terminus** is the fallback's signature: a sectional timeline stops at the
+      // last stop with a boarding fare, and the terminus has none.
+      'a fare timeline that fell back to the whole route': sheets.some(
+        (s, i) =>
+          s.kind === 'fare' &&
+          s.stages.length === 1 &&
+          s.stages[0]?.toSeq === cases[i]?.args.detail.stops.length,
+      ),
       'a concession legend': sheets.some((s) => s.kind === 'fare' && s.concessions.length > 0),
       'no concession legend': sheets.some((s) => s.kind === 'fare' && s.concessions.length === 0),
       'a frequency table': sheets.some((s) => s.kind === 'freq' && s.days.length > 0),

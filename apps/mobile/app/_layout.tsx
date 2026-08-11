@@ -20,7 +20,7 @@ import { useRootStackScreenOptions } from '../lib/navTransitions'
 import { usePreferences } from '../lib/preferences'
 import { registerServiceWorker } from '../lib/serviceWorker'
 import { useTheme } from '../lib/useTheme'
-import { LocaleProvider } from '../providers/LocaleProvider'
+import { LocaleProvider, useLocale } from '../providers/LocaleProvider'
 import { QueryProvider } from '../providers/QueryProvider'
 
 // Hold the splash until Inter is loaded so the first paint is in-brand, not a
@@ -74,6 +74,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryProvider>
           <LocaleProvider>
+            <DocumentLanguage />
             <View style={[{ flex: 1 }, vars(themeVars)]}>
               <StatusBar style={isDark ? 'light' : 'dark'} />
               <Stack screenOptions={stackScreenOptions} />
@@ -84,4 +85,31 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </GestureHandlerRootView>
   )
+}
+
+/**
+ * `<html lang>` follows the active locale — the web build only, and nothing at all on native.
+ *
+ * The PWA shipped with `lang="en"`: expo's web template writes the attribute once, at export, from
+ * `app.json`'s `langIsoCode` — a build-time constant in a document that is then never told the rider
+ * changed language. That mis-announces every Chinese word on the page to a screen reader (a synthesizer
+ * picks its voice and its pronunciation from this attribute) and takes the browser's own CJK font
+ * selection and line-breaking with it. `apps/web` carries the same fix in its `LocaleProvider`; both
+ * renderers were wrong in the same way, which is why `docs/07` filed it against both.
+ *
+ * **No mapping table, deliberately.** `Locale` is `'en' | 'zh-Hant' | 'zh-Hans'` — the contract's
+ * `LocaleSchema`, and already the BCP-47 tags a browser wants — so the value passes straight through. A
+ * second table would be a second thing to keep in step.
+ *
+ * It is a component rather than an effect in `RootLayout` because the locale is only readable *inside*
+ * `LocaleProvider`, and it renders nothing: it is one attribute on a node no React tree owns, the same
+ * shape as the html/body background above.
+ */
+function DocumentLanguage() {
+  const locale = useLocale()
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return
+    document.documentElement.lang = locale
+  }, [locale])
+  return null
 }

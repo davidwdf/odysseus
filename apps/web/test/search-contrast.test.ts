@@ -1,0 +1,135 @@
+// Which semantic token a *string* may be drawn in — the rule behind the three-token change in
+// `src/screens/Search.tsx` (the recents heading, the clear-recents control, the inactive segment label).
+//
+// WHY THIS IS A TEST AND NOT A COMMENT
+// The port dropped those three from `--text-muted` to `--text-subtle`, which the RN screen has never used
+// for them. Nothing caught it: `conformStates` reads *words*, and a colour is not a word — the same blind
+// spot ADR-098 names for interaction destinations and ADR-106 for the scroll-spy's geometry. A contrast
+// ratio, unlike a screenshot, is arithmetic over values this repo already publishes, so it can be asserted.
+//
+// WHAT IT ASSERTS, AND WHAT IT DELIBERATELY DOES NOT
+// It asserts the **classification** of each text token — which surfaces it may carry body prose on — from
+// `@nextbus/ui`'s emitted values, in both modes. It does not assert a token's value: the numbers are the
+// owner's decision (docs/09), and this file is what tells them what a change to one would cost.
+//
+// The measured table today, WCAG 2.2 contrast against the three surfaces:
+//
+//                  light: --bg   --surface  --surface-2      dark: --bg   --surface  --surface-2
+//   --text               17.74     16.96       16.19              17.42     15.87       13.94
+//   --text-muted          7.58      7.24        6.92               7.63      6.95        6.10
+//   --text-subtle         4.76      4.55        4.34 ✗             3.90 ✗     3.55 ✗      3.12 ✗
+//
+// So `--text-subtle` is a **large-text and non-text token**, not a body one — it clears 3:1 everywhere and
+// 4.5:1 almost nowhere. Search's three strings are 14 px (`text-label`), so they owe 4.5:1 and now get it.
+// That conclusion is wider than this screen: `--text-subtle` carries 14 px prose on Place detail, Settings,
+// About the data and Route detail too, and each of those is in `docs/07` rather than fixed here, because a
+// screen at a time is how the RN original is checked for what it actually uses.
+
+import { SEMANTIC_TOKENS, THEME_VARS, type ThemeMode } from '@nextbus/ui'
+import { describe, expect, it } from 'vitest'
+
+const MODES: ThemeMode[] = ['light', 'dark']
+/** Every surface a string is drawn on in this app. `--border` is a line, never a background for text. */
+const SURFACES = ['--bg', '--surface', '--surface-2'] as const
+
+/**
+ * The two thresholds, from WCAG 2.2 §1.4.3 and §1.4.11. 4.5:1 is body text; 3:1 is text at 24 px, or at
+ * 18.66 px bold, and any meaningful non-text mark (an icon, a chevron, a rule).
+ */
+const AA_BODY = 4.5
+const AA_LARGE = 3
+
+/** Prose tokens that may carry any size of text, and the one that may not. Every `--text*` token is in
+ *  exactly one list — the control below is what makes a new token a failing test rather than an omission. */
+const BODY_SAFE = ['--text', '--text-muted'] as const
+const LARGE_OR_NON_TEXT_ONLY = ['--text-subtle'] as const
+
+function rgb(mode: ThemeMode, token: string): [number, number, number] {
+  const value = THEME_VARS[mode][token as `--${string}`]
+  if (value === undefined) throw new Error(`@nextbus/ui publishes no \`${token}\` in ${mode} mode`)
+  const parts = value.split(/\s+/).map(Number)
+  if (parts.length !== 3 || parts.some(Number.isNaN)) {
+    throw new Error(`\`${token}\` is \`${value}\`, which is not the "R G B" triplet this reads`)
+  }
+  return parts as [number, number, number]
+}
+
+/** WCAG 2.2's relative luminance — the sRGB transfer function, then the luma weights. */
+function luminance([r, g, b]: [number, number, number]): number {
+  const channel = (raw: number) => {
+    const c = raw / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+
+function contrast(mode: ThemeMode, fg: string, bg: string): number {
+  const a = luminance(rgb(mode, fg))
+  const b = luminance(rgb(mode, bg))
+  const [hi, lo] = a > b ? [a, b] : [b, a]
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+const at = (mode: ThemeMode, fg: string, bg: string) =>
+  `${fg} on ${bg} in ${mode} mode is ${contrast(mode, fg, bg).toFixed(2)}:1`
+
+describe('the tokens a string may be drawn in', () => {
+  it('classifies every text token, so a new one cannot arrive unmeasured', () => {
+    // The anti-vacuous control. Without it, adding `--text-faint` and using it for a heading would leave
+    // every assertion below green while saying nothing about the new token.
+    const declared = SEMANTIC_TOKENS.filter((token) => token.startsWith('--text')).sort()
+    const classified = [...BODY_SAFE, ...LARGE_OR_NON_TEXT_ONLY].sort()
+    expect(declared, 'a text token is in neither list — measure it and classify it').toEqual(
+      classified,
+    )
+  })
+
+  it('clears AA body contrast on every surface, in both modes, for every body-safe token', () => {
+    // This is the claim `src/screens/Search.tsx` leans on: `text-muted` is safe for a 14 px string
+    // wherever it is put. If it ever stops being true the three strings there need a different answer,
+    // not a quieter one.
+    for (const mode of MODES) {
+      for (const token of BODY_SAFE) {
+        for (const surface of SURFACES) {
+          expect(contrast(mode, token, surface), at(mode, token, surface)).toBeGreaterThanOrEqual(
+            AA_BODY,
+          )
+        }
+      }
+    }
+  })
+
+  it('keeps `--text-subtle` off body prose, because it fails AA at body size', () => {
+    // **A tripwire, deliberately.** It asserts the *reason* the ban exists, so raising the token's value
+    // turns this red rather than leaving a rule nobody can justify: if that happens, the owner has made a
+    // design decision this file should record by moving `--text-subtle` into `BODY_SAFE`, and Search,
+    // Place detail, Settings, About the data and Route detail can stop worrying about it.
+    const failures = MODES.flatMap((mode) =>
+      SURFACES.filter((surface) => contrast(mode, '--text-subtle', surface) < AA_BODY).map(
+        (surface) => at(mode, '--text-subtle', surface),
+      ),
+    )
+    expect(
+      failures.length,
+      '`--text-subtle` now clears 4.5:1 everywhere — retire this rule rather than working around it',
+    ).toBeGreaterThan(0)
+    // The dark mode readings are the ones docs/07 quotes, and the reason this was worth fixing: a rider
+    // in the dark loses these strings entirely, on the screen they arrive at to type.
+    expect(contrast('dark', '--text-subtle', '--bg')).toBeLessThan(AA_BODY)
+    expect(contrast('dark', '--text-subtle', '--surface-2')).toBeLessThan(AA_BODY)
+  })
+
+  it('leaves `--text-subtle` usable for the icons and large text it is for', () => {
+    // The other half of the classification, and the reason this is not a demand to delete the token: the
+    // field glyphs, the chevrons and the `→` on a Search result row are non-text marks owing 3:1, and it
+    // clears that everywhere. A rule that banned it outright would be wrong and would be ignored.
+    for (const mode of MODES) {
+      for (const surface of SURFACES) {
+        expect(
+          contrast(mode, '--text-subtle', surface),
+          at(mode, '--text-subtle', surface),
+        ).toBeGreaterThanOrEqual(AA_LARGE)
+      }
+    }
+  })
+})

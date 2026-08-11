@@ -151,6 +151,22 @@ const INTERACTIVE = 'button, a[href], [role="button"]'
  * `idiom` entry the spec names. So no re-ordering and no de-duplication — and the two composed journey labels
  * are not in this tree at all, because `header.label` goes to `document.title` and there is no collapsed size.
  */
+/**
+ * Named graphics **whose whole content is their name** — which is the bus tokens, and only them.
+ *
+ * The `[role="img"][aria-label]` query used to stand alone, and it stopped being the same question the day
+ * the staleness cue became a `~`: that mark is also a named graphic, but its glyph is a real text node the
+ * walk above has already read, *in order*. Appending its label as well would read one element twice and
+ * would append it at the end, where the spec declares it beside the figure it qualifies. So the rule is the
+ * one the original comment already implied — an element whose name is its only content — and it is written
+ * down now that two kinds of named graphic are in the tree.
+ */
+function namedGraphics(host: HTMLElement): Element[] {
+  return [...host.querySelectorAll('[role="img"][aria-label]')].filter(
+    (el) => (el.textContent ?? '').trim() === '',
+  )
+}
+
 function readTree(host: HTMLElement): RenderedTree {
   const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
   // `Set<string>` explicitly: `t()` returns the branded `LocalizedString`, so an inferred set could not be
@@ -167,7 +183,7 @@ function readTree(host: HTMLElement): RenderedTree {
   // A bus token is a *graphic*: its accessible name is an attribute, not a text node, so the projection would
   // never see it. Appending the labels in the model's order is this renderer's honest reading of an element
   // whose whole content is its name — the same judgement the RN driver makes about its overlay.
-  for (const token of host.querySelectorAll('[role="img"][aria-label]')) {
+  for (const token of namedGraphics(host)) {
     text.push(token.getAttribute('aria-label') ?? '')
   }
   const interactive = [...host.querySelectorAll(INTERACTIVE)]
@@ -595,7 +611,7 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
     await mountCase()
     const rows = rowElements()
     const view = viewFor(caseNamed(CASE))
-    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    const tokens = namedGraphics(container)
     expect(tokens.length, 'the fixture drew no bus tokens').toBe(view.buses.length)
     view.buses.forEach((bus, ordinal) => {
       // A bus AT node N belongs to row N; a bus on the segment INTO node N belongs to row N−1, whose
@@ -617,7 +633,7 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
   it('positions it with a constant expression, so no reflow can leave it behind', async () => {
     await mountCase()
     const view = viewFor(caseNamed(CASE))
-    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    const tokens = namedGraphics(container)
     view.buses.forEach((bus, ordinal) => {
       const token = tokens[ordinal]
       if (!(token instanceof window.HTMLElement))
@@ -639,7 +655,7 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
     // of those live in the same row.
     await mountCase()
     const view = viewFor(caseNamed(CASE))
-    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    const tokens = namedGraphics(container)
     expect(tokens.map((el) => el.getAttribute('data-bus-at'))).toEqual(
       view.buses.map((bus) => String(bus.kind === 'node' ? bus.index : bus.from + 0.5)),
     )
@@ -648,9 +664,7 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
   it('projects the tokens in the model’s order', async () => {
     await mountCase()
     const view = viewFor(caseNamed(CASE))
-    const labels = [...container.querySelectorAll('[role="img"][aria-label]')].map((el) =>
-      el.getAttribute('aria-label'),
-    )
+    const labels = namedGraphics(container).map((el) => el.getAttribute('aria-label'))
     expect(labels).toEqual(view.buses.map((bus) => bus.label))
   })
 
@@ -693,7 +707,7 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
         />,
       )
     })
-    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
+    const tokens = namedGraphics(container)
     expect(tokens.map((el) => el.getAttribute('aria-label'))).toEqual([
       'at the terminus',
       'approaching stop 1',

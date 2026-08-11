@@ -13,16 +13,46 @@
 // `apps/mobile/scripts/build-web.mjs` asserts the same claims against the emitted bundle, but only when
 // somebody runs a build. This runs on `pnpm test`.
 //
+// The second describe block below covers `scripts/pwa/redirects.mjs`, the **host** half of one of those
+// decisions: `navigateFallback` only applies once a worker is installed, so the first visit to a shared
+// deep link is the origin's to answer. It lives here rather than in a file of its own because it is the
+// same declaration shared for the same reason, and because the one thing worth asserting about both at
+// once — that the two halves name the same file, and that both apps emit both — is one assertion.
+//
 // `.mjs`, not `.ts`: the thing under test is a `.mjs` build input with no type declaration, and the
 // honest options were a hand-written `.d.mts` to maintain beside it or a test in the same language as its
 // subject. `apps/web/vitest.config.ts` includes `.mjs` for this file; `tsconfig.json` does not, so nothing
 // here is typechecked and nothing here needs to be.
 
-import { describe, expect, it } from 'vitest'
-import { workboxConfig } from '../../../scripts/pwa/workbox.config.mjs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it } from 'vitest'
+import { getManifest } from 'workbox-build'
+import {
+  REDIRECTS,
+  REDIRECTS_FILE,
+  SPA_FALLBACK_RULE,
+  writeRedirects,
+} from '../../../scripts/pwa/redirects.mjs'
+import { NAVIGATE_FALLBACK, workboxConfig } from '../../../scripts/pwa/workbox.config.mjs'
 
 const API = 'https://api.example.test'
 const config = workboxConfig({ distDir: '/tmp/dist', apiOrigin: API })
+
+/**
+ * The repo root, reached through `path` rather than `new URL(…, import.meta.url)`.
+ *
+ * **The URL form silently does not work under vitest**, and it fails by resolving rather than by throwing:
+ * vite rewrites `new URL(x, import.meta.url)` into its asset-URL lookup, and a *templated* `x` becomes a
+ * glob that matches nothing, so the expression evaluates to the string `"undefined"` — every path below
+ * would have resolved to `test/undefined` and every assertion would have been an ENOENT rather than a
+ * comparison. Watched: the first version of the last test in this file failed that way.
+ */
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+const repoFile = (path) => join(REPO_ROOT, path)
+const readJson = (path) => JSON.parse(readFileSync(repoFile(path), 'utf8'))
 
 /** The route whose `urlPattern` matches `url`, or undefined. */
 const routeFor = (url) => config.runtimeCaching.find((r) => r.urlPattern.test(url))
@@ -90,5 +120,99 @@ describe('the shared Workbox policy', () => {
     // The default 2 MiB silently drops Expo's main bundle, which is the difference between "opens offline"
     // and "doesn't" — and silence is the whole problem: the build succeeds either way.
     expect(config.maximumFileSizeToCacheInBytes).toBeGreaterThan(2 * 1024 * 1024)
+  })
+})
+
+// ── the host half of the same decision ─────────────────────────────────────────────────────────────
+//
+// `navigateFallback` above only applies once a worker is installed, so the FIRST visit to a shared deep
+// link — the visit a shareable URL exists for — is the host's to answer, and `scripts/pwa/redirects.mjs`
+// is that answer. It is shared for the reason ADR-082 shared the caching policy: it started life as
+// `apps/web/public/_redirects`, which meant `apps/mobile` — the PWA that actually ships today (WP0-5) —
+// 404'd on the same link. Two PWAs must not be able to disagree about what a rider sees.
+
+describe('the shared SPA deep-link fallback', () => {
+  it('rewrites every unknown path to the worker’s own fallback, with no redirect', () => {
+    // Three claims in one line, each with its own failure. Without `/*` the rider's shared path is not
+    // covered at all; without the worker's own constant the two halves can come to point at different
+    // files, and only a first visit would notice; without `200` the address bar loses the path — which is
+    // the failure that looks like the app working.
+    const [pattern, target, status] = SPA_FALLBACK_RULE.trim().split(/\s+/)
+    expect(pattern).toBe('/*')
+    expect(target).toBe(NAVIGATE_FALLBACK)
+    expect(status).toBe('200')
+    expect(SPA_FALLBACK_RULE).not.toMatch(/\b30[128]\b/)
+  })
+
+  it('is the only rule in the file, and keeps its reasoning with it', () => {
+    // Everything else in the emitted file is a `#` comment. A second rule would need to be read against
+    // ordering (the host takes the first match), so its absence is worth asserting rather than assuming.
+    const rules = REDIRECTS.split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !line.startsWith('#'))
+    expect(rules).toEqual([SPA_FALLBACK_RULE])
+    // The 200-not-302 reasoning ships in the artefact, because that is what someone debugging a live 404
+    // opens first.
+    expect(REDIRECTS).toContain('rewrite')
+  })
+
+  describe('written into a finished build', () => {
+    let dist = null
+    afterEach(() => {
+      if (dist !== null) rmSync(dist, { recursive: true, force: true })
+      dist = null
+    })
+
+    it('lands at the root of dist, where the host looks for it', () => {
+      dist = mkdtempSync(join(tmpdir(), 'nextbus-redirects-'))
+      writeFileSync(join(dist, 'index.html'), '<!doctype html>')
+      const written = writeRedirects(dist)
+      expect(written).toBe(join(dist, REDIRECTS_FILE))
+      expect(readFileSync(written, 'utf8')).toContain(SPA_FALLBACK_RULE)
+    })
+
+    it('refuses a build with no index.html, rather than pointing the rewrite at nothing', () => {
+      // The silent failure this guards: an emit that ran before the exporter, or against the wrong
+      // directory, would write a rule rewriting every unknown path to a file that is not there — a 404
+      // with extra steps, on a host nobody has deployed yet.
+      dist = mkdtempSync(join(tmpdir(), 'nextbus-redirects-'))
+      expect(() => writeRedirects(dist)).toThrow(/no index\.html/)
+    })
+
+    it('is not swept into the precache manifest', async () => {
+      // Asserted with a real `getManifest` over a real directory rather than by reading the glob string,
+      // because the claim is about what Workbox matches, not about what the pattern looks like. The harm
+      // is small and cumulative rather than dramatic — a host config in every rider's precache, revisioned
+      // on every deploy — but it is the kind of thing a `**/*` added in five years' time does silently, and
+      // the emitted `_redirects` says it does not happen.
+      dist = mkdtempSync(join(tmpdir(), 'nextbus-redirects-'))
+      writeFileSync(join(dist, 'index.html'), '<!doctype html>')
+      writeRedirects(dist)
+      const { manifestEntries } = await getManifest({
+        globDirectory: dist,
+        globPatterns: workboxConfig({ distDir: dist, apiOrigin: API }).globPatterns,
+      })
+      const urls = manifestEntries.map((e) => e.url)
+      expect(urls).toContain('index.html')
+      expect(urls).not.toContain(REDIRECTS_FILE)
+    })
+  })
+
+  it('is emitted by BOTH apps’ build:web, and hand-copied into neither', () => {
+    // The finding itself, as an assertion. `apps/mobile` is the PWA that ships today and `apps/web` is the
+    // one that replaces it (ADR-075); a fallback only one of them emits is the ADR-082 split reintroduced
+    // one layer down, and it is invisible until a rider opens a shared link on a host.
+    for (const app of ['web', 'mobile']) {
+      const { scripts } = readJson(`apps/${app}/package.json`)
+      expect(scripts['build:web'], `apps/${app} does not emit the SPA fallback`).toContain(
+        'scripts/pwa/redirects.mjs',
+      )
+      // And no second declaration: a copy under `public/` is served verbatim by both builders, so it would
+      // silently win back the drift this replaced.
+      expect(
+        existsSync(repoFile(`apps/${app}/public/${REDIRECTS_FILE}`)),
+        `apps/${app}/public/${REDIRECTS_FILE} is a second declaration of a shared rule`,
+      ).toBe(false)
+    }
   })
 })

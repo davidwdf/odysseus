@@ -10,6 +10,7 @@ import {
   estimateChildFare,
   estimateElderlyFare,
   etaBoardingKey,
+  etaCarriesStaleMark,
   etaLabelParts,
   etaLineKey,
   etaReadout,
@@ -87,6 +88,28 @@ describe('eta#etaLabelParts', () => {
       ).toEqual(c.expect)
     })
   }
+})
+
+describe('eta#etaCarriesStaleMark', () => {
+  for (const c of cases<{ label: EtaLabelParts; stale: boolean }, boolean>('etaCarriesStaleMark')) {
+    it(c.name, () => {
+      expect(etaCarriesStaleMark(c.args.label, c.args.stale)).toBe(c.expect)
+    })
+  }
+
+  it('answers every variant of the union, so a new arm cannot be forgotten', () => {
+    // **The coverage control.** The rule is a `kind` test, so a corpus that happens to omit a variant is a
+    // rule with an unspecified case — and this union has grown twice already (`headway` at WP6-4b, `none`
+    // at WP6-3a). A sixth arm added without a row makes this red rather than silently defaulting to
+    // "marked" in one renderer and "not marked" in another.
+    const covered = new Set(
+      cases<{ label: EtaLabelParts; stale: boolean }, boolean>('etaCarriesStaleMark').map(
+        (c) => c.args.label.kind,
+      ),
+    )
+    const arms: Array<EtaLabelParts['kind']> = ['mins', 'due', 'departed', 'headway', 'none']
+    expect([...covered].sort()).toEqual([...arms].sort())
+  })
 })
 
 describe('eta#etaUrgency', () => {

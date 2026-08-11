@@ -327,3 +327,70 @@ describe('apps/web conforms to Search’s published spec, state by state', () =>
     ).toEqual(['N'])
   })
 })
+
+/**
+ * The colour half, which `conformStates` cannot reach: a spec holds *words*, and the token a word is drawn
+ * in is not one. Three of this screen's strings were dropped from `--text-muted` to `--text-subtle` in the
+ * port — 3.90:1 on `--bg` in dark mode, under WCAG AA's 4.5:1 for body text — and every suite stayed green,
+ * because each string was still present, still translated and still in the right order.
+ *
+ * The split with `test/search-contrast.test.ts` is deliberate: that file measures which *tokens* may carry
+ * body prose (and why `--text-subtle` may not); this one asserts which token each *string* actually uses.
+ * Neither claim is worth much alone.
+ */
+describe('the tokens Search’s own strings are drawn in', () => {
+  /** The three prose tones a string can carry here. A size class (`text-label`) is not one of them. */
+  const TONES = ['text-text', 'text-muted', 'text-subtle'] as const
+  /** …of which these clear 4.5:1 on every surface in both modes — measured in `search-contrast.test.ts`. */
+  const BODY_SAFE: string[] = ['text-text', 'text-muted']
+
+  function toneOf(el: Element, what: string): string {
+    const found = TONES.filter((tone) => el.classList.contains(tone))
+    if (found.length !== 1) {
+      throw new Error(`${what} carries ${found.length} prose tones, not one: ${el.className}`)
+    }
+    return found[0] as string
+  }
+
+  const assertBodySafe = (el: Element, what: string) =>
+    expect(
+      toneOf(el, what),
+      `${what} is drawn in a token that fails WCAG AA at body size — the RN screen uses \`text-muted\``,
+    ).toBeOneOf(BODY_SAFE)
+
+  it('puts the recents heading on a body-safe token', async () => {
+    await fixture('recents')
+    const heading = [...container.querySelectorAll('span')].find(
+      (el) => el.textContent?.trim() === t(LOCALE, 'searchRecent'),
+    )
+    if (!heading) {
+      throw new Error('the recents heading is not on screen — the driver missed the state')
+    }
+    assertBodySafe(heading, 'the recents heading')
+  })
+
+  it('puts the clear-recents control on a body-safe token', async () => {
+    // Its own test rather than a second assertion above, so each of the three strings docs/07 names is
+    // separately evidenced — one failing early would otherwise hide the other two.
+    await fixture('recents')
+    const clear = [...container.querySelectorAll('button')].find(
+      (el) => el.textContent?.trim() === t(LOCALE, 'searchClearRecent'),
+    )
+    if (!clear) throw new Error('the clear-recents control is not on screen')
+    assertBodySafe(clear, 'the clear-recents control')
+  })
+
+  it('puts the inactive segment label on a body-safe token', async () => {
+    // The unselected half of Routes/Stops is not decoration: it is the label a rider reads to decide
+    // whether to switch. It also sits on `bg-surface-2`, where `--text-subtle` is 3.12:1 — the worst
+    // pairing in the app. Scoped to the header because the filter chips are `aria-pressed` toggles too.
+    await fixture('recents')
+    const header = container.querySelector('header')
+    if (!header) throw new Error('the segment’s header is not on screen')
+    const segments = [...header.querySelectorAll('button[aria-pressed]')]
+    expect(segments, 'the two-option segment lost an option').toHaveLength(2)
+    const inactive = segments.filter((el) => el.getAttribute('aria-pressed') === 'false')
+    expect(inactive, 'exactly one of Routes/Stops is unselected').toHaveLength(1)
+    assertBodySafe(inactive[0] as Element, 'the inactive segment label')
+  })
+})

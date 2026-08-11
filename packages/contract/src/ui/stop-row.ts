@@ -32,6 +32,32 @@ import type { ComponentSpec } from '@nextbus/ui-spec'
  * it yet, which is the shape Wave 2 already established with its four `knownDefect` corpus rows, for the
  * reason ADR-075 restates: identical and visible beats different and hidden.
  */
+/**
+ * **The staleness mark**, declared once here and spread into the two readout arms that can carry it.
+ *
+ * A `literal` rather than a `message`, for the reason `headlineArrow` gives: the renderer supplies the
+ * glyph and it is a marker, not a word — the same `~` the kernel already composes onto a concession fare
+ * it worked out rather than read (ADR-095). Its *name* is translated and its glyph is not, which is the
+ * split `a11y.name.i18nKey` exists for; each renderer gives the node `role="img"` and the catalogue's
+ * `etaStaleMark` as its accessible label, so a cue that announced **nothing at all** in every locale now
+ * announces a sentence.
+ *
+ * **It rides `mins` and `due` and not the other two arms.** `departed` and `none` both print an em dash,
+ * and `~ —` is a claim about nothing; `headway` is the published timetable, which was never a reading and
+ * so can never be stale. That is not a hypothetical distinction — `stop-detail.spec.json` carries eight
+ * stale readings whose label is `departed`.
+ */
+const STALE_MARK = {
+  text: {
+    literal: '~',
+    why: 'The renderer supplies the glyph, as it does the `→` before a destination: a marker rather than a word, so it is not in the catalogue and needs no translation. Its *meaning* is — `etaStaleMark`, on the node’s accessible name.',
+  },
+  when: 'stale',
+  why: 'The overwhelmingly common case: the board this reading came from is fresher than the served `staleAfterMs` and there is nothing to qualify.',
+  invariant:
+    'Drawn **muted regardless of the figure’s urgency** — the mark says how old the reading is, the colour says how soon the bus is, and folding the two would make a stale "Due" shout in green. It sits in a gutter the readout reserves whether or not the mark is there, so a board ageing between two rounds does not move the figure by a pixel; and it is **mounted only when stale**, never mounted-and-hidden, because this harness reads text by presence rather than by visibility.',
+} as const
+
 export const STOP_ROW_SPEC: ComponentSpec = {
   component: 'StopRow',
   version: 1,
@@ -100,10 +126,14 @@ export const STOP_ROW_SPEC: ComponentSpec = {
           oneOf: 'label.kind',
           cases: {
             mins: [
+              { name: 'etaStale', ...STALE_MARK },
               { name: 'etaValue', text: { field: 'label.value' } },
               { name: 'etaUnit', text: { field: 'label.unit' } },
             ],
-            due: [{ name: 'etaDue', text: { field: 'label.label' } }],
+            due: [
+              { name: 'etaStale', ...STALE_MARK },
+              { name: 'etaDue', text: { field: 'label.label' } },
+            ],
             departed: [
               {
                 name: 'etaDeparted',
@@ -185,12 +215,23 @@ export const STOP_ROW_SPEC: ComponentSpec = {
       enforcement: { by: 'incomplete' },
     },
     stale: {
-      must: 'The `opacity.etaStale` treatment on the readout AND a relative age somewhere the rider can see it.',
-      mustNot: 'Colour alone, and never a value presented as fresh.',
+      must: 'A muted `~` immediately before the figure, in the reserved gutter — AND a relative age somewhere the rider can see it, which is still owed.',
+      mustNot:
+        'Colour alone, and never a value presented as fresh. And never a cue that moves the figure: a reading that shifts sideways when its board ages reads as a value that changed, which is the one thing ADR-008 forbids a stale readout from doing.',
       why: 'ADR-008. A replayed reading from the persisted cache arrives with its original `observedAt`, so it is aged and labelled rather than shown as live (ADR-058).',
       enforcement: {
-        unenforced:
-          'The card dims the readout from `row.stale`, which is opacity — not text — so this harness cannot see it. The relative age is the list screen\'s "updated N ago", so WP6-2 owns the assertable half.',
+        by: 'etaStale',
+        // Was `unenforced` from WP6-1 until the `~` replaced the fade, with the note: *"The card dims the
+        // readout from `row.stale`, which is opacity — not text — so this harness cannot see it."* That was
+        // true of the cue and it was also the cue's problem. **A treatment a text harness cannot see is a
+        // treatment a rider has to already know about**, which is what the owner said in different words:
+        // a fade is noticed, not read. Replacing it with a glyph made the state enforceable in the same
+        // stroke that made it legible, on all four of the specs that carried this excuse.
+        //
+        // **The half this does NOT close is the relative age**, and it is deliberately still in the `must`
+        // above rather than quietly deleted: `updatedAgo` has been in the catalogue since Wave 1 with no
+        // caller, and docs/07 scopes the "last updated" line as its own job (four states, four sentences).
+        // The mark says *this is old*; only that line will say *how old*.
       },
     },
     offline: {

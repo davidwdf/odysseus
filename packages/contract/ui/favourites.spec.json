@@ -122,11 +122,23 @@
       }
     },
     "stale": {
-      "must": "The cards, with each reading aged and marked stale.",
+      "must": "The same cards as `content`, each aged reading carrying `StopRow`’s muted `~`.",
       "mustNot": "A value presented as fresh.",
       "why": "ADR-008. Unlike Nearby there is no *position* to be stale here — this screen measures no distance and has nothing to say about where the rider is — so the only stale thing is a reading.",
       "enforcement": {
-        "unenforced": "`row.stale` is drawn as opacity inside the card, which is not text, so this harness cannot see it. It is `StopRow`’s field and `stop-row.spec.json` declares it there for the same reason."
+        "shows": [
+          {
+            "name": "cards",
+            "invariant": "One card per saved **place**, in save order, capped inside each card by the served `maxRows`. Never one per saved *pole*: a rider who saved two lines at two kerbs of one interchange saved two things at one place, and two cards would read as two places (ADR-089).",
+            "each": "cards",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              }
+            ]
+          }
+        ]
       }
     },
     "offline": {

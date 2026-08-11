@@ -20,6 +20,10 @@
  * `apps/web` asserts the policy *shape* on every `pnpm test`, and `assertServiceWorker` below asserts
  * the emitted bytes at build time.
  *
+ * `redirects.mjs` beside it is the **host** half of one of the decisions below — `navigateFallback`, which
+ * only applies once a worker is installed, so the first visit to a shared deep link needs the same answer
+ * from the origin. It is shared for the same reason and shares the constant.
+ *
  * `generateSW` (rather than `injectManifest`) because with `inlineWorkboxRuntime` the whole runtime is
  * written into `sw.js` — no `importScripts` from a CDN, which would otherwise make the *offline*
  * service worker depend on the network on first run.
@@ -48,8 +52,24 @@
 
 import { readFileSync } from 'node:fs'
 
-/** Everything worth precaching from `dist/`. Source maps and the SW itself are excluded. */
-const PRECACHE_GLOBS = ['**/*.{html,js,css,json,png,svg,ico,webmanifest,woff,woff2,ttf}']
+/**
+ * Everything worth precaching from `dist/`. Source maps and the SW itself are excluded.
+ *
+ * Exported because one thing that must **not** match matters as much as the things that must:
+ * `redirects.mjs` writes an extensionless `_redirects` into the same directory, and every pattern here is
+ * extension-qualified so it cannot be swept into the precache manifest. `pwa-policy.test.mjs` asserts that
+ * against a real `getManifest` run rather than by reading the string.
+ */
+export const PRECACHE_GLOBS = ['**/*.{html,js,css,json,png,svg,ico,webmanifest,woff,woff2,ttf}']
+
+/**
+ * The app shell — and the target of **two** rules, which is why it is a constant rather than a literal.
+ *
+ * The worker rewrites an unknown navigation to it once installed; the host rewrites one to it on the very
+ * first visit, before any worker exists (`redirects.mjs`). Those are the two halves of one decision, and a
+ * pair that disagreed would fail only on a first visit to a deep link — the one case nobody tests locally.
+ */
+export const NAVIGATE_FALLBACK = '/index.html'
 
 const cacheable = { statuses: [0, 200] }
 
@@ -91,7 +111,9 @@ export function workboxConfig({ distDir, apiOrigin }) {
     // error page, and the client-side router resolves the path (expo-router there, react-router
     // here). For the single-page Vite build this is also the only thing that makes a cold offline
     // load of `/settings` open anything at all.
-    navigateFallback: '/index.html',
+    // This covers every visit **after** the worker is installed. `redirects.mjs` is the same decision
+    // for the first one, where only the host can answer — same constant, so they cannot drift.
+    navigateFallback: NAVIGATE_FALLBACK,
     navigateFallbackDenylist: [/^\/v1\//],
 
     runtimeCaching: [

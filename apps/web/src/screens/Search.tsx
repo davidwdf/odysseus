@@ -241,12 +241,18 @@ export function Search() {
             ) : (
               <>
                 {view.source === 'recents' && routes.length + stops.length > 0 ? (
+                  // **`text-muted`, not `text-subtle`, and that is a contrast fix rather than a taste.**
+                  // Both of these are prose a rider reads — a section heading and the label on a control —
+                  // and the port dropped them a level from the RN screen's `text-muted`. `--text-subtle` is
+                  // 3.90:1 on `--bg` in dark mode, under WCAG AA's 4.5:1 for body text; `--text-muted` is
+                  // 7.63:1. The token *values* are the owner's to change; which token a string uses is not.
+                  // `test/search-contrast.test.ts` holds the rule for the whole screen.
                   <div className="flex items-center justify-between px-4 pb-1 pt-3">
-                    <span className="text-label text-subtle">{t(locale, 'searchRecent')}</span>
+                    <span className="text-label text-muted">{t(locale, 'searchRecent')}</span>
                     <button
                       type="button"
                       onClick={mode === 'routes' ? clearRecentRoutes : clearRecentStops}
-                      className="flex items-center gap-1 border-0 bg-transparent text-label text-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus active:opacity-60"
+                      className="flex items-center gap-1 border-0 bg-transparent text-label text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus active:opacity-60"
                     >
                       <X aria-hidden width={14} height={14} />
                       {t(locale, 'searchClearRecent')}
@@ -365,8 +371,12 @@ function Segment({
           type="button"
           aria-pressed={mode === value}
           onClick={() => onChange(value)}
+          // The inactive half is `text-muted`, as on the RN screen: an unselected segment is still a
+          // *label a rider reads to choose with*, so it is body text and owes AA. On `bg-surface-2`
+          // `--text-subtle` is 3.12:1 in dark mode — the worst pairing in the app. See the note by the
+          // recents heading, and `test/search-contrast.test.ts`.
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-pill border-0 py-2 text-label focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
-            mode === value ? 'bg-surface font-semibold text-text' : 'bg-transparent text-subtle'
+            mode === value ? 'bg-surface font-semibold text-text' : 'bg-transparent text-muted'
           }`}
         >
           <Glyph aria-hidden width={15} height={15} />

@@ -31,6 +31,26 @@ export function QueryProvider({ children }: { children: ReactNode }) {
             gcTime: MAX_AGE_MS,
             retry: 1,
             refetchOnWindowFocus: false,
+            // **A request we cannot make must FAIL, not vanish.** TanStack's default `networkMode:
+            // 'online'` refuses to run a query while `onlineManager` believes the device is offline: it
+            // sits at `status: 'pending'`, `fetchStatus: 'paused'`, `fetchFailureCount: 0` — no error, no
+            // data, no attempt on record — and every screen reads that as "not loading and did not fail"
+            // and draws its empty branch. That is how an offline Nearby claimed "No scheduled service".
+            // It is also unrecoverable: `refetchInterval` fires only on `status === 'error'` (ADR-079),
+            // which a paused query never reaches. `'always'` makes offline an honest failure that the
+            // error-path refetch then heals.
+            //
+            // It matters most on **web**. `onlineManager` has no default listener under React Native (no
+            // `window.addEventListener`), so a native build stays `online: true` and never pauses — but
+            // `apps/mobile` also ships as the Expo PWA, where react-native-web supplies the browser
+            // globals and the gate applies exactly as it does in `apps/web`. One declaration per app,
+            // and `apps/web/src/providers/QueryProvider.tsx` carries the long-form reasoning.
+            //
+            // **This literal is read by a test.** `apps/web/test/shell-parity.test.ts` captures it out of
+            // this source and compares it to that app's `NETWORK_MODE`, the way it already binds the four
+            // persisted-cache values — so reverting either app to `'online'` is a red build rather than one
+            // renderer quietly claiming "No scheduled service" offline while the other reports the error.
+            networkMode: 'always',
           },
         },
       }),

@@ -154,6 +154,41 @@ export function etaLabelParts(
 }
 
 /**
+ * **Whether an aged reading has anything for "old" to qualify.**
+ *
+ * Staleness is a property of the *board* (`isStale`), so every readout on a screen shares one answer to
+ * "how old is this?". This is the second half of the rule and it is per readout: a mark qualifies a
+ * **figure**, and only a figure.
+ *
+ *  · `departed` and `none` both print an em dash. `~ —` is a claim about nothing — "approximately we do
+ *    not know" — and it is the ordinary case rather than an edge one: `stop-detail.spec.json` carries
+ *    eight stale readings whose label is `departed`.
+ *  · `headway` is the published timetable, the **Static** honesty tier. It was never a reading, so it can
+ *    never have aged; marking it would say the timetable is out of date, which is a different claim and
+ *    not one we can make.
+ *
+ * ## Why this is a kernel rule and not a line in each renderer
+ *
+ * It was four lines in four components — two `marked()` helpers and two inline expressions across the DOM
+ * and RN badges and rails — which is the shape of every defect Wave 5 found in its own live code. A fifth
+ * arm on `EtaLabelParts` (there have already been two: `headway` at WP6-4b, `none` at WP6-3a) is updated in
+ * three of the four, and the renderers then disagree about a state the component specs claim to enforce.
+ * `check-no-derivation` cannot see it, because each copy is a boolean over fields the view legitimately has.
+ *
+ * The *geometry* of the mark stayed in `@nextbus/ui` (`ETA_STALE_GUTTER`), and the split is the layer line:
+ * that package owns design values and the rules that act on them, while this is a rule over
+ * `EtaLabelParts` — this package's own union — under ADR-008's honesty tiers. A design package that had
+ * learnt the shape of an arrival label would be ADR-075's `ui-spec`-with-a-`stopId` warning one layer over.
+ * It returns a **judgement, not a look**, exactly as `etaUrgency` returns a name and not a colour: each
+ * renderer decides what "qualified as old" is drawn as, and today both draw a muted `~`.
+ *
+ * @spec eta#etaCarriesStaleMark
+ */
+export function etaCarriesStaleMark(label: EtaLabelParts, stale: boolean): boolean {
+  return stale && (label.kind === 'mins' || label.kind === 'due')
+}
+
+/**
  * How much attention one arrival is owed — the *meaning* a renderer turns into a colour.
  *
  * This exists because the alternative had already drifted. `apps/mobile/components/EtaBadge.tsx`

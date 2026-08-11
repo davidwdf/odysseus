@@ -124,7 +124,9 @@ vi.mock('../src/adapters/datasource', () => ({
   dataSource: { getStop: () => stop(), getClientPolicy: () => Promise.resolve(undefined) },
 }))
 
-const { PlaceDetail, SNAP_BASE, tailRoom } = await import('../src/screens/PlaceDetail')
+const { PlaceDetail, CARD_DOCKED_BOTTOM, SNAP_BASE, tailRoom } = await import(
+  '../src/screens/PlaceDetail'
+)
 // The preference store is real, not mocked: which routes a rider saved at this place is this screen's
 // input, so a mock of it would be a mock of the thing the star block below is about.
 const { usePreferences } = await import('../src/lib/preferences')
@@ -497,4 +499,152 @@ describe('the map scroll-spy’s geometry — the half no projection can reach',
     // `paddingBottom: 32` on the same branch.
     expect(tailRoom(false, 400)).toMatch(/^\d+px$/)
   })
+
+  /**
+   * …and the same claim as **behaviour**, which is what the two assertions above cannot state: scroll the
+   * page as far as it goes and the LAST kerb's dot is the lit one.
+   *
+   * Everything real is real — the screen, its spy, its listener, its tail expression and `MiniMap`'s own
+   * choice of which dot is lit. What the test supplies is the one thing jsdom does not: a layout. Three
+   * numbers are given (the chrome above the first kerb, a kerb's height, the viewport) and **everything
+   * else is derived from the screen's own output** — the page's height from the tail `tailRoom` returns,
+   * how far it can scroll from that, and the spy's line from where the card reports itself. Nothing here
+   * restates the tail formula, which is what stops it agreeing with a broken one.
+   *
+   * The control is the first assertion: at rest the FIRST kerb is lit. A model that could not tell the two
+   * apart would pass the interesting one for free.
+   */
+  it('scrolls far enough for the last kerb to reach the line, and lights that kerb', async () => {
+    /** The chrome above the first kerb — header, summary, map card. Any value: nothing depends on it. */
+    const CHROME = 320
+    /** A kerb group's height, and the one the tail is measured against. */
+    const KERB = 120
+    const VIEWPORT = window.innerHeight
+    expect(VIEWPORT, 'jsdom reports no viewport height to model against').toBeGreaterThan(0)
+
+    const c = caseNamed(FIXTURE.groupedKerbs as string)
+    const view = viewFor(c)
+    if (!view.grouped) throw new Error('the grouped fixture is not grouped')
+    const lastPole = view.groups.at(-1)?.poleId
+    if (lastPole === undefined) throw new Error('the grouped fixture has no kerbs')
+    const litFor = (poleId: string) => view.pins.findIndex((pin) => pin.ids.includes(poleId))
+    // The kerbs must be on **different** dots, or "the last one lights" is true of any of them. ADR-086
+    // folds poles published at one coordinate into a single pin, so this is a claim about the fixture.
+    expect(litFor(lastPole), 'the last kerb is on no pin at all').toBeGreaterThanOrEqual(0)
+    expect(litFor(lastPole), 'every kerb in this fixture folds into one dot').not.toBe(
+      litFor(view.groups[0]?.poleId as string),
+    )
+
+    // `MiniMap` draws no pins until it has measured itself, and jsdom measures everything as zero.
+    const restoreWidth = stubClientWidth(320)
+    try {
+      await fixture('groupedKerbs')
+      const card = container.querySelector('div.sticky')
+      const sections = [...container.querySelectorAll('section')]
+      if (!card) throw new Error('the docked map card is not on screen')
+      expect(sections).toHaveLength(view.groups.length)
+
+      // The card is docked; only its bottom edge is read, and the spy adds the gap back itself.
+      card.getBoundingClientRect = () => rect(0, CARD_DOCKED_BOTTOM)
+      /** Put the page at `scroll` and let the spy look. */
+      const scrollTo = (scroll: number) => {
+        sections.forEach((section, i) => {
+          section.getBoundingClientRect = () => rect(CHROME + i * KERB - scroll, KERB)
+        })
+        act(() => window.dispatchEvent(new Event('scroll')))
+      }
+      /** Which dot `MiniMap` is drawing lit — the undimmed one. Its dots are in `view.pins` order. */
+      const lit = () => {
+        const dots = [...card.querySelectorAll('div.rounded-full')]
+        expect(dots, 'the map drew no dots to light').toHaveLength(view.pins.length)
+        const undimmed = dots.filter((dot) => (dot as HTMLElement).style.opacity === '1')
+        expect(undimmed, 'exactly one dot is lit at a time').toHaveLength(1)
+        return dots.indexOf(undimmed[0] as Element)
+      }
+
+      scrollTo(0)
+      expect(lit(), 'at rest the first kerb is the lit one').toBe(
+        litFor(view.groups[0]?.poleId as string),
+      )
+
+      // How far this page can actually scroll, from the tail the screen itself declares for a kerb of
+      // this height. `tailRoom` is the screen's own function; `evaluateLength` only does the arithmetic a
+      // browser would do to it.
+      const tail = evaluateLength(tailRoom(true, KERB), VIEWPORT)
+      const page = CHROME + sections.length * KERB + tail
+      scrollTo(Math.max(0, page - VIEWPORT))
+      expect(
+        lit(),
+        'scrolled to the very bottom, the last kerb never reaches the spy’s line — it has no tail room',
+      ).toBe(litFor(lastPole))
+    } finally {
+      restoreWidth()
+    }
+  })
 })
+
+/** A `DOMRect` with the two edges this screen reads, and zeroes for the rest. */
+function rect(top: number, height: number): DOMRect {
+  return {
+    top,
+    bottom: top + height,
+    height,
+    left: 0,
+    right: 0,
+    width: 0,
+    x: 0,
+    y: top,
+    toJSON: () => ({}),
+  }
+}
+
+/**
+ * Make every element report a width, for as long as the returned function has not been called.
+ * `MiniMap` takes its first measurement from `clientWidth`, which jsdom answers 0 for because it lays
+ * nothing out — and with no width it frames no tiles and draws no dots at all.
+ */
+function stubClientWidth(width: number): () => void {
+  const proto = window.HTMLElement.prototype
+  const original = Object.getOwnPropertyDescriptor(proto, 'clientWidth')
+  Object.defineProperty(proto, 'clientWidth', { configurable: true, get: () => width })
+  return () => {
+    if (original) Object.defineProperty(proto, 'clientWidth', original)
+    else Reflect.deleteProperty(proto, 'clientWidth')
+  }
+}
+
+/**
+ * Evaluate a CSS length the way a browser would, so a suite can ask how tall a page is.
+ *
+ * jsdom's CSSOM rejects `max()` wrapping a nested `calc(env(…))` outright — that is why `tailRoom` is
+ * exported at all — so this substitutes the two values a browser knows (the viewport, and a safe-area
+ * inset of zero) and folds the functions from the inside out. It understands `max`, `min`, `calc` and
+ * `+`/`-`; anything else throws rather than guesses, so a tail expression that grows an operator this
+ * cannot read fails loudly instead of quietly agreeing.
+ */
+function evaluateLength(expr: string, viewportPx: number): number {
+  let s = expr.replace(/100dvh/g, `${viewportPx}px`).replace(/env\([^()]*\)/g, '0px')
+  const sum = (terms: string) => {
+    const parts = terms.trim().split(/\s+/)
+    let total = Number.NaN
+    let sign = 1
+    for (const part of parts) {
+      if (part === '+' || part === '-') {
+        sign = part === '+' ? 1 : -1
+        continue
+      }
+      const px = /^(-?[\d.]+)px$/.exec(part)
+      if (!px) throw new Error(`\`${expr}\` contains \`${part}\`, which this evaluator cannot read`)
+      total = Number.isNaN(total) ? Number(px[1]) : total + sign * Number(px[1])
+    }
+    return total
+  }
+  for (let guard = 0; guard < 8 && s.includes('('); guard += 1) {
+    s = s.replace(/(max|min|calc)\(([^()]*)\)/, (_all, fn: string, body: string) => {
+      const values = body.split(',').map(sum)
+      if (fn === 'calc' && values.length !== 1) throw new Error(`\`${expr}\`: calc takes one term`)
+      return `${fn === 'max' ? Math.max(...values) : fn === 'min' ? Math.min(...values) : values[0]}px`
+    })
+  }
+  return sum(s)
+}

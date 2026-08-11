@@ -58,9 +58,25 @@ export function Favourites() {
 
   // Three states, not one — see the RN twin's note: guarding only on `isLoading` is what made a screen whose
   // every query had failed render its heading and an empty list, which reads as "you have nothing saved".
-  const loading = results.some((r) => r.isLoading) && cards.length === 0
+  //
+  // **`isPending`, never `isLoading`** (ADR-124), and here it is an aggregate over one query per saved pole.
+  // `isLoading` is `isPending && isFetching`, so it is false for a fetch TanStack has *parked* — and with
+  // every query parked (offline before `networkMode: 'always'`, or a hidden tab's parked retry still) this
+  // screen had nothing pending, nothing failed and no cards, so it fell through to the list arm and rendered
+  // **its title and nothing else**: the very `mustNot` the spec's `failed` state carries, on the one screen
+  // whose contents the rider curated by hand. The aggregate the spec's `loading` state asks for is per
+  // *screen*, not per query — "no card has arrived yet", with "a card that has arrived drawn immediately
+  // rather than held for its siblings" — so `some(isPending)` is right and `every` would not be: a pole still
+  // waiting while another has answered is a partial list, not a skeleton. Measured in
+  // `test/favourites-offline.test.tsx`; the same edit is on `apps/mobile/app/(tabs)/favorites.tsx`.
+  const nothingToShow = cards.length === 0
+  const loading = nothingToShow && results.some((r) => r.isPending)
   const errors = results.flatMap((r) => (r.isError ? [r.error] : []))
-  const failure = cards.length === 0 ? errors[0] : undefined
+  // Guarded by `nothingToShow` for the reason Nearby's error arm is guarded by `data === undefined`: a
+  // refresh that failed is a list we could not update, and replacing it with the reason is what the spec's
+  // `offline` state forbids ("never a blank list"). Ordered after `loading` below, so a pole that has given
+  // up cannot speak for one that is still trying.
+  const failure = nothingToShow ? errors[0] : undefined
 
   return (
     <main className="min-h-dvh bg-bg">
@@ -77,13 +93,16 @@ export function Favourites() {
             {t(locale, 'favoritesEmptyHelp')}
           </p>
         </div>
-      ) : failure ? (
-        <p className="m-0 px-4 text-body text-danger">{(failure as Error).message}</p>
-      ) : loading ? (
+      ) : /* The wait comes before the reason, which is the order Nearby uses and it matters more here: with
+             one query per saved pole, a pole that has exhausted its retries must not answer for one that is
+             still trying. Nothing to show and something still pending is a wait, and saying so is true. */
+      loading ? (
         <div className="px-4 py-4">
           <div className="h-5 w-2/3 animate-pulse rounded-sm bg-surface-2" />
           <div className="mt-3 h-6 w-full animate-pulse rounded-sm bg-surface-2" />
         </div>
+      ) : failure ? (
+        <p className="m-0 px-4 text-body text-danger">{(failure as Error).message}</p>
       ) : (
         <div>
           {cards.map((card, i) => (

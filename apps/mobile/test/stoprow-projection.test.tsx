@@ -34,10 +34,18 @@ import { CATALOGUE, type MessageKey, t } from '@nextbus/i18n'
 import { type ConformanceHarness, conform, type RenderedTree } from '@nextbus/ui-spec'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { StopRow } from '../components/StopRow'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const LOCALE: Locale = 'en'
+
+// **The card reads the locale now**, one level deeper than it used to. `EtaBadge`'s staleness `~` is a
+// graphic, and a graphic that carries information needs an accessible *name* — which is a catalogue string,
+// which needs a locale. The provider it reads through imports `expo-localization`, and that dies at import
+// outside Metro: vitest counts an import failure as a failed FILE rather than as failed tests, so without
+// this the suite reports nothing about the card at all. Every screen suite here carries the same line.
+vi.mock('../providers/LocaleProvider', () => ({ useLocale: () => LOCALE }))
+
+const { StopRow } = await import('../components/StopRow')
 
 const cases: Array<{ name: string; expect: StopCardView }> = corpus.groups.stopCardView.cases.map(
   (c) => ({ name: c.name, expect: fromCorpus(c.expect) }),

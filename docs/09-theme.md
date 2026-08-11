@@ -157,7 +157,12 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
 - `eta-imminent` → uses `danger`/`accent` weight + **"Due/Arriving"** label (sub-minute).
 - `eta-soon` (≈1–5 min) → `warning`.
 - `eta-later` (>5 min) → `text` (neutral).
-- `eta-stale` → desaturated `text-subtle` + a "stale" flag.
+- `eta-stale` → a **muted `~` immediately before the figure** ([ADR-123](./08-decision-log.md#adr-123--staleness-is-a-muted--before-the-figure-not-a-fade)),
+  and the figure does not move when it appears. **Not** a fade: this line specified `opacity.etaStale`
+  until 2026-08-11, and the treatment was removed from all four readouts — a 45 % dim is a *comparative*
+  cue with nothing to compare against (a rider who never saw the fresh value cannot tell a dimmed number
+  from a design choice), and a text harness cannot see it, which is why four component specs carried the
+  same sentence about being unable to enforce their own `stale` state.
 
 ### Operator accents (used **sparingly** — a route-number chip, a thin route line; not backgrounds)
 `KMB` `#D7282F` · `CTB` `#F6C700` (dark text on it) · `LWB` `#E8A33D` · `GMB` `#00845C`. Each pairs with
@@ -322,7 +327,11 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 - Big **tabular** numeral + unit (`7 min`) **or** absolute clock (`3:42`); user-selectable, smart
   default (minutes when small, clock when large). Sub-minute → **"Arriving" / "Due"**.
 - Coloured by `eta-*` urgency token **and** an icon — never colour alone.
-- **Freshness chip** "updated 12s ago"; past a threshold → `eta-stale` styling + a refresh affordance.
+- Past the staleness threshold → the muted `~` ([ADR-123](./08-decision-log.md#adr-123--staleness-is-a-muted--before-the-figure-not-a-fade)).
+  The **freshness chip** ("updated 12s ago") and its refresh affordance remain an aspiration: the
+  per-screen "last updated" line, and the four different reasons a screen can stop being fed, are scoped
+  in [`docs/07`](./07-backlog.md) and are not built. `stop-row.spec.json`'s `stale` state still asks for
+  a relative age for exactly this reason.
 - Up to 3 upcoming: first big, next two smaller/muted.
 - Screen-reader label spells it out: *"Route 6, arriving in 7 minutes, updated 10 seconds ago."*
 

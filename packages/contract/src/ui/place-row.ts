@@ -20,6 +20,26 @@ import type { ComponentSpec } from '@nextbus/ui-spec'
  * The `oneOf` nests, because a live reading is itself three-way (minutes, "Due", a dash for a departure
  * already past) and that inner union is `EtaLabelParts` — the same one `StopRow` declares.
  */
+/**
+ * **The staleness mark** — the same node `stop-row.ts` declares, over this model's own path.
+ *
+ * A row's `stale` hangs off the readout rather than off the row (`readout.stale`), because only the `eta`
+ * arm of the three-way readout has a reading old enough to be one. Everything else about it is `StopRow`'s
+ * — a muted renderer-supplied `~`, sitting in a gutter the readout reserves whether or not the mark is
+ * drawn, mounted only when stale, and translated through its accessible name rather than its glyph. See
+ * the long note there.
+ */
+const STALE_MARK = {
+  text: {
+    literal: '~',
+    why: 'The renderer supplies the glyph, exactly as it does the `→` above: a marker rather than a word, so it is not in the catalogue. Its meaning is — `etaStaleMark`, on the node’s accessible name.',
+  },
+  when: 'readout.stale',
+  why: 'The board this reading came from is fresher than the served `staleAfterMs`, which is the ordinary case.',
+  invariant:
+    'Muted whatever `etaUrgency` colours the figure, and it must not move the figure: the gutter is reserved in either state. Declared inside `mins` and `due` and not beside them — `departed` prints an em dash, and `~ —` claims nothing.',
+} as const
+
 export const PLACE_ROW_SPEC: ComponentSpec = {
   component: 'PlaceRow',
   version: 1,
@@ -69,10 +89,14 @@ export const PLACE_ROW_SPEC: ComponentSpec = {
             oneOf: 'readout.label.kind',
             cases: {
               mins: [
+                { name: 'etaStale', ...STALE_MARK },
                 { name: 'etaValue', text: { field: 'readout.label.value' } },
                 { name: 'etaUnit', text: { field: 'readout.label.unit' } },
               ],
-              due: [{ name: 'etaDue', text: { field: 'readout.label.label' } }],
+              due: [
+                { name: 'etaStale', ...STALE_MARK },
+                { name: 'etaDue', text: { field: 'readout.label.label' } },
+              ],
               departed: [
                 {
                   name: 'etaDeparted',
@@ -133,12 +157,16 @@ export const PLACE_ROW_SPEC: ComponentSpec = {
       },
     },
     stale: {
-      must: 'The `opacity.etaStale` treatment on the readout.',
-      mustNot: 'Colour alone, and never a value presented as fresh.',
+      must: 'A muted `~` immediately before the figure, in the gutter the readout reserves in either state.',
+      mustNot:
+        'Colour alone, and never a value presented as fresh — nor a cue that shifts the figure, which would read as the value having changed.',
       why: 'ADR-008. A reading replayed from the persisted cache arrives with its original `observedAt`, so `etaReadout` ages it rather than showing it as live (ADR-058).',
       enforcement: {
-        unenforced:
-          '`readout.stale` is drawn as opacity, which is not text, so this harness cannot see it. The relative age is the screen’s, not the row’s.',
+        by: 'etaStale',
+        // `unenforced` until the `~` replaced the fade, with the note *"`readout.stale` is drawn as
+        // opacity, which is not text, so this harness cannot see it"*. Which was the cue's problem as much
+        // as the harness's: a rider seeing one reading has nothing to compare a 45% fade against. The
+        // relative age is still the screen's and still unbuilt (docs/07).
       },
     },
     offline: {

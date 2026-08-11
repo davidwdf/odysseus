@@ -147,6 +147,29 @@ export const CATALOGUE = {
     'zh-Hant': '資料過時',
     'zh-Hans': '数据过时',
   },
+  /**
+   * **What the muted `~` in front of an arrival time means**, for a rider who cannot see it.
+   *
+   * The mark itself is a renderer-supplied glyph, like the `→` before a destination — it needs no
+   * translation and the component specs declare it as a `literal`. This is its *name*: a bare tilde
+   * announces as "tilde" or as nothing at all, and the treatment it replaces (a 45% opacity fade)
+   * announced as nothing at all in every locale, so this is the first time the cue exists for a screen
+   * reader.
+   *
+   * **It deliberately does not name a number.** "over two minutes ago" would be a fourth copy of a
+   * threshold that is *served* policy (`ClientPolicy.staleAfterMs`, 120 s since ADR-122) and can move
+   * without this file hearing about it — which is the exact failure ADR-053 is named for. "Not updated
+   * recently" is true at any threshold.
+   *
+   * "Approximate" is the register the `~` already carries in this app: a concession fare we work out from
+   * the fare policy rather than read from a feed is printed `~$6.7` (ADR-095), and the FAQ says so. One
+   * glyph, one meaning — *we are telling you roughly*.
+   */
+  etaStaleMark: {
+    en: 'Approximate — not updated recently',
+    'zh-Hant': '約數 — 未有最新更新',
+    'zh-Hans': '约数 — 未有最新更新',
+  },
   retry: {
     en: 'Retry',
     'zh-Hant': '重試',
@@ -373,16 +396,20 @@ export const CATALOGUE = {
     'zh-Hant': '到站時間有多新？',
     'zh-Hans': '到站时间有多新？',
   },
-  // "grey out" over-described the shipped cue: the whole stale treatment is `opacity.etaStale`, and the
-  // urgency colour is retained, so a stale figure fades rather than turning grey. ADR-008's "updated Ns
-  // ago" chip has never been built (`updatedAgo` is in this catalogue and no renderer calls it), so this
-  // answer describes what ships rather than what was promised.
+  // This answer has now been wrong twice in the same direction, which is worth recording. "Grey out"
+  // over-described the cue that shipped (the treatment was `opacity.etaStale` and the urgency colour was
+  // retained, so a stale figure *faded*), and "faded" then went stale itself the moment the fade was
+  // replaced by a muted `~` in front of the figure. **The FAQ describes the shipped cue, so it changes
+  // whenever the cue does** — and it is the only user-facing sentence that does, which is why it is worth
+  // a comment rather than a note in a doc nobody opens while editing a component. ADR-008's "updated Ns
+  // ago" chip is still unbuilt (`updatedAgo` is in this catalogue and no renderer calls it), so this
+  // answer still describes what ships rather than what was promised.
   faqFreshnessA: {
-    en: 'Live arrival times refresh about once a minute at source — we can never be fresher than that, and a figure we think has gone stale is faded rather than shown as current.',
+    en: 'Live arrival times refresh about once a minute at source — we can never be fresher than that, and a figure we think has gone stale is marked with a ~ rather than shown as current.',
     'zh-Hant':
-      '即時到站時間在來源端約每分鐘更新一次 — 我們不可能比來源更快；當某個數字可能已過時，我們會將它調淡，而不會當作最新資料顯示。',
+      '即時到站時間在來源端約每分鐘更新一次 — 我們不可能比來源更快；當某個數字可能已過時，我們會在數字前加上 ~ 標示，而不會當作最新資料顯示。',
     'zh-Hans':
-      '实时到站时间在来源端约每分钟更新一次 — 我们不可能比来源更快；当某个数字可能已过时，我们会将它调淡，而不会当作最新数据显示。',
+      '实时到站时间在来源端约每分钟更新一次 — 我们不可能比来源更快；当某个数字可能已过时，我们会在数字前加上 ~ 标示，而不会当作最新数据显示。',
   },
   faqTimingsQ: {
     en: 'Are the fares and timings live?',

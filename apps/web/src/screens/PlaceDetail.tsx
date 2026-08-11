@@ -258,7 +258,31 @@ export function PlaceDetail() {
                   registerSection(group.poleId, el)
                   // Only the bottom-most group is measured — it is the only one whose height decides how
                   // much tail room the page needs.
-                  if (groupIndex === view.groups.length - 1) return measureTail(el)
+                  const stopMeasuring =
+                    groupIndex === view.groups.length - 1 ? measureTail(el) : undefined
+                  /**
+                   * **One cleanup, returned unconditionally — and that is a bug fix.**
+                   *
+                   * React 19 calls a ref callback's returned cleanup *instead of* calling the callback back
+                   * with `null`. This used to `return measureTail(el)` and nothing else, so for the
+                   * bottom-most kerb — the only one that gets a `ResizeObserver`, and only where the browser
+                   * has one, which is every browser and not jsdom —
+                   * `registerSection(group.poleId, null)` never ran. That kerb stayed in the scroll-spy's
+                   * registry after its `<section>` left the document, holding the detached node and its rows
+                   * alive, and the spy went on measuring it: a detached node reports a **zero** rect, which
+                   * clears the spy's line at every offset past the first heading, so it won the "last heading
+                   * to clear the line" comparison and the active kerb became one that is not on this place.
+                   * `MiniMap` dims every pin as soon as it has an `activeId` and emphasises the one holding
+                   * it — so the map dimmed whole and lit nothing.
+                   *
+                   * The registration and the observer live and die together now, which is the only shape that
+                   * cannot go half-done: `test/place-detail-sections.test.tsx` drives a real place → place
+                   * navigation and asserts both halves.
+                   */
+                  return () => {
+                    registerSection(group.poleId, null)
+                    stopMeasuring?.()
+                  }
                 }}
                 style={{ scrollMarginTop: SECTION_SNAP }}
               >
@@ -338,8 +362,15 @@ const MAP_BORDER = 1
 /** `mb-2` under the card, and the gap above it. */
 const MAP_GAP = 8
 const MAP_TOP = `calc(${CONTENT_INSET_TOP} + ${COLLAPSED_HEIGHT + MAP_GAP}px)`
-/** How far below the inset a heading sits once scrolled to: clear of the card, its hairlines and the gap. */
-export const SNAP_BASE = COLLAPSED_HEIGHT + MAP_GAP + MAP_HEIGHT + 2 * MAP_BORDER + MAP_GAP
+/**
+ * The docked card's own bottom edge, below the inset — the thing the spy *measures* at run time, written
+ * down here because a suite has to put the card somewhere and jsdom lays nothing out. Exported for that,
+ * and for nothing else: at run time this number is read off the element, never recomputed.
+ */
+export const CARD_DOCKED_BOTTOM = COLLAPSED_HEIGHT + MAP_GAP + MAP_HEIGHT + 2 * MAP_BORDER
+/** How far below the inset a heading sits once scrolled to: clear of the card, its hairlines and the gap.
+ *  `card.bottom + MAP_GAP`, which is the spy's line — one expression, so the two cannot drift. */
+export const SNAP_BASE = CARD_DOCKED_BOTTOM + MAP_GAP
 const SECTION_SNAP = `calc(${CONTENT_INSET_TOP} + ${SNAP_BASE}px)`
 /**
  * A pixel of slack on the spy's comparison. A snapped section lands *on* the line, and a

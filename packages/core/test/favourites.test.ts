@@ -4,6 +4,8 @@ import {
   FAVOURITE_KEY_VERSION,
   favouritePoleIds,
   favouritesView,
+  mergePreferences,
+  mergeSavedKeys,
   migrateFavouriteKeys,
 } from '../src/favourites'
 import { formatFavoriteRouteKey, parseFavoriteRouteKey } from '../src/ids'
@@ -437,5 +439,97 @@ describe('favourites — the edges the corpus cannot reach', () => {
     const row = view[0]?.rows[0]
     expect(row?.headline).toBe('Kornhill Plaza, Kornhill Road')
     expect(row?.remark?.text).toBe('Last bus of the day')
+  })
+})
+
+describe('favourites#mergeSavedKeys', () => {
+  type Args = { base: string[]; mine: string[]; theirs: string[] }
+  const rows = cases<Args, string[]>('mergeSavedKeys')
+
+  for (const c of rows) {
+    it(c.name, () => {
+      expect(mergeSavedKeys(c.args.base, c.args.mine, c.args.theirs)).toEqual(c.expect)
+    })
+  }
+
+  it('is symmetric in what it keeps, whichever writer is asked', () => {
+    // The property two tabs converge on, and the one a corpus of one-sided rows cannot state: run every
+    // case again with the two writers swapped and the *set* must be identical. Only the order may differ,
+    // because each writer appends its own additions after the other's — and even that settles, since the
+    // round after this one both writers are merging against the same ancestor.
+    for (const c of rows) {
+      const forwards = mergeSavedKeys(c.args.base, c.args.mine, c.args.theirs)
+      const backwards = mergeSavedKeys(c.args.base, c.args.theirs, c.args.mine)
+      expect([...backwards].sort(), `${c.name}: the two writers disagree`).toEqual(
+        [...forwards].sort(),
+      )
+    }
+  })
+
+  it('never invents a key, and never duplicates one', () => {
+    // The safety property, the same one the migration carries: this is a rider's hand-curated list, so a
+    // merge may drop a key somebody deleted and may keep one somebody added, but it may not mint one — and
+    // a duplicate is not merely untidy, because the screen treats the list as a set and an un-star that
+    // removed one copy would look like it did nothing.
+    for (const c of rows) {
+      const got = mergeSavedKeys(c.args.base, c.args.mine, c.args.theirs)
+      expect(new Set(got).size, `${c.name}: duplicated a key`).toBe(got.length)
+      const offered = new Set([...c.args.mine, ...c.args.theirs])
+      for (const key of got) expect(offered.has(key), `${c.name}: invented ${key}`).toBe(true)
+    }
+  })
+
+  it('leaves every caller’s array alone', () => {
+    // Two of the three arrays belong to a live zustand store, and one belongs to whatever was just parsed
+    // off disk. A rule that sorted or spliced in place would corrupt the very list it was asked to
+    // reconcile — and only for a rider with two tabs open, which is the population least able to notice.
+    const base = ['CTB:001992|CTB:969:outbound:1']
+    const mine = ['CTB:001992|CTB:969:outbound:1', 'KMB:775642281FBFE336|CTB:969:outbound:1']
+    const theirs = ['KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1']
+    const before = JSON.stringify([base, mine, theirs])
+    mergeSavedKeys(base, mine, theirs)
+    expect(JSON.stringify([base, mine, theirs])).toBe(before)
+  })
+})
+
+describe('favourites#mergePreferences', () => {
+  interface Blob {
+    appearance: string
+    localeOverride: Locale | null
+    favoriteRoutes: string[]
+    recentRoutes: string[]
+    recentStops: string[]
+  }
+  type Args = { base: Blob | null; mine: Blob; theirs: Blob | null }
+  const rows = cases<Args, Blob>('mergePreferences')
+
+  for (const c of rows) {
+    it(c.name, () => {
+      expect(mergePreferences(c.args.base, c.args.mine, c.args.theirs)).toEqual(c.expect)
+    })
+  }
+
+  it('says so by identity when it has nothing to do', () => {
+    // The contract both stores are built on, and the reason it is worth asserting separately from the
+    // values: the callers read `merged === mine` as "there is nothing to write and nobody to notify". An
+    // equal-but-new object would make every remote write schedule a local write, which makes two tabs hand
+    // an unchanged blob back and forth for as long as they are both open.
+    for (const c of rows) {
+      const got = mergePreferences(c.args.base, c.args.mine, c.args.theirs)
+      const unchanged = JSON.stringify(got) === JSON.stringify(c.args.mine)
+      expect(got === c.args.mine, `${c.name}: identity and equality disagree`).toBe(unchanged)
+    }
+  })
+
+  it('converges: merging the result again changes nothing', () => {
+    // What a `storage` listener does a moment later, on the round after this one. If a second pass moved
+    // anything, two tabs would each keep finding something to write back and neither would ever settle —
+    // the failure mode a merge that ordered its output by *this* writer's list would have.
+    for (const c of rows) {
+      if (c.args.theirs === null) continue
+      const once = mergePreferences(c.args.base, c.args.mine, c.args.theirs)
+      // The settled state: this writer now holds `once`, and `once` is what went to disk.
+      expect(mergePreferences(once, once, once), `${c.name}: a second pass moved`).toBe(once)
+    }
   })
 })
