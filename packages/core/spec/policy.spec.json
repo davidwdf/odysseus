@@ -14,7 +14,7 @@
           "expect": {
             "dueUnderSec": 60,
             "warnUnderSec": 180,
-            "staleAfterMs": 90000,
+            "staleAfterMs": 120000,
             "refreshAfterMs": 30000,
             "maxArrivals": 3,
             "maxRows": 6
@@ -27,7 +27,7 @@
           "expect": {
             "dueUnderSec": 60,
             "warnUnderSec": 180,
-            "staleAfterMs": 90000,
+            "staleAfterMs": 120000,
             "refreshAfterMs": 30000,
             "maxArrivals": 3,
             "maxRows": 6
@@ -62,7 +62,7 @@
           "expect": {
             "dueUnderSec": 60,
             "warnUnderSec": 180,
-            "staleAfterMs": 90000,
+            "staleAfterMs": 120000,
             "refreshAfterMs": 30000,
             "maxArrivals": 3,
             "maxRows": 8
@@ -75,7 +75,7 @@
           "expect": {
             "dueUnderSec": 60,
             "warnUnderSec": 180,
-            "staleAfterMs": 90000,
+            "staleAfterMs": 120000,
             "refreshAfterMs": 30000,
             "maxArrivals": 3,
             "maxRows": 6
@@ -88,7 +88,7 @@
           "expect": {
             "dueUnderSec": 60,
             "warnUnderSec": 180,
-            "staleAfterMs": 90000,
+            "staleAfterMs": 120000,
             "refreshAfterMs": 30000,
             "maxArrivals": 3,
             "maxRows": 6
@@ -101,7 +101,7 @@
           "expect": {
             "dueUnderSec": 60,
             "warnUnderSec": 180,
-            "staleAfterMs": 90000,
+            "staleAfterMs": 120000,
             "refreshAfterMs": 30000,
             "maxArrivals": 3,
             "maxRows": 9

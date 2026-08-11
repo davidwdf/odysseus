@@ -6401,7 +6401,7 @@
                     "stopId": "KMB:9E2A7C1F3B4D5E60",
                     "operator": "CTB",
                     "arrivals": ["2026-08-05T14:07:00+08:00"],
-                    "dataTimestamp": "2026-08-05T13:58:12+08:00",
+                    "dataTimestamp": "2026-08-05T13:57:42+08:00",
                     "observedAt": "2026-08-05T05:59:20.000Z"
                   }
                 }
@@ -6714,7 +6714,7 @@
                     "stopId": "KMB:5BB4A5D9AAF9D5C1",
                     "operator": "CTB",
                     "arrivals": ["2026-08-05T14:09:00+08:00"],
-                    "dataTimestamp": "2026-08-05T13:58:12+08:00",
+                    "dataTimestamp": "2026-08-05T13:57:42+08:00",
                     "observedAt": "2026-08-05T05:59:20.000Z"
                   },
                   "fare": "11.2"

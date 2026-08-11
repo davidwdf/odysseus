@@ -505,6 +505,27 @@ written down.
       acts on is a document that ages.
 
 ## Infra / hardening
+- [ ] 🟠 **Once a route has loaded, a failing refetch is invisible — the screen keeps counting down.** Found
+      by the owner with the local Worker down (2026-08-11, screenshot on route 86K): every row kept ageing
+      its times normally and nothing said the data had stopped arriving. **The countdown itself is correct
+      and must stay** — arrival times are absolute instants, so the minute labels recompute against a ticking
+      clock with no new data, which is exactly why staleness is read off `dataTimestamp` (ADR-058, ADR-122).
+      What is missing is the *statement*.
+
+      **Why the existing signals do not cover it.** `apps/web/src/screens/RouteDetail.tsx` renders
+      `view ? … : query.isError ? … : skeleton`, so the error arm is only reachable when there is **no view
+      at all**; with `keepPreviousData` and ADR-058's persisted cache there almost always is one. The only
+      remaining signal is the per-row stale dimming, which is subtle by design, per-row rather than
+      per-screen, and now lands at 120 s (ADR-122). A rider on a dead connection sees a normal-looking
+      screen for two minutes and a slightly dim one after that.
+
+      Note the shape it shares with ADR-114: silence reading as data. This is the mirror image — **stale data
+      reading as live** — and the same argument applies, which is why it is filed rather than improvised.
+
+      **What a fix needs:** one screen-level statement (a "not updating" / "last updated HH:MM" line), which
+      is a new user-facing string in three locales and therefore **the owner's call on wording**, plus a
+      decision about which query states count (`isError`, a paused retry, `isFetching` overdue). The same
+      question applies to Place and Nearby, so whatever it says should be one component.
 - [ ] 🟡 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
       the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
       defect in the route watch, but in what the batch endpoint can express**. **Demoted from 🟠 the same

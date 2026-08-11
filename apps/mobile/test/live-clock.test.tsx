@@ -131,23 +131,32 @@ describe('a subscription-fed screen still has a clock', () => {
     const host = await mount(POLICY.refreshAfterMs)
     expect(visibleText(host)).toEqual(['4 min', 'fresh'])
 
-    // One cadence in: 210 s to the arrival, and the reading is 60 s old — inside the 90 s band.
+    // One cadence in: 210 s to the arrival, and the reading is 60 s old — inside the band.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLICY.refreshAfterMs)
     })
     expect(visibleText(host)).toEqual(['3 min', 'fresh'])
 
-    // Two cadences: exactly 90 s old. `isStale` is `now - dataTimestamp > staleAfterMs`, strictly greater,
-    // so the boundary itself is still fresh. Asserted rather than glossed, because "at the threshold" is the
-    // row a hand-port gets wrong.
+    // Two cadences: 90 s old, which **used to be the boundary and is now comfortably inside the band**
+    // (ADR-122 raised `staleAfterMs` to 120 s, because 90 fired on healthy Citybus data that arrives up to
+    // 105 s old). Kept as a step rather than deleted: it is the age at which this cue used to appear, so a
+    // port that hard-coded 90 fails here rather than somewhere vaguer.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLICY.refreshAfterMs)
     })
     expect(visibleText(host)).toEqual(['3 min', 'fresh'])
 
-    // Three cadences: 120 s old, and the cue lands. **This is the assertion that fails against a frozen
-    // clock** — without the tick the screen still reads `4 min` / `fresh` here: two minutes after the last
-    // reading arrived, one minute before the bus is due, and no hint that anything has stopped.
+    // Three cadences: exactly 120 s old. `isStale` is `now - dataTimestamp > staleAfterMs`, strictly
+    // greater, so the boundary itself is still fresh. Asserted rather than glossed, because "at the
+    // threshold" is the row a hand-port gets wrong.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLICY.refreshAfterMs)
+    })
+    expect(visibleText(host)).toEqual(['2 min', 'fresh'])
+
+    // Four cadences: 150 s old, and the cue lands. **This is the assertion that fails against a frozen
+    // clock** — without the tick the screen still reads `4 min` / `fresh` here: two and a half minutes after
+    // the last reading arrived, thirty seconds before the bus is due, and no hint that anything has stopped.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLICY.refreshAfterMs)
     })

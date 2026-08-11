@@ -8334,3 +8334,54 @@ pre-existing and unaddressed; it earned its keep here.
   - ⚠️ **`docs/07`'s poll-path 🟠 is not closed, it is demoted.** The un-narrowed fan-out, the cross-route
     `failed` and the `LIVE_CTB_BUDGET` silent drop are all still true of `poll` — they now affect only
     someone who selects it deliberately.
+
+## ADR-122 — The stale cue fired on healthy data, because 90 s is shorter than a Citybus reading's age
+
+- **Status:** **Accepted 2026-08-11** in `packages/core/src/policy.ts` (`CLIENT_POLICY_DEFAULTS.staleAfterMs`,
+  90 s → **120 s**). One constant: `/v1/policy` serves `CLIENT_POLICY_DEFAULTS` verbatim
+  (`apps/edge/src/index.ts`), so this moves the compiled-in default *and* the served one, and reaches clients
+  within the policy document's 5-minute `max-age` rather than a store release.
+- **Context.** The owner asked why some times go grey soon after appearing. The cue is `isStale`:
+  `now - dataTimestamp > staleAfterMs`, read off the **operator's** clock (ADR-058's reason: a reading
+  replayed from the offline cache must age by the operator's clock rather than look fresh because we just
+  read it from disk). So it fires on the *data's* age and not on whether a fetch succeeded.
+- **The measurement, on Citybus 182 and one KMB place** (2026-08-11):
+
+  | | age of a reading **when it arrives** |
+  |---|---|
+  | KMB stop board | 26–27 s |
+  | **Citybus 182 (one round, 18 readings)** | min 43 s, **median 63 s**, max **102 s** — **5 already past 90 s** |
+
+  Two delays stack, and neither is ours: the operator regenerates a route's board on a **~60 s cycle**, and
+  the CDN in front of it serves that response for up to **45 s** — observed directly as
+  `cache-control: max-age=45` with an `age:` header climbing 8 → 16 → 24 → 33 → 41 across successive
+  requests. **So a healthy Citybus reading is 0–105 s old on arrival, and a 90 s threshold sits below that
+  ceiling.**
+- **Decision: 120 s, one number, for every operator.** It clears the 105 s ceiling with a margin and still
+  fires inside the two-minute window where a countdown has genuinely stopped being trustworthy.
+  - **Why not per-operator** (KMB 90 / CTB 120), which was offered and declined: it buys ~30 s of
+    sensitivity on one operator in exchange for a second dimension in a served policy document, and a cue
+    whose meaning depends on which operator a rider is looking at is harder to explain than one that is
+    always "this is over two minutes old".
+  - **Why not derived from the cadence at runtime**: the inputs (publish period, CDN TTL) are upstream facts
+    we do not measure per feed, so a formula would look principled while quietly depending on two constants
+    nobody could see. The number is the derivation, written down where it can be read.
+- **Consequences:**
+  - 🟢 **The cue stops crying wolf.** 90 s was guaranteed to fire on working Citybus data every cycle, and a
+    cue that fires while everything works is one riders learn to ignore before the day it matters.
+  - ⚠️ **~30 s less sensitivity on KMB**, where readings arrive at 27 s and 90 s genuinely meant something.
+    Accepted deliberately per the decision above.
+  - ⚠️ **Six corpus rows were re-aged rather than re-expected**, which is the part worth copying: rows whose
+    *name* is the threshold (`exactly-at-the-threshold-is-still-fresh`,
+    `one-second-past-the-threshold-is-stale`, `a-reading-older-than-the-stale-threshold-is-marked-stale`) had
+    their fixtures moved so they still sit at 120 s and 121 s. Flipping their `expect` instead would have
+    kept the suite green while deleting the boundary they exist to pin. `live-clock.test.tsx` gained a step
+    for the same reason: 90 s is now an interior point and is kept as one, so a port that hard-codes 90
+    fails there rather than somewhere vaguer.
+  - 🟠 **It does not fix what the owner's screenshot showed.** With the Worker down, Route detail kept
+    counting 86K's times down and said nothing about the failing refetch — the arrival times are absolute
+    instants, so the minute labels recompute against a ticking clock with no new data at all, which is
+    correct and is *why* staleness must be read off `dataTimestamp`. But the screen's error arm is only
+    reachable when there is no view at all (`view ? … : query.isError ? …`), so once a route has loaded a
+    failed refetch is invisible except through this cue. Filed in `docs/07`; the sentence a rider should see
+    is the owner's call, as ADR-114's was.
