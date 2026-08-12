@@ -108,10 +108,13 @@ export function GlyphLab() {
       <header className="flex flex-col gap-3 py-6">
         <h1 className="font-bold text-h1 text-text">Bus glyphs</h1>
         <p className="max-w-2xl text-body text-muted">
-          Candidates for the rail's bus token now that minibus routes have times at every stop. The
-          shipping <code>BusGlyph</code> is first on every row. Nothing here is a component — they
-          live in <code>lab/glyphs.tsx</code> and the winner gets copied into <code>src/</code> and
-          its RN twin.
+          Round two. <strong>D1</strong> and <strong>M6</strong> are the picks so far; the rest are
+          the variables around them. The decker series spends D1's 3.8 gaps on taller windows — its
+          rhythm was already even, so there was no slack to take up. The minibus is now the decker's
+          width (14) with the decker's window width (8), so height and the roof sign are all that
+          tell them apart. Nothing here is a component: they live in <code>lab/glyphs.tsx</code> and
+          the winner is
+          <em>copied</em> into <code>src/</code> and its RN twin.
         </p>
         <div className="flex flex-wrap gap-3">
           <button
@@ -144,8 +147,16 @@ export function GlyphLab() {
         title="Decker against minibus, side by side"
         note="The pairing that has to work: if these two are not instantly different at 16 px, the drawing has failed regardless of how it reads alone. They share a ground line, so the height difference is what the eye catches."
       >
-        {DECKERS.map((d) =>
-          MINIBUSES.map((m) => (
+        {/* Every decker against the leading minibus, and every minibus against the leading decker. The
+            full cross-product was 20 cells and unreadable; what is being judged is one variant at a time
+            against a fixed partner, which is what these two runs give. */}
+        {[
+          ...DECKERS.map((d) => [d, MINIBUSES.find((m) => m.primary)] as const),
+          ...MINIBUSES.filter((m) => !m.primary).map(
+            (m) => [DECKERS.find((d) => d.primary), m] as const,
+          ),
+        ].map(([d, m]) =>
+          d && m ? (
             <div
               key={`${d.id}-${m.id}`}
               className="flex flex-col items-center gap-2 rounded-lg bg-surface-2 p-3"
@@ -158,7 +169,7 @@ export function GlyphLab() {
                 {d.id} · {m.id}
               </span>
             </div>
-          )),
+          ) : null,
         )}
       </Row>
 

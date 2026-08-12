@@ -114,7 +114,9 @@ describe('the arrivals line is reserved only while the round is out', () => {
     // The first slot is `text-body font-semibold` and the rest are `text-caption`. Two identical bars would
     // settle the row to the wrong height, which is the whole defect this exists to fix.
     const container = draw(ROW, true)
-    const [lead, rest] = [...bars(container)] as HTMLElement[]
-    expect(lead.className).not.toBe(rest.className)
+    const drawn = [...bars(container)] as HTMLElement[]
+    expect(drawn).toHaveLength(2)
+    const [lead, rest] = drawn
+    expect(lead?.className).not.toBe(rest?.className)
   })
 })

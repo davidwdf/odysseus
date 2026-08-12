@@ -6,26 +6,31 @@
  * `src/` may never import from `lab/`. When one of these wins, it is **copied** into `src/` (and its RN
  * twin), not imported from here.
  *
- * ## What is being decided
+ * ## Round two — the owner picked D1 and M2/M3, with three changes
  *
- * Now that every stop on a GMB route has times, the schematic draws a bus token for minibus routes too —
- * and `BusGlyph` currently draws one silhouette for every operator. So there are two questions, and the
- * second is the owner's:
+ * *"Bus D1 looks great. Can we keep that height and also test slightly taller windows on it? Or are they
+ * computationally padded perfectly already?"* — **They are.** D1's body is 17.0 with two 2.8-high bands, and
+ * the three gaps are 3.8 / 3.8 / 3.8 exactly. So there is no slack to take up: a taller window can only come
+ * out of the gaps, and the D1b–D1d series below spends it deliberately rather than by accident.
  *
- *  1. What does a **front-facing light bus** look like at 16–18 px?
- *  2. Does the **double-decker** need to be taller, given the bounce squashes it 6 % at the wheels?
+ * *"M2 and M3 look the same as the thick lines result in no outline"* — correct, and it is arithmetic rather
+ * than rendering: a 1.8-high box drawn with a 2 px stroke has **less than zero** interior. M2 is dropped;
+ * the filled sign is the only honest way to draw one that small.
  *
- * ## The proportions are real, not stylised
+ * *"make the minibus icon the same width as the double decker — the double is 56 px wide and the mini is
+ * 50"* — measured at the lab's 96 px, the decker body is **56 px** (14 × 4) and the minibus was **48 px**
+ * (12 × 4). Both are 14 now. The window follows: it was 8.4 wide against the decker's 8, so it now matches
+ * at 8 — which is the same fix seen from the other end, since a narrower window in a wider body is what the
+ * owner asked for twice.
  *
- * A Hong Kong light bus is ~2.0 m wide and ~2.8 m tall; a double-decker is ~2.5 m wide and ~4.4 m tall.
- * Head-on that is an aspect ratio of about **1.4 against 1.76** — the decker is both taller *and* wider.
- * Leaning into that is what makes them tell apart at 16 px, so every minibus below is **shorter and
- * narrower** than every decker below, and they share a ground line (tyres at the same y) so the height
- * difference is the thing the eye catches rather than a vertical offset.
+ * **The trade that buys, stated once.** A real light bus *is* narrower — 2.0 m against 2.5 m — so equal
+ * width is a deliberate departure from the proportions round one leaned on. It is the right one here: the
+ * token is a fixed 24 px circle, and a narrower glyph inside it reads as *smaller drawing* rather than
+ * *smaller vehicle*. All the meaning now rides on **height** (12.6 against 17.0) and the roof sign, which
+ * are the two things that survive at 16 px anyway.
  *
- * All of them keep `BusGlyph`'s existing DNA: a 24 px grid, 2 px stroke, round caps and joins,
- * `currentColor` throughout so the caller sets the colour with a text utility, and solid pill tyres
- * peeking below the body.
+ * Everything keeps `BusGlyph`'s DNA: a 24 px grid, 2 px stroke, round caps and joins, `currentColor`
+ * throughout, and solid pill tyres peeking below the body on a shared ground line at y=19.2.
  */
 
 interface GlyphProps {
@@ -58,12 +63,42 @@ function Frame({ size, children }: { size: number; children: React.ReactNode }) 
   )
 }
 
+/** Both tyres, on the ground line every glyph here shares. */
+function Tyres({ s }: { s: ReturnType<typeof stroke> }) {
+  return (
+    <>
+      <rect x="6.4" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
+      <rect x="15.2" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
+    </>
+  )
+}
+
 /* ────────────────────────────────────────────────────────────────────────── deckers */
 
 /**
- * **D0 — the shipping decker, unchanged.** Body 14 × 15.5 from y=3, two 2.8-high window bands whose *gap*
- * is the deck split, in a perfectly even rhythm (3.3 roof / 3.3 between / 3.3 base).
+ * A decker at D1's height with a chosen window height — the whole D1 series is this one function.
+ *
+ * The rhythm is **derived, not typed in**: three equal gaps around two bands, `g = (17 − 2·band) / 3`. That
+ * is what "computationally padded" means here, and writing it as arithmetic rather than as four sets of
+ * hand-placed coordinates is what stops a later tweak quietly breaking the evenness.
  */
+function DeckerAtBand({ band, size = 18, strokeWidth = 2 }: GlyphProps & { band: number }) {
+  const s = stroke(strokeWidth)
+  const TOP = 2.2
+  const HEIGHT = 17
+  const gap = (HEIGHT - 2 * band) / 3
+  const rx = Math.min(1, band / 2)
+  return (
+    <Frame size={size}>
+      <rect x="5" y={TOP} width="14" height={HEIGHT} rx="2.5" {...s} />
+      <rect x="8" y={TOP + gap} width="8" height={band} rx={rx} {...s} />
+      <rect x="8" y={TOP + gap * 2 + band} width="8" height={band} rx={rx} {...s} />
+      <Tyres s={s} />
+    </Frame>
+  )
+}
+
+/** **D0 — the shipping decker, unchanged.** Body 14 × 15.5 from y=3. Kept as the reference. */
 export function DeckerD0({ size = 18, strokeWidth = 2 }: GlyphProps) {
   const s = stroke(strokeWidth)
   return (
@@ -77,91 +112,51 @@ export function DeckerD0({ size = 18, strokeWidth = 2 }: GlyphProps) {
   )
 }
 
+/** **D1 — the owner's pick.** Body 14 × 17.0, bands 2.8, gaps 3.8 / 3.8 / 3.8. */
+export const DeckerD1 = (p: GlyphProps) => <DeckerAtBand band={2.8} {...p} />
+/** **D1b — bands 3.2.** Gaps fall to 3.53; the glazed interior goes 0.8 → 1.2, half again as much glass. */
+export const DeckerD1b = (p: GlyphProps) => <DeckerAtBand band={3.2} {...p} />
+/** **D1c — bands 3.6.** Gaps 3.27, interior 1.6 — twice D1's glass, and the roof starts to look thin. */
+export const DeckerD1c = (p: GlyphProps) => <DeckerAtBand band={3.6} {...p} />
 /**
- * **D1 — taller.** Body 14 × 17.0 from y=2.2, which is +1.5 px of height on the same width and buys back
- * roughly what the bounce's 6 % squash takes away at the wheels. The even rhythm is *preserved* rather
- * than stretched: three equal 3.8 gaps around two 2.8 bands, so it is the same drawing pulled taller and
- * not a different one.
+ * **D1d — bands 4.0.** The only one whose arithmetic lands clean: gaps are exactly 3.0 and the interior is
+ * exactly 2.0, i.e. the glass is finally as thick as the stroke around it. Watch the deck split, which is
+ * the *gap* and is now narrower than the bands it separates.
  */
-export function DeckerD1({ size = 18, strokeWidth = 2 }: GlyphProps) {
-  const s = stroke(strokeWidth)
-  return (
-    <Frame size={size}>
-      <rect x="5" y="2.2" width="14" height="17" rx="2.5" {...s} />
-      <rect x="8" y="6" width="8" height="2.8" rx="1" {...s} />
-      <rect x="8" y="12.6" width="8" height="2.8" rx="1" {...s} />
-      <rect x="6.4" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-      <rect x="15.2" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-    </Frame>
-  )
-}
-
-/**
- * **D2 — taller, with the deck split stated.** D1 plus a hairline between the bands. The shipping glyph
- * deliberately has no divider (the *gap* is the split), and this is the version that tests whether saying
- * it out loud helps at 16 px or just fills in. Expect it to muddy; included so the choice is made by
- * looking rather than by assumption.
- */
-export function DeckerD2({ size = 18, strokeWidth = 2 }: GlyphProps) {
-  const s = stroke(strokeWidth)
-  return (
-    <Frame size={size}>
-      <rect x="5" y="2.2" width="14" height="17" rx="2.5" {...s} />
-      <rect x="8" y="6" width="8" height="2.8" rx="1" {...s} />
-      <line x1="5" y1="10.7" x2="19" y2="10.7" {...s} />
-      <rect x="8" y="12.6" width="8" height="2.8" rx="1" {...s} />
-      <rect x="6.4" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-      <rect x="15.2" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-    </Frame>
-  )
-}
+export const DeckerD1d = (p: GlyphProps) => <DeckerAtBand band={4.0} {...p} />
 
 /* ───────────────────────────────────────────────────────────────────────── minibuses */
 
 /**
- * **M1 — one band, nothing else.** The control. Body 12 × 12.6 from y=6.6, one 3.4-high windscreen that is
- * *wider* than the decker's bands (8.4 against 8) because a light bus's screen fills more of its face.
- * Tyres share the decker's ground line at y=19.2.
+ * The minibus, parameterised on window height. Same construction rule as the decker — even rhythm, derived:
+ * two gaps around one band, `g = (12.6 − band) / 2`.
  *
- * If this reads as "small bus" on its own, every variant below is decoration.
+ * Body **14 wide, matching the decker**, and the window **8 wide, matching the decker's bands**. What is
+ * left to tell them apart is height (12.6 against 17.0) and the roof sign, which is the point.
  */
-export function MinibusM1({ size = 18, strokeWidth = 2 }: GlyphProps) {
+function MinibusAtBand({ band, size = 18, strokeWidth = 2 }: GlyphProps & { band: number }) {
   const s = stroke(strokeWidth)
+  const TOP = 6.6
+  const HEIGHT = 12.6
+  const gap = (HEIGHT - band) / 2
+  const rx = Math.min(1.1, band / 2)
   return (
     <Frame size={size}>
-      <rect x="6" y="6.6" width="12" height="12.6" rx="2.2" {...s} />
-      <rect x="7.8" y="9.6" width="8.4" height="3.4" rx="1.1" {...s} />
-      <rect x="7" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-      <rect x="14.6" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
+      {/* The sign box, filled — an outlined 1.8-high box has no interior left at a 2 px stroke, which is
+          exactly why M2 and M3 were indistinguishable. Centred on the body's own centre line (x=12). */}
+      <rect x="8.8" y="4.6" width="6.4" height="1.8" rx="0.8" {...s} fill="currentColor" />
+      <rect x="5" y={TOP} width="14" height={HEIGHT} rx="2.2" {...s} />
+      <rect x="8" y={TOP + gap} width="8" height={band} rx={rx} {...s} />
+      <Tyres s={s} />
     </Frame>
   )
 }
 
 /**
- * **M2 — the owner's suggestion: a slight rectangle on top for the sign.** M1 plus a 6.4 × 1.9 box sitting
- * above the roofline, which is the destination sign box every HK light bus carries and the decker does not.
- * It is the cheapest silhouette difference available: it changes the *outline*, which is what survives
- * when a shape is 16 px and two-thirds of a token's circle.
+ * **M3n — the previous pick, kept as the "before".** Narrow body (12) and a wider window (8.4), which is
+ * the combination the owner asked to change. Here so the change is visible rather than asserted.
  */
-export function MinibusM2({ size = 18, strokeWidth = 2 }: GlyphProps) {
-  const s = stroke(strokeWidth)
-  return (
-    <Frame size={size}>
-      <rect x="8.8" y="4.5" width="6.4" height="2" rx="0.7" {...s} />
-      <rect x="6" y="6.6" width="12" height="12.6" rx="2.2" {...s} />
-      <rect x="7.8" y="9.6" width="8.4" height="3.4" rx="1.1" {...s} />
-      <rect x="7" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-      <rect x="14.6" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-    </Frame>
-  )
-}
-
-/**
- * **M3 — the sign filled.** M2 with the box solid rather than outlined. At 16 px an outlined 2 px-high box
- * drawn with a 2 px stroke has no interior left, so it renders as a grey smudge; filling it makes it a
- * deliberate mark instead of a failed one. Same trick the tyres already use, and for the same reason.
- */
-export function MinibusM3({ size = 18, strokeWidth = 2 }: GlyphProps) {
+export function MinibusM3n({ size = 18, strokeWidth = 2 }: GlyphProps) {
   const s = stroke(strokeWidth)
   return (
     <Frame size={size}>
@@ -174,58 +169,25 @@ export function MinibusM3({ size = 18, strokeWidth = 2 }: GlyphProps) {
   )
 }
 
-/**
- * **M4 — sign as a roof pod, flush with the body.** Instead of a floating box, the sign is the full width
- * of the roof and reads as part of the vehicle rather than an aerial. Squarer overall, which is closer to
- * a real light bus's blunt front — and the least likely of the four to be mistaken for a decker's upper
- * deck at very small sizes, because it sits *outside* the body outline.
- */
-export function MinibusM4({ size = 18, strokeWidth = 2 }: GlyphProps) {
-  const s = stroke(strokeWidth)
-  return (
-    <Frame size={size}>
-      <rect x="7.2" y="4.4" width="9.6" height="2.4" rx="1" {...s} fill="currentColor" />
-      <rect x="6" y="6.6" width="12" height="12.6" rx="2.2" {...s} />
-      <rect x="7.8" y="9.8" width="8.4" height="3.4" rx="1.1" {...s} />
-      <rect x="7" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-      <rect x="14.6" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-    </Frame>
-  )
-}
+/** **M6 — the asked-for one.** Body 14 (matches the decker), window 8 (matches its bands), 3.4 high. */
+export const MinibusM6 = (p: GlyphProps) => <MinibusAtBand band={3.4} {...p} />
+/** **M6b — window 3.0.** The decker's band height plus a little; the most "family" of the three. */
+export const MinibusM6b = (p: GlyphProps) => <MinibusAtBand band={3.0} {...p} />
+/** **M6c — window 3.8.** A light bus's screen really is proportionally bigger; this is that, at 14 wide. */
+export const MinibusM6c = (p: GlyphProps) => <MinibusAtBand band={3.8} {...p} />
 
-/**
- * **M5 — the roof stripe.** Every HK light bus carries a statutory coloured roof band: **green** for a GMB
- * and red for the red minibuses we do not serve. This is M1 with that band drawn as a filled bar just under
- * the roofline.
- *
- * ⚠️ Drawn in `currentColor` here like everything else, so in the lab it is monochrome. Shipping it in
- * *green* would mean the glyph carries two colours — the token's own accent and the operator's — which is a
- * question for `docs/09` §2's operator-accent rule rather than a drawing decision, and it is the reason
- * this variant is last: it is the only one that cannot be adopted without a colour decision attached.
- */
-export function MinibusM5({ size = 18, strokeWidth = 2 }: GlyphProps) {
-  const s = stroke(strokeWidth)
-  return (
-    <Frame size={size}>
-      <rect x="6" y="6.6" width="12" height="12.6" rx="2.2" {...s} />
-      <rect x="7.6" y="7.6" width="8.8" height="1.4" rx="0.7" {...s} fill="currentColor" />
-      <rect x="7.8" y="10.6" width="8.4" height="3.2" rx="1.1" {...s} />
-      <rect x="7" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-      <rect x="14.6" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-    </Frame>
-  )
-}
-
+/** `primary` marks the leading candidate on each side — the pairing row uses it to stay readable. */
 export const DECKERS = [
-  { id: 'D0', label: 'D0 — shipping (14 × 15.5)', Glyph: DeckerD0 },
-  { id: 'D1', label: 'D1 — taller (14 × 17.0)', Glyph: DeckerD1 },
-  { id: 'D2', label: 'D2 — taller + deck line', Glyph: DeckerD2 },
+  { id: 'D0', label: 'D0 — shipping (h 15.5)', Glyph: DeckerD0, primary: false },
+  { id: 'D1', label: 'D1 — bands 2.8, gap 3.80', Glyph: DeckerD1, primary: true },
+  { id: 'D1b', label: 'D1b — bands 3.2, gap 3.53', Glyph: DeckerD1b, primary: false },
+  { id: 'D1c', label: 'D1c — bands 3.6, gap 3.27', Glyph: DeckerD1c, primary: false },
+  { id: 'D1d', label: 'D1d — bands 4.0, gap 3.00', Glyph: DeckerD1d, primary: false },
 ] as const
 
 export const MINIBUSES = [
-  { id: 'M1', label: 'M1 — one band, no sign', Glyph: MinibusM1 },
-  { id: 'M2', label: 'M2 — sign box, outlined', Glyph: MinibusM2 },
-  { id: 'M3', label: 'M3 — sign box, filled', Glyph: MinibusM3 },
-  { id: 'M4', label: 'M4 — roof pod, flush', Glyph: MinibusM4 },
-  { id: 'M5', label: 'M5 — roof stripe', Glyph: MinibusM5 },
+  { id: 'M3n', label: 'M3n — before (body 12, win 8.4)', Glyph: MinibusM3n, primary: false },
+  { id: 'M6', label: 'M6 — body 14, win 8 × 3.4', Glyph: MinibusM6, primary: true },
+  { id: 'M6b', label: 'M6b — body 14, win 8 × 3.0', Glyph: MinibusM6b, primary: false },
+  { id: 'M6c', label: 'M6c — body 14, win 8 × 3.8', Glyph: MinibusM6c, primary: false },
 ] as const

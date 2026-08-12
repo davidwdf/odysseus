@@ -616,7 +616,24 @@ written down.
       sign box filled, roof pod flush, roof stripe), shown at token size in the moving circle, paired
       decker-against-minibus, bare at 16/18/24 px, and enlarged. They live in `apps/web/lab/glyphs.tsx` and
       are **candidates, not components** — the winner gets copied into `src/` and its RN twin.
-      Awaiting the owner's pick. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
+      **Round two, after the owner's review (2026-08-12):** the picks are **D1** (decker, body 14 × 17.0)
+      and **M6** (minibus). Three findings from it:
+      · **D1's window rhythm was already exact** — three gaps of 3.80 around two 2.8 bands — so *"are they
+        computationally padded perfectly already?"* is answered yes, and a taller window can only come out
+        of the gaps. `D1b`/`D1c`/`D1d` spend that slack deliberately (bands 3.2/3.6/4.0 → gaps
+        3.53/3.27/3.00). `D1d` is the only one whose arithmetic lands clean, and it is where the glass
+        first becomes as thick as the stroke around it.
+      · **M2 and M3 were indistinguishable, and it was arithmetic not rendering:** a 1.8-high box drawn
+        with a 2 px stroke has *less than zero* interior, so only the filled sign is honest at this size.
+        M2 is dropped.
+      · **The minibus is now the decker's width.** The owner measured 56 px against 50 by eye; it was 56
+        against 48, and the window was 8.4 against the decker's 8. Both now match exactly (verified in a
+        browser: body 56, window 32 at the lab's 96 px). **The trade, recorded once:** a real light bus
+        *is* narrower (2.0 m against 2.5 m), so equal width departs from the proportions round one leaned
+        on. It is right anyway — the token is a fixed 24 px circle, and a narrower glyph inside it reads
+        as a *smaller drawing* rather than a *smaller vehicle*. All the meaning now rides on height
+        (12.6 against 17.0) and the roof sign, which are what survive at 16 px.
+      Still awaiting a final pick on the window height before it is copied into `src/`. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
       drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.
       The distinguishing features are real and few: a light bus is **single-deck with one window row**, a
       **taller windscreen relative to its width**, a **roof sign box**, and the statutory **roof stripe**
