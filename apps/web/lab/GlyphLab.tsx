@@ -22,7 +22,7 @@
 
 import { useState } from 'react'
 import { BusGlyph } from '../src/components/BusGlyph'
-import { DECKERS, LOWER_FACE, MINIBUSES, WHEEL_STUDY } from './glyphs'
+import { DECKERS, MINI_TOP_GAP_STUDY, MINIBUSES, PILL_STUDY } from './glyphs'
 
 /** `RailBusToken`'s own numbers, so the token row is the real size and not an approximation of it. */
 const TOKEN = 24
@@ -108,13 +108,11 @@ export function GlyphLab() {
       <header className="flex flex-col gap-3 py-6">
         <h1 className="font-bold text-h1 text-text">Bus glyphs</h1>
         <p className="max-w-2xl text-body text-muted">
-          Round six, and the last two questions. The decker is <strong>D1c</strong>, the minibus
-          window is
-          <strong>4.4</strong>, radii are Lucide's, and <strong>headlights are out</strong> — they
-          fit the minibus but not the decker, and a detail on one vehicle only becomes a
-          distinguishing mark rather than a shared one. What is left: whether anything belongs in
-          the minibus's empty lower face, and whether the wheels should be Lucide's stroke instead
-          of our filled pill.
+          Round seven. The decker is <strong>settled</strong> — D1c, Lucide radii, filled pill
+          wheels, no headlights, and no bumper line (a dash under the glass made the minibus read as
+          a two-band vehicle, which is the difference the pair depends on). Two tweaks left on the
+          minibus: <strong>roof-to-glass 3.27</strong> to match the decker's gap, and whether the
+          tyre pill should be <strong>thinner</strong> — which turns out to have no rule behind it.
         </p>
         <div className="flex flex-wrap gap-3">
           <button
@@ -174,15 +172,15 @@ export function GlyphLab() {
       </Row>
 
       <Row
-        title="The minibus's empty lower face"
-        note="A single horizontal line, less than full width. Round caps add half the stroke at each end, so a 6-wide path paints 8 — the window's full width — which caps 'not full width' at about 4 to 5. At token size that is a 2.7–3.3 px dash. The last cell drops it to where a bumper actually is."
+        title="Minibus roof-to-glass — 3.0 or the decker's 3.27"
+        note="3.27 is not a nearby number, it is the decker's own gap — so roof-to-glass becomes identical on both vehicles, which is true of the real things and means one constant retunes both. Costs 0.27 off the clear lower face, which nothing occupies now that headlights and the bumper line are out."
       >
-        {LOWER_FACE.map((v) => (
-          <div key={v.id} className="flex w-40 shrink-0 flex-col items-center gap-2">
+        {MINI_TOP_GAP_STUDY.map((v) => (
+          <div key={v.id} className="flex w-44 shrink-0 flex-col items-center gap-2">
             <div className="flex items-end gap-3">
               <Token Glyph={v.Glyph} moving={false} />
               <span className="flex text-text">
-                <v.Glyph size={64} />
+                <v.Glyph size={72} />
               </span>
             </div>
             <span className="text-center text-caption text-muted leading-tight">{v.label}</span>
@@ -191,17 +189,17 @@ export function GlyphLab() {
       </Row>
 
       <Row
-        title="Wheels — our filled pill against Lucide's stroke"
-        note="Lucide draws a wheel as M6 19v2, a 2-long vertical path from the body's bottom edge. Its round caps paint that 4 tall, so it is not the smaller option — it reads as a wheel emerging from under the body rather than a shape parked below it. Ours is a filled pill because at a 2 px stroke a tyre's interior is too small to outline (docs/09 §8), which is the one place this family is still off Lucide's rules."
+        title="The tyre pill's width — and the rule it never had"
+        note="docs/09 §8 only says the tyres are FILLED; the 2.4 × 2.6 is a hand-picked Wave 1 value with nothing behind it. Proposed rule: a pill is one stroke wide (2.0), the same rule Lucide's headlight dot follows. Height stays 2.6 — head-on you see a tyre's tread, so it should read taller than wide: 1.30:1 at 2.0 against a near-square 1.08:1 today. The last two cells ask whether the smaller vehicle should get smaller wheels."
       >
-        {WHEEL_STUDY.map((v) => (
-          <div key={v.id} className="flex w-44 shrink-0 flex-col items-center gap-2">
-            <div className="flex items-end gap-3">
-              <Token Glyph={v.Glyph} moving={false} />
-              <span className="flex text-text">
-                <v.Glyph size={64} />
-              </span>
-            </div>
+        {PILL_STUDY.map((v) => (
+          <div key={v.id} className="flex w-48 shrink-0 flex-col items-center gap-3">
+            <span className="flex text-text">
+              <v.Glyph size={72} />
+            </span>
+            <span className="flex text-text">
+              <v.Glyph size={16} />
+            </span>
             <span className="text-center text-caption text-muted leading-tight">{v.label}</span>
           </div>
         ))}

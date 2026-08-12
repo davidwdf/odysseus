@@ -56,6 +56,22 @@ const WIN_W = 8
 /** Where the wheels sit horizontally — the centres our filled pills already use. */
 const WHEEL_X = [7.6, 16.4] as const
 
+/**
+ * **The tyre pill, and the rule it never had.**
+ *
+ * `docs/09` §8 says the tyres are *filled* — "at a 2 px stroke their interior is too small to outline" —
+ * and says nothing at all about their **size**. The shipping `2.4 × 2.6` is a hand-picked Wave 1 value with
+ * nothing behind it, which is worth knowing before defending it.
+ *
+ * The rule proposed here: **a pill is one stroke wide.** `PILL_W = 2` is exactly `strokeWidth`, which is the
+ * same rule Lucide's headlight dot follows — so every mark in the glyph is one stroke thick and none of them
+ * needs its own constant. It also happens to be more truthful: head-on you see a tyre's **tread**, not its
+ * diameter, so it should read taller than it is wide. At `2 × 2.6` that is 1.30 : 1; the shipping 2.4 is a
+ * near-square 1.08 : 1, which is why it reads as a foot rather than a wheel.
+ */
+const PILL_W = 2
+const PILL_H = 2.6
+
 export type WheelStyle = 'pill' | 'stroke'
 
 const stroke = (strokeWidth: number) =>
@@ -93,10 +109,14 @@ function Frame({ size, children }: { size: number; children: React.ReactNode }) 
 function Wheels({
   style,
   bodyBottom,
+  pillW = PILL_W,
+  pillH = PILL_H,
   s,
 }: {
   style: WheelStyle
   bodyBottom: number
+  pillW?: number
+  pillH?: number
   s: ReturnType<typeof stroke>
 }) {
   if (style === 'stroke') {
@@ -113,11 +133,11 @@ function Wheels({
       {WHEEL_X.map((x) => (
         <rect
           key={x}
-          x={x - 1.2}
+          x={x - pillW / 2}
           y={bodyBottom}
-          width="2.4"
-          height="2.6"
-          rx="1"
+          width={pillW}
+          height={pillH}
+          rx={Math.min(1, pillW / 2)}
           {...s}
           fill="currentColor"
         />
@@ -135,9 +155,10 @@ const DECK_BAND = 3.6
 /** **D1c — settled.** Two 3.6 bands in a derived even rhythm, `gap = (17 − 2·band) / 3` = 3.27. */
 function Decker({
   wheels = 'pill',
+  pillW,
   size = 18,
   strokeWidth = 2,
-}: GlyphProps & { wheels?: WheelStyle }) {
+}: GlyphProps & { wheels?: WheelStyle; pillW?: number }) {
   const s = stroke(strokeWidth)
   const gap = (DECK_HEIGHT - 2 * DECK_BAND) / 3
   return (
@@ -152,7 +173,7 @@ function Decker({
         rx={WIN_RX}
         {...s}
       />
-      <Wheels style={wheels} bodyBottom={DECK_TOP + DECK_HEIGHT} s={s} />
+      <Wheels style={wheels} bodyBottom={DECK_TOP + DECK_HEIGHT} pillW={pillW} s={s} />
     </Frame>
   )
 }
@@ -191,27 +212,42 @@ const MINI_FACE_MID =
 function Minibus({
   line,
   lineY = MINI_FACE_MID,
+  topGap = MINI_TOP_GAP,
   wheels = 'pill',
+  pillW,
   size = 18,
   strokeWidth = 2,
-}: GlyphProps & { line?: number; lineY?: number; wheels?: WheelStyle }) {
+}: GlyphProps & {
+  line?: number
+  lineY?: number
+  topGap?: number
+  wheels?: WheelStyle
+  pillW?: number
+}) {
   const s = stroke(strokeWidth)
   return (
     <Frame size={size}>
       {/* Filled: an outlined 1.8-high box has no interior left at a 2 px stroke. */}
       <rect x="8.8" y="4.6" width="6.4" height="1.8" rx="0.8" {...s} fill="currentColor" />
       <rect x={BODY_X} y={MINI_TOP} width={BODY_W} height={MINI_HEIGHT} rx={BODY_RX} {...s} />
-      <rect
-        x={WIN_X}
-        y={MINI_TOP + MINI_TOP_GAP}
-        width={WIN_W}
-        height={MINI_BAND}
-        rx={WIN_RX}
-        {...s}
-      />
+      <rect x={WIN_X} y={MINI_TOP + topGap} width={WIN_W} height={MINI_BAND} rx={WIN_RX} {...s} />
       {line ? <path d={`M${12 - line / 2} ${lineY}h${line}`} {...s} /> : null}
-      <Wheels style={wheels} bodyBottom={MINI_TOP + MINI_HEIGHT} s={s} />
+      <Wheels style={wheels} bodyBottom={MINI_TOP + MINI_HEIGHT} pillW={pillW} s={s} />
     </Frame>
+  )
+}
+
+/** Both vehicles side by side, so a shared change is judged on the family rather than on one drawing. */
+function Pair({
+  pillW,
+  miniPillW,
+  size = 18,
+}: GlyphProps & { pillW?: number; miniPillW?: number }) {
+  return (
+    <span className="flex items-end gap-1">
+      <Decker pillW={pillW} size={size} />
+      <Minibus topGap={3.27} pillW={miniPillW ?? pillW} size={size} />
+    </span>
   )
 }
 
@@ -220,37 +256,58 @@ export const DeckerD1cStroke = (p: GlyphProps) => <Decker wheels="stroke" {...p}
 export const MinibusM = (p: GlyphProps) => <Minibus {...p} />
 export const MinibusMStroke = (p: GlyphProps) => <Minibus wheels="stroke" {...p} />
 
-/** The lower-face question, all on pill wheels so only one thing moves. */
-export const LOWER_FACE = [
-  { id: 'empty', label: 'empty — the default', Glyph: (p: GlyphProps) => <Minibus {...p} /> },
+/**
+ * **Roof-to-glass on the minibus: 3.0, or the decker's own 3.27?**
+ *
+ * 3.27 is not a nearby number, it is *the decker's gap* — so the roof-to-glass distance becomes identical on
+ * both vehicles, which is true of the real things and means one constant retunes both glyphs. The cost is
+ * 0.27 off the clear lower face (3.20 → 2.93), which nothing now occupies.
+ */
+export const MINI_TOP_GAP_STUDY = [
   {
-    id: 'l3',
-    label: 'line 3 → paints 5 of 8',
-    Glyph: (p: GlyphProps) => <Minibus line={3} {...p} />,
+    id: 'tg30',
+    label: 'roof-to-glass 3.0',
+    Glyph: (p: GlyphProps) => <Minibus topGap={3.0} {...p} />,
   },
   {
-    id: 'l4',
-    label: 'line 4 → paints 6 of 8',
-    Glyph: (p: GlyphProps) => <Minibus line={4} {...p} />,
-  },
-  {
-    id: 'l5',
-    label: 'line 5 → paints 7 of 8',
-    Glyph: (p: GlyphProps) => <Minibus line={5} {...p} />,
-  },
-  {
-    id: 'l4low',
-    label: 'line 4, low (a bumper)',
-    Glyph: (p: GlyphProps) => <Minibus line={4} lineY={17.4} {...p} />,
+    id: 'tg327',
+    label: "roof-to-glass 3.27 — the decker's gap",
+    Glyph: (p: GlyphProps) => <Minibus topGap={3.27} {...p} />,
   },
 ] as const
 
-/** The wheel question, on both vehicles, with nothing else changing. */
-export const WHEEL_STUDY = [
-  { id: 'd-pill', label: 'D1c · pill wheels (ships)', Glyph: DeckerD1c },
-  { id: 'd-stroke', label: 'D1c · Lucide stroke wheels', Glyph: DeckerD1cStroke },
-  { id: 'm-pill', label: 'minibus · pill wheels', Glyph: MinibusM },
-  { id: 'm-stroke', label: 'minibus · Lucide stroke wheels', Glyph: MinibusMStroke },
+/**
+ * **The tyre pill's width**, swept against the rule proposed above (one stroke = 2.0). Height is held at 2.6
+ * throughout, because head-on a tyre shows its tread and should read taller than wide — thinning it is what
+ * makes that ratio appear rather than a separate change.
+ *
+ * The last two cells are the question underneath: should the smaller vehicle get **smaller wheels**? True of
+ * the real things, and unlike a face detail it cannot compete with the one-pane-against-two-slots difference,
+ * because it happens below the body rather than on it.
+ */
+export const PILL_STUDY = [
+  {
+    id: 'p24',
+    label: 'both 2.4 — ships today',
+    Glyph: (p: GlyphProps) => <Pair pillW={2.4} {...p} />,
+  },
+  { id: 'p22', label: 'both 2.2', Glyph: (p: GlyphProps) => <Pair pillW={2.2} {...p} /> },
+  {
+    id: 'p20',
+    label: 'both 2.0 — one stroke',
+    Glyph: (p: GlyphProps) => <Pair pillW={2.0} {...p} />,
+  },
+  { id: 'p18', label: 'both 1.8', Glyph: (p: GlyphProps) => <Pair pillW={1.8} {...p} /> },
+  {
+    id: 'split',
+    label: 'decker 2.4 · minibus 2.0',
+    Glyph: (p: GlyphProps) => <Pair pillW={2.4} miniPillW={2.0} {...p} />,
+  },
+  {
+    id: 'split2',
+    label: 'decker 2.0 · minibus 1.8',
+    Glyph: (p: GlyphProps) => <Pair pillW={2.0} miniPillW={1.8} {...p} />,
+  },
 ] as const
 
 export const DECKERS = [

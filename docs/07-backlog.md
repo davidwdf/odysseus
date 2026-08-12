@@ -695,6 +695,20 @@ written down.
         It is more Lucide-consistent and reads **spindlier** — thin legs rather than tyres — which is the
         same conclusion `docs/09` §8 already recorded when it chose the filled pill, now confirmed by
         looking rather than by argument. The pill stays; it remains this family's one deliberate departure.
+      **Round seven (2026-08-12) — the decker is fully settled; two minibus tweaks under review.**
+      · **Roof-to-glass 3.27 instead of 3.0**, which is *the decker's own gap* rather than a nearby number,
+        so the distance is identical on both vehicles and one constant retunes both. Costs 0.27 off the
+        clear lower face, which is now deliberately empty, so it costs nothing.
+      · **The tyre pill has no rule and never did.** `docs/09` §8 states only that the tyres are *filled*
+        (interior too small to outline at a 2 px stroke); the shipping `2.4 × 2.6` is a hand-picked Wave 1
+        value. Proposed rule: **a pill is one stroke wide** (2.0) — the same rule Lucide's headlight dot
+        follows, so every mark in the glyph is one stroke thick and none needs its own constant. It is also
+        more truthful: head-on you see a tyre's **tread**, so it should read taller than wide, and 2.0 × 2.6
+        is 1.30 : 1 against today's near-square 1.08 : 1, which is why the current pill reads as a foot.
+      · ⚠️ **Giving the smaller vehicle smaller wheels is true and unobservable.** At token size 2.0 paints
+        1.33 px and 1.8 paints 1.20 px — a **0.13 px** difference. Same lesson as the radius sweep: below a
+        certain size the stroke decides, so a per-vehicle exception buys a second constant and nothing a
+        rider can see. One width for both.
       Once those two are confirmed: copy both into `apps/web/src/components/BusGlyph.tsx` and its RN twin,
       switch on the operator so GMB routes get the minibus, and note that `docs/09` §8 should gain the
       radius rule it has never had. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
