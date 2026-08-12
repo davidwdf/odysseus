@@ -190,7 +190,7 @@ export function GlyphLab() {
 
       <Row
         title="The tyre pill's width — and the rule it never had"
-        note="docs/09 §8 only says the tyres are FILLED; the 2.4 × 2.6 is a hand-picked Wave 1 value with nothing behind it. Proposed rule: a pill is one stroke wide (2.0), the same rule Lucide's headlight dot follows. Height stays 2.6 — head-on you see a tyre's tread, so it should read taller than wide: 1.30:1 at 2.0 against a near-square 1.08:1 today. The last two cells ask whether the smaller vehicle should get smaller wheels."
+        note="Every label here is the PAINTED width. The shipping pill's attribute says 2.4 but it carries a fill AND the shared 2 px stroke, so it paints 4.4 × 4.6 — 31% of the 14-wide body, and essentially square at 1.045:1, which is why it reads as a foot. The stroke is pure padding on a filled shape, so the last four cells drop it: then the number is the painted width, and 'fill 4.4' is today's silhouette exactly."
       >
         {PILL_STUDY.map((v) => (
           <div key={v.id} className="flex w-48 shrink-0 flex-col items-center gap-3">

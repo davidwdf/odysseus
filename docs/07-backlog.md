@@ -705,6 +705,16 @@ written down.
         follows, so every mark in the glyph is one stroke thick and none needs its own constant. It is also
         more truthful: head-on you see a tyre's **tread**, so it should read taller than wide, and 2.0 × 2.6
         is 1.30 : 1 against today's near-square 1.08 : 1, which is why the current pill reads as a foot.
+      · 🔴 **Correction — `2.4` is the attribute, not what ships.** The pill rect carries a `fill` **and**
+        the shared 2 px stroke, so the outline adds one unit on every side: the painted pill is
+        **4.4 × 4.6**. Measured by rasterising the shipping glyph and scanning the pixel row through the
+        tyres (ink runs 5.4 → 9.8, and the fill-only control paints 4.4 to match). That is **31 % of the
+        14-wide body** and a painted ratio of **1.045 : 1** — squarer than the attributes suggest, which is
+        why it reads as a foot. Every "2.4 ships today" figure in the rounds above was describing the path.
+        **The stroke on a filled shape is pure padding**, so `fill`-only is the real lever: then the number
+        *is* the painted width, and `fill 4.4` reproduces today's silhouette exactly (verified). Note the
+        radius has to move with it — a stroked pill's visual corner is `rx` + half the stroke, so fill-only
+        needs `rx=2` to match `rx=1` + stroke.
       · ⚠️ **Giving the smaller vehicle smaller wheels is true and unobservable.** At token size 2.0 paints
         1.33 px and 1.8 paints 1.20 px — a **0.13 px** difference. Same lesson as the radius sweep: below a
         certain size the stroke decides, so a per-vehicle exception buys a second constant and nothing a

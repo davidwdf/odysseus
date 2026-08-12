@@ -57,19 +57,23 @@ const WIN_W = 8
 const WHEEL_X = [7.6, 16.4] as const
 
 /**
- * **The tyre pill, and the rule it never had.**
+ * **The tyre pill, the rule it never had, and the 2 units nobody had noticed.**
  *
  * `docs/09` §8 says the tyres are *filled* — "at a 2 px stroke their interior is too small to outline" —
- * and says nothing at all about their **size**. The shipping `2.4 × 2.6` is a hand-picked Wave 1 value with
- * nothing behind it, which is worth knowing before defending it.
+ * and says nothing about their **size**. The shipping `2.4 × 2.6` is a hand-picked Wave 1 value.
  *
- * The rule proposed here: **a pill is one stroke wide.** `PILL_W = 2` is exactly `strokeWidth`, which is the
- * same rule Lucide's headlight dot follows — so every mark in the glyph is one stroke thick and none of them
- * needs its own constant. It also happens to be more truthful: head-on you see a tyre's **tread**, not its
- * diameter, so it should read taller than it is wide. At `2 × 2.6` that is 1.30 : 1; the shipping 2.4 is a
- * near-square 1.08 : 1, which is why it reads as a foot rather than a wheel.
+ * ⚠️ **But `2.4` is not what a rider sees.** The pill carries a `fill` **and** the shared 2 px stroke, so
+ * the stroke adds one unit on every side: the painted pill is **4.4 × 4.6**, measured by rasterising the
+ * shipping glyph and scanning the pixel row through the tyres (ink runs 5.4 → 9.8). That is **31 % of the
+ * 14-wide body**, and it is why the pill reads as a foot rather than a wheel — the painted ratio is
+ * 1.045 : 1, essentially square, not the 1.08 : 1 the attributes suggest.
+ *
+ * So the stroke on this shape is doing nothing but padding: the rect is filled, so an outline of the same
+ * colour only makes it bigger. **`pillStroke: false` is therefore the real lever** — with the stroke gone,
+ * the path width *is* the painted width, and "thinner" becomes something you can actually specify.
+ * `fill 4.4` reproduces today's silhouette exactly, with a number that finally means what it says.
  */
-const PILL_W = 2
+const PILL_W = 2.4
 const PILL_H = 2.6
 
 export type WheelStyle = 'pill' | 'stroke'
@@ -111,12 +115,15 @@ function Wheels({
   bodyBottom,
   pillW = PILL_W,
   pillH = PILL_H,
+  pillStroke = true,
   s,
 }: {
   style: WheelStyle
   bodyBottom: number
   pillW?: number
   pillH?: number
+  /** False drops the redundant outline, so the path width *is* the painted width. */
+  pillStroke?: boolean
   s: ReturnType<typeof stroke>
 }) {
   if (style === 'stroke') {
@@ -137,8 +144,8 @@ function Wheels({
           y={bodyBottom}
           width={pillW}
           height={pillH}
-          rx={Math.min(1, pillW / 2)}
-          {...s}
+          rx={Math.min(pillStroke ? 1 : 2, pillW / 2)}
+          {...(pillStroke ? s : { stroke: 'none' })}
           fill="currentColor"
         />
       ))}
@@ -156,9 +163,10 @@ const DECK_BAND = 3.6
 function Decker({
   wheels = 'pill',
   pillW,
+  pillStroke,
   size = 18,
   strokeWidth = 2,
-}: GlyphProps & { wheels?: WheelStyle; pillW?: number }) {
+}: GlyphProps & { wheels?: WheelStyle; pillW?: number; pillStroke?: boolean }) {
   const s = stroke(strokeWidth)
   const gap = (DECK_HEIGHT - 2 * DECK_BAND) / 3
   return (
@@ -173,7 +181,13 @@ function Decker({
         rx={WIN_RX}
         {...s}
       />
-      <Wheels style={wheels} bodyBottom={DECK_TOP + DECK_HEIGHT} pillW={pillW} s={s} />
+      <Wheels
+        style={wheels}
+        bodyBottom={DECK_TOP + DECK_HEIGHT}
+        pillW={pillW}
+        pillStroke={pillStroke}
+        s={s}
+      />
     </Frame>
   )
 }
@@ -215,6 +229,7 @@ function Minibus({
   topGap = MINI_TOP_GAP,
   wheels = 'pill',
   pillW,
+  pillStroke,
   size = 18,
   strokeWidth = 2,
 }: GlyphProps & {
@@ -223,6 +238,7 @@ function Minibus({
   topGap?: number
   wheels?: WheelStyle
   pillW?: number
+  pillStroke?: boolean
 }) {
   const s = stroke(strokeWidth)
   return (
@@ -232,7 +248,13 @@ function Minibus({
       <rect x={BODY_X} y={MINI_TOP} width={BODY_W} height={MINI_HEIGHT} rx={BODY_RX} {...s} />
       <rect x={WIN_X} y={MINI_TOP + topGap} width={WIN_W} height={MINI_BAND} rx={WIN_RX} {...s} />
       {line ? <path d={`M${12 - line / 2} ${lineY}h${line}`} {...s} /> : null}
-      <Wheels style={wheels} bodyBottom={MINI_TOP + MINI_HEIGHT} pillW={pillW} s={s} />
+      <Wheels
+        style={wheels}
+        bodyBottom={MINI_TOP + MINI_HEIGHT}
+        pillW={pillW}
+        pillStroke={pillStroke}
+        s={s}
+      />
     </Frame>
   )
 }
@@ -241,12 +263,13 @@ function Minibus({
 function Pair({
   pillW,
   miniPillW,
+  pillStroke,
   size = 18,
-}: GlyphProps & { pillW?: number; miniPillW?: number }) {
+}: GlyphProps & { pillW?: number; miniPillW?: number; pillStroke?: boolean }) {
   return (
     <span className="flex items-end gap-1">
-      <Decker pillW={pillW} size={size} />
-      <Minibus topGap={3.27} pillW={miniPillW ?? pillW} size={size} />
+      <Decker pillW={pillW} pillStroke={pillStroke} size={size} />
+      <Minibus topGap={3.27} pillW={miniPillW ?? pillW} pillStroke={pillStroke} size={size} />
     </span>
   )
 }
@@ -285,28 +308,47 @@ export const MINI_TOP_GAP_STUDY = [
  * the real things, and unlike a face detail it cannot compete with the one-pane-against-two-slots difference,
  * because it happens below the body rather than on it.
  */
+/**
+ * The pill sweep, rebuilt once the stroke was measured. **Every label is the PAINTED width**, which is the
+ * only number that describes what a rider sees.
+ *
+ * The first three keep the outline, so painted = path + 2 and the shipping value is the 4.4 at the top. The
+ * rest drop it (`pillStroke: false`), where painted = path — and `fill 4.4` is today's silhouette exactly,
+ * which is what makes the row a fair comparison rather than a redesign.
+ *
+ * The old sweep asked the wrong question: it moved the path between 2.4 and 1.8, i.e. the painted width
+ * between 4.4 and 3.8, a 14 % change dressed up as a 25 % one.
+ */
 export const PILL_STUDY = [
   {
-    id: 'p24',
-    label: 'both 2.4 — ships today',
+    id: 'p44',
+    label: 'painted 4.4 — ships today (stroke + fill)',
     Glyph: (p: GlyphProps) => <Pair pillW={2.4} {...p} />,
   },
-  { id: 'p22', label: 'both 2.2', Glyph: (p: GlyphProps) => <Pair pillW={2.2} {...p} /> },
   {
-    id: 'p20',
-    label: 'both 2.0 — one stroke',
+    id: 'p40',
+    label: 'painted 4.0 (stroke + fill, path 2.0)',
     Glyph: (p: GlyphProps) => <Pair pillW={2.0} {...p} />,
   },
-  { id: 'p18', label: 'both 1.8', Glyph: (p: GlyphProps) => <Pair pillW={1.8} {...p} /> },
   {
-    id: 'split',
-    label: 'decker 2.4 · minibus 2.0',
-    Glyph: (p: GlyphProps) => <Pair pillW={2.4} miniPillW={2.0} {...p} />,
+    id: 'f44',
+    label: 'painted 4.4 — fill only, same silhouette',
+    Glyph: (p: GlyphProps) => <Pair pillW={4.4} pillStroke={false} {...p} />,
   },
   {
-    id: 'split2',
-    label: 'decker 2.0 · minibus 1.8',
-    Glyph: (p: GlyphProps) => <Pair pillW={2.0} miniPillW={1.8} {...p} />,
+    id: 'f36',
+    label: 'painted 3.6 — fill only',
+    Glyph: (p: GlyphProps) => <Pair pillW={3.6} pillStroke={false} {...p} />,
+  },
+  {
+    id: 'f30',
+    label: 'painted 3.0 — fill only',
+    Glyph: (p: GlyphProps) => <Pair pillW={3.0} pillStroke={false} {...p} />,
+  },
+  {
+    id: 'f26',
+    label: 'painted 2.6 — fill only, one stroke wider than tall',
+    Glyph: (p: GlyphProps) => <Pair pillW={2.6} pillStroke={false} {...p} />,
   },
 ] as const
 
