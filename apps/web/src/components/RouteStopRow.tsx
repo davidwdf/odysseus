@@ -1,15 +1,8 @@
-import {
-  type EtaUrgency,
-  etaCarriesStaleMark,
-  type RouteStopArrival,
-  type RouteStopRowView,
-} from '@nextbus/core'
+import type { EtaUrgency, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
-import { ETA_STALE_GUTTER } from '@nextbus/ui'
 import { Star } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { useLocale } from '../providers/LocaleProvider'
-import { EtaStaleMark } from './EtaBadge'
 import { NODE, NODE_CENTRE, NODE_TOP, RAIL_WIDTH } from './RailBusToken'
 import { SlideNumber } from './SlideNumber'
 import { StopName } from './StopName'
@@ -173,13 +166,7 @@ export function RouteStopRow({
             ) : null}
           </span>
           {row.arrivals.length > 0 ? (
-            // `gap-x-2` where this was `gap-x-3`, and the two numbers are one decision: each slot now
-            // reserves a 12px gutter of its own for the staleness mark, so slot-to-slot separation is
-            // 8 + 12 = 20px against the 12px it was. The owner asked for the times "just a little farther
-            // apart" so the `~` is not crowding the figure before it, and this is where that lives — the
-            // gutter alone would have made it 24px, which reads as three separate columns rather than a run
-            // of times. `apps/mobile/components/EtaTimes.tsx` holds the identical pair.
-            <span className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            <span className="mt-1 flex flex-wrap items-baseline gap-x-3">
               {row.arrivals.map((arrival, slot) => (
                 // Keyed on the arrival's own timestamp, which is why the model carries it: a bus keeps its slot
                 // when the round refreshes rather than the third time sliding into the first slot's box.
@@ -227,9 +214,8 @@ const TONE: Record<EtaUrgency, string> = {
  * (an `h2` figure), and a schematic row carries up to three of them on one line. The **text nodes are
  * identical** either way, which is what the spec pins; the sizes are this row's business.
  *
- * Staleness marks and does not recolour (ADR-008: never colour alone) — and the value itself does not move,
- * because a reading only changes when a fresh one arrives. Staleness here is the **board's**, one
- * `dataTimestamp` per stop, so every slot on a row carries the mark or none of them does.
+ * Staleness dims and does not recolour (ADR-008: never colour alone) — and the value itself does not move,
+ * because a reading only changes when a fresh one arrives.
  *
  * **Exported for the action sheet** (ADR-115), which shows this route's times at one stop when the route view
  * has none of its own. Not for reuse in general: it is exported so there is exactly ONE renderer of a route
@@ -240,26 +226,17 @@ export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; fir
   const { label } = arrival
   const tone = first ? (TONE[arrival.urgency] ?? TONE.none) : 'text-muted'
   const size = first ? 'text-body font-semibold' : 'text-caption'
-  // The mark rides a figure and only a figure — `headway` and the dash have nothing for a `~` to qualify.
-  // The rule is the kernel's (`etaCarriesStaleMark`), not this row's: it was spelled out here, in
-  // `EtaBadge`, and twice more in the RN twins, so a new arm on `EtaLabelParts` was four edits and any
-  // three of them made the renderers disagree about a state both component specs claim to enforce.
-  const marked = etaCarriesStaleMark(label, arrival.stale)
   return (
-    // **`gap-1` is gone and the unit carries `ml-1` instead**, which is load-bearing rather than tidying: a
-    // flex `gap` applies *between* items, so the mark — whose own width is cancelled by an equal negative
-    // margin, precisely so it costs the line nothing — would still have pushed the figure over by one gap
-    // the moment it appeared. The gutter is reserved unconditionally, so the figure's left edge is the same
-    // 12px in either state.
-    <span className="flex items-baseline" style={{ paddingLeft: ETA_STALE_GUTTER }}>
-      {marked ? <EtaStaleMark /> : null}
+    <span className="flex items-baseline gap-1">
       {label.kind === 'mins' ? (
         <>
           {/* `String(...)` because a schematic arrival carries its minutes as a number where the card's
               `EtaLabelParts` carries a string — the odometer diffs characters, so it takes the rendered
               form rather than the value's own type. */}
           <SlideNumber value={String(label.value)} className={`tabular-nums ${size} ${tone}`} />
-          <span className="ml-1 text-caption text-muted">{label.unit}</span>
+          <span className={`${first ? 'text-caption' : 'text-caption'} text-muted`}>
+            {label.unit}
+          </span>
         </>
       ) : label.kind === 'due' ? (
         <SlideNumber value={label.label} className={`tabular-nums ${size} ${tone}`} />

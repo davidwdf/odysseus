@@ -77,16 +77,6 @@
           "cases": {
             "mins": [
               {
-                "name": "etaStale",
-                "when": "stale",
-                "why": "The overwhelmingly common case: the board this reading came from is fresher than the served `staleAfterMs` and there is nothing to qualify.",
-                "invariant": "Drawn **muted regardless of the figure’s urgency** — the mark says how old the reading is, the colour says how soon the bus is, and folding the two would make a stale \"Due\" shout in green. It sits in a gutter the readout reserves whether or not the mark is there, so a board ageing between two rounds does not move the figure by a pixel; and it is **mounted only when stale**, never mounted-and-hidden, because this harness reads text by presence rather than by visibility.",
-                "text": {
-                  "literal": "~",
-                  "why": "The renderer supplies the glyph, as it does the `→` before a destination: a marker rather than a word, so it is not in the catalogue and needs no translation. Its *meaning* is — `etaStaleMark`, on the node’s accessible name."
-                }
-              },
-              {
                 "name": "etaValue",
                 "text": {
                   "field": "label.value"
@@ -100,16 +90,6 @@
               }
             ],
             "due": [
-              {
-                "name": "etaStale",
-                "when": "stale",
-                "why": "The overwhelmingly common case: the board this reading came from is fresher than the served `staleAfterMs` and there is nothing to qualify.",
-                "invariant": "Drawn **muted regardless of the figure’s urgency** — the mark says how old the reading is, the colour says how soon the bus is, and folding the two would make a stale \"Due\" shout in green. It sits in a gutter the readout reserves whether or not the mark is there, so a board ageing between two rounds does not move the figure by a pixel; and it is **mounted only when stale**, never mounted-and-hidden, because this harness reads text by presence rather than by visibility.",
-                "text": {
-                  "literal": "~",
-                  "why": "The renderer supplies the glyph, as it does the `→` before a destination: a marker rather than a word, so it is not in the catalogue and needs no translation. Its *meaning* is — `etaStaleMark`, on the node’s accessible name."
-                }
-              },
               {
                 "name": "etaDue",
                 "text": {
@@ -195,11 +175,11 @@
       }
     },
     "stale": {
-      "must": "A muted `~` immediately before the figure, in the reserved gutter — AND a relative age somewhere the rider can see it, which is still owed.",
-      "mustNot": "Colour alone, and never a value presented as fresh. And never a cue that moves the figure: a reading that shifts sideways when its board ages reads as a value that changed, which is the one thing ADR-008 forbids a stale readout from doing.",
+      "must": "The `opacity.etaStale` treatment on the readout AND a relative age somewhere the rider can see it.",
+      "mustNot": "Colour alone, and never a value presented as fresh.",
       "why": "ADR-008. A replayed reading from the persisted cache arrives with its original `observedAt`, so it is aged and labelled rather than shown as live (ADR-058).",
       "enforcement": {
-        "by": "etaStale"
+        "unenforced": "The card dims the readout from `row.stale`, which is opacity — not text — so this harness cannot see it. The relative age is the list screen's \"updated N ago\", so WP6-2 owns the assertable half."
       }
     },
     "offline": {

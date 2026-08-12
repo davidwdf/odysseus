@@ -50,25 +50,6 @@ import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
  * (ADR-092): *the spec holds what both must show; a suite holds what only one can see.*
  */
 
-/**
- * **The staleness mark**, on a schematic arrival — the same node `stop-row.ts` and `place-row.ts` declare.
- *
- * The one thing that is this screen's own: staleness here is the **board's**, one `dataTimestamp` per stop,
- * so every slot on a row carries the mark or none of them does — and the row above can be current while
- * this one is not. That is why it is declared per arrival inside the `each` rather than once per row: a
- * single `~` in front of a run of three times would read as marking only the first.
- */
-const STALE_MARK = {
-  text: {
-    literal: '~',
-    why: 'The renderer supplies the glyph — a marker rather than a word, so it is not in the catalogue and needs no translation. Its meaning is: `etaStaleMark`, on the node’s accessible name.',
-  },
-  when: 'stale',
-  why: 'This stop’s board is fresher than the served `staleAfterMs`, which is the ordinary case.',
-  invariant:
-    'Muted whatever the slot’s own tone is — and the first slot on a row is coloured by `etaUrgency` where the rest are muted, so a mark that inherited would be two different colours down one row. The gutter it draws in is reserved on every slot in either state, so a board ageing between rounds moves no figure on the rail.',
-} as const
-
 /** The static-facts strip — every loaded state shows it, and one shows it empty. */
 const FACTS: SlotNode = {
   name: 'facts',
@@ -142,7 +123,6 @@ const STOP_ROWS: SlotNode = {
           oneOf: 'label.kind',
           cases: {
             mins: [
-              { name: 'arrivalStale', ...STALE_MARK },
               { name: 'arrivalValue', text: { field: 'label.value' } },
               {
                 name: 'arrivalUnit',
@@ -152,7 +132,6 @@ const STOP_ROWS: SlotNode = {
               },
             ],
             due: [
-              { name: 'arrivalStale', ...STALE_MARK },
               {
                 name: 'arrivalDue',
                 text: { field: 'label.label' },
@@ -397,10 +376,10 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
 
     /** A board old enough to say so. */
     stale: {
-      must: 'The readings we have, each preceded by a muted `~`, with the fresh rows beside them unmarked.',
+      must: 'The readings we have, dimmed, with the fresh rows beside them undimmed.',
       mustNot:
-        'Colour alone (ADR-008), or a whole-screen staleness banner. Staleness is the **board’s** — one `dataTimestamp` per stop — so one row can be old while the next is current, and a screen-level cue would be wrong about both. And never a cue that moves the figure: on a rail of forty rows, a stale board that shifted its own times sideways would read as a value that had changed.',
-      why: 'This used to say *"the projection cannot see opacity, so what it pins is that a stale row shows the **same text** as a fresh one"* — the honest half of an assertion whose other half no suite could make. The `~` moved the whole thing into the text: a stale row now shows text a fresh one does not, per arrival, and the same projection that could only pin the value’s constancy pins the mark as well. The value’s constancy is still pinned, because the figure is still the kernel’s and there is still no client-side countdown.',
+        'Colour alone (ADR-008), or a whole-screen staleness banner. Staleness is the **board’s** — one `dataTimestamp` per stop — so one row can be old while the next is current, and a screen-level cue would be wrong about both.',
+      why: 'The projection cannot see opacity, so what it pins is that a stale row shows the **same text** as a fresh one: the value does not change, because a reading only changes when a fresh one arrives, and there is no client-side countdown. That is the honest half of the assertion, and each suite asserts the dimming itself.',
       enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
     },
 

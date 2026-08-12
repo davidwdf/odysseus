@@ -36,7 +36,7 @@ function RouteRow({ row }: { row: StopCardRow }) {
           {row.remark ? <RemarkTag remark={row.remark} /> : null}
         </View>
       </View>
-      <EtaBadge label={row.label} urgency={row.urgency} stale={row.stale} />
+      <EtaBadge label={row.label} urgency={row.urgency} />
     </View>
   )
 }

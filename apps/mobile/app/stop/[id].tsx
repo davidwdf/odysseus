@@ -485,11 +485,7 @@ function RouteRowItem({ row, onPress }: { row: PlaceRouteRow; onPress: () => voi
           </View>
         </View>
         {row.readout.kind === 'eta' ? (
-          <EtaBadge
-            label={row.readout.label}
-            urgency={row.readout.urgency}
-            stale={row.readout.stale}
-          />
+          <EtaBadge label={row.readout.label} urgency={row.readout.urgency} />
         ) : row.readout.kind === 'headway' ? (
           <Text variant="caption" className="max-w-[120px] text-right text-subtle">
             {row.readout.text}

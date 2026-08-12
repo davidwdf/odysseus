@@ -133,7 +133,7 @@ export const NEARBY_SPEC: ComponentSpec = {
       why: 'ADR-058: a persisted query cache plus a remembered fix. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it.',
       enforcement: {
         unenforced:
-          'Textually identical to `stale` **at this level**, and deliberately so: offline *is* a remembered fix plus replayed readings, and which network failed is not something the screen says. The reason given here used to be that what distinguishes it — the readings’ age — is *"opacity rather than text"*, and that half is now false: a stale reading carries `StopRow`’s muted `~`, so an aged card is textually distinguishable from a fresh one. What it is still not distinguishable from is `stale` **on this screen**, because a remembered fix and a replayed reading are two different facts and only the first one has a subtitle. `Favourites` is where the mark is projected, because that screen has no position to be stale about and so nothing else in the difference; here it would be asserting `stale` twice. The cache-replay half is asserted in `apps/web/test/shell.test.tsx`, where a cold start is measurable.',
+          'Textually identical to `stale` at this level, and deliberately so: offline *is* a remembered fix plus replayed readings, and which network failed is not something the screen says. What distinguishes it is the readings’ age and the dimming, which are inside the card and are opacity rather than text. The cache-replay half is asserted in `apps/web/test/shell.test.tsx`, where a cold start is measurable.',
       },
     },
 

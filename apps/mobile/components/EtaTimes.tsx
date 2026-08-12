@@ -1,6 +1,5 @@
-import { type EtaUrgency, etaCarriesStaleMark, type RouteStopArrival } from '@nextbus/core'
-import { t } from '@nextbus/i18n'
-import { ETA_STALE_GUTTER, ETA_STALE_MARK_SIZE, FONT_FAMILY } from '@nextbus/ui'
+import type { EtaUrgency, RouteStopArrival } from '@nextbus/core'
+import { FONT_FAMILY } from '@nextbus/ui'
 import { useEffect, useState } from 'react'
 import { Text as RNText, StyleSheet, View } from 'react-native'
 import Animated, {
@@ -12,7 +11,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import { useTheme } from '../lib/useTheme'
-import { useLocale } from '../providers/LocaleProvider'
 
 const DUR = 260
 
@@ -43,13 +41,8 @@ export function EtaTimes({
   arrivals: readonly RouteStopArrival[]
 }) {
   return (
-    // `gap-x-2` where this was `gap-x-3`, and the two numbers are one decision: each slot now reserves a
-    // 12px gutter of its own for the staleness `~`, so slot-to-slot separation is 8 + 12 = 20px against the
-    // 12px it was. The owner asked for the times "just a little farther apart" so the mark is not crowding
-    // the figure before it; the gutter alone would have made it 24px, which reads as three columns rather
-    // than a run of times. `apps/web/src/components/RouteStopRow.tsx` holds the identical pair.
     <View
-      className="mt-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5"
+      className="mt-1 flex-row flex-wrap items-center gap-x-3 gap-y-0.5"
       style={{ minHeight: 22 }}
     >
       {arrivals.map((arrival, i) => (
@@ -76,50 +69,10 @@ const TONE: Record<EtaUrgency, `--${string}`> = {
   none: '--text',
 }
 
-/**
- * **The staleness mark** — the RN twin of `EtaBadge`'s, drawn here rather than shared because this row
- * animates raw `RNText` and cannot use the `<Text>` primitive's variant plumbing. Same glyph, same
- * `ETA_STALE_GUTTER`, same cancellation, same catalogue label.
- *
- * The width is the gutter and the margin is its negative, so the mark costs the row **zero** main-axis
- * width and the figure beside it does not move by a pixel when a board ages. Mounted only when the board
- * is stale — never mounted-and-hidden, because the conformance walker reads text by presence rather than
- * visibility and a permanently-mounted `~` would project from every fresh readout in the app.
- */
-function StaleMark({ colour }: { colour: string }) {
-  const locale = useLocale()
-  return (
-    <RNText
-      accessible
-      accessibilityRole="image"
-      accessibilityLabel={t(locale, 'etaStaleMark')}
-      style={{
-        width: ETA_STALE_GUTTER,
-        marginLeft: -ETA_STALE_GUTTER,
-        // Cross-axis only, so the main-axis cancellation above is untouched: a tilde is a mid-height glyph
-        // and a shared baseline with the first slot's larger figure reads as a subscript.
-        alignSelf: 'center',
-        textAlign: 'center',
-        fontSize: ETA_STALE_MARK_SIZE,
-        color: colour,
-        fontFamily: FONT_FAMILY.regular,
-      }}
-    >
-      ~
-    </RNText>
-  )
-}
-
 function TimeSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolean }) {
   const { color } = useTheme()
   const { label } = arrival
   const tone = TONE[arrival.urgency] ?? TONE.none
-  // The mark rides a figure and only a figure — `~ —` would be a claim about nothing, and a published
-  // headway was never a reading. Both component specs declare the mark inside the `mins` and `due` arms
-  // for the same reason, and the rule itself is the kernel's (`etaCarriesStaleMark`) rather than this
-  // row's: it was spelled out here and in three sibling components, so a new arm on `EtaLabelParts` was
-  // four edits in two apps.
-  const marked = etaCarriesStaleMark(label, arrival.stale)
   // The unit rides on every numeric slot, so the row reads "12 min  27 min  42 min"; a "Due" slot has
   // no unit to take. `headway` cannot reach this row — `upcoming` yields arrivals, and a published
   // frequency is not one — but the union carries the arm, so it renders as the text it is rather than
@@ -133,11 +86,7 @@ function TimeSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolea
   // `EtaLabelParts` carrying `value` and `unit` separately is that they are styled apart (`@nextbus/core`).
   if (label.kind === 'mins') {
     return (
-      // The gutter is reserved whether or not the mark is drawn, so a board ageing between two rounds
-      // moves nothing on the rail. No `gap` on this row: a flex gap applies *between* items and would
-      // reintroduce exactly the shift the mark's negative margin exists to cancel.
-      <View className="flex-row items-baseline" style={{ paddingLeft: ETA_STALE_GUTTER }}>
-        {marked ? <StaleMark colour={color('--text-muted')} /> : null}
+      <View className="flex-row items-baseline">
         <SlideNumber value={String(label.value)} color={figure} size={size} bold={first} />
         <RNText
           style={{
@@ -155,10 +104,7 @@ function TimeSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolea
   }
   const value = label.kind === 'due' ? label.label : label.kind === 'headway' ? label.text : '—'
   return (
-    // A row rather than a bare `View`, so the mark can sit beside the word the way it sits beside a figure
-    // — and it reserves the same gutter as the numeric arm, so a "Due" slot and a "12 min" slot line up.
-    <View className="flex-row items-baseline" style={{ paddingLeft: ETA_STALE_GUTTER }}>
-      {marked ? <StaleMark colour={color('--text-muted')} /> : null}
+    <View>
       <SlideNumber value={value} color={figure} size={size} bold={first} />
     </View>
   )

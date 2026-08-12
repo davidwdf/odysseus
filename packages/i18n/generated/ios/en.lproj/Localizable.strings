@@ -26,7 +26,6 @@
 /* {s} → %1$@ */
 "updatedAgo" = "updated %1$@s ago";
 "stale" = "stale";
-"etaStaleMark" = "Approximate — not updated recently";
 "retry" = "Retry";
 "locating" = "Finding stops near you…";
 "lastKnownLocation" = "Last known location";
@@ -67,7 +66,7 @@
 "aboutVersion" = "Version";
 "settingsFaq" = "FAQ";
 "faqFreshnessQ" = "How fresh are the arrival times?";
-"faqFreshnessA" = "Live arrival times refresh about once a minute at source — we can never be fresher than that, and a figure we think has gone stale is marked with a ~ rather than shown as current.";
+"faqFreshnessA" = "Live arrival times refresh about once a minute at source — we can never be fresher than that, and a figure we think has gone stale is faded rather than shown as current.";
 "faqTimingsQ" = "Are the fares and timings live?";
 "faqTimingsA" = "No — fares, frequencies and journey times are scheduled reference data, shown as published, not live. Child and elderly fares are the exception: those are not published at all, so we work them out from the fare policy and mark every one with a ~.";
 "faqCoverageQ" = "Which bus operators are covered?";

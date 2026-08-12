@@ -22,18 +22,10 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { View } from 'react-native'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { EtaBadge } from '../components/EtaBadge'
 import { Text } from '../components/Text'
 import { useLiveEtas } from '../lib/useLiveEtas'
-
-// **`EtaBadge` reads the locale now**, because its staleness `~` is a graphic and a graphic needs an
-// accessible *name*, which is a catalogue string. The provider it reads through imports `expo-localization`,
-// which dies at import outside Metro — and vitest counts that as a failed FILE rather than as failed tests,
-// i.e. as nothing at all about the seam. Every screen suite in this directory carries the same one-liner;
-// this file did not, because until now the only thing it mounted below the seam had no words of its own.
-vi.mock('../providers/LocaleProvider', () => ({ useLocale: () => 'en' }))
-
-const { EtaBadge } = await import('../components/EtaBadge')
 
 // **WP5-2: ADR-004 converted from an aspiration into something that runs.**
 //
@@ -219,10 +211,9 @@ function fakeSocketDataSource(): DataSource {
 
 /**
  * The live-fed card path, with the screen's own three lines: the query, the subscription, and a readout per
- * row. Deliberately the *data* path and not the whole Place screen — the screen's chrome needs a theme store
- * and AsyncStorage-backed favourites, neither of which any transport can reach, and mounting them here would
- * test jsdom rather than the seam. (The locale provider is mocked at the top of this file rather than
- * avoided, because the readout itself reaches for it now — see the note there.)
+ * row. Deliberately the *data* path and not the whole Place screen — the screen's chrome needs a
+ * `LocaleProvider`, a theme store and AsyncStorage-backed favourites, none of which any transport can reach,
+ * and mounting them here would test jsdom rather than the seam.
  */
 function StopRows({ id, source }: { id: string; source: DataSource }) {
   const query = useQuery({ queryKey: ['stop', id], queryFn: () => source.getStop(id) })
@@ -237,7 +228,7 @@ function StopRows({ id, source }: { id: string; source: DataSource }) {
           <View key={row.route.id}>
             <Text variant="body">{row.route.routeNo}</Text>
             {readout ? (
-              <EtaBadge label={readout.label} urgency={readout.urgency} stale={readout.stale} />
+              <EtaBadge label={readout.label} urgency={readout.urgency} />
             ) : (
               <Text variant="h3">—</Text>
             )}

@@ -143,7 +143,7 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 | [120](#adr-120--a-citybus-route-shows-live-times-and-the-readings-are-merged-at-render-rather-than-cached) | A Citybus route shows live times, and the readings are merged at render rather than cached | Accepted |
 | [121](#adr-121--the-socket-is-the-default-engine-because-polling-a-route-costs-19-what-it-should) | The socket is the default engine, because polling a route costs 19× what it should | Accepted |
 | [122](#adr-122--the-stale-cue-fired-on-healthy-data-because-90-s-is-shorter-than-a-citybus-readings-age) | The stale cue fired on healthy data, because 90 s is shorter than a Citybus reading's age | Accepted |
-| [123](#adr-123--staleness-is-a-muted--before-the-figure-not-a-fade) | Staleness is a muted `~` before the figure, not a fade | Accepted |
+| [123](#adr-123--staleness-is-a-board-level-fact-so-a-per-reading-cue-is-the-wrong-unit) | Staleness is a board-level fact, so a per-reading cue is the wrong unit | Accepted |
 | [124](#adr-124--a-parked-query-is-not-an-answer) | A parked query is not an answer | Accepted |
 | [125](#adr-125--preferences-are-merged-not-overwritten-and-the-ancestor-moves-with-the-write) | Preferences are merged, not overwritten, and the ancestor moves with the write | Accepted |
 | [126](#adr-126--the-navigation-moment-and-the-documents-language) | The navigation moment, and the document's language | Accepted |
@@ -8674,77 +8674,70 @@ pre-existing and unaddressed; it earned its keep here.
     ("last updated 14:19"), the rider offline, our edge unreachable, and the upstream refusing (which
     already has vocabulary and must not be rebuilt). The wording is the owner's call, as ADR-114's was.
 
-## ADR-123 — Staleness is a muted `~` before the figure, not a fade
+## ADR-123 — Staleness is a board-level fact, so a per-reading cue is the wrong unit
 
-- **Status:** **Accepted** — **2026-08-11**, implemented on both renderers (`apps/web` and
-  `apps/mobile` `EtaBadge`, `apps/web` `ArrivalSlot`, `apps/mobile` `EtaTimes`) and enforced by four
-  component specs. Amends [ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown)'s
-  presentation rule; the honesty principle itself is untouched.
-- **Context.** Staleness has been a 45 % opacity on the whole readout since Wave 1
-  (`opacity.etaStale`). The owner's objection, which is the right one: *"to me that's not very clearly
-  communicated."* A fade is a **comparative** cue with nothing to compare against — a rider sees one
-  reading, and somebody who has never seen the fresh version cannot tell a dimmed number from a design
-  choice. The same property made it **unenforceable**: the conformance walker reads text, so four specs
-  carried a variant of the same confession — *"the card dims the readout from `row.stale`, which is
-  opacity, not text, so this harness cannot see it"* (`stop-row`, `place-row`, `favourites`, and the
-  dimming clause of `nearby`'s `offline` state). **A treatment a text harness cannot see is a treatment
-  a rider has to already know about.**
-- **Options.** (A) Keep the fade and add a relative age beside it. (B) A word — "old", "last known".
-  (C) A muted `~` immediately before the figure. (D) An icon.
-- **Decision: (C).** A muted (`text-muted`), caption-sized `~` is mounted immediately before the figure
-  when the board has aged past the served `staleAfterMs`, and the opacity treatment is removed from all
-  four sites. Three sub-decisions:
-  - **It rides `mins` and `due` only.** `departed` and `none` both print an em dash and `~ —` is a claim
-    about nothing — *"approximately we do not know"*. `headway` is the published timetable, the *Static*
-    tier, which was never a reading and so cannot be stale. The specs declare the mark **inside** those
-    two arms rather than beside the `oneOf`.
-  - **It stays muted whatever `etaUrgency` colours the figure.** The mark says how old the reading is;
-    the colour says how soon the bus is. ADR-008's *"never colour alone"* is satisfied either way,
-    because a glyph is not a hue.
-  - **It is `role="img"` with a translated `aria-label`** (`etaStaleMark`, all three locales). The glyph
-    is a renderer literal like the `→` before a destination; its *name* is catalogue prose. **The fade
-    announced nothing at all, in every locale**, so this is the first time the cue exists for a rider who
-    cannot see it.
-- **The figure must not move by one pixel, and that is CSS rather than luck.** The readout reserves
-  `ETA_STALE_GUTTER` (12 px, derived from `SPACING['3']` in the new `packages/ui/src/staleMark.ts` and
-  read by both renderers) as **unconditional** left padding, and the mark is a flex item whose width is
-  cancelled by an equal negative margin — so it draws inside the reserved gutter and contributes exactly
-  zero to the line. **Two alternatives were rejected, and the first is the one that would have shipped:**
-  - **Mounting the `~` always and hiding it when fresh** satisfies every geometric requirement and puts
-    the glyph in the *text* of every fresh readout in the app, for ever, because this repo's walker reads
-    **presence rather than visibility** and every state suite mounts settled. Two prior instances: the
-    FAQ's collapsed `<details>`, and `SlideNumber`'s invisible sizer copy that made a mid-flight readout
-    project `"5112 min"`.
-  - **Leaning on the flex `gap`** fails quietly: a gap applies *between* items, so a mark that cancels its
-    own width still pushes the figure over by one gap. `ArrivalSlot`'s `gap-1` became an `ml-1` on the
-    unit for exactly this reason.
-- **Why the gutter is a derivation, not a token.** `ETA_STALE_GUTTER` is a hand-written module deriving
-  from `SPACING['3']` — the same shape as `elevation.ts`, a rule that *acts on* `tokens.json` rather than
-  a second copy of it. Both renderers write it as an **inline style** rather than a utility class,
-  specifically so `width + marginLeft === 0` and an equal `paddingLeft` in both states are facts a test
-  can read straight back off the tree React produced. jsdom has no layout engine; this is the only form
-  of *"the figure did not move"* it can actually measure.
-- **Measured, not eyeballed.** In real Chrome the figure's left edge is identical fresh vs stale to three
-  decimal places (298.742 for the card readout; 21 / 85.836 / 145.367 for the three schematic slots). The
-  measurement also produced a design change nobody predicted: the mark is **`self-center`, not
-  baseline-aligned**, because a tilde is a mid-height glyph and sharing a baseline with a 22 px figure
-  parks it among the digits' feet, where it reads as a subscript.
+- **Status:** **Accepted** — **2026-08-12.** Both per-reading treatments are removed from all four
+  readouts and **nothing replaces them at the readout**; the cue moves to screen level, where it is not
+  yet built. Amends [ADR-008](#adr-008--etas-are-approximations-no-client-side-fake-countdown)'s
+  presentation rule; the honesty principle itself is untouched, and is currently **in debt** — see the
+  consequences.
+- **Context.** Staleness was a 45 % opacity on the readout (`opacity.etaStale`) from Wave 1. The owner's
+  objection: *"to me that's not very clearly communicated."* A fade is a **comparative** cue with nothing
+  to compare against — a rider sees one reading, and somebody who has never seen the fresh version cannot
+  tell a dimmed number from a design choice. The same property made it **unenforceable**: the conformance
+  walker reads text, so four specs carried a variant of one confession — *"the card dims the readout from
+  `row.stale`, which is opacity, not text, so this harness cannot see it."*
+- **What was built, shipped for a day, and withdrawn.** A muted, caption-sized `~` immediately before the
+  figure, mounted only when stale, with the figure held in place by an unconditionally reserved 12 px
+  gutter that the mark's negative margin cancelled. It worked, and it was measured rather than eyeballed:
+  on live KMB 1A with the clock shifted six minutes, **all 78 readouts marked and every figure's inset
+  from its own readout box still exactly 12 px**. It carried a translated `aria-label`, so it was also the
+  first staleness cue a screen-reader rider had ever had. The owner's verdict on seeing it: *"the offset
+  on the times does not look right … I still don't love graying the text, it's confusing on its own."*
+- **The diagnosis, which is the decision.** Neither treatment was badly executed. **Both were the wrong
+  unit.** `isStale` reads one `dataTimestamp` per **board** — staleness is explicitly the board's, one
+  timestamp shared by every slot on a row (ADR-072's model, `route-detail.ts`) — so a per-figure cue draws
+  **one fact once per reading**: 78 marks on a single route screen, all saying the same thing. And the
+  thing they say is not actionable. A rider can do nothing with *"this particular number is two minutes
+  old"*; what they can act on is *"the screen has stopped updating"*, which is a statement about the
+  screen. **A cue at the wrong grain reads as decoration however it is drawn**, which is exactly how both
+  of these read.
+- **Options, and why the near misses are also wrong.**
+  - *A dotted underline on the figure.* Tempting: no layout shift at all, not colour, and a real
+    convention for "provisional". Still per-figure, still one fact repeated, still invisible to the walker.
+  - *A lighter weight.* Same wrong unit, and it changes glyph advance widths unless everything is locked
+    to tabular — reintroducing the shift the `~` had just been engineered to avoid.
+  - *Switch the readout to absolute clock time when stale* ("21:34" for "11 min"), which ADR-008 already
+    permits as a presentation. Self-documenting — a time in the past *is* the signal — but a list mixing
+    minutes and clock times is worse than either.
+  - **Chosen: no cue on the readout, and one line on the screen.** *"Last updated 21:34"* when the newest
+    board on screen is past the served `staleAfterMs`.
+- **Why the withdrawal is not a retreat to the fade.** The fade goes too. Keeping it would keep the wrong
+  unit *and* the objection that started this; and a treatment no harness can see is a treatment a rider
+  has to already know about.
 - **Consequences:**
-  - 🟢 **Four specs' `stale` state becomes enforceable for the first time**, on both renderers —
-    `stop-row` and `place-row` through a new `etaStale` slot inside the `mins`/`due` arms, `favourites`
-    through its own projection one stale window later on the clock, and `route-detail`, whose `stale`
-    state could previously only pin that the text was *unchanged*.
-  - 🟢 The owner's *"space the times a little farther apart"*: both schematic containers went `gap-x-3` →
-    `gap-x-2`, so slot-to-slot separation is 8 + 12 = 20 px against 12, with the gutter doing most of it.
-  - 🟠 **The relative-age half of the rule is still owed.** `stop-row.spec.json`'s `stale` state asked for
-    the fade **and** *"a relative age somewhere the rider can see it"*. This ADR answers the first clause
-    only; the second is the *"last updated, and four different reasons"* row in `docs/07`, deliberately
-    not bundled. The `must` was rewritten to describe the `~` accurately and to keep the age visible as
-    outstanding rather than quietly dropping it.
-  - ⚠️ **`~` is now load-bearing in two registers.** It already meant *"a figure we worked out rather than
-    read from a feed"* on a concession fare (`~$6.7`, ADR-095). Both are *"we are telling you roughly"*,
-    which is why one glyph is defensible — but a third use would dilute it.
-  - ⚠️ **The a11y wording is provisional and needs the owner**, on the ADR-114 / ADR-122 precedent.
+  - 🔴 **There is currently no staleness indication anywhere**, and ADR-008 ("indicate staleness") is a
+    golden rule in `CLAUDE.md`. This is a live debt, deliberately taken with the owner's agreement, and
+    `docs/07`'s *"a screen never says that it has stopped being fed"* row is promoted to 🔴 and now owns
+    the whole job. Its cheapest honest slice is the one line above — a fraction of the four-state taxonomy.
+  - **The four specs go back to `unenforced` on `stale`** — but the note is better than the one they had.
+    It was *"opacity is not text, so this harness cannot see it"*, i.e. a harness limitation. It is now
+    *"this component is the wrong place to look"*, i.e. a statement about the design. The screen-level line
+    will be text, and enforceable, on the screen specs.
+  - 🟢 **`opacity.etaStale` stays retired in place rather than deleted**, and its description in
+    `tokens.json` — emitted verbatim into `NextBusTokens.swift`/`.kt` — now carries the *general* warning
+    rather than pointing at the `~`: do not dim the number, do not mark it, say when the screen was last
+    updated. A hand-written third renderer meets this same design problem, and the answer is not obvious.
+  - ⚠️ **Two things the withdrawn work is worth keeping in mind.** The `~` could not be reserved by
+    mounting it always and hiding it when fresh, because this repo's walker reads **presence, not
+    visibility** — every fresh readout in the app would have projected a `~` for ever, and no state suite
+    would have caught it (they all mount settled). And the measurement that proved the no-shift property
+    also produced a real finding: a tilde on a shared baseline with a 22 px figure parks among the digits'
+    feet and reads as a subscript. Both apply to any future glyph beside a readout.
+  - ⚠️ **Cost of the round trip:** a day, and the four specs' `stale` state declared, enforced, and
+    un-declared again. Worth recording plainly — the design was reviewed *after* it was built and
+    measured, which is when the unit error became visible, and it is not clear it would have been visible
+    earlier.
 
 ## ADR-124 — A parked query is not an answer
 

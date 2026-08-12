@@ -586,8 +586,101 @@ written down.
       third is closed. Only worth starting when the owner wants to spend the sitting — an inventory nobody
       acts on is a document that ages.
 
+## Web UI — the owner's list (2026-08-12)
+
+> Asked for directly, after walking the shipping web app. Ordered as given, not by size. Two of the five
+> are **brainstorms the owner wants to sit with** rather than tickets — they say so, and an agent that
+> "just implements" them has misread the request.
+
+- [ ] 🟠 **Route detail's times should arrive into skeletons, not into empty space.** A delay in retrieving
+      the arrivals makes the whole schematic jump as each row's readout appears. The fix is a readout-shaped
+      skeleton **sized to the box the figure will occupy**, so the row's height and the right-hand column's
+      x-position are settled before any number exists.
+      Two things already in place that this has to respect: the screen's arms are
+      `view ? content : isError ? error : skeleton` and since ADR-124 the "no answer yet" branch is
+      `isPending`, not `isLoading` — so the skeleton is reachable for a *parked* query too, which is
+      exactly when a rider waits longest. And the readout already reserves a fixed gutter, so a
+      fixed-width skeleton is a small change rather than a new layout.
+- [ ] 🟡 **A front-facing minibus glyph for the rail's bus token, and a double-decker distinct enough to
+      tell it apart.** Now that every stop on a GMB route has times (ADR-116–121), the token is worth
+      drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.
+      The distinguishing features are real and few: a light bus is **single-deck with one window row**, a
+      **taller windscreen relative to its width**, a **roof sign box**, and the statutory **roof stripe**
+      (green for GMB, red for RMB); the double-decker is **two window rows** and a deeper body. Keep both
+      front-facing so they read at 16 px, and take the colours from the **operator accent tokens** — GMB's
+      green is already one (`docs/09` §2) and a raw hex in a component is a red build.
+      The owner wants to design this together rather than receive it.
+- [ ] 🟠 **Bring back the lab as a real component gallery, and drive it from the published specs.**
+      `apps/web/lab/` exists and is governed by [ADR-112](./08-decision-log.md#adr-112--a-dev-page-lives-in-the-app-and-a-gate-keeps-it-out-of-the-app)
+      — a dev page that lives in the repo and is kept out of production by `dev-pages.test.mjs` and
+      `scripts/build-web.mjs` — but it holds only the rail motion lab. The owner wants a **listing of the
+      design-system components** (bus badges, headers, pills, tab bar, buttons, inputs) *"as that will make
+      it easier to build a corresponding page for our eventual native apps"*.
+      **The idea worth building rather than the obvious one:** enumerate the gallery from
+      `packages/contract/ui/*.spec.json` and render **each declared state**, so the gallery cannot drift
+      from the specs and a component with a spec but no gallery entry is a red build. That turns a
+      convenience page into the thing a Swift/Kotlin porter checks their own gallery against — which is the
+      stated goal — and it costs one script rather than a hand-maintained list.
+      Note the standing rule this does **not** overturn: a component is still only abstracted when it is
+      used in more than one place. A gallery entry is not a reason to extract one.
+- [ ] 🟠 **Header rules, written down and testable — and yes, this belongs in the design system.**
+      *"I want us to be a bit more thorough with how we go about things."* Today the rules are scattered
+      across ADR-033 (the title morphs into a pill beside the back lens), the `CollapsingHeader` component
+      and its two thin wrappers, and ADR-126 (the back control is a floating lens fixed to the top). There
+      is no statement of **which kind of screen gets which header**.
+      A starting taxonomy to argue with, not to adopt: (1) a **root/tab** screen — no back control, the
+      title is content rather than chrome; (2) a **pushed detail** screen — collapsing header carrying a
+      badge, back control always reachable while scrolled; (3) a **sheet** — no header, a drag handle.
+      The questions that actually need settling: when the title collapses to a pill and what it collapses
+      *to*; what must stay reachable at any scroll offset; whether a header may ever carry actions; and
+      whether the collapse is scrubbed or two-state (`apps/web` is two-state and `apps/mobile` scrubs —
+      recorded as deliberate, worth revisiting now rather than inheriting).
+      ⚠️ **No suite in this repo can see a collapse** (jsdom has no `IntersectionObserver`), so any rule
+      agreed here needs its enforcement designed with it or it is prose.
+- [ ] 🟠 **Does the app need a bottom tab bar? — the owner's brainstorm, and the biggest question on this
+      list.** The proposal to play with: a **more useful default home** that shows better data and *"is
+      smart enough to know what to prioritise"*; **Settings as a floating top-right button**; **Nearby and
+      Favourites merged**; a **bottom-right floating search button**, with **search as an overlay** rather
+      than a standalone page. The owner's own caveat, and it is the right one: a tab bar probably still
+      earns its place for what comes next — a full map view, rail timings, ferry timings.
+      **What the architecture already says about each piece:**
+      · **Merging Nearby and Favourites is the most natural of the five.** Both screens are already lists
+        of `StopCardView` over the same kernel functions; the merge is a **ranking rule**, so it belongs in
+        `packages/core` as a corpus-pinned `homeView` rather than in a screen. The inputs for "smart enough
+        to prioritise" already exist and are already persisted: saved-or-not, distance, whether a bus is
+        due soon, and `recentRoutes`/`recentStops`.
+      · **Search as an overlay must stay a route.** ADR-102 put the query, mode and chips in the URL and
+        ADR-109 restores its inner scroll offset against the history key — a shareable search is a feature,
+        not an accident. A modal *route* keeps all of that; a component that opens over the shell loses it.
+      · **A floating top-right Settings button is cheap now** — the safe-area-top work landed with the
+        floating back lens (ADR-126 territory), so there is somewhere correct to put it.
+      · **The destination set is identity, and it is gated.** `src/shell/destinations.ts` is a declared set
+        that `shell-parity.test.ts` binds across both shells; changing it is a deliberate edit with a gate
+        to update, not a refactor.
+      · ⚠️ **The floating glass tab bar is *identity* under [ADR-100](./08-decision-log.md#adr-100--the-apps-signature-motion-and-material-are-identity-platform-conventional-detail-is-idiom)**,
+        ported value-for-value from `apps/mobile` at the owner's own direction after the parity review.
+        Removing it is a bigger call than a layout change and would amend that ADR. **Reframing worth
+        considering: the tab bar is probably not the question — what is *in* it is.**
+
 ## Infra / hardening
-- [ ] 🟠 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
+- [ ] 🔴 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
+      **Promoted to 🔴 and given the whole job on 2026-08-12**, at the owner's direction: *"I still don't
+      love graying the text, it's confusing on its own. I'm happy to remove this feature for now (the tilde
+      and gray text) … let's allow a basic error messaging/alerts system to convey if the times are out of
+      date. Include that with our todo regarding error handling."*
+      So **the per-reading staleness cue is being removed** — both the `~` and the fade it replaced — and
+      this row is now the only thing that tells a rider a reading is old. Until it lands, **nothing does**,
+      which is why it is 🔴 rather than 🟠: ADR-008 ("indicate staleness") is a golden rule, and this row is
+      the last thing standing under it.
+      **The reason the per-reading cue never felt communicated, which shapes what to build:** staleness is
+      a property of the **board**, not of each figure. `isStale` reads one `dataTimestamp` per board off the
+      operator's clock, so Route detail was drawing **one fact 78 times** — and a rider cannot act on
+      *"this particular number is two minutes old"*. What they can act on is *"the screen has stopped
+      updating"*, which is a screen-level statement, which is this row. Neither treatment was badly
+      executed; both were **the wrong unit**.
+      **The cheapest honest first slice** is therefore one line per screen, not a per-row marker: *"Last
+      updated 21:34"* whenever the newest board on screen is past the served `staleAfterMs`. That alone
+      restores ADR-008 compliance and is a fraction of the four-state work below.
       Asked for by the owner 2026-08-11 after finding it with the local Worker down (screenshot, route 86K):
       every row kept ageing its times normally and nothing said the data had stopped arriving.
 

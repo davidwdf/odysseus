@@ -244,21 +244,6 @@ function textOf(node: Node): string[] {
  * The bus tokens are appended last, from their accessible names: a token is a graphic whose whole content is
  * its name, so it contributes no text node at all. The DOM driver makes the same move for the same reason.
  */
-/**
- * Named graphics **whose whole content is their name** — the bus tokens, and only them.
- *
- * `[role="img"][aria-label]` stood alone until the staleness cue became a `~`. That mark is a named graphic
- * too, but its glyph is a real text node the walk above has already read *in order*; appending its label as
- * well would read one element twice and would append it at the end, where the spec declares it beside the
- * figure it qualifies. So the filter states the rule the original comment already implied. The DOM driver
- * carries the identical helper for the identical reason.
- */
-function namedGraphics(host: HTMLElement): Element[] {
-  return [...host.querySelectorAll('[role="img"][aria-label]')].filter(
-    (el) => (el.textContent ?? '').trim() === '',
-  )
-}
-
 function readTree(host: HTMLElement, view: RouteDetailView | undefined): RenderedTree {
   const screen = host.firstElementChild
   const body = screen?.children[0]
@@ -297,7 +282,9 @@ function readTree(host: HTMLElement, view: RouteDetailView | undefined): Rendere
     ),
   ]
   const bodyText = body ? textOf(body) : []
-  const busLabels = namedGraphics(host).map((el) => el.getAttribute('aria-label') ?? '')
+  const busLabels = [...host.querySelectorAll('[role="img"][aria-label]')].map(
+    (el) => el.getAttribute('aria-label') ?? '',
+  )
   const interactive = [...host.querySelectorAll(INTERACTIVE)]
   return {
     text: [...chromeText, ...bodyText, ...busLabels],
@@ -496,7 +483,7 @@ describe('apps/mobile conforms to Route detail’s published spec, state by stat
     // reported zero of them — which is the *"a harness that looks at the wrong moment is indistinguishable
     // from a renderer that is wrong"* trap this wave has now hit four times.
     await mountSettled(view)
-    const tokens = namedGraphics(container)
+    const tokens = [...container.querySelectorAll('[role="img"][aria-label]')]
     expect(tokens.length, 'no named bus token on the rail').toBe(view.buses.length)
     expect(tokens.map((el) => el.getAttribute('aria-label'))).toEqual(
       view.buses.map((bus) => bus.label),

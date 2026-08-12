@@ -26,7 +26,6 @@
 	<!-- {s} → %1$s -->
 	<string name="updatedAgo">%1$s 秒前更新</string>
 	<string name="stale">数据过时</string>
-	<string name="etaStaleMark">约数 — 未有最新更新</string>
 	<string name="retry">重试</string>
 	<string name="locating">正在查找附近车站…</string>
 	<string name="lastKnownLocation">最后已知位置</string>
@@ -67,7 +66,7 @@
 	<string name="aboutVersion">版本</string>
 	<string name="settingsFaq">常见问题</string>
 	<string name="faqFreshnessQ">到站时间有多新？</string>
-	<string name="faqFreshnessA">实时到站时间在来源端约每分钟更新一次 — 我们不可能比来源更快；当某个数字可能已过时，我们会在数字前加上 ~ 标示，而不会当作最新数据显示。</string>
+	<string name="faqFreshnessA">实时到站时间在来源端约每分钟更新一次 — 我们不可能比来源更快；当某个数字可能已过时，我们会将它调淡，而不会当作最新数据显示。</string>
 	<string name="faqTimingsQ">车费与班次是实时的吗？</string>
 	<string name="faqTimingsA">不是 — 车费、班次频率及行车时间属时间表参考数据，按发布内容显示，并非实时。小童及长者车费则属例外：这些数字并无公开发布，我们按车费政策推算，并在每个数字前加上 ~ 标示。</string>
 	<string name="faqCoverageQ">涵盖哪些巴士公司？</string>

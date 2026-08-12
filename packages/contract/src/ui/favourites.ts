@@ -117,21 +117,12 @@ export const FAVOURITES_SPEC: ComponentSpec = {
     },
 
     stale: {
-      must: 'The same cards as `content`, each aged reading carrying `StopRow`’s muted `~`.',
+      must: 'The cards, with each reading aged and marked stale.',
       mustNot: 'A value presented as fresh.',
       why: 'ADR-008. Unlike Nearby there is no *position* to be stale here — this screen measures no distance and has nothing to say about where the rider is — so the only stale thing is a reading.',
       enforcement: {
-        // `unenforced` until the `~` replaced the fade, with the note *"`row.stale` is drawn as opacity
-        // inside the card, which is not text, so this harness cannot see it."* Both halves of that have
-        // changed. The cue is text now, so `StopRow`'s `etaStale` slot arrives here through the `component`
-        // reference with no edit to the projection — and this state gets its **own** projection rather than
-        // a `by`, because a `by` can only name a slot in *this* spec and the mark lives in the card's.
-        //
-        // The driver reaches it the way a rider does: the **same corpus case as `content`**, one whole
-        // stale window later on the clock. That is the honest fixture — no synthetic view, no hand-set
-        // flag — and it is what makes the difference between the two states a *rendered* difference rather
-        // than an asserted one: `content` projects the figures, `stale` projects a `~` in front of each.
-        shows: [CARDS],
+        unenforced:
+          '`row.stale` is drawn as opacity inside the card, which is not text, so this harness cannot see it. It is `StopRow`’s field and `stop-row.spec.json` declares it there for the same reason.',
       },
     },
 

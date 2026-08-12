@@ -51,16 +51,6 @@
             "cases": {
               "mins": [
                 {
-                  "name": "etaStale",
-                  "when": "readout.stale",
-                  "why": "The board this reading came from is fresher than the served `staleAfterMs`, which is the ordinary case.",
-                  "invariant": "Muted whatever `etaUrgency` colours the figure, and it must not move the figure: the gutter is reserved in either state. Declared inside `mins` and `due` and not beside them — `departed` prints an em dash, and `~ —` claims nothing.",
-                  "text": {
-                    "literal": "~",
-                    "why": "The renderer supplies the glyph, exactly as it does the `→` above: a marker rather than a word, so it is not in the catalogue. Its meaning is — `etaStaleMark`, on the node’s accessible name."
-                  }
-                },
-                {
                   "name": "etaValue",
                   "text": {
                     "field": "readout.label.value"
@@ -74,16 +64,6 @@
                 }
               ],
               "due": [
-                {
-                  "name": "etaStale",
-                  "when": "readout.stale",
-                  "why": "The board this reading came from is fresher than the served `staleAfterMs`, which is the ordinary case.",
-                  "invariant": "Muted whatever `etaUrgency` colours the figure, and it must not move the figure: the gutter is reserved in either state. Declared inside `mins` and `due` and not beside them — `departed` prints an em dash, and `~ —` claims nothing.",
-                  "text": {
-                    "literal": "~",
-                    "why": "The renderer supplies the glyph, exactly as it does the `→` above: a marker rather than a word, so it is not in the catalogue. Its meaning is — `etaStaleMark`, on the node’s accessible name."
-                  }
-                },
                 {
                   "name": "etaDue",
                   "text": {
@@ -149,11 +129,11 @@
       }
     },
     "stale": {
-      "must": "A muted `~` immediately before the figure, in the gutter the readout reserves in either state.",
-      "mustNot": "Colour alone, and never a value presented as fresh — nor a cue that shifts the figure, which would read as the value having changed.",
+      "must": "The `opacity.etaStale` treatment on the readout.",
+      "mustNot": "Colour alone, and never a value presented as fresh.",
       "why": "ADR-008. A reading replayed from the persisted cache arrives with its original `observedAt`, so `etaReadout` ages it rather than showing it as live (ADR-058).",
       "enforcement": {
-        "by": "etaStale"
+        "unenforced": "`readout.stale` is drawn as opacity, which is not text, so this harness cannot see it. The relative age is the screen’s, not the row’s."
       }
     },
     "offline": {
