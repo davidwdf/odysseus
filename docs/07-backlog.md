@@ -701,6 +701,14 @@ written down.
         considering: the tab bar is probably not the question — what is *in* it is.**
 
 ## Infra / hardening
+- [ ] 🟡 **Wire the `age` header into the route watch's not-advanced retry** ([ADR-135](./08-decision-log.md#adr-135--the-live-path-hardened-against-the-networks-own-failure-modes-wp6-8b)
+      decision 7). `nextRouteRoundMs` has an arm that answers `ttl − age` when a round was handed a stale
+      CDN copy — the one question the `age` header genuinely answers — and **no production caller can reach
+      it**: the ETA adapters return parsed readings and never surface response headers, so `EtaHub` calls
+      the rule without `cacheAgeSec` and every not-advanced round takes the blind 33 s arm. Wiring it means
+      an adapter return shape that carries the header out (or a header sink threaded into `fetchUpstream`),
+      which touches every adapter's signature — hence a row rather than a rider on ADR-135. The arithmetic
+      is already corpus-pinned, so the wiring is the whole job.
 - [ ] 🟠 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
       **The mechanism is built and Route detail is wired (2026-08-12,
       [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence));

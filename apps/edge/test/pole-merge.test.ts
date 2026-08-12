@@ -314,11 +314,12 @@ async function liveEtasOf(target: string): Promise<Eta[]> {
   ws.accept()
   opened.push(ws)
   const deadline = Date.now() + 5_000
-  while (frames.length < 3 && Date.now() < deadline) {
+  while (frames.length < 2 && Date.now() < deadline) {
     await new Promise<void>((resolve) => setTimeout(resolve, 25))
   }
-  if (frames.length < 3) throw new Error(`timed out waiting for 3 frames; got ${frames.length}`)
-  // `changed` on the first delta *is* the whole set — the snapshot before it was empty.
+  if (frames.length < 2) throw new Error(`timed out waiting for 2 frames; got ${frames.length}`)
+  // The whole set arrives in the deferred first-round snapshot (WP6-8b); `live` follows it. There is
+  // no first delta any more — an empty connect snapshot was the blanking bug, so it no longer exists.
   return frames.flatMap((f) =>
     f.type === 'snapshot' ? f.etas : f.type === 'delta' ? f.changed : [],
   )

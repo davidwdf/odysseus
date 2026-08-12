@@ -1,6 +1,12 @@
 import type { Eta } from '@nextbus/core'
 import { z } from 'zod'
-import { canonicalRouteId, cleanArrivals, optionalRemark, toBound } from './normalize'
+import {
+  canonicalRouteId,
+  cleanArrivals,
+  fetchUpstream,
+  optionalRemark,
+  toBound,
+} from './normalize'
 
 // Citybus publishes via the Government real-time gateway. Use V2 (V1.x is retired).
 const CTB_BASE = 'https://rt.data.gov.hk/v2/transport/citybus'
@@ -35,7 +41,7 @@ export async function fetchCitybusEta(
   route: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Eta[]> {
-  const res = await fetchImpl(`${CTB_BASE}/eta/CTB/${stopId}/${route}`)
+  const res = await fetchUpstream(fetchImpl, `${CTB_BASE}/eta/CTB/${stopId}/${route}`)
   if (!res.ok) throw new Error(`Citybus ETA ${res.status} for ${route}@${stopId}`)
   const { generated_timestamp, data } = CtbEtaResponse.parse(await res.json())
   return groupCtb(stopId, generated_timestamp, data)

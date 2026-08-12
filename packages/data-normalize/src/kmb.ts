@@ -1,6 +1,12 @@
 import type { Eta, OperatorId } from '@nextbus/core'
 import { z } from 'zod'
-import { canonicalRouteId, cleanArrivals, optionalRemark, toBound } from './normalize'
+import {
+  canonicalRouteId,
+  cleanArrivals,
+  fetchUpstream,
+  optionalRemark,
+  toBound,
+} from './normalize'
 
 const KMB_BASE = 'https://data.etabus.gov.hk/v1/transport/kmb'
 
@@ -37,7 +43,7 @@ export async function fetchKmbEta(
   serviceType: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Eta[]> {
-  const res = await fetchImpl(`${KMB_BASE}/eta/${stopId}/${route}/${serviceType}`)
+  const res = await fetchUpstream(fetchImpl, `${KMB_BASE}/eta/${stopId}/${route}/${serviceType}`)
   if (!res.ok) throw new Error(`KMB ETA ${res.status} for ${route}@${stopId}`)
   const { generated_timestamp, data } = KmbEtaResponse.parse(await res.json())
   return groupKmb(stopId, generated_timestamp, data)
@@ -54,7 +60,7 @@ export async function fetchKmbStopEta(
   stopId: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Eta[]> {
-  const res = await fetchImpl(`${KMB_BASE}/stop-eta/${stopId}`)
+  const res = await fetchUpstream(fetchImpl, `${KMB_BASE}/stop-eta/${stopId}`)
   if (!res.ok) throw new Error(`KMB stop-ETA ${res.status} for ${stopId}`)
   const { generated_timestamp, data } = KmbEtaResponse.parse(await res.json())
   return groupKmb(stopId, generated_timestamp, data)
@@ -114,7 +120,7 @@ export async function fetchKmbRouteEta(
   serviceType: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<RouteEtaEntry[]> {
-  const res = await fetchImpl(`${KMB_BASE}/route-eta/${route}/${serviceType}`)
+  const res = await fetchUpstream(fetchImpl, `${KMB_BASE}/route-eta/${route}/${serviceType}`)
   if (!res.ok) throw new Error(`KMB route-ETA ${res.status} for ${route}/${serviceType}`)
   const { generated_timestamp, data } = KmbEtaResponse.parse(await res.json())
 

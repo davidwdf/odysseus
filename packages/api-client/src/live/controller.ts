@@ -35,6 +35,18 @@ import type { LiveEngine, LiveEtaEngine } from './engine'
 
 /** One repaint's worth of truth: every current reading, what is being watched, and what the connection is doing. */
 export interface LiveEtaUpdate {
+  /**
+   * The session's `seq` — `0` until the first data frame has been applied (WP6-8b).
+   *
+   * The sentinel matters more than the counter: `etas: []` means two different things on either side of
+   * it. At `seq > 0` it is the server's answer — "nothing is due" — and a holder should paint it. At
+   * `seq === 0` no `snapshot` has ever landed, so the empty list is `LIVE_SESSION_START`'s placeholder
+   * riding along on a `status` transition, and writing it into a query cache would blank arrivals the
+   * screen already painted from its own HTTP fetch — the ADR-073/087 blanking shape, from the client
+   * side. `EdgeClient`'s listener door reads this field to hold every update back until data exists;
+   * a holder of this controller that writes `etas` anywhere should do the same.
+   */
+  seq: number
   /** Canonically ordered by `(stopId, routeId)` — the kernel's order, so both engines agree (D1). */
   etas: readonly Eta[]
   /**
@@ -167,6 +179,7 @@ export function createLiveEtaController(deps: LiveEtaControllerDeps): LiveEtaCon
           // doc says a caller may skip on `false`; this is the caller that does.
           if (result.applied && alive()) {
             deps.emit({
+              seq: session.seq,
               etas: session.etas,
               targets: session.targets,
               failed: session.failed,

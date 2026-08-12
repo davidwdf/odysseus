@@ -121,10 +121,11 @@ function chunkIds(ids: readonly string[]): string[][] {
  * send: a `snapshot` on the first round, a `delta` computed by the kernel's `diffEtas` afterwards, and
  * a `status` frame per failure.
  *
- * **This is the default engine**, and that is the point of it: with no transport configured,
- * `EdgeClient.watch()` builds one of these, so what a screen gets is one request per `refreshAfterMs`
- * for its whole target set, a target dropped only when its id stops resolving, and a failure that never
- * reads as a departure — and a socket is opt-in.
+ * **The default engine since ADR-121 is the socket; this is what stands behind it.** It is what
+ * `LIVE_TRANSPORT=poll` selects, and what `EdgeClient`'s supervisor rebuilds a subscription on when the
+ * socket fails repeatedly without ever delivering a frame (WP6-8b) — so what a screen gets, on either
+ * path, is one request per `refreshAfterMs` for its whole target set, a target dropped only when its id
+ * stops resolving, and a failure that never reads as a departure.
  */
 export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
   const timers = deps.timers ?? systemTimers
@@ -158,6 +159,18 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
    * (its target list was fixed for the life of the subscription); a resync can, and does.
    */
   let generation = 0
+  /**
+   * The rounds' own ordering, within one generation (WP6-8b). `timers.every` fires on the clock, not
+   * on completion, so a round slower than the cadence overlaps the next — measured on a poll-emulated
+   * route watch, where one round ran 75 s against a 30 s cadence (ADR-121) — and completion order is
+   * then the network's choice: a slow round finishing *after* a fast one would fold data it fetched
+   * earlier into the state and publish it as a fresh delta, and every time on screen steps backwards
+   * for one cadence. So each round takes a number when it starts and publishes only if no
+   * higher-numbered round has applied its result first; a stale completion is discarded whole, exactly as a
+   * completion from a dead generation is, one line above where this is checked.
+   */
+  let roundCounter = 0
+  let newestApplied = 0
 
   const emit = (frame: ServerFrame) => {
     if (!closed) sink?.frame(frame)
@@ -181,6 +194,7 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
 
   const runRound = async () => {
     const round = generation
+    const roundId = ++roundCounter
     const asked = watching
     /** Every entry the round came back with, by the id it answers for. */
     const entries = new Map<string, EtaBatchEntry>()
@@ -203,9 +217,12 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
         }
       }),
     )
-    // Two ways this round is no longer wanted: the subscription was released, or the target set moved
-    // while the requests were in flight.
-    if (closed || round !== generation) return
+    // Three ways this round is no longer wanted: the subscription was released, the target set moved
+    // while the requests were in flight, or a younger round already finished and applied its result — in which
+    // case what this one fetched is the older data, whatever the completion order says (see
+    // `roundCounter`). Checked before the first state mutation, so a discarded round leaves no trace.
+    if (closed || round !== generation || roundId <= newestApplied) return
+    newestApplied = roundId
 
     // **Walked in accepted-target order, never in the response's order**, and narrowed here rather than
     // by the server. Two things depend on it: `reportable` below publishes failures in exactly this

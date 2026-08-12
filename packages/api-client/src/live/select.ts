@@ -21,13 +21,39 @@ import { createSocketTransport } from './socket'
 /**
  * The two legal spellings, as data — so the warning below can name them and a test can enumerate them.
  *
- * **There is deliberately no `auto`.** An automatic choice implies a fallback from socket to poll, and
- * no such fallback exists: `createSocketTransport` reconnects for ever rather than degrading, because a
- * transport that quietly became a different transport would make "which engine is driving" unanswerable
- * and would hide a broken socket behind a working poll. `auto` would be a promise the code does not
- * keep. Recorded in ADR-056 and in `.env.example` in the same words.
+ * **There is deliberately no `auto` spelling, and there is now a supervised fallback — those are
+ * different things** (WP6-8b; the original "no fallback exists" stance is ADR-056's, amended). A
+ * *transport* still never quietly becomes a different transport: `createSocketTransport` reconnects for
+ * ever, because a socket that silently turned into a poll would make "which engine is driving"
+ * unanswerable and would hide a broken socket behind a working poll. What changed is one level up:
+ * `EdgeClient` supervises a socket *subscription* and rebuilds it on the poll engine after
+ * `SOCKET_FALLBACK_AFTER_FAILURES` consecutive connection failures with no data ever delivered — a
+ * whole-subscription swap with a stated trigger, not a transport mood. The stance was written when the
+ * socket was opt-in behind an env var; once ADR-121 made it the *default*, "no fallback" changed
+ * meaning: a rider whose network blocks WebSockets (an office proxy, a captive portal — and a browser
+ * exposes neither the status nor the body of a refused upgrade, so nothing can even say why) would ship
+ * with live times that never arrive. Degrade-to-slow is the promise the edge already makes for every
+ * missing binding (ADR-055); this extends it to the network path.
  */
 export const LIVE_ENGINES: readonly LiveEngine[] = ['poll', 'socket']
+
+/**
+ * Consecutive socket connection failures — with **no data frame ever delivered** — before a
+ * subscription is rebuilt on the poll engine (WP6-8b).
+ *
+ * Three, which at the kernel's reconnect schedule (1 s → 2 s → 4 s, half-jittered) means a
+ * WebSocket-hostile network is discovered and degraded within roughly ten seconds of first paint —
+ * inside one poll cadence, so the rider's first live round arrives about when the socket's first
+ * round would have. One failure is a blip a reconnect absorbs; three in a row with nothing ever
+ * received is a network that does not carry this protocol.
+ *
+ * The guard is "never delivered data", not "recently failed": a socket that has ever produced a frame
+ * has proved the path works, and its failures thereafter are outages the reconnect schedule owns —
+ * falling back *then* would swap a recovering fast engine for a slow one mid-journey. And a terminal
+ * `closed` + `retryable: false` never counts: the server answered, and what it said was "stop asking",
+ * which polling the same targets would not change.
+ */
+export const SOCKET_FALLBACK_AFTER_FAILURES = 3
 
 /**
  * The shipped default — **the socket since 2026-08-11**, and the reason is a measurement rather than a

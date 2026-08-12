@@ -36,6 +36,7 @@ import type {
 } from '@nextbus/contract'
 import { dedupeEtas, etaBoardingKey } from './eta'
 import { formatFavoriteRouteKey, memberStopIds, parseRouteId, parseStopOrPlaceId } from './ids'
+import { CLIENT_POLICY_DEFAULTS } from './policy'
 import type {
   DeltaFrame,
   Eta,
@@ -164,16 +165,25 @@ export const LIVE_ROUTE_PUBLISH_MARGIN_MS = 3_000
  * **Alignment improves the odds and cannot guarantee**, because the CDN entry is shared with every other
  * consumer of the API: whoever's request created it set its phase, not us, so a still-valid copy can be older
  * than the newest publish (measured worst case in the same sample: 78 s). When `data_timestamp` has not
- * advanced we know the round taught us nothing, and one short retry is cheaper than waiting out a full period
- * — 15 s, because the entry that misled us expires within 45 s of its own creation and a third of that is a
- * reasonable first look.
+ * advanced we know the round taught us nothing, and one short retry is cheaper than waiting out a full period.
+ *
+ * **Derived from `refreshAfterMs`, not chosen — because the edge's own cache is the binding floor**
+ * (WP6-8b). This constant was 15 s, reasoned entirely about the upstream CDN's 45 s entry; what that
+ * reasoning left out was one layer of our own. Every board a route round reads goes through the edge's
+ * coalescer, whose TTL is `ETA_TTL_SEC = refreshAfterMs / 1000` (ADR-053/057) — so a retry inside that
+ * window is answered from our own cache with the identical bytes *by construction*, concludes "not
+ * advanced" again, and has spent a billed Durable Object wake to learn nothing, every time. A blind
+ * retry can only be worth its alarm if it lands past the coalescer window, so it is written as that
+ * window plus the same margin the aligned arm uses: 30 s + 3 s. Deriving it keeps the coupling visible
+ * at the definition, which is the same argument `ETA_TTL_SEC` itself makes about this exact number.
  *
  * A deliberate non-decision: there is **no quiet-route ramp** here, unlike `nextLiveCadenceMs`. A route with
  * nothing on it returns no `data_timestamp` at all and simply ticks at the period. Adding a ramp would have to
  * interact with this retry arm, and the case for its shape should come from measuring how often the
  * not-advanced arm actually fires — which cannot be known until this runs.
  */
-export const LIVE_ROUTE_RETRY_MS = 15_000
+export const LIVE_ROUTE_RETRY_MS =
+  CLIENT_POLICY_DEFAULTS.refreshAfterMs + LIVE_ROUTE_PUBLISH_MARGIN_MS
 /**
  * The CDN's advertised TTL — and the **one** thing `45 − age` is the right answer for.
  *
@@ -1176,7 +1186,15 @@ export function nextRouteRoundMs(input: {
   publishedAt?: string
   /** …and the newest the round before it saw, so this function decides "advanced" rather than its caller. */
   previousPublishedAt?: string
-  /** The `age` header on the response that misled us, in **seconds**, when the round has one to offer. */
+  /**
+   * The `age` header on the response that misled us, in **seconds**, when the round has one to offer.
+   *
+   * **No production caller offers one yet** (noted WP6-8b, filed in `docs/07`): the ETA adapters return
+   * parsed readings and never surface response headers, so `EtaHub` calls this rule without the field
+   * and every not-advanced round takes the blind-retry arm below. The arm is kept — corpus-pinned, and
+   * the arithmetic is the part a hand-port needs — but until an adapter carries the header out, arm 2
+   * is a design with no wire into it, and reading this table as "what runs today" would overstate it.
+   */
   cacheAgeSec?: number
   now: number
 }): number {

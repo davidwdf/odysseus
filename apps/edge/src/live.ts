@@ -147,10 +147,13 @@ export async function liveUpgrade(
     failWith(code, message, headers)
 
   // **A Worker with no `ETA_HUB` binding still runs.** That is ADR-055's degrade-to-slow promise and
-  // the shape the whole edge already follows for `DATASET`/`BUILDS`: the live socket is unavailable,
+  // the shape the whole edge already follows for `DATASET`/`BUILDS`: the live socket is unavailable and
   // says so permanently (`not_found` — this deployment does not serve it, and asking again will not
-  // change that), and every client falls back to the poll transport, which is the default engine
-  // anyway. A required binding would instead make `pnpm dev:edge` fail to start for anyone who has not
+  // change that). A browser client cannot read that refusal — a failed upgrade exposes neither status
+  // nor body — but it does not need to: the shipped default engine is the socket (ADR-121), and
+  // `EdgeClient`'s supervisor rebuilds the subscription on the poll engine after three fruitless
+  // connections (WP6-8b), so this deployment serves live times slowly rather than not at all. A
+  // required binding would instead make `pnpm dev:edge` fail to start for anyone who has not
   // provisioned a Durable Object.
   if (!env.ETA_HUB) {
     return fail('not_found', 'live ETAs are not enabled on this deployment')
