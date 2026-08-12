@@ -25,6 +25,10 @@
 	<string name="noService">No scheduled service</string>
 	<!-- {s} → %1$s -->
 	<string name="updatedAgo">updated %1$ss ago</string>
+	<!-- {time} → %1$s -->
+	<string name="feedLastUpdated">Last updated %1$s</string>
+	<string name="feedOffline">You’re offline — showing the last times we had</string>
+	<string name="feedUnreachable">Can’t reach NextBus — retrying</string>
 	<string name="stale">stale</string>
 	<string name="retry">Retry</string>
 	<string name="locating">Finding stops near you…</string>

@@ -25,6 +25,10 @@
 	<string name="noService">暂无班次</string>
 	<!-- {s} → %1$s -->
 	<string name="updatedAgo">%1$s 秒前更新</string>
+	<!-- {time} → %1$s -->
+	<string name="feedLastUpdated">最后更新 %1$s</string>
+	<string name="feedOffline">你目前离线，显示最后取得的时间</string>
+	<string name="feedUnreachable">无法连线至 NextBus，正在重试</string>
 	<string name="stale">数据过时</string>
 	<string name="retry">重试</string>
 	<string name="locating">正在查找附近车站…</string>

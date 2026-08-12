@@ -16,6 +16,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
+import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { JourneyLines } from '../components/JourneyLines'
 import { RailBusToken } from '../components/RailBusToken'
 import { RouteChip } from '../components/RouteChip'
@@ -24,6 +25,7 @@ import { RouteStopRow } from '../components/RouteStopRow'
 import { RouteStopSheet } from '../components/RouteStopSheet'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveRoute } from '../hooks/useLiveRoute'
+import { useOnline } from '../hooks/useOnline'
 import { useRailFlip } from '../hooks/useRailFlip'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
@@ -133,6 +135,7 @@ export function RouteDetail() {
    * `setInterval` for the clock — which this screen needed anyway.
    */
   const wantsLive = query.data?.liveArrivals !== undefined
+  const online = useOnline()
   const { round, now } = useLiveRoute(query.data?.route.id, {
     wanted: wantsLive,
     refreshAfterMs: policy.refreshAfterMs,
@@ -178,6 +181,20 @@ export function RouteDetail() {
         },
       })
     : undefined
+
+  /**
+   * The screen's freshness notice (ADR-133) — the kernel joins the view's newest board to the network's
+   * state. `trouble` is `unreachable` only for a failure that reached *us*: an `EdgeRequestError` means the
+   * Worker answered and said no, and a bare rejection means the fetch never got there. Both are ours to
+   * report; an **upstream** board refusing is not passed here at all, because the rows already say it.
+   */
+  const notice = feedNotice({
+    lastUpdatedIso: view?.lastUpdatedIso ?? null,
+    now,
+    online,
+    trouble: query.isError ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
 
   // The tab title is where a web rider reads the whole journey on one line — the resting label the RN
   // collapsing header shows at its expanded size. Restored on unmount so a route's title does not outlive it.
@@ -413,6 +430,12 @@ export function RouteDetail() {
               {t(locale, 'etasUnavailable')}
             </p>
           ) : null}
+
+          {/* And the screen's own freshness line, which answers a different question: `etasUnavailable`
+              above says *an upstream board refused us*, this says *we have stopped being fed at all*. Both
+              can be true, and they are two sentences because a rider acts on them differently — one is
+              nothing they can do, the other may be their network. ADR-133. */}
+          <FeedNotice notice={notice} />
 
           {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read
               against — the only thing left on this element now the overlay is gone. */}

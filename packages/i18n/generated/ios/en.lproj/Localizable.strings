@@ -25,6 +25,10 @@
 "noService" = "No scheduled service";
 /* {s} → %1$@ */
 "updatedAgo" = "updated %1$@s ago";
+/* {time} → %1$@ */
+"feedLastUpdated" = "Last updated %1$@";
+"feedOffline" = "You’re offline — showing the last times we had";
+"feedUnreachable" = "Can’t reach NextBus — retrying";
 "stale" = "stale";
 "retry" = "Retry";
 "locating" = "Finding stops near you…";

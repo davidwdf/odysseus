@@ -1821,6 +1821,146 @@
           "expect": null
         }
       ]
+    },
+    "feedNotice": {
+      "doc": "What a screen says when it has stopped being fed. Precedence is offline -> unreachable -> lastUpdated -> none, because each earlier state explains the later ones. Upstream board refusals are deliberately NOT an input: they are already said per card and per row, and a screen-level sentence could disagree with those (a live round asks each pole separately).",
+      "cases": [
+        {
+          "name": "a-fresh-board-says-nothing",
+          "why": "Silence is the ordinary case and must stay silent: a notice that shows while everything works is one riders learn to ignore before the day it matters (ADR-122's lesson about the stale cue crying wolf).",
+          "args": {
+            "lastUpdatedIso": "2026-08-12T14:19:30+08:00",
+            "now": 1786515600000,
+            "online": true,
+            "trouble": "none",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "none",
+            "at": "14:19"
+          }
+        },
+        {
+          "name": "a-board-past-the-threshold-says-when-it-was-updated",
+          "why": "The row this rule exists for. The owner found it with the local Worker down: every time kept counting down and nothing said the data had stopped arriving.",
+          "args": {
+            "lastUpdatedIso": "2026-08-12T14:15:00+08:00",
+            "now": 1786515600000,
+            "online": true,
+            "trouble": "none",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "lastUpdated",
+            "at": "14:15"
+          }
+        },
+        {
+          "name": "exactly-at-the-threshold-is-still-fresh",
+          "why": "The boundary, on the same side as isStale's: strictly greater than. A port that used >= would announce staleness one tick early on every screen.",
+          "args": {
+            "lastUpdatedIso": "2026-08-12T14:18:00+08:00",
+            "now": 1786515600000,
+            "online": true,
+            "trouble": "none",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "none",
+            "at": "14:18"
+          }
+        },
+        {
+          "name": "offline-outranks-a-stale-board",
+          "why": "Precedence. A rider with no network does not also need telling their data is old — the offline sentence explains the staleness, and two sentences about one situation is worse than one.",
+          "args": {
+            "lastUpdatedIso": "2026-08-12T14:10:00+08:00",
+            "now": 1786515600000,
+            "online": false,
+            "trouble": "none",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "offline",
+            "at": "14:10"
+          }
+        },
+        {
+          "name": "offline-outranks-an-unreachable-edge",
+          "why": "Both are true when the network is gone — a fetch that never left the device also failed. Whose problem it is decides which sentence, and it is the rider's.",
+          "args": {
+            "lastUpdatedIso": "2026-08-12T14:10:00+08:00",
+            "now": 1786515600000,
+            "online": false,
+            "trouble": "unreachable",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "offline",
+            "at": "14:10"
+          }
+        },
+        {
+          "name": "an-unreachable-edge-is-said-even-on-fresh-data",
+          "why": "A refetch can fail while the readings on screen are still inside the threshold. Staying silent until the data ages would delay the only sentence that tells a rider the screen has stopped moving.",
+          "args": {
+            "lastUpdatedIso": "2026-08-12T14:19:30+08:00",
+            "now": 1786515600000,
+            "online": true,
+            "trouble": "unreachable",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "unreachable",
+            "at": "14:19"
+          }
+        },
+        {
+          "name": "no-readings-and-no-trouble-says-nothing",
+          "why": "A screen still loading, or one with genuinely nothing due, has no freshness to report. Saying 'last updated' with no time to put after it would be worse than silence — the same reason formatClock returns an empty string rather than inventing a value.",
+          "args": {
+            "lastUpdatedIso": null,
+            "now": 1786515600000,
+            "online": true,
+            "trouble": "none",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "none",
+            "at": ""
+          }
+        },
+        {
+          "name": "no-readings-but-offline-still-says-offline",
+          "why": "The connectivity sentence does not depend on having data: a cold offline start has nothing to be stale, and 'you are offline' is still the thing a rider can act on.",
+          "args": {
+            "lastUpdatedIso": null,
+            "now": 1786515600000,
+            "online": false,
+            "trouble": "none",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "offline",
+            "at": ""
+          }
+        },
+        {
+          "name": "an-unparseable-timestamp-is-not-evidence-of-staleness",
+          "why": "Upstream really does publish fields this app cannot read (the fare sheet's whole defect, ADR-128). A NaN compared against a threshold is false in every direction, so the rule says so explicitly rather than leaning on comparison luck — a port that wrote now - NaN > ms would get silence by accident and a port that wrote the inverse would announce staleness on every screen.",
+          "args": {
+            "lastUpdatedIso": "not a date",
+            "now": 1786515600000,
+            "online": true,
+            "trouble": "none",
+            "staleAfterMs": 120000
+          },
+          "expect": {
+            "kind": "none",
+            "at": ""
+          }
+        }
+      ]
     }
   }
 }

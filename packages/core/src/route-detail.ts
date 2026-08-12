@@ -497,6 +497,16 @@ export interface RouteDetailView {
   /** The buses on the rail, in route order. */
   buses: RailBus[]
   /**
+   * The **freshest board this screen drew**, or `null` when it drew no readings at all — the data half of
+   * the screen's freshness notice (`feedNotice`).
+   *
+   * The view's, not the screen's, because the view is what knows *which* boards it used: a route's rows can
+   * carry readings of different ages, and "the newest one" is a fact about the list rather than about the
+   * fetch. The other half — whether the network or our edge failed — is the screen's, and `feedNotice` joins
+   * the two.
+   */
+  lastUpdatedIso: string | null
+  /**
    * Which vehicle to draw for those buses — `routeVehicle`'s answer, carried so no renderer has to ask.
    *
    * On the view rather than on each `RailBus` because every bus on one route is the same vehicle: putting
@@ -661,7 +671,18 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
     return marker === undefined ? [] : [railBus(marker, row.name.label, labels)]
   })
 
+  // The newest board among the ones this view drew. A plain max over the payload's own timestamps: whichever
+  // pole answered most recently is what "last updated" means to a rider looking at the whole schematic.
+  // Unreadable values are skipped rather than treated as epoch zero, which would make one bad field read as
+  // "last updated 08:00" on every screen.
+  const boardTimes = stops
+    .map((st) => (st.eta ? Date.parse(st.eta.dataTimestamp) : Number.NaN))
+    .filter((t) => !Number.isNaN(t))
+  const lastUpdatedIso =
+    boardTimes.length === 0 ? null : new Date(Math.max(...boardTimes)).toISOString()
+
   return {
+    lastUpdatedIso,
     vehicle: routeVehicle(route.operator),
     header: {
       operator: route.operator,

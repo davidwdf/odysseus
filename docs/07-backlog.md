@@ -633,8 +633,9 @@ written down.
       🟡 Not walked on a live GMB route: no GMB appeared in today's dataset near the coordinates tried, and
       the corpus's GMB route ids predate the current build. The switch rests on the kernel corpus (6 cases,
       including `GMB → minibus`) plus one of `routeDetailView`'s 24 cases being a real GMB route.
-      🟡 The roof sign overlaps the body's top stroke by ~1.8 units, so it reads as a pod fused to the
-      roofline rather than a box on it. Left as-is — it is close to the "roof pod" variant that was liked.
+      ✅ The roof sign overlaps the body's top stroke by ~1.8 units, so it reads as a **pod fused to the
+      roofline** rather than a box on it. **Confirmed as intended by the owner** — it is the "roof pod"
+      variant, arrived at by accident and then kept on purpose. Not a defect; do not "fix" the overlap.
 - [ ] 🟠 **Bring back the lab as a real component gallery, and drive it from the published specs.**
       **Started:** the lab is now a switcher over more than one page (`#rail`, `#glyphs`), which is the
       scaffolding the gallery needs — and `/lab` without a trailing slash no longer silently serves the
@@ -697,7 +698,26 @@ written down.
         considering: the tab bar is probably not the question — what is *in* it is.**
 
 ## Infra / hardening
-- [ ] 🔴 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
+- [ ] 🟠 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
+      **The mechanism is built and Route detail is wired (2026-08-12,
+      [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence));
+      demoted from 🔴 because ADR-008 is satisfied again.** `feedNotice` in the kernel with a 9-case corpus
+      decides which of the states a screen is in — precedence `offline` → `unreachable` → `lastUpdated` →
+      `none`, because each earlier state *explains* the later ones — and one shared `FeedNotice` component
+      draws it in `text-muted`, silent in the ordinary case.
+      **The fourth sentence is deliberately absent**, which is this row's own most important line honoured:
+      an upstream board refusing already has vocabulary, and a screen-level duplicate could disagree with it,
+      because a live round asks each pole separately. Route detail can therefore show *two* lines at once,
+      and that is right — they answer different questions.
+      **Still owed:** `lastUpdatedIso` and a `trouble` value for **Nearby, Place detail and Favourites**,
+      each of which reaches its readings through a different hook. Until then **three screens still say
+      nothing.** Plus: the wording is a placeholder awaiting the owner (ADR-114/122 precedent), a reading
+      from yesterday reads as today (`formatClock` has no date), and `trouble` currently collapses *"the
+      Worker said no"* and *"the fetch never arrived"* into one sentence — ADR-124 showed they are
+      distinguishable when one earns its own.
+
+      <details><summary>The original scoping, kept because the four-state table is still the plan</summary>
+
       **Promoted to 🔴 and given the whole job on 2026-08-12**, at the owner's direction: *"I still don't
       love graying the text, it's confusing on its own. I'm happy to remove this feature for now (the tilde
       and gray text) … let's allow a basic error messaging/alerts system to convey if the times are out of
@@ -767,6 +787,9 @@ written down.
       whether to keep asking** (`ERROR_CODES` in `packages/contract`), so this line should render that
       distinction rather than invent one — a permanent failure and a transient one are different sentences,
       which is the same argument ADR-114 made for `unavailable` versus `perStopOnly`.
+
+      </details>
+
 - [ ] 🟡 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
       the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
       defect in the route watch, but in what the batch endpoint can express**. **Demoted from 🟠 the same

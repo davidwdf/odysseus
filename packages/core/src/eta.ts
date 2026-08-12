@@ -285,6 +285,84 @@ export function remarkView(
 const HK_UTC_OFFSET_MS = 8 * 60 * 60 * 1000
 
 /**
+ * What a **screen** says when it has stopped being fed — the four states of `docs/07`'s hardening row,
+ * reduced to the three that need a sentence.
+ *
+ * ## Why this is a screen's statement and not a reading's
+ *
+ * Staleness is a property of the **board**: one `dataTimestamp` per board, so a per-reading cue draws one
+ * fact once per reading and a rider can do nothing with *"this number is two minutes old"*. Two such cues
+ * were built and withdrawn for exactly that reason (ADR-123). What a rider *can* act on is *"the screen has
+ * stopped updating"*, and that is one line, once, here.
+ *
+ * ## The four states, and why one of them says nothing
+ *
+ * | state | what it means to a rider | this returns |
+ * |---|---|---|
+ * | fresh | nothing to say | `none` |
+ * | old data, still trying | *"the data is old and we are still asking"* | `lastUpdated` |
+ * | the rider has no network | *their* problem to fix | `offline` |
+ * | our edge is unreachable or erroring | *our* problem, retrying | `unreachable` |
+ * | **an upstream board refused** | already has vocabulary | **nothing — deliberately** |
+ *
+ * The last row is the important one. A refused upstream board is already said per card and per row
+ * (`StopCardView.incomplete`, `RouteStopRowView.incomplete`, `liveArrivals`) by ADR-073/077/081/114, and a
+ * second sentence at screen level could **disagree with the first**: a live round asks each pole separately,
+ * so one kerb can refuse while forty answer, and no screen-level line can say that without being wrong about
+ * most of the route. So `feedNotice` is not given upstream failures and has no arm for them.
+ *
+ * ## Precedence, which is the whole of the logic
+ *
+ * `offline` → `unreachable` → `lastUpdated` → `none`. Each earlier state *explains* the later ones: a rider
+ * with no network does not also need telling their data is old, and neither sentence is improved by adding
+ * the other. One line, one message.
+ *
+ * ## The clock
+ *
+ * `at` is Hong Kong wall-clock from `formatClock`, i.e. an **absolute** time. ADR-008 prefers that to a
+ * fabricated relative one — *"2 minutes ago"* ages while nothing re-renders, which is the same dishonesty as
+ * a client-side countdown. It is carried on every arm, not only `lastUpdated`, so a later iteration can
+ * enrich the offline sentence without a kernel change.
+ *
+ * ⚠️ **A reading from yesterday reads as today.** `formatClock` gives an `HH:MM` with no date, so a cache
+ * replayed after midnight says *"Last updated 23:58"* with no hint that it is stale by a day. Recorded rather
+ * than fixed: the honest fix needs a date-aware format and a locale, and this arm is only reachable through
+ * the persisted query cache. `docs/07` carries it.
+ *
+ * @spec eta#feedNotice
+ */
+export function feedNotice(input: {
+  /** The freshest board on screen, or `null` when the screen is drawing no readings at all. */
+  lastUpdatedIso: string | null
+  now: number
+  /** Whether the platform believes it has a network — a platform fact, handed in like a clock. */
+  online: boolean
+  /** How the last attempt failed. Upstream refusals are **not** passed here; see above. */
+  trouble: FeedTrouble
+  staleAfterMs: number
+}): FeedNotice {
+  const at = input.lastUpdatedIso === null ? '' : formatClock(input.lastUpdatedIso)
+  if (!input.online) return { kind: 'offline', at }
+  if (input.trouble === 'unreachable') return { kind: 'unreachable', at }
+  const t = input.lastUpdatedIso === null ? Number.NaN : Date.parse(input.lastUpdatedIso)
+  // An unreadable or absent timestamp is not evidence of staleness. Saying "last updated" with no time to
+  // put after it would be worse than silence, which is the same reason `formatClock` returns '' rather
+  // than inventing a value.
+  if (Number.isNaN(t)) return { kind: 'none', at: '' }
+  return input.now - t > input.staleAfterMs ? { kind: 'lastUpdated', at } : { kind: 'none', at }
+}
+
+/** How the last attempt to reach our own edge failed. An upstream board's refusal is not one of these. */
+export type FeedTrouble = 'none' | 'unreachable'
+
+/** What a screen should say about its own freshness, and the clock time to say it with. */
+export interface FeedNotice {
+  kind: 'none' | 'lastUpdated' | 'offline' | 'unreachable'
+  /** Hong Kong wall-clock of the freshest board, or `''` when there is none. */
+  at: string
+}
+
+/**
  * Hong Kong wall-clock time of an arrival, `HH:mm` on a 24-hour clock — preferred for longer waits
  * (proposals/00 P5, the countdown⇄clock toggle). Returns `''` for an unparseable timestamp.
  *
