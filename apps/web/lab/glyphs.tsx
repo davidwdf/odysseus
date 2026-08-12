@@ -6,32 +6,36 @@
  * `src/` may never import from `lab/`. When one of these wins, it is **copied** into `src/` (and its RN
  * twin), not imported from here.
  *
- * ## Settled (round four)
+ * ## Settled
  *
- * · **Radii are Lucide's, everywhere.** Body `rx=2`, windows `rx=1`. That is the two-value system the
- *   installed `lucide-react` set actually uses — `rx="2"` 260 times, `rx="1"` 111 — rather than a formula.
- *   The shipping glyph's body was 2.5, which was never a decision: `docs/09` §8 pins the 24 px grid, the
- *   2 px stroke and the round caps/joins and has never mentioned radius.
+ * · **The decker is D1c** — body 14 × 17.0 from y=2.2, two 3.6-high bands, three derived gaps of 3.27, and
+ *   **no headlights**: they do not fit (1.27 of clear lower face against the 2.00 a dot needs), and the
+ *   shifted-rhythm version that would have made room is not being taken.
+ * · **The minibus is the decker's width** (14), with the decker's window width (8), a **high** window
+ *   (roof-to-glass 3.0) **4.4 tall**, and a filled roof sign box.
+ * · **Radii are Lucide's two values**: body `rx=2`, windows `rx=1`. The concentric alternative was measured
+ *   and dropped as unobservable — the whole sweep from square to a full pill is identical at token size,
+ *   because a round linejoin on a 2 px stroke rounds a square corner anyway.
+ * · **Headlights are out.** Drawn Lucide's way (a zero-length path a round cap paints as a dot) they fit the
+ *   minibus and not the decker, and a detail on one vehicle only becomes a *distinguishing* mark rather than
+ *   a shared one — which competes with the height-and-pane difference already doing that work.
  *
- *   The concentric alternative (window radius = body radius − side inset) was measured and **abandoned as
- *   unobservable**: it gives `2 − 3 → 0`, i.e. square, and `stroke-linejoin="round"` on a 2 px stroke rounds
- *   a square corner by about half the stroke anyway. The whole sweep from 0 to a full pill was **visually
- *   identical at token size** in a browser. Below about `rx=1` the stroke decides the look, not the path —
- *   so the radius was chosen on the rule, because nothing else could choose it.
+ * ## The two questions this round
  *
- * · **The decker is D1c**: body 14 × 17.0 from y=2.2, two 3.6-high bands, three derived gaps of 3.27.
+ * **1. Is there anything worth putting in the minibus's empty lower face?** A single horizontal line, less
+ * than full width — a bumper, or a plate. The arithmetic is not encouraging and is worth stating before
+ * looking: round caps add half the stroke at each end, so a **6-wide path paints 8 wide, which is the
+ * window's full width**. "Not full width" therefore caps the path at about 4–5. At token size that is a
+ * 2.7–3.3 px dash, a third of the glyph's width and one stroke tall — right at the edge of reading as a mark
+ * rather than as dirt. The owner's own default is to leave it empty, and this row exists to confirm that
+ * rather than to talk them out of it.
  *
- * · **The minibus is the decker's width** (14) with the decker's window width (8), a **high** window
- *   (roof-to-glass 3.0), and a filled roof sign box. Its **window height is the one open question** — the
- *   owner is *"kind of liking a height around 4.4"*, so `MINIBUSES` is that sweep and nothing else.
- *
- * ## Why the minibus glass is allowed to be taller than the decker's
- *
- * It is not an inconsistency. A light bus really does have a proportionally bigger windscreen — one deck of
- * glass instead of two bands sharing the same face — so at 4.4 the minibus reads as *one big screen* against
- * the decker's *two slots*, which is a second axis of difference on top of height. What to watch as it grows:
- * the glazed interior passes the 2 px stroke at band 4.0 (interior 2.0), and the aspect ratio passes 2:1 at
- * the same point, after which the window stops reading as a *band* and starts reading as a *pane*.
+ * **2. Lucide-style wheels.** `bus-front` draws a wheel as `M6 19v2` — a 2-long vertical stroke from the
+ * body's bottom edge, not a filled pill. Ours are pills, which `docs/09` §8 records as a deliberate
+ * divergence: at a 2 px stroke a tyre's interior is too small to outline. Now that everything else here is
+ * on Lucide's rules, that is the one remaining departure, so it is worth seeing rather than assuming.
+ * Note the stroke version is not "smaller": a 2-long path with round caps paints **4 tall**, from the body's
+ * inner bottom edge to 2 below its outer one, which is exactly how Lucide's own sits.
  */
 
 interface GlyphProps {
@@ -39,9 +43,20 @@ interface GlyphProps {
   strokeWidth?: number
 }
 
-/** Lucide's two values, settled in round four. */
+/** Lucide's two values. */
 const BODY_RX = 2
 const WIN_RX = 1
+/** Half the 2 px stroke — how far a path's paint hangs beyond it, at a cap or a join. */
+const HALF_STROKE = 1
+
+const BODY_X = 5
+const BODY_W = 14
+const WIN_X = 8
+const WIN_W = 8
+/** Where the wheels sit horizontally — the centres our filled pills already use. */
+const WHEEL_X = [7.6, 16.4] as const
+
+export type WheelStyle = 'pill' | 'stroke'
 
 const stroke = (strokeWidth: number) =>
   ({
@@ -68,80 +83,76 @@ function Frame({ size, children }: { size: number; children: React.ReactNode }) 
 }
 
 /**
- * **A headlight, drawn the way Lucide draws one.** `bus-front` and `tram-front` both use a **zero-length
- * path** — `M8 15h.01` — which with `stroke-linecap="round"` paints a round dot exactly one stroke-width
- * across. Three things that buys, and they are why this is worth copying rather than reinventing:
- * the dot's size is the stroke's, so it never needs its own constant and cannot drift from it; it is
- * stroke-only, so it inherits `currentColor` with no `fill` override; and it is the same idiom Lucide uses
- * for every dot in the set, so a reader who knows Lucide reads it without being told.
+ * The wheels, either way.
  *
- * Positioned at x = 8 and 16 — **±4 from the body's centre line, which is Lucide's own offset** in
- * `bus-front`, and which here lands directly below the window's two corners. (Our body is 14 wide against
- * Lucide's 16, so the *proportional* equivalent would be 8.5 and 15.5; the absolute match reads better
- * because it lines up with the glass.)
+ * `pill` is what ships: a solid rounded rect peeking below the body, filled because at a 2 px stroke its
+ * interior is too small to outline (`docs/09` §8). `stroke` is Lucide's: a 2-long vertical path from the
+ * body's bottom edge, which its round caps paint 4 tall — so it reads as a wheel emerging from underneath
+ * rather than as a shape parked below it.
  */
-function Headlights({ y, s }: { y: number; s: ReturnType<typeof stroke> }) {
+function Wheels({
+  style,
+  bodyBottom,
+  s,
+}: {
+  style: WheelStyle
+  bodyBottom: number
+  s: ReturnType<typeof stroke>
+}) {
+  if (style === 'stroke') {
+    return (
+      <>
+        {WHEEL_X.map((x) => (
+          <path key={x} d={`M${x} ${bodyBottom}v2`} {...s} />
+        ))}
+      </>
+    )
+  }
   return (
     <>
-      <path d={`M8 ${y}h.01`} {...s} />
-      <path d={`M16 ${y}h.01`} {...s} />
+      {WHEEL_X.map((x) => (
+        <rect
+          key={x}
+          x={x - 1.2}
+          y={bodyBottom}
+          width="2.4"
+          height="2.6"
+          rx="1"
+          {...s}
+          fill="currentColor"
+        />
+      ))}
     </>
   )
 }
-
-/**
- * Both tyres, on the ground line every glyph here shares.
- *
- * ⚠️ **Lucide would draw these as short vertical strokes**, not filled pills — `bus-front` uses
- * `M6 19v2`. The pill is a deliberate, documented divergence (`docs/09` §8): at a 2 px stroke a tyre's
- * interior is too small to outline. Noted here because the rest of this file has just been brought onto
- * Lucide's rules, and this is the one place that stays off them on purpose.
- */
-function Tyres({ s }: { s: ReturnType<typeof stroke> }) {
-  return (
-    <>
-      <rect x="6.4" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-      <rect x="15.2" y="19.2" width="2.4" height="2.6" rx="1" {...s} fill="currentColor" />
-    </>
-  )
-}
-
-const BODY_X = 5
-const BODY_W = 14
-const WIN_X = 8
-const WIN_W = 8
-/** Half the 2 px stroke — the amount a path's paint hangs either side of it. */
-const HALF_STROKE = 1
 
 /* ────────────────────────────────────────────────────────────────────────── the decker */
 
-/**
- * **The decker, settled.** Two bands in a derived even rhythm: `gap = (17 − 2·band) / 3`, which for D1c's
- * 3.6 bands is 3.27 three times over. Written as arithmetic rather than as placed coordinates so a later
- * retune cannot quietly break the evenness — the property that made *"are they padded perfectly?"* a yes.
- */
+const DECK_TOP = 2.2
+const DECK_HEIGHT = 17
+const DECK_BAND = 3.6
+
+/** **D1c — settled.** Two 3.6 bands in a derived even rhythm, `gap = (17 − 2·band) / 3` = 3.27. */
 function Decker({
-  band,
-  gap,
-  headlights = false,
+  wheels = 'pill',
   size = 18,
   strokeWidth = 2,
-}: GlyphProps & { band: number; gap?: number; headlights?: boolean }) {
+}: GlyphProps & { wheels?: WheelStyle }) {
   const s = stroke(strokeWidth)
-  const TOP = 2.2
-  const HEIGHT = 17
-  // Undefined `gap` means the even rhythm — three equal gaps around two bands. Passing one explicitly
-  // spends the difference on the LOWER face instead, which is what makes room for headlights.
-  const g = gap ?? (HEIGHT - 2 * band) / 3
-  const lowerBandEnd = TOP + g * 2 + band * 2
-  const lampY = (lowerBandEnd + HALF_STROKE + (TOP + HEIGHT - HALF_STROKE)) / 2
+  const gap = (DECK_HEIGHT - 2 * DECK_BAND) / 3
   return (
     <Frame size={size}>
-      <rect x={BODY_X} y={TOP} width={BODY_W} height={HEIGHT} rx={BODY_RX} {...s} />
-      <rect x={WIN_X} y={TOP + g} width={WIN_W} height={band} rx={WIN_RX} {...s} />
-      <rect x={WIN_X} y={TOP + g * 2 + band} width={WIN_W} height={band} rx={WIN_RX} {...s} />
-      {headlights ? <Headlights y={lampY} s={s} /> : null}
-      <Tyres s={s} />
+      <rect x={BODY_X} y={DECK_TOP} width={BODY_W} height={DECK_HEIGHT} rx={BODY_RX} {...s} />
+      <rect x={WIN_X} y={DECK_TOP + gap} width={WIN_W} height={DECK_BAND} rx={WIN_RX} {...s} />
+      <rect
+        x={WIN_X}
+        y={DECK_TOP + gap * 2 + DECK_BAND}
+        width={WIN_W}
+        height={DECK_BAND}
+        rx={WIN_RX}
+        {...s}
+      />
+      <Wheels style={wheels} bodyBottom={DECK_TOP + DECK_HEIGHT} s={s} />
     </Frame>
   )
 }
@@ -160,67 +171,93 @@ export function DeckerD0({ size = 18, strokeWidth = 2 }: GlyphProps) {
   )
 }
 
-/** **D1c — the pick.** Bands 3.6, even gaps 3.27, Lucide radii, no headlights (they do not fit). */
-export const DeckerD1c = (p: GlyphProps) => <Decker band={3.6} {...p} />
-/** **D1c with headlights forced** — kept to *show* the collision rather than assert it. */
-export const DeckerD1cLampsForced = (p: GlyphProps) => <Decker band={3.6} headlights {...p} />
-/**
- * **D1s — the same bands, shifted up so there is a lower face to put lamps on.** Top and middle gaps 2.6,
- * bottom 4.6, which gives 2.60 of clear inner face against the 2.00 a dot needs.
- *
- * It gives up the even rhythm on purpose, and the trade is arguable both ways: evenness was a nice property
- * and nothing depended on it, while a real bus genuinely has more sheet metal below its windows than above.
- */
-export const DeckerD1s = (p: GlyphProps) => <Decker band={3.6} gap={2.6} {...p} />
-export const DeckerD1sLamps = (p: GlyphProps) => <Decker band={3.6} gap={2.6} headlights {...p} />
-
 /* ──────────────────────────────────────────────────────────────────────── the minibus */
 
-/** Roof-to-glass, fixed at M3n's high placement — the owner asked for the window up here. */
+const MINI_TOP = 6.6
+const MINI_HEIGHT = 12.6
 const MINI_TOP_GAP = 3.0
+const MINI_BAND = 4.4
+/** The clear inner face below the glass runs 15.0 → 18.2, so anything drawn in it centres on 16.6. */
+const MINI_FACE_MID =
+  (MINI_TOP + MINI_TOP_GAP + MINI_BAND + HALF_STROKE + (MINI_TOP + MINI_HEIGHT - HALF_STROKE)) / 2
 
 /**
- * **The minibus, settled apart from its window height.** Body 14 × 12.6 from y=6.6 (so the tyres share the
- * decker's ground line at 19.2), window 8 wide starting 3.0 below the roof, and a **filled** sign box above
- * the roofline — filled because an outlined 1.8-high box has no interior left at a 2 px stroke, which is why
- * the outlined and filled variants were indistinguishable two rounds ago.
+ * **The minibus — settled apart from what goes in the lower face.**
+ *
+ * `line` is a **path** width, not a painted one: round caps add 1 at each end, so `line: 4` paints 6 of the
+ * window's 8. `lineY` defaults to the centre of the clear face; a larger value sits it nearer the floor,
+ * where a bumper actually is.
  */
 function Minibus({
-  band,
-  headlights = false,
+  line,
+  lineY = MINI_FACE_MID,
+  wheels = 'pill',
   size = 18,
   strokeWidth = 2,
-}: GlyphProps & { band: number; headlights?: boolean }) {
+}: GlyphProps & { line?: number; lineY?: number; wheels?: WheelStyle }) {
   const s = stroke(strokeWidth)
-  const TOP = 6.6
-  const HEIGHT = 12.6
-  const winEnd = TOP + MINI_TOP_GAP + band
-  const lampY = (winEnd + HALF_STROKE + (TOP + HEIGHT - HALF_STROKE)) / 2
   return (
     <Frame size={size}>
+      {/* Filled: an outlined 1.8-high box has no interior left at a 2 px stroke. */}
       <rect x="8.8" y="4.6" width="6.4" height="1.8" rx="0.8" {...s} fill="currentColor" />
-      <rect x={BODY_X} y={TOP} width={BODY_W} height={HEIGHT} rx={BODY_RX} {...s} />
-      <rect x={WIN_X} y={TOP + MINI_TOP_GAP} width={WIN_W} height={band} rx={WIN_RX} {...s} />
-      {headlights ? <Headlights y={lampY} s={s} /> : null}
-      <Tyres s={s} />
+      <rect x={BODY_X} y={MINI_TOP} width={BODY_W} height={MINI_HEIGHT} rx={BODY_RX} {...s} />
+      <rect
+        x={WIN_X}
+        y={MINI_TOP + MINI_TOP_GAP}
+        width={WIN_W}
+        height={MINI_BAND}
+        rx={WIN_RX}
+        {...s}
+      />
+      {line ? <path d={`M${12 - line / 2} ${lineY}h${line}`} {...s} /> : null}
+      <Wheels style={wheels} bodyBottom={MINI_TOP + MINI_HEIGHT} s={s} />
     </Frame>
   )
 }
 
-/** **The minibus, settled at window 4.4.** */
-export const MinibusM = (p: GlyphProps) => <Minibus band={4.4} {...p} />
-/** **The same, with Lucide-dot headlights** — which fit here, with 3.20 of clear face against a need of 2.00. */
-export const MinibusMLamps = (p: GlyphProps) => <Minibus band={4.4} headlights {...p} />
+export const DeckerD1c = (p: GlyphProps) => <Decker {...p} />
+export const DeckerD1cStroke = (p: GlyphProps) => <Decker wheels="stroke" {...p} />
+export const MinibusM = (p: GlyphProps) => <Minibus {...p} />
+export const MinibusMStroke = (p: GlyphProps) => <Minibus wheels="stroke" {...p} />
+
+/** The lower-face question, all on pill wheels so only one thing moves. */
+export const LOWER_FACE = [
+  { id: 'empty', label: 'empty — the default', Glyph: (p: GlyphProps) => <Minibus {...p} /> },
+  {
+    id: 'l3',
+    label: 'line 3 → paints 5 of 8',
+    Glyph: (p: GlyphProps) => <Minibus line={3} {...p} />,
+  },
+  {
+    id: 'l4',
+    label: 'line 4 → paints 6 of 8',
+    Glyph: (p: GlyphProps) => <Minibus line={4} {...p} />,
+  },
+  {
+    id: 'l5',
+    label: 'line 5 → paints 7 of 8',
+    Glyph: (p: GlyphProps) => <Minibus line={5} {...p} />,
+  },
+  {
+    id: 'l4low',
+    label: 'line 4, low (a bumper)',
+    Glyph: (p: GlyphProps) => <Minibus line={4} lineY={17.4} {...p} />,
+  },
+] as const
+
+/** The wheel question, on both vehicles, with nothing else changing. */
+export const WHEEL_STUDY = [
+  { id: 'd-pill', label: 'D1c · pill wheels (ships)', Glyph: DeckerD1c },
+  { id: 'd-stroke', label: 'D1c · Lucide stroke wheels', Glyph: DeckerD1cStroke },
+  { id: 'm-pill', label: 'minibus · pill wheels', Glyph: MinibusM },
+  { id: 'm-stroke', label: 'minibus · Lucide stroke wheels', Glyph: MinibusMStroke },
+] as const
 
 export const DECKERS = [
   { id: 'D0', label: 'D0 — ships today', Glyph: DeckerD0, primary: false },
-  { id: 'D1c', label: 'D1c — the pick, no lamps', Glyph: DeckerD1c, primary: true },
-  { id: 'D1c!', label: 'D1c + lamps — collides', Glyph: DeckerD1cLampsForced, primary: false },
-  { id: 'D1s', label: 'D1s — bands up 2.6/2.6/4.6', Glyph: DeckerD1s, primary: false },
-  { id: 'D1s+', label: 'D1s + lamps — fits', Glyph: DeckerD1sLamps, primary: false },
+  { id: 'D1c', label: 'D1c — settled', Glyph: DeckerD1c, primary: true },
 ] as const
 
 export const MINIBUSES = [
-  { id: 'M', label: 'M — window 4.4, no lamps', Glyph: MinibusM, primary: true },
-  { id: 'M+', label: 'M + lamps — fits', Glyph: MinibusMLamps, primary: false },
+  { id: 'M', label: 'M — window 4.4, empty face', Glyph: MinibusM, primary: true },
 ] as const

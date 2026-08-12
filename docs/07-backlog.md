@@ -684,7 +684,18 @@ written down.
       *(Also noted while aligning with Lucide: it draws wheels as short vertical strokes, `M6 19v2`, where
       we draw filled pills. That divergence is deliberate and documented in `docs/09` §8 — a tyre's interior
       is too small to outline at a 2 px stroke — and is not being changed.)*
-      Once the headlight call is made: copy both into `apps/web/src/components/BusGlyph.tsx` and its RN twin,
+      **Round six (2026-08-12) — headlights out, and the last two questions asked.** Headlights were
+      rejected on looks; the decker stays **D1c** with its even rhythm.
+      · **The minibus's empty lower face:** a partial-width horizontal line was tried at three widths and a
+        low "bumper" placement. **It is more visible at token size than the arithmetic predicted** — but
+        what it costs is the thing the drawing depends on: a dash under the glass makes the minibus start
+        reading as a **two-band** vehicle, which is exactly the one-pane-against-two-slots difference that
+        tells it from the decker. So the empty face is not a compromise, it is the *reason* the pair works.
+      · **Wheels:** Lucide's stroke form (`M6 19v2`, painted 4 tall by its round caps) was drawn on both.
+        It is more Lucide-consistent and reads **spindlier** — thin legs rather than tyres — which is the
+        same conclusion `docs/09` §8 already recorded when it chose the filled pill, now confirmed by
+        looking rather than by argument. The pill stays; it remains this family's one deliberate departure.
+      Once those two are confirmed: copy both into `apps/web/src/components/BusGlyph.tsx` and its RN twin,
       switch on the operator so GMB routes get the minibus, and note that `docs/09` §8 should gain the
       radius rule it has never had. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
       drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.

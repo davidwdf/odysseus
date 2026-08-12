@@ -22,7 +22,7 @@
 
 import { useState } from 'react'
 import { BusGlyph } from '../src/components/BusGlyph'
-import { DECKERS, MINIBUSES } from './glyphs'
+import { DECKERS, LOWER_FACE, MINIBUSES, WHEEL_STUDY } from './glyphs'
 
 /** `RailBusToken`'s own numbers, so the token row is the real size and not an approximation of it. */
 const TOKEN = 24
@@ -108,15 +108,13 @@ export function GlyphLab() {
       <header className="flex flex-col gap-3 py-6">
         <h1 className="font-bold text-h1 text-text">Bus glyphs</h1>
         <p className="max-w-2xl text-body text-muted">
-          Round five. The minibus window is <strong>4.4</strong>, the decker is <strong>D1c</strong>
-          , and both radii are Lucide's (body <code>rx=2</code>, windows <code>rx=1</code>). The
-          open question is
-          <strong>headlights</strong>, drawn Lucide's own way — a zero-length path (
-          <code>M8 16.6h.01</code>) that a round linecap paints as a dot exactly one stroke wide.
-          They <strong>fit the minibus</strong> (3.20 of clear lower face against the 2.00 a dot
-          needs) and <strong>do not fit D1c</strong> (1.27) — <code>D1c!</code> shows the collision.
-          <code>D1s</code> shifts both bands up (gaps 2.6/2.6/4.6) to make room, giving up the even
-          rhythm to get it.
+          Round six, and the last two questions. The decker is <strong>D1c</strong>, the minibus
+          window is
+          <strong>4.4</strong>, radii are Lucide's, and <strong>headlights are out</strong> — they
+          fit the minibus but not the decker, and a detail on one vehicle only becomes a
+          distinguishing mark rather than a shared one. What is left: whether anything belongs in
+          the minibus's empty lower face, and whether the wheels should be Lucide's stroke instead
+          of our filled pill.
         </p>
         <div className="flex flex-wrap gap-3">
           <button
@@ -173,6 +171,40 @@ export function GlyphLab() {
             </div>
           ) : null,
         )}
+      </Row>
+
+      <Row
+        title="The minibus's empty lower face"
+        note="A single horizontal line, less than full width. Round caps add half the stroke at each end, so a 6-wide path paints 8 — the window's full width — which caps 'not full width' at about 4 to 5. At token size that is a 2.7–3.3 px dash. The last cell drops it to where a bumper actually is."
+      >
+        {LOWER_FACE.map((v) => (
+          <div key={v.id} className="flex w-40 shrink-0 flex-col items-center gap-2">
+            <div className="flex items-end gap-3">
+              <Token Glyph={v.Glyph} moving={false} />
+              <span className="flex text-text">
+                <v.Glyph size={64} />
+              </span>
+            </div>
+            <span className="text-center text-caption text-muted leading-tight">{v.label}</span>
+          </div>
+        ))}
+      </Row>
+
+      <Row
+        title="Wheels — our filled pill against Lucide's stroke"
+        note="Lucide draws a wheel as M6 19v2, a 2-long vertical path from the body's bottom edge. Its round caps paint that 4 tall, so it is not the smaller option — it reads as a wheel emerging from under the body rather than a shape parked below it. Ours is a filled pill because at a 2 px stroke a tyre's interior is too small to outline (docs/09 §8), which is the one place this family is still off Lucide's rules."
+      >
+        {WHEEL_STUDY.map((v) => (
+          <div key={v.id} className="flex w-44 shrink-0 flex-col items-center gap-2">
+            <div className="flex items-end gap-3">
+              <Token Glyph={v.Glyph} moving={false} />
+              <span className="flex text-text">
+                <v.Glyph size={64} />
+              </span>
+            </div>
+            <span className="text-center text-caption text-muted leading-tight">{v.label}</span>
+          </div>
+        ))}
       </Row>
 
       <Row
