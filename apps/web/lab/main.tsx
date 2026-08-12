@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import '../src/index.css'
 import '../src/tokens.css'
 import { applyMode, currentMode } from '../src/lib/appearance'
+import { Gallery } from './Gallery'
 import { GlyphLab } from './GlyphLab'
 import { RailLab } from './RailLab'
 
@@ -18,6 +19,7 @@ applyMode(currentMode())
 const LABS = {
   '#rail': { title: 'Rail motion', render: () => <RailLab /> },
   '#glyphs': { title: 'Bus glyphs', render: () => <GlyphLab /> },
+  '#gallery': { title: 'Design system', render: () => <Gallery /> },
 } as const
 
 type LabKey = keyof typeof LABS

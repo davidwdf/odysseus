@@ -122,7 +122,7 @@ export const FAVOURITES_SPEC: ComponentSpec = {
       why: 'ADR-008. Unlike Nearby there is no *position* to be stale here — this screen measures no distance and has nothing to say about where the rider is — so the only stale thing is a reading.',
       enforcement: {
         unenforced:
-          '`row.stale` is drawn as opacity inside the card, which is not text, so this harness cannot see it. It is `StopRow`’s field and `stop-row.spec.json` declares it there for the same reason.',
+          'Since ADR-123 the card draws no staleness cue at all — staleness is the board’s, not each figure’s. The screen says it once instead (ADR-133’s `feedNotice`), and this screen has yet to be wired for it, which is why this stays `unenforced` rather than becoming a projection.',
       },
     },
 

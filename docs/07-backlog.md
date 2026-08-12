@@ -636,28 +636,31 @@ written down.
       ✅ The roof sign overlaps the body's top stroke by ~1.8 units, so it reads as a **pod fused to the
       roofline** rather than a box on it. **Confirmed as intended by the owner** — it is the "roof pod"
       variant, arrived at by accident and then kept on purpose. Not a defect; do not "fix" the overlap.
-- [ ] 🟠 **Bring back the lab as a real component gallery, and drive it from the published specs.**
-      **Started:** the lab is now a switcher over more than one page (`#rail`, `#glyphs`), which is the
-      scaffolding the gallery needs — and `/lab` without a trailing slash no longer silently serves the
-      *app* (the SPA fallback answered 200 with Nearby, so the page looked absent; a dev-only Vite
-      middleware 301s to `/lab/`, ADR-132). The gallery itself — enumerated from `packages/contract/ui/*.spec.json`
-      so it cannot drift — is still to build, and the owner has extended the ask: it should cover
-      **components, sub-components AND some of the motions**, *"to help understand the underlying principles
-      about how it's designed and translate that to the appropriate styles for the operating system it's
-      on"*. That makes the motion half load-bearing rather than a bonus: a native porter needs the
-      *principle* (what moves, on what occasion, at what speed), not the CSS.
-      `apps/web/lab/` exists and is governed by [ADR-112](./08-decision-log.md#adr-112--a-dev-page-lives-in-the-app-and-a-gate-keeps-it-out-of-the-app)
-      — a dev page that lives in the repo and is kept out of production by `dev-pages.test.mjs` and
-      `scripts/build-web.mjs` — but it holds only the rail motion lab. The owner wants a **listing of the
-      design-system components** (bus badges, headers, pills, tab bar, buttons, inputs) *"as that will make
-      it easier to build a corresponding page for our eventual native apps"*.
-      **The idea worth building rather than the obvious one:** enumerate the gallery from
-      `packages/contract/ui/*.spec.json` and render **each declared state**, so the gallery cannot drift
-      from the specs and a component with a spec but no gallery entry is a red build. That turns a
-      convenience page into the thing a Swift/Kotlin porter checks their own gallery against — which is the
-      stated goal — and it costs one script rather than a hand-maintained list.
-      Note the standing rule this does **not** overturn: a component is still only abstracted when it is
-      used in more than one place. A gallery entry is not a reason to extract one.
+- [x] ✅ **The lab is a real component gallery, driven from the published specs** — **done 2026-08-12**
+      ([ADR-134](./08-decision-log.md#adr-134--the-design-system-gallery-is-enumerated-from-the-published-specs-not-hand-listed)).
+      `/lab/#gallery` prints every component's slots and states from `packages/contract/ui/*.spec.json` — the
+      same ten files a native repo vendors — including **what enforces each state**, which is the field a
+      porter must read before copying anything. `test/gallery-covers-specs.test.ts` makes a spec with no
+      gallery entry a red build, in both directions; the list is explicit rather than globbed precisely so
+      that adding a spec cannot pass silently.
+      **The motions lead with the occasion, not the keyframe**, which is the owner's extension honoured: a
+      keyframe name and a duration port to nothing, so each row says *what moves, on what occasion, how
+      fast* first and the CSS second.
+      🟢 **It found a live drift on its first run** — `stop-row`, `place-row` and `favourites` still declared
+      the `opacity.etaStale` fade three days after ADR-123 removed it from every renderer, invisible because
+      the state was `unenforced` and so nothing read it. **A gallery that renders prose is a gate on prose**,
+      which nothing else here is.
+      **Still owed:** a live sample per leaf component from a corpus case (cheap for `StopRow`/`PlaceRow`,
+      not for whole screens), and the review section below.
+- [ ] 🟡 **Review the app's error and placeholder texts as a set** — asked for by the owner 2026-08-12:
+      *"add these errors and placeholder texts to the list of components we're going to review later."*
+      The wording shipped so far is **accepted as the default** and is not blocking anything; what is wanted
+      is one sitting looking at them together rather than one at a time, because that is the only way the
+      register stays consistent. On the list: `feedNotice`'s three sentences (ADR-133), `etasUnavailable`
+      (ADR-077), `liveArrivals`'s notices (ADR-114), the retired `etaStaleMark` label (ADR-123), Search's
+      empty and recents prose, the FAQ answers, and every skeleton or placeholder that stands in for data.
+      The gallery is where they should be surfaced — it lists components today and does not review their
+      words.
 - [ ] 🟠 **Header rules, written down and testable — and yes, this belongs in the design system.**
       *"I want us to be a bit more thorough with how we go about things."* Today the rules are scattered
       across ADR-033 (the title morphs into a pill beside the back lens), the `CollapsingHeader` component

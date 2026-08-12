@@ -14,6 +14,7 @@ import {
   formatJourney,
   formatServiceHours,
   isStale,
+  newestBoard,
 } from './eta'
 import { formatDistance, routeDistanceM } from './geo'
 import { formatFavoriteRouteKey, memberStopIds } from './ids'
@@ -671,15 +672,9 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
     return marker === undefined ? [] : [railBus(marker, row.name.label, labels)]
   })
 
-  // The newest board among the ones this view drew. A plain max over the payload's own timestamps: whichever
-  // pole answered most recently is what "last updated" means to a rider looking at the whole schematic.
-  // Unreadable values are skipped rather than treated as epoch zero, which would make one bad field read as
-  // "last updated 08:00" on every screen.
-  const boardTimes = stops
-    .map((st) => (st.eta ? Date.parse(st.eta.dataTimestamp) : Number.NaN))
-    .filter((t) => !Number.isNaN(t))
-  const lastUpdatedIso =
-    boardTimes.length === 0 ? null : new Date(Math.max(...boardTimes)).toISOString()
+  // Whichever pole answered most recently is what "last updated" means to a rider looking at the whole
+  // schematic. `newestBoard` is the one rule; this is only the payload adapter for it.
+  const lastUpdatedIso = newestBoard(stops.map((st) => st.eta?.dataTimestamp))
 
   return {
     lastUpdatedIso,

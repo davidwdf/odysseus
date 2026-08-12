@@ -148,8 +148,9 @@ export const CATALOGUE = {
    * already says per card and per row (ADR-073/077/114). A second sentence for that could disagree with the
    * first, because a live round asks each pole separately.
    *
-   * ⚠️ **Wording is the owner's call and has not been given** — ADR-114 and ADR-122 both set that precedent.
-   * These are defensible placeholders. `{time}` is Hong Kong wall-clock from `formatClock`: absolute rather
+   * **Wording accepted as the default by the owner (2026-08-12)**, to be reviewed with the app's other error
+   * and placeholder texts as a set rather than one at a time — that review is a `docs/07` row, not a block.
+   * `{time}` is Hong Kong wall-clock from `formatClock`: absolute rather
    * than relative, because "2 minutes ago" ages while nothing re-renders, which is the dishonesty ADR-008
    * rules out for arrival times and for the same reason.
    */

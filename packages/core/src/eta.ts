@@ -285,6 +285,34 @@ export function remarkView(
 const HK_UTC_OFFSET_MS = 8 * 60 * 60 * 1000
 
 /**
+ * The newest board among the ones a screen drew, or `null` when it drew none — the data half of `feedNotice`.
+ *
+ * **One rule, four callers.** Route detail carries the answer on its view; Nearby, Place detail and
+ * Favourites hand their payload's timestamps straight in. The alternative was each screen taking its own
+ * maximum, which is four chances to disagree about a tie or about an unreadable value — and taking a maximum
+ * is arithmetic, which a renderer may not do (`check-no-derivation`).
+ *
+ * **Unreadable and absent values are skipped, not treated as epoch zero.** Upstream really does publish
+ * fields this app cannot parse — that is the whole of ADR-128's fare defect — and a `NaN` folded into a
+ * maximum would make one bad field read as *"last updated 08:00"* on every screen that touched it.
+ *
+ * Returns an ISO string rather than a number so the value can cross a wire, sit in a corpus, and be handed
+ * to `formatClock` without a second conversion at each call site.
+ *
+ * @spec eta#newestBoard
+ */
+export function newestBoard(timestamps: readonly (string | null | undefined)[]): string | null {
+  let best = Number.NaN
+  for (const ts of timestamps) {
+    if (ts === null || ts === undefined) continue
+    const t = Date.parse(ts)
+    if (Number.isNaN(t)) continue
+    if (Number.isNaN(best) || t > best) best = t
+  }
+  return Number.isNaN(best) ? null : new Date(best).toISOString()
+}
+
+/**
  * What a **screen** says when it has stopped being fed — the four states of `docs/07`'s hardening row,
  * reduced to the three that need a sentence.
  *

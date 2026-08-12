@@ -29,6 +29,7 @@ import {
   formatRelative,
   formatServiceHours,
   isStale,
+  newestBoard,
   type RemarkView,
   remarkView,
 } from '../src/eta'
@@ -336,6 +337,17 @@ describe('eta#feedNotice', () => {
   >(corpus, 'feedNotice')) {
     it(c.name, () => {
       expect(feedNotice(c.args)).toEqual(c.expect)
+    })
+  }
+})
+
+describe('eta#newestBoard', () => {
+  for (const c of specCases<{ timestamps: (string | null)[] }, string | null>(
+    corpus,
+    'newestBoard',
+  )) {
+    it(c.name, () => {
+      expect(newestBoard(c.args.timestamps)).toBe(c.expect)
     })
   }
 })

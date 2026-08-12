@@ -1961,6 +1961,79 @@
           }
         }
       ]
+    },
+    "newestBoard": {
+      "doc": "The newest board among the ones a screen drew, or null when it drew none. One rule with four callers, so a tie or an unreadable value cannot be resolved four different ways. Unreadable and absent values are SKIPPED, never folded in as epoch zero.",
+      "cases": [
+        {
+          "name": "the-newest-of-several-wins",
+          "why": "The ordinary case, and the reason this is not `[0]`: a payload's order is the feed's, not newest-first, so taking the first board would report an arbitrary one.",
+          "args": {
+            "timestamps": [
+              "2026-08-12T14:10:00+08:00",
+              "2026-08-12T14:19:00+08:00",
+              "2026-08-12T14:03:00+08:00"
+            ]
+          },
+          "expect": "2026-08-12T06:19:00.000Z"
+        },
+        {
+          "name": "one-board-is-its-own-newest",
+          "why": "A single-pole stop, which is most of the dataset.",
+          "args": {
+            "timestamps": ["2026-08-12T14:19:00+08:00"]
+          },
+          "expect": "2026-08-12T06:19:00.000Z"
+        },
+        {
+          "name": "no-boards-at-all-is-null",
+          "why": "A screen still loading, or one with genuinely nothing due. `feedNotice` reads null as 'no freshness to report' and stays silent rather than saying 'last updated' with nothing to put after it.",
+          "args": {
+            "timestamps": []
+          },
+          "expect": null
+        },
+        {
+          "name": "absent-boards-are-skipped-not-counted",
+          "why": "A pole with no ETA block is ordinary — a stop can be served by a route with no live feed. Nulls must not make the whole answer null, or one quiet kerb would silence the notice for a place that is otherwise being fed.",
+          "args": {
+            "timestamps": [null, "2026-08-12T14:19:00+08:00", null]
+          },
+          "expect": "2026-08-12T06:19:00.000Z"
+        },
+        {
+          "name": "an-unreadable-timestamp-is-skipped-not-treated-as-epoch-zero",
+          "why": "Upstream publishes fields this app cannot parse — ADR-128's fare defect is exactly that. A NaN folded into a maximum is harmless, but a NaN coerced to 0 would make one bad field read as 'last updated 08:00' on every screen that touched it, which is a confident lie rather than a silence.",
+          "args": {
+            "timestamps": ["not a date", "2026-08-12T14:19:00+08:00"]
+          },
+          "expect": "2026-08-12T06:19:00.000Z"
+        },
+        {
+          "name": "only-unreadable-timestamps-is-null",
+          "why": "The control for the row above: skipping must be able to skip everything and still answer honestly.",
+          "args": {
+            "timestamps": ["not a date", null]
+          },
+          "expect": null
+        },
+        {
+          "name": "identical-timestamps-resolve-to-that-instant",
+          "why": "A batch round stamps every pole with one time (ADR-079), so a tie is the COMMON case rather than an edge one — and it must not depend on iteration order.",
+          "args": {
+            "timestamps": ["2026-08-12T14:19:00+08:00", "2026-08-12T14:19:00+08:00"]
+          },
+          "expect": "2026-08-12T06:19:00.000Z"
+        },
+        {
+          "name": "mixed-offsets-are-compared-as-instants-not-as-strings",
+          "why": "The row that fails a port comparing strings. 14:19+08:00 and 07:00Z are the same instant; a lexical comparison would pick whichever sorted later and could report a board an hour off. The feed publishes +08:00 and our own frames publish Z.",
+          "args": {
+            "timestamps": ["2026-08-12T14:19:00+08:00", "2026-08-12T06:30:00Z"]
+          },
+          "expect": "2026-08-12T06:30:00.000Z"
+        }
+      ]
     }
   }
 }
