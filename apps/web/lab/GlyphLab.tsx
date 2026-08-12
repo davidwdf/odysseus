@@ -108,13 +108,15 @@ export function GlyphLab() {
       <header className="flex flex-col gap-3 py-6">
         <h1 className="font-bold text-h1 text-text">Bus glyphs</h1>
         <p className="max-w-2xl text-body text-muted">
-          Round four. <strong>D1c</strong> is the decker and the radii are settled at Lucide's two
-          values — body <code>rx=2</code>, windows <code>rx=1</code>. The concentric alternative was
-          dropped as unobservable: the whole sweep from square to a full pill is identical at token
-          size, because a round linejoin on a 2&nbsp;px stroke rounds a square corner anyway. The
-          one open question is the <strong>minibus window height</strong>, swept below. Nothing here
-          is a component: they live in <code>lab/glyphs.tsx</code> and the winner is <em>copied</em>{' '}
-          into <code>src/</code> and its RN twin.
+          Round five. The minibus window is <strong>4.4</strong>, the decker is <strong>D1c</strong>
+          , and both radii are Lucide's (body <code>rx=2</code>, windows <code>rx=1</code>). The
+          open question is
+          <strong>headlights</strong>, drawn Lucide's own way — a zero-length path (
+          <code>M8 16.6h.01</code>) that a round linecap paints as a dot exactly one stroke wide.
+          They <strong>fit the minibus</strong> (3.20 of clear lower face against the 2.00 a dot
+          needs) and <strong>do not fit D1c</strong> (1.27) — <code>D1c!</code> shows the collision.
+          <code>D1s</code> shifts both bands up (gaps 2.6/2.6/4.6) to make room, giving up the even
+          rhythm to get it.
         </p>
         <div className="flex flex-wrap gap-3">
           <button
@@ -145,7 +147,7 @@ export function GlyphLab() {
 
       <Row
         title="Decker against minibus, side by side"
-        note="D1c against every candidate window height. This is the pairing that has to work: if the two are not instantly different at 16 px the drawing has failed however it reads alone. They share a ground line, so height is what the eye catches — and as the minibus glass grows it gains a second difference, one big pane against the decker's two slots."
+        note="The family question: if headlights land on the minibus only, they become a distinguishing mark rather than a shared detail. This is the pairing that has to work: if the two are not instantly different at 16 px the drawing has failed however it reads alone. They share a ground line, so height is what the eye catches — and as the minibus glass grows it gains a second difference, one big pane against the decker's two slots."
       >
         {/* Every decker against the leading minibus, and every minibus against the leading decker. The
             full cross-product was 20 cells and unreadable; what is being judged is one variant at a time

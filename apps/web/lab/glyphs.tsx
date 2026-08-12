@@ -67,7 +67,36 @@ function Frame({ size, children }: { size: number; children: React.ReactNode }) 
   )
 }
 
-/** Both tyres, on the ground line every glyph here shares. */
+/**
+ * **A headlight, drawn the way Lucide draws one.** `bus-front` and `tram-front` both use a **zero-length
+ * path** — `M8 15h.01` — which with `stroke-linecap="round"` paints a round dot exactly one stroke-width
+ * across. Three things that buys, and they are why this is worth copying rather than reinventing:
+ * the dot's size is the stroke's, so it never needs its own constant and cannot drift from it; it is
+ * stroke-only, so it inherits `currentColor` with no `fill` override; and it is the same idiom Lucide uses
+ * for every dot in the set, so a reader who knows Lucide reads it without being told.
+ *
+ * Positioned at x = 8 and 16 — **±4 from the body's centre line, which is Lucide's own offset** in
+ * `bus-front`, and which here lands directly below the window's two corners. (Our body is 14 wide against
+ * Lucide's 16, so the *proportional* equivalent would be 8.5 and 15.5; the absolute match reads better
+ * because it lines up with the glass.)
+ */
+function Headlights({ y, s }: { y: number; s: ReturnType<typeof stroke> }) {
+  return (
+    <>
+      <path d={`M8 ${y}h.01`} {...s} />
+      <path d={`M16 ${y}h.01`} {...s} />
+    </>
+  )
+}
+
+/**
+ * Both tyres, on the ground line every glyph here shares.
+ *
+ * ⚠️ **Lucide would draw these as short vertical strokes**, not filled pills — `bus-front` uses
+ * `M6 19v2`. The pill is a deliberate, documented divergence (`docs/09` §8): at a 2 px stroke a tyre's
+ * interior is too small to outline. Noted here because the rest of this file has just been brought onto
+ * Lucide's rules, and this is the one place that stays off them on purpose.
+ */
 function Tyres({ s }: { s: ReturnType<typeof stroke> }) {
   return (
     <>
@@ -81,6 +110,8 @@ const BODY_X = 5
 const BODY_W = 14
 const WIN_X = 8
 const WIN_W = 8
+/** Half the 2 px stroke — the amount a path's paint hangs either side of it. */
+const HALF_STROKE = 1
 
 /* ────────────────────────────────────────────────────────────────────────── the decker */
 
@@ -89,16 +120,27 @@ const WIN_W = 8
  * 3.6 bands is 3.27 three times over. Written as arithmetic rather than as placed coordinates so a later
  * retune cannot quietly break the evenness — the property that made *"are they padded perfectly?"* a yes.
  */
-function Decker({ band, size = 18, strokeWidth = 2 }: GlyphProps & { band: number }) {
+function Decker({
+  band,
+  gap,
+  headlights = false,
+  size = 18,
+  strokeWidth = 2,
+}: GlyphProps & { band: number; gap?: number; headlights?: boolean }) {
   const s = stroke(strokeWidth)
   const TOP = 2.2
   const HEIGHT = 17
-  const gap = (HEIGHT - 2 * band) / 3
+  // Undefined `gap` means the even rhythm — three equal gaps around two bands. Passing one explicitly
+  // spends the difference on the LOWER face instead, which is what makes room for headlights.
+  const g = gap ?? (HEIGHT - 2 * band) / 3
+  const lowerBandEnd = TOP + g * 2 + band * 2
+  const lampY = (lowerBandEnd + HALF_STROKE + (TOP + HEIGHT - HALF_STROKE)) / 2
   return (
     <Frame size={size}>
       <rect x={BODY_X} y={TOP} width={BODY_W} height={HEIGHT} rx={BODY_RX} {...s} />
-      <rect x={WIN_X} y={TOP + gap} width={WIN_W} height={band} rx={WIN_RX} {...s} />
-      <rect x={WIN_X} y={TOP + gap * 2 + band} width={WIN_W} height={band} rx={WIN_RX} {...s} />
+      <rect x={WIN_X} y={TOP + g} width={WIN_W} height={band} rx={WIN_RX} {...s} />
+      <rect x={WIN_X} y={TOP + g * 2 + band} width={WIN_W} height={band} rx={WIN_RX} {...s} />
+      {headlights ? <Headlights y={lampY} s={s} /> : null}
       <Tyres s={s} />
     </Frame>
   )
@@ -118,8 +160,19 @@ export function DeckerD0({ size = 18, strokeWidth = 2 }: GlyphProps) {
   )
 }
 
-/** **D1c — the pick.** Bands 3.6, gaps 3.27, Lucide radii. */
+/** **D1c — the pick.** Bands 3.6, even gaps 3.27, Lucide radii, no headlights (they do not fit). */
 export const DeckerD1c = (p: GlyphProps) => <Decker band={3.6} {...p} />
+/** **D1c with headlights forced** — kept to *show* the collision rather than assert it. */
+export const DeckerD1cLampsForced = (p: GlyphProps) => <Decker band={3.6} headlights {...p} />
+/**
+ * **D1s — the same bands, shifted up so there is a lower face to put lamps on.** Top and middle gaps 2.6,
+ * bottom 4.6, which gives 2.60 of clear inner face against the 2.00 a dot needs.
+ *
+ * It gives up the even rhythm on purpose, and the trade is arguable both ways: evenness was a nice property
+ * and nothing depended on it, while a real bus genuinely has more sheet metal below its windows than above.
+ */
+export const DeckerD1s = (p: GlyphProps) => <Decker band={3.6} gap={2.6} {...p} />
+export const DeckerD1sLamps = (p: GlyphProps) => <Decker band={3.6} gap={2.6} headlights {...p} />
 
 /* ──────────────────────────────────────────────────────────────────────── the minibus */
 
@@ -132,46 +185,42 @@ const MINI_TOP_GAP = 3.0
  * the roofline — filled because an outlined 1.8-high box has no interior left at a 2 px stroke, which is why
  * the outlined and filled variants were indistinguishable two rounds ago.
  */
-function Minibus({ band, size = 18, strokeWidth = 2 }: GlyphProps & { band: number }) {
+function Minibus({
+  band,
+  headlights = false,
+  size = 18,
+  strokeWidth = 2,
+}: GlyphProps & { band: number; headlights?: boolean }) {
   const s = stroke(strokeWidth)
   const TOP = 6.6
   const HEIGHT = 12.6
+  const winEnd = TOP + MINI_TOP_GAP + band
+  const lampY = (winEnd + HALF_STROKE + (TOP + HEIGHT - HALF_STROKE)) / 2
   return (
     <Frame size={size}>
       <rect x="8.8" y="4.6" width="6.4" height="1.8" rx="0.8" {...s} fill="currentColor" />
       <rect x={BODY_X} y={TOP} width={BODY_W} height={HEIGHT} rx={BODY_RX} {...s} />
       <rect x={WIN_X} y={TOP + MINI_TOP_GAP} width={WIN_W} height={band} rx={WIN_RX} {...s} />
+      {headlights ? <Headlights y={lampY} s={s} /> : null}
       <Tyres s={s} />
     </Frame>
   )
 }
 
-/**
- * The window-height sweep, which is the only open question left.
- *
- * `interior` is the glazed area left inside a 2 px stroke, and `ratio` is width : height. Both cross a
- * threshold at **4.0** — the interior becomes as thick as the stroke around it, and the shape passes 2:1 —
- * which is where a *band* starts reading as a *pane*. 6.6 is included as the far end rather than as a
- * candidate: it is the symmetric case, where roof-to-glass and glass-to-floor are both 3.0.
- */
-export const MINI_HEIGHTS = [
-  { band: 3.8, note: 'interior 1.8 · 2.11:1' },
-  { band: 4.0, note: 'interior 2.0 · 2.00:1' },
-  { band: 4.2, note: 'interior 2.2 · 1.90:1' },
-  { band: 4.4, note: 'interior 2.4 · 1.82:1' },
-  { band: 4.6, note: 'interior 2.6 · 1.74:1' },
-  { band: 5.0, note: 'interior 3.0 · 1.60:1' },
-  { band: 6.6, note: 'symmetric · 1.21:1' },
-] as const
+/** **The minibus, settled at window 4.4.** */
+export const MinibusM = (p: GlyphProps) => <Minibus band={4.4} {...p} />
+/** **The same, with Lucide-dot headlights** — which fit here, with 3.20 of clear face against a need of 2.00. */
+export const MinibusMLamps = (p: GlyphProps) => <Minibus band={4.4} headlights {...p} />
 
 export const DECKERS = [
   { id: 'D0', label: 'D0 — ships today', Glyph: DeckerD0, primary: false },
-  { id: 'D1c', label: 'D1c — the pick (bands 3.6)', Glyph: DeckerD1c, primary: true },
+  { id: 'D1c', label: 'D1c — the pick, no lamps', Glyph: DeckerD1c, primary: true },
+  { id: 'D1c!', label: 'D1c + lamps — collides', Glyph: DeckerD1cLampsForced, primary: false },
+  { id: 'D1s', label: 'D1s — bands up 2.6/2.6/4.6', Glyph: DeckerD1s, primary: false },
+  { id: 'D1s+', label: 'D1s + lamps — fits', Glyph: DeckerD1sLamps, primary: false },
 ] as const
 
-export const MINIBUSES = MINI_HEIGHTS.map(({ band, note }) => ({
-  id: `M-${band}`,
-  label: `window ${band} — ${note}`,
-  Glyph: (p: GlyphProps) => <Minibus band={band} {...p} />,
-  primary: band === 4.4,
-}))
+export const MINIBUSES = [
+  { id: 'M', label: 'M — window 4.4, no lamps', Glyph: MinibusM, primary: true },
+  { id: 'M+', label: 'M + lamps — fits', Glyph: MinibusMLamps, primary: false },
+] as const

@@ -665,7 +665,26 @@ written down.
       as thick as the 2 px stroke around it, and the shape passes 2 : 1 — after which the window stops
       reading as a *band* and starts reading as a *pane*, which is a second axis of difference from the
       decker's two slots on top of the height difference.
-      Once the number is picked: copy both into `apps/web/src/components/BusGlyph.tsx` and its RN twin,
+      **Round five (2026-08-12) — the window is 4.4, and headlights are the last question.** Drawn Lucide's
+      own way, which the owner spotted: `bus-front` and `tram-front` render a headlight as a **zero-length
+      path** (`M8 15h.01`) that a round linecap paints as a dot exactly one stroke-width across. Worth
+      copying rather than reinventing — the dot's size *is* the stroke's, so it cannot drift from it; it is
+      stroke-only, so it needs no `fill` override; and it is the idiom the whole Lucide set uses for a dot.
+      **They fit the minibus and not the decker**, which is the opposite of the question's assumption and
+      is arithmetic rather than taste. A dot needs 2.00 of clear inner face; the minibus at window 4.4 has
+      **3.20**, and D1c has **1.27**, because the decker spends its face on two bands. `D1c!` in the lab
+      draws the collision rather than asserting it.
+      **`D1s` is the version where both get them:** the same 3.6 bands shifted up, gaps 2.6 / 2.6 / 4.6,
+      giving 2.60 of clear face. It **gives up the even rhythm** — which this row praised two rounds ago and
+      which nothing depends on — in exchange for a lower face. Arguable both ways, and more truthful either
+      way: a real bus has more sheet metal below its windows than above.
+      **The family question underneath it:** a detail that lands on one vehicle only stops being a shared
+      detail and becomes a *distinguishing* one, which competes with the height-and-pane difference already
+      doing that work.
+      *(Also noted while aligning with Lucide: it draws wheels as short vertical strokes, `M6 19v2`, where
+      we draw filled pills. That divergence is deliberate and documented in `docs/09` §8 — a tyre's interior
+      is too small to outline at a 2 px stroke — and is not being changed.)*
+      Once the headlight call is made: copy both into `apps/web/src/components/BusGlyph.tsx` and its RN twin,
       switch on the operator so GMB routes get the minibus, and note that `docs/09` §8 should gain the
       radius rule it has never had. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
       drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.
