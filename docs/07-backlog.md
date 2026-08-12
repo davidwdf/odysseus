@@ -633,7 +633,24 @@ written down.
         on. It is right anyway — the token is a fixed 24 px circle, and a narrower glyph inside it reads
         as a *smaller drawing* rather than a *smaller vehicle*. All the meaning now rides on height
         (12.6 against 17.0) and the roof sign, which are what survive at 16 px.
-      Still awaiting a final pick on the window height before it is copied into `src/`. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
+      **Round three (2026-08-12):** the owner's picks are **D1b/D1c** (bands 3.2/3.6) and **M7** — M6's
+      proportions with M3n's high window (roof-to-glass 3.0). D1d was rejected as *"a bit too tall"*, which
+      is worth recording precisely because it **is not taller**: every D1 variant shares one 17.0 body, so
+      what reads as height is the glass, and at bands 4.0 the bands exceed the 3.00 gap between them so the
+      deck split stops looking like a split.
+      **The corner-radius question is answered and the answer is "decide it on principle, because nobody
+      can see it".** Lucide's convention is empirical and is a two-value system, not a formula: across the
+      installed set `rx="2"` appears 260 times and `rx="1"` 111, plus full pills. So our windows at `rx=1`
+      were already on the rule and the **body at 2.5 is the deviation** (`docs/09` §8 pins the grid, stroke
+      and joins but has never said anything about radius, so the 2.5 was never a decision). The owner's
+      concentric rule — window radius = body radius − side inset — gives `2.5 − 3 = −0.5`, i.e. **square**,
+      and the padding is near-uniform (3.0 across against 3.53/3.27 down) so the rule is meaningful.
+      ⚠️ **But `stroke-linejoin="round"` on a 2 px stroke rounds a square corner by about half the stroke**,
+      so `rx=0` renders near a 1 px radius — and the lab's sweep (0 / 0.5 / 1 / pill / body-rx-2) is
+      **visually identical at token size**, verified in a browser. Below ~1 the geometry stops deciding the
+      look. So the choice is free, and the tidiest options are *keep `rx=1`* (Lucide's inner value) or
+      *go on-rule everywhere* with body 2 and a square window.
+      Still awaiting a final pick on the window height and radius before it is copied into `src/`. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
       drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.
       The distinguishing features are real and few: a light bus is **single-deck with one window row**, a
       **taller windscreen relative to its width**, a **roof sign box**, and the statutory **roof stripe**

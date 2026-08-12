@@ -22,7 +22,7 @@
 
 import { useState } from 'react'
 import { BusGlyph } from '../src/components/BusGlyph'
-import { DECKERS, MINIBUSES } from './glyphs'
+import { DECKERS, MINIBUSES, RADIUS_STUDY } from './glyphs'
 
 /** `RailBusToken`'s own numbers, so the token row is the real size and not an approximation of it. */
 const TOKEN = 24
@@ -108,13 +108,13 @@ export function GlyphLab() {
       <header className="flex flex-col gap-3 py-6">
         <h1 className="font-bold text-h1 text-text">Bus glyphs</h1>
         <p className="max-w-2xl text-body text-muted">
-          Round two. <strong>D1</strong> and <strong>M6</strong> are the picks so far; the rest are
-          the variables around them. The decker series spends D1's 3.8 gaps on taller windows — its
-          rhythm was already even, so there was no slack to take up. The minibus is now the decker's
-          width (14) with the decker's window width (8), so height and the roof sign are all that
-          tell them apart. Nothing here is a component: they live in <code>lab/glyphs.tsx</code> and
-          the winner is
-          <em>copied</em> into <code>src/</code> and its RN twin.
+          Round three. <strong>D1b</strong>/<strong>D1c</strong> and <strong>M7</strong> are the
+          picks so far. The decker series spends D1's 3.8 gaps on taller windows — its rhythm was
+          already even, so there was no slack to take up, and every D1 variant shares one body
+          height (17.0): what changes is the glass, not the bus. The minibus is the decker's width
+          (14) with its window width (8), and its window sits high again. Nothing here is a
+          component: they live in <code>lab/glyphs.tsx</code> and the winner is <em>copied</em> into{' '}
+          <code>src/</code> and its RN twin.
         </p>
         <div className="flex flex-wrap gap-3">
           <button
@@ -171,6 +171,23 @@ export function GlyphLab() {
             </div>
           ) : null,
         )}
+      </Row>
+
+      <Row
+        title="Corner radii — the concentric rule against Lucide's two values"
+        note="Lucide is rx=2 outer / rx=1 inner (260 and 111 uses in the installed set), not a formula. The concentric rule gives 2.5 − 3 = −0.5, i.e. square. But stroke-linejoin=round on a 2 px stroke rounds a square corner by about half the stroke, so rx=0 renders near a 1 px radius anyway — this row is where you see whether the difference survives at all. The r20 pair also puts the BODY on Lucide's 2."
+      >
+        {RADIUS_STUDY.map((v) => (
+          <div key={v.id} className="flex w-40 shrink-0 flex-col items-center gap-2">
+            <div className="flex items-end gap-3">
+              <Token Glyph={v.Glyph} moving={false} />
+              <span className="flex text-text">
+                <v.Glyph size={64} />
+              </span>
+            </div>
+            <span className="text-center text-caption text-muted leading-tight">{v.label}</span>
+          </div>
+        ))}
       </Row>
 
       <Row
