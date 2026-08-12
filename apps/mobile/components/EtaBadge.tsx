@@ -24,31 +24,27 @@ const TONE: Record<EtaUrgency, string> = {
 }
 
 /**
- * Honest ETA readout (docs/09 §6, ADR-008): tabular figures, urgency colour, stale dimming.
+ * Honest ETA readout (docs/09 §6, ADR-008): tabular figures, urgency colour.
  * No client-side countdown — the value only changes when fresh data arrives. The minutes
  * number is prominent with a small, muted, **pinned** unit so only the number shifts as the
  * value changes (less width-jump); under a minute it collapses to a short "Due" status.
- * (A number-flip / split-flap animation hooks in here later.)
  *
- * Takes an already-derived label, urgency and staleness rather than an `Eta` and a clock. All three are
- * corpus-pinned kernel rules (`etaLabelParts`, `etaUrgency`, `isStale`), and a component that derives
- * them itself is a component a second renderer has to *read* rather than call.
+ * Takes an already-derived label and urgency rather than an `Eta` and a clock. Both are corpus-pinned
+ * kernel rules (`etaLabelParts`, `etaUrgency`), and a component that derives them itself is a component
+ * a second renderer has to *read* rather than call.
+ *
+ * **It says nothing about staleness, deliberately** (ADR-123). It used to fade to 45 %, and briefly drew
+ * a muted `~`; both were withdrawn as **the wrong unit**, not as bad executions. `isStale` reads one
+ * `dataTimestamp` per *board*, so a per-figure cue repeats a single fact once per reading, and a rider
+ * cannot act on *"this number is two minutes old"* — only on *"the screen has stopped updating"*, which
+ * is the screen's statement to make. The kernel still computes `stale`; the screen-level line reads it.
  */
-export function EtaBadge({
-  label,
-  urgency,
-  stale,
-}: {
-  label: EtaLabelParts
-  urgency: EtaUrgency
-  /** The reading is old enough to say so. Dimming is this component's choice; the judgement is not. */
-  stale: boolean
-}) {
+export function EtaBadge({ label, urgency }: { label: EtaLabelParts; urgency: EtaUrgency }) {
   // `?? TONE.none` because `EtaUrgency` may grow: this file is compiled against one version of the
   // kernel and a table lookup that returned `undefined` would render an unstyled figure.
   const tone = TONE[urgency] ?? TONE.none
   return (
-    <View className={`flex-row items-baseline ${stale ? 'opacity-45' : ''}`}>
+    <View className="flex-row items-baseline">
       {label.kind === 'mins' ? (
         <>
           <Text variant="h2" tabular className={tone}>

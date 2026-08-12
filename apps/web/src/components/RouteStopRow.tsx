@@ -24,11 +24,19 @@ export function RouteStopRow({
   row,
   index,
   animateIn,
+  arrivalsPending = false,
   tokens,
   onPress,
   registerRow,
 }: {
   row: RouteStopRowView
+  /**
+   * The route's live round has not answered yet, so a row with no arrivals is **waiting** rather than
+   * quiet. Only ever used to reserve the arrivals line's height; it never changes a word on screen, which
+   * is why it is a boolean from the screen rather than anything the kernel derives — "have we asked yet"
+   * is a fact about this fetch, not about the route.
+   */
+  arrivalsPending?: boolean
   /** Position in the list — what `RailBus`'s `index`/`from`/`to` name, and the cascade's per-row delay. */
   index: number
   /**
@@ -173,6 +181,28 @@ export function RouteStopRow({
                 <ArrivalSlot key={arrival.iso} arrival={arrival} first={slot === 0} />
               ))}
             </span>
+          ) : arrivalsPending ? (
+            // **The times are coming; hold their place.** A route watch resolves every pole server-side and
+            // answers in one round (ADR-116), so on a slow round all 34 rows gain an arrivals line at the
+            // same instant and the whole schematic jumps — the rail, every bus token's row, and the reveal
+            // of the originating stop all move together. Reserving the line is the fix; the skeleton is what
+            // makes the reservation legible rather than a mysterious gap.
+            //
+            // **It is deliberately not shown when a round has answered with nothing.** "No bus due" and
+            // "we have not asked yet" are different facts, and drawing the same placeholder for both is the
+            // exact conflation ADR-073 and ADR-124 exist to prevent — this is `null` again the moment the
+            // round lands, whether or not it brought a time.
+            //
+            // `aria-hidden` and no text: a skeleton is a layout promise, not content. The conformance
+            // walker reads presence, so a labelled placeholder would project into every state that mounts
+            // before its data (the trap ADR-123 and the FAQ both hit).
+            <span aria-hidden className="mt-1 flex items-baseline gap-x-3">
+              {/* Sized to what they stand in for — the first slot is `text-body font-semibold` and the
+                  rest are `text-caption`, so the widths differ and a row of identical bars would settle
+                  to the wrong height. */}
+              <span className="h-[1.125rem] w-12 rounded bg-surface-2" />
+              <span className="h-[0.875rem] w-10 rounded bg-surface-2" />
+            </span>
           ) : null}
           {row.incomplete ? (
             // **Why a row says this and the screen does not.** A live route watch asks each pole separately, so
@@ -227,7 +257,7 @@ export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; fir
   const tone = first ? (TONE[arrival.urgency] ?? TONE.none) : 'text-muted'
   const size = first ? 'text-body font-semibold' : 'text-caption'
   return (
-    <span className={`flex items-baseline gap-1 ${arrival.stale ? 'opacity-45' : ''}`}>
+    <span className="flex items-baseline gap-1">
       {label.kind === 'mins' ? (
         <>
           {/* `String(...)` because a schematic arrival carries its minutes as a number where the card's

@@ -86,7 +86,7 @@ function TimeSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolea
   // `EtaLabelParts` carrying `value` and `unit` separately is that they are styled apart (`@nextbus/core`).
   if (label.kind === 'mins') {
     return (
-      <View className="flex-row items-baseline" style={{ opacity: arrival.stale ? 0.45 : 1 }}>
+      <View className="flex-row items-baseline">
         <SlideNumber value={String(label.value)} color={figure} size={size} bold={first} />
         <RNText
           style={{
@@ -104,7 +104,7 @@ function TimeSlot({ arrival, first }: { arrival: RouteStopArrival; first: boolea
   }
   const value = label.kind === 'due' ? label.label : label.kind === 'headway' ? label.text : '—'
   return (
-    <View style={{ opacity: arrival.stale ? 0.45 : 1 }}>
+    <View>
       <SlideNumber value={value} color={figure} size={size} bold={first} />
     </View>
   )

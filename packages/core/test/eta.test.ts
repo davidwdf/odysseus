@@ -16,8 +16,11 @@ import {
   etaUrgency,
   etaView,
   type FareStage,
+  type FeedNotice,
+  type FeedTrouble,
   fareRange,
   fareStages,
+  feedNotice,
   formatClock,
   formatFare,
   formatFareRange,
@@ -26,6 +29,7 @@ import {
   formatRelative,
   formatServiceHours,
   isStale,
+  newestBoard,
   type RemarkView,
   remarkView,
 } from '../src/eta'
@@ -318,4 +322,32 @@ describe('eta#formatClock', () => {
     }
     expect([...seen]).toEqual(['12:05'])
   })
+})
+
+describe('eta#feedNotice', () => {
+  for (const c of specCases<
+    {
+      lastUpdatedIso: string | null
+      now: number
+      online: boolean
+      trouble: FeedTrouble
+      staleAfterMs: number
+    },
+    FeedNotice
+  >(corpus, 'feedNotice')) {
+    it(c.name, () => {
+      expect(feedNotice(c.args)).toEqual(c.expect)
+    })
+  }
+})
+
+describe('eta#newestBoard', () => {
+  for (const c of specCases<{ timestamps: (string | null)[] }, string | null>(
+    corpus,
+    'newestBoard',
+  )) {
+    it(c.name, () => {
+      expect(newestBoard(c.args.timestamps)).toBe(c.expect)
+    })
+  }
 })

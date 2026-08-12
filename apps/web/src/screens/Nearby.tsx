@@ -118,7 +118,18 @@ export function Nearby() {
         <Centred>
           <p className="m-0 text-body text-danger">{loc.message}</p>
         </Centred>
-      ) : loc.status === 'loading' || query.isLoading ? (
+      ) : /* **`isPending`, never `isLoading`** — this arm is "we have no answer", and `isLoading` is
+             `isPending && isFetching`, which is a narrower claim: it excludes a query that is pending
+             because its fetch is *parked*. TanStack parks one in two ways, and both were reachable here —
+             `networkMode` while offline (fixed at the provider, which now sets `networkMode: 'always'`)
+             and the focus gate while the document is hidden, which is library behaviour we keep and
+             which resumes on `visibilitychange`. Both are measured in
+             `test/query-failure-state.test.tsx`; the screen's half is `test/nearby-offline.test.tsx`. A parked query
+             matched neither this arm nor the error arm, so it fell through to the list and an empty
+             `cards` said **"No scheduled service"** — a claim about Hong Kong made out of our own silence,
+             which is the exact conflation ADR-073 spent a wave separating and ADR-088 already fixed one
+             screen over. Fall back to the skeleton: the wait is real, and saying so is true. */
+      loc.status === 'loading' || query.isPending ? (
         <div>
           <p className="m-0 px-4 pb-1 text-label text-muted">{t(locale, 'locating')}</p>
           {[0, 1, 2].map((i) => (
@@ -129,7 +140,13 @@ export function Nearby() {
             </div>
           ))}
         </div>
-      ) : query.isError ? (
+      ) : /* And the mirror of it: an error **with data** is not a failed board either, it is a board we
+             could not refresh. `networkMode: 'always'` makes that state common where the paused fetch used
+             to hide it — a cold offline start restores the persisted list (ADR-058), refetches, and now
+             genuinely fails. Showing the error here would replace the last known arrivals with a sentence,
+             which is precisely what the spec's `offline` state forbids ("never a blank list"). So the
+             reason is shown only when there is nothing else to show. */
+      query.isError && query.data === undefined ? (
         <Centred>
           <p className="m-0 text-body text-danger">{(query.error as Error).message}</p>
         </Centred>

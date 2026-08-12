@@ -16,20 +16,25 @@ const TONE: Record<EtaUrgency, string> = {
   none: 'text-muted',
 }
 
-/** Honest ETA readout (ADR-008): tabular figures, urgency colour, stale dimming, and no client-side
- *  countdown — the value changes only when fresh data arrives. */
-export function EtaBadge({
-  label,
-  urgency,
-  stale,
-}: {
-  label: EtaLabelParts
-  urgency: EtaUrgency
-  stale: boolean
-}) {
+/**
+ * Honest ETA readout (ADR-008): tabular figures, urgency colour, and no client-side countdown — the
+ * value changes only when fresh data arrives.
+ *
+ * **It says nothing about staleness, deliberately** (ADR-123). Two treatments were tried here and both
+ * were withdrawn: a 45 % fade, and a muted `~` before the figure. Neither was badly executed; both were
+ * **the wrong unit.** `isStale` reads one `dataTimestamp` per *board*, so a per-figure cue draws a single
+ * fact once per reading — 78 times on one route screen — and a rider can do nothing with *"this
+ * particular number is two minutes old"*. What they can act on is *"the screen has stopped updating"*,
+ * which is a statement about the screen and belongs there. See `docs/07`'s "last updated, and four
+ * different reasons".
+ *
+ * `stale` is therefore **not a prop of this component**. The kernel still computes it — `etaReadout`
+ * and `RouteStopRowView` both carry it — and the screen-level line is what will read it.
+ */
+export function EtaBadge({ label, urgency }: { label: EtaLabelParts; urgency: EtaUrgency }) {
   const tone = TONE[urgency] ?? TONE.none
   return (
-    <span className={`flex shrink-0 items-baseline ${stale ? 'opacity-45' : ''}`}>
+    <span className="flex shrink-0 items-baseline">
       {label.kind === 'mins' ? (
         <>
           <SlideNumber

@@ -1,6 +1,109 @@
 # 11 — Status & Where to Continue
 
 > **Living handoff doc — update it at the end of each working session.**
+
+## 🔵 Snapshot 2026-08-12 — the bus glyphs, and two lessons about measuring
+
+> **Shipped:** two bus glyphs ([ADR-132](./08-decision-log.md#adr-132--the-bus-glyphs-two-vehicles-and-the-three-rules-that-had-never-been-written-down)) —
+> a double-decker and a light bus — with **`routeVehicle` in the kernel** deciding which, because a view may
+> not select on data or parse an operator out of an id. Plus readout skeletons on Route detail, and the
+> withdrawal of both staleness cues (ADR-123).
+>
+> **Two things worth carrying forward, both about how to check a drawing:**
+>
+> · 🟠 **Painted ≠ path, and this cost three errors in one sitting.** Every SVG number in this repo is a
+>   *path* value; the painted value is path + 2 wherever a shape is stroked — which is everywhere, including
+>   the *filled* tyres and sign box, since they carry a `fill` **and** the shared stroke. "The tyre is 2.4
+>   wide" was an attribute; the ink is **4.4**. A fill-only variant labelled "same silhouette" matched in one
+>   axis and came out a horizontal pill. A token-size comparison was computed without the stroke. The habit
+>   that catches all three: **rasterise the glyph and scan the ink, in both axes.** `docs/09` §8 now carries
+>   the distinction as a rule.
+> · 🟠 **A lab whose defaults drift is worse than no lab.** A proposed value was set as the component
+>   *default*, so every glyph on the page silently adopted it — including cells labelled "settled". The owner
+>   spotted it before it went anywhere. Studies pass their values explicitly now.
+>
+> **And one about design process:** the *rejected* options were the valuable output. Headlights, a bumper
+> line, a concentric radius rule, Lucide's stroke wheels and a fill-only pill were all drawn and all
+> rejected — and two of them taught rules (`the empty lower face is the reason the pair works`; `the stroke
+> is the shape, not padding`). Those live in ADR-132 and §8; the **candidates were deleted** from
+> `apps/web/lab/`, because a lab full of dead drawings cannot be told apart from one full of live ones.
+>
+> ⚠️ **Not walked on a live GMB route** — none appeared in today's dataset near the coordinates tried, and
+> the corpus's GMB ids predate the current build. The operator switch rests on the kernel corpus.
+
+## 🔵 Snapshot 2026-08-11 — WP6-8a: the hardening sweep, and one fix that had to be fixed twice
+
+> **What this was.** The owner asked *"anything major outstanding?"*, then asked for the whole open
+> rider-facing list to be fixed at once, plus the ADR hygiene job, in one PR. **Deploy (WP0-5) was
+> explicitly deprioritised** and is now waiting on the owner's go-ahead rather than on a domain.
+> **ADRs 123–131.** Nine defects, the third instance of one of them, a ref leak, and a new gate.
+>
+> **Read these three first if you are picking this up:**
+>
+> · 🔴 **A fix for a data-loss bug caused the same data loss, and only an adversarial review caught it**
+>   ([ADR-125](./08-decision-log.md#adr-125--preferences-are-merged-not-overwritten-and-the-ancestor-moves-with-the-write)).
+>   The two-tab preference clobber was fixed with a three-way merge; the merge's read-modify-write was
+>   **unserialised**, so the ancestor could advance past the snapshot a concurrent write held and
+>   `mergeSavedKeys` read `base \ theirs` as a remote deletion. **Three manifestations, none needing a
+>   second tab:** two stars in one task erased the first; a `storage` event in the same task as a star
+>   erased the star; an un-star plus a star **resurrected the un-starred key**. The rule that fixes it —
+>   *the ancestor moves only with a write, so the adopt path must not advance it* — is the half a plain
+>   "serialise the writes" fix does not have. **`docs/07`'s stated fix ("one `storage` listener per
+>   store") was also incomplete**: a bfcached tab is frozen and gets no events at all, so the merge has
+>   to sit on the write path.
+> · 🔴 **Two 🔴 rows filed months apart against different screens were one defect, and there was a third
+>   nobody had filed** ([ADR-124](./08-decision-log.md#adr-124--a-parked-query-is-not-an-answer)).
+>   TanStack Query **parks** a fetch — `networkMode: 'online'` never invokes the query function offline,
+>   and `isLoading` is `isPending && isFetching`, so a parked query is neither loading nor errored. Nearby
+>   fell through to its list and printed *"No scheduled service"*: **our own silence rendered as a claim
+>   about Hong Kong**, which is ADR-073's rule broken one screen over from where it was written. The
+>   `fetchStatus: 'idle'` that hid the Place-detail half for two waves is what a parked query becomes when
+>   its last observer detaches (`cancel({revert: true})` **erases the failure count**). **Favourites was
+>   the worst instance:** a rider saw *the title and nothing else*, on the one screen whose contents they
+>   curated by hand. Fixed with `networkMode: 'always'` and by branching on `isPending`.
+> · 🟠 **The most reusable lesson is about suites, not screens.** `place-detail-states.test.tsx` builds its
+>   own `QueryClient` with `retry: false` against a visible jsdom document, so **neither pause gate is
+>   reachable in it** — which is exactly why the bug report said "the identical rejection lands on `error`
+>   in the test". *A suite that configures away the environment cannot see an environmental defect.* The
+>   same shape appeared twice more the same day: jsdom has **no `ResizeObserver`**, so every Place-detail
+>   suite ran in the one environment where [ADR-131](./08-decision-log.md#adr-131--a-react-19-ref-callback-that-both-registers-and-observes-must-return-one-cleanup)'s
+>   registry leak was impossible; and `conformStates` reads **words**, so it cannot see a colour
+>   ([ADR-129](./08-decision-log.md#adr-129--two-things-a-conformance-walker-cannot-see-colour-and-geometry)).
+>
+> **The stale cue is the owner's own design and it is in** ([ADR-123](./08-decision-log.md#adr-123--staleness-is-a-muted--before-the-figure-not-a-fade)).
+> A muted `~` before the figure replaces the 45 % fade on all four readouts, because *a fade is a
+> comparative cue with nothing to compare against*. **Verified in a real browser on live KMB 1A, not
+> just in a replica:** with the clock shifted 6 minutes, all 78 readouts marked and **every figure's
+> inset from its own readout box still exactly 12 px** — the no-shift property, measured rather than
+> eyeballed. Light mode 7.58:1. Two things it bought: the mark is the first staleness cue a screen-reader
+> rider has ever had (the fade announced nothing, in every locale), and **four specs whose `stale` state
+> confessed in writing that "opacity is not text, so this harness cannot see it" now enforce it.**
+> ⚠️ **Two things still want the owner:** the accessible wording (shipped provisionally as
+> *"Approximate — not updated recently"* / 約數 — 未有最新更新; the Chinese needs a native eye more than the
+> English) and the 12 px the gutter costs every readout, always.
+>
+> **The relative-age half of the staleness rule is deliberately NOT in this batch.**
+> `stop-row.spec.json`'s `must` still asks for it, and `docs/07`'s *"last updated, and four different
+> reasons"* row — the owner's own request from the same morning — is the next real piece of work.
+>
+> **The ADR log is indexed, not consolidated** ([ADR-127](./08-decision-log.md#adr-127--an-adr-number-is-an-address-so-the-log-is-indexed-rather-than-consolidated)).
+> The owner asked whether ADRs get cleaned up; the answer is **no, and never renumber** — there are 2,068
+> `ADR-NNN` references *outside* `docs/08`, so a number is a permanent address. Instead: a generated
+> index, a three-word status vocabulary, and `check-adr-index.mjs` in the `boundaries` chain. It found
+> **16 of the 20 ADR-to-ADR relations were written on one side only** — including exactly the
+> ADR-100/ADR-094 case that let *"it is in an ADR"* pass for *"the owner chose it"* during WP6-7b's parity
+> audit — plus 11 broken anchors, and it caught its own author's forward references within minutes.
+>
+> **Two token-value changes are measured and owed to the owner, and neither was made here:**
+> `--text-subtle` fails AA for body text in **five of six** pairings (not the one `docs/07` claimed), and
+> light-mode `--positive`/`--warning` are short on the 16 px arrival readouts. `search-contrast.test.ts`
+> is a deliberate tripwire that goes red if `--text-subtle` is ever raised, so the rule gets retired
+> rather than quietly outlived.
+>
+> **What did NOT get done, on purpose:** WP0-5 (owner's call), the four-sentence "last updated" taxonomy,
+> the ADR-113 inventory of what `apps/mobile` does better, and `apps/mobile`'s own `stop/[id].tsx`
+> section registry — which has ADR-131's defect and worse, and retires at WP6-8.
+
 > Snapshot: **2026-08-08**, and the top of this doc is now an **owner review of `apps/web`** rather than a
 > work-package report — read [ADR-100](./08-decision-log.md#adr-100--the-apps-signature-motion-and-material-are-identity-platform-conventional-detail-is-idiom)
 > before touching either renderer.

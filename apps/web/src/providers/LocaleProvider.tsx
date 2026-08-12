@@ -1,5 +1,5 @@
 import type { Locale } from '@nextbus/core'
-import { createContext, type ReactNode, useContext, useMemo } from 'react'
+import { createContext, type ReactNode, useContext, useEffect, useMemo } from 'react'
 import { detectedLocale } from '../adapters/locale'
 import { usePreferences } from '../lib/preferences'
 
@@ -45,6 +45,31 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     () => ({ locale: override ?? device, override, setLocale }),
     [override, device, setLocale],
   )
+
+  /**
+   * `<html lang>` follows the active locale.
+   *
+   * It was hard-coded `"en"` in `index.html` and never moved, which mis-announces every Chinese word on the
+   * page to a screen reader — a synthesizer picks its voice and its pronunciation from this attribute — and
+   * takes the browser's own CJK font selection and line-breaking with it. Both are wrong in the language the
+   * app is *most* likely to be read in.
+   *
+   * **No mapping table, deliberately.** `Locale` is `'en' | 'zh-Hant' | 'zh-Hans'` (the contract's
+   * `LocaleSchema`), which are already the BCP-47 tags a browser wants, so the value is passed straight
+   * through. A `Record<Locale, string>` here would be a second declaration of the tag set that could drift
+   * from the first the day a fourth locale arrives.
+   *
+   * **Here rather than in `index.html` or `main.tsx`, and it costs a frame.** The active locale is the
+   * override *or* the browser's detection, and that resolution lives in this component; reading localStorage
+   * from an inline script to get the attribute onto the very first paint would be a second declaration of
+   * both the storage key and the fallback rule, in a file no gate reads — the identical trade `main.tsx`
+   * refuses for the appearance class, for the identical reason. `index.html` keeps `lang="en"` as the
+   * pre-bundle default, because a document with no `lang` at all is worse than one with a stated guess.
+   */
+  useEffect(() => {
+    document.documentElement.lang = value.locale
+  }, [value.locale])
+
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>
 }
 

@@ -142,6 +142,35 @@ export const CATALOGUE = {
     'zh-Hant': '{s} 秒前更新',
     'zh-Hans': '{s} 秒前更新',
   },
+  /**
+   * The screen-level freshness notice (ADR-133). Three sentences for three states a rider can act on
+   * differently — and deliberately **no fourth** for an upstream board refusing, which `etasUnavailable`
+   * already says per card and per row (ADR-073/077/114). A second sentence for that could disagree with the
+   * first, because a live round asks each pole separately.
+   *
+   * **Wording accepted as the default by the owner (2026-08-12)**, to be reviewed with the app's other error
+   * and placeholder texts as a set rather than one at a time — that review is a `docs/07` row, not a block.
+   * `{time}` is Hong Kong wall-clock from `formatClock`: absolute rather
+   * than relative, because "2 minutes ago" ages while nothing re-renders, which is the dishonesty ADR-008
+   * rules out for arrival times and for the same reason.
+   */
+  feedLastUpdated: {
+    en: 'Last updated {time}',
+    'zh-Hant': '最後更新 {time}',
+    'zh-Hans': '最后更新 {time}',
+  },
+  /** The rider's network is gone — their problem to fix, and it explains any staleness underneath it. */
+  feedOffline: {
+    en: 'You’re offline — showing the last times we had',
+    'zh-Hant': '你目前離線，顯示最後取得的時間',
+    'zh-Hans': '你目前离线，显示最后取得的时间',
+  },
+  /** Our own edge is unreachable or erroring — our problem, and we are still retrying. */
+  feedUnreachable: {
+    en: 'Can’t reach NextBus — retrying',
+    'zh-Hant': '無法連線至 NextBus，正在重試',
+    'zh-Hans': '无法连线至 NextBus，正在重试',
+  },
   stale: {
     en: 'stale',
     'zh-Hant': '資料過時',

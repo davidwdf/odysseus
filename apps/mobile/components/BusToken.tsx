@@ -1,3 +1,4 @@
+import type { RouteVehicle } from '@nextbus/core'
 import { useEffect } from 'react'
 import { View } from 'react-native'
 import Animated, {
@@ -33,7 +34,16 @@ const EASE = Easing.inOut(Easing.sin)
  * an ETA value, so it doesn't touch the ADR-008 honesty rule. Position along the rail is
  * animated by the parent on real data change.
  */
-export function BusToken({ size = 26, disc = true }: { size?: number; disc?: boolean }) {
+export function BusToken({
+  size = 26,
+  disc = true,
+  vehicle = 'bus',
+}: {
+  size?: number
+  disc?: boolean
+  /** The kernel's word for which vehicle to draw — see `routeVehicle`. */
+  vehicle?: RouteVehicle
+}) {
   const { color } = useTheme()
   const bob = useSharedValue(0) // 0 (top) .. 1 (bottom / "ground"), reverses
   const rock = useSharedValue(0) // 0..1, reverses
@@ -75,7 +85,7 @@ export function BusToken({ size = 26, disc = true }: { size?: number; disc?: boo
     >
       <Animated.View style={bounceStyle}>
         <Animated.View style={[{ transformOrigin: 'center bottom' }, squashStyle]}>
-          <BusGlyph size={size * 0.66} color={color('--accent-contrast')} />
+          <BusGlyph vehicle={vehicle} size={size * 0.66} color={color('--accent-contrast')} />
         </Animated.View>
       </Animated.View>
     </View>

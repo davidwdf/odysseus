@@ -452,27 +452,63 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       `env(safe-area-inset-bottom)`, and **no screen applies `env(safe-area-inset-top)`** — so in an
       installed iOS PWA the heading and the back control on every pushed screen sit under the status bar.
       Search's keypad and result list have the same problem at the bottom, outside the tab bar's inset.
-- [ ] 🟠 **A shared deep link will 404 on a first visit unless the host is configured.** ⚠️ *(unverified by
-      the run; confirmed by hand.)* `scripts/pwa/workbox.config.mjs:94`'s `navigateFallback` only helps once
-      the service worker is installed; a first visit to `/route/…` from a message hits the origin, and
-      `apps/web/public/` carries no `_redirects`, `404.html` or equivalent. This is a **WP0-5 precondition**
-      rather than a code defect — there is no host yet — but it must be written into the deploy step or the
-      first shared link a rider sends will be broken.
+- [x] ✅ **A shared deep link will 404 on a first visit unless the host is configured** — **the artefact
+      ships as of 2026-08-11** ([ADR-130](./08-decision-log.md#adr-130--one-declaration-two-apps-the-deep-link-fallback-and-an-enforcement-claim-nobody-evaluates)),
+      **and the app that actually ships was worse than this row said.** `expo export -p web` writes its
+      dynamic routes as literal `dist/route/[id].html` and `dist/stop/[id].html`, so no host matches a real
+      route id — the Expo PWA that WP0-5 deploys 404s on every shared link, not just on a cold one.
+      Declared **once** in `scripts/pwa/redirects.mjs` beside the Workbox policy and emitted by both apps'
+      `build:web`, taking its target from a shared `NAVIGATE_FALLBACK` so the worker's fallback and the
+      host's rewrite cannot drift — a disagreeing pair would fail only on a first visit to a deep link,
+      which is the case nobody tests locally. A **200 rewrite, not a redirect**: redirecting to `/` would
+      open the app at Nearby and silently drop the place, route or query that was shared.
+      **Two things still belong to WP0-5**, so this is ticked rather than deleted: the deploy step must
+      **curl a deep link on the real origin once** (Pages and Netlify read `_redirects`; Workers static
+      assets do too but with different precedence), and if the API is ever moved behind the app's origin a
+      rule must go **above** the catch-all or `/v1/…` starts being answered with the app shell.
 - [ ] 🟠 **Route detail's row tap goes to the place on `apps/web`, dropping the action sheet the spec
       declares non-optionally.** The same finding as the blocker above, from the spec's side rather than the
       store's: fixing the favourite affordance fixes this, and the two must be fixed together.
-- [ ] 🟡 **Place detail's last kerb can never be highlighted on `apps/web`**, and tapping its map dot scrolls
-      to the bottom and lights a *different* kerb's dot — the DOM list has no tail padding, so the last
-      heading never reaches the scroll-spy line. The RN screen pads for exactly this.
-- [ ] 🟡 **Three Search strings dropped from `--text-muted` to `--text-subtle` in the port** (the recents
-      heading, the clear-recents control, the inactive segment label), which is 3.9:1 in dark mode and fails
-      WCAG AA. A token change, not a redesign.
-- [ ] 🟡 **`apps/web` carries the document scroll position into a pushed screen.** react-router does no
-      scroll management and nothing in the shell adds any; the RN app's per-screen scrollers do it
-      implicitly. Back *does* restore correctly, so this is one direction only. **This one genuinely is
-      `<ScrollRestoration>`'s job** — unlike the Search item below, the quantity is `window.scrollY` — and it
-      is deliberately not bundled with ADR-109 because it changes behaviour on all eight screens at once,
-      including Route detail's `scrollIntoView` reveal and both collapsing headers' sentinels.
+- [x] ✅ **Place detail's last kerb can never be highlighted on `apps/web`** — **this row was already
+      stale**, and finding that out was the useful part. `tailRoom()` landed in `ec7053c` (the WP6-7
+      owner's review) and the defect as written has not shipped since. What was actually missing was
+      **evidence**: both existing assertions parse the tail *expression*, so neither would have caught a
+      page that still could not scroll far enough. There is now a behavioural test that models a layout —
+      jsdom lays nothing out — drives the real screen, the real scroll listener and the real `MiniMap`,
+      scrolls as far as the page goes and asserts the **last** kerb's dot is the lit one, deriving the page
+      height from the screen's own `tailRoom()` output rather than restating the formula
+      ([ADR-129](./08-decision-log.md#adr-129--two-things-a-conformance-walker-cannot-see-colour-and-geometry)).
+      Making the model exact split `SNAP_BASE` into `CARD_DOCKED_BOTTOM + MAP_GAP`, which also removes a
+      second expression that could drift from the spy's own `card.bottom + MAP_GAP`.
+- [x] ✅ **Three Search strings dropped from `--text-muted` to `--text-subtle` in the port** — **fixed
+      2026-08-11**, and the measurement found more than the row did
+      ([ADR-129](./08-decision-log.md#adr-129--two-things-a-conformance-walker-cannot-see-colour-and-geometry)).
+      All three are back on `text-muted`, which is what `apps/mobile/app/search.tsx` uses for all three.
+      Computed from the shipped token values rather than taken on trust: **`--text-subtle` is 3.90 / 3.55 /
+      3.12 : 1** on `--bg` / `--surface` / `--surface-2` in dark and 4.76 / 4.55 / 4.34 in light — so it
+      fails AA for body text in **five of six pairings**, not one — where `--text-muted` is 7.63 / 6.95 /
+      6.10 and 7.58 / 7.24 / 6.92 and clears AA everywhere. No token *value* was changed; that is a design
+      decision and it is the owner's. What changed is that the classification is now executable:
+      `apps/web/test/search-contrast.test.ts` classifies every `--text*` token with an anti-vacuous control,
+      so a new one cannot arrive unmeasured, and the `--text-subtle` assertion is a deliberate tripwire that
+      goes red if the value is ever raised — so the rule gets retired rather than quietly outlived.
+      **Why nothing caught it:** `conformStates` reads words, and a colour is not a word — the same blind
+      spot ADR-098 names for interaction destinations and ADR-106 for the spy's geometry.
+- [x] ✅ **`apps/web` carries the document scroll position into a pushed screen** — **fixed 2026-08-11**
+      ([ADR-126](./08-decision-log.md#adr-126--the-navigation-moment-and-the-documents-language)), and
+      **this entry's own recommendation was wrong**, which is the part worth keeping. It said the fix
+      "genuinely is `<ScrollRestoration>`'s job". It is not: that component sets
+      `history.scrollRestoration = 'manual'` and replaces the browser's back-restore with a single
+      `scrollTo(0, y)` on the first commit of the POP — which on these screens is a **skeleton**, so it
+      would trade away the direction this row says already works to fix the one that is broken. It would
+      also fire on Search's per-keystroke `replace`. **Second time in two rows that `<ScrollRestoration>`
+      was named as the obvious fix and was the wrong one** (ADR-109 was the first, for a different reason:
+      Search does not scroll the window). Scroll, focus and the announcement are instead **one hook** with
+      one definition of an arrival — a changed `useLocation().key`, never the first commit, never a
+      `REPLACE` — because they are the same instant. Route detail's `scrollIntoView` reveal is a passive
+      effect and therefore always wins over the layout-effect reset. Both collapsing headers are argued
+      from frame timing rather than tested, **because jsdom has no `IntersectionObserver` and no suite in
+      this repo can see a collapse** — an honest gap, not a covered one.
 - [x] ✅ **Route detail's bus tokens keep stale row offsets** — **fixed twice, and the second one removed the
       mechanism**: ADR-108 made the observer watch every row's border box, and
       [ADR-110](./08-decision-log.md#adr-110--the-rails-resting-place-is-css-only-its-travel-is-measured)
@@ -482,12 +518,38 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
 **Found while comparing, broken on BOTH renderers** (so retiring `apps/mobile` neither causes nor fixes
 them; they belong to the hardening list above rather than to WP6-8):
 
-- [ ] 🔴 **An offline, paused fetch renders "No scheduled service"** on Nearby — a false claim, and the exact
-      ADR-073 conflation one screen over from where it was fixed.
-- [ ] 🟠 **`<html lang>` is hard-coded `"en"` and never follows the active locale**, on both renderers.
-- [ ] 🟠 **A stale reading is `opacity` alone on both**, with no relative age anywhere, though
-      `stop-row.spec.json` demands one and `updatedAgo` has sat unused in the catalogue since Wave 1.
-- [ ] 🟡 **Nothing announces or moves focus on a route change** on either renderer.
+- [x] ✅ **An offline, paused fetch renders "No scheduled service"** — **fixed 2026-08-11**
+      ([ADR-124](./08-decision-log.md#adr-124--a-parked-query-is-not-an-answer)), **and it was the same
+      defect as the `getStop` row further down.** Both are TanStack Query *parking* a fetch and a screen
+      reading a parked query as an answer. Two gates park one: `networkMode: 'online'` means an offline
+      query is never run at all (`pending`/`paused`, `fetchFailureCount: 0`, permanent), and
+      `retryer.canContinue()` ANDs `focusManager.isFocused()`, so a retry scheduled while the document is
+      hidden waits for `visibilitychange`. Both are `isError === false` **and** `isLoading === false` —
+      because `isLoading` is `isPending && isFetching` and nothing is fetching — so Nearby's
+      `loading ? … : isError ? … : list` fell through to the list, where `nearbyView([])` is `[]` and the
+      screen printed `noService`: *a claim about Hong Kong manufactured from our own silence*, which is
+      ADR-073's rule broken one screen over from where it was written.
+- [x] ✅ **`<html lang>` is hard-coded `"en"` and never follows the active locale** — **fixed 2026-08-11**
+      on both renderers ([ADR-126](./08-decision-log.md#adr-126--the-navigation-moment-and-the-documents-language)).
+      Written by the component that already resolves the answer — an effect in each app's `LocaleProvider`.
+      No tag table was added: the `Locale` union (`en`/`zh-Hant`/`zh-Hans`) is already the BCP-47 tag set.
+      `index.html` keeps `lang="en"` as a documented pre-bundle default rather than gaining an inline
+      script, which would be the second declaration of a storage key that the light-flash row already
+      refuses.
+- [x] ✅ **A stale reading is `opacity` alone on both** — **the opacity half is fixed 2026-08-11**
+      ([ADR-123](./08-decision-log.md#adr-123--staleness-is-a-muted--before-the-figure-not-a-fade)): all
+      four readouts now draw a **muted `~` before the figure** and the fade is gone. The owner's objection
+      is the reason and it generalises — *a fade is a comparative cue with nothing to compare against*.
+      **The relative-age half is still owed** and is deliberately not bundled: it is the "last updated,
+      and four different reasons" row under *Infra / hardening* below. `stop-row.spec.json`'s `stale`
+      state still asks for it, and `updatedAgo` is still unused in the catalogue.
+- [x] ✅ **Nothing announces or moves focus on a route change** — **fixed 2026-08-11 on `apps/web`**
+      ([ADR-126](./08-decision-log.md#adr-126--the-navigation-moment-and-the-documents-language)): focus
+      moves to the new screen's `<main>` **only when the navigation orphaned it**, so a tab link keeps
+      focus and Search's autofocused field keeps the keyboard, and a polite `role="status"` region names
+      the destination from the matched route's `handle` (no second path→name table). **Not ported to
+      `apps/mobile`**, which retires at WP6-8 — recorded as a deliberate divergence rather than an
+      oversight.
 
 **Explicitly at parity, recorded so the next reader does not re-audit it:** every screen's content, ordering
 and states (all eight drive the same kernel functions and the same corpus fixtures); the destination set and
@@ -524,8 +586,158 @@ written down.
       third is closed. Only worth starting when the owner wants to spend the sitting — an inventory nobody
       acts on is a document that ages.
 
+## Web UI — the owner's list (2026-08-12)
+
+> Asked for directly, after walking the shipping web app. Ordered as given, not by size. Two of the five
+> are **brainstorms the owner wants to sit with** rather than tickets — they say so, and an agent that
+> "just implements" them has misread the request.
+
+- [x] ✅ **Route detail's times should arrive into skeletons, not into empty space** — **done 2026-08-12.** A delay in retrieving
+      the arrivals makes the whole schematic jump as each row's readout appears. The fix is a readout-shaped
+      skeleton **sized to the box the figure will occupy**, so the row's height and the right-hand column's
+      x-position are settled before any number exists.
+      Two things already in place that this has to respect: the screen's arms are
+      `view ? content : isError ? error : skeleton` and since ADR-124 the "no answer yet" branch is
+      `isPending`, not `isLoading` — so the skeleton is reachable for a *parked* query too, which is
+      exactly when a rider waits longest. And the readout already reserves a fixed gutter, so a
+      fixed-width skeleton is a small change rather than a new layout.
+      **Built as `arrivalsPending` on `RouteStopRow`**, passed from the screen as `wantsLive && round === null`
+      — `useLiveRoute` saying no round has landed, which is exactly the window in which all 34 rows gain a
+      line at the same instant. Two bars sized to what they stand in for (the first slot is
+      `text-body font-semibold`, the rest `text-caption`), `aria-hidden` and wordless, because the
+      conformance walker reads presence and a labelled placeholder would project into every state that
+      mounts before its data.
+      **The part worth keeping: it is deliberately NOT drawn when a round has answered with nothing.**
+      *"No bus due"* and *"we have not asked yet"* are different facts, and one placeholder for both is the
+      exact conflation ADR-073 and ADR-124 exist to prevent.
+- [x] ✅ **A front-facing minibus glyph for the rail's bus token, and a double-decker distinct enough to
+      tell it apart** — **shipped 2026-08-12**
+      ([ADR-132](./08-decision-log.md#adr-132--the-bus-glyphs-two-vehicles-and-the-three-rules-that-had-never-been-written-down)).
+      Seven rounds with the owner. The decker is body 14 × 17.0 with two 3.6 bands in a derived even rhythm
+      (gaps 3.27); the minibus is the same width with one 4.4 pane, roof-to-glass 3.27 (**the decker's own
+      gap**, so one constant retunes both) and a filled roof sign. **Which one is drawn is the kernel's
+      call** — `routeVehicle(operator)` names it, because deciding it in a view is what
+      `check-no-derivation` and `check-no-adhoc-id-parsing` both forbid.
+      **Three rules `docs/09` §8 had never carried** are now in it: Lucide's two radii (body 2, inner 1,
+      counted in the installed set rather than derived), the tyre pill at painted 3.6 × 4.6, and
+      **painted ≠ path** — painted is path + 2 wherever a shape is stroked, which is everywhere.
+      **What was drawn and rejected is the valuable half:** headlights (Lucide's zero-length-path dot; they
+      fit the minibus and not the decker, and a detail on one vehicle becomes a *distinguishing* mark);
+      a partial bumper line (it makes the minibus read as a **two-band** vehicle, destroying the very
+      difference it has to keep — *the empty face is the reason the pair works*); a concentric radius rule
+      (correct arithmetic, **unobservable** — below `rx=1` the stroke decides the look); Lucide's stroke
+      wheels (spindly); and dropping the stroke from the filled pill (**the stroke is the shape** — its
+      round join carries the bottom of the wheel, which `rx` cannot).
+      🟠 **Three of this row's own errors came from quoting a path value as a painted one.** The habit that
+      catches it is rasterising and scanning the ink in **both** axes, not reading attributes.
+      🟡 Not walked on a live GMB route: no GMB appeared in today's dataset near the coordinates tried, and
+      the corpus's GMB route ids predate the current build. The switch rests on the kernel corpus (6 cases,
+      including `GMB → minibus`) plus one of `routeDetailView`'s 24 cases being a real GMB route.
+      ✅ The roof sign overlaps the body's top stroke by ~1.8 units, so it reads as a **pod fused to the
+      roofline** rather than a box on it. **Confirmed as intended by the owner** — it is the "roof pod"
+      variant, arrived at by accident and then kept on purpose. Not a defect; do not "fix" the overlap.
+- [x] ✅ **The lab is a real component gallery, driven from the published specs** — **done 2026-08-12**
+      ([ADR-134](./08-decision-log.md#adr-134--the-design-system-gallery-is-enumerated-from-the-published-specs-not-hand-listed)).
+      `/lab/#gallery` prints every component's slots and states from `packages/contract/ui/*.spec.json` — the
+      same ten files a native repo vendors — including **what enforces each state**, which is the field a
+      porter must read before copying anything. `test/gallery-covers-specs.test.ts` makes a spec with no
+      gallery entry a red build, in both directions; the list is explicit rather than globbed precisely so
+      that adding a spec cannot pass silently.
+      **The motions lead with the occasion, not the keyframe**, which is the owner's extension honoured: a
+      keyframe name and a duration port to nothing, so each row says *what moves, on what occasion, how
+      fast* first and the CSS second.
+      🟢 **It found a live drift on its first run** — `stop-row`, `place-row` and `favourites` still declared
+      the `opacity.etaStale` fade three days after ADR-123 removed it from every renderer, invisible because
+      the state was `unenforced` and so nothing read it. **A gallery that renders prose is a gate on prose**,
+      which nothing else here is.
+      **Still owed:** a live sample per leaf component from a corpus case (cheap for `StopRow`/`PlaceRow`,
+      not for whole screens), and the review section below.
+- [ ] 🟡 **Review the app's error and placeholder texts as a set** — asked for by the owner 2026-08-12:
+      *"add these errors and placeholder texts to the list of components we're going to review later."*
+      The wording shipped so far is **accepted as the default** and is not blocking anything; what is wanted
+      is one sitting looking at them together rather than one at a time, because that is the only way the
+      register stays consistent. On the list: `feedNotice`'s three sentences (ADR-133), `etasUnavailable`
+      (ADR-077), `liveArrivals`'s notices (ADR-114), the retired `etaStaleMark` label (ADR-123), Search's
+      empty and recents prose, the FAQ answers, and every skeleton or placeholder that stands in for data.
+      The gallery is where they should be surfaced — it lists components today and does not review their
+      words.
+- [ ] 🟠 **Header rules, written down and testable — and yes, this belongs in the design system.**
+      *"I want us to be a bit more thorough with how we go about things."* Today the rules are scattered
+      across ADR-033 (the title morphs into a pill beside the back lens), the `CollapsingHeader` component
+      and its two thin wrappers, and ADR-126 (the back control is a floating lens fixed to the top). There
+      is no statement of **which kind of screen gets which header**.
+      A starting taxonomy to argue with, not to adopt: (1) a **root/tab** screen — no back control, the
+      title is content rather than chrome; (2) a **pushed detail** screen — collapsing header carrying a
+      badge, back control always reachable while scrolled; (3) a **sheet** — no header, a drag handle.
+      The questions that actually need settling: when the title collapses to a pill and what it collapses
+      *to*; what must stay reachable at any scroll offset; whether a header may ever carry actions; and
+      whether the collapse is scrubbed or two-state (`apps/web` is two-state and `apps/mobile` scrubs —
+      recorded as deliberate, worth revisiting now rather than inheriting).
+      ⚠️ **No suite in this repo can see a collapse** (jsdom has no `IntersectionObserver`), so any rule
+      agreed here needs its enforcement designed with it or it is prose.
+- [ ] 🟠 **Does the app need a bottom tab bar? — the owner's brainstorm, and the biggest question on this
+      list.** The proposal to play with: a **more useful default home** that shows better data and *"is
+      smart enough to know what to prioritise"*; **Settings as a floating top-right button**; **Nearby and
+      Favourites merged**; a **bottom-right floating search button**, with **search as an overlay** rather
+      than a standalone page. The owner's own caveat, and it is the right one: a tab bar probably still
+      earns its place for what comes next — a full map view, rail timings, ferry timings.
+      **What the architecture already says about each piece:**
+      · **Merging Nearby and Favourites is the most natural of the five.** Both screens are already lists
+        of `StopCardView` over the same kernel functions; the merge is a **ranking rule**, so it belongs in
+        `packages/core` as a corpus-pinned `homeView` rather than in a screen. The inputs for "smart enough
+        to prioritise" already exist and are already persisted: saved-or-not, distance, whether a bus is
+        due soon, and `recentRoutes`/`recentStops`.
+      · **Search as an overlay must stay a route.** ADR-102 put the query, mode and chips in the URL and
+        ADR-109 restores its inner scroll offset against the history key — a shareable search is a feature,
+        not an accident. A modal *route* keeps all of that; a component that opens over the shell loses it.
+      · **A floating top-right Settings button is cheap now** — the safe-area-top work landed with the
+        floating back lens (ADR-126 territory), so there is somewhere correct to put it.
+      · **The destination set is identity, and it is gated.** `src/shell/destinations.ts` is a declared set
+        that `shell-parity.test.ts` binds across both shells; changing it is a deliberate edit with a gate
+        to update, not a refactor.
+      · ⚠️ **The floating glass tab bar is *identity* under [ADR-100](./08-decision-log.md#adr-100--the-apps-signature-motion-and-material-are-identity-platform-conventional-detail-is-idiom)**,
+        ported value-for-value from `apps/mobile` at the owner's own direction after the parity review.
+        Removing it is a bigger call than a layout change and would amend that ADR. **Reframing worth
+        considering: the tab bar is probably not the question — what is *in* it is.**
+
 ## Infra / hardening
 - [ ] 🟠 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
+      **The mechanism is built and Route detail is wired (2026-08-12,
+      [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence));
+      demoted from 🔴 because ADR-008 is satisfied again.** `feedNotice` in the kernel with a 9-case corpus
+      decides which of the states a screen is in — precedence `offline` → `unreachable` → `lastUpdated` →
+      `none`, because each earlier state *explains* the later ones — and one shared `FeedNotice` component
+      draws it in `text-muted`, silent in the ordinary case.
+      **The fourth sentence is deliberately absent**, which is this row's own most important line honoured:
+      an upstream board refusing already has vocabulary, and a screen-level duplicate could disagree with it,
+      because a live round asks each pole separately. Route detail can therefore show *two* lines at once,
+      and that is right — they answer different questions.
+      **Still owed:** `lastUpdatedIso` and a `trouble` value for **Nearby, Place detail and Favourites**,
+      each of which reaches its readings through a different hook. Until then **three screens still say
+      nothing.** Plus: the wording is a placeholder awaiting the owner (ADR-114/122 precedent), a reading
+      from yesterday reads as today (`formatClock` has no date), and `trouble` currently collapses *"the
+      Worker said no"* and *"the fetch never arrived"* into one sentence — ADR-124 showed they are
+      distinguishable when one earns its own.
+
+      <details><summary>The original scoping, kept because the four-state table is still the plan</summary>
+
+      **Promoted to 🔴 and given the whole job on 2026-08-12**, at the owner's direction: *"I still don't
+      love graying the text, it's confusing on its own. I'm happy to remove this feature for now (the tilde
+      and gray text) … let's allow a basic error messaging/alerts system to convey if the times are out of
+      date. Include that with our todo regarding error handling."*
+      So **the per-reading staleness cue is being removed** — both the `~` and the fade it replaced — and
+      this row is now the only thing that tells a rider a reading is old. Until it lands, **nothing does**,
+      which is why it is 🔴 rather than 🟠: ADR-008 ("indicate staleness") is a golden rule, and this row is
+      the last thing standing under it.
+      **The reason the per-reading cue never felt communicated, which shapes what to build:** staleness is
+      a property of the **board**, not of each figure. `isStale` reads one `dataTimestamp` per board off the
+      operator's clock, so Route detail was drawing **one fact 78 times** — and a rider cannot act on
+      *"this particular number is two minutes old"*. What they can act on is *"the screen has stopped
+      updating"*, which is a screen-level statement, which is this row. Neither treatment was badly
+      executed; both were **the wrong unit**.
+      **The cheapest honest first slice** is therefore one line per screen, not a per-row marker: *"Last
+      updated 21:34"* whenever the newest board on screen is past the served `staleAfterMs`. That alone
+      restores ADR-008 compliance and is a fraction of the four-state work below.
       Asked for by the owner 2026-08-11 after finding it with the local Worker down (screenshot, route 86K):
       every row kept ageing its times normally and nothing said the data had stopped arriving.
 
@@ -537,10 +749,14 @@ written down.
       **Why nothing covers it today.** `apps/web/src/screens/RouteDetail.tsx` renders
       `view ? … : query.isError ? … : skeleton`, so the error arm is only reachable when there is **no view
       at all**; with `keepPreviousData` and ADR-058's persisted cache there almost always is one. The only
-      remaining signal is the per-row stale dimming — subtle by design, per-row rather than per-screen, and
-      since ADR-122 it lands at 120 s. A rider on a dead connection sees a normal-looking screen for two
-      minutes and a slightly dim one after that. Note the shape it shares with ADR-114: there, silence read
-      as data; **here, stale data reads as live.**
+      remaining signal is the per-row staleness mark — **a muted `~` before each figure since
+      [ADR-123](./08-decision-log.md#adr-123--staleness-is-a-muted--before-the-figure-not-a-fade)**, where
+      it used to be a 45 % fade — which is per-row rather than per-screen and says *this reading is old*
+      rather than *we have stopped being fed*. Since ADR-122 it lands at 120 s. A rider on a dead
+      connection sees a normal-looking screen for two minutes and a tilde-marked one after that. **The `~`
+      makes this row easier, not unnecessary:** the cue is now legible, but it is still a property of one
+      reading, and none of the four sentences below can be inferred from it. Note the shape it shares with
+      ADR-114: there, silence read as data; **here, stale data reads as live.**
 
       **Four states, four sentences, and collapsing them is the trap.** They differ in what a rider should
       *do*, which is the only test that matters:
@@ -574,6 +790,9 @@ written down.
       whether to keep asking** (`ERROR_CODES` in `packages/contract`), so this line should render that
       distinction rather than invent one — a permanent failure and a transient one are different sentences,
       which is the same argument ADR-114 made for `unavailable` versus `perStopOnly`.
+
+      </details>
+
 - [ ] 🟡 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
       the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
       defect in the route watch, but in what the batch endpoint can express**. **Demoted from 🟠 the same
@@ -680,8 +899,48 @@ written down.
       re-run", and the second time it was narrowed wrongly to one file. A gate that needs a re-run to pass
       is a gate people stop reading — which this entry itself said — so the third sighting should have been
       the first fix, not the third filing.
-- [ ] 🔴 **Two tabs of the PWA silently overwrite each other's preferences — including a rider's
-      favourites.** Found by WP6-7 while declaring Settings' `stale` state
+- [x] ✅ **Two tabs of the PWA silently overwrite each other's preferences — including a rider's
+      favourites** — **fixed 2026-08-11**
+      ([ADR-125](./08-decision-log.md#adr-125--preferences-are-merged-not-overwritten-and-the-ancestor-moves-with-the-write)).
+      **Two corrections to this entry, and both matter more than the tick.**
+      **(1) The fix it names is not sufficient.** *"One `storage` listener per store"* cannot help a writer
+      that was never told: a bfcached tab is **frozen** and `storage` events are not queued for it, which is
+      the widest stale window there is. So the three-way merge sits on the **write** path, and the listener
+      is only what makes the other tab's change visible without a reload (plus a `pageshow`-with-`persisted`
+      re-read for the window no event announces).
+      **(2) 🔴 The first implementation of that fix caused the data loss it was written to prevent**, and an
+      adversarial review caught it before it left the branch. The read-modify-write was unserialised, so the
+      merge's ancestor could advance past the snapshot a concurrent write was holding and `mergeSavedKeys`
+      read `base \ theirs` as a remote deletion. **Three manifestations, none of which needs a second tab:**
+      two stars in one task erased the first; a `storage` event in the same task as a star erased the star;
+      and an un-star plus a star in one task **resurrected the un-starred key**. The rule that fixes it —
+      *the ancestor moves only with a write, and the adopt path therefore does not advance it* — is the half
+      an obvious "just serialise the writes" fix does **not** have.
+      Also worth keeping: **set-union was considered and is a worse bug than the original** — with a union,
+      un-starring in one tab is undone by the other tab's stale copy, so a rider with two tabs cannot delete
+      a favourite at all.
+      **(3) 🔴 A second adversarial pass over the corrected fix found three more, one worse than the
+      first.** Sixteen interleavings, five findings, all closed — and the pattern across both rounds is the
+      lesson: **every one of the six defects the merge introduced was a sequencing error around correct
+      arithmetic.** The kernel needed no change at either round. The blocker was the web store advancing its
+      ancestor past a write the disk *refused* — reachable with **no second tab at all**, because
+      `safeLocalStorage` swallows a `QuotaExceededError` and the origin is genuinely fillable (the query
+      cache persists through the same wrapper, ADR-058). `setItem` reports success now. The others: memory
+      adopting the merge on the wrong side of an `await`; a blob merely *missing* `favoriteRoutes` being
+      destructive where an unparseable one was safe; and a **hung** write wedging every later write for the
+      session, because `then(job, job)` continues from a settlement and a hang is not one.
+      **Two residuals, stated because neither is fixable in the merge:**
+      · 🟠 **For the whole rollout window the other writer is a build without this commit** — the installed,
+        service-worker-cached Expo PWA. It writes the whole blob from a stale copy, and our handler
+        correctly reads the difference as deletions. The argument for trusting a deletion holds only once
+        *every* writer on the origin merges; never trusting one is the worse bug.
+      · 🟠 The 🟠 below — *a preference that could not be saved is not reported to the rider* — is worth more
+        than it looked, and is now the honest place to finish this: reporting the failure is what would let
+        a rider know their choice did not stick, rather than the store silently declining to advance.
+
+      <details><summary>The original report, kept because the reproduction is still the right one</summary>
+
+      Found by WP6-7 while declaring Settings' `stale` state
       ([ADR-096](./08-decision-log.md#adr-096--a-screen-with-no-data-still-has-five-states-and-attribution-is-one-of-them)
       decision 9), and pinned as that spec's `knownDefect`. Two stores share the `nextbus.preferences` key
       (ADR-089), **neither listens for a `storage` event** (verified: no listener exists in either store or in
@@ -693,6 +952,8 @@ written down.
       that re-reads and merges, which is a producer fix rather than anything on the Settings screen (ADR-090,
       third instance). Reproduction: open `/settings` in two tabs, change the language in the first, then star
       a route in the second, then reload the first.
+
+      </details>
 - [ ] 🟠 **A preference that could not be saved is not reported to the rider.** The other `knownDefect` WP6-7
       declared (ADR-096 decision 9). Storage can refuse — Safari private browsing, a full quota, a wiped
       profile — and both stores write through a wrapper that swallows the throw so the app keeps running, with
@@ -755,15 +1016,24 @@ written down.
       All eight decisions are `routeFactSheet`'s, with 15 corpus cases; both renderers project it, `apps/web`
       has the sheets as a `<dialog>`, and `RouteFactSheets.tsx` joined `check-no-derivation`'s `POLICED` list
       **with no new allowlist entries**.
-- [ ] 🔴 **A route whose per-stop fares are not numbers opens an entirely blank fare sheet**, while the pill
-      that opened it shows a fare. Found by WP6-6c and pinned as the corpus row
-      `a-route-whose-fares-are-not-numbers-opens-an-entirely-blank-fare-sheet` (`knownDefect`). `fareStages`
-      drops any value `Number()` cannot read, so there are no stages and no concessions; `fareRange` drops the
-      same values, falls back to `service.fareFull`, and the strip therefore reads `$13.4`. So a rider taps a
-      pill showing a fare and gets nothing. **The fix:** fall back to the origin full fare as a **single stage
-      covering the whole route** — the same datum the pill used — and say nothing about sections the data
-      cannot describe. Whether upstream actually publishes such a fare is not measured; the guard in
-      `fareStages` makes the state reachable by construction, which is enough to pin it.
+- [x] ✅ **A route whose per-stop fares are not numbers opens an entirely blank fare sheet** — **fixed
+      2026-08-11** ([ADR-128](./08-decision-log.md#adr-128--a-fare-sheet-with-nothing-in-it-is-the-strip-contradicting-itself)).
+      One new private kernel function, `wholeRouteStage`: when `fareStages` yields nothing the timeline
+      falls back to a **single stage spanning `1 … stops.length`** priced at `service.fareFull`, boarding at
+      the origin row, and priced for concessions through the **existing** `concessionFigures` helper — so
+      ADR-107's `min(adult, max($2, 20%))` cap is applied once rather than copied onto a second path.
+      `routeFactSheet`'s exported signature is unchanged, so neither renderer needed an edit.
+      **The root cause is worth keeping, because it is a shape rather than a bug:** `fareStages` and
+      `fareRange` reject an *identical* set of values, and two surfaces disagreed about what to do next —
+      the strip fell through to `service.fareFull` and printed `$13.4`, the sheet had no fallback at all.
+      So this was never a defect in either guard; it was **the missing second half of one decision**, which
+      existed for the pill and nowhere for the sheet. That identity is also what makes the fix sound: no
+      stages implies no span, which is exactly when the pill is showing `formatFare(service.fareFull)`.
+      The corpus row was **renamed, not merely re-expected** —
+      `…-opens-an-entirely-blank-fare-sheet` → `…-opens-with-the-fare-the-pill-showed` — because the
+      property it pins (what the sheet says when the fares are unreadable and the pill shows one anyway) is
+      unchanged while the answer is not. Two rows added so an empty timeline stays a *measured* state:
+      no fare anywhere (nothing invented — no `$0`, no `~$2.0` from an absent adult fare) and no stops.
 - [ ] 🔴 **Why does a failed `getStop` leave the query pending-and-idle rather than `error`?** Found by
       WP6-3b ([ADR-088](./08-decision-log.md#adr-088--place-details-spec-its-dom-port-and-the-gate-that-finally-reads-both-renderers))
       and **half fixed**: the screen no longer renders nothing (the skeleton is the fallback arm on both
@@ -777,6 +1047,25 @@ written down.
       *paused* rather than run; `PersistQueryClientProvider`'s restore interacting with a first-load failure;
       the service worker turning a cross-origin 404 into something `classifyFailure` cannot read. Worth an
       afternoon — every screen in the app shares this shape.
+
+      **✅ Answered and fixed 2026-08-11** ([ADR-124](./08-decision-log.md#adr-124--a-parked-query-is-not-an-answer)).
+      **The first candidate was right, and it is the same defect as the offline "No scheduled service" row
+      above** — one mechanism, two screens, filed twice. Measured three ways rather than reasoned about: a
+      harness mounting the app's real `QueryProvider`, a live `pnpm dev:edge` + `pnpm dev:dom` driven in
+      Chrome, and a read of `@tanstack/query-core@5.101.4`'s source.
+      Two gates park a fetch — `networkMode: 'online'` (offline ⇒ the query function is never invoked;
+      `pending`/`paused`, `fetchFailureCount: 0`, permanent) and `retryer.canContinue()`, which ANDs
+      `focusManager.isFocused()`, so a retry scheduled while the document is **hidden** waits for
+      `visibilitychange`.
+      **And the `fetchStatus: 'idle'` in this row — the detail that hid the mechanism for two waves — is
+      what a *parked* query becomes when its last observer detaches:** `Query.removeObserver` →
+      `#isInitialPausedFetch()` → `retryer.cancel({ revert: true })`, restoring the pre-fetch state with
+      the failure count **erased**. Both `<StrictMode>` and any navigation away trigger it. So it looked
+      like a query nobody had ever asked.
+      **Why the suite disagreed with the browser**, which is the reusable lesson:
+      `test/place-detail-states.test.tsx` builds its own `QueryClient` with `retry: false` and runs against
+      a visible jsdom document, so **neither gate is reachable there**. A suite that configures away the
+      environment cannot see an environmental defect.
 - [ ] 🟠 **A bus token that waits for a measurement draws nothing when the measurement never arrives** —
       **the symptom is fixed, the cause is the row below.** WP6-6b (ADR-094) found that the RN route
       schematic's overlay skipped any token whose target row had not reported its `onLayout` offset, so a

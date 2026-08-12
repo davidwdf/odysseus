@@ -14,6 +14,7 @@ import {
   formatJourney,
   formatServiceHours,
   isStale,
+  newestBoard,
 } from './eta'
 import { formatDistance, routeDistanceM } from './geo'
 import { formatFavoriteRouteKey, memberStopIds } from './ids'
@@ -460,6 +461,34 @@ export function routeStopBoard(
 }
 
 /** What a renderer needs to draw the Route screen, with nothing left to decide. */
+/**
+ * What kind of vehicle a route runs, as far as the operator lets us say.
+ *
+ * **Two words, because two is what the data supports.** A Green Minibus route is a light bus; everything
+ * else this app serves is drawn as *a bus*. It is deliberately not a taxonomy of chassis: NLB and MTR Bus
+ * run single-deckers in reality, and calling them `bus` overstates the deck count — but the alternative is
+ * a third word the feed cannot justify, and the decker has been this app's glyph for *a bus* since Wave 1
+ * (`docs/09` §8). The overstatement is recorded rather than fixed.
+ *
+ * **Why this is the kernel's and not the renderer's.** It is one line, and it is exactly the line two gates
+ * forbid a view from writing: `check-no-derivation` bans a renderer selecting on data, and
+ * `check-no-adhoc-id-parsing` bans reaching into an id for the operator. So the kernel names the vehicle
+ * and each renderer maps that name to a drawing — the same shape as `etaUrgency` naming a band and each
+ * renderer owning its own colour for it (ADR-053).
+ *
+ * **Unknown operators degrade to `bus`**, which is ADR-051's rule applied here: the id grammar is shape and
+ * not vocabulary, so the day a fifth operator ships, a client that has never heard of it must draw
+ * *something* rather than nothing. A closed list would have made that day a blank rail.
+ *
+ * @spec route-detail#routeVehicle
+ */
+export function routeVehicle(operator: OperatorId): RouteVehicle {
+  return operator === 'GMB' ? 'minibus' : 'bus'
+}
+
+/** The vehicle a route runs — see `routeVehicle` for why there are only two. */
+export type RouteVehicle = 'bus' | 'minibus'
+
 export interface RouteDetailView {
   header: RouteJourneyHeader
   /** The static-facts strip, in pill order. Empty when the payload carries no service block at all. */
@@ -468,6 +497,24 @@ export interface RouteDetailView {
   stops: RouteStopRowView[]
   /** The buses on the rail, in route order. */
   buses: RailBus[]
+  /**
+   * The **freshest board this screen drew**, or `null` when it drew no readings at all — the data half of
+   * the screen's freshness notice (`feedNotice`).
+   *
+   * The view's, not the screen's, because the view is what knows *which* boards it used: a route's rows can
+   * carry readings of different ages, and "the newest one" is a fact about the list rather than about the
+   * fetch. The other half — whether the network or our edge failed — is the screen's, and `feedNotice` joins
+   * the two.
+   */
+  lastUpdatedIso: string | null
+  /**
+   * Which vehicle to draw for those buses — `routeVehicle`'s answer, carried so no renderer has to ask.
+   *
+   * On the view rather than on each `RailBus` because every bus on one route is the same vehicle: putting
+   * it per-token would be the same fact repeated once per bus, and two renderers would eventually disagree
+   * about which copy was authoritative.
+   */
+  vehicle: RouteVehicle
   /**
    * Where the boarding row is, or `-1`.
    *
@@ -625,7 +672,13 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
     return marker === undefined ? [] : [railBus(marker, row.name.label, labels)]
   })
 
+  // Whichever pole answered most recently is what "last updated" means to a rider looking at the whole
+  // schematic. `newestBoard` is the one rule; this is only the payload adapter for it.
+  const lastUpdatedIso = newestBoard(stops.map((st) => st.eta?.dataTimestamp))
+
   return {
+    lastUpdatedIso,
+    vehicle: routeVehicle(route.operator),
     header: {
       operator: route.operator,
       routeNo: route.routeNo,
@@ -687,7 +740,9 @@ function railBus(marker: BusMarker, name: string, labels: RouteDetailLabels): Ra
  *
  *  · **the fare falls back from the sectional span to the origin's full fare.** A route whose stops carry
  *    no per-stop fares still has one number worth printing, and the span is framed dearest → cheapest
- *    because boarding later costs less — `formatFareRange`'s own rule;
+ *    because boarding later costs less — `formatFareRange`'s own rule. `wholeRouteStage` is the other half
+ *    of this decision and reads the same field: whatever this pill falls back to, the sheet behind it opens
+ *    with, or the rider taps a fare and is shown nothing;
  *  · **the holiday fare is a note on the fare pill, never a pill of its own**, and only where upstream
  *    published a different one;
  *  · **no service block at all means no strip**, which is a real state: the dataset has routes with no
@@ -739,7 +794,9 @@ function routeFacts(
 // deliberately absent from `check-no-derivation`'s `POLICED` list until now.
 //
 // Eight decisions lived there, and the pattern is the wave's: each looks like formatting and each is a
-// judgement about what a rider is told.
+// judgement about what a rider is told. A **ninth** was added afterwards and had lived nowhere: what the
+// fare timeline opens with when the per-stop fares are unreadable, which until then was nothing at all —
+// see `wholeRouteStage`.
 
 /** Which pill opened a sheet. The same four keys the strip carries, so a renderer switches once. */
 export type RouteFactSheetKind = RouteFactKey
@@ -765,7 +822,14 @@ export interface ConcessionFigure {
 
 /** One step of the sectional fare, dearest first. */
 export interface FareStageRow {
-  /** The stops this price covers, 1-based and inclusive. `fromSeq` is also the row's identity. */
+  /**
+   * The stops this price covers, 1-based and inclusive. `fromSeq` is also the row's identity.
+   *
+   * **Positions in the stop list, not the wire's `seq`** — `fareStages` numbers its stages from the array it
+   * was handed, and the fallback stage below spans `1 … stops.length` for the same reason. A payload whose
+   * sequence is offset (seq 5…9) numbers these 1…5 and still names the right boarding stops, which is what
+   * `a-sequence-that-does-not-start-at-one-still-names-the-right-boarding-stops` measures.
+   */
   fromSeq: number
   toSeq: number
   /** The adult fare, printed. */
@@ -817,15 +881,28 @@ export interface HoursDayRow {
 export type RouteFactSheetView =
   | {
       kind: 'fare'
-      /** Dearest (origin) first, which is the order sectional fares step down in. */
+      /**
+       * Dearest (origin) first, which is the order sectional fares step down in.
+       *
+       * **One stage spanning the whole route is the fallback, not a malformed timeline** — it is what a route
+       * whose per-stop fares are unreadable gets, carrying the same figure the pill that opened the sheet
+       * showed (`wholeRouteStage`). A renderer draws it exactly as it draws any other stage; the sheet is
+       * deliberately silent about *why* there is only one, because "we cannot describe this route's sections"
+       * is not a sentence a rider can act on.
+       */
       stages: FareStageRow[]
       /**
        * Which concession classes the legend explains, or empty for no legend at all.
        *
-       * **Empty is a real state**: a GMB route whose fares upstream publishes as a non-numeric string has no
-       * estimate to make, and a legend keyed to figures that are not on screen is worse than none. The RN
-       * sheet spelled this `stages.some((st) => estimateChildFare(st.fare) && estimateElderlyFare(st.fare))`,
-       * which is a decision about what a rider is shown rather than a formatting step.
+       * **Empty is a real state**: a route with no priceable fare anywhere — no readable per-stop fare *and*
+       * no whole-route fare to fall back to — has no estimate to make, and a legend keyed to figures that are
+       * not on screen is worse than none. The RN sheet spelled this
+       * `stages.some((st) => estimateChildFare(st.fare) && estimateElderlyFare(st.fare))`, which is a decision
+       * about what a rider is shown rather than a formatting step.
+       *
+       * It used to read "a GMB route whose fares upstream publishes as a non-numeric string", and that
+       * example is now wrong: such a route falls back to its origin full fare and therefore *does* get a
+       * legend. The state survived the fix; the only payload that reaches it did not.
        */
       concessions: ConcessionClass[]
     }
@@ -889,13 +966,17 @@ export function routeFactSheet(
   opts: RouteFactSheetOptions,
 ): RouteFactSheetView {
   const { locale, labels } = opts
-  if (kind === 'fare') return fareSheet(view, labels)
+  if (kind === 'fare') return fareSheet(view, service, labels)
   if (kind === 'freq') return freqSheet(service, locale, labels)
   if (kind === 'hours') return hoursSheet(service, labels)
   return { kind: 'stops', stats: routeStats(view, service, locale) }
 }
 
-function fareSheet(view: RouteDetailView, labels: RouteFactLabels): RouteFactSheetView {
+function fareSheet(
+  view: RouteDetailView,
+  service: RouteServiceInfo | undefined,
+  labels: RouteFactLabels,
+): RouteFactSheetView {
   // The **raw** fares, which is why `RouteStopRowView` keeps both: `fareStages` groups contiguous runs by
   // comparing the decimal, and `fareLabel` is what is printed.
   const rows = view.stops
@@ -907,7 +988,7 @@ function fareSheet(view: RouteDetailView, labels: RouteFactLabels): RouteFactShe
   // a `find` by `seq` would name no stop at all and the timeline would print blank headings. And walking the
   // rows leaves no dead branch: "this row does not start a stage" is the ordinary case, where a `find` with a
   // `?? ''` fallback has an arm no payload can reach — the same finding as WP6-3a's `?? []`.
-  const stages = rows.flatMap((row, index) => {
+  const sectional: FareStageRow[] = rows.flatMap((row, index) => {
     const stage = byPosition.get(index + 1)
     if (stage === undefined) return []
     return [
@@ -922,14 +1003,73 @@ function fareSheet(view: RouteDetailView, labels: RouteFactLabels): RouteFactShe
       },
     ]
   })
+  const stages = sectional.length > 0 ? sectional : wholeRouteStage(rows, service, labels)
   // The legend explains exactly the classes that appear, which is what makes it honest: a class with no
-  // figure anywhere on screen has nothing to explain.
+  // figure anywhere on screen has nothing to explain. Read off the **finished** timeline, fallback included,
+  // so the legend cannot explain a class the sheet does not show or omit one it does.
   const classes = new Set(stages.flatMap((stage) => stage.concessions.map((c) => c.class)))
   return {
     kind: 'fare',
     stages,
     concessions: CONCESSION_CLASSES.filter((klass) => classes.has(klass)),
   }
+}
+
+/**
+ * The whole route as **one** stage, priced at the fare the strip's pill is already showing.
+ *
+ * ## What it fixes
+ *
+ * `fareStages` skips any per-stop fare `Number()` cannot read, so a route whose fares upstream publishes as
+ * a string — `"n/a"`, a range, a footnote marker — yielded **no stages at all**, and no concessions with
+ * them. That much was self-consistent. The defect was one level up: `fareRange` rejects *exactly the same
+ * values*, so the strip fell through to `service.fareFull` and printed `$13.4` — and a rider who tapped that
+ * pill got an empty sheet. Found by WP6-6c and carried in the corpus as a `knownDefect` until now.
+ *
+ * ## Why the two conditions are the same condition
+ *
+ * The fallback is only correct because `fareRange` and `fareStages` reject an identical set (`null`, `''`,
+ * and anything `Number()` reads as `NaN`): **no stages** therefore implies **no span**, which is precisely
+ * when the pill is showing `formatFare(service.fareFull)` and nothing else. So this is not a second guess at
+ * what the pill said — it is the same datum, read again. Should those two guards ever diverge, a sectional
+ * span could coexist with an empty timeline and this would put the wrong figure on screen, which is why the
+ * pairing is written down here and measured by a property in the suite rather than left to be noticed.
+ *
+ * ## What it deliberately does not say
+ *
+ * A whole-route fare says where a rider boards (the origin) and what they pay for the ride. It says nothing
+ * about where the sections change, and neither does this: **one** stage covering `1 … stops.length`, the
+ * terminus included, because "the whole route" is the only span the datum supports. Inventing plausible
+ * section boundaries from a full fare would be fabricating route data (ADR-008), and a caveat about sections
+ * we cannot describe is a sentence a rider cannot act on.
+ *
+ * The concessions come from `concessionFigures`, the **same** helper every sectional stage uses, so the $2
+ * Scheme's `min(adult, max($2, 20%))` cap (ADR-107) is applied once for the whole app rather than copied for
+ * this path. A route reaching this fallback is exactly the sort with a `$0` interchange leg, which is the
+ * fare that made the cap necessary.
+ *
+ * Walked as `rows.slice(0, 1)` rather than read as `rows[0]` with a guard, the shape this file uses
+ * throughout: a route with **no stops** is a real payload (`routeFacts` still prints a fare pill for one, off
+ * `fareFull`) and there is no stop to name as the boarding point, so it yields no stage — which is the
+ * ordinary case for an empty list, not an arm to defend against.
+ */
+function wholeRouteStage(
+  rows: RouteStopRowView[],
+  service: RouteServiceInfo | undefined,
+  labels: RouteFactLabels,
+): FareStageRow[] {
+  const fullFare = service?.fareFull
+  // The **same truthiness test the pill uses** (`routeFacts`), so a `fareFull` of `''` yields neither a pill
+  // nor a stage — rather than a sheet whose one price reads "$" under a strip showing no fare at all.
+  if (!fullFare) return []
+  return rows.slice(0, 1).map((row) => ({
+    fromSeq: 1,
+    toSeq: rows.length,
+    fare: formatFare(fullFare),
+    boardingStop: row.name.label,
+    covers: labels.stopCount(rows.length),
+    concessions: concessionFigures(fullFare),
+  }))
 }
 
 /** In legend order, which is the order the figures appear on a stage. */

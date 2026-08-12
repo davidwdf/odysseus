@@ -35,7 +35,7 @@ function RouteRow({ row, onPress }: { row: StopCardRow; onPress?: (routeId: stri
   const inner = (
     <>
       {content}
-      <EtaBadge label={row.label} urgency={row.urgency} stale={row.stale} />
+      <EtaBadge label={row.label} urgency={row.urgency} />
     </>
   )
   // A real `<button>` when it navigates, a plain `<div>` when it does not — so keyboard focus and the

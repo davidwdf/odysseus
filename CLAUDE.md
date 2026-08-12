@@ -36,6 +36,10 @@ pnpm --filter @nextbus/contract ui:emit        # …and ui/<component>.spec.json
 pnpm --filter @nextbus/contract native:emit    # …and README.md + native/{ios,android} — it prints the
                         # path/schema/corpus COUNTS, so it goes stale on any wire or corpus change too
                         # …all FOUR are committed + gated: `pnpm test` fails if any is stale
+pnpm check:adr-index:write   # regenerate docs/08's ADR index — the FIFTH emit-and-gate artefact
+                        # (ADR-127). `pnpm boundaries` also fails on a Status outside the three-word
+                        # vocabulary, a one-sided supersede/amend claim, or an `ADR-NNN` citation or
+                        # `#adr-` anchor anywhere in the repo that resolves to nothing
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
@@ -88,7 +92,11 @@ packages/ui          NativeWind preset + themes + tokens
 packages/tsconfig    shared TS configs
 scripts/pwa          the Workbox caching policy + the assertions over the emitted `sw.js` — ONE
                      declaration, read by both apps' `build:web` (ADR-082). It is ADR-058 in data,
-                     so a second copy could disagree about what a rider sees with no network
+                     so a second copy could disagree about what a rider sees with no network.
+                     Since ADR-130 it also holds `redirects.mjs`, the **host-side** SPA fallback for a
+                     shared deep link, emitted into both `dist/` from the same `NAVIGATE_FALLBACK` the
+                     worker uses — the same one-declaration rule, one layer down. A first visit to
+                     `/route/…` has no service worker, so `navigateFallback` cannot answer it
 ```
 
 ## Golden rules (don't break these)
@@ -207,8 +215,20 @@ either renderer: the five canonical states for a screen with **no data source** 
 whole screen in `slots` so `shows: []` means *everything*; the conformance walker **sees presence, not
 visibility**, so a collapsed `<details>` (or any CSS-hidden node) projects its content and is banned on the
 FAQ; and **`react-native-web@0.21` drops `accessibilityState` silently**, which had left six controls on the
-shipping Expo PWA announcing no state to a screen reader — all six are `aria-*` now. **WP6-7b, a parity audit
-of `apps/web` against the `apps/mobile` it replaces, is next**, ahead of WP6-8. `watch()` is a real
+shipping Expo PWA announcing no state to a screen reader — all six are `aria-*` now. **WP6-7b's parity audit
+is done** and so are the four rows after it: Search keeps its place and the rail stops being measured
+(ADR-109/110/111), the route watch landed end to end (ADR-112–121, and **the socket is the default engine
+now**), and **WP6-8a — the hardening sweep — closed nine open rider-facing defects plus the ADR hygiene job
+(ADR-123–131)**. Four things from that sweep change how you should work here:
+**(1) a suite that configures away the environment cannot see an environmental defect** — two 🔴 rows filed
+months apart were one parked-query bug that jsdom could not reach, and the same shape hid a `ResizeObserver`
+leak and a colour regression; **(2) staleness is a muted `~` before the figure, not a fade** (ADR-123), so
+never reach for `opacity.etaStale` — it is retired in place with a warning in the generated native tokens;
+**(3) preferences are merged, not overwritten** (ADR-125) — and that fix caused the data loss it was written
+to prevent, twice, both times a *sequencing* error around correct arithmetic, so read the ADR before touching
+either store; **(4) an ADR number is a permanent address** (ADR-127) — never renumber, and `pnpm boundaries`
+now fails on a one-sided supersede claim or a dangling citation.
+**WP0-5 (deploy) is deliberately parked pending the owner's go-ahead**, not blocked. `watch()` is a real
 frame protocol whose default engine is a poll emulator and whose other engine is a sharded,
 hibernating `EtaHub` Durable Object on `/v1/live`. An adversarial review over that finished diff
 confirmed **13 findings and all 13 are fixed on the branch** — read ADR-056 decisions 13–19 before

@@ -175,11 +175,11 @@
       }
     },
     "stale": {
-      "must": "The `opacity.etaStale` treatment on the readout AND a relative age somewhere the rider can see it.",
+      "must": "A relative age somewhere the rider can see it — the screen’s “last updated” line.",
       "mustNot": "Colour alone, and never a value presented as fresh.",
       "why": "ADR-008. A replayed reading from the persisted cache arrives with its original `observedAt`, so it is aged and labelled rather than shown as live (ADR-058).",
       "enforcement": {
-        "unenforced": "The card dims the readout from `row.stale`, which is opacity — not text — so this harness cannot see it. The relative age is the list screen's \"updated N ago\", so WP6-2 owns the assertable half."
+        "unenforced": "Nothing on the CARD says this, and since ADR-123 nothing is meant to: two per-reading treatments (a 45% fade, then a muted `~`) were built and withdrawn because staleness is a property of the BOARD, so a per-figure cue draws one fact once per reading. The sentence is the screen’s — ADR-133’s `feedNotice`, held by `eta#feedNotice`’s corpus and wired on Route detail so far. This row stays `unenforced` until it is wired on the screens that draw this card."
       }
     },
     "offline": {

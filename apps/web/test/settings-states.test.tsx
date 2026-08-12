@@ -286,3 +286,134 @@ describe('what the projection cannot see: which option is the rider’s', () => 
     expect(pressedLabels()).not.toContain(t('en', 'appearanceDark'))
   })
 })
+
+describe('the spec’s `stale` state: the preferences as they are on disk *now*', () => {
+  // **The state that was a `knownDefect` until WP6-8a, asserted on the rendered DOM.** Its `mustNot` is
+  // "a choice this tab made three minutes ago, written over a choice another tab made since", and until
+  // the stores merged, a second tab of this app held a stale copy from the moment it loaded and reverted
+  // the first tab's language with its next write.
+  //
+  // **The spec declares `stale` `unenforced`, and this block is one of the things it names** (ADR-130
+  // decision 2). Pointing `enforcement.by` at `languageOptions` was tried and withdrawn: `conformStates`
+  // does not project a `by` state, and that slot is already `empty`'s — so the claim would have been one
+  // no harness evaluates, green on both renderers the day the `storage` listener was deleted. A `shows`
+  // projection is worse still, and not for want of a fixture: `apps/mobile/lib/preferences.ts` gates the
+  // merge *and* the listener on a web feature test, so **`stale` is a state the native surface cannot
+  // enter by design** — and the walker treats a projected state a renderer cannot reach as a finding, so
+  // the RN driver would have had to fake it. What holds the behaviour instead is named in the spec:
+  // `favourites#mergePreferences` and `favourites#mergeSavedKeys` in `packages/core/spec`,
+  // `test/preferences-sync.test.ts`, `apps/mobile/lib/preferences.sync.test.ts`, and this block — which
+  // mounts the screen, delivers a real `storage` event and reads the new language back off the DOM, which
+  // is as close to a projection as the state gets on the one renderer where it exists.
+  //
+  // Nothing about this screen changed to make it pass. That is the point of an ADR-090 producer fix: the
+  // screen already drew whatever the store held, and the store is what learnt to listen.
+
+  const pressedLabels = (): string[] =>
+    [...container.querySelectorAll('[aria-pressed="true"]')].map((el) =>
+      (el.textContent ?? '').trim(),
+    )
+
+  it('re-reads a language another tab chose, without a reload', () => {
+    usePreferences.setState({ appearance: 'auto', localeOverride: null })
+    mount()
+    expect(container.textContent).toContain(t('en', 'settingsLanguage'))
+    expect(pressedLabels()).toContain(t('en', 'languageAuto'))
+
+    // The other tab writes the blob — the whole blob, which is what `partialize` writes — and the browser
+    // delivers a `storage` event. `newValue` is deliberately not what the store trusts; it re-reads.
+    act(() => {
+      window.localStorage.setItem(
+        'nextbus.preferences',
+        JSON.stringify({
+          state: {
+            appearance: 'auto',
+            localeOverride: 'zh-Hant',
+            favoriteRoutes: [],
+            recentRoutes: [],
+            recentStops: [],
+          },
+          version: 1,
+        }),
+      )
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'nextbus.preferences',
+          storageArea: window.localStorage,
+        }),
+      )
+    })
+
+    // The headings follow the reader, the language names do not, and exactly one row is lit — the same
+    // three claims `localeOverridden` makes, arrived at from another tab rather than from a tap.
+    expect(container.textContent).toContain(t('zh-Hant', 'settingsLanguage'))
+    // Two lit controls, not three: one language and one appearance. `languageAuto` and `appearanceAuto`
+    // are the same word in Chinese, so "Automatic is no longer chosen" has to be counted rather than
+    // searched for — a `not.toContain('自動')` would fail on the appearance row, which is still Auto.
+    expect(pressedLabels()).toContain(endonym('zh-Hant'))
+    expect(pressedLabels()).toHaveLength(2)
+    expect(pressedLabels()).toEqual(
+      expect.arrayContaining([endonym('zh-Hant'), t('zh-Hant', 'appearanceAuto')]),
+    )
+  })
+
+  it('does not revert that language when this tab then changes its appearance', () => {
+    // `docs/07`'s reproduction, in the order a rider hits it — and **with no event delivered**, which is
+    // the half a listener cannot cover and the half that destroyed data: this tab's next write went out
+    // as the *whole* blob from its stale memory, taking the other tab's language with it.
+    usePreferences.setState({ appearance: 'auto', localeOverride: null })
+    mount()
+    window.localStorage.setItem(
+      'nextbus.preferences',
+      JSON.stringify({
+        state: {
+          appearance: 'auto',
+          localeOverride: 'zh-Hant',
+          favoriteRoutes: [],
+          recentRoutes: [],
+          recentStops: [],
+        },
+        version: 1,
+      }),
+    )
+
+    usePreferences.getState().setAppearance('dark')
+
+    const blob = JSON.parse(window.localStorage.getItem('nextbus.preferences') as string)
+    expect(blob.state.localeOverride, 'the other tab’s language was overwritten').toBe('zh-Hant')
+    expect(blob.state.appearance).toBe('dark')
+  })
+
+  it('was watched failing: without the listener the screen stays in the old language', () => {
+    // The control. If the merge were removed, the first case above would still *mount* correctly and only
+    // the post-event assertions would go red — so this pins what "the state was entered" means: the store
+    // is what changed, and the screen is only reporting it.
+    usePreferences.setState({ localeOverride: null })
+    mount()
+    window.localStorage.setItem(
+      'nextbus.preferences',
+      JSON.stringify({
+        state: {
+          appearance: 'auto',
+          localeOverride: 'zh-Hans',
+          favoriteRoutes: [],
+          recentRoutes: [],
+          recentStops: [],
+        },
+        version: 1,
+      }),
+    )
+    // No event dispatched: nothing tells this tab. It is still in English, which is honest — a listener
+    // cannot hear what was never broadcast, and it is why the *write* path merges too.
+    expect(usePreferences.getState().localeOverride).toBeNull()
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'nextbus.preferences',
+          storageArea: window.localStorage,
+        }),
+      )
+    })
+    expect(usePreferences.getState().localeOverride).toBe('zh-Hans')
+  })
+})

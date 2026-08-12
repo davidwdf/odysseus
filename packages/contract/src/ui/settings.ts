@@ -18,10 +18,12 @@ import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
  * than passing. `route-detail.spec.json` records the trap this inverts: there, `shows: []` and "renders
  * nothing at all" are indistinguishable to a text projection. Here they are opposites.
  *
- * So: `loading` is `unenforced` on this screen alone, and for a reason worth reading (below); `empty` is
- * enforced `by` the slot that would have to be empty for it to happen; `offline` is a full projection,
- * because every control here works with no network and that is a claim; and two states are real defects
- * this row found and declined to hide.
+ * So: `empty` is enforced `by` the slot that would have to be empty for it to happen; `offline` is a full
+ * projection, because every control here works with no network and that is a claim; `loading` and `stale`
+ * are `unenforced`, each for a reason worth reading (below) and each naming who *does* hold it, which is
+ * the whole difference between an honest gap and decoration; and `failed` is a real defect this row found
+ * and declined to hide. `stale` was the second such defect, and WP6-8a fixed it — in the producer, so
+ * nothing on this screen changed.
  *
  * ## What the projection cannot see, and what the suites do about it
  *
@@ -138,10 +140,27 @@ export const SETTINGS_SPEC: ComponentSpec = {
       must: 'The preferences as they are on disk now.',
       mustNot:
         'A choice this tab made three minutes ago, written over a choice another tab made since.',
-      why: '**A real defect this row found, not a hypothetical.** Two stores share one storage key (ADR-089) and neither listens for a `storage` event, and zustand’s `persist` writes `partialize`’s output as the *whole* blob. So a second tab of the PWA holds a stale copy in memory, and the next preference it writes — or the next route a rider stars — silently reverts the first tab’s language. It is the same hazard ADR-082 decision 5 identified between two *apps*, arriving between two tabs of one.',
+      why: '**A real defect this row found, and WP6-8a fixed it.** Two stores share one storage key (ADR-089), neither listened for a `storage` event, and zustand’s `persist` writes `partialize`’s output as the *whole* blob — so a second tab held a stale copy and the next preference it wrote silently reverted the first tab’s language, favourites included. It was ADR-082 decision 5’s hazard between two *apps*, arriving between two tabs of one. The fix is in the **producer**, not here (ADR-090, third instance): `@nextbus/core`’s `mergePreferences` is the arithmetic, corpus-pinned so both stores resolve a conflict the same way, and each store does a read-modify-write on every save plus a `storage` listener that re-reads and merges.',
       enforcement: {
-        knownDefect:
-          'No renderer subscribes to cross-tab writes, so there is no state to enter. The fix is one `storage` listener per store rather than anything on this screen — which is what makes it a `mustNot` about a producer (ADR-090) a third time. Owner: `docs/07`’s hardening list, added by WP6-7.',
+        unenforced:
+          'Not at this layer — and saying so is the point, because this state’s first classification was ' +
+          '`by: languageOptions`, which was worse than none. `conformStates` does not project a `by` ' +
+          'state at all, so that claim named a slot nothing ever asks about the merge: delete the ' +
+          '`storage` listener tomorrow and every conformance run on both renderers stays green. A ' +
+          'projection is not the alternative either, and not merely for want of a fixture. This state is ' +
+          '**two tabs of one origin**, and there is no second writer on a native build by design — the ' +
+          'merge and the listener are both gated on a web feature test, so iOS and Android still do one ' +
+          'write per mutation (`apps/mobile/lib/preferences.ts`, and the comment above the gate says so). ' +
+          'A `shows` on `stale` would therefore oblige the RN driver to enter a state its surface does ' +
+          'not have, through a `useLocaleOverride` it mocks — a fixture faking the thing under test, ' +
+          'which is a worse lie than an honest gap. What holds it instead, named so that a port knows ' +
+          'what to copy rather than having to infer it: `favourites#mergePreferences` and ' +
+          '`favourites#mergeSavedKeys` in `packages/core/spec` pin the arithmetic once for every ' +
+          'platform; `apps/web/test/preferences-sync.test.ts` and `apps/mobile/lib/preferences.sync.test.ts` ' +
+          'drive the real stores with a second writer on the other end; and the last block of ' +
+          '`apps/web/test/settings-states.test.tsx` mounts **this screen**, delivers a `storage` event, ' +
+          'reads the new language back off the DOM, and carries a watched-failing control beside it — ' +
+          'which is as close to a projection as the state gets, on the one renderer where it exists.',
       },
     },
 

@@ -65,9 +65,27 @@ export default function Favorites() {
   // WP6-4b it collapsed them: `loading` was the only guard, so once every query had *failed* the screen
   // rendered its heading and an empty list, which is the same blank-screen hole WP6-3b found on Place detail
   // through a different door. A rider could not tell "still fetching" from "we could not reach any of them".
-  const loading = results.some((r) => r.isLoading) && cards.length === 0
+  //
+  // **And WP6-4b named the hazard while still branching on `isLoading`, which does not guard it** (ADR-124).
+  // `isLoading` is `isPending && isFetching`, so it is false for a fetch TanStack has **parked** — offline
+  // under `networkMode` before that ADR set it to `'always'`, and *still* between retries while the document
+  // is hidden, because `retryer.canContinue()` ANDs `focusManager.isFocused()`. With every query parked there
+  // was nothing loading, nothing failed and no cards, so the screen fell through to the list arm and drew
+  // **its heading and nothing else**: the third state's own `mustNot`, reached through the door the comment
+  // above was watching. So the branch is on `isPending` — status alone.
+  //
+  // The aggregate is per **screen**, not per query, which is what the spec's `loading` state already says:
+  // "no card has arrived yet", with "a card that has arrived drawn immediately rather than held for its
+  // siblings". Hence `some(isPending)` and not `every`: one pole still waiting while another has answered is
+  // a partial list. Measured in `apps/web/test/favourites-offline.test.tsx` against the real provider; the
+  // same edit is on `apps/web/src/screens/Favourites.tsx`.
+  const nothingToShow = cards.length === 0
+  const loading = nothingToShow && results.some((r) => r.isPending)
   const errors = results.flatMap((r) => (r.isError ? [r.error] : []))
-  const failure = cards.length === 0 ? errors[0] : undefined
+  // The `nothingToShow` guard is this screen's version of Nearby's `data === undefined`: a refresh that
+  // failed is a list we could not update, and replacing it with the reason is what the spec's `offline`
+  // state forbids ("never a blank list").
+  const failure = nothingToShow ? errors[0] : undefined
 
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
@@ -85,15 +103,18 @@ export default function Favorites() {
             {t(locale, 'favoritesEmptyHelp')}
           </Text>
         </View>
-      ) : failure ? (
-        <Text variant="body" className="px-4 text-danger">
-          {(failure as Error).message}
-        </Text>
-      ) : loading ? (
+      ) : /* The wait comes before the reason, and with one query per saved pole that ordering is load-bearing:
+             a pole that has exhausted its retries must not answer for one that is still trying. Nothing to
+             show and something still pending is a wait, and the skeleton says so honestly. */
+      loading ? (
         <View className="px-4 py-4">
           <Skeleton className="h-5 w-2/3" />
           <Skeleton className="mt-3 h-6 w-full" />
         </View>
+      ) : failure ? (
+        <Text variant="body" className="px-4 text-danger">
+          {(failure as Error).message}
+        </Text>
       ) : (
         <ScrollView>
           <View style={{ paddingBottom: tab.contentInset }}>

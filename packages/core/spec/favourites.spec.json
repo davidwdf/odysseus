@@ -2,7 +2,7 @@
   "module": "favourites",
   "source": "src/favourites.ts",
   "version": 1,
-  "doc": "The three rules the Favourites screen is assembled from. A favourite is a route AT a boarding pole (ADR-032) keyed on the *member* pole id rather than the churning `P:` place id (ADR-062), so the screen's job is to turn a rider's hand-curated list of keys into cards: `migrateFavouriteKeys` brings a list written by an older scheme up to date — the one rule in this repo whose failure loses something a rider made by hand, which is why it is versioned rather than merely changed; `favouritePoleIds` says which poles to fetch, a question the screen must answer BEFORE it has any data; and `favouritesView` says what the cards contain, grouped by the place each saved pole resolves to. Every payload below is a **trimmed** real one from the live dataset — real canonical ids, real names in all three locales, real service facts — with only the route rows a case needs and every reading re-timed against a fixed `now` of 2026-08-05T00:30:00+08:00, because a fixture that read a clock would be worthless to a second platform. TWO ROWS RECORD BUGS THIS GROUP CLOSED (WP6-4b) rather than bugs it carries — a saved route with no live reading is a row now, and a line saved at two kerbs is two rows — and each says in its `why` what it used to do. No row here is `knownDefect`.",
+  "doc": "The five rules a rider's hand-curated list is assembled from, and survives on. A favourite is a route AT a boarding pole (ADR-032) keyed on the *member* pole id rather than the churning `P:` place id (ADR-062), so the screen's job is to turn a rider's hand-curated list of keys into cards: `migrateFavouriteKeys` brings a list written by an older scheme up to date — the one rule in this repo whose failure loses something a rider made by hand, which is why it is versioned rather than merely changed; `favouritePoleIds` says which poles to fetch, a question the screen must answer BEFORE it has any data; and `favouritesView` says what the cards contain, grouped by the place each saved pole resolves to. TWO MORE ARE ABOUT THE BLOB RATHER THAN THE SCREEN: `mergeSavedKeys` and `mergePreferences` reconcile two writers of the one `nextbus.preferences` blob — a second tab, the other app on the same origin, a tab restored from the back/forward cache — against the ancestor they diverged from, which is what lets a removal be told from an addition without a tombstone. Their payloads are plain blobs rather than dataset extracts, because a preferences blob IS the whole of what they see. Every payload below is a **trimmed** real one from the live dataset — real canonical ids, real names in all three locales, real service facts — with only the route rows a case needs and every reading re-timed against a fixed `now` of 2026-08-05T00:30:00+08:00, because a fixture that read a clock would be worthless to a second platform. TWO ROWS RECORD BUGS THIS GROUP CLOSED (WP6-4b) rather than bugs it carries — a saved route with no live reading is a row now, and a line saved at two kerbs is two rows — and each says in its `why` what it used to do. No row here is `knownDefect`.",
   "groups": {
     "migrateFavouriteKeys": {
       "doc": "v0 → v1: a favourite saved against a merged `P:` place id becomes one key per member pole, in save order. Every member, never a guess at one — a place-keyed favourite does not say which kerb the rider meant, and the screen intersects the saved keys with the rows a place actually reports, so an over-expanded key can never render while a wrong guess is an invisibly missing favourite.",
@@ -99,6 +99,374 @@
             "KMB:AFB9321F7CD2C2E4|CTB:969:outbound:1",
             "KMB:DC5B5F4350685442|CTB:969:outbound:1"
           ]
+        }
+      ]
+    },
+    "mergeSavedKeys": {
+      "doc": "Two writers' favourite lists, reconciled against the ancestor they diverged from. `base` is the writer's OWN previous list, which is what makes a deletion and an addition tell apart: a key missing from `mine` was un-starred here, one missing from `theirs` was un-starred there, and either deletion beats the other side's stale copy. Everything else is a union, ordered `theirs` first then this writer's own additions so that two writers that have seen each other converge on identical bytes. ONE PRECONDITION, which is the caller's and cannot be a type: `theirs` must have been read AFTER `base` was written. An ancestor that has run ahead of the snapshot makes this writer's own addition look exactly like the other writer's deletion — the last row below is that shape, and it is a real defect (WP6-8b), not a hypothetical one.",
+      "cases": [
+        {
+          "name": "an-addition-on-each-side-is-kept",
+          "why": "The ordinary two-tab case: a rider stars one route here and another there before either write is seen. Both survive, and the order is theirs-then-mine — which is what stops the two tabs writing the same set back to each other in their own orders forever.",
+          "args": {
+            "base": ["CTB:001992|CTB:969:outbound:1"],
+            "mine": ["CTB:001992|CTB:969:outbound:1", "KMB:775642281FBFE336|CTB:969:outbound:1"],
+            "theirs": ["CTB:001992|CTB:969:outbound:1", "KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1"]
+          },
+          "expect": [
+            "CTB:001992|CTB:969:outbound:1",
+            "KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1",
+            "KMB:775642281FBFE336|CTB:969:outbound:1"
+          ]
+        },
+        {
+          "name": "a-removal-here-survives-the-other-tabs-stale-copy",
+          "why": "The row a set-union cannot pass, and the reason `base` exists at all. Un-star a route in this tab and the other tab still has it in memory; under a union it would come straight back, so a rider with two tabs open could never delete a favourite.",
+          "args": {
+            "base": ["CTB:001992|CTB:969:outbound:1", "KMB:775642281FBFE336|CTB:969:outbound:1"],
+            "mine": ["CTB:001992|CTB:969:outbound:1"],
+            "theirs": ["CTB:001992|CTB:969:outbound:1", "KMB:775642281FBFE336|CTB:969:outbound:1"]
+          },
+          "expect": ["CTB:001992|CTB:969:outbound:1"]
+        },
+        {
+          "name": "a-removal-in-the-other-tab-is-applied-here",
+          "why": "The same rule from the other side, and the half a naive \"keep everything I have\" would fail. The other writer deleted it; this writer never touched it; it goes.",
+          "args": {
+            "base": ["CTB:001992|CTB:969:outbound:1", "KMB:775642281FBFE336|CTB:969:outbound:1"],
+            "mine": ["CTB:001992|CTB:969:outbound:1", "KMB:775642281FBFE336|CTB:969:outbound:1"],
+            "theirs": ["CTB:001992|CTB:969:outbound:1"]
+          },
+          "expect": ["CTB:001992|CTB:969:outbound:1"]
+        },
+        {
+          "name": "the-same-key-starred-on-both-sides-appears-once",
+          "why": "Two tabs showing the same place, both stars tapped. A duplicate key is not merely untidy: the Favourites screen treats the list as a set, so an un-star that removed one copy would appear to do nothing.",
+          "args": {
+            "base": [],
+            "mine": ["KMB:775642281FBFE336|CTB:969:outbound:1"],
+            "theirs": ["KMB:775642281FBFE336|CTB:969:outbound:1"]
+          },
+          "expect": ["KMB:775642281FBFE336|CTB:969:outbound:1"]
+        },
+        {
+          "name": "a-key-both-writers-dropped-stays-dropped",
+          "why": "Idempotence for a deletion. The second tab has already applied the removal, so neither side holds the key any more and the merge must not reason it back into existence from the ancestor.",
+          "args": {
+            "base": ["CTB:001992|CTB:969:outbound:1"],
+            "mine": [],
+            "theirs": []
+          },
+          "expect": []
+        },
+        {
+          "name": "with-no-shared-ancestor-nothing-is-removed",
+          "why": "A writer that has never persisted passes an empty ancestor, which says \"I have deleted nothing\" — so the merge is a pure union. Anything else would let a freshly-loaded tab delete a list it has never seen.",
+          "args": {
+            "base": [],
+            "mine": ["CTB:001992|CTB:969:outbound:1"],
+            "theirs": ["KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1"]
+          },
+          "expect": ["KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1", "CTB:001992|CTB:969:outbound:1"]
+        },
+        {
+          "name": "an-ancestor-ahead-of-theirs-reads-an-addition-as-a-deletion",
+          "why": "The precondition, violated — and the row that says where the fix belongs. `base` names a key this writer has just added while `theirs` is a snapshot taken before that write landed, so `base \\ theirs` reads as \"the other writer deleted it\" and the rider's own star is erased. Both stores did exactly this before WP6-8b: two taps in one task, an unseen key on disk, and a favourite gone from memory and disk with no second tab involved. The arithmetic here is CORRECT and must not be softened — dropping the `base \\ theirs` half would leave a rider with two tabs open unable to delete a favourite at all, which is the bug `base` exists to avoid. What has to hold instead is the caller's sequencing: read, merge, write and adopt in one critical section, and advance the ancestor only with the write.",
+          "args": {
+            "base": ["CTB:001992|CTB:969:outbound:1"],
+            "mine": ["CTB:001992|CTB:969:outbound:1", "KMB:775642281FBFE336|CTB:969:outbound:1"],
+            "theirs": []
+          },
+          "expect": ["KMB:775642281FBFE336|CTB:969:outbound:1"]
+        }
+      ]
+    },
+    "mergePreferences": {
+      "doc": "The whole blob, merged: `base` is this writer's previous persisted state, `mine` is what it holds now with its change included, `theirs` is what is on disk right now. Scalars go to whichever side moved away from the ancestor, with the local side winning a true conflict; favourites are merged key by key; the recents follow the scalar rule as WHOLE lists, because an MRU order cannot be interleaved. A `null` here is a value and not the corpus's usual absent marker: `theirs: null` means nothing is on disk, `base: null` means this writer has never persisted, and `localeOverride: null` means follow the device.",
+      "cases": [
+        {
+          "name": "a-writer-that-changed-nothing-adopts-the-other-tabs-blob",
+          "why": "The reproduction, from the receiving side: the other tab changed the language and starred a route, this one has done nothing since it loaded, so every field falls to the other tab's. This is the whole of what a `storage` listener is for.",
+          "args": {
+            "base": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            },
+            "mine": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            },
+            "theirs": {
+              "appearance": "dark",
+              "localeOverride": "zh-Hant",
+              "favoriteRoutes": [
+                "CTB:001992|CTB:969:outbound:1",
+                "KMB:775642281FBFE336|CTB:969:outbound:1"
+              ],
+              "recentRoutes": ["CTB:969:outbound:1", "KMB:269D:outbound:1"],
+              "recentStops": ["CTB:001992", "KMB:AFB9321F7CD2C2E4"]
+            }
+          },
+          "expect": {
+            "appearance": "dark",
+            "localeOverride": "zh-Hant",
+            "favoriteRoutes": [
+              "CTB:001992|CTB:969:outbound:1",
+              "KMB:775642281FBFE336|CTB:969:outbound:1"
+            ],
+            "recentRoutes": ["CTB:969:outbound:1", "KMB:269D:outbound:1"],
+            "recentStops": ["CTB:001992", "KMB:AFB9321F7CD2C2E4"]
+          }
+        },
+        {
+          "name": "a-choice-made-here-beats-the-other-tabs-older-one",
+          "why": "The write side of the same rule, and the half that must not be \"adopt whatever arrived\": the rider's finger was on this tab a millisecond ago. Both scalars and both recents lists moved here, so all four keep the local value; the other writer adopts them when its own event lands.",
+          "args": {
+            "base": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "mine": {
+              "appearance": "dark",
+              "localeOverride": "en",
+              "favoriteRoutes": [],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            },
+            "theirs": {
+              "appearance": "light",
+              "localeOverride": "zh-Hans",
+              "favoriteRoutes": [],
+              "recentRoutes": ["CTB:969:outbound:1"],
+              "recentStops": ["CTB:001992"]
+            }
+          },
+          "expect": {
+            "appearance": "dark",
+            "localeOverride": "en",
+            "favoriteRoutes": [],
+            "recentRoutes": ["KMB:269D:outbound:1"],
+            "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+          }
+        },
+        {
+          "name": "a-star-here-and-a-language-there-both-survive",
+          "why": "`docs/07`'s reproduction in one call — the exact interleaving that used to revert a language change when the second tab starred a route. The favourite is this writer's addition and the language is the other's, and the merge is not allowed to choose between them.",
+          "args": {
+            "base": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "mine": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [
+                "CTB:001992|CTB:969:outbound:1",
+                "KMB:775642281FBFE336|CTB:969:outbound:1"
+              ],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "theirs": {
+              "appearance": "auto",
+              "localeOverride": "zh-Hant",
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": [],
+              "recentStops": []
+            }
+          },
+          "expect": {
+            "appearance": "auto",
+            "localeOverride": "zh-Hant",
+            "favoriteRoutes": [
+              "CTB:001992|CTB:969:outbound:1",
+              "KMB:775642281FBFE336|CTB:969:outbound:1"
+            ],
+            "recentRoutes": [],
+            "recentStops": []
+          }
+        },
+        {
+          "name": "an-unstar-here-is-not-resurrected-by-the-other-tab",
+          "why": "The deletion carried through the whole blob rather than through the key list alone, because this is the call the stores actually make. Nothing else moved, so the result differs from `mine` only in the field the other tab is stale about.",
+          "args": {
+            "base": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [
+                "CTB:001992|CTB:969:outbound:1",
+                "KMB:775642281FBFE336|CTB:969:outbound:1"
+              ],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "mine": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "theirs": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [
+                "CTB:001992|CTB:969:outbound:1",
+                "KMB:775642281FBFE336|CTB:969:outbound:1"
+              ],
+              "recentRoutes": [],
+              "recentStops": []
+            }
+          },
+          "expect": {
+            "appearance": "auto",
+            "localeOverride": null,
+            "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+            "recentRoutes": [],
+            "recentStops": []
+          }
+        },
+        {
+          "name": "a-reordered-recents-list-is-a-local-change",
+          "why": "An MRU bump is a reorder, not a growth, so sameness has to be order-sensitive: a length-only comparison would treat \"the rider just opened this route again\" as no change and hand the list back to the other tab.",
+          "args": {
+            "base": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [],
+              "recentRoutes": ["KMB:269D:outbound:1", "CTB:969:outbound:1"],
+              "recentStops": []
+            },
+            "mine": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [],
+              "recentRoutes": ["CTB:969:outbound:1", "KMB:269D:outbound:1"],
+              "recentStops": []
+            },
+            "theirs": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [],
+              "recentRoutes": ["KMB:6:outbound:1", "KMB:269D:outbound:1"],
+              "recentStops": []
+            }
+          },
+          "expect": {
+            "appearance": "auto",
+            "localeOverride": null,
+            "favoriteRoutes": [],
+            "recentRoutes": ["CTB:969:outbound:1", "KMB:269D:outbound:1"],
+            "recentStops": []
+          }
+        },
+        {
+          "name": "a-writer-that-loaded-before-the-blob-existed-adopts-it",
+          "why": "`base` is null: this writer has never persisted, so its values are defaults rather than choices and it cannot have deleted anything. Adopting the disk wholesale is right here and wrong everywhere else, which is why the absence is a separate input rather than an empty blob.",
+          "args": {
+            "base": null,
+            "mine": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": [],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "theirs": {
+              "appearance": "light",
+              "localeOverride": "en",
+              "favoriteRoutes": ["KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1"],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            }
+          },
+          "expect": {
+            "appearance": "light",
+            "localeOverride": "en",
+            "favoriteRoutes": ["KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1"],
+            "recentRoutes": ["KMB:269D:outbound:1"],
+            "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+          }
+        },
+        {
+          "name": "no-blob-on-disk-leaves-this-writer-untouched",
+          "why": "`theirs` is null — a first run, or another app calling `localStorage.clear()`. There is nobody to merge with, so the rider's own state stands. Emptying it here would be the same data loss from the opposite direction.",
+          "args": {
+            "base": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "mine": {
+              "appearance": "dark",
+              "localeOverride": null,
+              "favoriteRoutes": [
+                "CTB:001992|CTB:969:outbound:1",
+                "KMB:775642281FBFE336|CTB:969:outbound:1"
+              ],
+              "recentRoutes": [],
+              "recentStops": []
+            },
+            "theirs": null
+          },
+          "expect": {
+            "appearance": "dark",
+            "localeOverride": null,
+            "favoriteRoutes": [
+              "CTB:001992|CTB:969:outbound:1",
+              "KMB:775642281FBFE336|CTB:969:outbound:1"
+            ],
+            "recentRoutes": [],
+            "recentStops": []
+          }
+        },
+        {
+          "name": "two-writers-that-already-agree-have-nothing-to-merge",
+          "why": "The steady state, and the row that pins the identity return: every field is equal, so the merge yields `mine` itself. The stores read that identity as \"there is nothing to write and nobody to notify\", which is what stops two tabs handing an unchanged blob back and forth forever.",
+          "args": {
+            "base": {
+              "appearance": "dark",
+              "localeOverride": "en",
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            },
+            "mine": {
+              "appearance": "dark",
+              "localeOverride": "en",
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            },
+            "theirs": {
+              "appearance": "dark",
+              "localeOverride": "en",
+              "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            }
+          },
+          "expect": {
+            "appearance": "dark",
+            "localeOverride": "en",
+            "favoriteRoutes": ["CTB:001992|CTB:969:outbound:1"],
+            "recentRoutes": ["KMB:269D:outbound:1"],
+            "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+          }
         }
       ]
     },

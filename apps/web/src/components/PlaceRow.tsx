@@ -45,11 +45,7 @@ export function PlaceRow({
         </span>
       </span>
       {row.readout.kind === 'eta' ? (
-        <EtaBadge
-          label={row.readout.label}
-          urgency={row.readout.urgency}
-          stale={row.readout.stale}
-        />
+        <EtaBadge label={row.readout.label} urgency={row.readout.urgency} />
       ) : row.readout.kind === 'headway' ? (
         <span className="max-w-[120px] shrink-0 text-right text-caption text-subtle">
           {row.readout.text}

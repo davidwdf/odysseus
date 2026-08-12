@@ -25,6 +25,10 @@
 "noService" = "暫無班次";
 /* {s} → %1$@ */
 "updatedAgo" = "%1$@ 秒前更新";
+/* {time} → %1$@ */
+"feedLastUpdated" = "最後更新 %1$@";
+"feedOffline" = "你目前離線，顯示最後取得的時間";
+"feedUnreachable" = "無法連線至 NextBus，正在重試";
 "stale" = "資料過時";
 "retry" = "重試";
 "locating" = "正在尋找附近車站…";

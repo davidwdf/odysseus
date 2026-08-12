@@ -20,7 +20,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PREFERENCES_STORAGE_KEY } from '../src/lib/preferences'
-import { PERSISTED_CACHE } from '../src/providers/QueryProvider'
+import { NETWORK_MODE, PERSISTED_CACHE } from '../src/providers/QueryProvider'
 import { DESTINATIONS, type Destination } from '../src/shell/destinations'
 
 /**
@@ -194,6 +194,26 @@ describe("ADR-058's persisted cache is one policy, declared in two shells", () =
     expect(evalNumber(capture(rn, /staleTime: ([^,\n]+)/, 'staleTime'))).toBe(
       PERSISTED_CACHE.staleTimeMs,
     )
+  })
+
+  it('agrees that a request we cannot make must fail rather than vanish', () => {
+    // **The fifth value, and it is not part of the persisted cache** — which is why it is asserted here
+    // rather than folded into `PERSISTED_CACHE`. It shares the cache's hazard and nothing else: TanStack's
+    // default `networkMode: 'online'` parks an offline query at `pending`/`paused` with no error and no
+    // attempt on record, every screen reads that as "not loading and did not fail" and draws its empty
+    // branch, and `refetchInterval` — which fires only on `error` (ADR-079) — never heals it. That is the
+    // ADR-073 conflation reintroduced by a library default, and it is what made an offline Nearby claim
+    // "No scheduled service".
+    //
+    // So a divergence here is a rider-visible divergence in one direction only, which is the case a parity
+    // test is for: revert either app to `'online'` and that app alone lies about the network while both
+    // suites stay green, because each app's own state suites stub `fetch` and never exercise `onlineManager`.
+    // Watched failing by flipping the RN literal to `'online'`.
+    expect(capture(rn, /networkMode: '([^']+)'/, 'networkMode')).toBe(NETWORK_MODE)
+    // …and the web half is a *binding*, not a second literal: the value asserted above is the one the
+    // `QueryClient` is actually constructed with. An exported constant the options object does not read
+    // would make this whole case a comparison between two strings nobody uses.
+    expect(readWeb('src/providers/QueryProvider.tsx')).toContain('networkMode: NETWORK_MODE')
   })
 
   it('persists successes only, in both', () => {

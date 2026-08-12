@@ -981,6 +981,8 @@
                 "label": "Bus approaching Tin Shui Wai Park"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": 1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -1243,6 +1245,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": 2,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -1524,6 +1528,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -1809,6 +1815,8 @@
                 "label": "Bus at Tin Shui Wai Station"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2088,6 +2096,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2398,6 +2408,8 @@
                 "label": "Bus approaching Tsuen Wan Station"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2706,6 +2718,8 @@
                 "label": "Bus at Tsuen Wan Station"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2930,6 +2944,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "minibus",
             "hereIndex": -1,
             "distanceM": 3032.5034864866025,
             "liveArrivals": "answered"
@@ -3209,6 +3225,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -3467,6 +3485,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -3537,6 +3557,8 @@
             ],
             "stops": [],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 0,
             "liveArrivals": "answered"
@@ -3786,6 +3808,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4037,6 +4061,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4257,6 +4283,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4557,6 +4585,8 @@
                 "label": "Bus approaching Tin Shui Wai Park"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4895,6 +4925,8 @@
                 "label": "Bus approaching Tin Shui Wai Park"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5163,6 +5195,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5471,6 +5505,8 @@
                 "label": "Bus at Tin Shui Wai Park"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T06:00:00.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5699,6 +5735,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5961,6 +5999,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "perStopOnly"
@@ -6223,6 +6263,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "unavailable"
@@ -6589,6 +6631,8 @@
                 "label": "Bus approaching Central"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T05:59:12.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -6940,6 +6984,8 @@
                 "label": "Bus approaching Kingswood Richly Plaza"
               }
             ],
+            "lastUpdatedIso": "2026-08-05T05:59:12.000Z",
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -7244,6 +7290,8 @@
               }
             ],
             "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "perStopOnly"
@@ -7252,7 +7300,7 @@
       ]
     },
     "routeFactSheet": {
-      "doc": "One of the four fact sheets a static pill opens (ADR-044), derived once: the sectional-fare timeline with its concession estimates, the per-day-type frequency bands, the first/last hours, and the whole-route overview. Eight decisions that lived in `apps/mobile/components/RouteFactSheets.tsx` (WP6-6c) — which is why that file was the one surface `check-no-derivation` still did not police. `labels` is a fixture supplied by each platform’s suite; what these rows pin is the COMPOSITION, chiefly the `~` that marks an estimate and the ` · ` that joins an unnamed day mask. `view` is `routeDetailView`’s output for the same payload, so a timeline cannot name a stop differently from the schematic above it.",
+      "doc": "One of the four fact sheets a static pill opens (ADR-044), derived once: the sectional-fare timeline with its concession estimates, the per-day-type frequency bands, the first/last hours, and the whole-route overview. Eight decisions that lived in `apps/mobile/components/RouteFactSheets.tsx` (WP6-6c) — which is why that file was the one surface `check-no-derivation` still did not police. `labels` is a fixture supplied by each platform’s suite; what these rows pin is the COMPOSITION, chiefly the `~` that marks an estimate and the ` · ` that joins an unnamed day mask. `view` is `routeDetailView`’s output for the same payload, so a timeline cannot name a stop differently from the schematic above it. A **ninth** decision joined them afterwards and had lived nowhere: what the fare timeline opens with when the per-stop fares are unreadable, which was nothing at all under a pill showing a fare. It now falls back to the whole-route fare that pill is printing — one stage, the origin as its boarding stop, and silence about sections the data cannot describe.",
       "cases": [
         {
           "name": "the-fare-timeline-steps-down-and-names-where-you-board-for-each-price",
@@ -7681,9 +7729,8 @@
           }
         },
         {
-          "name": "a-route-whose-fares-are-not-numbers-opens-an-entirely-blank-fare-sheet",
-          "why": "A LIVE DEFECT, and the row records it as it stands. `fareStages` skips any fare it cannot read as a number (its own guard, `Number.isNaN(Number(f))`), so a payload whose per-stop fares are non-numeric yields **no stages at all** — and `concessions` is empty with them, which is correct on its own terms: there is no estimate to make and a legend keyed to figures that are not on screen is worse than none. What makes it a defect is the pill: `fareRange` skips the same values, falls back to `service.fareFull`, and the strip therefore reads `$13.4`. So a rider taps a pill showing a fare and gets a blank sheet. WHEN FIXED: the sheet falls back to the origin full fare as a single stage covering the whole route — the same datum the pill used — and says nothing about sections it cannot describe. Owner: `docs/07`. Whether upstream actually publishes such a fare is not something this row measures; the guard makes the state reachable by construction, which is enough to pin it.",
-          "knownDefect": true,
+          "name": "a-route-whose-fares-are-not-numbers-opens-with-the-fare-the-pill-showed",
+          "why": "THE DEFECT ROW, FIXED AND RENAMED WITH THE BEHAVIOUR. It pins the same property it always did — what the fare sheet says when the per-stop fares are unreadable and the pill that opened it nonetheless shows a fare — and only the answer has changed, so the name had to: `…-opens-an-entirely-blank-fare-sheet` would now be a lie about a row that still measures the thing it is named for. What it recorded: `fareStages` skips any fare it cannot read as a number (its own guard, `Number.isNaN(Number(f))`), so non-numeric per-stop fares yielded **no stages at all**, while `fareRange` skipped exactly the same values, fell through to `service.fareFull`, and the strip therefore read `$13.4` — a rider tapped a fare and got a blank sheet. What it records now: **one stage covering the whole route at the pill's own figure**, boarding at the origin, with both concession estimates, and nothing said about sections the data cannot describe. It is load-bearing rather than decorative because it is the only fare row whose figure comes from the service block instead of the stop list: a port that fell back to the cheapest readable fare, or that spanned only as far as the last boarding stop, or that skipped the concession estimates on this path, passes every other fare row and fails this one. Whether upstream actually publishes such a fare is not something this row measures; the guard makes the state reachable by construction, which is enough to pin it.",
           "args": {
             "kind": "fare",
             "detail": {
@@ -7832,6 +7879,151 @@
                   "eta": null
                 }
               ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "fare",
+            "stages": [
+              {
+                "fromSeq": 1,
+                "toSeq": 5,
+                "fare": "$13.4",
+                "boardingStop": "Tin Shui Wai Station",
+                "covers": "5 stops",
+                "concessions": [
+                  {
+                    "class": "child",
+                    "fare": "~$6.7"
+                  },
+                  {
+                    "class": "elderly",
+                    "fare": "~$2.7"
+                  }
+                ]
+              }
+            ],
+            "concessions": ["child", "elderly"]
+          }
+        },
+        {
+          "name": "a-route-with-no-fare-anywhere-says-nothing-rather-than-inventing-a-stage",
+          "why": "THE OTHER SIDE OF THE FALLBACK, and the row that keeps it from becoming a fabrication. The fallback is only honest because it prints a figure the dataset actually carries; a route with no readable per-stop fare **and** no `service.fareFull` has none, so the timeline is empty and the legend with it — no `$0`, no `~$2.0` elderly estimate conjured out of an absent adult fare, which is exactly what ADR-008 forbids and what `parseFareOrUndefined` exists to prevent one level down. The strip on this payload has no fare pill either (`routeFacts` reads the same field), so nothing promises a rider a fare here. It is also the row that proves the fallback keys on the **fare** rather than on the presence of a service block: this route has a headway and hours, so a port that fell back whenever `service` existed would print `$undefined` and fail here while passing every other row.",
+          "args": {
+            "kind": "fare",
+            "detail": {
+              "route": {
+                "id": "GMB:NT:601:outbound:1",
+                "operator": "GMB",
+                "routeNo": "601",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水围"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中环"
+                },
+                "service": {
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "GMB:20015091",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水围站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "GMB",
+                        "operatorStopId": "20015091"
+                      }
+                    ]
+                  },
+                  "eta": null
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "GMB:20015092",
+                    "name": {
+                      "en": "CENTRAL (EXCHANGE SQUARE)",
+                      "zh-Hant": "中環（交易廣場）",
+                      "zh-Hans": "中环（交易广场）"
+                    },
+                    "location": {
+                      "lat": 22.2849,
+                      "lng": 114.1577
+                    },
+                    "sources": [
+                      {
+                        "operator": "GMB",
+                        "operatorStopId": "20015092"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "kind": "fare",
+            "stages": [],
+            "concessions": []
+          }
+        },
+        {
+          "name": "a-route-with-no-stops-names-no-boarding-stop-and-so-shows-no-stage",
+          "why": "THE ONE PLACE THE FALLBACK STILL SHOWS NOTHING WITH A FARE PILL ABOVE IT, and it is deliberate. A stage states **where you board** to pay its price, and this payload has no stop to name — so the alternatives are a stage with an empty heading or one naming a stop that is not on the route, and both are worse than an empty sheet. Zero stops is a broken payload rather than a route (the overview sheet's own row says the same), and the strip does print a fare pill for one, off `service.fareFull`. Keeping the row means that residue is written down and measured rather than discovered again later; it is also what pins the fallback to the **origin row** rather than to a constructed heading.",
+          "args": {
+            "kind": "fare",
+            "detail": {
+              "route": {
+                "id": "KMB:264X:outbound:1",
+                "operator": "KMB",
+                "routeNo": "264X",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水围"
+                },
+                "destination": {
+                  "en": "CENTRAL",
+                  "zh-Hant": "中環",
+                  "zh-Hans": "中环"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62
+                }
+              },
+              "stops": []
             },
             "locale": "en",
             "now": "2026-08-05T14:00:00+08:00"
@@ -10331,6 +10523,59 @@
             "arrivals": [],
             "incomplete": false
           }
+        }
+      ]
+    },
+    "routeVehicle": {
+      "doc": "Which vehicle a route runs, from its operator alone. Two words because two is what the feed supports: a Green Minibus route is a light bus, everything else is drawn as a bus. The renderer maps the word to a drawing; it must never read the operator itself.",
+      "cases": [
+        {
+          "name": "gmb-runs-a-minibus",
+          "why": "The row this rule exists for. GMB is the only operator this app serves whose vehicle is a light bus, and it only became worth drawing once every stop on a GMB route had times (ADR-116-121).",
+          "args": {
+            "operator": "GMB"
+          },
+          "expect": "minibus"
+        },
+        {
+          "name": "kmb-runs-a-bus",
+          "why": "The ordinary case, and the one that must not regress: KMB is most of the app's traffic.",
+          "args": {
+            "operator": "KMB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "ctb-runs-a-bus",
+          "why": "A second franchised operator, so the rule cannot be 'anything but the first one'.",
+          "args": {
+            "operator": "CTB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "lwb-runs-a-bus",
+          "why": "LWB shares KMB's feed but is its own operator code; a port that special-cased KMB alone would draw nothing recognisable for Lantau routes.",
+          "args": {
+            "operator": "LWB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "nlb-is-called-a-bus-though-it-runs-single-deckers",
+          "why": "A deliberate overstatement, pinned so it is a decision rather than an oversight: NLB runs single-deckers, and the app draws a double-decker for 'a bus'. Fixing it would need a third word the feed cannot justify. If a chassis taxonomy ever arrives, this is the row that changes.",
+          "args": {
+            "operator": "NLB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "an-operator-nobody-has-heard-of-still-gets-a-bus",
+          "why": "ADR-051's forward-compatibility rule applied to a drawing: the id grammar is shape and not vocabulary, so a client compiled today must render SOMETHING for an operator that ships tomorrow. A closed list here would make that day a blank rail, on every renderer at once, and the failure would look like missing data rather than a missing case.",
+          "args": {
+            "operator": "ZZZ9"
+          },
+          "expect": "bus"
         }
       ]
     }

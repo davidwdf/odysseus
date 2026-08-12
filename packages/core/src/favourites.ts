@@ -30,7 +30,7 @@ import {
 } from './stop-card'
 import type { StopDetailRoute } from './stop-detail'
 import { titleCaseName } from './stop-name'
-import type { StopDetail } from './types'
+import type { Locale, StopDetail } from './types'
 
 /**
  * The persisted favourite-key scheme's version. Bump it — and add a step to `migrateFavouriteKeys` —
@@ -98,6 +98,210 @@ function rebaseOntoPoles(entries: readonly unknown[]): readonly unknown[] {
     } else keep(entry)
   }
   return out
+}
+
+// ── One blob, more than one writer ─────────────────────────────────────────────────────────────
+//
+// The migration above answers *"how does a saved key survive a change of scheme"*. These two answer the
+// question that turned out to be sitting next to it and was never asked: **what happens when two writers
+// hold the same blob at once.**
+//
+// It is not hypothetical and it is not only about two apps. `nextbus.preferences` is one `localStorage`
+// key on one origin, and every one of these is a second writer: a second *tab* of the PWA, the Expo PWA
+// and `apps/web` on the same origin (ADR-082 decision 5), and a tab restored from the back/forward cache
+// that missed every write made while it was frozen. zustand's `persist` writes `partialize`'s output as
+// the **whole** blob, so a writer holding a stale copy in memory does not merely fail to see the other's
+// change — its next write *deletes* it. A language change reverts a starred route; a starred route
+// reverts a language change; and the data at stake is the only data in this app a rider made by hand.
+//
+// WHY THIS IS A KERNEL RULE AND NOT PLUMBING. The listener, the event and the storage API are each
+// platform's own (ADR-069 decision 7: the rule is shared, the wiring is not). What must not differ
+// between two writers of one blob is **the arithmetic of the merge** — exactly the argument that put
+// `FAVOURITE_KEY_VERSION` and `bumpRecent` here (ADR-089). Two stores that resolved a conflict
+// differently would converge on nothing, and would do it silently.
+//
+// THE THREE-WAY MERGE, AND WHY NEITHER OF THE TWO OBVIOUS RULES WORKS.
+//
+//  · **Last-writer-wins on the whole blob** — adopt whatever arrived — loses whatever this writer has
+//    that the other has not seen yet, which on a restored tab is everything it did while frozen.
+//  · **Set-union of the favourites** never loses an addition and therefore **can never express a
+//    removal**: un-starring a route in one tab would be undone by the other tab's stale copy, so a
+//    rider with two tabs open could not delete a favourite at all. That is a worse bug than the one
+//    being fixed, and it is the reason `base` exists.
+//
+// So the merge is three-way, and the ancestor is the load-bearing argument. `base` is **this writer's own
+// previous persisted state** — the value it held before the change it is now writing — which the caller
+// always has, because `persist` writes on every mutation. Against that ancestor a removal and an addition
+// are *not* symmetric and *are* distinguishable: `base \ mine` is what this writer deleted, `mine \ base`
+// is what it added, and the same two differences read off `theirs` say what the other writer did. No
+// clock, no tombstone, no vector clock, and no field that has to be added to the blob.
+//
+// THE ONE PRECONDITION, AND WHY IT IS THE CALLER'S TO KEEP. `base` and `theirs` have to be *consistent in
+// time*: **`theirs` must be a snapshot of the blob taken after `base` was written.** Violated, the
+// arithmetic is not approximate, it is inverted — a key this writer added a moment ago sits in `base` and
+// is missing from the stale `theirs`, which is indistinguishable from the other writer having deleted it,
+// so the merge erases the rider's own star. `mergeSavedKeys`' corpus carries that row
+// (`an-ancestor-ahead-of-theirs-reads-an-addition-as-a-deletion`) because it is the shape of a real defect
+// (WP6-8b: both stores lost a favourite to two taps in one task) and because the wrong fix is tempting —
+// weakening the `base \ theirs` half would make a rider with two tabs open unable to delete anything, which
+// is the bug `base` exists to avoid.
+//
+// **No signature can enforce it**, and that is worth stating rather than leaving as an omission. The
+// precondition is about the *order two I/O operations happened in*, not about the values, so the only
+// in-band way to detect a stale snapshot would be a per-writer counter or a tombstone **on the blob** — and
+// the blob's envelope is fixed by a shipped app that already reads it (ADR-082 decision 5). So what the
+// callers do instead is keep the read, the merge, the write and the adoption in one critical section, and
+// advance the ancestor only *with* a write: on web that is free, because `localStorage` is synchronous;
+// on AsyncStorage it takes a write queue. The rule is shared, the sequencing is each platform's — the
+// third platform to call this must read this paragraph before it writes its own store.
+//
+// WHAT IT STILL CANNOT DO, stated rather than glossed:
+//
+//  · Two writers changing the **same** scalar before either has seen the other: one choice is discarded.
+//    The rule is *local wins* (see below), so on disk the later write survives and the earlier tab
+//    adopts it when the event lands. Somebody has to lose a coin flip they caused by making two
+//    conflicting choices at once.
+//  · A removal is only distinguishable **while the removing writer's `base` is intact**. A writer whose
+//    write silently failed (Safari private browsing, a full quota — `docs/07`'s other open preferences
+//    defect) advances its ancestor anyway, so the other writer's copy resurrects the key on its next
+//    write. Recoverable by un-starring again; the fix belongs with the failed-write defect, not here.
+//  · The recents are merged as **whole lists**, not per entry — see `mergePreferences`.
+
+/**
+ * The persisted preferences, exactly as they sit in the one blob both apps write.
+ *
+ * Generic over the appearance rather than naming it: `Appearance` is `@nextbus/ui`'s and the kernel may
+ * not import it (ADR-051), which is the same shape `settingsView<A extends string>` already takes. Every
+ * field is the store's own — this is a description of a blob on disk, not a new model.
+ */
+export interface StoredPreferences<A extends string> {
+  appearance: A
+  /** The manual UI-language override; `null` = follow the device, which is a value and not an absence. */
+  localeOverride: Locale | null
+  /** Favourited route-at-stop pairs, keyed by `formatFavoriteRouteKey(memberPoleId, routeId)`. */
+  favoriteRoutes: string[]
+  /** Recently-opened route ids from search, most-recent first. */
+  recentRoutes: string[]
+  /** Recently-opened stop/place ids from search, most-recent first. */
+  recentStops: string[]
+}
+
+/**
+ * Merge two writers' favourite lists against the ancestor they diverged from.
+ *
+ * **A key survives unless somebody deleted it.** `base` is what this writer held before its own change,
+ * so a key in `base` that is missing from `mine` was un-starred *here*, and one missing from `theirs` was
+ * un-starred *there* — either is a deletion and wins over the other side's stale retention. Everything
+ * else is a union, so an addition on each side keeps both.
+ *
+ * **The order is `theirs` first, then this writer's own additions**, and it is chosen for convergence
+ * rather than for looks: both writers append the *same* set to the *same* prefix, so two tabs that have
+ * seen each other's writes hold byte-identical lists and neither has anything left to write back. An
+ * order that put `mine` first would have each tab writing the list back in its own order forever.
+ *
+ * **`theirs` must have been read after `base` was written** — the precondition set out above. An ancestor
+ * that has run ahead of the snapshot turns this writer's own addition into the other writer's deletion, and
+ * no argument here can tell the two apart.
+ *
+ * The one thing it cannot see: a key deleted *and re-added* by the other writer between two rounds looks
+ * exactly like a key it never touched. That needs a tombstone, and a tombstone is a field on a blob a
+ * shipped app is already reading — the cost is one resurrected favourite in a race nobody can hit twice.
+ *
+ * @spec favourites#mergeSavedKeys
+ */
+export function mergeSavedKeys(
+  base: readonly string[],
+  mine: readonly string[],
+  theirs: readonly string[],
+): string[] {
+  const inMine = new Set(mine)
+  const inTheirs = new Set(theirs)
+  const deleted = new Set<string>()
+  for (const key of base) {
+    if (!inMine.has(key) || !inTheirs.has(key)) deleted.add(key)
+  }
+  const out: string[] = []
+  const kept = new Set<string>()
+  for (const key of [...theirs, ...mine]) {
+    if (deleted.has(key) || kept.has(key)) continue
+    kept.add(key)
+    out.push(key)
+  }
+  return out
+}
+
+/** Two lists holding the same strings in the same order. */
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i])
+}
+
+/** The list-valued fields, so the sameness check below is one loop rather than three comparisons. */
+const LIST_FIELDS = ['favoriteRoutes', 'recentRoutes', 'recentStops'] as const
+
+function sameStored<A extends string>(a: StoredPreferences<A>, b: StoredPreferences<A>): boolean {
+  return (
+    a.appearance === b.appearance &&
+    a.localeOverride === b.localeOverride &&
+    LIST_FIELDS.every((field) => sameList(a[field], b[field]))
+  )
+}
+
+/**
+ * The whole blob, merged: what this writer should now hold, and write.
+ *
+ * `base` — the state this writer last **wrote** — `mine` — what it holds now, change included — and
+ * `theirs` — what is on disk right now, read after that write (the precondition above). Two absences are
+ * meaningful and neither is an error:
+ *
+ *  · `theirs === null` — nothing on disk, so there is nobody to merge with. Returns `mine` **by
+ *    identity**, which is this file's existing convention for "the rule had nothing to do"
+ *    (`migrateFavouriteKeys` does the same) and is what lets a caller skip a pointless write.
+ *  · `base === null` — this writer has never persisted, so it cannot have deleted anything and its
+ *    values are defaults rather than choices. Treating `mine` as its own ancestor says exactly that:
+ *    every scalar falls to `theirs`, and nothing is subtracted from the union.
+ *
+ * **Scalars: local wins on a true conflict.** A field this writer has not touched since `base` takes the
+ * other writer's value — that is the whole point, and it is what makes a language change in one tab
+ * appear in the other. A field it *has* touched keeps its own, because at a write this is the rider's
+ * finger a millisecond ago and at a remote event it is a change already on disk. The loser of a genuine
+ * simultaneous conflict is the earlier choice, and it converges: the other writer adopts what it reads.
+ *
+ * **Recents are merged whole rather than per entry, and that is a decision.** They are an *ordered* MRU
+ * list whose order is its meaning, and there is nothing in the blob to interleave two orders by — a union
+ * would produce a history in an order neither writer ever saw, and it would break the cap
+ * `bumpRecent` maintains. So the list follows the scalar rule, and the cost is a concurrent bump
+ * discarded. A recent is regenerated by using the app; a favourite is not, which is why only one of the
+ * two is merged element-wise.
+ *
+ * Returns `mine` by identity whenever the merge changes nothing, so a caller can write, and notify, only
+ * when there is something to say.
+ *
+ * @spec favourites#mergePreferences
+ */
+export function mergePreferences<A extends string>(
+  base: StoredPreferences<A> | null,
+  mine: StoredPreferences<A>,
+  theirs: StoredPreferences<A> | null,
+): StoredPreferences<A> {
+  if (theirs === null) return mine
+  const ancestor = base ?? mine
+  const merged: StoredPreferences<A> = {
+    appearance: mine.appearance === ancestor.appearance ? theirs.appearance : mine.appearance,
+    localeOverride:
+      mine.localeOverride === ancestor.localeOverride ? theirs.localeOverride : mine.localeOverride,
+    favoriteRoutes: mergeSavedKeys(
+      ancestor.favoriteRoutes,
+      mine.favoriteRoutes,
+      theirs.favoriteRoutes,
+    ),
+    recentRoutes: [
+      ...(sameList(mine.recentRoutes, ancestor.recentRoutes) ? theirs : mine).recentRoutes,
+    ],
+    recentStops: [
+      ...(sameList(mine.recentStops, ancestor.recentStops) ? theirs : mine).recentStops,
+    ],
+  }
+  return sameStored(merged, mine) ? mine : merged
 }
 
 /**

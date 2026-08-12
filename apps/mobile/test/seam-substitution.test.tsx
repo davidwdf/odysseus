@@ -228,7 +228,7 @@ function StopRows({ id, source }: { id: string; source: DataSource }) {
           <View key={row.route.id}>
             <Text variant="body">{row.route.routeNo}</Text>
             {readout ? (
-              <EtaBadge label={readout.label} urgency={readout.urgency} stale={readout.stale} />
+              <EtaBadge label={readout.label} urgency={readout.urgency} />
             ) : (
               <Text variant="h3">—</Text>
             )}

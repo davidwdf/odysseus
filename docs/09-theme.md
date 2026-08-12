@@ -157,7 +157,15 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
 - `eta-imminent` → uses `danger`/`accent` weight + **"Due/Arriving"** label (sub-minute).
 - `eta-soon` (≈1–5 min) → `warning`.
 - `eta-later` (>5 min) → `text` (neutral).
-- `eta-stale` → desaturated `text-subtle` + a "stale" flag.
+- `eta-stale` → **nothing at the readout.** This line specified `opacity.etaStale` (a 45 % dim) until
+  2026-08-11 and a muted `~` for a day after that; **both were withdrawn**
+  ([ADR-123](./08-decision-log.md#adr-123--staleness-is-a-board-level-fact-so-a-per-reading-cue-is-the-wrong-unit)),
+  and the reason is not that either was drawn badly. **Staleness is a property of the *board*, not of
+  each figure** — `isStale` reads one `dataTimestamp` per board — so a per-figure treatment repeats one
+  fact once per reading, 78 times on a single route screen, and a rider can act on *"the screen has
+  stopped updating"* but not on *"this particular number is two minutes old"*. The cue belongs at
+  **screen level, as one line**; see `docs/07`'s *"last updated, and four different reasons"*. Until that
+  lands there is **no staleness indication at all**, which is a live ADR-008 debt and is tracked as 🔴.
 
 ### Operator accents (used **sparingly** — a route-number chip, a thin route line; not backgrounds)
 `KMB` `#D7282F` · `CTB` `#F6C700` (dark text on it) · `LWB` `#E8A33D` · `GMB` `#00845C`. Each pairs with
@@ -322,7 +330,13 @@ Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. B
 - Big **tabular** numeral + unit (`7 min`) **or** absolute clock (`3:42`); user-selectable, smart
   default (minutes when small, clock when large). Sub-minute → **"Arriving" / "Due"**.
 - Coloured by `eta-*` urgency token **and** an icon — never colour alone.
-- **Freshness chip** "updated 12s ago"; past a threshold → `eta-stale` styling + a refresh affordance.
+- Past the staleness threshold → **one line on the screen**, not a treatment on the figure
+  ([ADR-123](./08-decision-log.md#adr-123--staleness-is-a-board-level-fact-so-a-per-reading-cue-is-the-wrong-unit)).
+  This is the **freshness chip** of the original sketch, and it is the one bullet here that turned out to
+  be the *whole* answer rather than an extra: two per-reading treatments were built and withdrawn before
+  arriving back at it. It is scoped in [`docs/07`](./07-backlog.md) — *"last updated, and four different
+  reasons"* — and is **not built**, which is why `stop-row.spec.json`'s `stale` state still asks for a
+  relative age and why that row is 🔴.
 - Up to 3 upcoming: first big, next two smaller/muted.
 - Screen-reader label spells it out: *"Route 6, arriving in 7 minutes, updated 10 seconds ago."*
 
@@ -427,11 +441,33 @@ in `packages/ui/tokens.json`; `scripts/gen-icons.mjs` reads it from the generate
   centred to the icon frame.
 
 **In-app bus glyph (distinct from the icon above).** The route schematic's rail token uses a **front-view**
-double-decker line glyph — `BusGlyph` (`apps/mobile/components/BusGlyph.tsx`), a custom **Lucide-style** icon
-(24px grid, round caps/joins, **2px stroke** to match the Lucide set; Lucide has no decker). Same decker DNA
-reworked head-on: **two glazed window bands** whose gap *is* the deck split (no divider line), over
-**front-view tyres** as **solid pills** at the corners — filled because at a 2px stroke their interior is too
-small to outline, a deliberate, documented break from Lucide's stroke-only convention. It rides a
+**two** front-view line glyphs — `BusGlyph` (`apps/mobile/components/BusGlyph.tsx` + its DOM twin), custom
+**Lucide-style** icons (24px grid, round caps/joins, **2px stroke** to match the Lucide set; Lucide has
+neither a double-decker nor a light bus). **Which one is drawn is the kernel's call, never a renderer's:**
+`routeVehicle(operator)` names a `RouteVehicle` — `bus` or `minibus` — and each renderer maps that word to a
+drawing, the same shape as `etaUrgency` naming a band and each renderer owning its colour for it. A view may
+not decide this: `check-no-derivation` bans selecting on data and `check-no-adhoc-id-parsing` bans reaching
+into an id for the operator.
+
+**The glyph rules, settled by measurement in [ADR-132](./08-decision-log.md#adr-132--the-bus-glyphs-two-vehicles-and-the-three-rules-that-had-never-been-written-down) —
+§8 had never carried any of them:**
+
+| rule | value | why |
+|---|---|---|
+| **Corner radii** | body `rx=2`, inner details `rx=1` | Lucide's actual convention, counted in the installed set: `rx="2"` 260 times, `rx="1"` 111. Not a formula. A *concentric* rule (inner = outer − padding) was tried and abandoned as **unobservable** — the whole sweep from square to a full pill is identical at token size, because a round linejoin on a 2px stroke rounds a square corner anyway. **Below about `rx=1` the stroke decides the look, not the path.** |
+| **Tyre pill** | path `1.6 × 2.6`, **painted `3.6 × 4.6`** | Head-on you see a tyre's *tread*, not its diameter, so it must read **taller than wide**. The previous value painted `4.4 × 4.6` — essentially square, 31 % of the body's width, which is why it read as a foot. |
+| **Painted ≠ path** | painted = path + 2 wherever a shape is stroked | Which is everywhere here, including the *filled* tyres and sign box, since they carry both a `fill` and the shared stroke. **Quote painted values when discussing how something looks.** Three separate design errors in ADR-132 came from reporting one as the other. |
+| **The stroke is the shape** | never drop it from a filled mark | It looks like padding on a filled rect and is not: the round join is what carries the bottom of the wheel, which `rx` cannot do on a 2.6-high rect where it is capped at half the height. |
+
+The decker is **two glazed window bands** whose gap *is* the deck split (no divider line — one was tried and
+fills in exactly where the gap was doing the work), in a **derived** even rhythm: three equal gaps around two
+bands, `(17 − 2·band) / 3`. The minibus is **one taller pane** plus a **filled roof sign box**, on the same
+width, window width and ground line — so the difference a rider reads at 16px is *height* and *one pane
+against two slots*. Its lower face is **deliberately empty**: headlights and a partial bumper line were both
+drawn and rejected, because anything under the glass makes the minibus read as a two-band vehicle and destroys
+exactly that difference. Tyres are **solid pills** — filled because at a 2px stroke their interior is too
+small to outline, a deliberate, documented break from Lucide's stroke-only convention (Lucide draws a wheel as
+`M6 19v2`; that was tried too, and reads spindly). Each rides a
 **stationary** accent disc as the `BusToken`: the disc stays put and only the glyph animates — a gentle eased
 **bob** with a ~4× slower side-to-side **rock** and a small **squash on impact** (squash-and-stretch),
 all declarative reanimated timings on an ease-in-out curve (native-driven, **no JS clock**). Decorative idle

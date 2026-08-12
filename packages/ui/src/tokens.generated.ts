@@ -190,8 +190,17 @@ export const MOTION = {
 
 export const OPACITY = {
   /**
-   * Applied to an ETA reading that has gone stale. Honesty, not decoration: a dimmed number
-   * says "this is old" without inventing a fresher one (ADR-008).
+   * RETIRED — do not apply this to anything, and do not replace it with a per-reading marker
+   * either. It was the staleness cue: an ETA reading whose board had aged was faded to 45%.
+   * Two treatments have now been withdrawn (ADR-123) — this fade, and a muted `~` before the
+   * figure — and the reason is the same for both and is worth a porter's time: staleness is a
+   * property of the BOARD, not of each figure. `isStale` reads one `dataTimestamp` per board,
+   * so a per-figure cue draws one fact once per reading (78 times on one route screen), and a
+   * rider can act on "the screen has stopped updating" but not on "this particular number is
+   * two minutes old". The cue belongs at screen level, as one line. If you are implementing a
+   * third renderer: do not dim the number, do not mark it — say when the screen was last
+   * updated. `check-tokens-current` counts tokens; it cannot see that one has no consumer, so
+   * this sentence is the mechanism.
    */
   etaStale: 0.45,
 } as const

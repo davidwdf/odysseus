@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router'
+import { useNavigationMoment } from '../hooks/useScrollToTop'
 import { useAppearance } from '../lib/appearance'
 import { LocaleProvider } from '../providers/LocaleProvider'
 import { QueryProvider } from '../providers/QueryProvider'
@@ -73,15 +74,31 @@ import { TabBar } from './TabBar'
  * `LocaleProvider`, because a query key never contains the locale (ADR-052) and switching language must not
  * invalidate a single cached response.
  */
-const routes = [
+/*
+  **`handle` carries the whole `Destination` on every leaf route**, and it exists for one consumer:
+  `useNavigationMoment` announces where a rider has landed and needs that destination's name. Reading it
+  back off the match is what keeps the announcement from becoming a second path→name table — the one the
+  tab bar and this file already share — which is the shape ADR-054 keeps finding in this repo. The two
+  layout routes carry none, because neither is a destination.
+
+  **Exported for `test/navigation-a11y.test.tsx`**, which mounts this table under a memory router: the two
+  most interesting destinations — a place and a route — cannot be reached from a networkless shell, because
+  every control that leads to one is drawn from data. The alternative was a second, synthetic table in a
+  test, and a route table that only a test can see is the one thing this file exists to prevent.
+*/
+export const routes = [
   {
     element: <Root />,
     children: [
       {
         element: <TabsLayout />,
-        children: TABS.map((tab) => ({ path: tab.path, element: screenFor(tab) })),
+        children: TABS.map((tab) => ({ path: tab.path, element: screenFor(tab), handle: tab })),
       },
-      ...PUSHED.map((pushed) => ({ path: pushed.path, element: screenFor(pushed) })),
+      ...PUSHED.map((pushed) => ({
+        path: pushed.path,
+        element: screenFor(pushed),
+        handle: pushed,
+      })),
       /*
         An unknown path goes to Nearby rather than to a "not found" page, and that is a content decision
         rather than a lazy one: every string in this app comes from `@nextbus/i18n` (CLAUDE.md rule 5), the
@@ -116,8 +133,42 @@ function Root() {
     <QueryProvider>
       <LocaleProvider>
         <Outlet />
+        {/*
+          **After `<Outlet/>`, which is the shell saying it is the fallback.** React runs a host node's
+          `autoFocus` in the same commit phase as layout effects and in tree order, so declared here the
+          announcer asks about focus only once the new screen has had its own commit to claim it — and
+          Search's autofocused field, the one screen that claims it, keeps the keyboard.
+
+          It would in fact work from either side of the outlet, because what protects that field is the
+          condition in `focusScreen` rather than the order — measured both ways: the suite goes red on
+          removing the condition and stays green on swapping these two lines. This is the position that
+          says what the rule is.
+
+          Inside `LocaleProvider` for the ordinary reason: what it says is a catalogue string in the
+          rider's language.
+        */}
+        <NavigationMoment />
       </LocaleProvider>
     </QueryProvider>
+  )
+}
+
+/**
+ * The shell's answer to *"nothing tells a screen-reader rider that the page changed"* — a polite live
+ * region naming the destination, plus the focus move and the scroll reset the same instant owes (all three
+ * live in `useNavigationMoment`, because they share one definition of a navigation).
+ *
+ * Empty on a page load and empty on the two screens a rider reaches by tapping a place or a route, whose
+ * names are bus data rather than UI strings. A region that is present-but-empty from the start is also the
+ * only kind that reliably announces: a live region inserted *with* its text is frequently missed, so this
+ * one is mounted for the life of the app and only its content changes.
+ */
+function NavigationMoment() {
+  const announcement = useNavigationMoment()
+  return (
+    <p className="sr-only" role="status" aria-live="polite">
+      {announcement}
+    </p>
   )
 }
 
