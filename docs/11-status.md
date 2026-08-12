@@ -2,6 +2,35 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-12 — the bus glyphs, and two lessons about measuring
+
+> **Shipped:** two bus glyphs ([ADR-132](./08-decision-log.md#adr-132--the-bus-glyphs-two-vehicles-and-the-three-rules-that-had-never-been-written-down)) —
+> a double-decker and a light bus — with **`routeVehicle` in the kernel** deciding which, because a view may
+> not select on data or parse an operator out of an id. Plus readout skeletons on Route detail, and the
+> withdrawal of both staleness cues (ADR-123).
+>
+> **Two things worth carrying forward, both about how to check a drawing:**
+>
+> · 🟠 **Painted ≠ path, and this cost three errors in one sitting.** Every SVG number in this repo is a
+>   *path* value; the painted value is path + 2 wherever a shape is stroked — which is everywhere, including
+>   the *filled* tyres and sign box, since they carry a `fill` **and** the shared stroke. "The tyre is 2.4
+>   wide" was an attribute; the ink is **4.4**. A fill-only variant labelled "same silhouette" matched in one
+>   axis and came out a horizontal pill. A token-size comparison was computed without the stroke. The habit
+>   that catches all three: **rasterise the glyph and scan the ink, in both axes.** `docs/09` §8 now carries
+>   the distinction as a rule.
+> · 🟠 **A lab whose defaults drift is worse than no lab.** A proposed value was set as the component
+>   *default*, so every glyph on the page silently adopted it — including cells labelled "settled". The owner
+>   spotted it before it went anywhere. Studies pass their values explicitly now.
+>
+> **And one about design process:** the *rejected* options were the valuable output. Headlights, a bumper
+> line, a concentric radius rule, Lucide's stroke wheels and a fill-only pill were all drawn and all
+> rejected — and two of them taught rules (`the empty lower face is the reason the pair works`; `the stroke
+> is the shape, not padding`). Those live in ADR-132 and §8; the **candidates were deleted** from
+> `apps/web/lab/`, because a lab full of dead drawings cannot be told apart from one full of live ones.
+>
+> ⚠️ **Not walked on a live GMB route** — none appeared in today's dataset near the coordinates tried, and
+> the corpus's GMB ids predate the current build. The operator switch rests on the kernel corpus.
+
 ## 🔵 Snapshot 2026-08-11 — WP6-8a: the hardening sweep, and one fix that had to be fixed twice
 
 > **What this was.** The owner asked *"anything major outstanding?"*, then asked for the whole open

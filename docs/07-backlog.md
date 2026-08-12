@@ -610,138 +610,36 @@ written down.
       **The part worth keeping: it is deliberately NOT drawn when a round has answered with nothing.**
       *"No bus due"* and *"we have not asked yet"* are different facts, and one placeholder for both is the
       exact conflation ADR-073 and ADR-124 exist to prevent.
-- [ ] 🟡 **A front-facing minibus glyph for the rail's bus token, and a double-decker distinct enough to
-      tell it apart.** **Candidates are drawn and on a page for review** (`pnpm dev:dom` → `/lab/#glyphs`):
-      three deckers (shipping, taller, taller-with-a-deck-line) and five minibuses (plain, sign box outlined,
-      sign box filled, roof pod flush, roof stripe), shown at token size in the moving circle, paired
-      decker-against-minibus, bare at 16/18/24 px, and enlarged. They live in `apps/web/lab/glyphs.tsx` and
-      are **candidates, not components** — the winner gets copied into `src/` and its RN twin.
-      **Round two, after the owner's review (2026-08-12):** the picks are **D1** (decker, body 14 × 17.0)
-      and **M6** (minibus). Three findings from it:
-      · **D1's window rhythm was already exact** — three gaps of 3.80 around two 2.8 bands — so *"are they
-        computationally padded perfectly already?"* is answered yes, and a taller window can only come out
-        of the gaps. `D1b`/`D1c`/`D1d` spend that slack deliberately (bands 3.2/3.6/4.0 → gaps
-        3.53/3.27/3.00). `D1d` is the only one whose arithmetic lands clean, and it is where the glass
-        first becomes as thick as the stroke around it.
-      · **M2 and M3 were indistinguishable, and it was arithmetic not rendering:** a 1.8-high box drawn
-        with a 2 px stroke has *less than zero* interior, so only the filled sign is honest at this size.
-        M2 is dropped.
-      · **The minibus is now the decker's width.** The owner measured 56 px against 50 by eye; it was 56
-        against 48, and the window was 8.4 against the decker's 8. Both now match exactly (verified in a
-        browser: body 56, window 32 at the lab's 96 px). **The trade, recorded once:** a real light bus
-        *is* narrower (2.0 m against 2.5 m), so equal width departs from the proportions round one leaned
-        on. It is right anyway — the token is a fixed 24 px circle, and a narrower glyph inside it reads
-        as a *smaller drawing* rather than a *smaller vehicle*. All the meaning now rides on height
-        (12.6 against 17.0) and the roof sign, which are what survive at 16 px.
-      **Round three (2026-08-12):** the owner's picks are **D1b/D1c** (bands 3.2/3.6) and **M7** — M6's
-      proportions with M3n's high window (roof-to-glass 3.0). D1d was rejected as *"a bit too tall"*, which
-      is worth recording precisely because it **is not taller**: every D1 variant shares one 17.0 body, so
-      what reads as height is the glass, and at bands 4.0 the bands exceed the 3.00 gap between them so the
-      deck split stops looking like a split.
-      **The corner-radius question is answered and the answer is "decide it on principle, because nobody
-      can see it".** Lucide's convention is empirical and is a two-value system, not a formula: across the
-      installed set `rx="2"` appears 260 times and `rx="1"` 111, plus full pills. So our windows at `rx=1`
-      were already on the rule and the **body at 2.5 is the deviation** (`docs/09` §8 pins the grid, stroke
-      and joins but has never said anything about radius, so the 2.5 was never a decision). The owner's
-      concentric rule — window radius = body radius − side inset — gives `2.5 − 3 = −0.5`, i.e. **square**,
-      and the padding is near-uniform (3.0 across against 3.53/3.27 down) so the rule is meaningful.
-      ⚠️ **But `stroke-linejoin="round"` on a 2 px stroke rounds a square corner by about half the stroke**,
-      so `rx=0` renders near a 1 px radius — and the lab's sweep (0 / 0.5 / 1 / pill / body-rx-2) is
-      **visually identical at token size**, verified in a browser. Below ~1 the geometry stops deciding the
-      look. So the choice is free, and the tidiest options are *keep `rx=1`* (Lucide's inner value) or
-      *go on-rule everywhere* with body 2 and a square window.
-      **Round four (2026-08-12) — settled except one number.** The decker is **D1c** (body 14 × 17.0, two
-      3.6 bands, three derived gaps of 3.27). **Radii are Lucide's two values everywhere: body `rx=2`,
-      windows `rx=1`** — which also corrects the shipping glyph's body from 2.5, a value that was never a
-      decision (`docs/09` §8 pins the grid, the stroke and the joins and has never mentioned radius).
-      **The concentric rule was dropped as unobservable, and that is the reusable finding:** it gives
-      `2 − 3 → 0` (square), and `stroke-linejoin="round"` on a 2 px stroke rounds a square corner by about
-      half the stroke anyway — so the whole sweep from square to a full pill is *visually identical at
-      token size*, verified in a browser. **Below about `rx=1` the stroke decides the look, not the path.**
-      The radius was therefore chosen on the rule, because nothing observable could choose it.
-      The minibus keeps the decker's width (14) and window width (8), its window **high** (roof-to-glass
-      3.0) and a filled roof sign. **Its window height is the last open question** — the owner is leaning
-      to ~4.4, and the sweep runs 3.8 → 6.6. Two thresholds cross at **4.0**: the glazed interior becomes
-      as thick as the 2 px stroke around it, and the shape passes 2 : 1 — after which the window stops
-      reading as a *band* and starts reading as a *pane*, which is a second axis of difference from the
-      decker's two slots on top of the height difference.
-      **Round five (2026-08-12) — the window is 4.4, and headlights are the last question.** Drawn Lucide's
-      own way, which the owner spotted: `bus-front` and `tram-front` render a headlight as a **zero-length
-      path** (`M8 15h.01`) that a round linecap paints as a dot exactly one stroke-width across. Worth
-      copying rather than reinventing — the dot's size *is* the stroke's, so it cannot drift from it; it is
-      stroke-only, so it needs no `fill` override; and it is the idiom the whole Lucide set uses for a dot.
-      **They fit the minibus and not the decker**, which is the opposite of the question's assumption and
-      is arithmetic rather than taste. A dot needs 2.00 of clear inner face; the minibus at window 4.4 has
-      **3.20**, and D1c has **1.27**, because the decker spends its face on two bands. `D1c!` in the lab
-      draws the collision rather than asserting it.
-      **`D1s` is the version where both get them:** the same 3.6 bands shifted up, gaps 2.6 / 2.6 / 4.6,
-      giving 2.60 of clear face. It **gives up the even rhythm** — which this row praised two rounds ago and
-      which nothing depends on — in exchange for a lower face. Arguable both ways, and more truthful either
-      way: a real bus has more sheet metal below its windows than above.
-      **The family question underneath it:** a detail that lands on one vehicle only stops being a shared
-      detail and becomes a *distinguishing* one, which competes with the height-and-pane difference already
-      doing that work.
-      *(Also noted while aligning with Lucide: it draws wheels as short vertical strokes, `M6 19v2`, where
-      we draw filled pills. That divergence is deliberate and documented in `docs/09` §8 — a tyre's interior
-      is too small to outline at a 2 px stroke — and is not being changed.)*
-      **Round six (2026-08-12) — headlights out, and the last two questions asked.** Headlights were
-      rejected on looks; the decker stays **D1c** with its even rhythm.
-      · **The minibus's empty lower face:** a partial-width horizontal line was tried at three widths and a
-        low "bumper" placement. **It is more visible at token size than the arithmetic predicted** — but
-        what it costs is the thing the drawing depends on: a dash under the glass makes the minibus start
-        reading as a **two-band** vehicle, which is exactly the one-pane-against-two-slots difference that
-        tells it from the decker. So the empty face is not a compromise, it is the *reason* the pair works.
-      · **Wheels:** Lucide's stroke form (`M6 19v2`, painted 4 tall by its round caps) was drawn on both.
-        It is more Lucide-consistent and reads **spindlier** — thin legs rather than tyres — which is the
-        same conclusion `docs/09` §8 already recorded when it chose the filled pill, now confirmed by
-        looking rather than by argument. The pill stays; it remains this family's one deliberate departure.
-      **Round seven (2026-08-12) — the decker is fully settled; two minibus tweaks under review.**
-      · **Roof-to-glass 3.27 instead of 3.0**, which is *the decker's own gap* rather than a nearby number,
-        so the distance is identical on both vehicles and one constant retunes both. Costs 0.27 off the
-        clear lower face, which is now deliberately empty, so it costs nothing.
-      · **The tyre pill has no rule and never did.** `docs/09` §8 states only that the tyres are *filled*
-        (interior too small to outline at a 2 px stroke); the shipping `2.4 × 2.6` is a hand-picked Wave 1
-        value. Proposed rule: **a pill is one stroke wide** (2.0) — the same rule Lucide's headlight dot
-        follows, so every mark in the glyph is one stroke thick and none needs its own constant. It is also
-        more truthful: head-on you see a tyre's **tread**, so it should read taller than wide, and 2.0 × 2.6
-        is 1.30 : 1 against today's near-square 1.08 : 1, which is why the current pill reads as a foot.
-      · 🔴 **Correction — `2.4` is the attribute, not what ships.** The pill rect carries a `fill` **and**
-        the shared 2 px stroke, so the outline adds one unit on every side: the painted pill is
-        **4.4 × 4.6**. Measured by rasterising the shipping glyph and scanning the pixel row through the
-        tyres (ink runs 5.4 → 9.8, and the fill-only control paints 4.4 to match). That is **31 % of the
-        14-wide body** and a painted ratio of **1.045 : 1** — squarer than the attributes suggest, which is
-        why it reads as a foot. Every "2.4 ships today" figure in the rounds above was describing the path.
-        **The stroke on a filled shape is pure padding**, so `fill`-only is the real lever: then the number
-        *is* the painted width, and `fill 4.4` reproduces today's silhouette exactly (verified). Note the
-        radius has to move with it — a stroked pill's visual corner is `rx` + half the stroke.
-      · 🔴 **And dropping the stroke was then tried and is wrong.** Two reasons, the second the important
-        one. First, the stroke inflates **both** axes, so reproducing the silhouette needed `4.4 × 4.6` — the
-        first attempt grew the width by 2 and left the height at 2.6, which came out a **horizontal** pill
-        where a head-on tyre should be vertical. Second, and structurally: **the stroke is what rounds the
-        bottom of the wheel.** Its round join carries the corner far more generously than any `rx` can on a
-        2.6-high rect, where `rx` is capped at 1.3. So the outline is not padding — it is the shape.
-      · **Settled: keep `stroke` + `fill` and thin the path.** Painted height stays 4.6, so every unit off
-        the width makes the tyre more clearly vertical, which is correct — head-on you see a tyre's tread,
-        not its diameter. Sweep verified by raster in **both** axes: painted 4.4 (today, 1.05 : 1) · 4.2 ·
-        4.0 (1.15 : 1) · 3.8 · 3.6 (1.28 : 1) · 3.2. The owner is inclined to **4.0 or 3.6**.
-      · ✅ **Roof-to-glass 3.27 is agreed** and is now the minibus constant.
-      · ⚠️ **Giving the smaller vehicle smaller wheels is true and unobservable.** At token size 2.0 paints
-        1.33 px and 1.8 paints 1.20 px — a **0.13 px** difference. Same lesson as the radius sweep: below a
-        certain size the stroke decides, so a per-vehicle exception buys a second constant and nothing a
-        rider can see. One width for both.
-      Once those two are confirmed: copy both into `apps/web/src/components/BusGlyph.tsx` and its RN twin,
-      switch on the operator so GMB routes get the minibus, and note that `docs/09` §8 should gain the
-      radius rule it has never had. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
-      drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.
-      The distinguishing features are real and few: a light bus is **single-deck with one window row**, a
-      **taller windscreen relative to its width**, a **roof sign box**, and the statutory **roof stripe**
-      (green for GMB, red for RMB); the double-decker is **two window rows** and a deeper body. Keep both
-      front-facing so they read at 16 px, and take the colours from the **operator accent tokens** — GMB's
-      green is already one (`docs/09` §2) and a raw hex in a component is a red build.
-      The owner wants to design this together rather than receive it.
+- [x] ✅ **A front-facing minibus glyph for the rail's bus token, and a double-decker distinct enough to
+      tell it apart** — **shipped 2026-08-12**
+      ([ADR-132](./08-decision-log.md#adr-132--the-bus-glyphs-two-vehicles-and-the-three-rules-that-had-never-been-written-down)).
+      Seven rounds with the owner. The decker is body 14 × 17.0 with two 3.6 bands in a derived even rhythm
+      (gaps 3.27); the minibus is the same width with one 4.4 pane, roof-to-glass 3.27 (**the decker's own
+      gap**, so one constant retunes both) and a filled roof sign. **Which one is drawn is the kernel's
+      call** — `routeVehicle(operator)` names it, because deciding it in a view is what
+      `check-no-derivation` and `check-no-adhoc-id-parsing` both forbid.
+      **Three rules `docs/09` §8 had never carried** are now in it: Lucide's two radii (body 2, inner 1,
+      counted in the installed set rather than derived), the tyre pill at painted 3.6 × 4.6, and
+      **painted ≠ path** — painted is path + 2 wherever a shape is stroked, which is everywhere.
+      **What was drawn and rejected is the valuable half:** headlights (Lucide's zero-length-path dot; they
+      fit the minibus and not the decker, and a detail on one vehicle becomes a *distinguishing* mark);
+      a partial bumper line (it makes the minibus read as a **two-band** vehicle, destroying the very
+      difference it has to keep — *the empty face is the reason the pair works*); a concentric radius rule
+      (correct arithmetic, **unobservable** — below `rx=1` the stroke decides the look); Lucide's stroke
+      wheels (spindly); and dropping the stroke from the filled pill (**the stroke is the shape** — its
+      round join carries the bottom of the wheel, which `rx` cannot).
+      🟠 **Three of this row's own errors came from quoting a path value as a painted one.** The habit that
+      catches it is rasterising and scanning the ink in **both** axes, not reading attributes.
+      🟡 Not walked on a live GMB route: no GMB appeared in today's dataset near the coordinates tried, and
+      the corpus's GMB route ids predate the current build. The switch rests on the kernel corpus (6 cases,
+      including `GMB → minibus`) plus one of `routeDetailView`'s 24 cases being a real GMB route.
+      🟡 The roof sign overlaps the body's top stroke by ~1.8 units, so it reads as a pod fused to the
+      roofline rather than a box on it. Left as-is — it is close to the "roof pod" variant that was liked.
 - [ ] 🟠 **Bring back the lab as a real component gallery, and drive it from the published specs.**
       **Started:** the lab is now a switcher over more than one page (`#rail`, `#glyphs`), which is the
-      scaffolding the gallery needs. The gallery itself — enumerated from `packages/contract/ui/*.spec.json`
+      scaffolding the gallery needs — and `/lab` without a trailing slash no longer silently serves the
+      *app* (the SPA fallback answered 200 with Nearby, so the page looked absent; a dev-only Vite
+      middleware 301s to `/lab/`, ADR-132). The gallery itself — enumerated from `packages/contract/ui/*.spec.json`
       so it cannot drift — is still to build, and the owner has extended the ask: it should cover
       **components, sub-components AND some of the motions**, *"to help understand the underlying principles
       about how it's designed and translate that to the appropriate styles for the operating system it's

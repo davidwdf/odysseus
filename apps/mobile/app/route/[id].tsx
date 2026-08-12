@@ -1,3 +1,4 @@
+import type { RouteVehicle } from '@nextbus/core'
 import {
   type Locale,
   type RailBus,
@@ -286,8 +287,16 @@ export default function RouteDetail() {
               const a = nodeY(target) ?? 0
               const b = (bus.kind === 'node' ? a : nodeY(bus.from)) ?? 0
               const y = bus.kind === 'node' ? a : (a + b) / 2
-              // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is intentional — buses keep order, so the k-th token tweens to its new position (ADR-030)
-              return <RailBusToken key={i} bus={bus} y={y} enterY={nodeY(0) ?? y} />
+              return (
+                <RailBusToken
+                  // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is intentional — buses keep order, so the k-th token tweens to its new position (ADR-030)
+                  key={i}
+                  bus={bus}
+                  y={y}
+                  enterY={nodeY(0) ?? y}
+                  vehicle={view.vehicle}
+                />
+              )
             })}
 
             {/* Saved-stop stars (ADR-042), drawn last so they sit ABOVE the bus tokens — a passing
@@ -479,7 +488,18 @@ function StopActionSheet({
  *  (WP6-6a). `accessibilityRole="image"` rather than nothing, because a labelled `View` with no role
  *  is announced inconsistently across platforms — and the token is still `pointerEvents: 'none'`, so
  *  it is read but never focused as a control. */
-function RailBusToken({ bus, y, enterY }: { bus: RailBus; y: number; enterY: number }) {
+function RailBusToken({
+  bus,
+  y,
+  enterY,
+  vehicle,
+}: {
+  bus: RailBus
+  y: number
+  enterY: number
+  /** The kernel's word — `routeVehicle`'s answer, carried down rather than re-derived here. */
+  vehicle: RouteVehicle
+}) {
   const ty = useSharedValue(enterY)
   useEffect(() => {
     ty.value = withTiming(y, { duration: 650 })
@@ -495,7 +515,7 @@ function RailBusToken({ bus, y, enterY }: { bus: RailBus; y: number; enterY: num
       accessibilityLabel={bus.label}
       style={[{ position: 'absolute', left: RAIL_W / 2 - TOKEN / 2, top: -TOKEN / 2 }, style]}
     >
-      <BusToken size={TOKEN} />
+      <BusToken size={TOKEN} vehicle={vehicle} />
     </Animated.View>
   )
 }

@@ -460,6 +460,34 @@ export function routeStopBoard(
 }
 
 /** What a renderer needs to draw the Route screen, with nothing left to decide. */
+/**
+ * What kind of vehicle a route runs, as far as the operator lets us say.
+ *
+ * **Two words, because two is what the data supports.** A Green Minibus route is a light bus; everything
+ * else this app serves is drawn as *a bus*. It is deliberately not a taxonomy of chassis: NLB and MTR Bus
+ * run single-deckers in reality, and calling them `bus` overstates the deck count — but the alternative is
+ * a third word the feed cannot justify, and the decker has been this app's glyph for *a bus* since Wave 1
+ * (`docs/09` §8). The overstatement is recorded rather than fixed.
+ *
+ * **Why this is the kernel's and not the renderer's.** It is one line, and it is exactly the line two gates
+ * forbid a view from writing: `check-no-derivation` bans a renderer selecting on data, and
+ * `check-no-adhoc-id-parsing` bans reaching into an id for the operator. So the kernel names the vehicle
+ * and each renderer maps that name to a drawing — the same shape as `etaUrgency` naming a band and each
+ * renderer owning its own colour for it (ADR-053).
+ *
+ * **Unknown operators degrade to `bus`**, which is ADR-051's rule applied here: the id grammar is shape and
+ * not vocabulary, so the day a fifth operator ships, a client that has never heard of it must draw
+ * *something* rather than nothing. A closed list would have made that day a blank rail.
+ *
+ * @spec route-detail#routeVehicle
+ */
+export function routeVehicle(operator: OperatorId): RouteVehicle {
+  return operator === 'GMB' ? 'minibus' : 'bus'
+}
+
+/** The vehicle a route runs — see `routeVehicle` for why there are only two. */
+export type RouteVehicle = 'bus' | 'minibus'
+
 export interface RouteDetailView {
   header: RouteJourneyHeader
   /** The static-facts strip, in pill order. Empty when the payload carries no service block at all. */
@@ -468,6 +496,14 @@ export interface RouteDetailView {
   stops: RouteStopRowView[]
   /** The buses on the rail, in route order. */
   buses: RailBus[]
+  /**
+   * Which vehicle to draw for those buses — `routeVehicle`'s answer, carried so no renderer has to ask.
+   *
+   * On the view rather than on each `RailBus` because every bus on one route is the same vehicle: putting
+   * it per-token would be the same fact repeated once per bus, and two renderers would eventually disagree
+   * about which copy was authoritative.
+   */
+  vehicle: RouteVehicle
   /**
    * Where the boarding row is, or `-1`.
    *
@@ -626,6 +662,7 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
   })
 
   return {
+    vehicle: routeVehicle(route.operator),
     header: {
       operator: route.operator,
       routeNo: route.routeNo,

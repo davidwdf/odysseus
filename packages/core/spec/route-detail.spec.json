@@ -981,6 +981,7 @@
                 "label": "Bus approaching Tin Shui Wai Park"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": 1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -1243,6 +1244,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": 2,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -1524,6 +1526,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -1809,6 +1812,7 @@
                 "label": "Bus at Tin Shui Wai Station"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2088,6 +2092,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2398,6 +2403,7 @@
                 "label": "Bus approaching Tsuen Wan Station"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2706,6 +2712,7 @@
                 "label": "Bus at Tsuen Wan Station"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -2930,6 +2937,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "minibus",
             "hereIndex": -1,
             "distanceM": 3032.5034864866025,
             "liveArrivals": "answered"
@@ -3209,6 +3217,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -3467,6 +3476,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -3537,6 +3547,7 @@
             ],
             "stops": [],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 0,
             "liveArrivals": "answered"
@@ -3786,6 +3797,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4037,6 +4049,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4257,6 +4270,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4557,6 +4571,7 @@
                 "label": "Bus approaching Tin Shui Wai Park"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -4895,6 +4910,7 @@
                 "label": "Bus approaching Tin Shui Wai Park"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5163,6 +5179,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5471,6 +5488,7 @@
                 "label": "Bus at Tin Shui Wai Park"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5699,6 +5717,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -5961,6 +5980,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "perStopOnly"
@@ -6223,6 +6243,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "unavailable"
@@ -6589,6 +6610,7 @@
                 "label": "Bus approaching Central"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -6940,6 +6962,7 @@
                 "label": "Bus approaching Kingswood Richly Plaza"
               }
             ],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "answered"
@@ -7244,6 +7267,7 @@
               }
             ],
             "buses": [],
+            "vehicle": "bus",
             "hereIndex": -1,
             "distanceM": 27667.212574335084,
             "liveArrivals": "perStopOnly"
@@ -10475,6 +10499,59 @@
             "arrivals": [],
             "incomplete": false
           }
+        }
+      ]
+    },
+    "routeVehicle": {
+      "doc": "Which vehicle a route runs, from its operator alone. Two words because two is what the feed supports: a Green Minibus route is a light bus, everything else is drawn as a bus. The renderer maps the word to a drawing; it must never read the operator itself.",
+      "cases": [
+        {
+          "name": "gmb-runs-a-minibus",
+          "why": "The row this rule exists for. GMB is the only operator this app serves whose vehicle is a light bus, and it only became worth drawing once every stop on a GMB route had times (ADR-116-121).",
+          "args": {
+            "operator": "GMB"
+          },
+          "expect": "minibus"
+        },
+        {
+          "name": "kmb-runs-a-bus",
+          "why": "The ordinary case, and the one that must not regress: KMB is most of the app's traffic.",
+          "args": {
+            "operator": "KMB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "ctb-runs-a-bus",
+          "why": "A second franchised operator, so the rule cannot be 'anything but the first one'.",
+          "args": {
+            "operator": "CTB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "lwb-runs-a-bus",
+          "why": "LWB shares KMB's feed but is its own operator code; a port that special-cased KMB alone would draw nothing recognisable for Lantau routes.",
+          "args": {
+            "operator": "LWB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "nlb-is-called-a-bus-though-it-runs-single-deckers",
+          "why": "A deliberate overstatement, pinned so it is a decision rather than an oversight: NLB runs single-deckers, and the app draws a double-decker for 'a bus'. Fixing it would need a third word the feed cannot justify. If a chassis taxonomy ever arrives, this is the row that changes.",
+          "args": {
+            "operator": "NLB"
+          },
+          "expect": "bus"
+        },
+        {
+          "name": "an-operator-nobody-has-heard-of-still-gets-a-bus",
+          "why": "ADR-051's forward-compatibility rule applied to a drawing: the id grammar is shape and not vocabulary, so a client compiled today must render SOMETHING for an operator that ships tomorrow. A closed list here would make that day a blank rail, on every renderer at once, and the failure would look like missing data rather than a missing case.",
+          "args": {
+            "operator": "ZZZ9"
+          },
+          "expect": "bus"
         }
       ]
     }

@@ -9,10 +9,12 @@ import {
   type RouteFactSheetKind,
   type RouteFactSheetView,
   type RouteHeaderNames,
+  type RouteVehicle,
   routeDetailView,
   routeFactSheet,
   routeStopBoard,
   routeTerminusNames,
+  routeVehicle,
   upcoming,
   visibleBusMarkers,
 } from '../src/route-detail'
@@ -693,4 +695,15 @@ describe('route-detail#routeFactSheet', () => {
         .map(([arm]) => arm),
     ).toEqual([])
   })
+})
+
+describe('route-detail#routeVehicle', () => {
+  for (const c of specCases<{ operator: string }, RouteVehicle>(corpus, 'routeVehicle')) {
+    it(c.name, () => {
+      // Cast at the boundary rather than typing the corpus as `OperatorId`: the point of the
+      // unknown-operator row is an operator the union does NOT contain, so a corpus typed to the union
+      // could not express it — which is the same reason ADR-051 made the grammar shape, not vocabulary.
+      expect(routeVehicle(c.args.operator as Parameters<typeof routeVehicle>[0])).toBe(c.expect)
+    })
+  }
 })

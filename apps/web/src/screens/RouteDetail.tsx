@@ -243,8 +243,10 @@ export function RouteDetail() {
     // Ordinal identity is intentional and unchanged — buses keep order, so the k-th token travels to its new
     // position (ADR-030). It is carried explicitly now rather than left implicit in a map's index, because a
     // row renders only its own and `useRailFlip` matches a moved token to its old place by it.
-    // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is the point — see above and ADR-030
-    const token = <RailBusToken key={ordinal} ordinal={ordinal} bus={bus} />
+    const token = (
+      // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is the point — see above and ADR-030
+      <RailBusToken key={ordinal} ordinal={ordinal} bus={bus} vehicle={view.vehicle} />
+    )
     const carried = busesByRow.get(owner)
     if (carried === undefined) busesByRow.set(owner, [token])
     else carried.push(token)

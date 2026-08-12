@@ -22,7 +22,7 @@
 
 import { useState } from 'react'
 import { BusGlyph } from '../src/components/BusGlyph'
-import { DECKERS, MINI_TOP_GAP_STUDY, MINIBUSES, PILL_STUDY } from './glyphs'
+import { DeckerD0 } from './glyphs'
 
 /** `RailBusToken`'s own numbers, so the token row is the real size and not an approximation of it. */
 const TOKEN = 24
@@ -96,8 +96,16 @@ function Row({
   )
 }
 
-const SHIPPING: Variant = { id: 'ship', label: 'shipping BusGlyph', Glyph: BusGlyph }
-const ALL: readonly Variant[] = [SHIPPING, ...DECKERS, ...MINIBUSES]
+/** The two vehicles that ship, and the drawing they replaced. */
+const ALL: readonly Variant[] = [
+  { id: 'before', label: 'before — Wave 1 → ADR-132', Glyph: DeckerD0 },
+  { id: 'bus', label: 'bus — shipped', Glyph: (p) => <BusGlyph vehicle="bus" {...p} /> },
+  {
+    id: 'minibus',
+    label: 'minibus — shipped',
+    Glyph: (p) => <BusGlyph vehicle="minibus" {...p} />,
+  },
+]
 
 export function GlyphLab() {
   const [moving, setMoving] = useState(true)
@@ -108,11 +116,12 @@ export function GlyphLab() {
       <header className="flex flex-col gap-3 py-6">
         <h1 className="font-bold text-h1 text-text">Bus glyphs</h1>
         <p className="max-w-2xl text-body text-muted">
-          Round seven. The decker is <strong>settled</strong> — D1c, Lucide radii, filled pill
-          wheels, no headlights, and no bumper line (a dash under the glass made the minibus read as
-          a two-band vehicle, which is the difference the pair depends on). Two tweaks left on the
-          minibus: <strong>roof-to-glass 3.27</strong> to match the decker's gap, and whether the
-          tyre pill should be <strong>thinner</strong> — which turns out to have no rule behind it.
+          <strong>Settled and shipped</strong> (ADR-132). Both vehicles are drawn from
+          <code>src/components/BusGlyph.tsx</code> here, not from candidates — the kernel picks
+          between them with <code>routeVehicle</code>, so a GMB route gets the minibus. The seven
+          rounds of proposals are gone on purpose: their reasoning is in ADR-132 and{' '}
+          <code>docs/09</code> §8, and a lab full of rejected drawings rots. The old glyph stays so{' '}
+          <em>is the new one better?</em> can be answered by looking.
         </p>
         <div className="flex flex-wrap gap-3">
           <button
@@ -138,70 +147,6 @@ export function GlyphLab() {
       >
         {ALL.map((v) => (
           <Cell key={v.id} variant={v} moving={moving} />
-        ))}
-      </Row>
-
-      <Row
-        title="Decker against minibus, side by side"
-        note="The family question: if headlights land on the minibus only, they become a distinguishing mark rather than a shared detail. This is the pairing that has to work: if the two are not instantly different at 16 px the drawing has failed however it reads alone. They share a ground line, so height is what the eye catches — and as the minibus glass grows it gains a second difference, one big pane against the decker's two slots."
-      >
-        {/* Every decker against the leading minibus, and every minibus against the leading decker. The
-            full cross-product was 20 cells and unreadable; what is being judged is one variant at a time
-            against a fixed partner, which is what these two runs give. */}
-        {[
-          ...DECKERS.map((d) => [d, MINIBUSES.find((m) => m.primary)] as const),
-          ...MINIBUSES.filter((m) => !m.primary).map(
-            (m) => [DECKERS.find((d) => d.primary), m] as const,
-          ),
-        ].map(([d, m]) =>
-          d && m ? (
-            <div
-              key={`${d.id}-${m.id}`}
-              className="flex flex-col items-center gap-2 rounded-lg bg-surface-2 p-3"
-            >
-              <div className="flex items-end gap-2">
-                <Token Glyph={d.Glyph} moving={moving} />
-                <Token Glyph={m.Glyph} moving={moving} />
-              </div>
-              <span className="text-caption text-muted">
-                {d.id} · {m.id}
-              </span>
-            </div>
-          ) : null,
-        )}
-      </Row>
-
-      <Row
-        title="Minibus roof-to-glass — 3.0 or the decker's 3.27"
-        note="3.27 is not a nearby number, it is the decker's own gap — so roof-to-glass becomes identical on both vehicles, which is true of the real things and means one constant retunes both. Costs 0.27 off the clear lower face, which nothing occupies now that headlights and the bumper line are out."
-      >
-        {MINI_TOP_GAP_STUDY.map((v) => (
-          <div key={v.id} className="flex w-44 shrink-0 flex-col items-center gap-2">
-            <div className="flex items-end gap-3">
-              <Token Glyph={v.Glyph} moving={false} />
-              <span className="flex text-text">
-                <v.Glyph size={72} />
-              </span>
-            </div>
-            <span className="text-center text-caption text-muted leading-tight">{v.label}</span>
-          </div>
-        ))}
-      </Row>
-
-      <Row
-        title="The tyre pill's width — and the rule it never had"
-        note="Labels are PAINTED widths; painted height is 4.6 throughout, so what moves is the ratio. The shipping pill says 2.4 but carries a fill AND the 2 px stroke, so it paints 4.4 × 4.6 — 31% of the 14-wide body and essentially square, which is why it reads as a foot. Dropping the stroke was tried and is wrong: the stroke is what rounds the bottom of the wheel, since rx on a 2.6-high rect is capped at 1.3. So the stroke stays and the path thins, which makes the tyre vertical — correct for a head-on tyre, where you see its tread and not its diameter."
-      >
-        {PILL_STUDY.map((v) => (
-          <div key={v.id} className="flex w-48 shrink-0 flex-col items-center gap-3">
-            <span className="flex text-text">
-              <v.Glyph size={72} />
-            </span>
-            <span className="flex text-text">
-              <v.Glyph size={16} />
-            </span>
-            <span className="text-center text-caption text-muted leading-tight">{v.label}</span>
-          </div>
         ))}
       </Row>
 

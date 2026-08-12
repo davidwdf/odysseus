@@ -1,4 +1,4 @@
-import type { RailBus } from '@nextbus/core'
+import type { RailBus, RouteVehicle } from '@nextbus/core'
 import { useLayoutEffect, useRef } from 'react'
 import { BusGlyph } from './BusGlyph'
 
@@ -42,7 +42,19 @@ import { BusGlyph } from './BusGlyph'
  * Chrome's accessibility tree; `pointer-events: none` does not exempt it, and no suite here can see it,
  * because the projection reads text nodes and token labels in two separate passes.
  */
-export function RailBusToken({ bus, ordinal }: { bus: RailBus; ordinal: number }) {
+export function RailBusToken({
+  bus,
+  ordinal,
+  vehicle = 'bus',
+}: {
+  bus: RailBus
+  ordinal: number
+  /**
+   * Which vehicle to draw — the kernel's word, never this component's guess. `routeVehicle` decides it from
+   * the operator, because selecting on data and reaching into an id are both things a view may not do.
+   */
+  vehicle?: RouteVehicle
+}) {
   const disc = useRef<HTMLSpanElement>(null)
   /**
    * Put this token's three idle clocks on the **document's** timeline rather than on its own element's age.
@@ -111,7 +123,7 @@ export function RailBusToken({ bus, ordinal }: { bus: RailBus; ordinal: number }
       <span className="bus-bob flex">
         <span className="bus-rock flex">
           <span className="bus-squash flex text-accent-contrast">
-            <BusGlyph size={TOKEN * 0.66} />
+            <BusGlyph vehicle={vehicle} size={TOKEN * 0.66} />
           </span>
         </span>
       </span>
