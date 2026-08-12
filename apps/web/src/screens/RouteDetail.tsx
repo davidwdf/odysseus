@@ -421,6 +421,10 @@ export function RouteDetail() {
                 row={row}
                 index={index}
                 animateIn={swapNonce > 0}
+                // Reserve the arrivals line while the round is still out. `round === null` is
+                // `useLiveRoute` saying "no round has landed", which is exactly the window in which every
+                // row is about to gain a line at once — see the skeleton's note in `RouteStopRow`.
+                arrivalsPending={wantsLive && round === null}
                 tokens={busesByRow.get(index)}
                 onPress={setSheetRow}
                 registerRow={registerRow}

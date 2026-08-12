@@ -592,7 +592,7 @@ written down.
 > are **brainstorms the owner wants to sit with** rather than tickets — they say so, and an agent that
 > "just implements" them has misread the request.
 
-- [ ] 🟠 **Route detail's times should arrive into skeletons, not into empty space.** A delay in retrieving
+- [x] ✅ **Route detail's times should arrive into skeletons, not into empty space** — **done 2026-08-12.** A delay in retrieving
       the arrivals makes the whole schematic jump as each row's readout appears. The fix is a readout-shaped
       skeleton **sized to the box the figure will occupy**, so the row's height and the right-hand column's
       x-position are settled before any number exists.
@@ -601,8 +601,22 @@ written down.
       `isPending`, not `isLoading` — so the skeleton is reachable for a *parked* query too, which is
       exactly when a rider waits longest. And the readout already reserves a fixed gutter, so a
       fixed-width skeleton is a small change rather than a new layout.
+      **Built as `arrivalsPending` on `RouteStopRow`**, passed from the screen as `wantsLive && round === null`
+      — `useLiveRoute` saying no round has landed, which is exactly the window in which all 34 rows gain a
+      line at the same instant. Two bars sized to what they stand in for (the first slot is
+      `text-body font-semibold`, the rest `text-caption`), `aria-hidden` and wordless, because the
+      conformance walker reads presence and a labelled placeholder would project into every state that
+      mounts before its data.
+      **The part worth keeping: it is deliberately NOT drawn when a round has answered with nothing.**
+      *"No bus due"* and *"we have not asked yet"* are different facts, and one placeholder for both is the
+      exact conflation ADR-073 and ADR-124 exist to prevent.
 - [ ] 🟡 **A front-facing minibus glyph for the rail's bus token, and a double-decker distinct enough to
-      tell it apart.** Now that every stop on a GMB route has times (ADR-116–121), the token is worth
+      tell it apart.** **Candidates are drawn and on a page for review** (`pnpm dev:dom` → `/lab/#glyphs`):
+      three deckers (shipping, taller, taller-with-a-deck-line) and five minibuses (plain, sign box outlined,
+      sign box filled, roof pod flush, roof stripe), shown at token size in the moving circle, paired
+      decker-against-minibus, bare at 16/18/24 px, and enlarged. They live in `apps/web/lab/glyphs.tsx` and
+      are **candidates, not components** — the winner gets copied into `src/` and its RN twin.
+      Awaiting the owner's pick. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
       drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.
       The distinguishing features are real and few: a light bus is **single-deck with one window row**, a
       **taller windscreen relative to its width**, a **roof sign box**, and the statutory **roof stripe**
@@ -611,6 +625,13 @@ written down.
       green is already one (`docs/09` §2) and a raw hex in a component is a red build.
       The owner wants to design this together rather than receive it.
 - [ ] 🟠 **Bring back the lab as a real component gallery, and drive it from the published specs.**
+      **Started:** the lab is now a switcher over more than one page (`#rail`, `#glyphs`), which is the
+      scaffolding the gallery needs. The gallery itself — enumerated from `packages/contract/ui/*.spec.json`
+      so it cannot drift — is still to build, and the owner has extended the ask: it should cover
+      **components, sub-components AND some of the motions**, *"to help understand the underlying principles
+      about how it's designed and translate that to the appropriate styles for the operating system it's
+      on"*. That makes the motion half load-bearing rather than a bonus: a native porter needs the
+      *principle* (what moves, on what occasion, at what speed), not the CSS.
       `apps/web/lab/` exists and is governed by [ADR-112](./08-decision-log.md#adr-112--a-dev-page-lives-in-the-app-and-a-gate-keeps-it-out-of-the-app)
       — a dev page that lives in the repo and is kept out of production by `dev-pages.test.mjs` and
       `scripts/build-web.mjs` — but it holds only the rail motion lab. The owner wants a **listing of the
