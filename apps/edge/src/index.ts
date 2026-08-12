@@ -7,7 +7,14 @@ import { errorResponse, fail as failWith } from './errors'
 import { ETA_TTL_SEC } from './eta-cache'
 import { LIVE_PATH, liveUpgrade } from './live'
 import { nearby } from './nearby'
-import { LIST_CTB_BUDGET, routeDetail, stopDetail, stopEtas, stopEtasBatch } from './stop-route'
+import {
+  LIST_CTB_BUDGET,
+  routeDetail,
+  routeEtasBatch,
+  stopDetail,
+  stopEtas,
+  stopEtasBatch,
+} from './stop-route'
 import { fetchTile, parseTilePath } from './tiles'
 
 /**
@@ -392,10 +399,37 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   // `decodeURIComponent` throws. The asymmetry with `/v1/etas/{id}` is real and worth knowing.
   if (parts[0] === 'v1' && parts[1] === 'etas' && !parts[2]) {
     const asked = url.searchParams.getAll('ids').filter((id) => id.length > 0)
+    const routeId = url.searchParams.get('route')
+
+    // `?route=` — one report per pole of one route, narrowed to it (ADR-136). Mutually exclusive with
+    // `ids`, and both-or-neither is a 400: a request naming both is asking two different questions, and
+    // answering either one silently would leave the caller certain it asked the other.
+    if (routeId !== null && routeId.length > 0) {
+      if (asked.length > 0) {
+        return fail(
+          'bad_request',
+          '`ids` and `route` are mutually exclusive — send one or the other',
+        )
+      }
+      // The cache key keeps only the parameter that decides the answer, mirroring the `ids` branch.
+      const keyUrl = new URL(url.toString())
+      keyUrl.searchParams.delete('route')
+      keyUrl.searchParams.set('route', routeId)
+      return cached(
+        request,
+        keyUrl,
+        ctx,
+        env,
+        ETA_TTL_SEC,
+        (dataset) => routeEtasBatch(dataset, routeId, LIST_CTB_BUDGET),
+        'etas error',
+      )
+    }
+
     if (asked.length === 0) {
       return fail(
         'bad_request',
-        'usage: /v1/etas?ids=<canonical id>&ids=<canonical id>… (repeated, percent-encoded)',
+        'usage: /v1/etas?ids=<canonical id>&ids=<canonical id>… (repeated, percent-encoded) — or /v1/etas?route=<canonical route id> for every pole of one route, narrowed to it',
       )
     }
     // Deduplicated by string equality and sorted in code-point order — the same total order

@@ -280,16 +280,24 @@ export const WIRE_ENDPOINTS = [
     operationId: 'getStopEtasBatch',
     path: '/v1/etas',
     summary:
-      'Live arrivals for up to 12 stops or places in one request — the same answer `/v1/etas/{id}` gives each of them, in one round trip (WP5-7). It exists because a screen watching six places through the polling live engine issued six requests per window where the screen itself issued one, which is a regression no rider would accept for a feature they cannot see. Every id goes through the same producer, so an entry is byte-identical to the single-id response, and the edge coalescer makes a pole shared by two ids one upstream call rather than two (ADR-057).',
+      'Live arrivals for up to 12 stops or places in one request — the same answer `/v1/etas/{id}` gives each of them, in one round trip (WP5-7) — **or, with `?route=` instead of `?ids=`, one report per pole of one whole route, narrowed to that route** (ADR-136). Exactly one of the two parameters; both or neither is a 400. Every id goes through the same producer, so an entry is byte-identical to the single-id response, and the edge coalescer makes a pole shared by two ids one upstream call rather than two (ADR-057).',
     response: EtaBatchSchema,
     params: [
       {
         name: 'ids',
         in: 'query',
-        required: true,
+        required: false,
         type: 'string[]',
         description:
-          'Canonical stop or place ids, **repeated** (`?ids=a&ids=b`), each percent-encoded. Repeated and not comma-separated, and that is a grammar constraint rather than a preference: `,` is a legal `idchar` (`ids/id-grammar.abnf`) and a query string decodes `%2C` before any delimiter could be split on, so a comma list cannot be parsed back unambiguously — the parameter repetition is the only separator not drawn from the id alphabet. A `+` in a place id must be `%2B` or it arrives as a space and the id is rejected. At most 12 ids (`ETAS_BATCH_MAX_IDS`); more is a 400. Duplicates collapse to one entry.',
+          'Canonical stop or place ids, **repeated** (`?ids=a&ids=b`), each percent-encoded. Repeated and not comma-separated, and that is a grammar constraint rather than a preference: `,` is a legal `idchar` (`ids/id-grammar.abnf`) and a query string decodes `%2C` before any delimiter could be split on, so a comma list cannot be parsed back unambiguously — the parameter repetition is the only separator not drawn from the id alphabet. A `+` in a place id must be `%2B` or it arrives as a space and the id is rejected. At most 12 ids (`ETAS_BATCH_MAX_IDS`); more is a 400. Duplicates collapse to one entry. **Required unless `route` is given** — the two are mutually exclusive, which an OpenAPI parameter table cannot state formally and this sentence states instead.',
+      },
+      {
+        name: 'route',
+        in: 'query',
+        required: false,
+        type: 'string',
+        description:
+          "One canonical route id (`CTB:182:outbound:1`), percent-encoded — **the alternative to `ids`, not an addition to it** (ADR-136). The server resolves the route's poles from the same route document `/v1/route/{id}` serves and answers one report per pole, **narrowed to this route** — the narrowing `ids` cannot express, because the batch carries no per-id route list and every pole would otherwise be asked about every route calling there. That difference is the whole point: measured on Citybus 182 (31 poles), one un-narrowed chunk of 12 ids cost ~130 upstream calls and 10–20 s where the same poles narrowed cost 12 calls and 0.25 s. This is the polled twin of `/v1/live?route=` and exists for the same rider: Citybus and GMB publish no bulk route-eta feed, so a route screen that cannot hold a socket has no other affordable way to fetch a whole route's times. A malformed id is a 400; a route the dataset does not carry is a 404. Report ids are canonical pole ids in the route's own stop order, deduplicated.",
       },
     ],
   },

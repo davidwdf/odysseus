@@ -130,6 +130,17 @@ export class EdgeClient implements DataSource {
     return this.getJson<EtaBatch>(`/v1/etas?${q}`)
   }
 
+  /**
+   * `/v1/etas?route=…` — one report per pole of one route, **narrowed by the server** (ADR-136).
+   *
+   * The `ids` batch above cannot express the narrowing (it carries no per-id route list), so a route
+   * round through it asks every pole about every route calling there. This is what the poll engine
+   * uses instead when a subscription is a whole route — the polled twin of `/v1/live?route=`.
+   */
+  getEtasRoute(routeId: string): Promise<EtaBatch> {
+    return this.getJson<EtaBatch>(`/v1/etas?route=${encodeURIComponent(routeId)}`)
+  }
+
   getSearchIndex(): Promise<SearchIndex> {
     return this.getJson<SearchIndex>('/v1/index')
   }
@@ -223,6 +234,7 @@ export class EdgeClient implements DataSource {
     return {
       endpoints: this.endpoints,
       getEtasBatch: (ids) => this.getEtasBatch(ids),
+      getEtasRoute: (routeId) => this.getEtasRoute(routeId),
       pollMs: opts?.refreshAfterMs ?? this.pollMs,
       clock: this.clock,
       ...(route === undefined ? {} : { route }),
@@ -419,11 +431,12 @@ export class EdgeClient implements DataSource {
    * construct a second socket, fail three more times, fall back again, and settle on polling only after
    * paying the whole discovery cost twice.
    *
-   * A poll-emulated route watch costs one `/v1/route/:id` read at subscribe time and does not share a
-   * round with anybody — stated rather than hidden, and the same cost the screen's own refetch already
-   * pays. Each target is narrowed to this route, because a pole on this route serves others: without
-   * `routeIds` the emulator would deliver every line at all 41 kerbs and the screen would attach the
-   * wrong times to a row.
+   * A poll-emulated route watch costs one `/v1/route/:id` read at subscribe time, and then **one
+   * `/v1/etas?route=` request per round, narrowed by the server** (ADR-136) — not the chunked `ids`
+   * fan-out ADR-121 measured at ~19× and 10–20 s a chunk. It still does not share a round with anybody
+   * (the coalescer is per-isolate; only the socket's named object shares). Each target is narrowed to
+   * this route as well, because a pole on this route serves others: without `routeIds` the emulator
+   * would deliver every line at all 41 kerbs and the screen would attach the wrong times to a row.
    */
   private watchRoutePolled(
     routeId: string,
@@ -435,8 +448,10 @@ export class EdgeClient implements DataSource {
     void this.getRoute(routeId).then(
       (detail) => {
         if (cancelled) return
+        // The context carries the route, so the poll engine's rounds are ONE `/v1/etas?route=` request
+        // narrowed by the server (ADR-136) — not the chunked `ids` fan-out ADR-121 measured at ~19×.
         inner = this.startController(
-          liveTransportFor('poll')(this.liveContext(opts)),
+          liveTransportFor('poll')(this.liveContext(opts, routeId)),
           detail.stops.map((stop) => ({ stopId: stop.stop.id, routeIds: [routeId] })),
           emit,
         )

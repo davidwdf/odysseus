@@ -801,8 +801,20 @@ written down.
 
       </details>
 
-- [ ] 🟡 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
-      the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
+- [x] ✅ **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
+      the watched route's own times — fixed 2026-08-13 by
+      [ADR-136](./08-decision-log.md#adr-136--the-batch-endpoint-learns-the-route-question-v1etasroute):
+      `/v1/etas?route=` resolves the poles and narrows server-side (the fix the row sketched as option (b),
+      route-shaped rather than per-id), and `watchRoute`'s poll path rounds are now ONE request.** All three
+      consequences below close together, because they were one cause: `boardsFor` now engages on the poll
+      path exactly as on the socket's, so the fan-out is per-pole, a sibling route's failure cannot mark this
+      route's kerb, and `LIVE_CTB_BUDGET` counts only the watched route's own calls. The fix mattered more
+      after ADR-135 than when this was filed: the supervised fallback routes riders on WebSocket-hostile
+      networks onto this exact path automatically, so "affects only somebody who selects `poll`
+      deliberately" stopped being true. Measured 2026-08-13 against the live feed: an un-narrowed chunk of
+      12 of Citybus 182's poles was 10.0 s (timeout-bounded; 19.9 s in ADR-121); the same poles narrowed,
+      0.25 s. Kept below as filed, for the history:
+      Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
       defect in the route watch, but in what the batch endpoint can express**. **Demoted from 🟠 the same
       day: `socket` is the default engine now (ADR-121)**, measured on the route that prompted it — Citybus
       182's round was 395 upstream calls and 75.7 s on `poll` against 31 calls and ~1.2 s on the socket, and

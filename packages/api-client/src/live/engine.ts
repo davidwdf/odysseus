@@ -72,6 +72,15 @@ export interface LiveTransportContext {
    * reason at the target level — a stale favourite must not look like a stop that went quiet.
    */
   getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
+  /**
+   * The client's `/v1/etas?route=…` call — one request for a whole route's poles, **narrowed
+   * server-side** (ADR-136). What the poll engine uses for a round when `route` is set: the `ids`
+   * batch cannot express the narrowing, so a route round through it costs every route at every pole
+   * (~130 upstream calls and 10–20 s per chunk of 12, measured on Citybus 182) where this costs one
+   * call per pole. Optional so a hand-built test context without it still compiles; the poll engine
+   * falls back to the chunked `ids` fan-out when it is absent.
+   */
+  getEtasRoute?(routeId: string): Promise<EtaBatch>
   /** The resolved cadence, ms: `pollMs` if given, else the served policy default (ADR-053). */
   pollMs: number
   clock: Clock

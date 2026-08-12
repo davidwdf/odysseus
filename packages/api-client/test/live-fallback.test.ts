@@ -188,7 +188,10 @@ describe('EdgeClient.watchRoute, socket-first', () => {
 
     expect(socket.wasClosed()).toBe(true)
     expect(edge.paths.some((p) => p.includes('/v1/route/'))).toBe(true)
-    expect(edge.paths.filter((p) => p.includes('/v1/etas?'))).toHaveLength(1)
+    // The round is ONE `?route=` request, narrowed by the server (ADR-136) — never the chunked `ids`
+    // fan-out ADR-121 measured at ~19× the upstream cost and 10–20 s a chunk.
+    expect(edge.paths.filter((p) => p.includes('/v1/etas?route='))).toHaveLength(1)
+    expect(edge.paths.filter((p) => p.includes('/v1/etas?ids='))).toHaveLength(0)
     expect(updates.at(-1)?.etas[0]?.arrivals[0]).toBe('2026-08-12T20:04:00+08:00')
 
     sub.unsubscribe()

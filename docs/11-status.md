@@ -27,6 +27,14 @@
 >   traffic do **not** share upstream fetches, whatever older comments implied. Cost arguments must not
 >   assume cross-context dedup (`eta-cache.ts` now says so at length).
 >
+> **Follow-up shipped 2026-08-13
+> ([ADR-136](./08-decision-log.md#adr-136--the-batch-endpoint-learns-the-route-question-v1etasroute)):**
+> the fallback's own slow path is fixed. A polled route watch used to inherit the ~19× un-narrowed
+> fan-out ADR-121 measured (10–20 s per chunk of 12, re-measured live); `/v1/etas?route=` now resolves
+> the poles and narrows server-side exactly as the socket's object does, so a fallback round is **one
+> request, one upstream call per pole, ~0.5 s** — and the `docs/07` row about the poll path's silent
+> route loss closes with it, because all three consequences were the un-narrowed question.
+>
 > Also: wire error messages are capped at 200 chars and the socket attachment stores no messages
 > (the 16 KB cap was reachable); overlapping poll rounds are discarded by watermark instead of
 > publishing stale data; `LIVE_ROUTE_RETRY_MS` is 33 s, derived from the coalescer window it used to

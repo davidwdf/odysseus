@@ -92,11 +92,22 @@ export interface PollTransportDeps {
    * unreachable in production and therefore only ever exercised by a test.
    */
   getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
+  /** `/v1/etas?route=…` — see `LiveTransportContext.getEtasRoute`. Used only when `route` is set. */
+  getEtasRoute?(routeId: string): Promise<EtaBatch>
   /** Stamps each frame's `at`. The kernel may not read a clock; this layer may, through the port. */
   clock: Clock
   /** Cadence, ms. `EdgeClient` defaults it to the served `refreshAfterMs` (ADR-053). */
   pollMs: number
   timers?: Timers
+  /**
+   * One canonical route id, when this subscription is a whole route (ADR-116/136). With
+   * `getEtasRoute` present, a round becomes **one request whose fan-out the server narrows** to this
+   * route — the difference between 0.25 s and 10–20 s per chunk on a real Citybus route, and the
+   * reason the socket became the default engine (ADR-121). The subscribe frame still declares the
+   * poles (resolved once by `EdgeClient.watchRoutePolled`), because the per-target bookkeeping —
+   * retention, drops, failure ordering — is written in targets, and the route batch answers per pole.
+   */
+  route?: string
 }
 
 /**
@@ -205,18 +216,31 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
      * there were N independent requests and N independent failures.
      */
     let requestError: WireError | null = null
-    await Promise.all(
-      chunkIds(asked.map((t) => t.stopId)).map(async (ids) => {
-        try {
-          for (const entry of (await deps.getEtasBatch(ids)).reports) entries.set(entry.id, entry)
-        } catch (thrown) {
-          // First one wins, and only the ids in this chunk are affected — the loop below decides that
-          // per target by looking for its entry, so a chunk that answered is not lost to one that did
-          // not. Recorded rather than thrown so the round still publishes what it learned.
-          requestError ??= wireErrorOf(thrown)
+    if (deps.route !== undefined && deps.getEtasRoute !== undefined) {
+      // A route round is **one request, narrowed by the server** (ADR-136) — never the chunked `ids`
+      // fan-out, which cannot say "only this route" and so asks every pole about every route calling
+      // there. The reports are per pole, which is exactly the shape the target walk below indexes.
+      try {
+        for (const entry of (await deps.getEtasRoute(deps.route)).reports) {
+          entries.set(entry.id, entry)
         }
-      }),
-    )
+      } catch (thrown) {
+        requestError ??= wireErrorOf(thrown)
+      }
+    } else {
+      await Promise.all(
+        chunkIds(asked.map((t) => t.stopId)).map(async (ids) => {
+          try {
+            for (const entry of (await deps.getEtasBatch(ids)).reports) entries.set(entry.id, entry)
+          } catch (thrown) {
+            // First one wins, and only the ids in this chunk are affected — the loop below decides that
+            // per target by looking for its entry, so a chunk that answered is not lost to one that did
+            // not. Recorded rather than thrown so the round still publishes what it learned.
+            requestError ??= wireErrorOf(thrown)
+          }
+        }),
+      )
+    }
     // Three ways this round is no longer wanted: the subscription was released, the target set moved
     // while the requests were in flight, or a younger round already finished and applied its result — in which
     // case what this one fetched is the older data, whatever the completion order says (see
