@@ -650,7 +650,24 @@ written down.
       **visually identical at token size**, verified in a browser. Below ~1 the geometry stops deciding the
       look. So the choice is free, and the tidiest options are *keep `rx=1`* (Lucide's inner value) or
       *go on-rule everywhere* with body 2 and a square window.
-      Still awaiting a final pick on the window height and radius before it is copied into `src/`. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
+      **Round four (2026-08-12) — settled except one number.** The decker is **D1c** (body 14 × 17.0, two
+      3.6 bands, three derived gaps of 3.27). **Radii are Lucide's two values everywhere: body `rx=2`,
+      windows `rx=1`** — which also corrects the shipping glyph's body from 2.5, a value that was never a
+      decision (`docs/09` §8 pins the grid, the stroke and the joins and has never mentioned radius).
+      **The concentric rule was dropped as unobservable, and that is the reusable finding:** it gives
+      `2 − 3 → 0` (square), and `stroke-linejoin="round"` on a 2 px stroke rounds a square corner by about
+      half the stroke anyway — so the whole sweep from square to a full pill is *visually identical at
+      token size*, verified in a browser. **Below about `rx=1` the stroke decides the look, not the path.**
+      The radius was therefore chosen on the rule, because nothing observable could choose it.
+      The minibus keeps the decker's width (14) and window width (8), its window **high** (roof-to-glass
+      3.0) and a filled roof sign. **Its window height is the last open question** — the owner is leaning
+      to ~4.4, and the sweep runs 3.8 → 6.6. Two thresholds cross at **4.0**: the glazed interior becomes
+      as thick as the 2 px stroke around it, and the shape passes 2 : 1 — after which the window stops
+      reading as a *band* and starts reading as a *pane*, which is a second axis of difference from the
+      decker's two slots on top of the height difference.
+      Once the number is picked: copy both into `apps/web/src/components/BusGlyph.tsx` and its RN twin,
+      switch on the operator so GMB routes get the minibus, and note that `docs/09` §8 should gain the
+      radius rule it has never had. Now that every stop on a GMB route has times (ADR-116–121), the token is worth
       drawing for minibuses too — and `BusGlyph` currently draws one silhouette for every operator.
       The distinguishing features are real and few: a light bus is **single-deck with one window row**, a
       **taller windscreen relative to its width**, a **roof sign box**, and the statutory **roof stripe**
