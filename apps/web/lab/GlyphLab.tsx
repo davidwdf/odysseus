@@ -190,7 +190,7 @@ export function GlyphLab() {
 
       <Row
         title="The tyre pill's width — and the rule it never had"
-        note="Every label here is the PAINTED width. The shipping pill's attribute says 2.4 but it carries a fill AND the shared 2 px stroke, so it paints 4.4 × 4.6 — 31% of the 14-wide body, and essentially square at 1.045:1, which is why it reads as a foot. The stroke is pure padding on a filled shape, so the last four cells drop it: then the number is the painted width, and 'fill 4.4' is today's silhouette exactly."
+        note="Labels are PAINTED widths; painted height is 4.6 throughout, so what moves is the ratio. The shipping pill says 2.4 but carries a fill AND the 2 px stroke, so it paints 4.4 × 4.6 — 31% of the 14-wide body and essentially square, which is why it reads as a foot. Dropping the stroke was tried and is wrong: the stroke is what rounds the bottom of the wheel, since rx on a 2.6-high rect is capped at 1.3. So the stroke stays and the path thins, which makes the tyre vertical — correct for a head-on tyre, where you see its tread and not its diameter."
       >
         {PILL_STUDY.map((v) => (
           <div key={v.id} className="flex w-48 shrink-0 flex-col items-center gap-3">

@@ -713,8 +713,18 @@ written down.
         why it reads as a foot. Every "2.4 ships today" figure in the rounds above was describing the path.
         **The stroke on a filled shape is pure padding**, so `fill`-only is the real lever: then the number
         *is* the painted width, and `fill 4.4` reproduces today's silhouette exactly (verified). Note the
-        radius has to move with it — a stroked pill's visual corner is `rx` + half the stroke, so fill-only
-        needs `rx=2` to match `rx=1` + stroke.
+        radius has to move with it — a stroked pill's visual corner is `rx` + half the stroke.
+      · 🔴 **And dropping the stroke was then tried and is wrong.** Two reasons, the second the important
+        one. First, the stroke inflates **both** axes, so reproducing the silhouette needed `4.4 × 4.6` — the
+        first attempt grew the width by 2 and left the height at 2.6, which came out a **horizontal** pill
+        where a head-on tyre should be vertical. Second, and structurally: **the stroke is what rounds the
+        bottom of the wheel.** Its round join carries the corner far more generously than any `rx` can on a
+        2.6-high rect, where `rx` is capped at 1.3. So the outline is not padding — it is the shape.
+      · **Settled: keep `stroke` + `fill` and thin the path.** Painted height stays 4.6, so every unit off
+        the width makes the tyre more clearly vertical, which is correct — head-on you see a tyre's tread,
+        not its diameter. Sweep verified by raster in **both** axes: painted 4.4 (today, 1.05 : 1) · 4.2 ·
+        4.0 (1.15 : 1) · 3.8 · 3.6 (1.28 : 1) · 3.2. The owner is inclined to **4.0 or 3.6**.
+      · ✅ **Roof-to-glass 3.27 is agreed** and is now the minibus constant.
       · ⚠️ **Giving the smaller vehicle smaller wheels is true and unobservable.** At token size 2.0 paints
         1.33 px and 1.8 paints 1.20 px — a **0.13 px** difference. Same lesson as the radius sweep: below a
         certain size the stroke decides, so a per-vehicle exception buys a second constant and nothing a
