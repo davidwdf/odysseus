@@ -1874,6 +1874,162 @@
               "incomplete": false
             }
           ]
+        },
+        {
+          "name": "an-empty-or-departed-board-sorts-below-a-live-reading",
+          "why": "GUARD ROW (ADR-144). The sort's own comment says 'soonest first, and the ones with no reading last', but readoutRank's fall-through gave kind 'departed' rank 0 — the same tier as a live arrival — and its absent `due` compared before every ISO string, so an empty board (a KMB row whose null etas clean to []) sat at the TOP of the card, above a bus due in five minutes. The rows here are saved with the empty board FIRST, so the expectation only holds if the sort actually demotes it. Also pins that the tiebreak is code-point order, not localeCompare, which is banned in this package (see live.ts). The third route (269B, due later than 69M) is saved after it in soonest order, which is what drives the tiebreak's other comparison arm.",
+          "args": {
+            "saved": [
+              "KMB:775642281FBFE336|KMB:E37:outbound:1",
+              "KMB:775642281FBFE336|KMB:69M:outbound:1",
+              "KMB:775642281FBFE336|KMB:269B:outbound:1"
+            ],
+            "places": [
+              {
+                "stop": {
+                  "id": "P:KMB:775642281FBFE336",
+                  "name": {
+                    "en": "Tin Shui Wai Park, Tin Shui Road",
+                    "zh-Hant": "天水圍公園, 天瑞路",
+                    "zh-Hans": "天水圍公園, 天瑞路"
+                  },
+                  "location": {
+                    "lat": 22.4545,
+                    "lng": 114.003
+                  },
+                  "sources": [
+                    {
+                      "operator": "KMB",
+                      "operatorStopId": "775642281FBFE336"
+                    }
+                  ]
+                },
+                "routes": [
+                  {
+                    "route": {
+                      "id": "KMB:E37:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "E37",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "destination": {
+                        "en": "AIRPORT (GROUND TRANSPORTATION CENTRE)",
+                        "zh-Hant": "機場(地面運輸中心)",
+                        "zh-Hans": "机场(地面运输中心)"
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:E37:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": [],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "stopId": "KMB:775642281FBFE336"
+                  },
+                  {
+                    "route": {
+                      "id": "KMB:69M:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "69M",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "destination": {
+                        "en": "KWAI FONG STATION",
+                        "zh-Hant": "葵芳站",
+                        "zh-Hans": "葵芳站"
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:69M:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": ["2026-08-04T16:35:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "stopId": "KMB:775642281FBFE336"
+                  },
+                  {
+                    "route": {
+                      "id": "KMB:269B:outbound:1",
+                      "operator": "KMB",
+                      "routeNo": "269B",
+                      "bound": "outbound",
+                      "serviceType": "1",
+                      "destination": {
+                        "en": "HUNG HOM (HUNG LUEN ROAD)",
+                        "zh-Hant": "紅磡(紅鸞道)",
+                        "zh-Hans": "红磡(红鸾道)"
+                      }
+                    },
+                    "eta": {
+                      "routeId": "KMB:269B:outbound:1",
+                      "stopId": "KMB:775642281FBFE336",
+                      "operator": "KMB",
+                      "arrivals": ["2026-08-04T16:42:00Z"],
+                      "dataTimestamp": "2026-08-04T16:29:40Z",
+                      "observedAt": "2026-08-04T16:29:55Z"
+                    },
+                    "stopId": "KMB:775642281FBFE336"
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-08-04T16:30:00Z"
+          },
+          "expect": [
+            {
+              "stopId": "P:KMB:775642281FBFE336",
+              "name": {
+                "label": "Tin Shui Wai Park, Tin Shui Road"
+              },
+              "caption": "",
+              "rows": [
+                {
+                  "routeId": "KMB:69M:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "69M",
+                  "headline": "Kwai Fong Station",
+                  "label": {
+                    "kind": "mins",
+                    "value": 5,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:269B:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "269B",
+                  "headline": "Hung Hom (Hung Luen Road)",
+                  "label": {
+                    "kind": "mins",
+                    "value": 12,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "routeId": "KMB:E37:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "E37",
+                  "headline": "Airport (Ground Transportation Centre)",
+                  "label": {
+                    "kind": "departed"
+                  },
+                  "urgency": "none",
+                  "stale": false
+                }
+              ],
+              "remaining": 0,
+              "incomplete": false
+            }
+          ]
         }
       ]
     }

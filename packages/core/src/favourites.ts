@@ -410,7 +410,7 @@ export function favouritesView(input: FavouritesInput, opts: StopCardOptions): S
       // bus, so a live arrival outranks a timetable and a timetable outranks a dash — and within the
       // readings, the sooner one. It is the card's own order because Favourites is the one surface whose
       // rows do not arrive pre-sorted from anywhere: the wire orders a *place's* rows, not a rider's list.
-      .sort((a, b) => readoutRank(a) - readoutRank(b) || (a.due ?? '').localeCompare(b.due ?? ''))
+      .sort((a, b) => readoutRank(a) - readoutRank(b) || compareDue(a.due, b.due))
       .map(({ due: _due, ...row }) => row)
 
     const shown = rows.slice(0, policy.maxRows)
@@ -436,10 +436,31 @@ export function favouritesView(input: FavouritesInput, opts: StopCardOptions): S
 /** A row, plus the arrival it sorts on — stripped before it leaves `favouritesView`. */
 type SortableRow = StopCardRow & { due?: string }
 
-/** Live reading, then published timetable, then nothing. See the sort above. */
+/**
+ * Live reading, then published timetable, then the dashes. See the sort above.
+ *
+ * `departed` ranks with `none`, not with the readings (ADR-144): both render the dash — there is no
+ * bus to catch either way — and the fall-through that used to give it rank 0 put an **empty or
+ * departed board above a bus due in five minutes**, because its absent `due` compared before every
+ * ISO string. Rank 0 is now exactly the kinds that carry a figure or "Due", which is what "soonest
+ * first" was always about.
+ */
 function readoutRank(row: SortableRow): number {
+  if (row.label.kind === 'due' || row.label.kind === 'mins') return 0
   if (row.label.kind === 'headway') return 1
-  if (row.label.kind === 'none') return 2
+  return 2
+}
+
+/**
+ * Code-point order on the sort key — **not `localeCompare`**, which is banned in this package because
+ * the host's ICU decides its answer (see the comparator note in `live.ts`). Arrivals are ISO-8601
+ * with a fixed +08:00 offset, so lexical order is chronological.
+ */
+function compareDue(a: string | undefined, b: string | undefined): number {
+  const x = a ?? ''
+  const y = b ?? ''
+  if (x < y) return -1
+  if (x > y) return 1
   return 0
 }
 
