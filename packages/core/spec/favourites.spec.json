@@ -467,6 +467,37 @@
             "recentRoutes": ["KMB:269D:outbound:1"],
             "recentStops": ["KMB:AFB9321F7CD2C2E4"]
           }
+        },
+        {
+          "name": "a-star-made-before-the-first-write-survives-it",
+          "why": "GUARD ROW (ADR-145). `base` is null AND `mine` is no longer the defaults: the rider starred K before this writer ever persisted. `base ?? mine` as the list ancestor read K-absent-from-theirs as the OTHER writer's deletion and erased the star at the moment of its own first write — the sibling row above pins only the benign shape where mine is still default-empty. A never-persisted writer cannot have deleted anything, so the list ancestor is the empty list and the merge is a pure union, theirs-first for convergence. The recents follow the same rule: this session's history is a local change, not something the disk can veto. Scalars still fall to theirs — mine's are untouched defaults here.",
+          "args": {
+            "base": null,
+            "mine": {
+              "appearance": "auto",
+              "localeOverride": null,
+              "favoriteRoutes": ["KMB:5BB4A5D9AAF9D5C1|KMB:6:outbound:1"],
+              "recentRoutes": ["KMB:6:outbound:1"],
+              "recentStops": []
+            },
+            "theirs": {
+              "appearance": "light",
+              "localeOverride": "en",
+              "favoriteRoutes": ["KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1"],
+              "recentRoutes": ["KMB:269D:outbound:1"],
+              "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+            }
+          },
+          "expect": {
+            "appearance": "light",
+            "localeOverride": "en",
+            "favoriteRoutes": [
+              "KMB:AFB9321F7CD2C2E4|KMB:269D:outbound:1",
+              "KMB:5BB4A5D9AAF9D5C1|KMB:6:outbound:1"
+            ],
+            "recentRoutes": ["KMB:6:outbound:1"],
+            "recentStops": ["KMB:AFB9321F7CD2C2E4"]
+          }
         }
       ]
     },

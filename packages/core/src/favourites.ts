@@ -285,23 +285,40 @@ export function mergePreferences<A extends string>(
 ): StoredPreferences<A> {
   if (theirs === null) return mine
   const ancestor = base ?? mine
+  // **A writer that has never persisted cannot have deleted anything, so its LIST ancestor is empty**
+  // (ADR-145). `base ?? mine` used to stand in for the list arms too, and it read this writer's own
+  // unwritten addition as the other writer's deletion: `base = null`, `mine = [K]`, `theirs = [X]`
+  // puts K in the ancestor and not in `theirs`, so `mergeSavedKeys` erased the star at the moment of
+  // its own first write — in memory and on disk. The empty list is what a null `base` *means* for a
+  // list: no write has happened, so nothing can have been removed since it, and the docblock's
+  // "nothing is subtracted from the union" becomes arithmetically true instead of true only while
+  // `mine`'s lists are still default-empty. The scalars keep `mine` as the stand-in — there is no
+  // neutral scalar value, and falling to `theirs` is the approximation the docblock documents.
+  const listAncestor = base ?? EMPTY_LIST_ANCESTOR
   const merged: StoredPreferences<A> = {
     appearance: mine.appearance === ancestor.appearance ? theirs.appearance : mine.appearance,
     localeOverride:
       mine.localeOverride === ancestor.localeOverride ? theirs.localeOverride : mine.localeOverride,
     favoriteRoutes: mergeSavedKeys(
-      ancestor.favoriteRoutes,
+      listAncestor.favoriteRoutes,
       mine.favoriteRoutes,
       theirs.favoriteRoutes,
     ),
     recentRoutes: [
-      ...(sameList(mine.recentRoutes, ancestor.recentRoutes) ? theirs : mine).recentRoutes,
+      ...(sameList(mine.recentRoutes, listAncestor.recentRoutes) ? theirs : mine).recentRoutes,
     ],
     recentStops: [
-      ...(sameList(mine.recentStops, ancestor.recentStops) ? theirs : mine).recentStops,
+      ...(sameList(mine.recentStops, listAncestor.recentStops) ? theirs : mine).recentStops,
     ],
   }
   return sameStored(merged, mine) ? mine : merged
+}
+
+/** What a null `base` means to the list arms: nothing written, so nothing possibly deleted. */
+const EMPTY_LIST_ANCESTOR: Record<(typeof LIST_FIELDS)[number], readonly string[]> = {
+  favoriteRoutes: [],
+  recentRoutes: [],
+  recentStops: [],
 }
 
 /**
