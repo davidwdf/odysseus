@@ -33,6 +33,8 @@ const KMB_STOP_ETA = /^https:\/\/data\.etabus\.gov\.hk\/v1\/transport\/kmb\/stop
 const HASH = 'testbuild01'
 const realFetch = globalThis.fetch
 let upstreamDatasetFetches = 0
+/** The init the last dataset fetch carried — the deadline assertion below reads it. */
+let upstreamDatasetInit: RequestInit | undefined
 
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
@@ -102,6 +104,7 @@ beforeEach(() => {
     // throwing, so a failure reports "it fetched the dataset" instead of an opaque 502.
     if (url === DATASET_URL) {
       upstreamDatasetFetches++
+      upstreamDatasetInit = init
       return jsonResponse(datasetJson())
     }
     const stopEta = KMB_STOP_ETA.exec(url)
@@ -212,6 +215,10 @@ describe('the mutable pointer', () => {
       await get(`/v1/nearby?lat=${ORIGIN.lat}&lng=${ORIGIN.lng}&radius=451`)
       expect((await health()).datasetBuildsThisIsolate).toBe(1)
       expect(upstreamDatasetFetches).toBe(1)
+      // The 8.3 MB fetch carries its own deadline (ADR-138). The memo in `getInlineIndex` clears
+      // only on rejection, so without a signal a hung fetch would wedge this isolate for life —
+      // and this runs inside workerd, so it also proves `AbortSignal.timeout` exists on this path.
+      expect(upstreamDatasetInit?.signal).toBeInstanceOf(AbortSignal)
     } finally {
       if (saved) await kv.put(datasetKeys.current, saved)
       resetDatasetState()

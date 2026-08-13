@@ -789,10 +789,22 @@ function buildPlaces(
   return { places, placeByStopId }
 }
 
+/**
+ * The consolidated dataset's own deadline (ADR-138) — the one upstream call in this package that
+ * does not go through `fetchUpstream`, because `UPSTREAM_TIMEOUT_MS` is a hang detector sized for a
+ * ~1 kB ETA board and this body is 8.3 MB. Sixty seconds is still a hang detector, not a latency
+ * budget: the file arrives from a CDN in single-digit seconds from the Worker, and the slow
+ * consumer — `pnpm dataset:build` on a home connection — clears it with an order of magnitude to
+ * spare. A hang matters *more* here than anywhere: the edge memoizes this promise per isolate
+ * (`apps/edge/src/dataset.ts`) and clears the memo only on *rejection*, so a fetch that never
+ * settled used to wedge every request in the isolate for the isolate's lifetime.
+ */
+export const DATASET_TIMEOUT_MS = 60_000
+
 export async function fetchConsolidatedIndex(
   fetchImpl: typeof fetch = fetch,
 ): Promise<StaticIndex> {
-  const res = await fetchImpl(DATASET_URL)
+  const res = await fetchImpl(DATASET_URL, { signal: AbortSignal.timeout(DATASET_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`consolidated dataset ${res.status}`)
   const data = (await res.json()) as RawDataset
 
