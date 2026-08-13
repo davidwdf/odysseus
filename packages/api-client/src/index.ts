@@ -69,6 +69,14 @@ export interface EdgeClientOptions {
 export const REQUEST_DEADLINE_MS = 15_000
 
 /**
+ * `/v1/index`'s own ceiling — the whole-blob exception to the derivation above (see
+ * `getSearchIndex`). Sixty seconds for the same reason the dataset download gets sixty (ADR-138):
+ * still a hang detector, just sized for a body whose transfer time is the rider's downlink, not the
+ * edge's latency.
+ */
+export const INDEX_DEADLINE_MS = 60_000
+
+/**
  * v1 DataSource: talks to the Cloudflare edge API.
  *
  * `watch()` is no longer a shim that concatenates lists — it runs a real frame protocol
@@ -105,7 +113,7 @@ export class EdgeClient implements DataSource {
     this.transport = opts.transport ?? liveTransportFor(DEFAULT_LIVE_ENGINE)
   }
 
-  private async getJson<T>(path: string): Promise<T> {
+  private async getJson<T>(path: string, deadlineMs = REQUEST_DEADLINE_MS): Promise<T> {
     // A deadline, not just error handling (ADR-137). A blackholed connection — a network switch, a
     // NAT entry that expired without an RST — never *rejects*, and every failure arm in this package
     // (the poll round's `requestError`, a screen's query retry) needs a rejection to fire. Without
@@ -114,7 +122,7 @@ export class EdgeClient implements DataSource {
     // keepalive close (ADR-135), rebuilt one engine over. The timer spans the *body* read too — a
     // server that sends headers and then wedges is the same dead pipe.
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), REQUEST_DEADLINE_MS)
+    const timer = setTimeout(() => controller.abort(), deadlineMs)
     try {
       const res = await this.fetchImpl(`${this.base}${path}`, { signal: controller.signal })
       if (!res.ok) throw await classifyFailure(path, res)
@@ -123,7 +131,7 @@ export class EdgeClient implements DataSource {
       // The platform's abort rejection ("The operation was aborted") names neither the request nor
       // the cause, and `wireErrorOf` would carry that string onto a status frame. Say what happened.
       if (controller.signal.aborted) {
-        throw new Error(`${path} → no response in ${REQUEST_DEADLINE_MS} ms`)
+        throw new Error(`${path} → no response in ${deadlineMs} ms`)
       }
       throw thrown
     } finally {
@@ -172,7 +180,14 @@ export class EdgeClient implements DataSource {
   }
 
   getSearchIndex(): Promise<SearchIndex> {
-    return this.getJson<SearchIndex>('/v1/index')
+    // The one whole-blob endpoint, and the one place `REQUEST_DEADLINE_MS`'s derivation does not
+    // hold: that number is sized from server-side latency (the edge's own 10 s upstream deadline
+    // plus slack), and this body is the full search index, so the missing term is the rider's
+    // downlink × the blob. A first-ever Search load on a slow link could clear 15 s and still be
+    // succeeding — failing it restarts the download from byte zero on every retry, into the same
+    // deadline. The dataset fetch made the same argument for the same shape (ADR-138); after one
+    // success the 6 h max-age, the ETag and the persisted query cache make this ceiling moot.
+    return this.getJson<SearchIndex>('/v1/index', INDEX_DEADLINE_MS)
   }
 
   /**

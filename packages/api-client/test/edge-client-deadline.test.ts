@@ -14,7 +14,7 @@
 
 import { CLIENT_POLICY_DEFAULTS, type Eta } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createPollTransport, EdgeClient, REQUEST_DEADLINE_MS } from '../src'
+import { createPollTransport, EdgeClient, INDEX_DEADLINE_MS, REQUEST_DEADLINE_MS } from '../src'
 
 const STOP_A = 'KMB:A'
 const ROUTE_1 = 'KMB:1:outbound:1'
@@ -75,13 +75,40 @@ describe('the request deadline (ADR-137)', () => {
     await failure
   })
 
+  it('/v1/index gets the whole-blob ceiling, not the request deadline', async () => {
+    // The search index is the one endpoint whose transfer time is the rider's downlink × the whole
+    // blob, so 15 s could fail a slow first load that was still succeeding. It gets 60 s — a hang
+    // detector sized like the dataset download's (ADR-138) — and the ordinary deadline must NOT have
+    // fired at 15 s, or every retry would restart the download from byte zero into the same wall.
+    let settled = false
+    const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) =>
+      hangUntilAborted<Response>(init?.signal)) as typeof fetch
+    const client = new EdgeClient({ baseUrl: 'http://localhost:8787', fetchImpl })
+
+    const request = client.getSearchIndex().catch((thrown: Error) => {
+      settled = true
+      return thrown
+    })
+    await vi.advanceTimersByTimeAsync(REQUEST_DEADLINE_MS)
+    expect(settled, 'the ordinary deadline must not end the index download').toBe(false)
+    await vi.advanceTimersByTimeAsync(INDEX_DEADLINE_MS - REQUEST_DEADLINE_MS)
+    expect(settled).toBe(true)
+    expect(String(await request)).toContain(`/v1/index → no response in ${INDEX_DEADLINE_MS} ms`)
+  })
+
   it('a poll subscription outlives a blackholed round: the deadline fails it, the next round recovers', async () => {
     let blackholed = true
+    let aborted = 0
     const urls: string[] = []
     const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
       urls.push(url)
-      if (blackholed) return hangUntilAborted<Response>(init?.signal)
+      if (blackholed) {
+        init?.signal?.addEventListener('abort', () => {
+          aborted++
+        })
+        return hangUntilAborted<Response>(init?.signal)
+      }
       const reports = new URL(url).searchParams
         .getAll('ids')
         .map((id) => ({ id, etas: [eta(id, '10:02')] }))
@@ -106,9 +133,13 @@ describe('the request deadline (ADR-137)', () => {
     expect(seen.length).toBe(0)
 
     // The deadline fires inside the cadence — the hung round is *over* before round 2 begins, so a
-    // dead connection costs exactly one in-flight request at a time, never a stack.
+    // dead connection costs exactly one in-flight request at a time, never a stack. The abort count
+    // is the load-bearing assertion: the recovery below happened on the clock even before ADR-137
+    // (the poll engine schedules rounds by timer, not by completion), but only a request that
+    // carries the signal is ever *ended* rather than left pending against the connection pool.
     expect(REQUEST_DEADLINE_MS).toBeLessThan(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
     await vi.advanceTimersByTimeAsync(REQUEST_DEADLINE_MS)
+    expect(aborted).toBe(1)
 
     // The network comes back; the next scheduled round answers and the listener finally hears.
     blackholed = false

@@ -9548,6 +9548,12 @@ pre-existing and unaddressed; it earned its keep here.
   - 🟡 `unsubscribe()` still cannot *cancel* an in-flight round's fetch — the deadline bounds the orphan
     at 15 s instead of forever, which is the cheap 80% of the fix. Threading the controller out to the
     poll engine's teardown is the remaining 20%, worth doing only if orphaned rounds show up in traces.
+  - **`/v1/index` is the exception, and it gets its own ceiling** (added after the branch's adversarial
+    review flagged it): the 15 s derivation sums server-side terms only, and the search index is the one
+    whole-blob body whose transfer time is the rider's downlink — a slow first Search load could clear
+    15 s while still succeeding, and failing it restarts the download from byte zero on every retry.
+    `getSearchIndex` passes `INDEX_DEADLINE_MS` (60 s, the ADR-138 sizing argument); after one success
+    the 6 h max-age, ETag and persisted query cache make the ceiling moot.
 
 ## ADR-138 — The dataset download carries its own deadline, because its memo only clears on rejection
 
@@ -9596,6 +9602,12 @@ pre-existing and unaddressed; it earned its keep here.
      upstream connection instead of waiting for collection.
   3. Pinned in `tiles.test.ts` the same way as ADR-138: the LandsD stub records its `init` and the
      basemap case asserts the `AbortSignal` is there.
+- **Consequences:**
+  - 🟡 The 10 s signal now spans the *success* path's body too, and `fetchTile` streams `res.body` at
+    the rider's pace — so a client slower than tile-size ÷ 10 s would get a truncated tile where the
+    pre-fix stream was unbounded. Tiles are ~30 kB and Cloudflare buffers in front, so this is
+    theoretical; recorded because the success path was strictly more tolerant before and nothing
+    measures it.
 
 ## ADR-140 — A round that answered nothing records nothing: the fabricated "polled, empty" row
 
@@ -9625,6 +9637,11 @@ pre-existing and unaddressed; it earned its keep here.
   - 🟡 A rider who subscribes mid-outage now waits for the first *answering* round before any snapshot,
     exactly like the first subscriber — up to a cadence longer than the blanking behaviour it replaces,
     and the `retrying` status frame is what tells the screen why.
+  - 🟡 `subscribe()`'s `pollNow` fires on every re-subscribe to a still-failing target now that no row
+    ever exists for it — the fabricated row used to suppress that by accident — and `coalesce` does not
+    cache rejections, so a client reconnect loop mid-outage pulls the shard's round forward per
+    subscribe and re-hits the failing upstream each time. Bounded by the client's reconnect backoff;
+    the "bounded by coalesce's 30 s window" claim near that call is true only for targets that answer.
 
 ## ADR-141 — A route watch's pole resolution is retried on the poll cadence, not fired once
 
