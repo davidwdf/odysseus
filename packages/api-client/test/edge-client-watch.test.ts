@@ -492,4 +492,96 @@ describe('EdgeClient.watchRoute() on the poll emulator', () => {
     expect(seen).toEqual([])
     sub.unsubscribe()
   })
+
+  it('retries a failed pole resolution on the poll cadence, and comes alive when the network returns', async () => {
+    // The husk this closes (ADR-141): the resolve is one `getRoute` per subscription, keyed on a route
+    // id that never changes, so nothing upstream ever re-subscribes it — and this path is reached
+    // *offline* as a matter of course (socket attempts fail fast with no network, so the WP6-8b
+    // fallback lands here mid-outage). One rejection used to mean zero frames for the life of the
+    // screen, while the socket engine would have recovered on its own schedule.
+    let offline = true
+    const answers = new Map(POLES.map((id) => [id, [{ ...eta(id, '10:02'), routeId: ROUTE }]]))
+    const { urls, fetchImpl } = stubRouteAndEtas(ROUTE, POLES, answers)
+    const gated = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (offline && String(input).includes('/v1/route/')) {
+        throw new TypeError('Network request failed')
+      }
+      return fetchImpl(input, init)
+    }) as typeof fetch
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl: gated,
+      transport: createPollTransport,
+    })
+    const seen: Eta[][] = []
+    const sub = client.watchRoute(ROUTE, (etas) => seen.push(etas))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(seen).toEqual([])
+
+    // The network returns; the next scheduled resolve succeeds and the watch is an ordinary
+    // poll-engine route watch from there — first round included.
+    offline = false
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs)
+    expect(urls.filter((u) => u.includes('/v1/route/')).length).toBe(1)
+    expect(seen[0]?.map((e) => e.stopId)).toEqual(POLES)
+    sub.unsubscribe()
+  })
+
+  it('stops asking for a route the server says will never resolve', async () => {
+    // `retryable: false` is the wire's instruction to stop (ADR-064) — a background client retrying a
+    // route id that no longer denotes anything would spend the rider's battery asking for ever.
+    const routeAsks: string[] = []
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/v1/route/')) {
+        routeAsks.push(url)
+        return new Response(
+          JSON.stringify({
+            error: 'no such route',
+            code: 'not_found',
+            message: 'no such route',
+            retryable: false,
+          }),
+          { status: 404, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      return new Response(JSON.stringify({ reports: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl,
+      transport: createPollTransport,
+    })
+    const sub = client.watchRoute(ROUTE, () => {})
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs * 3)
+    expect(routeAsks.length).toBe(1)
+    sub.unsubscribe()
+  })
+
+  it('a pending resolution retry dies with the subscription', async () => {
+    // Unsubscribing while a retry is armed must cancel it: a screen the rider left should cost nothing
+    // more, and a timer that survives its subscription is this repo's recurring leak shape.
+    let routeAsks = 0
+    const failing = (async (input: string | URL | Request) => {
+      if (String(input).includes('/v1/route/')) {
+        routeAsks++
+        throw new TypeError('Network request failed')
+      }
+      throw new Error(`unexpected fetch: ${String(input)}`)
+    }) as typeof fetch
+    const client = new EdgeClient({
+      baseUrl: 'http://localhost:8787',
+      fetchImpl: failing,
+      transport: createPollTransport,
+    })
+    const sub = client.watchRoute(ROUTE, () => {})
+    await vi.advanceTimersByTimeAsync(0)
+    expect(routeAsks).toBe(1)
+    sub.unsubscribe()
+    await vi.advanceTimersByTimeAsync(CLIENT_POLICY_DEFAULTS.refreshAfterMs * 3)
+    expect(routeAsks).toBe(1)
+  })
 })

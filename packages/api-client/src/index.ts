@@ -18,7 +18,7 @@ import type {
 import { CLIENT_POLICY_DEFAULTS, sameFailures } from '@nextbus/core'
 import type { Clock } from '@nextbus/ports'
 import { type Endpoints, resolveEndpoints } from './endpoint'
-import { classifyFailure } from './errors'
+import { classifyFailure, wireErrorOf } from './errors'
 import {
   createLiveEtaController,
   DEFAULT_LIVE_ENGINE,
@@ -495,27 +495,42 @@ export class EdgeClient implements DataSource {
   ): Subscription {
     let inner: LiveEtaController | null = null
     let cancelled = false
-    void this.getRoute(routeId).then(
-      (detail) => {
-        if (cancelled) return
-        // The context carries the route, so the poll engine's rounds are ONE `/v1/etas?route=` request
-        // narrowed by the server (ADR-136) — not the chunked `ids` fan-out ADR-121 measured at ~19×.
-        inner = this.startController(
-          liveTransportFor('poll')(this.liveContext(opts, routeId)),
-          detail.stops.map((stop) => ({ stopId: stop.stop.id, routeIds: [routeId] })),
-          emit,
-        )
-      },
-      () => {
-        // A route that will not load is the screen's problem and it already has it: this method's caller
-        // renders from the *same* route document, so an unreachable one means there is no schematic to put
-        // times on. Swallowed rather than thrown, because an unhandled rejection from a subscription
-        // nobody awaited would take a screen down for a fetch it is already retrying.
-      },
-    )
+    let retry: ReturnType<typeof setTimeout> | null = null
+    const resolvePoles = (): void => {
+      retry = null
+      void this.getRoute(routeId).then(
+        (detail) => {
+          if (cancelled) return
+          // The context carries the route, so the poll engine's rounds are ONE `/v1/etas?route=` request
+          // narrowed by the server (ADR-136) — not the chunked `ids` fan-out ADR-121 measured at ~19×.
+          inner = this.startController(
+            liveTransportFor('poll')(this.liveContext(opts, routeId)),
+            detail.stops.map((stop) => ({ stopId: stop.stop.id, routeIds: [routeId] })),
+            emit,
+          )
+        },
+        (thrown) => {
+          // Swallowed rather than thrown, because an unhandled rejection from a subscription nobody
+          // awaited would take a screen down for a fetch it is already retrying — but **retried, not
+          // abandoned** (ADR-141). The screen's own retry covers the route *document*; this
+          // subscription is keyed on a route id that never changes, so nothing upstream ever
+          // re-subscribes it, and one rejection used to leave a husk that delivered no frame for the
+          // life of the screen. Reached offline as a matter of course: socket attempts fail fast when
+          // there is no network, so the WP6-8b fallback lands here *during* the outage it exists for,
+          // and the one-shot resolve failed on the same dead network the sockets did. The poll cadence
+          // is the retry cadence — this path is the poll engine, resolution is its round zero.
+          if (cancelled) return
+          if (wireErrorOf(thrown).retryable) retry = setTimeout(resolvePoles, this.pollMs)
+          // …and a `retryable: false` answer (the id no longer denotes a route) means stop asking —
+          // the same instruction every other consumer of the taxonomy honours (ADR-064).
+        },
+      )
+    }
+    resolvePoles()
     return {
       unsubscribe() {
         cancelled = true
+        if (retry !== null) clearTimeout(retry)
         inner?.stop()
       },
     }
