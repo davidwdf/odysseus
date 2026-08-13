@@ -18,6 +18,7 @@
 // Attribution obligations (logo on the map face + copyright notice) are the client's job and
 // live in `components/MiniMap.tsx`; this file only moves bytes.
 
+import { fetchUpstream } from '@nextbus/data-normalize'
 import { fail } from './errors'
 
 const LANDSD = 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz'
@@ -81,7 +82,12 @@ export function parseTilePath(parts: string[]): { upstream: string } | { error: 
  * runs at all — that is what keeps us inside LandsD's "no large amount of requests" limit.
  */
 export async function fetchTile(upstream: string): Promise<Response> {
-  const res = await fetch(upstream, {
+  // Through `fetchUpstream` for its deadline (ADR-139): this was the one upstream call in the
+  // Worker with no timeout, and a wedged LandsD connection held one of the runtime's six
+  // simultaneous outgoing connections — the number every fan-out cap's arithmetic is written in
+  // terms of — for as long as the platform took to notice. The caller's `errorResponse` already
+  // classifies the abort (`codeFor`: `TimeoutError` → `upstream_timeout`).
+  const res = await fetchUpstream(fetch, upstream, {
     cf: { cacheTtl: TILE_TTL_SEC, cacheEverything: true },
   } as RequestInit)
   if (!res.ok) {
@@ -95,6 +101,9 @@ export async function fetchTile(upstream: string): Promise<Response> {
         : res.status === 504
           ? 'upstream_timeout'
           : 'upstream_unavailable'
+    // The error body replaces `res.body`, which nobody will ever read — cancel it, or the
+    // half-open upstream stream keeps its connection slot until the runtime collects it.
+    void res.body?.cancel().catch(() => {})
     return fail(code, `tile upstream ${res.status}`, { 'access-control-allow-origin': '*' })
   }
   return new Response(res.body, {
