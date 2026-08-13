@@ -603,13 +603,17 @@ export async function stopEtasBatch(
   ds: DatasetSource,
   ids: readonly string[],
   ctbBudget?: number,
+  routeIds?: string[],
 ): Promise<EtaBatch> {
   const reports = await Promise.all(
     ids.map(async (id): Promise<EtaBatchEntry> => {
       try {
-        // No `routes=`: the batch answers every route at every id, and a caller that wants fewer
-        // applies `narrowEtasToRoutes` itself — see `stopEtas` above for why that is one rule.
-        return { id, ...(await stopEtas(ds, id, undefined, ctbBudget)) }
+        // `routeIds` is absent on the `?ids=` path — that batch answers every route at every id, and a
+        // caller that wants fewer applies `narrowEtasToRoutes` itself; see `stopEtas` above for why that
+        // is one rule. It is present only from `routeEtasBatch` below, where the ids are one route's own
+        // poles and the narrowing bounds the upstream fan-out (`boardsFor`) exactly as `EtaHub`'s route
+        // watch does (ADR-117, ADR-136).
+        return { id, ...(await stopEtas(ds, id, routeIds, ctbBudget)) }
       } catch (err) {
         // `etas: []` rather than an omitted field, because `EtaReport.etas` is required and making it
         // optional would be a change to `/v1/etas/{id}`'s own shape. The empty list carries no meaning
@@ -619,6 +623,36 @@ export async function stopEtasBatch(
     }),
   )
   return { reports }
+}
+
+/**
+ * GET /v1/etas?route=… — one report per pole of one route, narrowed to that route (ADR-136).
+ *
+ * The polled twin of `/v1/live?route=`, and the resolution is the same three steps `liveUpgrade`
+ * performs: parse (a malformed id is the caller's, `bad_request`), look up (an absent route is nobody's,
+ * `not_found`), then the document's own stop list is the pole set. What makes it worth a parameter
+ * rather than leaving callers on `?ids=`: the ids batch carries no per-id route list, so every pole is
+ * asked about **every** route calling there — measured on Citybus 182, ~130 upstream calls and 10–20 s
+ * per chunk of 12 where the narrowed question is 12 calls and 0.25 s. `boardsFor` (via `stopEtas`) is
+ * what turns the route id into that bound, exactly as `EtaHub`'s route watch does; the two paths share
+ * every rule below the fetch, so a poll-emulated route watch and a socket one read the same boards.
+ *
+ * Deduplicated but **kept in the route's own stop order** — a circulars' pole can appear at two seqs,
+ * and one report answers both rows. Not capped: the pole set is our own dataset's, the same list
+ * `/v1/route/:id` already serves uncapped, and this endpoint runs once per request rather than on an
+ * alarm cadence (the DO's `LIVE_ROUTE_MAX_POLES` bounds the *recurring* cost, which is a different
+ * argument — see its docblock).
+ */
+export async function routeEtasBatch(
+  ds: DatasetSource,
+  routeId: string,
+  ctbBudget?: number,
+): Promise<EtaBatch> {
+  if (!parseRouteId(routeId)) throw badRequest(`not a route id: ${routeId}`)
+  const doc = await ds.route(routeId)
+  if (!doc) throw notFound(`unknown route: ${routeId}`)
+  const poles = [...new Set(doc.stops.map((stop) => stop.id))]
+  return stopEtasBatch(ds, poles, ctbBudget, [routeId])
 }
 
 /** GET /v1/route/:id — a route and its ordered stop list, each stop carrying the route's

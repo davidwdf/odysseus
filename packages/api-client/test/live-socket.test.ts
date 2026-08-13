@@ -307,6 +307,62 @@ describe('createSocketTransport', () => {
     expect(h.liveRepeating()).toBe(1)
   })
 
+  it('tears down a silently dead connection after two quiet keepalive intervals', () => {
+    // The half of the keepalive that was missing (WP6-8b): the ping held intermediaries' idle timers
+    // open, but nothing checked that anything came back. A phone that changes networks leaves the
+    // platform socket reading OPEN for minutes while `send()` buffers silently — this connection is
+    // exactly that, and before this rule it sat labelled `live` with frozen readings until the OS
+    // noticed.
+    const h = harness()
+    h.controller.start()
+    h.latest()?.handlers.onOpen()
+    h.latest()?.handlers.onMessage(JSON.stringify(snapshotFrame))
+    const dead = h.latest()
+
+    h.tick() // one quiet interval: still a ping, not a verdict — a single delayed pong is not a dead pipe
+    expect(dead?.sent.at(-1)).toBe('{"type":"ping"}')
+    expect(dead?.closed).toBe(false)
+
+    h.tick() // two quiet intervals: the pipe is dead, whatever the platform says
+    expect(dead?.closed).toBe(true)
+    // The listener is told (`retrying`, with the session's readings intact — a stale reading with an
+    // honest label beats a blank screen), and a reconnect is scheduled. The frame this connection did
+    // deliver reset the attempt counter, so the schedule starts at its floor.
+    expect(h.updates.at(-1)).toBe('retrying:1')
+    expect(h.scheduled()).toEqual([1_000])
+  })
+
+  it('any inbound frame resets the silence counter, so a live connection is never torn down', () => {
+    const h = harness()
+    h.controller.start()
+    h.latest()?.handlers.onOpen()
+    const socket = h.latest()
+    for (let interval = 0; interval < 5; interval++) {
+      h.tick()
+      // The runtime's auto-response answers each ping without waking the shard, so on a healthy
+      // connection a pong is the guaranteed once-per-interval frame even when no bus moves.
+      socket?.handlers.onMessage('{"type":"pong"}')
+    }
+    expect(socket?.closed).toBe(false)
+    expect(h.liveRepeating()).toBe(1)
+  })
+
+  it('fails a handshake that never completes within one keepalive interval', () => {
+    // Most refusals fire `error`/`close` promptly, but a blackholed upgrade — a dropping middlebox, a
+    // captive portal that swallows it — leaves the platform socket CONNECTING for its own long timeout,
+    // during which this transport would neither deliver nor retry. The watch turns that into an
+    // ordinary failure on the ordinary schedule.
+    const h = harness()
+    h.controller.start()
+    const stuck = h.latest()
+    expect(stuck?.closed).toBe(false)
+    // The only live one-shot is the handshake watch; firing it is the interval elapsing.
+    expect(h.fireOnce()).toEqual([30_000])
+    expect(stuck?.closed).toBe(true)
+    expect(h.updates.at(-1)).toBe('retrying:0')
+    expect(h.scheduled()).toEqual([1_000])
+  })
+
   it('releases everything on unsubscribe, including a pending reconnect', () => {
     const h = harness()
     h.controller.start()

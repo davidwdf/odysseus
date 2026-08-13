@@ -1292,7 +1292,7 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991,
-            "description": "Monotonic frame counter for this connection, starting at 1. A client compares it with the last frame it applied to notice a gap; `0` is never sent — it is the client-side \"nothing applied yet\" sentinel."
+            "description": "Monotonic frame counter for this connection. A client compares it with the last frame it applied to notice a gap; `0` is never sent — it is the client-side \"nothing applied yet\" sentinel. Do not assume the first snapshot carries exactly `1`: a snapshot applies at whatever value it carries (it is the recovery frame), and a server may consume counter values on bookkeeping that emitted no frame — the socket engine does, when it defers a cold subscription’s first snapshot to the first poll round rather than sending it empty."
           },
           "at": {
             "type": "string",

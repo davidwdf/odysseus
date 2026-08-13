@@ -21,7 +21,13 @@
 
 import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
 import { LIVE_PATH } from '@nextbus/contract'
-import { LIVE_ROUTE_NAME_PREFIX, liveShardFor, parseStopId, routeWatchName } from '@nextbus/core'
+import {
+  LIVE_ROUTE_NAME_PREFIX,
+  LIVE_ROUTE_RETRY_MS,
+  liveShardFor,
+  parseStopId,
+  routeWatchName,
+} from '@nextbus/core'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
@@ -358,23 +364,15 @@ async function connectToRouteObject(
     ws,
     statuses: () => messages.filter((m) => m.includes('"status"')),
     /**
-     * The accepted set, off the `snapshot` — which is what a cap has to be asserted on.
+     * Wait for a `snapshot` to be dispatched.
      *
-     * **Not the socket's stored attachment**, and the difference was a flake this file shipped for one
-     * commit. These cases hand the object synthetic pole ids to reach a cap no real route reaches, and a
-     * synthetic id resolves to no place — so the first round answers `not_found`, which is
-     * `retryable: false`, which means *the target has left the subscription* and the attachment legitimately
-     * empties. In isolation the assertion won that race; under a full-suite load the round did, and the
-     * failure read as "the cap kept nothing". The snapshot is sent inside the upgrade, before any round can
-     * run, and it is the accepted set by definition.
-     */
-    /**
-     * Wait for the `snapshot` to be *dispatched*.
-     *
-     * It is queued inside the upgrade — the object sends it before returning the 101 — but a queued frame
-     * reaches a listener on a later turn of the event loop, so reading `messages` synchronously after
-     * `accept()` finds nothing. The previous version of these cases only worked because an unrelated
-     * `await` happened to give the loop that turn.
+     * **Since WP6-8b this is the post-round snapshot, not a connect-time echo.** A cold target's snapshot
+     * is deferred to the first round (an empty connect snapshot was the blanking defect), so for the
+     * synthetic ids these cap cases use — which resolve to no place, fail `not_found`, and are dropped as
+     * permanent — the first snapshot that arrives is the *corrected* echo, after the round. The cap
+     * decision itself is therefore asserted at its own seam (`capDecision` below), and the wire assertions
+     * here are about the refusal statuses, which are still sent at subscribe time, and about the corrected
+     * echo being the truthful end state.
      */
     awaitSnapshot: async () => {
       const deadline = Date.now() + 2_000
@@ -408,6 +406,39 @@ function keptTargets(routeId: string): Promise<number> {
 const synthetic = (n: number, tag: string): string[] =>
   Array.from({ length: n }, (_, i) => `KMB:${tag}${String(i).padStart(3, '0')}`)
 
+/**
+ * The cap decision for one connection, asked of the object itself — deterministic where a wire
+ * assertion cannot be (WP6-8b).
+ *
+ * These cases hand the object synthetic pole ids to reach a cap no real route reaches, and a synthetic
+ * id resolves to no place: the first round answers `not_found`, `retryable: false`, and the target
+ * legitimately leaves the subscription. The connect-time snapshot that used to freeze the accepted set
+ * before any round could run is now deferred (an empty connect snapshot was the blanking defect), so
+ * the only snapshot on the wire is the *corrected* echo — truthful, and useless for asserting the cap.
+ * Asking `acceptForConnection` directly asserts the identical decision the upgrade applies, on the
+ * identical object (its name is what selects the route caps), with no round to race.
+ */
+function capDecision(
+  routeId: string,
+  ids: readonly string[],
+): Promise<{ kept: string[]; dropped: string[] }> {
+  return inRouteObject(routeId, async (instance) => {
+    const decide = (
+      instance as unknown as {
+        acceptForConnection(asked: { stopId: string }[]): {
+          kept: { stopId: string }[]
+          dropped: { stopId: string }[]
+        }
+      }
+    ).acceptForConnection
+    const { kept, dropped } = decide.call(
+      instance,
+      ids.map((stopId) => ({ stopId })),
+    )
+    return { kept: kept.map((t) => t.stopId), dropped: dropped.map((t) => t.stopId) }
+  })
+}
+
 describe('the route cap is the route’s own', () => {
   it('keeps a route longer than a place connection is allowed', async () => {
     // Twenty poles: above `LIVE_MAX_TARGETS_PER_CONNECTION` (12) and below `LIVE_ROUTE_MAX_POLES` (64), so
@@ -416,12 +447,17 @@ describe('the route cap is the route’s own', () => {
     const long = synthetic(20, 'LONG')
     expect(long.length).toBeGreaterThan(LIVE_MAX_TARGETS_PER_CONNECTION)
     expect(long.length).toBeLessThan(LIVE_ROUTE_MAX_POLES)
-    const { statuses, acceptedTargets, awaitSnapshot } = await connectToRouteObject(
-      'KMB:LONG:outbound:1',
-      long,
-    )
+    const routeId = 'KMB:LONG:outbound:1'
+
+    const decision = await capDecision(routeId, long)
+    expect(decision.kept).toEqual(long)
+    expect(decision.dropped).toEqual([])
+
+    // …and over the wire: nothing is refused. The refusal statuses are sent at subscribe time, so a
+    // connection that watches all twenty produces no "not watching" at all — waited out via the round's
+    // own snapshot so the absence assertion is not asked before the frames could have arrived.
+    const { statuses, awaitSnapshot } = await connectToRouteObject(routeId, long)
     await awaitSnapshot()
-    expect(acceptedTargets()).toEqual(long)
     expect(statuses().filter((s) => s.includes('not watching'))).toEqual([])
   })
 
@@ -431,19 +467,24 @@ describe('the route cap is the route’s own', () => {
     // argument for the number, not for leaving the arithmetic unchecked.
     const absurd = synthetic(LIVE_ROUTE_MAX_POLES + 6, 'HUGE')
     const routeId = 'KMB:HUGE:outbound:1'
-    const { statuses, acceptedTargets, awaitSnapshot } = await connectToRouteObject(routeId, absurd)
-    await awaitSnapshot()
-    expect(acceptedTargets().length).toBe(LIVE_ROUTE_MAX_POLES)
-    expect(acceptedTargets()).toEqual(absurd.slice(0, LIVE_ROUTE_MAX_POLES))
+
+    const decision = await capDecision(routeId, absurd)
+    expect(decision.kept.length).toBe(LIVE_ROUTE_MAX_POLES)
+    expect(decision.kept).toEqual(absurd.slice(0, LIVE_ROUTE_MAX_POLES))
+    // …and the tail is what goes: `liveShardFor` hashes the lowest accepted id, so dropping from the front
+    // would move a capped connection to a different object than the one it was routed to.
+    expect(decision.dropped).toEqual(absurd.slice(LIVE_ROUTE_MAX_POLES))
+
     // Dropped **and named**, which is the treatment this file's caps all get: a client that asked about 70
-    // kerbs and got 64 readings cannot otherwise tell a dropped target from a stop with no buses due.
+    // kerbs and got 64 readings cannot otherwise tell a dropped target from a stop with no buses due. The
+    // naming status goes out at subscribe time, before any round.
+    const { statuses, awaitSnapshot } = await connectToRouteObject(routeId, absurd)
+    await awaitSnapshot()
     const named = statuses().filter((s) => s.includes('not watching'))
     expect(named.length, 'the excess was dropped in silence').toBe(1)
     for (const dropped of absurd.slice(LIVE_ROUTE_MAX_POLES)) {
       expect(named[0], `${dropped} was dropped without being named`).toContain(dropped)
     }
-    // …and the tail is what goes: `liveShardFor` hashes the lowest accepted id, so dropping from the front
-    // would move a capped connection to a different object than the one it was routed to.
     expect(named[0]).not.toContain(`${absurd[0] as string}"`)
   })
 })
@@ -552,9 +593,10 @@ describe('a route watch polls on the operator’s clock', () => {
 
   it('retries sooner when the publish did not advance, instead of waiting out a cadence', async () => {
     // Two rounds off the same `data_timestamp` — which is what the CDN serving us bytes we already had
-    // looks like from here. The rule's answer is `LIVE_ROUTE_RETRY_MS` (15 s): we know the publish is due
-    // and we know we have not seen it, so waiting a full period would mean sitting on stale times for a
-    // minute. 15 s is also unmistakably neither the place floor (45 s) nor an aligned answer.
+    // looks like from here. The rule's answer is `LIVE_ROUTE_RETRY_MS` (33 s — the coalescer window
+    // plus the margin, see the kernel): we know the publish is due and we know we have not seen it, so
+    // waiting a full period would mean sitting on stale times for a minute. It is also unmistakably
+    // neither the place floor (45 s) nor this test's aligned answer (~63 s out).
     boardPublishedAt = new Date(Date.now() - 90_000).toISOString()
 
     await openRouteWatch(ROUTE_ID)
@@ -575,8 +617,8 @@ describe('a route watch polls on the operator’s clock', () => {
     const armed = await alarmAt(ROUTE_ID)
     expect(armed).not.toBeNull()
     const delay = (armed as number) - Date.now()
-    expect(delay).toBeGreaterThan(15_000 - 3_000)
-    expect(delay).toBeLessThanOrEqual(15_000)
+    expect(delay).toBeGreaterThan(LIVE_ROUTE_RETRY_MS - 3_000)
+    expect(delay).toBeLessThanOrEqual(LIVE_ROUTE_RETRY_MS)
   })
 
   it('ticks at the publish period when it has no clock to align to', async () => {
@@ -671,7 +713,9 @@ describe('a round that learns nothing does not pretend it did', () => {
     // The healthy round aligned, which is the control: without this the case could pass on a rule that
     // never aligns at all.
     const aligned = (await alarmAt(ROUTE_ID)) as number
-    expect(aligned - Date.now()).toBeGreaterThan(30_000)
+    // Strictly above the retry arm, so this control still tells an aligned answer (~63 s out) from a
+    // blind retry now that the retry is 33 s rather than 15 (WP6-8b).
+    expect(aligned - Date.now()).toBeGreaterThan(LIVE_ROUTE_RETRY_MS + 3_000)
 
     boardsRefuse = true
     await nextRound(ROUTE_ID, 2)
@@ -679,15 +723,15 @@ describe('a round that learns nothing does not pretend it did', () => {
     const armed = await alarmAt(ROUTE_ID)
     expect(armed).not.toBeNull()
     const delay = (armed as number) - Date.now()
-    expect(delay, 'an outage was treated as a publish').toBeGreaterThan(15_000 - 3_000)
-    expect(delay).toBeLessThanOrEqual(15_000)
+    expect(delay, 'an outage was treated as a publish').toBeGreaterThan(LIVE_ROUTE_RETRY_MS - 3_000)
+    expect(delay).toBeLessThanOrEqual(LIVE_ROUTE_RETRY_MS)
   })
 
   it('forgets the publish clock when the last rider leaves, so the next one is not told a stale phase', async () => {
     // Teardown drops the readings; the clock describes those readings and has to go with them. If it
     // survived, the next watch's very first round would meet its own `publishedAt` as
     // `previousPublishedAt` — "the publish did not advance", which that round cannot possibly know — and
-    // take the 15 s retry arm on perfectly fresh data.
+    // take the blind-retry arm on perfectly fresh data.
     //
     // This case also pins that `roundsCompleted` does **not** reset on teardown: `awaitRounds(…, 2)` below
     // would wait for ever if it did, since the reopened object's first round would count as round 1.

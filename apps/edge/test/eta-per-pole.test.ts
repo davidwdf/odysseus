@@ -315,10 +315,11 @@ async function liveEtasOf(target: string): Promise<Eta[]> {
   ws.accept()
   opened.push(ws)
   const deadline = Date.now() + 5_000
-  while (frames.length < 3 && Date.now() < deadline) {
+  // Two frames since WP6-8b: the first round arrives as the deferred snapshot, then `live`.
+  while (frames.length < 2 && Date.now() < deadline) {
     await new Promise<void>((resolve) => setTimeout(resolve, 25))
   }
-  if (frames.length < 3) throw new Error(`timed out waiting for 3 frames; got ${frames.length}`)
+  if (frames.length < 2) throw new Error(`timed out waiting for 2 frames; got ${frames.length}`)
   return frames.flatMap((f) =>
     f.type === 'snapshot' ? f.etas : f.type === 'delta' ? f.changed : [],
   )

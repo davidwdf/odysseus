@@ -375,6 +375,16 @@ function stubRouteAndEtas(routeId: string, poles: string[], answers: Map<string,
         { status: 200, headers: { 'content-type': 'application/json' } },
       )
     }
+    // The route batch (ADR-136). Deliberately NOT narrowed here, unlike the real server: the client
+    // applies `narrowEtasToRoutes` per target as well, and the narrowing test below asserts that layer
+    // holds even against a producer that narrows nothing.
+    if (url.includes('/v1/etas?route=')) {
+      const reports = poles.map((id) => ({ id, etas: answers.get(id) ?? [] }))
+      return new Response(JSON.stringify({ reports }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
     const reports = idsOf(url).map((id) => ({ id, etas: answers.get(id) ?? [] }))
     return new Response(JSON.stringify({ reports }), {
       status: 200,
@@ -400,11 +410,11 @@ describe('EdgeClient.watchRoute() on the poll emulator', () => {
     const sub = client.watchRoute(ROUTE, (etas) => seen.push(etas))
     await vi.advanceTimersByTimeAsync(0)
 
-    // The route document first — the emulator has no route endpoint to poll, so this is what stands in for
-    // the resolution the socket gets server-side — and then one batch for the whole route.
+    // The route document first — the targets and their narrowing come from it — and then one
+    // `?route=` batch for the whole route, whose fan-out the SERVER narrows (ADR-136).
     expect(urls[0]).toBe(`http://localhost:8787/v1/route/${encodeURIComponent(ROUTE)}`)
     expect(urls.length).toBe(2)
-    expect(idsOf(urls[1] as string)).toEqual(POLES)
+    expect(urls[1]).toBe(`http://localhost:8787/v1/etas?route=${encodeURIComponent(ROUTE)}`)
     expect(seen[0]?.map((e) => e.stopId)).toEqual(POLES)
 
     // …and **once**: the poles are resolved at subscribe time, not per round. A route document re-read

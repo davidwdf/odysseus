@@ -385,10 +385,14 @@ async function connect(targets: string[]): Promise<{ ws: WebSocket; frames: Fram
 }
 
 /**
- * Connect and wait for the first round to land — snapshot, `live`, and the delta that fills the
- * readings in.
+ * Connect and wait for the first round to land — the deferred `snapshot` that carries it, then `live`.
  *
- * The third frame arrives **without this test driving an alarm**, and that is worth stating because it
+ * Two frames, not three, since WP6-8b: a cold target's snapshot is **deferred to the first round**
+ * rather than sent empty at connect (an empty snapshot is the frame for "no buses due", and it blanked
+ * the screen's HTTP-painted arrivals), so the first round's readings arrive in the snapshot itself and
+ * there is no first delta.
+ *
+ * That round runs **without this test driving an alarm**, and that is worth stating because it
  * cost a debugging pass to notice: a subscriber that names a target this shard has never polled pulls the
  * alarm forward to *now*, and an alarm set to now fires on its own. So `runDurableObjectAlarm` returned
  * `false` for the first round — nothing was armed any more, because the round had already happened —
@@ -399,7 +403,7 @@ async function connectAndPoll(
   targets: string[],
 ): Promise<{ ws: WebSocket; frames: FrameReader; first: ServerFrame[] }> {
   const connection = await connect(targets)
-  const first = await connection.frames.take(3)
+  const first = await connection.frames.take(2)
   return { ...connection, first }
 }
 
@@ -460,14 +464,18 @@ describe('connecting', () => {
 
     const snapshot = only(received, 'snapshot')[0]
     expect(snapshot, 'the first frame must be a snapshot').toBeDefined()
-    expect(snapshot?.seq).toBe(1)
     expect(snapshot?.targets).toEqual([{ stopId: POLE_A.id }])
-    // A cold shard holds no readings yet, and says so honestly rather than inventing any. The round
-    // below is what fills them in — and the alarm was pulled forward to *now* precisely because this
-    // subscriber named a target the shard had never polled.
-    expect(snapshot?.etas).toEqual([])
+    // **A cold shard's snapshot waits for the first round and arrives carrying it** (WP6-8b). It used
+    // to be sent empty at connect, which is the frame for "no buses due" — delivered one paint after
+    // the rider's own HTTP fetch drew real minutes, it blanked them until the round landed. The alarm
+    // was pulled forward to *now* because this subscriber named a target the shard had never polled,
+    // so "waits for the first round" is seconds, not a cadence.
+    expect(snapshot?.etas.length, 'the deferred snapshot carries the round').toBeGreaterThan(0)
+    // `seq` 2, not 1: the subscription consumed 1 at connect (the strict per-subscribe increment is
+    // what `sendRound` detects a mid-round re-subscribe by), and the deferred snapshot is the round's.
+    expect(snapshot?.seq).toBe(2)
     // Data frame first, then how much of it to trust: a `status` carrying `state: 'live'` is what moves
-    // the client's session out of `connecting`, and it comes second on purpose.
+    // the client's session out of `connecting`, and it follows the deferred snapshot on purpose.
     expect(only(received, 'status')[0]?.state).toBe('live')
     expect(only(received, 'status')[0]?.error).toBeUndefined()
   })
@@ -513,7 +521,7 @@ describe('an alarm round', () => {
 
   it('sends exactly one delta carrying only the reading that changed', async () => {
     const { frames, first } = await connectAndPoll([POLE_A.id])
-    expect(only(first, 'delta')[0]?.changed.length, 'both poles of the place report').toBe(2)
+    expect(only(first, 'snapshot')[0]?.etas.length, 'both poles of the place report').toBe(2)
     frames.drain()
 
     boards.set(POLE_A.rawId, [{ route: POLE_A.route, arrivals: [at(2), at(8)] }])
@@ -526,7 +534,7 @@ describe('an alarm round', () => {
     expect(delta?.gone).toEqual([])
     expect(delta?.changed.map((eta) => eta.stopId)).toEqual([POLE_A.id])
     expect(delta?.changed[0]?.arrivals[0]).toBe(at(2))
-    // Monotonic: snapshot 1, first delta 2, this one 3.
+    // Monotonic: the subscribe consumed 1, the deferred first-round snapshot was 2, this delta is 3.
     expect(delta?.seq).toBe(3)
   })
 
@@ -565,22 +573,41 @@ describe('an alarm round', () => {
     // I/O context open and `ws.send` fails with "Cannot perform I/O on behalf of a different Durable
     // Object", which is the runtime telling us the same thing.)
     const hold = holdBoards()
+    // POLE_C is cold, so this subscription's snapshot is deferred (WP6-8b) — behind exactly the round
+    // the hold is keeping in flight, which is the window this defect needs.
     subscribeTo(ws, [POLE_A.id, POLE_C.id])
-    await frames.take(2)
-    frames.drain()
     await hold.entered()
 
     try {
       // …and *this* is the frame that lands inside the round's awaits.
       subscribeTo(ws, [POLE_A.id, POLE_C.id, POLE_D.id])
-      // It was handled during the round — this snapshot is the proof, and it is why the wait is for a
-      // frame rather than for a timer.
-      const echo = only(await frames.take(2), 'snapshot')[0]
-      expect(echo?.targets.map((t) => t.stopId)).toEqual([POLE_A.id, POLE_C.id, POLE_D.id].sort())
+      // Wait until the shard has actually *handled* it, or the frame may still be in flight when the
+      // hold releases and land after the round instead of inside it. The attachment is the observable
+      // (its snapshot is deferred, so no frame can be waited on), and the boards are still held, so the
+      // round this frame must interrupt cannot have finished yet.
+      const deadline = Date.now() + 5_000
+      let attachedTargets: string[] = []
+      while (Date.now() < deadline && attachedTargets.length !== 3) {
+        attachedTargets = await runInDurableObject(
+          stubFor([POLE_A.id]),
+          (_i: EtaHub, state) =>
+            (
+              state.getWebSockets()[0]?.deserializeAttachment() as {
+                targets: WatchTarget[]
+              } | null
+            )?.targets.map((t) => t.stopId) ?? [],
+        )
+        if (attachedTargets.length !== 3) await settle(10)
+      }
+      expect(attachedTargets).toEqual([POLE_A.id, POLE_C.id, POLE_D.id].sort())
     } finally {
       hold.release()
     }
-    // The re-subscription pulled the alarm forward again, so a further round follows on its own.
+    // The proof the mid-round frame was honoured: the round it interrupted was computed for a set this
+    // connection no longer has, so `sendRound` must skip it (the seq detector), and the *next* round —
+    // pulled forward by the re-subscription itself — sends the deferred snapshot echoing all three.
+    const echo = only(await frames.take(2), 'snapshot')[0]
+    expect(echo?.targets.map((t) => t.stopId)).toEqual([POLE_A.id, POLE_C.id, POLE_D.id].sort())
     await settle(300)
 
     const attached = await runInDurableObject(stubFor([POLE_A.id]), (_i: EtaHub, state) =>
@@ -616,7 +643,10 @@ describe('an alarm round', () => {
 
 describe('targets it will not or cannot watch', () => {
   it('drops a malformed target, names it, and keeps serving the others', async () => {
-    const { first: received } = await connectAndPoll([POLE_A.id, 'not-an-id'])
+    // Three frames: the rejection `status` goes out at subscribe time (it is knowable immediately),
+    // while the snapshot is deferred to the first round (WP6-8b) and `live` follows it.
+    const { frames } = await connect([POLE_A.id, 'not-an-id'])
+    const received = await frames.take(3)
 
     const snapshot = only(received, 'snapshot')[0]
     expect(snapshot?.targets, 'the echo is how a client learns a favourite was dropped').toEqual([
@@ -634,8 +664,8 @@ describe('targets it will not or cannot watch', () => {
     expect(status?.error?.message).toContain('not-an-id')
 
     // …and the surviving target really does keep working: the round that ran alongside the rejection
-    // delivered both of its place's readings.
-    expect(only(received, 'delta')[0]?.changed.length).toBe(2)
+    // delivered both of its place's readings, in the deferred snapshot.
+    expect(snapshot?.etas.length).toBe(2)
   })
 
   it('says a subscription with nothing left is closed, permanently', async () => {
@@ -670,7 +700,7 @@ describe('targets it will not or cannot watch', () => {
 
     const { frames, first } = await connectAndPoll([POLE_A.id, POLE_C.id])
     // Both targets started with readings, which is what makes the survival claim below meaningful.
-    expect(only(first, 'delta')[0]?.changed.length).toBe(4)
+    expect(only(first, 'snapshot')[0]?.etas.length).toBe(4)
     frames.drain()
 
     await kv.put(datasetKeys.place(HASH, placeId), '{ not json')
@@ -740,7 +770,7 @@ describe('targets it will not or cannot watch', () => {
     // trying. The default engine says `closed` at the identical condition (`poll.ts`, `watching.length ===
     // 0`), so this was a cross-engine divergence as well as an untruth.
     const { frames, first } = await connectAndPoll([POLE_C.id])
-    expect(only(first, 'delta')[0]?.changed.length, 'it had readings to lose').toBe(2)
+    expect(only(first, 'snapshot')[0]?.etas.length, 'it had readings to lose').toBe(2)
     frames.drain()
 
     await withUnresolvable(POLE_C.id, async () => {
@@ -771,7 +801,7 @@ describe('targets it will not or cannot watch', () => {
     // change both engines. What was missing is the *echo*: after the round, `snapshot.targets` still named
     // the dropped stop, so "compare the echo with what you sent" had nothing to compare against.
     const { frames, first } = await connectAndPoll([POLE_A.id, POLE_C.id])
-    expect(only(first, 'delta')[0]?.changed.length).toBe(4)
+    expect(only(first, 'snapshot')[0]?.etas.length).toBe(4)
     frames.drain()
 
     await withUnresolvable(POLE_C.id, async () => {
@@ -1108,6 +1138,7 @@ describe('sessionChanged', () => {
     seq: 7,
     announcedLive: true,
     failed: [],
+    snapshotPending: false,
   }
   const refusing = (stopId: string) => ({
     stopId,
@@ -1123,12 +1154,15 @@ describe('sessionChanged', () => {
     expect(sessionChanged(session, { ...session, targets: [...session.targets] })).toBe(false)
   })
 
-  it('says something changed when any of the four moves', () => {
+  it('says something changed when any of the five moves', () => {
     expect(sessionChanged(session, { ...session, seq: 8 })).toBe(true)
     expect(sessionChanged(session, { ...session, announcedLive: false })).toBe(true)
     // A dropped target. `kept` is a subsequence of `targets`, so a shorter list is a different list.
     expect(sessionChanged(session, { ...session, targets: [{ stopId: 'KMB:A' }] })).toBe(true)
     expect(sessionChanged(session, { ...session, targets: [] })).toBe(true)
+    // The deferred first snapshot going out (WP6-8b) — today the seq moves with it, but the two moving
+    // together is a property of the current code and not of the shape.
+    expect(sessionChanged(session, { ...session, snapshotPending: true })).toBe(true)
   })
 
   it('says something changed when only the failure set moved, in both directions', () => {
@@ -1154,9 +1188,13 @@ describe('frame conformance', () => {
     // keys, so `parse()` alone would accept and silently discard an undocumented field. This case exists
     // so that property is not vacuous: it drives one scenario that produces all four frames the shard
     // can send.
-    const { ws, frames } = await connectAndPoll([POLE_A.id, 'not-an-id']) // snapshot + status + delta
+    const { ws, frames } = await connectAndPoll([POLE_A.id, 'not-an-id']) // status + snapshot (+ live)
+    // The first round arrives as the deferred snapshot (WP6-8b), so a delta needs a second round with
+    // something to say.
+    boards.set(POLE_A.rawId, [{ route: POLE_A.route, arrivals: [at(4), at(9)] }])
+    expect(await runRound([POLE_A.id, 'not-an-id'])).toBe(true)
     ws.send('{"type": "ping"}')
-    await frames.take(4) // pong
+    await frames.take(5) // delta + pong
 
     const seen = new Set(frames.all().map((frame) => frame.type))
     const declared = new Set<ServerFrame['type']>(['snapshot', 'delta', 'status', 'pong'])
@@ -1169,14 +1207,14 @@ describe('frame conformance', () => {
     // inherits it because it polls through `stopEtas`, and this asserts the inheritance rather than
     // assuming it: the frames' readings are the HTTP endpoint's readings.
     const { first } = await connectAndPoll([POLE_A.id])
-    const delta = only(first, 'delta')[0]
+    const snapshot = only(first, 'snapshot')[0]
 
     resetEtaCache()
     const { etas: http } = (await (
       await get(`/v1/etas/${encodeURIComponent(POLE_A.id)}`)
     ).json()) as EtaReport
     const key = (eta: Eta) => `${eta.stopId}|${eta.routeId}`
-    expect((delta?.changed ?? []).map(key).sort()).toEqual(http.map(key).sort())
+    expect((snapshot?.etas ?? []).map(key).sort()).toEqual(http.map(key).sort())
     expect(http.length).toBeGreaterThan(0)
   })
 })

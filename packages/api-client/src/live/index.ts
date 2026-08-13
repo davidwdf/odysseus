@@ -2,7 +2,8 @@
 // `LiveTransport`.
 //
 //   ./engine.ts      the frames, the `'poll' | 'socket'` label, and the two timers a transport may hold
-//   ./poll.ts        the poll emulator — HTTP polling wearing the socket protocol. **The default.**
+//   ./poll.ts        the poll emulator — HTTP polling wearing the socket protocol. The configured
+//                    alternative, and the supervised fallback when the default socket cannot connect
 //   ./memory.ts      the scripted fake — WP5-1's other half and WP5-2's `FakeSocketDataSource` engine
 //   ./socket.ts      the real one: keepalive, reconnect, backoff
 //   ./select.ts      which engine a configured spelling names — the one declaration of it (WP5-6)
@@ -39,12 +40,14 @@ export {
   liveEngineFrom,
   liveTransportFor,
   liveTransportFromEnv,
+  SOCKET_FALLBACK_AFTER_FAILURES,
 } from './select'
 export {
   browserSocketFactory,
   createSocketTransport,
   DEFAULT_KEEPALIVE_MS,
   DEFAULT_SOCKET_BACKOFF,
+  KEEPALIVE_MISSED_LIMIT,
   type LiveSocketConnection,
   type LiveSocketFactory,
   type LiveSocketHandlers,

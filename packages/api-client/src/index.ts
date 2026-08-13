@@ -22,10 +22,12 @@ import { classifyFailure } from './errors'
 import {
   createLiveEtaController,
   DEFAULT_LIVE_ENGINE,
+  type LiveEtaController,
   type LiveEtaEngine,
   type LiveEtaUpdate,
   type LiveTransportContext,
   liveTransportFor,
+  SOCKET_FALLBACK_AFTER_FAILURES,
 } from './live'
 
 export interface EdgeClientOptions {
@@ -45,13 +47,13 @@ export interface EdgeClientOptions {
    */
   clock?: Clock
   /**
-   * How `watch()` gets its frames. **Absent means the poll emulator**, so today's behaviour is the
-   * default and a socket is opt-in: **one HTTP request per cadence** for the whole target set since
-   * WP5-7 (it was one per target, which is why a six-place screen could not adopt it), a target whose id
-   * stops resolving dropped without disturbing the others, and a failed round that is not a departure.
-   * Supply `createSocketTransport` (or a `MemoryTransport`) to change engines without touching a screen —
-   * which is the property ADR-004 has claimed since v1 and
-   * `apps/mobile/test/seam-substitution.test.tsx` now actually tests.
+   * How `watch()` gets its frames. **Absent means `DEFAULT_LIVE_ENGINE` — the socket, since ADR-121** —
+   * supervised, so a network that cannot carry WebSockets degrades to the poll emulator after
+   * `SOCKET_FALLBACK_AFTER_FAILURES` fruitless connections (WP6-8b) rather than never updating. Either
+   * engine gives a screen the same protocol: a target whose id stops resolving dropped without
+   * disturbing the others, and a failed round that is not a departure. Supply `createSocketTransport`
+   * (or a `MemoryTransport`) to change engines without touching a screen — which is the property
+   * ADR-004 has claimed since v1 and `apps/mobile/test/seam-substitution.test.tsx` now actually tests.
    */
   transport?: (ctx: LiveTransportContext) => LiveEtaEngine
 }
@@ -60,8 +62,9 @@ export interface EdgeClientOptions {
  * v1 DataSource: talks to the Cloudflare edge API.
  *
  * `watch()` is no longer a shim that concatenates lists — it runs a real frame protocol
- * (`snapshot`/`delta`/`status`) over a pluggable transport, whose default is the poll emulator in
- * `./live/poll.ts`. Swapping in `createSocketTransport` swaps the engine and nothing else (ADR-004).
+ * (`snapshot`/`delta`/`status`) over a pluggable transport, whose default is the socket (ADR-121),
+ * supervised so it degrades to the poll emulator in `./live/poll.ts` on a network that cannot carry it
+ * (WP6-8b). Swapping transports swaps the engine and nothing else (ADR-004).
  */
 export class EdgeClient implements DataSource {
   private readonly endpoints: Endpoints
@@ -127,6 +130,17 @@ export class EdgeClient implements DataSource {
     return this.getJson<EtaBatch>(`/v1/etas?${q}`)
   }
 
+  /**
+   * `/v1/etas?route=…` — one report per pole of one route, **narrowed by the server** (ADR-136).
+   *
+   * The `ids` batch above cannot express the narrowing (it carries no per-id route list), so a route
+   * round through it asks every pole about every route calling there. This is what the poll engine
+   * uses instead when a subscription is a whole route — the polled twin of `/v1/live?route=`.
+   */
+  getEtasRoute(routeId: string): Promise<EtaBatch> {
+    return this.getJson<EtaBatch>(`/v1/etas?route=${encodeURIComponent(routeId)}`)
+  }
+
   getSearchIndex(): Promise<SearchIndex> {
     return this.getJson<SearchIndex>('/v1/index')
   }
@@ -176,25 +190,165 @@ export class EdgeClient implements DataSource {
      * comparison holds a `createLiveEtaController` directly, which is what `useLiveEtas` becomes when
      * Favourites adopts it (WP5-0 watches one target per screen, so there is nothing to diff yet).
      */
+    const door = this.etaListenerDoor(onUpdate)
+    const primary = this.transport(this.liveContext(opts))
+    // Anything that is not a socket needs no supervision: the poll engine's failures are per round and
+    // its own retrying is the recovery. A socket's failure mode is different in kind — a network that
+    // does not carry WebSockets at all — and that is what `withPollFallback` watches for (WP6-8b).
+    if (primary.engine !== 'socket') {
+      const controller = this.startController(primary, targets, door)
+      return {
+        unsubscribe() {
+          controller.stop()
+        },
+      }
+    }
+    return this.withPollFallback(
+      (emit) => this.startController(primary, targets, emit),
+      () => {
+        const controller = this.startController(
+          liveTransportFor('poll')(this.liveContext(opts)),
+          targets,
+          door,
+        )
+        return {
+          unsubscribe() {
+            controller.stop()
+          },
+        }
+      },
+      door,
+    )
+  }
+
+  /**
+   * The transport factory's whole input, built one way for every subscription.
+   *
+   * `pollMs`: a caller that has the *served* policy wins over this client's construction-time default.
+   * `EdgeClient` is built at module scope, before any policy has been fetched, so `this.pollMs` is
+   * `CLIENT_POLICY_DEFAULTS.refreshAfterMs` unless someone passed one — which once meant a served
+   * override reached three screens' `refetchInterval` and *not* the seam that replaced it. See
+   * `WatchOptions` in `@nextbus/core` for why this is threaded rather than fetched here.
+   */
+  private liveContext(opts?: WatchOptions, route?: string): LiveTransportContext {
+    return {
+      endpoints: this.endpoints,
+      getEtasBatch: (ids) => this.getEtasBatch(ids),
+      getEtasRoute: (routeId) => this.getEtasRoute(routeId),
+      pollMs: opts?.refreshAfterMs ?? this.pollMs,
+      clock: this.clock,
+      ...(route === undefined ? {} : { route }),
+    }
+  }
+
+  /** A controller over one transport, already started — the shape every subscription here reduces to. */
+  private startController(
+    transport: LiveEtaEngine,
+    targets: readonly WatchTarget[],
+    emit: (update: LiveEtaUpdate) => void,
+    declaredInUrl?: boolean,
+  ): LiveEtaController {
     const controller = createLiveEtaController({
-      transport: this.transport({
-        endpoints: this.endpoints,
-        getEtasBatch: (ids) => this.getEtasBatch(ids),
-        // A caller that has the *served* policy wins over this client's construction-time default.
-        // `EdgeClient` is built at module scope, before any policy has been fetched, so `this.pollMs` is
-        // `CLIENT_POLICY_DEFAULTS.refreshAfterMs` unless someone passed one — which meant a served
-        // override reached three screens' `refetchInterval` and *not* the seam that replaced it. See
-        // `WatchOptions` in `@nextbus/core` for why this is threaded rather than fetched here.
-        pollMs: opts?.refreshAfterMs ?? this.pollMs,
-        clock: this.clock,
-      }),
-      targets,
-      emit: this.etaListenerDoor(onUpdate),
+      transport,
+      targets: [...targets],
+      emit,
+      ...(declaredInUrl === undefined ? {} : { declaredInUrl }),
     })
     controller.start()
+    return controller
+  }
+
+  /**
+   * Supervise a socket subscription: if it fails `SOCKET_FALLBACK_AFTER_FAILURES` times in a row
+   * without ever delivering a data frame, rebuild the whole subscription on the poll engine (WP6-8b).
+   *
+   * ## Why this exists, and why it lives here rather than in a transport
+   *
+   * The socket became the default engine in ADR-121, and a socket's characteristic failure is one the
+   * rider can never see the reason for: a browser exposes neither the status nor the body of a refused
+   * WebSocket upgrade, so a proxy that strips the protocol, a captive portal, or a deployment without
+   * the `ETA_HUB` binding all look identical — `retrying`, for ever, at the backoff cap, with the
+   * screen frozen on its first HTTP fetch. When the socket was opt-in, "no fallback" (ADR-056) was the
+   * honest refusal to hide a broken socket behind a working poll; as the *default*, it shipped that
+   * frozen screen to every rider on a WebSocket-hostile network. The edge already promises
+   * degrade-to-slow for every missing binding (ADR-055); this is the same promise for the network path.
+   *
+   * It is a **subscription** swap and not a transport that changes engines mid-flight, which is the
+   * distinction ADR-056's argument actually protects: the fallback builds a fresh controller over a
+   * fresh poll transport, `engine` answers honestly on each, and the trigger is stated and testable
+   * rather than a mood. Hence this method sits beside `watch()`/`watchRoute()`, the two holders of
+   * "what the subscription is", and not inside `createSocketTransport`, which keeps reconnecting for
+   * ever exactly as documented.
+   *
+   * ## The trigger, precisely
+   *
+   * Counts `retrying` updates arriving while the session has never held data (`seq === 0` — the
+   * kernel's own "no snapshot has ever landed" sentinel) — **and only the transport's own connection
+   * failures among them.** The two kinds of `retrying` are distinguishable by who authored the error:
+   * the socket transport synthesizes `internal` for everything connection-level (a close, a keepalive
+   * timeout, a hung handshake — `wireErrorOf` over a local `Error`), while a frame carrying an
+   * `upstream_*` or `not_found` code was **parsed from server bytes**, which is itself proof the path
+   * carries the protocol. Without that distinction, a healthy socket whose *upstream* was down for the
+   * first three rounds fell back to polling — which polls the same dead upstream, learns nothing
+   * sooner, and forfeits the shared round for the rest of the screen's life. So a server-authored
+   * `retrying` latches `everWorked` exactly as a data frame does.
+   *
+   * A socket that has ever delivered a frame has proved the path, and every later failure belongs to
+   * the reconnect schedule — `everWorked` latches and the counter never fires. A terminal `closed` +
+   * `retryable: false` does not count either: the server *answered*, and what it said polling would
+   * not change. The supervised updates pass through to the door untouched; the fallback's do too,
+   * through the same door, so the listener sees one continuous subscription.
+   *
+   * **Fallback is per subscription, which is also the re-upgrade path**: every new `watch()` /
+   * `watchRoute()` — a screen navigation, a pull-to-refresh, an app resume — starts socket-first
+   * again, so a rider is pinned to polling only for the lifetime of the screen that discovered the
+   * hostile network, never for the app's.
+   */
+  private withPollFallback(
+    startSocket: (emit: (update: LiveEtaUpdate) => void) => LiveEtaController,
+    startFallback: () => Subscription,
+    door: (update: LiveEtaUpdate) => void,
+  ): Subscription {
+    let failures = 0
+    let everWorked = false
+    let fallback: Subscription | null = null
+    let released = false
+    /** Assigned right after `startSocket` returns; the guard below covers a transport (a scripted
+     *  fake) that delivers frames synchronously inside `start()`, before the assignment lands. */
+    let socket: LiveEtaController | null = null
+    let fellBack = false
+
+    socket = startSocket((update) => {
+      if (released || fellBack) return
+      // A `retrying` whose error the transport did not author (`internal` is its one spelling for a
+      // connection-level failure) was parsed from server bytes — the path works; the upstream doesn't.
+      const connectionFailure =
+        update.status.state === 'retrying' && update.status.error?.code === 'internal'
+      if (
+        update.seq > 0 ||
+        update.status.state === 'live' ||
+        (update.status.state === 'retrying' && !connectionFailure)
+      ) {
+        everWorked = true
+      }
+      if (!everWorked && connectionFailure && ++failures >= SOCKET_FALLBACK_AFTER_FAILURES) {
+        fellBack = true
+        socket?.stop()
+        fallback = startFallback()
+        // The triggering `retrying` is not delivered: the poll engine's own frames take over from
+        // here, and a status describing a connection that has just been abandoned is not news the
+        // listener can use.
+        return
+      }
+      door(update)
+    })
+    if (fellBack) socket.stop()
+
     return {
       unsubscribe() {
-        controller.stop()
+        released = true
+        socket?.stop()
+        fallback?.unsubscribe()
       },
     }
   }
@@ -224,7 +378,14 @@ export class EdgeClient implements DataSource {
   private etaListenerDoor(onUpdate: EtaListener): (update: LiveEtaUpdate) => void {
     let last: readonly Eta[] | null = null
     let lastFailed: readonly EtaFailure[] = []
-    return ({ etas, failed }) => {
+    return ({ seq, etas, failed }) => {
+      // **No data frame yet means nothing to say** (WP6-8b). Before the first `snapshot`, `etas` is
+      // `LIVE_SESSION_START`'s empty placeholder arriving on a `status` transition, and delivering it
+      // would hand every listener "no buses due" for stops that were never asked — `useLiveEtas` writes
+      // straight into the query cache, so the screen's HTTP-painted arrivals blanked on the first
+      // `retrying` of a flaky connection. `seq === 0` is the kernel's own sentinel for "no snapshot has
+      // ever landed" (`LiveEtaUpdate.seq`), so the door and the reducer agree about what "yet" means.
+      if (seq === 0) return
       if (etas === last && sameFailures(lastFailed, failed)) return
       last = etas
       lastFailed = failed
@@ -254,51 +415,65 @@ export class EdgeClient implements DataSource {
    * which is the invariant ADR-074's shared corpus exists to protect.
    *
    * A poll-emulated route watch therefore costs one `/v1/route/:id` read at subscribe time and does not
-   * share a round with anybody. Stated rather than hidden: `poll` is still the default engine
-   * (`EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`), so that is what ships until the socket is
-   * switched on, and it is the same cost the screen's own refetch already pays.
+   * share a round with anybody — reached when `EXPO_PUBLIC_LIVE_TRANSPORT` / `VITE_LIVE_TRANSPORT`
+   * spells `poll`, and as the supervised fallback when the default socket cannot connect (WP6-8b). The
+   * shipped default is the socket (ADR-121).
    */
   watchRoute(routeId: string, onUpdate: EtaListener, opts?: WatchOptions): Subscription {
-    const transport = this.transport({
-      endpoints: this.endpoints,
-      getEtasBatch: (ids) => this.getEtasBatch(ids),
-      pollMs: opts?.refreshAfterMs ?? this.pollMs,
-      clock: this.clock,
-      route: routeId,
-    })
+    const door = this.etaListenerDoor(onUpdate)
+    const primary = this.transport(this.liveContext(opts, routeId))
 
     // An engine that speaks a real socket has already been handed the route (`LiveTransportContext.route`)
     // and connects on `open()`. Anything else is emulating, and an emulator that cannot resolve poles must
-    // be given them.
-    if (transport.engine === 'socket') {
-      const controller = createLiveEtaController({
-        transport,
-        targets: [],
-        declaredInUrl: true,
-        emit: this.etaListenerDoor(onUpdate),
-      })
-      controller.start()
-      return {
-        unsubscribe() {
-          controller.stop()
-        },
-      }
+    // be given them. The socket is supervised exactly as `watch()`'s is, and its fallback is the same
+    // emulated path the poll engine takes below — resolve the poles once, then poll them narrowed — so a
+    // WebSocket-hostile network costs a route screen the shared round, not its times (WP6-8b).
+    if (primary.engine === 'socket') {
+      return this.withPollFallback(
+        (emit) => this.startController(primary, [], emit, true),
+        () => this.watchRoutePolled(routeId, door, opts),
+        door,
+      )
     }
 
-    // The emulated path. `transport` was constructed and never opened, so it is released rather than left
-    // holding a sink; `watch()` builds its own.
-    transport.close()
-    let inner: Subscription | null = null
+    // The emulated path. `primary` was constructed and never opened, so it is released rather than left
+    // holding a sink; `watchRoutePolled` builds its own.
+    primary.close()
+    return this.watchRoutePolled(routeId, door, opts)
+  }
+
+  /**
+   * A route watch on the poll engine: resolve the poles once, then poll them narrowed.
+   *
+   * **Forced onto the poll engine by construction**, not onto `this.transport` — that distinction is
+   * what keeps the fallback path from recursing. This used to be inlined in `watchRoute` as a call to
+   * `watch()`, which builds `this.transport`; reached as a *fallback* from a failed socket, that would
+   * construct a second socket, fail three more times, fall back again, and settle on polling only after
+   * paying the whole discovery cost twice.
+   *
+   * A poll-emulated route watch costs one `/v1/route/:id` read at subscribe time, and then **one
+   * `/v1/etas?route=` request per round, narrowed by the server** (ADR-136) — not the chunked `ids`
+   * fan-out ADR-121 measured at ~19× and 10–20 s a chunk. It still does not share a round with anybody
+   * (the coalescer is per-isolate; only the socket's named object shares). Each target is narrowed to
+   * this route as well, because a pole on this route serves others: without `routeIds` the emulator
+   * would deliver every line at all 41 kerbs and the screen would attach the wrong times to a row.
+   */
+  private watchRoutePolled(
+    routeId: string,
+    emit: (update: LiveEtaUpdate) => void,
+    opts?: WatchOptions,
+  ): Subscription {
+    let inner: LiveEtaController | null = null
     let cancelled = false
     void this.getRoute(routeId).then(
       (detail) => {
         if (cancelled) return
-        // Narrowed per target, because a pole on this route serves others: without `routeIds` the emulator
-        // would deliver every line at all 41 kerbs and the screen would attach the wrong times to a row.
-        inner = this.watch(
+        // The context carries the route, so the poll engine's rounds are ONE `/v1/etas?route=` request
+        // narrowed by the server (ADR-136) — not the chunked `ids` fan-out ADR-121 measured at ~19×.
+        inner = this.startController(
+          liveTransportFor('poll')(this.liveContext(opts, routeId)),
           detail.stops.map((stop) => ({ stopId: stop.stop.id, routeIds: [routeId] })),
-          onUpdate,
-          opts,
+          emit,
         )
       },
       () => {
@@ -311,7 +486,7 @@ export class EdgeClient implements DataSource {
     return {
       unsubscribe() {
         cancelled = true
-        inner?.unsubscribe()
+        inner?.stop()
       },
     }
   }

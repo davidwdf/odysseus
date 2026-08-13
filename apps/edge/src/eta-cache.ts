@@ -14,6 +14,17 @@
 // ever showing an arrival that upstream itself would have called fresh. Staleness is still
 // surfaced to the rider from the reading's own `observedAt` (ADR-008), so a cached value is
 // labelled honestly rather than presented as new.
+//
+// **The scope is one isolate, and an `EtaHub` Durable Object is its own isolate** (WP6-8b). This map
+// is module state, so what shares it is exactly what shares a JavaScript heap: concurrent HTTP
+// requests inside one Worker isolate share it (the case this file was built for), and the calls of
+// one `EtaHub` round share it (the shard imports `stopEtas`, which reads through here). What does
+// NOT share it: the Worker's HTTP isolates with any Durable Object, one shard with another, or a
+// route watch with anything else — each runs its own heap, possibly in a different colo, so a stop
+// that is both socket-watched and HTTP-polled is fetched once per context per TTL. Any cost argument
+// built on "the socket and the HTTP path share fetches" is therefore wrong; genuine cross-context
+// sharing would be a Cache API / short-TTL-KV design and is deliberately not built (no measured need
+// pre-deploy, and both add their own consistency questions).
 
 import { CLIENT_POLICY_DEFAULTS } from '@nextbus/core'
 

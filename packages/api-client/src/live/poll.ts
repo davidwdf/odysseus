@@ -92,11 +92,22 @@ export interface PollTransportDeps {
    * unreachable in production and therefore only ever exercised by a test.
    */
   getEtasBatch(ids: readonly string[]): Promise<EtaBatch>
+  /** `/v1/etas?route=…` — see `LiveTransportContext.getEtasRoute`. Used only when `route` is set. */
+  getEtasRoute?(routeId: string): Promise<EtaBatch>
   /** Stamps each frame's `at`. The kernel may not read a clock; this layer may, through the port. */
   clock: Clock
   /** Cadence, ms. `EdgeClient` defaults it to the served `refreshAfterMs` (ADR-053). */
   pollMs: number
   timers?: Timers
+  /**
+   * One canonical route id, when this subscription is a whole route (ADR-116/136). With
+   * `getEtasRoute` present, a round becomes **one request whose fan-out the server narrows** to this
+   * route — the difference between 0.25 s and 10–20 s per chunk on a real Citybus route, and the
+   * reason the socket became the default engine (ADR-121). The subscribe frame still declares the
+   * poles (resolved once by `EdgeClient.watchRoutePolled`), because the per-target bookkeeping —
+   * retention, drops, failure ordering — is written in targets, and the route batch answers per pole.
+   */
+  route?: string
 }
 
 /**
@@ -121,10 +132,11 @@ function chunkIds(ids: readonly string[]): string[][] {
  * send: a `snapshot` on the first round, a `delta` computed by the kernel's `diffEtas` afterwards, and
  * a `status` frame per failure.
  *
- * **This is the default engine**, and that is the point of it: with no transport configured,
- * `EdgeClient.watch()` builds one of these, so what a screen gets is one request per `refreshAfterMs`
- * for its whole target set, a target dropped only when its id stops resolving, and a failure that never
- * reads as a departure — and a socket is opt-in.
+ * **The default engine since ADR-121 is the socket; this is what stands behind it.** It is what
+ * `LIVE_TRANSPORT=poll` selects, and what `EdgeClient`'s supervisor rebuilds a subscription on when the
+ * socket fails repeatedly without ever delivering a frame (WP6-8b) — so what a screen gets, on either
+ * path, is one request per `refreshAfterMs` for its whole target set, a target dropped only when its id
+ * stops resolving, and a failure that never reads as a departure.
  */
 export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
   const timers = deps.timers ?? systemTimers
@@ -158,6 +170,18 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
    * (its target list was fixed for the life of the subscription); a resync can, and does.
    */
   let generation = 0
+  /**
+   * The rounds' own ordering, within one generation (WP6-8b). `timers.every` fires on the clock, not
+   * on completion, so a round slower than the cadence overlaps the next — measured on a poll-emulated
+   * route watch, where one round ran 75 s against a 30 s cadence (ADR-121) — and completion order is
+   * then the network's choice: a slow round finishing *after* a fast one would fold data it fetched
+   * earlier into the state and publish it as a fresh delta, and every time on screen steps backwards
+   * for one cadence. So each round takes a number when it starts and publishes only if no
+   * higher-numbered round has applied its result first; a stale completion is discarded whole, exactly as a
+   * completion from a dead generation is, one line above where this is checked.
+   */
+  let roundCounter = 0
+  let newestApplied = 0
 
   const emit = (frame: ServerFrame) => {
     if (!closed) sink?.frame(frame)
@@ -181,6 +205,7 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
 
   const runRound = async () => {
     const round = generation
+    const roundId = ++roundCounter
     const asked = watching
     /** Every entry the round came back with, by the id it answers for. */
     const entries = new Map<string, EtaBatchEntry>()
@@ -191,21 +216,37 @@ export function createPollTransport(deps: PollTransportDeps): LiveEtaEngine {
      * there were N independent requests and N independent failures.
      */
     let requestError: WireError | null = null
-    await Promise.all(
-      chunkIds(asked.map((t) => t.stopId)).map(async (ids) => {
-        try {
-          for (const entry of (await deps.getEtasBatch(ids)).reports) entries.set(entry.id, entry)
-        } catch (thrown) {
-          // First one wins, and only the ids in this chunk are affected — the loop below decides that
-          // per target by looking for its entry, so a chunk that answered is not lost to one that did
-          // not. Recorded rather than thrown so the round still publishes what it learned.
-          requestError ??= wireErrorOf(thrown)
+    if (deps.route !== undefined && deps.getEtasRoute !== undefined) {
+      // A route round is **one request, narrowed by the server** (ADR-136) — never the chunked `ids`
+      // fan-out, which cannot say "only this route" and so asks every pole about every route calling
+      // there. The reports are per pole, which is exactly the shape the target walk below indexes.
+      try {
+        for (const entry of (await deps.getEtasRoute(deps.route)).reports) {
+          entries.set(entry.id, entry)
         }
-      }),
-    )
-    // Two ways this round is no longer wanted: the subscription was released, or the target set moved
-    // while the requests were in flight.
-    if (closed || round !== generation) return
+      } catch (thrown) {
+        requestError ??= wireErrorOf(thrown)
+      }
+    } else {
+      await Promise.all(
+        chunkIds(asked.map((t) => t.stopId)).map(async (ids) => {
+          try {
+            for (const entry of (await deps.getEtasBatch(ids)).reports) entries.set(entry.id, entry)
+          } catch (thrown) {
+            // First one wins, and only the ids in this chunk are affected — the loop below decides that
+            // per target by looking for its entry, so a chunk that answered is not lost to one that did
+            // not. Recorded rather than thrown so the round still publishes what it learned.
+            requestError ??= wireErrorOf(thrown)
+          }
+        }),
+      )
+    }
+    // Three ways this round is no longer wanted: the subscription was released, the target set moved
+    // while the requests were in flight, or a younger round already finished and applied its result — in which
+    // case what this one fetched is the older data, whatever the completion order says (see
+    // `roundCounter`). Checked before the first state mutation, so a discarded round leaves no trace.
+    if (closed || round !== generation || roundId <= newestApplied) return
+    newestApplied = roundId
 
     // **Walked in accepted-target order, never in the response's order**, and narrowed here rather than
     // by the server. Two things depend on it: `reportable` below publishes failures in exactly this

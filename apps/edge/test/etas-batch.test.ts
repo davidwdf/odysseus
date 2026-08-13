@@ -4,7 +4,7 @@ import { ETAS_BATCH_MAX_IDS } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import worker from '../src/index'
-import { datasetJson, kmbStopEtaJson, ORIGIN, SERVED_POLES } from './fixtures'
+import { datasetJson, kmbStopEtaJson, ORIGIN, poles, SERVED_POLES } from './fixtures'
 
 // WP5-7's server half, inside real workerd.
 //
@@ -220,5 +220,45 @@ describe('cache-control', () => {
     const ids = await placeIds('ttl-ids')
     const res = await get(batchPath(ids.slice(0, 2), 'ttl'))
     expect(res.headers.get('cache-control')).toBe('public, max-age=30')
+  })
+})
+
+describe('/v1/etas?route=… — one report per pole, narrowed to the route (ADR-136)', () => {
+  const routeId = `KMB:${(poles[0] as (typeof poles)[number]).route}:outbound:1`
+
+  it('answers the route document’s poles, carrying only that route’s readings', async () => {
+    const routeRes = await get(`/v1/route/${encodeURIComponent(routeId)}?case=route-doc`)
+    expect(routeRes.status).toBe(200)
+    const detail = (await routeRes.json()) as { stops: Array<{ stop: { id: string } }> }
+
+    const res = await get(`/v1/etas?route=${encodeURIComponent(routeId)}&case=route-ok`)
+    expect(res.status).toBe(200)
+    const batch = (await res.json()) as EtaBatch
+    // The report set IS the route document's stop list — the same resolution `/v1/live?route=` makes —
+    // so the polled route watch and the schematic cannot disagree about which kerbs exist.
+    expect(batch.reports.map((r) => r.id)).toEqual(detail.stops.map((s) => s.stop.id))
+    for (const report of batch.reports) {
+      expect(report.error).toBeUndefined()
+      // Narrowed by the server: no reading for any other route calling at the pole, which is the whole
+      // fan-out argument (ADR-121 measured the un-narrowed question at ~19×).
+      for (const eta of report.etas) expect(eta.routeId).toBe(routeId)
+    }
+    expect(
+      batch.reports.some((r) => r.etas.length > 0),
+      'the narrowing must not have filtered everything',
+    ).toBe(true)
+  })
+
+  it('refuses both parameters at once, a malformed id, and an unknown route — each with its own code', async () => {
+    const both = await get(`/v1/etas?route=${encodeURIComponent(routeId)}&ids=KMB%3AX&case=both`)
+    expect(both.status).toBe(400)
+
+    const malformed = await get('/v1/etas?route=not-a-route&case=route-bad')
+    expect(malformed.status).toBe(400)
+    expect(((await malformed.json()) as { code: string }).code).toBe('bad_request')
+
+    const unknown = await get('/v1/etas?route=KMB%3ANOPE%3Aoutbound%3A1&case=route-missing')
+    expect(unknown.status).toBe(404)
+    expect(((await unknown.json()) as { code: string }).code).toBe('not_found')
   })
 })

@@ -2,6 +2,46 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-12 (later) — WP6-8b: the live path stops assuming the network behaves
+
+> **Shipped:** nine reliability fixes from an owner-requested review of the socket system, the CTB/GMB
+> per-pole fan-out and the coalescing — one ADR
+> ([ADR-135](./08-decision-log.md#adr-135--the-live-path-hardened-against-the-networks-own-failure-modes-wp6-8b),
+> which **amends ADR-121**: the socket default now degrades to polling, supervised). The family resemblance
+> across all nine: *the code assumed the network behaves*, and every assumption fails in an ordinary way
+> that jsdom/workerd tests cannot see.
+>
+> **The four a maintainer should know before touching the live path:**
+>
+> · **Upstream calls time out now** — `fetchUpstream` (10 s, measured against all three feeds) in every
+>   adapter. A wedged connection used to hold a whole `EtaHub` round and its next alarm hostage.
+> · **A cold target's connect snapshot is deferred to the first round** (`Session.snapshotPending`), and
+>   the client's listener door drops updates at `seq === 0`. An empty connect snapshot was the
+>   ADR-073/087 blanking bug from a third direction; both ends now refuse to present "we have not asked
+>   yet" as "no buses due".
+> · **The socket checks its own liveness** — two quiet keepalive intervals or an unfinished handshake
+>   fail the connection — and **a subscription that never delivers falls back to the poll engine after
+>   three fruitless connections** (`SOCKET_FALLBACK_AFTER_FAILURES`). No `auto` spelling; the transport
+>   never mutates; the swap is whole-subscription, in `EdgeClient`.
+> · **The coalescer's scope is one isolate and every Durable Object is its own** — socket and HTTP
+>   traffic do **not** share upstream fetches, whatever older comments implied. Cost arguments must not
+>   assume cross-context dedup (`eta-cache.ts` now says so at length).
+>
+> **Follow-up shipped 2026-08-13
+> ([ADR-136](./08-decision-log.md#adr-136--the-batch-endpoint-learns-the-route-question-v1etasroute)):**
+> the fallback's own slow path is fixed. A polled route watch used to inherit the ~19× un-narrowed
+> fan-out ADR-121 measured (10–20 s per chunk of 12, re-measured live); `/v1/etas?route=` now resolves
+> the poles and narrows server-side exactly as the socket's object does, so a fallback round is **one
+> request, one upstream call per pole, ~0.5 s** — and the `docs/07` row about the poll path's silent
+> route loss closes with it, because all three consequences were the un-narrowed question.
+>
+> Also: wire error messages are capped at 200 chars and the socket attachment stores no messages
+> (the 16 KB cap was reachable); overlapping poll rounds are discarded by watermark instead of
+> publishing stale data; `LIVE_ROUTE_RETRY_MS` is 33 s, derived from the coalescer window it used to
+> retry uselessly inside; the `ttl − age` retry arm is documented as unwired (`docs/07`, Infra).
+> Three stale `.env.example` blocks and four stale docblocks that still called `poll` the default are
+> corrected.
+
 ## 🔵 Snapshot 2026-08-12 — the bus glyphs, and two lessons about measuring
 
 > **Shipped:** two bus glyphs ([ADR-132](./08-decision-log.md#adr-132--the-bus-glyphs-two-vehicles-and-the-three-rules-that-had-never-been-written-down)) —

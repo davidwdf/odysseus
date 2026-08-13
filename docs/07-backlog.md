@@ -701,6 +701,14 @@ written down.
         considering: the tab bar is probably not the question — what is *in* it is.**
 
 ## Infra / hardening
+- [ ] 🟡 **Wire the `age` header into the route watch's not-advanced retry** ([ADR-135](./08-decision-log.md#adr-135--the-live-path-hardened-against-the-networks-own-failure-modes-wp6-8b)
+      decision 7). `nextRouteRoundMs` has an arm that answers `ttl − age` when a round was handed a stale
+      CDN copy — the one question the `age` header genuinely answers — and **no production caller can reach
+      it**: the ETA adapters return parsed readings and never surface response headers, so `EtaHub` calls
+      the rule without `cacheAgeSec` and every not-advanced round takes the blind 33 s arm. Wiring it means
+      an adapter return shape that carries the header out (or a header sink threaded into `fetchUpstream`),
+      which touches every adapter's signature — hence a row rather than a rider on ADR-135. The arithmetic
+      is already corpus-pinned, so the wiring is the whole job.
 - [ ] 🟠 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
       **The mechanism is built and Route detail is wired (2026-08-12,
       [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence));
@@ -793,8 +801,20 @@ written down.
 
       </details>
 
-- [ ] 🟡 **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
-      the watched route's own times.** Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
+- [x] ✅ **A poll-emulated route watch is ~19× the upstream fan-out of a socket one, and can silently lose
+      the watched route's own times — fixed 2026-08-13 by
+      [ADR-136](./08-decision-log.md#adr-136--the-batch-endpoint-learns-the-route-question-v1etasroute):
+      `/v1/etas?route=` resolves the poles and narrows server-side (the fix the row sketched as option (b),
+      route-shaped rather than per-id), and `watchRoute`'s poll path rounds are now ONE request.** All three
+      consequences below close together, because they were one cause: `boardsFor` now engages on the poll
+      path exactly as on the socket's, so the fan-out is per-pole, a sibling route's failure cannot mark this
+      route's kerb, and `LIVE_CTB_BUDGET` counts only the watched route's own calls. The fix mattered more
+      after ADR-135 than when this was filed: the supervised fallback routes riders on WebSocket-hostile
+      networks onto this exact path automatically, so "affects only somebody who selects `poll`
+      deliberately" stopped being true. Measured 2026-08-13 against the live feed: an un-narrowed chunk of
+      12 of Citybus 182's poles was 10.0 s (timeout-bounded; 19.9 s in ADR-121); the same poles narrowed,
+      0.25 s. Kept below as filed, for the history:
+      Found by an adversarial review of ADR-116–120 (2026-08-11); **not a
       defect in the route watch, but in what the batch endpoint can express**. **Demoted from 🟠 the same
       day: `socket` is the default engine now (ADR-121)**, measured on the route that prompted it — Citybus
       182's round was 395 upstream calls and 75.7 s on `poll` against 31 calls and ~1.2 s on the socket, and

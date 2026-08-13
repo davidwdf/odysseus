@@ -40,6 +40,11 @@
 //     connects and dies before delivering anything is not a working connection — a Worker that accepts
 //     the upgrade and then throws looks exactly like that — and resetting on `open` would turn the
 //     backoff into a tight loop against it.
+//   · **Liveness is checked, not assumed** (WP6-8b). A connection that has delivered no frame for
+//     `KEEPALIVE_MISSED_LIMIT` keepalive intervals is torn down and reconnected, and a handshake that
+//     has not completed within one interval is failed — because the platform `WebSocket` reports a
+//     silently dead pipe as OPEN for as long as the OS takes to notice, which on a phone that changed
+//     networks is minutes of a screen labelled live over readings that stopped moving.
 //
 // WHAT IS DELIBERATELY NOT HERE
 // No `Origin` header (a browser sets it and cannot be told otherwise; a native client may omit it, so it
@@ -127,6 +132,25 @@ export const DEFAULT_SOCKET_BACKOFF: SocketBackoff = {
 export const DEFAULT_KEEPALIVE_MS = LIVE_KEEPALIVE_MS
 
 /**
+ * How many keepalive intervals may pass without a single inbound frame before the connection is
+ * declared dead and reconnected (WP6-8b).
+ *
+ * This is the half of a keepalive that was missing: the ping held intermediaries' idle timers open,
+ * but nothing ever checked that anything came *back*. A phone that changes networks, or a NAT entry
+ * that expires without an RST, leaves the platform `WebSocket` reading OPEN for minutes — `send()`
+ * buffers silently, no `close` event fires, and a screen sits labelled live while its readings age.
+ * The server answers every ping without waking (the hibernation auto-response), so on a healthy
+ * connection a frame arrives at least once per interval; two intervals of silence — a minute, at the
+ * shipped `LIVE_KEEPALIVE_MS` — is therefore not lag, it is a dead pipe.
+ *
+ * Two rather than one so a single delayed pong cannot cost a working connection a reconnect; the
+ * price is that a genuinely dead one is noticed in ~60–90 s rather than ~30–60 s, against the many
+ * minutes the TCP stack takes unaided. A timer-behaviour constant, so it lives here with the timer
+ * rather than in the kernel with the schedule arithmetic (see the module header for that split).
+ */
+export const KEEPALIVE_MISSED_LIMIT = 2
+
+/**
  * The keepalive bytes.
  *
  * Encoded from a value the compiler checks is a `PingFrame`, rather than restating the string, which
@@ -194,6 +218,8 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
   let queued: ClientFrame[] = []
   let stopKeepalive: (() => void) | null = null
   let cancelReconnect: (() => void) | null = null
+  /** Cancels the handshake watch. Transport-scoped so a deliberate `close()` mid-handshake clears it. */
+  let cancelConnectWatch: (() => void) | null = null
 
   const emit = (frame: ServerFrame) => {
     if (!released) sink?.frame(frame)
@@ -223,6 +249,8 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
         `${deps.url}?route=${encodeURIComponent(deps.route)}`
 
   const teardownConnection = () => {
+    cancelConnectWatch?.()
+    cancelConnectWatch = null
     stopKeepalive?.()
     stopKeepalive = null
     connection?.close()
@@ -240,17 +268,85 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
     queued = subscription === null ? [] : [subscription]
     let settled = false
     ready = false
+    /** Keepalive intervals since the last inbound frame of any kind. See `KEEPALIVE_MISSED_LIMIT`. */
+    let quietIntervals = 0
+
+    /**
+     * The one exit for a connection that is gone, however we learnt it: the platform said so
+     * (`onClose`, which a browser may fire twice as `error` then `close`), the keepalive counted
+     * `KEEPALIVE_MISSED_LIMIT` silent intervals, or the handshake never completed. At most once per
+     * connection — `settled` is that latch — and the *reconnect* half is identical for all three,
+     * which is why this is one function rather than a handler and two copies (WP6-8b).
+     */
+    const failed = (reason: string) => {
+      if (settled) return
+      settled = true
+      cancelConnectWatch?.()
+      cancelConnectWatch = null
+      stopKeepalive?.()
+      stopKeepalive = null
+      // A no-op for a socket the platform already closed; the real teardown for one that is silently
+      // dead, where `close()` is also what detaches the handlers so a late platform event cannot
+      // re-enter (the factory's `close` contract: "do not call `onClose`").
+      connection?.close()
+      connection = null
+      ready = false
+      if (released || stopped) return
+      // A close code is not an HTTP status and `ERROR_CODES` has no member for one, so this reuses the
+      // same `internal` / `retryable: true` fallback `classifyFailure` uses for a response body that is
+      // not ours (see `wireErrorOf`). Inventing a code for it would put a value on the wire that the
+      // status table does not bind.
+      emit({
+        type: 'status',
+        at: frameAt(deps.clock.now()),
+        state: 'retrying',
+        error: wireErrorOf(new Error(reason)),
+      })
+      attempt += 1
+      cancelReconnect = timers.after(delayFor(attempt), () => {
+        cancelReconnect = null
+        connect()
+      })
+    }
+
+    // **A handshake that hangs is a failure nobody reports.** Most refusals fire `error`/`close`
+    // promptly, but a blackholed connection (a dropping middlebox, a captive portal that swallows the
+    // upgrade) can leave the platform socket CONNECTING for its own long, platform-specific timeout —
+    // during which this transport would neither deliver frames nor retry. One keepalive interval is a
+    // generous ceiling for a handshake whose healthy time is a round trip.
+    cancelConnectWatch = timers.after(keepaliveMs, () => {
+      cancelConnectWatch = null
+      if (!ready) failed('connect timeout')
+    })
+
     connection = socketFactory(connectUrl(subscription?.targets ?? []), {
       onOpen() {
         if (released) return
         ready = true
+        cancelConnectWatch?.()
+        cancelConnectWatch = null
         const pending = queued
         queued = []
         for (const frame of pending) connection?.send(JSON.stringify(frame))
-        stopKeepalive = timers.every(keepaliveMs, () => connection?.send(PING_MESSAGE))
+        // The tick counts first and pings second, so silence is measured in whole intervals: a healthy
+        // connection's pong (answered by the runtime without waking the shard) resets the counter long
+        // before the next tick, while a dead pipe — OPEN to the platform, buffering every send — reaches
+        // the limit and is torn down here rather than minutes later when the TCP stack notices. This is
+        // the half of the keepalive that was missing: the ping held intermediaries' idle timers open,
+        // but nothing checked that anything came back.
+        quietIntervals = 0
+        stopKeepalive = timers.every(keepaliveMs, () => {
+          quietIntervals += 1
+          if (quietIntervals >= KEEPALIVE_MISSED_LIMIT) {
+            failed(`keepalive timeout: no frame in ${quietIntervals * keepaliveMs} ms`)
+            return
+          }
+          connection?.send(PING_MESSAGE)
+        })
       },
       onMessage(data) {
         if (released) return
+        quietIntervals = 0
         let frame: ServerFrame
         try {
           frame = JSON.parse(data) as ServerFrame
@@ -277,28 +373,7 @@ export function createSocketTransport(deps: SocketTransportDeps): LiveEtaEngine 
         }
       },
       onClose(reason) {
-        if (settled) return // a browser fires `error` and then `close`; one is enough
-        settled = true
-        stopKeepalive?.()
-        stopKeepalive = null
-        connection = null
-        ready = false
-        if (released || stopped) return
-        // A close code is not an HTTP status and `ERROR_CODES` has no member for one, so this reuses the
-        // same `internal` / `retryable: true` fallback `classifyFailure` uses for a response body that is
-        // not ours (see `wireErrorOf`). Inventing a code for it would put a value on the wire that the
-        // status table does not bind.
-        emit({
-          type: 'status',
-          at: frameAt(deps.clock.now()),
-          state: 'retrying',
-          error: wireErrorOf(new Error(reason)),
-        })
-        attempt += 1
-        cancelReconnect = timers.after(delayFor(attempt), () => {
-          cancelReconnect = null
-          connect()
-        })
+        failed(reason)
       },
     })
   }

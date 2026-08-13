@@ -11919,13 +11919,13 @@
         },
         {
           "name": "a-stale-copy-with-no-age-to-read-falls-back-to-the-blind-retry",
-          "why": "Same situation, measurement missing. Kept as its own answer so a guess and a measurement do not read alike in a schedule.",
+          "why": "Same situation, measurement missing. Kept as its own answer so a guess and a measurement do not read alike in a schedule. 33 s = the edge coalescer's window (refreshAfterMs) plus the publish margin: a retry inside that window is answered from our own cache with the identical bytes by construction, so a shorter guess spends a wake to learn nothing (WP6-8b).",
           "args": {
             "publishedAt": "2026-08-10T21:29:12+08:00",
             "previousPublishedAt": "2026-08-10T21:29:12+08:00",
             "now": "2026-08-10T21:29:20+08:00"
           },
-          "expect": 15000
+          "expect": 33000
         },
         {
           "name": "a-nonsense-age-is-no-age-at-all",
@@ -11936,7 +11936,7 @@
             "cacheAgeSec": -5,
             "now": "2026-08-10T21:29:20+08:00"
           },
-          "expect": 15000
+          "expect": 33000
         },
         {
           "name": "a-publish-older-than-the-one-before-it-is-also-no-news",
@@ -11946,7 +11946,7 @@
             "previousPublishedAt": "2026-08-10T21:29:12+08:00",
             "now": "2026-08-10T21:29:20+08:00"
           },
-          "expect": 15000
+          "expect": 33000
         },
         {
           "name": "an-out-of-service-route-reports-no-publish-at-all",

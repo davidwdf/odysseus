@@ -46,7 +46,14 @@
 // WHAT GOES ON THE WIRE, AND WHEN NOTHING DOES
 // ────────────────────────────────────────────────────────────────────────────────────────────────
 //  · A new subscription (from the connect URL, or a later `subscribe` frame) gets a `snapshot` — the
-//    accepted target set echoed back, plus every reading this shard already holds for it.
+//    accepted target set echoed back, plus every reading this shard already holds for it — **but only
+//    when the shard actually holds those targets.** For a target this shard has never polled, an
+//    immediate snapshot would be `etas: []`, and that is not "no buses due", it is "we have not asked
+//    yet": delivered, it blanks the arrivals the screen just painted from its own HTTP fetch until the
+//    first round lands (WP6-8b — the same blanking shape ADR-073/087 fixed twice before, arriving from
+//    the connect path). So a subscription with any never-polled target defers its snapshot to the end
+//    of the pulled-forward first round, exactly as the poll emulator's first snapshot waits for a round
+//    that answered (`poll.ts`, "a failed first round is not an empty world").
 //  · Each alarm round sends a `delta`, and **sends nothing at all when nothing changed.** No empty
 //    delta, no heartbeat. Incoming WebSocket messages bill at 20:1 and outgoing ones are free, so the
 //    cost of a needless frame is not the byte but the repaint: `applyLiveEtasToStopDetail` rebuilds
@@ -316,8 +323,29 @@ interface Session {
    * A few tens of bytes on an attachment that already carries the target list, so the 2 KB budget is not
    * in play. `sessionOf` tolerates its absence, which is what lets a socket opened by the previous deploy
    * keep working.
+   *
+   * **Stored without messages** (`compactFailures`, WP6-8b). `sameFailures` compares `stopId`, `code`
+   * and `retryable` and never the message, so nothing behavioural can tell; what it buys is a bound. A
+   * route watch holds up to 64 targets, and a total upstream outage is one `EtaFailure` per pole — with
+   * upstream-authored messages (a `ZodError`'s serialized issue list runs to kilobytes) that pushed a
+   * worst-case session past the platform's hard 16,384-byte attachment cap, and `serializeAttachment`
+   * throwing mid-round is how one session's bookkeeping cost every other subscriber its frames. The only
+   * reader that re-emits these entries is `subscribe()`'s carried-forward echo, which now carries an
+   * empty message — the code and the kerb, which is what a card renders, survive.
    */
   failed: readonly EtaFailure[]
+  /**
+   * This connection is owed a `snapshot` that `subscribe()` deliberately did not send (WP6-8b).
+   *
+   * Set when the accepted set names any target this shard has never polled: an immediate snapshot for
+   * it would be `etas: []`, which on screen is "no buses due" — delivered one paint after the rider's
+   * own HTTP fetch drew real minutes, it blanks them (the ADR-073/087 blanking shape, from the connect
+   * path). So the snapshot waits for the pulled-forward first round, exactly as the poll emulator's
+   * first snapshot waits for a round that answered. Cleared by `sendRound` when that snapshot goes out;
+   * until then the connection gets no `delta` either, because a delta describes a change to a state the
+   * client was never given.
+   */
+  snapshotPending: boolean
 }
 
 /**
@@ -346,7 +374,23 @@ function sessionOf(ws: WebSocket): Session | null {
     // the next round that finds a refusing kerb reports it as news, which is one frame the client did not
     // strictly need and no wrong information.
     failed: Array.isArray(candidate.failed) ? candidate.failed : [],
+    // Tolerated when absent for the same deploy-boundary reason. `false` is the safe default: a session
+    // written by a build that always sent the connect snapshot has nothing pending by definition.
+    snapshotPending: candidate.snapshotPending === true,
   }
+}
+
+/**
+ * A failure set as the attachment stores it: `stopId`, `code`, `retryable` — no message.
+ *
+ * See `Session.failed` for why. Applied at the two places a session is built, never on the wire: the
+ * frames of the round that discovered a failure carry the full (already `boundedMessage`-capped) text.
+ */
+function compactFailures(failed: readonly EtaFailure[]): EtaFailure[] {
+  return failed.map((entry) => ({
+    stopId: entry.stopId,
+    error: { code: entry.error.code, retryable: entry.error.retryable, message: '' },
+  }))
 }
 
 /**
@@ -373,7 +417,11 @@ export function sessionChanged(previous: Session, next: Session): boolean {
     // The failure set is the one part of a session that can move on a round where nothing else does — that
     // is the whole reason it is stored — so a guard that did not ask would drop exactly the write that
     // matters and the next round would report the same outage as news all over again.
-    !sameFailures(previous.failed, next.failed)
+    !sameFailures(previous.failed, next.failed) ||
+    // A deferred snapshot going out is a state change even on a round whose seq the snapshot itself
+    // bumped (so the seq clause already fires today) — compared anyway, because the two moving together
+    // is a property of the current code and not of the shape.
+    next.snapshotPending !== previous.snapshotPending
   )
 }
 
@@ -831,24 +879,45 @@ export class EtaHub extends DurableObject<Env> {
     // the next round tells it everything within one cadence.
     const keptPoles = new Set(fits.flatMap((target) => memberStopIds(target.stopId)))
     const carried = (previous?.failed ?? []).filter((entry) => keptPoles.has(entry.stopId))
-    const session: Session = { targets: fits, seq, announcedLive: true, failed: carried }
-    ws.serializeAttachment(session)
 
     const stored = this.storedReadings()
-    const at = frameAt(Date.now())
-    this.send(ws, {
-      type: 'snapshot',
-      seq,
-      at,
-      // The echo is the mechanism, not a courtesy: without it a client that asked for six places and
-      // got five readings cannot tell a dropped target from a stop with no buses due, which is the same
-      // class of dishonesty as a fake countdown (ADR-008). `SnapshotFrame.targets` says to compare it
-      // with what was sent and tell the rider about the difference.
+    // **A snapshot goes out now only when this shard can actually answer it** (WP6-8b). "Can answer"
+    // is per target and binary: a target with a `readings` row has been polled — even an empty row is
+    // real knowledge ("polled, nothing due") — while a target with none has never been asked about, and
+    // a snapshot naming it would present "we have not asked yet" as "no buses due". Delivered, that
+    // blanks the arrivals the screen just painted from its own HTTP fetch until the first round lands:
+    // the ADR-073/087 blanking shape, reached from the connect path, and the one divergence from the
+    // poll emulator the scenario matrix could not see (its first snapshot has always waited for a round
+    // that answered). An empty accepted set is vacuously known — its snapshot *is* the echo saying
+    // "nothing you named is being watched", and no round is coming to carry it.
+    const known = fits.every((target) => stored.has(target.stopId))
+    const session: Session = {
       targets: fits,
-      etas: canonicalEtas(readingsFor(fits, stored)),
-      // Omitted when empty, like every list in this protocol.
-      ...(carried.length > 0 ? { failed: carried } : {}),
-    })
+      seq,
+      // Deferred data means a deferred `live` too — the data-before-status order, kept by postponement
+      // rather than reordering. `sendRound` announces it right after the snapshot it owes.
+      announcedLive: known,
+      failed: compactFailures(carried),
+      snapshotPending: !known,
+    }
+    ws.serializeAttachment(session)
+
+    const at = frameAt(Date.now())
+    if (known) {
+      this.send(ws, {
+        type: 'snapshot',
+        seq,
+        at,
+        // The echo is the mechanism, not a courtesy: without it a client that asked for six places and
+        // got five readings cannot tell a dropped target from a stop with no buses due, which is the same
+        // class of dishonesty as a fake countdown (ADR-008). `SnapshotFrame.targets` says to compare it
+        // with what was sent and tell the rider about the difference.
+        targets: fits,
+        etas: canonicalEtas(readingsFor(fits, stored)),
+        // Omitted when empty, like every list in this protocol.
+        ...(carried.length > 0 ? { failed: carried } : {}),
+      })
+    }
 
     // Two reasons a target is not being watched, and they are **not** the same error. A malformed or
     // over-cap-for-this-connection target is the caller's to fix (`bad_request`, `retryable: false`, so a
@@ -887,9 +956,11 @@ export class EtaHub extends DurableObject<Env> {
       // snapshot too, because an empty echo with no error is how a client tells this apart from "every
       // target you named was rejected". No error, so the transport stays connected and may re-subscribe.
       this.send(ws, this.status('closed'))
-    } else {
+    } else if (known) {
       // Something has to move the client's session out of `connecting`, or a screen sits under a
-      // "connecting" label while the snapshot's readings are already drawn behind it.
+      // "connecting" label while the snapshot's readings are already drawn behind it. When the snapshot
+      // was deferred there is nothing drawn behind the label yet, so `connecting` stays the honest word
+      // and the transition follows the deferred snapshot out of `sendRound`, in the data-first order.
       this.send(ws, this.status('live'))
     }
 
@@ -951,8 +1022,13 @@ export class EtaHub extends DurableObject<Env> {
         try {
           // The **existing** read path, not a second one: `stopEtas` already resolves a place id
           // through the dataset, fans out per member pole and coalesces every upstream call per pole on
-          // a 30 s TTL (ADR-057, WP0-4). A shard with its own fetcher would double the upstream rate
-          // for every stop that is also being served over HTTP.
+          // a 30 s TTL (ADR-057, WP0-4). What that buys *here* is within-round sharing — two targets of
+          // this round that overlap at a pole are one upstream call — plus one set of rules for what a
+          // reading and a failure mean. What it does **not** buy is sharing with the HTTP path: the
+          // coalescer is per-isolate module state, and this Durable Object is its own isolate (see
+          // `eta-cache.ts`), so a stop served over both the socket and `/v1/etas` is fetched by each.
+          // The cost model in `LIVE_MAX_TARGETS_PER_SHARD` already prices the round standalone, so no
+          // cap moves — but a future argument must not assume cross-path dedup that is not there.
           //
           // …with **this object's own CTB budget**, not the read path's default. That default is sized
           // for one HTTP request; a round repeats at the cadence, and at 24 the 48 heaviest real places
@@ -1011,7 +1087,15 @@ export class EtaHub extends DurableObject<Env> {
     const quiet = shardDiff.changed.length === 0 && shardDiff.gone.length === 0
 
     for (const { ws, session } of entries) {
-      this.sendRound(ws, session, before, after, failures, poleFailures)
+      // Guarded per socket, like `send` one level down: `sendRound` also serializes an attachment, and
+      // a throw anywhere in one connection's bookkeeping must not cost the *other* subscribers their
+      // frames — nor skip the storage writes below, which are what the next round's diffs are computed
+      // against.
+      try {
+        this.sendRound(ws, session, before, after, failures, poleFailures)
+      } catch (err) {
+        console.error(`[eta-hub] sendRound failed: ${(err as Error)?.stack ?? String(err)}`)
+      }
     }
 
     this.writeReadings(before, after)
@@ -1119,7 +1203,17 @@ export class EtaHub extends DurableObject<Env> {
     const failedField = mineFailed.length > 0 ? { failed: mineFailed } : {}
 
     let seq = session.seq
-    if (permanent.length > 0) {
+    let snapshotPending = session.snapshotPending
+    /**
+     * Did this round answer for anything this connection watches? A target in `failures` did not — a
+     * retryable failure only carried the previous readings forward, and "we could not ask" is not an
+     * answer — while a target with pole failures did, partially. The deferred first snapshot waits for
+     * this the same way the poll emulator's waits for `answered || dropped`: a round that told us
+     * nothing must not produce `snapshot { etas: [] }`, the frame for "no buses due" (WP6-8b).
+     */
+    const answered = session.targets.some((target) => !failures.has(target.stopId))
+    if (permanent.length > 0 || (snapshotPending && answered)) {
+      snapshotPending = false
       // **A round that changes the accepted set re-echoes it, and a `snapshot` is the only frame that
       // can.** A target that failed `retryable: false` has left this subscription for good, so the
       // `targets` the client is holding — from its own `subscribe` — now names a stop nobody is polling,
@@ -1138,11 +1232,13 @@ export class EtaHub extends DurableObject<Env> {
         etas: canonicalEtas(readingsFor(kept, after)),
         ...failedField,
       })
-    } else if (changed.length > 0 || gone.length > 0 || failuresAreNews) {
+    } else if (!snapshotPending && (changed.length > 0 || gone.length > 0 || failuresAreNews)) {
       seq += 1
       // A delta with two empty lists and a `failed` is a legal frame and a new one: it is how a round that
       // only learned "this kerb has started refusing" — or "has stopped" — reaches a screen. The module
       // header's "an unchanged round sends nothing" still holds; what counts as unchanged has widened.
+      // `!snapshotPending`, because a connection still owed its first snapshot has no state a delta could
+      // describe a change to: the round that will clear the flag sends the snapshot branch above instead.
       this.send(ws, { type: 'delta', seq, at: frameAt(Date.now()), changed, gone, ...failedField })
     }
     // else: nothing changed for this subscriber, so nothing is sent at all. See the module header.
@@ -1163,10 +1259,19 @@ export class EtaHub extends DurableObject<Env> {
       // (BRIEF-3 §8 decision 7). The snapshot above is what carries the correction.
       for (const error of mine) this.send(ws, this.status('retrying', error))
     }
-    const announcedLive = mine.length === 0
+    // Announced only once the client holds data — a deferred snapshot defers the `live` transition with
+    // it (data-first, by postponement). Until the snapshot exists, `announcedLive` stays false so the
+    // round that finally sends it also sends the transition, in order.
+    const announcedLive = mine.length === 0 && !snapshotPending
     if (announcedLive && !session.announcedLive) this.send(ws, this.status('live'))
 
-    const next: Session = { targets: kept, seq, announcedLive, failed: mineFailed }
+    const next: Session = {
+      targets: kept,
+      seq,
+      announcedLive,
+      failed: compactFailures(mineFailed),
+      snapshotPending,
+    }
     if (sessionChanged(session, next)) {
       // Re-serialized because a mutation of the object the attachment was built from is *not* captured;
       // the runtime snapshots at the call.

@@ -1,6 +1,6 @@
 import type { I18nText } from '@nextbus/core'
 import { z } from 'zod'
-import { cleanArrivals, optionalRemark } from './normalize'
+import { cleanArrivals, fetchUpstream, optionalRemark } from './normalize'
 
 // Green Minibus (GMB) live ETAs — `data.etagmb.gov.hk`, keyless JSON, trilingual (ADR-047).
 // GMB differs from KMB/CTB in two ways that shape this adapter:
@@ -63,7 +63,9 @@ export async function fetchGmbStopEta(
   stopId: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<GmbEtaEntry[]> {
-  const res = await fetchImpl(`${GMB_BASE}/eta/stop/${stopId}`, { headers: GMB_HEADERS })
+  const res = await fetchUpstream(fetchImpl, `${GMB_BASE}/eta/stop/${stopId}`, {
+    headers: GMB_HEADERS,
+  })
   if (!res.ok) throw new Error(`GMB stop-ETA ${res.status} for ${stopId}`)
   const { generated_timestamp, data } = GmbStopEtaResponse.parse(await res.json())
   const observedAt = new Date().toISOString()

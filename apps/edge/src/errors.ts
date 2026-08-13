@@ -83,10 +83,30 @@ export function wireErrorFor(code: ErrorCode, message: string): WireErrorPayload
   return { code, message, retryable: ERROR_CODES[code].retryable }
 }
 
+/**
+ * The most of a thrown message that is allowed onto the wire.
+ *
+ * Two hundred characters, because a message here is a diagnostic and not a payload — and the throw
+ * is not always ours to size. A `ZodError`'s `message` is its serialized issue list, which for an
+ * upstream that changed shape runs to kilobytes and embeds the upstream's own field paths. Unbounded,
+ * that lands in three places that must stay small: every `status` frame, every `EtaFailure` in a
+ * frame's `failed` list, and — before WP6-8b slimmed it — the `EtaHub` socket attachment, whose hard
+ * platform cap is 16,384 bytes for a session that also carries up to 64 route-watch targets.
+ * `sameFailures` never compares the message, so nothing behavioural can notice the cut.
+ */
+const MAX_WIRE_MESSAGE_CHARS = 200
+
+/** `message`, bounded — see `MAX_WIRE_MESSAGE_CHARS`. The ellipsis marks the cut for a human reader. */
+export function boundedMessage(message: string): string {
+  return message.length <= MAX_WIRE_MESSAGE_CHARS
+    ? message
+    : `${message.slice(0, MAX_WIRE_MESSAGE_CHARS - 1)}…`
+}
+
 /** A caught throw as a `WireError`, classified exactly as `errorResponse` classifies it. */
 export function wireErrorOf(err: unknown, fallback?: ErrorCode): WireErrorPayload {
   const code = codeFor(err, fallback ?? 'upstream_unavailable')
-  return wireErrorFor(code, (err as Error)?.message ?? String(err))
+  return wireErrorFor(code, boundedMessage((err as Error)?.message ?? String(err)))
 }
 
 /** The envelope, once. `error` duplicates `message` until ADR-064's deprecation window closes. */
