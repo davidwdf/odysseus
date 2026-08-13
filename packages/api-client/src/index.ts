@@ -18,7 +18,7 @@ import type {
 import { CLIENT_POLICY_DEFAULTS, sameFailures } from '@nextbus/core'
 import type { Clock } from '@nextbus/ports'
 import { type Endpoints, resolveEndpoints } from './endpoint'
-import { classifyFailure } from './errors'
+import { classifyFailure, wireErrorOf } from './errors'
 import {
   createLiveEtaController,
   DEFAULT_LIVE_ENGINE,
@@ -59,6 +59,24 @@ export interface EdgeClientOptions {
 }
 
 /**
+ * How long any single edge request may run — headers *and* body — before it is failed (ADR-137).
+ *
+ * A derivation, not a guess: the Worker's own upstream deadline is 10 s (`fetchUpstream`'s
+ * `AbortSignal.timeout` in `@nextbus/data-normalize`), so the slowest *truthful* answer clears the
+ * edge inside ~12 s; 15 adds network slack on top and still ends a hung request before the next
+ * 30 s poll round starts (`refreshAfterMs`), so rounds cannot stack behind a dead connection.
+ */
+export const REQUEST_DEADLINE_MS = 15_000
+
+/**
+ * `/v1/index`'s own ceiling — the whole-blob exception to the derivation above (see
+ * `getSearchIndex`). Sixty seconds for the same reason the dataset download gets sixty (ADR-138):
+ * still a hang detector, just sized for a body whose transfer time is the rider's downlink, not the
+ * edge's latency.
+ */
+export const INDEX_DEADLINE_MS = 60_000
+
+/**
  * v1 DataSource: talks to the Cloudflare edge API.
  *
  * `watch()` is no longer a shim that concatenates lists — it runs a real frame protocol
@@ -95,10 +113,30 @@ export class EdgeClient implements DataSource {
     this.transport = opts.transport ?? liveTransportFor(DEFAULT_LIVE_ENGINE)
   }
 
-  private async getJson<T>(path: string): Promise<T> {
-    const res = await this.fetchImpl(`${this.base}${path}`)
-    if (!res.ok) throw await classifyFailure(path, res)
-    return (await res.json()) as T
+  private async getJson<T>(path: string, deadlineMs = REQUEST_DEADLINE_MS): Promise<T> {
+    // A deadline, not just error handling (ADR-137). A blackholed connection — a network switch, a
+    // NAT entry that expired without an RST — never *rejects*, and every failure arm in this package
+    // (the poll round's `requestError`, a screen's query retry) needs a rejection to fire. Without
+    // one, poll rounds stack behind requests that will never settle and the screen stays labelled
+    // live over ageing readings: the silent-dead-pipe defect the socket's connect watch and
+    // keepalive close (ADR-135), rebuilt one engine over. The timer spans the *body* read too — a
+    // server that sends headers and then wedges is the same dead pipe.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), deadlineMs)
+    try {
+      const res = await this.fetchImpl(`${this.base}${path}`, { signal: controller.signal })
+      if (!res.ok) throw await classifyFailure(path, res)
+      return (await res.json()) as T
+    } catch (thrown) {
+      // The platform's abort rejection ("The operation was aborted") names neither the request nor
+      // the cause, and `wireErrorOf` would carry that string onto a status frame. Say what happened.
+      if (controller.signal.aborted) {
+        throw new Error(`${path} → no response in ${deadlineMs} ms`)
+      }
+      throw thrown
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   getNearby(at: LatLng, radiusM: number): Promise<NearbyStop[]> {
@@ -142,7 +180,14 @@ export class EdgeClient implements DataSource {
   }
 
   getSearchIndex(): Promise<SearchIndex> {
-    return this.getJson<SearchIndex>('/v1/index')
+    // The one whole-blob endpoint, and the one place `REQUEST_DEADLINE_MS`'s derivation does not
+    // hold: that number is sized from server-side latency (the edge's own 10 s upstream deadline
+    // plus slack), and this body is the full search index, so the missing term is the rider's
+    // downlink × the blob. A first-ever Search load on a slow link could clear 15 s and still be
+    // succeeding — failing it restarts the download from byte zero on every retry, into the same
+    // deadline. The dataset fetch made the same argument for the same shape (ADR-138); after one
+    // success the 6 h max-age, the ETag and the persisted query cache make this ceiling moot.
+    return this.getJson<SearchIndex>('/v1/index', INDEX_DEADLINE_MS)
   }
 
   /**
@@ -465,27 +510,46 @@ export class EdgeClient implements DataSource {
   ): Subscription {
     let inner: LiveEtaController | null = null
     let cancelled = false
-    void this.getRoute(routeId).then(
-      (detail) => {
-        if (cancelled) return
-        // The context carries the route, so the poll engine's rounds are ONE `/v1/etas?route=` request
-        // narrowed by the server (ADR-136) — not the chunked `ids` fan-out ADR-121 measured at ~19×.
-        inner = this.startController(
-          liveTransportFor('poll')(this.liveContext(opts, routeId)),
-          detail.stops.map((stop) => ({ stopId: stop.stop.id, routeIds: [routeId] })),
-          emit,
-        )
-      },
-      () => {
-        // A route that will not load is the screen's problem and it already has it: this method's caller
-        // renders from the *same* route document, so an unreachable one means there is no schematic to put
-        // times on. Swallowed rather than thrown, because an unhandled rejection from a subscription
-        // nobody awaited would take a screen down for a fetch it is already retrying.
-      },
-    )
+    let retry: ReturnType<typeof setTimeout> | null = null
+    const resolvePoles = (): void => {
+      retry = null
+      void this.getRoute(routeId).then(
+        (detail) => {
+          if (cancelled) return
+          // The context carries the route, so the poll engine's rounds are ONE `/v1/etas?route=` request
+          // narrowed by the server (ADR-136) — not the chunked `ids` fan-out ADR-121 measured at ~19×.
+          inner = this.startController(
+            liveTransportFor('poll')(this.liveContext(opts, routeId)),
+            detail.stops.map((stop) => ({ stopId: stop.stop.id, routeIds: [routeId] })),
+            emit,
+          )
+        },
+        (thrown) => {
+          // Swallowed rather than thrown, because an unhandled rejection from a subscription nobody
+          // awaited would take a screen down for a fetch it is already retrying — but **retried, not
+          // abandoned** (ADR-141). The screen's own retry covers the route *document*; this
+          // subscription is keyed on a route id that never changes, so nothing upstream ever
+          // re-subscribes it, and one rejection used to leave a husk that delivered no frame for the
+          // life of the screen. Reached offline as a matter of course: socket attempts fail fast when
+          // there is no network, so the WP6-8b fallback lands here *during* the outage it exists for,
+          // and the one-shot resolve failed on the same dead network the sockets did. The poll cadence
+          // is the retry cadence — this path is the poll engine, resolution is its round zero.
+          if (cancelled) return
+          // The *effective* cadence, exactly as `liveContext` computes it for the rounds — a served
+          // `refreshAfterMs` that governs polling must govern resolution retries too (ADR-149), or an
+          // edge that slowed the cadence would still be asked for the route document at the shipped one.
+          const cadence = opts?.refreshAfterMs ?? this.pollMs
+          if (wireErrorOf(thrown).retryable) retry = setTimeout(resolvePoles, cadence)
+          // …and a `retryable: false` answer (the id no longer denotes a route) means stop asking —
+          // the same instruction every other consumer of the taxonomy honours (ADR-064).
+        },
+      )
+    }
+    resolvePoles()
     return {
       unsubscribe() {
         cancelled = true
+        if (retry !== null) clearTimeout(retry)
         inner?.stop()
       },
     }

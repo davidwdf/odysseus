@@ -243,6 +243,26 @@ export const LIVE_MAX_SOCKETS_PER_SHARD = 64
  */
 export const LIVE_MAX_CLIENT_FRAME_BYTES = 8_192
 
+/** One encoder for the byte-accurate half of the frame cap — see `webSocketMessage`. */
+const UTF8 = new TextEncoder()
+
+/**
+ * The floor under a pulled-forward round (ADR-147): a `subscribe` may not start a round sooner than
+ * this after the previous one **started**. Ten seconds for `LIVE_ROUTE_MIN_GAP_MS`'s own reason —
+ * "never ask more often than this, whatever the arithmetic says" — and deliberately far under the
+ * 45 s cadence floor, so a genuinely new cold target still gets its first round promptly. What it
+ * bounds is the outage shape ADR-140 exposed: a never-polled target keeps no readings row while its
+ * rounds fail, so every re-`subscribe` from a reconnect loop read as "never polled" and pulled the
+ * alarm to *now* — and `coalesce` does not cache rejections, so each pull re-hit the failing
+ * upstream. With the floor, a reconnect loop costs at most one upstream round per gap per shard.
+ */
+export const LIVE_POLL_NOW_MIN_GAP_MS = 10_000
+
+/** Where the last round's start time lives. Survives teardown on purpose — see `forgetReadings`.
+ *  Exported like `ROUNDS_COMPLETED_KEY`: a test that needs a shard to read "has not polled recently"
+ *  again deletes this one stamp rather than sweeping the whole `LIVE_HUB_KV_KEYS` list. */
+export const LAST_ROUND_AT_KEY = 'lastRoundAt'
+
 /** Where the consecutive-quiet-round counter lives. See `unchangedRounds`. */
 const UNCHANGED_ROUNDS_KEY = 'unchangedRounds'
 
@@ -266,6 +286,11 @@ export const LIVE_HUB_KV_KEYS = [
   UNCHANGED_ROUNDS_KEY,
   PUBLISH_CLOCK_KEY,
   ROUNDS_COMPLETED_KEY,
+  // The ADR-147 floor's input. In it for exactly the reason the docblock predicts a fifth key would
+  // need to be: a case inheriting the previous one's round stamp has its pulled-forward first poll
+  // silently floored 10 s out, and every `connectAndPoll` in the file times out for a reason nothing
+  // names. (A production teardown deliberately keeps it — see `forgetReadings` — a test reset must not.)
+  LAST_ROUND_AT_KEY,
 ] as const
 
 /**
@@ -626,7 +651,15 @@ export class EtaHub extends DurableObject<Env> {
     // handlers binary data as `ArrayBuffer` regardless of `websocket_standard_binary_type`.)
     if (typeof message !== 'string') return
 
-    if (message.length > LIVE_MAX_CLIENT_FRAME_BYTES) {
+    // The cap is *bytes* and `length` counts UTF-16 code units, which undercounts everything outside
+    // ASCII — a frame of 8,191 CJK characters is ~24 kB and used to pass at 3× the documented parse-CPU
+    // bound (ADR-146). Units first, because that check is free and bounds the encode: a frame longer in
+    // units than the cap cannot be under it in bytes, so the exact count below only ever runs on a
+    // string the cap's own arithmetic already calls small.
+    if (
+      message.length > LIVE_MAX_CLIENT_FRAME_BYTES ||
+      UTF8.encode(message).byteLength > LIVE_MAX_CLIENT_FRAME_BYTES
+    ) {
       this.send(ws, this.status('live', wireErrorFor('bad_request', 'frame too large')))
       return
     }
@@ -967,8 +1000,10 @@ export class EtaHub extends DurableObject<Env> {
     // A first poll, not an "again": `nextLiveCadenceMs` owns the steady-state cadence and is not being
     // second-guessed here. Without this a subscriber that named a stop this shard has never polled would
     // see an empty snapshot and then nothing for up to 45 s. The upstream cost of pulling the alarm
-    // forward is bounded by `coalesce`'s 30 s window, so a client reconnecting in a loop cannot amplify
-    // it into upstream traffic.
+    // forward is bounded by the `LIVE_POLL_NOW_MIN_GAP_MS` floor in `reschedule` (ADR-147) — NOT by
+    // `coalesce`, which this comment used to credit: the coalescer's 30 s window holds answers, never
+    // rejections, so it bounds nothing during exactly the outage in which a still-failing target keeps
+    // no readings row (ADR-140) and every re-subscribe reads as "never polled".
     await this.reschedule({
       pollNow: fits.some((target) => !stored.has(target.stopId)),
     })
@@ -1006,6 +1041,11 @@ export class EtaHub extends DurableObject<Env> {
       if (session !== null) entries.push({ ws, session })
     }
     if (entries.length === 0) return
+
+    // Stamped at the START, before any await: the floor under a pulled-forward round (ADR-147) is
+    // "how recently did this shard hit upstream", and a round that is still inside its fan-out has
+    // hit it already. Stamping at the end would leave the whole in-flight window unfloored.
+    this.ctx.storage.kv.put(LAST_ROUND_AT_KEY, Date.now())
 
     const before = this.storedReadings()
     // The shard's poll set: every subscriber's targets merged by the kernel's own union semantics — if
@@ -1072,7 +1112,17 @@ export class EtaHub extends DurableObject<Env> {
         // **A failed round is not a departure.** The previous readings stay, so nothing appears in
         // `gone`: reporting them would tell the rider the bus had left when all that happened is that
         // we could not ask. The `status` frame below is what says so honestly.
-        after.set(result.target.stopId, before.get(result.target.stopId) ?? [])
+        //
+        // **Carried forward only when there is something to carry.** This used to read `?? []`, and
+        // for a never-polled target that fabricated a "polled, nothing due" row: `writeReadings`
+        // stored it, `subscribe()`'s `stored.has` then answered the *next* rider an immediate
+        // `snapshot { etas: [] }` — the ADR-073/087 blanking shape, handed to whoever subscribed
+        // second during an outage, while the first subscriber was correctly protected by
+        // `snapshotPending`. The asymmetry is the tell: the row recorded an answer for a round that
+        // answered nothing. Absence is frame-invisible (`readingsFor` flattens a missing row to the
+        // same empty list), so the only thing this changes is what the next `subscribe` believes.
+        const prior = before.get(result.target.stopId)
+        if (prior !== undefined) after.set(result.target.stopId, prior)
       }
       // …and a `retryable: false` failure leaves the target absent from `after` entirely, because it has
       // left the subscription. Its readings are not reported as `gone`: `sendRound` sends the *corrected
@@ -1495,12 +1545,25 @@ export class EtaHub extends DurableObject<Env> {
         ? teardown
         : nextRouteRoundMs({ ...this.publishClock(), now: Date.now() })
 
-    const at = opts.pollNow ? Date.now() : Date.now() + delay
+    // `pollNow` is floored, not absolute (ADR-147): "as soon as the gap allows", never sooner than
+    // `LIVE_POLL_NOW_MIN_GAP_MS` after the last round *started*. A shard that has not polled within
+    // the gap (or ever) still gets its round immediately — the WP6-8b first-poll promise — while a
+    // reconnect loop against a target whose rounds are failing (which keeps no readings row, ADR-140,
+    // so every re-subscribe reads as "never polled") is bounded to one upstream round per gap.
+    const at = opts.pollNow
+      ? Math.max(Date.now(), this.lastRoundAt() + LIVE_POLL_NOW_MIN_GAP_MS)
+      : Date.now() + delay
     // Inside `alarm()` this reads `null` unless `setAlarm` has already been called since the handler
     // started — documented, and exactly what is wanted: the end of a round always installs the next one.
     const existing = await this.ctx.storage.getAlarm()
     if (existing !== null && existing <= at) return
     await this.ctx.storage.setAlarm(at)
+  }
+
+  /** When the last round started, or 0 when this shard has never polled (then the floor is a no-op). */
+  private lastRoundAt(): number {
+    const stored = this.ctx.storage.kv.get<number>(LAST_ROUND_AT_KEY)
+    return typeof stored === 'number' && Number.isFinite(stored) && stored > 0 ? stored : 0
   }
 
   /**
@@ -1518,7 +1581,10 @@ export class EtaHub extends DurableObject<Env> {
     // The publish clock goes with them, and it has to: it describes readings that are being dropped. A
     // surviving `publishedAt` would meet the next watch's first round as its own `previousPublishedAt`,
     // and "the publish did not advance" is exactly what that round cannot know yet. `roundsCompleted`
-    // deliberately does **not** go — see its docblock; it is history, not state.
+    // deliberately does **not** go — see its docblock; it is history, not state. `lastRoundAt` stays
+    // too, and for a sharper reason than history: it is the ADR-147 floor's input, and a reconnect
+    // loop whose every disconnect empties the shard would otherwise reset the floor through this very
+    // teardown and pull an upstream round per reconnect again.
     this.ctx.storage.kv.delete(PUBLISH_CLOCK_KEY)
   }
 }

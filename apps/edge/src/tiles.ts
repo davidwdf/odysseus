@@ -18,6 +18,7 @@
 // Attribution obligations (logo on the map face + copyright notice) are the client's job and
 // live in `components/MiniMap.tsx`; this file only moves bytes.
 
+import { UPSTREAM_TIMEOUT_MS } from '@nextbus/data-normalize'
 import { fail } from './errors'
 
 const LANDSD = 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz'
@@ -81,9 +82,26 @@ export function parseTilePath(parts: string[]): { upstream: string } | { error: 
  * runs at all — that is what keeps us inside LandsD's "no large amount of requests" limit.
  */
 export async function fetchTile(upstream: string): Promise<Response> {
-  const res = await fetch(upstream, {
-    cf: { cacheTtl: TILE_TTL_SEC, cacheEverything: true },
-  } as RequestInit)
+  // The hang detector bounds the *connection* — DNS, TLS, headers — and is disarmed the moment the
+  // response arrives (ADR-148). ADR-139 first routed this through `fetchUpstream`, whose signal
+  // spans the body too; for an ETA board (~1 kB, consumed by us) the distinction is invisible, but
+  // this body is streamed to the rider at the rider's own pace, so a client slower than
+  // tile-size ÷ 10 s was handed a truncated image. The defect ADR-139 closed stays closed: a
+  // connection that never answers is aborted at the same `UPSTREAM_TIMEOUT_MS`, and the caller's
+  // `errorResponse` classifies the abort (`codeFor`: `AbortError` → `upstream_timeout`). What this
+  // deliberately does not bound is an upstream that wedges mid-body with a client still reading —
+  // indistinguishable from a slow rider, and ended by the rider's own disconnect.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(upstream, {
+      signal: controller.signal,
+      cf: { cacheTtl: TILE_TTL_SEC, cacheEverything: true },
+    } as RequestInit)
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) {
     // A tile failure is an API failure and carries the same envelope as every other (ADR-064).
     // It used to be a bare text body with a hand-picked status; a `<Image>` never read either, but
@@ -95,6 +113,9 @@ export async function fetchTile(upstream: string): Promise<Response> {
         : res.status === 504
           ? 'upstream_timeout'
           : 'upstream_unavailable'
+    // The error body replaces `res.body`, which nobody will ever read — cancel it, or the
+    // half-open upstream stream keeps its connection slot until the runtime collects it.
+    void res.body?.cancel().catch(() => {})
     return fail(code, `tile upstream ${res.status}`, { 'access-control-allow-origin': '*' })
   }
   return new Response(res.body, {

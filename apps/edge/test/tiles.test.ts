@@ -8,14 +8,18 @@ import worker from '../src/index'
 const LANDSD = 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz'
 
 let upstream: string[]
+/** The init the last LandsD fetch carried — the deadline assertion reads it. */
+let upstreamInit: RequestInit | undefined
 const realFetch = globalThis.fetch
 
 beforeEach(() => {
   upstream = []
+  upstreamInit = undefined
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (url.startsWith(LANDSD)) {
       upstream.push(url)
+      upstreamInit = init
       // Mimic the real headers, including the `private` we deliberately override.
       return new Response(new Uint8Array([137, 80, 78, 71]), {
         headers: {
@@ -49,6 +53,11 @@ describe('/v1/tiles', () => {
     // The point of the proxy: `private` upstream becomes `public` for us.
     expect(res.headers.get('cache-control')).toMatch(/^public, max-age=43200/)
     expect(res.headers.get('x-tile-source')).toBe('landsd')
+    // The fetch carries the connection hang detector (ADR-139/148) — this was the Worker's one
+    // upstream call with none, and a wedged connection held an outgoing-connection slot
+    // indefinitely. Since ADR-148 the timer is disarmed once headers arrive, so it can no longer
+    // truncate a slow rider's download; the signal on the *request* is what this pins.
+    expect(upstreamInit?.signal).toBeInstanceOf(AbortSignal)
   })
 
   it('maps each UI locale to its LandsD label layer', async () => {
