@@ -736,6 +736,71 @@ describe('targets it will not or cannot watch', () => {
     }
   })
 
+  it('an outage on a never-polled target writes no readings row, so a second subscriber is deferred too', async () => {
+    // The asymmetry this pins: during an outage, the *first* subscriber to a cold target was protected
+    // by `snapshotPending` (a round that answered nothing clears no flag), but the round's retryable
+    // failure used to write `target → []` into `readings` — a row that says "polled, nothing due" for a
+    // round that answered nothing — so the *second* subscriber found `stored.has(target)` true and was
+    // handed an immediate `snapshot { etas: [] }`: the ADR-073/087 blanking shape, from the connect
+    // path, for exactly one rider. Both riders must be treated like the first.
+    const kv = env.DATASET as KVNamespace
+    const placeId = (await kv.get(datasetKeys.alias(HASH, POLE_D.id), 'text')) as string
+    const saved = (await kv.get(datasetKeys.place(HASH, placeId), 'text')) as string
+    expect(saved, 'the fixture must have a place document to corrupt').toBeTruthy()
+
+    // Corrupt *before* anyone subscribes: the shard has never polled this target when the outage starts.
+    await kv.put(datasetKeys.place(HASH, placeId), '{ not json')
+    try {
+      // Rider 1: the subscription pulls the alarm to now, the round fails retryably, and the only frame
+      // is `retrying` — the deferred snapshot correctly waits for a round that answers.
+      const rider1 = await connect([POLE_D.id])
+      const first = await rider1.frames.take(1)
+      expect(only(first, 'status')[0]?.state).toBe('retrying')
+      expect(only(first, 'snapshot')).toEqual([])
+
+      // No fabricated row: the round answered nothing, so storage must record nothing.
+      const stored = await runInDurableObject(stubFor([POLE_D.id]), (_i: EtaHub, state) =>
+        state.storage.sql.exec<{ target: string }>('SELECT target FROM readings').toArray(),
+      )
+      expect(
+        stored.find((row) => row.target === POLE_D.id),
+        'a retryable failure on a never-polled target must not write a readings row',
+      ).toBeUndefined()
+
+      // Rider 2, subscribing mid-outage — the defect's victim. Before the fix the stored `[]` row made
+      // this an immediate `snapshot { etas: [] }` with no `failed` (a fresh socket carries none), which
+      // blanked the arrivals the screen had just painted from its own HTTP fetch.
+      const rider2 = await connect([POLE_D.id])
+      const second = await rider2.frames.take(1)
+      expect(only(second, 'status')[0]?.state).toBe('retrying')
+      expect(only(second, 'snapshot')).toEqual([])
+
+      // Rider 2's subscribe pulled a round forward, and rider 1 hears that round's `retrying` too —
+      // wait for it, or the drain below races a frame still in flight and it surfaces later as a
+      // stray `status` in the recovery assertions.
+      await rider1.frames.take(2)
+
+      // The outage ends; the next round answers, and *both* riders get their deferred snapshot
+      // carrying real readings — never the empty one.
+      rider1.frames.drain()
+      rider2.frames.drain()
+      await kv.put(datasetKeys.place(HASH, placeId), saved)
+      expect(await runRound([POLE_D.id])).toBe(true)
+      for (const rider of [rider1, rider2]) {
+        const received = await rider.frames.take(2)
+        const snapshot = only(received, 'snapshot')[0]
+        expect(
+          snapshot,
+          'the deferred snapshot arrives with the first answering round',
+        ).toBeDefined()
+        expect(snapshot?.etas.length).toBeGreaterThan(0)
+        expect(only(received, 'status')[0]?.state).toBe('live')
+      }
+    } finally {
+      await kv.put(datasetKeys.place(HASH, placeId), saved)
+    }
+  })
+
   /**
    * Make one target permanently unresolvable, run the body, then put the dataset back.
    *

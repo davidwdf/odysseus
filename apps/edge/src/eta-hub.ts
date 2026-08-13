@@ -1072,7 +1072,17 @@ export class EtaHub extends DurableObject<Env> {
         // **A failed round is not a departure.** The previous readings stay, so nothing appears in
         // `gone`: reporting them would tell the rider the bus had left when all that happened is that
         // we could not ask. The `status` frame below is what says so honestly.
-        after.set(result.target.stopId, before.get(result.target.stopId) ?? [])
+        //
+        // **Carried forward only when there is something to carry.** This used to read `?? []`, and
+        // for a never-polled target that fabricated a "polled, nothing due" row: `writeReadings`
+        // stored it, `subscribe()`'s `stored.has` then answered the *next* rider an immediate
+        // `snapshot { etas: [] }` — the ADR-073/087 blanking shape, handed to whoever subscribed
+        // second during an outage, while the first subscriber was correctly protected by
+        // `snapshotPending`. The asymmetry is the tell: the row recorded an answer for a round that
+        // answered nothing. Absence is frame-invisible (`readingsFor` flattens a missing row to the
+        // same empty list), so the only thing this changes is what the next `subscribe` believes.
+        const prior = before.get(result.target.stopId)
+        if (prior !== undefined) after.set(result.target.stopId, prior)
       }
       // …and a `retryable: false` failure leaves the target absent from `after` entirely, because it has
       // left the subscription. Its readings are not reported as `gone`: `sendRound` sends the *corrected
