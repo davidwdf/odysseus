@@ -283,12 +283,26 @@ export class EdgeClient implements DataSource {
    * ## The trigger, precisely
    *
    * Counts `retrying` updates arriving while the session has never held data (`seq === 0` — the
-   * kernel's own "no snapshot has ever landed" sentinel). A socket that has ever delivered a frame has
-   * proved the path carries the protocol, and every later failure belongs to the reconnect schedule —
-   * `everWorked` latches and the counter never fires. A terminal `closed` + `retryable: false` does not
-   * count either: the server *answered*, and what it said polling would not change. The supervised
-   * updates pass through to the door untouched; the fallback's do too, through the same door, so the
-   * listener sees one continuous subscription.
+   * kernel's own "no snapshot has ever landed" sentinel) — **and only the transport's own connection
+   * failures among them.** The two kinds of `retrying` are distinguishable by who authored the error:
+   * the socket transport synthesizes `internal` for everything connection-level (a close, a keepalive
+   * timeout, a hung handshake — `wireErrorOf` over a local `Error`), while a frame carrying an
+   * `upstream_*` or `not_found` code was **parsed from server bytes**, which is itself proof the path
+   * carries the protocol. Without that distinction, a healthy socket whose *upstream* was down for the
+   * first three rounds fell back to polling — which polls the same dead upstream, learns nothing
+   * sooner, and forfeits the shared round for the rest of the screen's life. So a server-authored
+   * `retrying` latches `everWorked` exactly as a data frame does.
+   *
+   * A socket that has ever delivered a frame has proved the path, and every later failure belongs to
+   * the reconnect schedule — `everWorked` latches and the counter never fires. A terminal `closed` +
+   * `retryable: false` does not count either: the server *answered*, and what it said polling would
+   * not change. The supervised updates pass through to the door untouched; the fallback's do too,
+   * through the same door, so the listener sees one continuous subscription.
+   *
+   * **Fallback is per subscription, which is also the re-upgrade path**: every new `watch()` /
+   * `watchRoute()` — a screen navigation, a pull-to-refresh, an app resume — starts socket-first
+   * again, so a rider is pinned to polling only for the lifetime of the screen that discovered the
+   * hostile network, never for the app's.
    */
   private withPollFallback(
     startSocket: (emit: (update: LiveEtaUpdate) => void) => LiveEtaController,
@@ -306,12 +320,18 @@ export class EdgeClient implements DataSource {
 
     socket = startSocket((update) => {
       if (released || fellBack) return
-      if (update.seq > 0 || update.status.state === 'live') everWorked = true
+      // A `retrying` whose error the transport did not author (`internal` is its one spelling for a
+      // connection-level failure) was parsed from server bytes — the path works; the upstream doesn't.
+      const connectionFailure =
+        update.status.state === 'retrying' && update.status.error?.code === 'internal'
       if (
-        !everWorked &&
-        update.status.state === 'retrying' &&
-        ++failures >= SOCKET_FALLBACK_AFTER_FAILURES
+        update.seq > 0 ||
+        update.status.state === 'live' ||
+        (update.status.state === 'retrying' && !connectionFailure)
       ) {
+        everWorked = true
+      }
+      if (!everWorked && connectionFailure && ++failures >= SOCKET_FALLBACK_AFTER_FAILURES) {
         fellBack = true
         socket?.stop()
         fallback = startFallback()

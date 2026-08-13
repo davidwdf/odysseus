@@ -9401,6 +9401,14 @@ pre-existing and unaddressed; it earned its keep here.
      the existing polled-route path, now forced onto the poll engine by construction
      (`watchRoutePolled`) so a fallback cannot recurse into a second socket. This also restores
      ADR-055's degrade-to-slow promise for a deployment without the `ETA_HUB` binding.
+     **Refined the next day, after review:** only the transport's *own* connection failures count —
+     `internal` is its one spelling for those — because a `retrying` carrying an `upstream_*` code was
+     parsed from server bytes and is itself proof the path works. Without the distinction, a healthy
+     socket whose upstream was down for its first three rounds fell back to polling, which polls the
+     same dead upstream and forfeits the shared round for the screen's life. Fallback remains
+     per-subscription, which is also the re-upgrade path: every new `watch()`/`watchRoute()` starts
+     socket-first again, so a rider is pinned to polling only for the life of the screen that
+     discovered the hostile network.
   5. **A poll round that completes after a younger round is discarded whole** (a per-subscription
      watermark). `timers.every` fires on the clock, so a round slower than the cadence overlaps the next
      — ADR-121 measured 75.7 s against 30 s — and completion order is the network's choice: a slow round

@@ -42,15 +42,22 @@ function fakeSocketEngine() {
       closed = true
     },
   }
-  const retrying = (): ServerFrame => ({
+  const retrying = (code: 'internal' | 'upstream_unavailable'): ServerFrame => ({
     type: 'status',
     at: '2026-08-12T12:00:00.000Z',
     state: 'retrying',
-    error: { code: 'internal', message: 'socket error', retryable: true },
+    error: {
+      code,
+      message: code === 'internal' ? 'socket error' : 'KMB stop-ETA 502',
+      retryable: true,
+    },
   })
   return {
     engine,
-    emitRetrying: () => sink?.(retrying()),
+    /** The transport's own connection failure — `internal` is its one spelling for those. */
+    emitRetrying: () => sink?.(retrying('internal')),
+    /** A server-authored failure: parsed from server bytes, so the path itself is proven. */
+    emitUpstreamRetrying: () => sink?.(retrying('upstream_unavailable')),
     emitSnapshot: () =>
       sink?.({
         type: 'snapshot',
@@ -137,6 +144,36 @@ describe('EdgeClient.watch, socket-first', () => {
     expect(socket.wasClosed()).toBe(true)
     expect(edge.paths.filter((p) => p.includes('/v1/etas?'))).toHaveLength(1)
     expect(updates.at(-1)?.etas[0]?.arrivals[0]).toBe('2026-08-12T20:04:00+08:00')
+
+    sub.unsubscribe()
+  })
+
+  it('never falls back on server-authored failures: a frame that arrived proves the path', async () => {
+    // A healthy socket whose UPSTREAM is down: the shard's rounds fail and it sends `retrying` frames
+    // carrying upstream codes. Falling back here would poll the same dead upstream — no sooner an
+    // answer, and the shared round forfeited for the screen's life — so a `retrying` the transport did
+    // not author latches `everWorked` exactly as a snapshot does.
+    const socket = fakeSocketEngine()
+    const edge = fakeEdge()
+    const client = createEdgeClient({
+      baseUrl: 'https://api.example.test',
+      fetchImpl: edge.fetchImpl,
+      transport: () => socket.engine,
+    })
+    const sub = client.watch([{ stopId: STOP }], () => {})
+
+    for (let failure = 0; failure < SOCKET_FALLBACK_AFTER_FAILURES * 3; failure++) {
+      socket.emitUpstreamRetrying()
+    }
+    // …and even transport-level failures afterwards stay with the reconnect schedule: the server has
+    // been heard from, so the path is proven for this subscription's lifetime.
+    for (let failure = 0; failure < SOCKET_FALLBACK_AFTER_FAILURES; failure++) {
+      socket.emitRetrying()
+    }
+    await flush()
+
+    expect(socket.wasClosed()).toBe(false)
+    expect(edge.paths.filter((p) => p.includes('/v1/etas?'))).toHaveLength(0)
 
     sub.unsubscribe()
   })

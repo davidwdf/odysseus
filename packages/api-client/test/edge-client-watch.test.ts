@@ -385,16 +385,6 @@ function stubRouteAndEtas(routeId: string, poles: string[], answers: Map<string,
         headers: { 'content-type': 'application/json' },
       })
     }
-    // The route batch (ADR-136). Deliberately NOT narrowed here, unlike the real server: the client
-    // applies `narrowEtasToRoutes` per target as well, and the narrowing test below asserts that layer
-    // holds even against a producer that narrows nothing.
-    if (url.includes('/v1/etas?route=')) {
-      const reports = poles.map((id) => ({ id, etas: answers.get(id) ?? [] }))
-      return new Response(JSON.stringify({ reports }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
     const reports = idsOf(url).map((id) => ({ id, etas: answers.get(id) ?? [] }))
     return new Response(JSON.stringify({ reports }), {
       status: 200,
