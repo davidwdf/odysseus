@@ -91,9 +91,13 @@ function rowsToEta(bucket: KmbRow[], stopId: string, generated: string, observed
  * (`dataset.ts`) — and `dir` arrives as `I`/`O` but occasionally spelled out. A response mixing `1`
  * and `"1"` split one board into two buckets that minted the SAME `routeId`; `dedupeEtas` downstream
  * then kept whichever bucket sorted first and the other bucket's later arrivals vanished from the row.
+ * `co` goes through the identical `LWB`-or-`KMB` collapse as `rowsToEta`'s `operator` (ADR-149) — the
+ * one field ADR-146 left keyed raw, and the same split-board shape one field over if the feed ever
+ * mixed spellings.
  */
 function bucketKey(row: KmbRow): string {
-  return `${row.co}|${row.route}|${toBound(row.dir)}|${String(row.service_type)}`
+  const operator = row.co === 'LWB' ? 'LWB' : 'KMB'
+  return `${operator}|${row.route}|${toBound(row.dir)}|${String(row.service_type)}`
 }
 
 function groupKmb(stopId: string, generated: string, rows: KmbRow[]): Eta[] {

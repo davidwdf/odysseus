@@ -25,6 +25,7 @@ import type { Appearance } from '@nextbus/ui'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   adoptRemotePreferences,
+  PREFERENCES_QUARANTINE_KEY,
   PREFERENCES_STORAGE_KEY,
   PREFERENCES_VERSION,
   usePreferences,
@@ -402,6 +403,20 @@ describe('the blob stays the one the Expo PWA can read', () => {
     // …and the next write repairs the file rather than leaving the rider's list unreachable.
     usePreferences.getState().toggleFavoriteRoute(POLE_C, ROUTE_6)
     expect(onDisk().favoriteRoutes).toEqual([FAV_A, FAV_C])
+  })
+
+  it('quarantines the bytes it cannot read before writing over them (ADR-149)', () => {
+    // The comfort the old comment offered — "the next write merges over whatever is still there" — was
+    // the defect: the next write's own read of the blob fails the same way, so it merges with nobody
+    // and *replaces* what is still there. The unreadable bytes (another writer's list, truncated
+    // mid-flush) now survive that repair verbatim, under a key nothing reads — the same rule the Expo
+    // store applies at launch (ADR-143).
+    const corrupt = '{"state":{"favoriteRoutes":["KMB:18492910339E23AA|KMB:6'
+    window.localStorage.setItem(PREFERENCES_STORAGE_KEY, corrupt)
+    usePreferences.getState().toggleFavoriteRoute(POLE_A, ROUTE_6)
+    expect(window.localStorage.getItem(PREFERENCES_QUARANTINE_KEY)).toBe(corrupt)
+    // The repair itself is unchanged: the main key holds this tab's state again.
+    expect(onDisk().favoriteRoutes).toEqual([FAV_A])
   })
 })
 

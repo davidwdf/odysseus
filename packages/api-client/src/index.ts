@@ -535,7 +535,11 @@ export class EdgeClient implements DataSource {
           // and the one-shot resolve failed on the same dead network the sockets did. The poll cadence
           // is the retry cadence — this path is the poll engine, resolution is its round zero.
           if (cancelled) return
-          if (wireErrorOf(thrown).retryable) retry = setTimeout(resolvePoles, this.pollMs)
+          // The *effective* cadence, exactly as `liveContext` computes it for the rounds — a served
+          // `refreshAfterMs` that governs polling must govern resolution retries too (ADR-149), or an
+          // edge that slowed the cadence would still be asked for the route document at the shipped one.
+          const cadence = opts?.refreshAfterMs ?? this.pollMs
+          if (wireErrorOf(thrown).retryable) retry = setTimeout(resolvePoles, cadence)
           // …and a `retryable: false` answer (the id no longer denotes a route) means stop asking —
           // the same instruction every other consumer of the taxonomy honours (ADR-064).
         },

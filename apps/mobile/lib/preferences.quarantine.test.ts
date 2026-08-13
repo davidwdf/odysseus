@@ -58,4 +58,30 @@ describe('a corrupt preferences blob (ADR-143)', () => {
     expect(usePreferences.getState().favoriteRoutes).toEqual([favourite])
     expect(await AsyncStorage.getItem(PREFERENCES_QUARANTINE_KEY)).toBeNull()
   })
+
+  it('a blob corrupted mid-session is quarantined by the write that repairs it (ADR-149)', async () => {
+    // The launch path was ADR-143; this is the other door. `commit`'s `readDisk` catches a corrupt
+    // blob and merges with nobody — and its write then replaces the bytes. They must be preserved
+    // first, exactly as at launch. (The quarantine write failing is swallowed there, deliberately:
+    // mid-session there is no splash to hold, and failing the commit trades a possible loss for a
+    // certain one.)
+    const { usePreferences, PREFERENCES_QUARANTINE_KEY } = await import('./preferences')
+    await AsyncStorage.removeItem(PREFERENCES_QUARANTINE_KEY)
+    await AsyncStorage.setItem(KEY, CORRUPT)
+
+    usePreferences.getState().toggleFavoriteRoute('KMB:18492910339E23AA', 'KMB:6:outbound:1')
+
+    // The write queue is asynchronous; wait for the commit that does the quarantining to land.
+    const deadline = Date.now() + 2_000
+    let quarantined: string | null = null
+    while (quarantined === null && Date.now() < deadline) {
+      quarantined = await AsyncStorage.getItem(PREFERENCES_QUARANTINE_KEY)
+      if (quarantined === null) await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    expect(quarantined, 'the unreadable bytes must survive the repairing write').toBe(CORRUPT)
+    // …and the repair happened: the main key parses again.
+    const repaired = await AsyncStorage.getItem(KEY)
+    expect(repaired).not.toBe(CORRUPT)
+    expect(() => JSON.parse(repaired as string)).not.toThrow()
+  })
 })

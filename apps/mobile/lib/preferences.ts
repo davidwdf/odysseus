@@ -259,8 +259,9 @@ function persistedNow(): PersistedPreferences {
  * "nobody to merge with" — the safe answer, since it leaves the rider's own state standing.
  */
 async function readDisk(name: string): Promise<PersistedPreferences | null> {
+  let raw: string | null = null
   try {
-    const raw = await AsyncStorage.getItem(name)
+    raw = await AsyncStorage.getItem(name)
     if (raw === null) return null
     const envelope = JSON.parse(raw) as StorageValue<PersistedPreferences> | null
     const state = envelope?.state as Partial<PersistedPreferences> | undefined
@@ -282,6 +283,12 @@ async function readDisk(name: string): Promise<PersistedPreferences | null> {
       recentStops: Array.isArray(migrated.recentStops) ? migrated.recentStops : [],
     }
   } catch {
+    // The launch path's rule (ADR-143), applied to the mid-session read (ADR-149): this is what
+    // `commit` calls, and its merge — with nobody, since the blob is unreadable — is about to write
+    // over the bytes. A read that itself rejected has nothing to preserve; a quarantine write that
+    // fails is swallowed, because mid-session there is no splash to hold and failing the commit
+    // would trade a possible loss for a certain one.
+    if (raw !== null) await AsyncStorage.setItem(PREFERENCES_QUARANTINE_KEY, raw).catch(() => {})
     return null
   }
 }

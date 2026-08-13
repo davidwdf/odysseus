@@ -182,6 +182,13 @@ function persistedNow(): PersistedPreferences {
  * work package rebasing. Anything unreadable — absent, truncated, hand-edited — is `null`, which the
  * kernel rule reads as "nobody to merge with" and which therefore costs the rider nothing.
  */
+/**
+ * Where an unparseable `nextbus.preferences` blob is copied before anything writes over it (ADR-149)
+ * — the same key, spelling and rule as the Expo store's (ADR-143). Written only by the two catch
+ * arms below; never read by the app.
+ */
+export const PREFERENCES_QUARANTINE_KEY = 'nextbus.preferences.quarantine'
+
 function readDisk(): PersistedPreferences | null {
   const raw = safeLocalStorage.getItem(STORAGE_KEY)
   if (raw === null) return null
@@ -208,6 +215,10 @@ function readDisk(): PersistedPreferences | null {
       recentStops: Array.isArray(migrated.recentStops) ? migrated.recentStops : [],
     }
   } catch {
+    // Bytes we hold but cannot read are preserved before the caller writes over them (ADR-149): this
+    // is the mid-session path `setItem` reads, and its merge — with nobody, since the blob is
+    // unreadable — is about to replace the blob with this tab's own state.
+    safeLocalStorage.setItem(PREFERENCES_QUARANTINE_KEY, raw)
     return null
   }
 }
@@ -227,9 +238,11 @@ const mergingStorage: PersistStorage<PersistedPreferences> = {
     try {
       return JSON.parse(raw) as StorageValue<PersistedPreferences>
     } catch {
-      // A corrupt blob hydrates as the defaults, exactly as `createJSONStorage` behaved. It is not
-      // cleared: the next write merges over whatever is still there, and a blob this cannot parse today
-      // may be one a later build can.
+      // A corrupt blob hydrates as the defaults, exactly as `createJSONStorage` behaved — but the
+      // bytes are quarantined first (ADR-149). This comment used to say "the next write merges over
+      // whatever is still there", and that was the defect: the next write's own read of the blob
+      // fails the same way, so it merges with nobody and *replaces* what is still there.
+      safeLocalStorage.setItem(PREFERENCES_QUARANTINE_KEY, raw)
       return null
     }
   },
