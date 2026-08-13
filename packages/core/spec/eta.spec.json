@@ -160,6 +160,20 @@
             "isDue": false,
             "hasDeparted": true
           }
+        },
+        {
+          "name": "unparseable-arrival-is-departed",
+          "why": "GUARD ROW (ADR-142). The wire admits any string and cleanArrivals drops only falsy values, so a malformed operator timestamp reaches this function. NaN seconds used to fail every band and render a literal 'NaN min' in the normal colour on every readout in the product. The one honest arm every consumer already has is 'departed' (formatRelative's dash, etaLabelParts' departed, etaUrgency's none, upcoming's filter), so an unreadable arrival takes it. The zeros are a defined sentinel, not a measurement: JSON cannot hold NaN, and no caller reads the figures once hasDeparted is true.",
+          "args": {
+            "arrivalIso": "not-a-timestamp",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": {
+            "seconds": 0,
+            "minutes": 0,
+            "isDue": false,
+            "hasDeparted": true
+          }
         }
       ]
     },
@@ -254,6 +268,16 @@
           "why": "U+2014 EM DASH. Never a negative minute count.",
           "args": {
             "arrivalIso": "2026-07-27T11:58:00+08:00",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
+          },
+          "expect": "—"
+        },
+        {
+          "name": "unparseable-arrival-is-the-dash",
+          "why": "The rendered half of etaView's guard row: an arrival that cannot be read shows the departed dash, never 'NaN min' (ADR-142).",
+          "args": {
+            "arrivalIso": "not-a-timestamp",
             "nowIso": "2026-07-27T12:00:00+08:00",
             "locale": "en"
           },
@@ -362,6 +386,18 @@
             "nowIso": "2026-07-27T12:00:00+08:00",
             "locale": "en",
             "dueUnderSec": 30
+          },
+          "expect": {
+            "kind": "departed"
+          }
+        },
+        {
+          "name": "unparseable-arrival-is-departed",
+          "why": "The badge half of etaView's guard row: kind 'departed', never {kind:'mins', value:NaN} (ADR-142).",
+          "args": {
+            "arrivalIso": "not-a-timestamp",
+            "nowIso": "2026-07-27T12:00:00+08:00",
+            "locale": "en"
           },
           "expect": {
             "kind": "departed"
@@ -1621,6 +1657,15 @@
             }
           },
           "expect": "soon"
+        },
+        {
+          "name": "unparseable-arrival-is-none",
+          "why": "The colour half of etaView's guard row: nothing to be urgent about, so 'none' — a NaN used to compare false against every threshold and land on 'normal' (ADR-142).",
+          "args": {
+            "arrivalIso": "not-a-timestamp",
+            "nowIso": "2026-07-27T12:00:00+08:00"
+          },
+          "expect": "none"
         }
       ]
     },

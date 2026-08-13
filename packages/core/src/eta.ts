@@ -45,7 +45,20 @@ export function etaView(
   now: number,
   dueUnderSec: number = CLIENT_POLICY_DEFAULTS.dueUnderSec,
 ): EtaView {
-  const seconds = Math.round((new Date(arrivalIso).getTime() - now) / 1000)
+  const arrivalMs = new Date(arrivalIso).getTime()
+  // **An arrival we cannot read is treated as departed** (ADR-142). The wire admits any string
+  // (`Eta.arrivals` is `z.string()`, ADR-052 decision 2) and `cleanArrivals` drops only falsy values,
+  // so an operator's malformed timestamp used to arrive here, make `seconds` NaN, fail every band
+  // below and render a literal "NaN min" in the normal colour on every readout in the product.
+  // "Departed" is the one honest arm every consumer already has: `formatRelative`'s dash,
+  // `etaLabelParts`' departed, `etaUrgency`'s none, `upcoming`'s filter. The zeros are deliberate —
+  // the corpus is JSON, which cannot hold NaN, and nothing reads the figures once `hasDeparted` is
+  // true (every caller branches on the flags first, exactly like the sibling guards in
+  // `formatClock`/`newestBoard`/`soonestArrivalMs`).
+  if (Number.isNaN(arrivalMs)) {
+    return { seconds: 0, minutes: 0, isDue: false, hasDeparted: true }
+  }
+  const seconds = Math.round((arrivalMs - now) / 1000)
   return {
     seconds,
     minutes: Math.floor(seconds / 60),
