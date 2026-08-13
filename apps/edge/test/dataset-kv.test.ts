@@ -256,3 +256,41 @@ describe('the mutable pointer', () => {
     }
   })
 })
+
+describe('the live door’s dataset read', () => {
+  it('classifies a failed route lookup as upstream weather, not as our bug (ADR-146)', async () => {
+    // `/v1/live?route=` resolves the route document before any Durable Object exists, and that read
+    // was the one dataset I/O in the Worker outside a classifying try: a transient KV error rode the
+    // top-level catch out as 500 `internal` — "our bug" — where every HTTP sibling answers 502. A
+    // corrupt stored document forces the same shape deterministically: `kv.get(type: 'json')` throws.
+    const detail = (await (
+      await get(`/v1/nearby?lat=${ORIGIN.lat}&lng=${ORIGIN.lng}&radius=453`)
+    ).json()) as { stop: { id: string } }[]
+    const stop = (await (
+      await get(`/v1/stop/${encodeURIComponent(detail[0]?.stop.id as string)}`)
+    ).json()) as StopDetail
+    const routeId = stop.routes[0]?.route.id as string
+    const kv = env.DATASET as KVNamespace
+    const key = datasetKeys.route(HASH, routeId)
+    const saved = (await kv.get(key, 'text')) as string
+    expect(saved, 'the fixture must carry the route document').toBeTruthy()
+    await kv.put(key, '{ not json')
+    try {
+      const ctx = createExecutionContext()
+      const res = await worker.fetch(
+        new Request(`https://edge.test/v1/live?route=${encodeURIComponent(routeId)}`, {
+          headers: { Upgrade: 'websocket' },
+        }),
+        env,
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      expect(res.status).toBe(502)
+      const body = (await res.json()) as { code: string; retryable: boolean }
+      expect(body.code).toBe('upstream_unavailable')
+      expect(body.retryable).toBe(true)
+    } finally {
+      await kv.put(key, saved)
+    }
+  })
+})

@@ -27,7 +27,7 @@ import { LIVE_PATH } from '@nextbus/contract'
 import { acceptTargets, liveShardFor, routeWatchName, type WatchTarget } from '@nextbus/core'
 import { getDataset } from './dataset'
 import type { Env } from './env'
-import { fail as failWith } from './errors'
+import { codeFor, fail as failWith } from './errors'
 
 /** The path, read from its one declaration in the contract rather than restated in the router. */
 export { LIVE_PATH }
@@ -206,7 +206,17 @@ export async function liveUpgrade(
     // is a real Durable Object, and this is the door that arbitrary text arrives at.
     if (name === undefined) return fail('bad_request', `not a route id: ${routeId}`)
 
-    const doc = await (await getDataset(env)).route(routeId)
+    // Classified here rather than left to the top-level catch: `kvSource.route()` is a bare `kv.get`
+    // and the inline fallback fetches, so a transient dataset I/O error is *upstream* weather, not our
+    // bug — every HTTP endpoint routes dataset reads inside `cached()`'s try for exactly this reason
+    // ("`internal` means *our* bug", index.ts), and this was the one path that bypassed it and
+    // answered 500 where its siblings answer 502.
+    let doc: Awaited<ReturnType<Awaited<ReturnType<typeof getDataset>>['route']>>
+    try {
+      doc = await (await getDataset(env)).route(routeId)
+    } catch (err) {
+      return fail(codeFor(err), `route lookup failed: ${routeId}`)
+    }
     // Absent is nobody's fault and not worth retrying — the same split `routeDetail` makes between a
     // malformed id and an unknown one.
     if (!doc) return fail('not_found', `unknown route: ${routeId}`)

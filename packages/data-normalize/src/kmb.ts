@@ -83,11 +83,24 @@ function rowsToEta(bucket: KmbRow[], stopId: string, generated: string, observed
   }
 }
 
+/**
+ * The bucket key, canonicalised exactly as `rowsToEta` canonicalises the id it mints (ADR-146).
+ *
+ * The raw fields used to be the key, and two of them admit spellings the id does not: `service_type`
+ * is `number | string` in the schema — the static dataset is documented mixing exactly these types
+ * (`dataset.ts`) — and `dir` arrives as `I`/`O` but occasionally spelled out. A response mixing `1`
+ * and `"1"` split one board into two buckets that minted the SAME `routeId`; `dedupeEtas` downstream
+ * then kept whichever bucket sorted first and the other bucket's later arrivals vanished from the row.
+ */
+function bucketKey(row: KmbRow): string {
+  return `${row.co}|${row.route}|${toBound(row.dir)}|${String(row.service_type)}`
+}
+
 function groupKmb(stopId: string, generated: string, rows: KmbRow[]): Eta[] {
   const observedAt = new Date().toISOString()
   const groups = new Map<string, KmbRow[]>()
   for (const row of rows) {
-    const key = `${row.co}|${row.route}|${row.dir}|${row.service_type}`
+    const key = bucketKey(row)
     const bucket = groups.get(key)
     if (bucket) bucket.push(row)
     else groups.set(key, [row])
@@ -125,10 +138,11 @@ export async function fetchKmbRouteEta(
   const { generated_timestamp, data } = KmbEtaResponse.parse(await res.json())
 
   const observedAt = new Date().toISOString()
-  // Group by direction + stop sequence — one bus line's arrivals at one stop.
+  // Group by direction + stop sequence — one bus line's arrivals at one stop. The same canonicalised
+  // key as `groupKmb` (see `bucketKey`), with the sequence appended.
   const groups = new Map<string, KmbRow[]>()
   for (const row of data) {
-    const key = `${row.co}|${row.route}|${row.dir}|${row.service_type}|${row.seq}`
+    const key = `${bucketKey(row)}|${row.seq}`
     const bucket = groups.get(key)
     if (bucket) bucket.push(row)
     else groups.set(key, [row])

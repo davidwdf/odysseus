@@ -801,6 +801,23 @@ describe('targets it will not or cannot watch', () => {
     }
   })
 
+  it('the frame cap counts bytes, so a CJK frame cannot smuggle 3× the parse budget', async () => {
+    // `LIVE_MAX_CLIENT_FRAME_BYTES` is documented in bytes and exists to bound parse CPU *before*
+    // `JSON.parse` runs — but the check read `message.length`, which counts UTF-16 code units, and a
+    // frame of ~8,000 CJK characters is ~24 kB of UTF-8 and passed (ADR-146). This frame is inside
+    // the unit cap and far outside the byte cap, so it only fails if the check really counts bytes.
+    const { ws, frames } = await connectAndPoll([POLE_A.id])
+    frames.drain()
+    const cjk = `{"type":"subscribe","targets":[{"stopId":"${'書'.repeat(4_000)}"}]}`
+    expect(cjk.length).toBeLessThanOrEqual(8_192)
+    expect(new TextEncoder().encode(cjk).byteLength).toBeGreaterThan(8_192)
+    ws.send(cjk)
+    const received = await frames.take(1)
+    const status = only(received, 'status')[0]
+    expect(status?.error?.code).toBe('bad_request')
+    expect(status?.error?.message).toBe('frame too large')
+  })
+
   /**
    * Make one target permanently unresolvable, run the body, then put the dataset back.
    *

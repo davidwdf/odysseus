@@ -243,6 +243,9 @@ export const LIVE_MAX_SOCKETS_PER_SHARD = 64
  */
 export const LIVE_MAX_CLIENT_FRAME_BYTES = 8_192
 
+/** One encoder for the byte-accurate half of the frame cap — see `webSocketMessage`. */
+const UTF8 = new TextEncoder()
+
 /** Where the consecutive-quiet-round counter lives. See `unchangedRounds`. */
 const UNCHANGED_ROUNDS_KEY = 'unchangedRounds'
 
@@ -626,7 +629,15 @@ export class EtaHub extends DurableObject<Env> {
     // handlers binary data as `ArrayBuffer` regardless of `websocket_standard_binary_type`.)
     if (typeof message !== 'string') return
 
-    if (message.length > LIVE_MAX_CLIENT_FRAME_BYTES) {
+    // The cap is *bytes* and `length` counts UTF-16 code units, which undercounts everything outside
+    // ASCII — a frame of 8,191 CJK characters is ~24 kB and used to pass at 3× the documented parse-CPU
+    // bound (ADR-146). Units first, because that check is free and bounds the encode: a frame longer in
+    // units than the cap cannot be under it in bytes, so the exact count below only ever runs on a
+    // string the cap's own arithmetic already calls small.
+    if (
+      message.length > LIVE_MAX_CLIENT_FRAME_BYTES ||
+      UTF8.encode(message).byteLength > LIVE_MAX_CLIENT_FRAME_BYTES
+    ) {
       this.send(ws, this.status('live', wireErrorFor('bad_request', 'frame too large')))
       return
     }
