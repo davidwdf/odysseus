@@ -68,6 +68,14 @@ type PersistedPreferences = Pick<
 export const PREFERENCES_VERSION = FAVOURITE_KEY_VERSION
 
 /**
+ * Where an unparseable `nextbus.preferences` blob is copied before the app starts on defaults
+ * (ADR-143) — the rider's data, preserved for a future build or a support path to recover, instead of
+ * a splash screen held for ever over bytes nothing would ever repair. Written only by
+ * `mergingStorage.getItem`'s catch arm; never read by the app.
+ */
+export const PREFERENCES_QUARANTINE_KEY = 'nextbus.preferences.quarantine'
+
+/**
  * The `persist` migration: read the blob's favourite list, hand it to the shared rule, put it back.
  *
  * One trap worth naming and it is zustand's, not the rule's: `migrate` is only called when the stored
@@ -318,16 +326,35 @@ async function commit(name: string, version: number | undefined): Promise<void> 
  * device looks like, and on web it is what `apps/web` reads.
  */
 const mergingStorage: PersistStorage<PersistedPreferences> = {
-  // **Deliberately unguarded, unlike the DOM twin, and the asymmetry is a safety property rather than an
-  // oversight.** A read that throws or a blob that will not parse rejects here, `persist` abandons the
-  // hydration, and `hydrated` therefore never flips — so `app/_layout.tsx` holds the splash screen and the
-  // rider cannot write anything on top of data that is still on the device. Swallowing it would start the
-  // app on the defaults and let the first preference change persist them over a list that was merely
-  // unreadable this once. `apps/web` has no such gate (its storage is synchronous and cannot throw), so it
-  // catches and repairs instead.
+  // **A blob that will not parse is quarantined, then the app starts on the defaults** (ADR-143).
+  //
+  // This used to be deliberately unguarded: a parse throw rejected here, `persist` abandoned the
+  // hydration, `hydrated` never flipped, and `app/_layout.tsx` held the splash — so the rider could not
+  // write anything on top of data that was still on the device. The safety intent was right and the
+  // failure mode was not: nothing ever repaired the blob (the app never reaches a write), so one
+  // truncated write — an interrupted flush on a full device, or any other script on the shared web
+  // origin putting garbage under this key — was a **permanent** blank screen on every launch until the
+  // rider cleared app data, which deletes the very bytes the hold was protecting.
+  //
+  // The quarantine keeps the safety property and drops the brick: the unreadable bytes are copied to
+  // `PREFERENCES_QUARANTINE_KEY` *before* this returns `null`, so the store's first write — which
+  // overwrites the corrupt main key — destroys nothing. If the quarantine write itself fails, the
+  // rejection propagates and the splash-hold is back to doing its old job, now only for the case where
+  // the bytes genuinely could not be preserved. A *read* rejection (the storage layer itself failing)
+  // still rejects too: there are no bytes to quarantine and none to overwrite, and starting on defaults
+  // there would let the first write clobber a blob that may be perfectly healthy.
+  //
+  // `apps/web` has no such gate (its storage is synchronous and cannot throw), so it catches and
+  // repairs in place instead.
   getItem: async (name) => {
     const raw = await AsyncStorage.getItem(name)
-    return raw === null ? null : (JSON.parse(raw) as StorageValue<PersistedPreferences>)
+    if (raw === null) return null
+    try {
+      return JSON.parse(raw) as StorageValue<PersistedPreferences>
+    } catch {
+      await AsyncStorage.setItem(PREFERENCES_QUARANTINE_KEY, raw)
+      return null
+    }
   },
   // The version is the only thing taken from `persist`'s snapshot: the *state* is re-read when the write's
   // turn comes (see `commit`), because by then it may have adopted a merge this snapshot predates.
