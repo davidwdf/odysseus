@@ -59,6 +59,16 @@ export interface EdgeClientOptions {
 }
 
 /**
+ * How long any single edge request may run — headers *and* body — before it is failed (ADR-137).
+ *
+ * A derivation, not a guess: the Worker's own upstream deadline is 10 s (`fetchUpstream`'s
+ * `AbortSignal.timeout` in `@nextbus/data-normalize`), so the slowest *truthful* answer clears the
+ * edge inside ~12 s; 15 adds network slack on top and still ends a hung request before the next
+ * 30 s poll round starts (`refreshAfterMs`), so rounds cannot stack behind a dead connection.
+ */
+export const REQUEST_DEADLINE_MS = 15_000
+
+/**
  * v1 DataSource: talks to the Cloudflare edge API.
  *
  * `watch()` is no longer a shim that concatenates lists — it runs a real frame protocol
@@ -96,9 +106,29 @@ export class EdgeClient implements DataSource {
   }
 
   private async getJson<T>(path: string): Promise<T> {
-    const res = await this.fetchImpl(`${this.base}${path}`)
-    if (!res.ok) throw await classifyFailure(path, res)
-    return (await res.json()) as T
+    // A deadline, not just error handling (ADR-137). A blackholed connection — a network switch, a
+    // NAT entry that expired without an RST — never *rejects*, and every failure arm in this package
+    // (the poll round's `requestError`, a screen's query retry) needs a rejection to fire. Without
+    // one, poll rounds stack behind requests that will never settle and the screen stays labelled
+    // live over ageing readings: the silent-dead-pipe defect the socket's connect watch and
+    // keepalive close (ADR-135), rebuilt one engine over. The timer spans the *body* read too — a
+    // server that sends headers and then wedges is the same dead pipe.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_DEADLINE_MS)
+    try {
+      const res = await this.fetchImpl(`${this.base}${path}`, { signal: controller.signal })
+      if (!res.ok) throw await classifyFailure(path, res)
+      return (await res.json()) as T
+    } catch (thrown) {
+      // The platform's abort rejection ("The operation was aborted") names neither the request nor
+      // the cause, and `wireErrorOf` would carry that string onto a status frame. Say what happened.
+      if (controller.signal.aborted) {
+        throw new Error(`${path} → no response in ${REQUEST_DEADLINE_MS} ms`)
+      }
+      throw thrown
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   getNearby(at: LatLng, radiusM: number): Promise<NearbyStop[]> {
