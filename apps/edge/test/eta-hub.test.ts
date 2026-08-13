@@ -24,7 +24,14 @@ import {
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
-import { LIVE_HUB_KV_KEYS, LIVE_MAX_TARGETS_PER_CONNECTION, sessionChanged } from '../src/eta-hub'
+import {
+  LAST_ROUND_AT_KEY,
+  LIVE_HUB_KV_KEYS,
+  LIVE_MAX_TARGETS_PER_CONNECTION,
+  LIVE_POLL_NOW_MIN_GAP_MS,
+  ROUNDS_COMPLETED_KEY,
+  sessionChanged,
+} from '../src/eta-hub'
 import worker from '../src/index'
 import { liveShardName, liveUpgrade } from '../src/live'
 import { datasetJson, poles } from './fixtures'
@@ -573,6 +580,13 @@ describe('an alarm round', () => {
     // I/O context open and `ws.send` fails with "Cannot perform I/O on behalf of a different Durable
     // Object", which is the runtime telling us the same thing.)
     const hold = holdBoards()
+    // ADR-147 would floor the round this subscribe pulls forward (round 1 just stamped the shard),
+    // and this case needs that round to start *now* and be held mid-flight — while the I/O-context
+    // constraint above still rules out firing it from the harness. Deleting the stamp is the honest
+    // knob: it makes the shard "has not polled recently" again, which is the state the case is about.
+    await runInDurableObject(stubFor([POLE_A.id]), (_i: EtaHub, state) => {
+      state.storage.kv.delete(LAST_ROUND_AT_KEY)
+    })
     // POLE_C is cold, so this subscription's snapshot is deferred (WP6-8b) — behind exactly the round
     // the hold is keeping in flight, which is the window this defect needs.
     subscribeTo(ws, [POLE_A.id, POLE_C.id])
@@ -604,8 +618,11 @@ describe('an alarm round', () => {
       hold.release()
     }
     // The proof the mid-round frame was honoured: the round it interrupted was computed for a set this
-    // connection no longer has, so `sendRound` must skip it (the seq detector), and the *next* round —
-    // pulled forward by the re-subscription itself — sends the deferred snapshot echoing all three.
+    // connection no longer has, so `sendRound` must skip it (the seq detector), and the *next* round
+    // sends the deferred snapshot echoing all three. The re-subscription armed that round, but a gap
+    // out rather than at *now* — it landed within `LIVE_POLL_NOW_MIN_GAP_MS` of the held round's start,
+    // which is exactly the shape ADR-147 floors — so it is fired by hand here.
+    expect(await runRound([POLE_A.id]), 'the re-subscribe armed no round').toBe(true)
     const echo = only(await frames.take(2), 'snapshot')[0]
     expect(echo?.targets.map((t) => t.stopId)).toEqual([POLE_A.id, POLE_C.id, POLE_D.id].sort())
     await settle(300)
@@ -771,13 +788,33 @@ describe('targets it will not or cannot watch', () => {
       // this an immediate `snapshot { etas: [] }` with no `failed` (a fresh socket carries none), which
       // blanked the arrivals the screen had just painted from its own HTTP fetch.
       const rider2 = await connect([POLE_D.id])
+
+      // **The ADR-147 floor, pinned in the same scenario that motivated it.** With no readings row,
+      // rider 2's subscribe reads as "never polled" and pulls a round forward — but within the gap of
+      // round 1's start, so the round is *armed*, not run: the alarm sits in the future (at most one
+      // gap out) and the completed-round counter has not moved. This is the bound on a reconnect loop
+      // re-hitting a failing upstream once per subscribe, which `coalesce` cannot provide (it caches
+      // answers, never rejections).
+      const alarmAt = await runInDurableObject(stubFor([POLE_D.id]), (_i: EtaHub, state) =>
+        state.storage.getAlarm(),
+      )
+      expect(alarmAt, 'the re-subscribe must arm a round').not.toBeNull()
+      expect((alarmAt as number) - Date.now()).toBeGreaterThan(0)
+      expect((alarmAt as number) - Date.now()).toBeLessThanOrEqual(LIVE_POLL_NOW_MIN_GAP_MS)
+      const roundsBefore = await runInDurableObject(stubFor([POLE_D.id]), (_i: EtaHub, state) =>
+        state.storage.kv.get<number>(ROUNDS_COMPLETED_KEY),
+      )
+      expect(roundsBefore, 'rider 2 must not have triggered an immediate second round').toBe(1)
+
+      // Fired by hand (the floor is why it will not fire itself inside this test's lifetime): the
+      // round fails again, and rider 2 hears `retrying` — never the empty snapshot.
+      expect(await runRound([POLE_D.id])).toBe(true)
       const second = await rider2.frames.take(1)
       expect(only(second, 'status')[0]?.state).toBe('retrying')
       expect(only(second, 'snapshot')).toEqual([])
 
-      // Rider 2's subscribe pulled a round forward, and rider 1 hears that round's `retrying` too —
-      // wait for it, or the drain below races a frame still in flight and it surfaces later as a
-      // stray `status` in the recovery assertions.
+      // Rider 1 hears that round's `retrying` too — wait for it, or the drain below races a frame
+      // still in flight and it surfaces later as a stray `status` in the recovery assertions.
       await rider1.frames.take(2)
 
       // The outage ends; the next round answers, and *both* riders get their deferred snapshot

@@ -12,7 +12,7 @@ import { type BuildManifest, datasetKeys, type PlaceDoc } from '@nextbus/data-no
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'
 import type { EtaHub } from '../src/eta-hub'
-import { LIVE_CTB_BUDGET, LIVE_MAX_TARGETS_PER_SHARD } from '../src/eta-hub'
+import { LAST_ROUND_AT_KEY, LIVE_CTB_BUDGET, LIVE_MAX_TARGETS_PER_SHARD } from '../src/eta-hub'
 import worker from '../src/index'
 import { liveShardName } from '../src/live'
 
@@ -247,6 +247,18 @@ const stubFor = (targets: string[]) =>
     liveShardName(liveShardFor(targets.map((stopId): WatchTarget => ({ stopId })))),
   )
 
+/**
+ * Make the shard read "has not polled recently" again, so the next cold connect or `subscribe` fires
+ * its pulled-forward round itself instead of arming it a gap out (ADR-147). These cases are about the
+ * caps, not the floor — and several of them need a round *self*-fired mid-test, which the harness
+ * cannot do for them (`runDurableObjectAlarm` from inside the frame-wait would hold the object's I/O
+ * context — see eta-hub.test.ts's holdBoards note).
+ */
+const allowPollNow = (targets: string[]): Promise<void> =>
+  runInDurableObject(stubFor(targets), async (_i: EtaHub, state) => {
+    state.storage.kv.delete(LAST_ROUND_AT_KEY)
+  })
+
 const settle = (ms = 100): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 function only<T extends ServerFrame['type']>(
@@ -286,6 +298,7 @@ describe('the shard target cap', () => {
     for (let i = 0; i < 4; i++) {
       const socket = sockets[i] as { ws: WebSocket; frames: ReturnType<typeof readFrames> }
       socket.frames.drain()
+      await allowPollNow([host])
       subscribeTo(socket.ws, capIds.slice(i * 11, i * 11 + 11))
       expect(only(await socket.frames.take(2), 'snapshot')[0]?.targets.length).toBe(11)
     }
@@ -293,6 +306,7 @@ describe('the shard target cap', () => {
     const last = sockets[4] as { ws: WebSocket; frames: ReturnType<typeof readFrames> }
     last.frames.drain()
     const asked = capIds.slice(44, 56)
+    await allowPollNow([host])
     subscribeTo(last.ws, asked)
     await last.frames.take(2)
     await settle()
@@ -394,6 +408,7 @@ describe('a round’s upstream fan-out', () => {
     // The `subscribe` frame is the door route narrowing arrives through (§8.1), which is why the case is
     // driven through it rather than through `stopEtas` directly: the *round* is what repeats.
     const watched = `CTB:900:outbound:1`
+    await allowPollNow([CTB_HEAVY_ID])
     const { ws, frames } = await connect([CTB_HEAVY_ID])
     await frames.take(2)
     ws.send(

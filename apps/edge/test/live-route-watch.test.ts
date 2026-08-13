@@ -757,6 +757,17 @@ describe('a round that learns nothing does not pretend it did', () => {
     // A new rider, the same board, the same publish timestamp.
     resetEtaCache()
     await openRouteWatch(ROUTE_ID)
+    // A re-subscribe after a teardown is exactly the reconnect shape ADR-147 floors — `lastRoundAt`
+    // survives the teardown on purpose — so the pulled-forward round is armed a gap out rather than
+    // firing itself. Fired by hand, which keeps this case about the clock rather than the floor.
+    expect(
+      await runDurableObjectAlarm(
+        (env.ETA_HUB as NonNullable<typeof env.ETA_HUB>).getByName(
+          routeWatchName(ROUTE_ID) as string,
+        ),
+      ),
+      'the re-subscribe armed no round at all',
+    ).toBe(true)
     await awaitRounds(ROUTE_ID, 2)
 
     const armed = await alarmAt(ROUTE_ID)
