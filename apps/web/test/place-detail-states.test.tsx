@@ -23,8 +23,10 @@ import placeDetailSpec from '@nextbus/contract/ui/place-detail.spec.json'
 import placeRowSpec from '@nextbus/contract/ui/place-row.spec.json'
 import {
   CLIENT_POLICY_DEFAULTS,
+  feedNotice,
   formatFavoriteRouteKey,
   type Locale,
+  newestPlaceBoard,
   type PlaceDetailView,
   placeDetailView,
   type StopDetail,
@@ -235,6 +237,31 @@ async function mountSettled(): Promise<RenderedTree> {
 
 const FETCH_FAILURE = 'unknown stop: P:CTB:001992'
 
+/** jsdom's `navigator.onLine` is a prototype getter, so the state a screen reads is set by redefining it. */
+function setOnline(online: boolean): void {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
+}
+
+/**
+ * The freshness notice the screen will have computed for this payload — the same two kernel calls it makes
+ * (ADR-150), over the same clock and the same policy.
+ *
+ * **Several of these fixtures produce a sentence rather than silence, and that is the data being honest.**
+ * Most `placeDetailView` corpus cases are a payload captured on 27 July viewed at a `now` on the 29th — a
+ * coherent snapshot, two days old — so their readouts are all departed and the screen says when the board
+ * was published. It also shows the limitation ADR-133 recorded in the goldens themselves: `formatClock`
+ * prints a wall-clock with no date, so a two-day-old board reads as this morning.
+ */
+function noticeFor(detail: StopDetail, at: number, opts: { online: boolean }) {
+  return feedNotice({
+    lastUpdatedIso: newestPlaceBoard([detail]),
+    now: at,
+    online: opts.online,
+    trouble: 'none',
+    staleAfterMs: CLIENT_POLICY_DEFAULTS.staleAfterMs,
+  })
+}
+
 /** How this renderer is put into each declared state, and the view each corresponds to. */
 async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTree } | null> {
   if (state === 'loading') {
@@ -245,6 +272,21 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
   if (state === 'failed') {
     stop = () => Promise.reject(new Error(FETCH_FAILURE))
     return { view: { error: FETCH_FAILURE }, tree: await mountSettled() }
+  }
+  if (state === 'offline') {
+    // **The state that could not be told from a loaded screen until ADR-150**: the same place, the same
+    // rows, and one sentence saying the rider's own network is gone rather than that the data is old.
+    const c = caseNamed(FIXTURE.content as string)
+    now = Date.parse(c.args.now)
+    locationState = { status: 'undetermined' }
+    const detail = fromCorpus<StopDetail>(c.args.detail)
+    placeId = detail.stop.id
+    stop = () => Promise.resolve(detail)
+    setOnline(false)
+    return {
+      view: { ...viewFor(c), notice: noticeFor(detail, now, { online: false }) },
+      tree: await mountSettled(),
+    }
   }
   const name = FIXTURE[state]
   // `null` for the four states the spec declares without a projection (`stale`, `offline`, `codedPlace`,
@@ -260,12 +302,18 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
   const detail = fromCorpus<StopDetail>(c.args.detail)
   placeId = detail.stop.id
   stop = () => Promise.resolve(detail)
-  return { view: viewFor(c), tree: await mountSettled() }
+  return {
+    view: { ...viewFor(c), notice: noticeFor(detail, now, { online: true }) },
+    tree: await mountSettled(),
+  }
 }
 
 beforeEach(() => {
   locationState = { status: 'loading' }
   stop = () => Promise.reject(new Error('no fixture set'))
+  // Restored per test: `offline` redefines it, and a leaked `false` would add a sentence to every state
+  // that ran after it.
+  setOnline(true)
   now = 0
   placeId = 'CTB:000000'
   document.body.innerHTML = '<div id="host"></div>'
@@ -284,11 +332,11 @@ describe('apps/web conforms to Place detail’s published spec, state by state',
     const projected = Object.entries(placeDetailSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(8)
+    expect(projected.length).toBeGreaterThanOrEqual(9)
     // Every projected state is either driven from a named corpus case or is one of the two async branches.
     for (const state of projected) {
       expect(
-        FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',
+        FIXTURE[state] !== undefined || ['loading', 'failed', 'offline'].includes(state),
         `${state} is projected and this driver cannot reach it`,
       ).toBe(true)
     }

@@ -4705,7 +4705,7 @@
         },
         {
           "name": "a-served-policy-moves-the-imminence-band",
-          "why": "The policy is threaded through to every readout (ADR-053), and this row is the reason that matters: the SAME arrival is `normal` under the shipped 180 s band and `soon` under a served 600 s one. A renderer that carried its own threshold — which both of them did until WP4-0 — would disagree with the edge for months without anything failing.",
+          "why": "The policy is threaded through to every readout (ADR-053), and this row is the reason that matters: the SAME arrival is `normal` under the shipped 180 s band and `soon` under a served 600 s one. A renderer that carried its own threshold — which both of them did until WP4-0 — would disagree with the edge for months without anything failing. The board is timed 15 s before `now`, like the arrival it carries: this row's board was left at the capture date when its arrival was re-timed, so it described a feed that had published two days ago and predicted a bus five minutes from now — impossible data, pinning `stale: true` beside a live reading, and the screen-level freshness notice (ADR-150) is what finally read it.",
           "args": {
             "detail": {
               "stop": {
@@ -4751,8 +4751,8 @@
                     "stopId": "CTB:001992",
                     "operator": "CTB",
                     "arrivals": ["2026-07-29T11:55:30+08:00"],
-                    "dataTimestamp": "2026-07-27T11:59:30+08:00",
-                    "observedAt": "2026-07-27T11:59:45+08:00"
+                    "dataTimestamp": "2026-07-29T11:50:15+08:00",
+                    "observedAt": "2026-07-29T03:50:20.000Z"
                   },
                   "stopId": "CTB:001992"
                 }
@@ -4792,7 +4792,7 @@
                     "unit": "min"
                   },
                   "urgency": "soon",
-                  "stale": true
+                  "stale": false
                 }
               }
             ],

@@ -43,15 +43,20 @@ import { Text } from './Text'
 // property of the source, not of the component; a vector basemap would turn it off (ADR-041).
 
 // Turn the light tiles into a dark map: invert the luminance, then hue-rotate 180° so water
-// and parks land back near their real colour; trim brightness/contrast so it isn't harsh. Applied
-// to the tiles only — the pin and attribution sit outside it.
+// and parks land back near their real colour; lift the brightness so the inverted street names read
+// as white rather than as grey. Applied to the tiles only — the pin and attribution sit outside it.
+//
+// It used to trim brightness AND contrast (0.9/0.9) so as not to be harsh, and the result was muddy
+// instead: inverting already flattens a cartography drawn for white paper, so another 10 % off each
+// left mid-grey labels on a mid-grey field. Kept in step with `.dark .map-tiles-invert` in
+// apps/web/src/index.css — same recipe, two idioms.
 //
 // The shape differs by platform: react-native-web (0.21) has no `filter` handler, so it passes a
 // **string** value straight to the DOM (the array form becomes an unusable object and is dropped);
 // native RN wants the **array** form. Hence the Platform split.
 const DARK_TILE_FILTER = Platform.select<NonNullable<ViewStyle['filter']>>({
-  web: 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9)',
-  default: [{ invert: 1 }, { hueRotate: '180deg' }, { brightness: 0.9 }, { contrast: 0.9 }],
+  web: 'invert(1) hue-rotate(180deg) brightness(1.2)',
+  default: [{ invert: 1 }, { hueRotate: '180deg' }, { brightness: 1.2 }],
 })
 
 /**

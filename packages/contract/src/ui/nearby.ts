@@ -1,4 +1,5 @@
 import type { ComponentSpec } from '@nextbus/ui-spec'
+import { FEED_NOTICE } from './feed-notice'
 
 /**
  * **The first screen spec** (WP6-2) — Nearby: the stops around the rider, and the eight states it can be in.
@@ -61,6 +62,7 @@ export const NEARBY_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           { name: 'subtitle', text: { message: 'appName' } },
+          FEED_NOTICE,
           {
             name: 'cards',
             each: 'cards',
@@ -92,6 +94,7 @@ export const NEARBY_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           { name: 'subtitle', text: { message: 'appName' } },
+          FEED_NOTICE,
           { name: 'noService', text: { message: 'noService' } },
         ],
       },
@@ -122,18 +125,23 @@ export const NEARBY_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           { name: 'subtitle', text: { message: 'lastKnownLocation' } },
+          FEED_NOTICE,
           { name: 'cards', each: 'cards', of: [{ name: 'card', component: 'StopRow' }] },
         ],
       },
     },
 
     offline: {
-      must: 'The last known stops and readings, aged and marked stale, on the remembered position.',
-      mustNot: 'A blank list, and never a fresh-looking arrival time.',
-      why: 'ADR-058: a persisted query cache plus a remembered fix. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it.',
+      must: 'The last known stops and readings, on the remembered position, under the line that says the rider’s own network is gone.',
+      mustNot:
+        'A blank list, a fresh-looking arrival time, or the *position*’s sentence standing in for the network’s. This screen is the one place both can be true at once, and they are two lines: the subtitle says where the list is anchored, the notice says when it was last fed.',
+      why: 'ADR-058: a persisted query cache plus a remembered fix. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it. **This state was `unenforced` until ADR-150** on the ground that it was textually identical to `stale`; that was true, and it was a statement about the gap rather than the design — the screen had no sentence for *why* it had stopped being fed. Now it has one.',
       enforcement: {
-        unenforced:
-          'Textually identical to `stale` at this level, and deliberately so: offline *is* a remembered fix plus replayed readings, and which network failed is not something the screen says. What distinguishes it is the readings’ age and the dimming, which are inside the card and are opacity rather than text. The cache-replay half is asserted in `apps/web/test/shell.test.tsx`, where a cold start is measurable.',
+        shows: [
+          { name: 'subtitle', text: { message: 'lastKnownLocation' } },
+          FEED_NOTICE,
+          { name: 'cards', each: 'cards', of: [{ name: 'card', component: 'StopRow' }] },
+        ],
       },
     },
 

@@ -21,6 +21,7 @@
 import routeDetailSpec from '@nextbus/contract/ui/route-detail.spec.json'
 import {
   CLIENT_POLICY_DEFAULTS,
+  feedNotice,
   type Locale,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
@@ -68,7 +69,12 @@ const FIXTURE: Record<string, string> = {
   emptyRail: 'an-origin-bus-not-yet-leaving-earns-no-token',
   savedStop: 'a-saved-route-stars-only-the-pole-it-was-saved-at',
   noReading: 'a-departed-reading-is-not-an-arrival-and-leaves-its-row-with-nothing',
+  // Driven with the clock moved past the served threshold rather than with an old fixture — see the note in
+  // `fixture`. The case is kept because its two boards of different ages are what makes "the newest board on
+  // screen" a real question rather than a single value.
   stale: 'a-stale-board-dims-every-slot-on-its-row-together',
+  // The same payload as `content`, with the platform reporting no network.
+  offline: 'a-bus-mid-route-rides-the-segment-leading-into-its-stop',
   sparseFacts: 'a-sparse-service-block-yields-only-the-facts-it-can-support',
   noFacts: 'a-route-with-no-service-block-has-no-facts-strip-at-all',
   holidayFare: 'a-holiday-fare-is-a-note-on-the-fare-pill-never-a-pill-of-its-own',
@@ -96,10 +102,35 @@ const labels = {
   busAtStop: (stop: string) => t(LOCALE, 'busAtStop', { stop }),
 }
 
-function viewFor(c: CorpusCase): RouteDetailView {
+/**
+ * `navigator.onLine` is a prototype getter, so the state a screen reads is set by redefining it. Under
+ * `react-native-web` `useOnline` reads the browser's own API; on native there is none and it answers `true`.
+ */
+function setOnline(online: boolean): void {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
+}
+
+/**
+ * The freshness notice the screen will have computed for this view — the same kernel call it makes, over the
+ * view's own `lastUpdatedIso` (ADR-133, wired on this renderer by ADR-150).
+ *
+ * Silent for every fixture but `stale` and `offline`: this corpus's boards are seconds old, which is what a
+ * working route looks like and is exactly when the line must not appear.
+ */
+function noticeFor(view: RouteDetailView, at: number, opts: { online: boolean }) {
+  return feedNotice({
+    lastUpdatedIso: view.lastUpdatedIso,
+    now: at,
+    online: opts.online,
+    trouble: 'none',
+    staleAfterMs: CLIENT_POLICY_DEFAULTS.staleAfterMs,
+  })
+}
+
+function viewFor(c: CorpusCase, at = Date.parse(c.args.now)): RouteDetailView {
   return routeDetailView(fromCorpus<RouteDetailPayload>(c.args.detail), {
     locale: c.args.locale,
-    now: Date.parse(c.args.now),
+    now: at,
     labels,
     ...(c.args.arrivedFromStop === undefined ? {} : { arrivedFromStop: c.args.arrivedFromStop }),
     ...(c.args.flipped === undefined ? {} : { flipped: c.args.flipped }),
@@ -354,8 +385,22 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
   const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
   route = () => Promise.resolve(detail)
   usePreferences.setState({ favoriteRoutes: [...(c.args.savedRouteKeys ?? [])] })
-  vi.setSystemTime(Date.parse(c.args.now))
-  const view = viewFor(c)
+  /**
+   * **`stale` is driven with the clock moved past the served threshold, not with a stale fixture** (ADR-150).
+   *
+   * It used to be driven by a corpus case whose *one* row carries an old board, because the state was about
+   * that row dimming — and since ADR-123 there is no per-row cue to observe. What replaced it is a statement
+   * about the screen, so the fixture has to make the whole screen old: `now` moves past `staleAfterMs`, and
+   * the same clock produces the view, so the readings age with it rather than diverging from a golden taken
+   * at another moment.
+   */
+  const at =
+    state === 'stale'
+      ? Date.parse(c.args.now) + CLIENT_POLICY_DEFAULTS.staleAfterMs + 1_000
+      : Date.parse(c.args.now)
+  setOnline(state !== 'offline')
+  vi.setSystemTime(at)
+  const view = viewFor(c, at)
   // **`flipped` is reached by flipping**, which is the honest path on this renderer: the toggle sets a local
   // override rather than navigating, so a driver that set the state directly would be asserting that the
   // screen renders a view it was handed — which nothing doubted. The mocked `DataSource` answers any id with
@@ -365,8 +410,9 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     c.args.arrivedFromStop === undefined
       ? { id: detail.route.id }
       : { id: detail.route.id, stop: c.args.arrivedFromStop }
+  const notice = noticeFor(view, at, { online: state !== 'offline' })
   const tree = await mountSettled(view)
-  if (c.args.flipped !== true) return { view, tree }
+  if (c.args.flipped !== true) return { view: { ...view, notice }, tree }
   const toggle = [...container.querySelectorAll(INTERACTIVE)].find(
     (el) => el.getAttribute('aria-label') === t(LOCALE, 'reverseDirection'),
   )
@@ -375,7 +421,7 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     ;(toggle as HTMLElement).click()
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
-  return { view, tree: readTree(container, view) }
+  return { view: { ...view, notice }, tree: readTree(container, view) }
 }
 
 beforeEach(() => {
@@ -397,7 +443,7 @@ describe('apps/mobile conforms to Route detail’s published spec, state by stat
     const projected = Object.entries(routeDetailSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(20)
+    expect(projected.length).toBeGreaterThanOrEqual(21)
     for (const state of projected) {
       expect(
         FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',

@@ -1,4 +1,4 @@
-import { type Locale, nearbyView } from '@nextbus/core'
+import { type Locale, nearbyView, newestNearbyBoard } from '@nextbus/core'
 import { type LocalizedString, t } from '@nextbus/i18n'
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -7,6 +7,7 @@ import { type ReactNode, useCallback } from 'react'
 import { Linking, Platform, RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../../components/Button'
+import { FeedNotice, feedNotice } from '../../components/FeedNotice'
 import { Skeleton } from '../../components/Skeleton'
 import { StopRow } from '../../components/StopRow'
 import { Text } from '../../components/Text'
@@ -15,6 +16,7 @@ import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLiveNearby } from '../../lib/useLiveNearby'
 import { useLocation } from '../../lib/useLocation'
+import { useOnline } from '../../lib/useOnline'
 import { useLocale } from '../../providers/LocaleProvider'
 
 /** One array, so "no cards yet" has a stable identity — see `useLiveNearby`'s note on the storm. */
@@ -62,6 +64,26 @@ export default function Nearby() {
   // `packages/core/spec/stop-card.spec.json` and shared byte-for-byte with any other renderer. This
   // component's remaining job is layout, navigation and the location states below.
   const cards = nearbyView(query.data ?? [], { locale, now, policy })
+
+  /**
+   * The screen's freshness notice (ADR-133, wired on this renderer by ADR-150).
+   *
+   * The boards it reads are the **cached payload's**, which is what makes it honest on a screen whose
+   * readings arrive by subscription: `useLiveNearby` writes each round into the query cache, so a
+   * subscription that has quietly stopped delivering ages these timestamps exactly as a dead refetch would.
+   *
+   * An **upstream** board refusing is not passed here and never will be: the card says that itself
+   * (`StopCardView.incomplete`, ADR-077), and a live round asks each pole separately, so a screen-level
+   * sentence would be wrong about the other five cards.
+   */
+  const online = useOnline()
+  const notice = feedNotice({
+    lastUpdatedIso: newestNearbyBoard(query.data ?? []),
+    now,
+    online,
+    trouble: query.isError ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
 
   return (
     <View className="flex-1 bg-bg" style={{ paddingTop: insets.top }}>
@@ -124,6 +146,10 @@ export default function Nearby() {
           refreshControl={<RefreshControl refreshing={query.isFetching} onRefresh={onRefresh} />}
         >
           <View style={{ paddingBottom: tab.contentInset }}>
+            {/* Inside the arm that has something to show, as on `apps/web`: when the whole screen is the
+                reason a fetch failed, that reason is already the sentence and a second line above it would
+                be the same fact twice (ADR-133 — one line, one message). */}
+            <FeedNotice notice={notice} />
             {cards.map((card, i) => (
               <View key={card.stopId} className={i === 0 ? '' : 'border-border border-t'}>
                 <StopRow

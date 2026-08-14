@@ -133,7 +133,7 @@
       "mustNot": "Colour alone, and never a value presented as fresh.",
       "why": "ADR-008. A reading replayed from the persisted cache arrives with its original `observedAt`, so `etaReadout` ages it rather than showing it as live (ADR-058).",
       "enforcement": {
-        "unenforced": "Deliberately nothing to enforce here since ADR-123: the row draws no staleness cue at all, because staleness is the board’s and a per-figure mark repeats one fact once per reading. The screen’s `feedNotice` line carries it (ADR-133), and Place detail has yet to be wired for it."
+        "unenforced": "Deliberately nothing to enforce here since ADR-123: the row draws no staleness cue at all, because staleness is the board’s and a per-figure mark repeats one fact once per reading. The screen’s `feedNotice` line carries it (ADR-133), and Place detail draws that line since ADR-150 — `place-detail.spec.json` projects it, so the claim is checked one level up, which is where the fact lives."
       }
     },
     "offline": {

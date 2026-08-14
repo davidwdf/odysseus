@@ -30,6 +30,7 @@ import { BottomSheet, SheetAction } from '../../components/BottomSheet'
 import { BusToken } from '../../components/BusToken'
 import { EtaTimes } from '../../components/EtaTimes'
 import { Fare } from '../../components/Fare'
+import { FeedNotice, feedNotice } from '../../components/FeedNotice'
 import { Icon } from '../../components/Icon'
 import { type FactKind, RouteFactSheet } from '../../components/RouteFactSheets'
 import {
@@ -46,6 +47,7 @@ import { dataSource } from '../../lib/datasource'
 import { usePageRevealReady } from '../../lib/navTransitions'
 import { usePreferences } from '../../lib/preferences'
 import { useClientPolicy } from '../../lib/useClientPolicy'
+import { useOnline } from '../../lib/useOnline'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useTheme } from '../../lib/useTheme'
 import { useLocale } from '../../providers/LocaleProvider'
@@ -158,6 +160,24 @@ export default function RouteDetail() {
       })
     : undefined
 
+  /**
+   * The screen's freshness notice (ADR-133, wired on this renderer by ADR-150).
+   *
+   * `lastUpdatedIso` is on the view here — `routeDetailView` is handed the whole payload, and *"whichever
+   * pole answered most recently"* is part of what the schematic means — so unlike the other three screens
+   * this one needs no payload adapter. `trouble` is `unreachable` only for a failure that reached **us**;
+   * an upstream board refusing is `liveArrivals`' sentence above the rows, and both can be on screen at once
+   * because they answer different questions.
+   */
+  const online = useOnline()
+  const notice = feedNotice({
+    lastUpdatedIso: view?.lastUpdatedIso ?? null,
+    now,
+    online,
+    trouble: query.isError ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
+
   // Warm the reverse direction the moment we learn it exists, so the first flip is instant.
   const reverseId = view?.header.reverseId
   const queryClient = useQueryClient()
@@ -262,6 +282,11 @@ export default function RouteDetail() {
                 {t(locale, 'etasUnavailable')}
               </Text>
             ) : null}
+            {/* And the screen's own freshness line, which answers a different question: the line above says
+                *an upstream board refused us*, this says *we have stopped being fed at all*. Both can be
+                true, and they are two sentences because a rider acts on them differently. Inside this
+                `View` and above the rows, like the one above it, so every row's measured `y` includes it. */}
+            <FeedNotice notice={notice} />
             {view.stops.map((row, i) => (
               <RouteStopRow
                 key={`${row.seq}-${row.stopId}`}

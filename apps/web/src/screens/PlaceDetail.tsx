@@ -1,4 +1,4 @@
-import { type PlaceRouteRow, placeDetailView } from '@nextbus/core'
+import { newestPlaceBoard, type PlaceRouteRow, placeDetailView } from '@nextbus/core'
 import { operatorName, poleSideLabel, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { MapPin } from 'lucide-react'
@@ -6,11 +6,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { BearingArrow } from '../components/BearingArrow'
+import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { MiniMap } from '../components/MiniMap'
 import { PlaceRow } from '../components/PlaceRow'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveEtas } from '../hooks/useLiveEtas'
 import { useLocation } from '../hooks/useLocation'
+import { useOnline } from '../hooks/useOnline'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
 import { COLLAPSED_HEIGHT, CollapsingHeader } from '../shell/CollapsingHeader'
@@ -92,6 +94,24 @@ export function PlaceDetail() {
         },
       })
     : undefined
+
+  /**
+   * The screen's freshness notice (ADR-133, wired here by ADR-150).
+   *
+   * Read off the **payload** rather than the view, and that is not an oversight: `PlaceDetailView` carries no
+   * `lastUpdatedIso` the way `RouteDetailView` does, because a place's boards are one per row and the answer
+   * is the same `newestBoard` rule either way — see `newestPlaceBoard`. The subscription writes each round
+   * into the query cache (`useLiveEtas`), so these timestamps age when the feed stops, whatever the last
+   * fetch did.
+   */
+  const online = useOnline()
+  const notice = feedNotice({
+    lastUpdatedIso: newestPlaceBoard(query.data === undefined ? [] : [query.data]),
+    now,
+    online,
+    trouble: query.isError ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
 
   const openRoute = (row: PlaceRouteRow) =>
     navigate(`/route/${encodeURIComponent(row.routeId)}?stop=${encodeURIComponent(row.stopId)}`)
@@ -249,6 +269,12 @@ export function PlaceDetail() {
               onPinPress={scrollToPole}
             />
           </div>
+
+          {/* The screen's own freshness line, above the list and below the map — the position Route detail
+              and Nearby use, and the one that reads as being about the times rather than about the place.
+              It answers a different question from a kerb's own `incomplete` marker: that one says an
+              upstream board refused us, this says we have stopped being fed at all (ADR-133). */}
+          <FeedNotice notice={notice} />
 
           {view.grouped ? (
             view.groups.map((group, groupIndex) => (

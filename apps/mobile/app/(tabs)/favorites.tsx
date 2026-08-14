@@ -1,9 +1,10 @@
-import { favouritePoleIds, favouritesView } from '@nextbus/core'
+import { favouritePoleIds, favouritesView, newestPlaceBoard } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQueries } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { FeedNotice, feedNotice } from '../../components/FeedNotice'
 import { Skeleton } from '../../components/Skeleton'
 import { StopRow } from '../../components/StopRow'
 import { Text } from '../../components/Text'
@@ -11,6 +12,7 @@ import { dataSource } from '../../lib/datasource'
 import { usePreferences } from '../../lib/preferences'
 import { useTabBarLayout } from '../../lib/tabBarLayout'
 import { useClientPolicy } from '../../lib/useClientPolicy'
+import { useOnline } from '../../lib/useOnline'
 import { useLocale } from '../../providers/LocaleProvider'
 
 export default function Favorites() {
@@ -56,10 +58,28 @@ export default function Favorites() {
    * **not** capping, because the cap is the served `maxRows` and `stopCardView` applies it together with
    * the "+N more" count. `apps/web` calls the identical function rather than re-deriving them from this JSX.
    */
-  const cards = favouritesView(
-    { saved, places: results.flatMap((r) => (r.data ? [r.data] : [])) },
-    { locale, now, policy },
-  )
+  const places = results.flatMap((r) => (r.data ? [r.data] : []))
+  const cards = favouritesView({ saved, places }, { locale, now, policy })
+
+  /**
+   * The screen's freshness notice (ADR-133, wired on this renderer by ADR-150).
+   *
+   * `newestPlaceBoard` takes the **whole list** rather than one document per query, which is the point of its
+   * shape: this screen fans out one request per saved pole, and *"the newest board on this screen"* is a fact
+   * about the screen rather than about whichever place resolved last.
+   *
+   * `trouble` fires when **any** query has errored, deliberately, on the one screen that has several: a rider
+   * whose third saved pole is unreachable is looking at an incomplete list, and the cards that did arrive
+   * cannot say so for it.
+   */
+  const online = useOnline()
+  const notice = feedNotice({
+    lastUpdatedIso: newestPlaceBoard(places),
+    now,
+    online,
+    trouble: results.some((r) => r.isError) ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
 
   // **A screen with saved favourites and nothing to show is one of three states, not one** — and until
   // WP6-4b it collapsed them: `loading` was the only guard, so once every query had *failed* the screen
@@ -118,6 +138,9 @@ export default function Favorites() {
       ) : (
         <ScrollView>
           <View style={{ paddingBottom: tab.contentInset }}>
+            {/* Inside the arm that has cards to show, as on `apps/web`: when the screen *is* the reason a
+                fetch failed, that reason is already the sentence. */}
+            <FeedNotice notice={notice} />
             {cards.map((card, i) => (
               <View key={card.stopId} className={i === 0 ? '' : 'border-border border-t'}>
                 <StopRow

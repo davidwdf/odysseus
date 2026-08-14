@@ -22,8 +22,10 @@ import specs from '@nextbus/contract/ui/nearby.spec.json'
 import stopRowSpec from '@nextbus/contract/ui/stop-row.spec.json'
 import {
   CLIENT_POLICY_DEFAULTS,
+  feedNotice,
   type Locale,
   type NearbyStop,
+  newestNearbyBoard,
   type StopCardView,
 } from '@nextbus/core'
 import corpus from '@nextbus/core/spec/stop-card.spec.json'
@@ -167,13 +169,40 @@ const READY = { status: 'ready', lat: 22.38, lng: 114.19, stale: false } as cons
 const FETCH_FAILURE = 'nearby: 502 upstream'
 
 /**
+ * The freshness notice the screen will have computed for these stops — the same kernel call it makes, over
+ * the same clock and the same policy (ADR-150).
+ *
+ * The driver **computes** it rather than restating the sentence, for the reason every other fixture here
+ * computes its cards: a golden written by hand is a second specification, and this one would drift the first
+ * time the precedence changed. What keeps it from being circular is that the screen's inputs are not the
+ * driver's — the screen reads its boards out of the query cache the subscription writes to, and reads the
+ * network off the platform.
+ */
+function noticeFor(stops: readonly NearbyStop[], opts: { online: boolean }) {
+  return feedNotice({
+    lastUpdatedIso: newestNearbyBoard(stops),
+    now: NOW,
+    online: opts.online,
+    trouble: 'none',
+    staleAfterMs: CLIENT_POLICY_DEFAULTS.staleAfterMs,
+  })
+}
+
+/** jsdom's `navigator.onLine` is a prototype getter, so the state a screen reads is set by redefining it. */
+function setOnline(online: boolean): void {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
+}
+
+/**
  * How this renderer is put into each declared state, and the view each corresponds to.
  *
- * `null` for `offline`, and that is not a gap in the driver: the spec declares it `unenforced` because it
- * is textually identical to `stale` — see the spec, and `test/shell.test.tsx` for the cache-replay half.
+ * Every state the spec projects has a case here; `default` returns `null` only for states this screen does
+ * not declare, and `conformStates` treats an unreachable projected state as a finding rather than a skip.
  */
 async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTree } | null> {
   const cards = fromCorpus<StopCardView[]>(WITH_STOPS.expect)
+  const stops = fromCorpus<NearbyStop[]>(WITH_STOPS.args.stops)
+  const notice = noticeFor(stops, { online: true })
   switch (state) {
     case 'undetermined':
       locationState = { status: 'undetermined' }
@@ -189,17 +218,36 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
       return { view: {}, tree: mount() }
     case 'content':
       locationState = READY
-      nearby = () => Promise.resolve(fromCorpus<NearbyStop[]>(WITH_STOPS.args.stops))
-      return { view: { cards }, tree: await mountSettled() }
+      nearby = () => Promise.resolve(stops)
+      return { view: { cards, notice }, tree: await mountSettled() }
     case 'stale':
       // The one difference from `content`, and the whole reason the subtitle is declared per state.
       locationState = { ...READY, stale: true }
-      nearby = () => Promise.resolve(fromCorpus<NearbyStop[]>(WITH_STOPS.args.stops))
-      return { view: { cards }, tree: await mountSettled() }
-    case 'empty':
+      nearby = () => Promise.resolve(stops)
+      return { view: { cards, notice }, tree: await mountSettled() }
+    case 'offline':
+      // **The state that could not be told from `stale` until ADR-150.** A remembered fix *and* no network:
+      // the subtitle says where the list is anchored, the notice says the rider's own network is gone, and
+      // the two sentences are the reason this state is projected at all now.
+      setOnline(false)
+      locationState = { ...READY, stale: true }
+      nearby = () => Promise.resolve(stops)
+      return {
+        view: { cards, notice: noticeFor(stops, { online: false }) },
+        tree: await mountSettled(),
+      }
+    case 'empty': {
+      const none = fromCorpus<NearbyStop[]>(WITHOUT_STOPS.args.stops)
       locationState = READY
-      nearby = () => Promise.resolve(fromCorpus<NearbyStop[]>(WITHOUT_STOPS.args.stops))
-      return { view: { cards: [] }, tree: await mountSettled() }
+      nearby = () => Promise.resolve(none)
+      // No boards at all, so the notice is silent — which is the honest answer and not an accident: a
+      // screen with nothing to report its freshness *about* must not say "last updated" with nothing to
+      // put after it.
+      return {
+        view: { cards: [], notice: noticeFor(none, { online: true }) },
+        tree: await mountSettled(),
+      }
+    }
     case 'failed':
       locationState = READY
       nearby = () => Promise.reject(new Error(FETCH_FAILURE))
@@ -212,6 +260,9 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
 beforeEach(() => {
   locationState = { status: 'loading' }
   nearby = () => Promise.resolve([])
+  // Restored per test, because `offline` redefines it and a leaked `false` would silently add a sentence to
+  // every state that ran after it — the sort of cross-test leak that reads as a renderer bug.
+  setOnline(true)
   document.body.innerHTML = '<div id="host"></div>'
   const host = document.getElementById('host')
   if (!host) throw new Error('unreachable: the host div was just written')

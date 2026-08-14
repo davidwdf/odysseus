@@ -1,4 +1,5 @@
 import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
+import { FEED_NOTICE } from './feed-notice'
 
 /**
  * **The Place screen** (WP6-3b) — a place, its boarding points, and the thirteen states it can be in.
@@ -144,6 +145,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           ...LOADED_CHROME,
+          FEED_NOTICE,
           {
             name: 'routesLabel',
             text: { message: 'routesAtStop' },
@@ -167,7 +169,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'One flat list for a place with several kerbs, which would put a rider on the wrong side of the road.',
       why: 'ADR-042: a place is N poles. Which kerb a line leaves from is the single most consequential thing on this screen — it is the difference between catching a bus and watching it go past on the other carriageway.',
-      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+      enforcement: { shows: [...LOADED_CHROME, FEED_NOTICE, KERB_GROUPS] },
     },
 
     /** Two kerbs whose headings would otherwise be identical — ADR-080 tier 1. */
@@ -176,7 +178,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'Two identical headings, or a side printed on a heading that was already unique — a side that distinguishes nothing is noise.',
       why: 'ADR-080. The side is **appended, never substituted**, so the operator and the code stay put and every place that never needed one reads exactly as it always has.',
-      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+      enforcement: { shows: [...LOADED_CHROME, FEED_NOTICE, KERB_GROUPS] },
     },
 
     /** The kerbs' own names are what tells them apart — ADR-080 tier 2. */
@@ -184,7 +186,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       must: 'The pole’s own name on a second line under its heading.',
       mustNot: 'A compass side where the names already differ — the name is the better answer.',
       why: 'ADR-080’s tiers are ordered by what a rider can act on: a printed code beats a name, a name beats a compass bearing, and a bearing beats silence.',
-      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+      enforcement: { shows: [...LOADED_CHROME, FEED_NOTICE, KERB_GROUPS] },
     },
 
     /** Nothing can tell them apart — ADR-080 tier 3. */
@@ -193,7 +195,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'Silence, leaving a rider to work out for themselves that two identical headings are two different kerbs.',
       why: 'Two poles within the separation floor, with the same code and the same name. The compass rule refuses a single centroid and there is no third fact, so the honest answer is to say that the app cannot tell either.',
-      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+      enforcement: { shows: [...LOADED_CHROME, FEED_NOTICE, KERB_GROUPS] },
     },
 
     /** A route with no live reading but a published timetable — the readout's middle arm. */
@@ -205,6 +207,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           ...LOADED_CHROME,
+          FEED_NOTICE,
           { name: 'routesLabel', text: { message: 'routesAtStop' } },
           { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
         ],
@@ -220,6 +223,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           ...LOADED_CHROME,
+          FEED_NOTICE,
           { name: 'routesLabel', text: { message: 'routesAtStop' } },
           { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
         ],
@@ -235,6 +239,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           ...LOADED_CHROME,
+          FEED_NOTICE,
           { name: 'routesLabel', text: { message: 'routesAtStop' } },
           { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
         ],
@@ -250,6 +255,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       enforcement: {
         shows: [
           ...LOADED_CHROME,
+          FEED_NOTICE,
           { name: 'routesLabel', text: { message: 'routesAtStop' } },
           { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
         ],
@@ -262,7 +268,7 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'An estimated distance — a distance we cannot measure is not one to guess (ADR-008).',
       why: 'The state a rider who has refused location is in, and the one that proves the `when` gates on `kerbWalk` and inside the summary are real rather than incidentally true.',
-      enforcement: { shows: [...LOADED_CHROME, KERB_GROUPS] },
+      enforcement: { shows: [...LOADED_CHROME, FEED_NOTICE, KERB_GROUPS] },
     },
 
     loading: {
@@ -279,7 +285,11 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
         'A name with nothing under it, which cannot be told from a screen that failed to load.',
       why: 'A real state: a place all of whose lines have stopped for the night still exists, and its summary says "0 routes" rather than nothing. `docs/11`’s open empty-card bug is this shape one level down.',
       enforcement: {
-        shows: [...LOADED_CHROME, { name: 'routesLabel', text: { message: 'routesAtStop' } }],
+        shows: [
+          ...LOADED_CHROME,
+          FEED_NOTICE,
+          { name: 'routesLabel', text: { message: 'routesAtStop' } },
+        ],
       },
     },
 
@@ -311,12 +321,17 @@ export const PLACE_DETAIL_SPEC: ComponentSpec = {
     },
 
     offline: {
-      must: 'The last known place, its rows aged and marked stale, on the remembered position.',
-      mustNot: 'A blank screen, and never a fresh-looking arrival time.',
-      why: 'ADR-058: a service worker plus a persisted query cache. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it.',
+      must: 'The last known place and its rows, under the line that says the rider’s own network is gone.',
+      mustNot:
+        'A blank screen, a fresh-looking arrival time, or `stale`’s sentence in place of this one — no network **explains** old data, so a rider is told the cause (ADR-133’s precedence).',
+      why: 'ADR-058: a service worker plus a persisted query cache. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it. **This state was `unenforced` until ADR-150**, on the stated ground that it was textually identical to a loaded screen — which was true, and was a fact about the gap rather than about the design: the screen had nothing to say about *why* it had stopped being fed. Now it does, and the difference is a word a harness can read.',
       enforcement: {
-        unenforced:
-          'Textually identical to `groupedKerbs` at this level, and deliberately so: offline *is* a remembered fix plus replayed readings, and which network failed is not something this screen says. What distinguishes it is the readings’ age and the dimming, which are inside the row and are opacity rather than text. The cache-replay half is asserted where a cold start is measurable — `apps/web/test/shell.test.tsx`.',
+        shows: [
+          ...LOADED_CHROME,
+          FEED_NOTICE,
+          { name: 'routesLabel', text: { message: 'routesAtStop' } },
+          { name: 'rows', each: 'rows', of: [{ name: 'row', component: 'PlaceRow' }] },
+        ],
       },
     },
 

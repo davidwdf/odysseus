@@ -1,14 +1,16 @@
-import { nearbyView } from '@nextbus/core'
+import { nearbyView, newestNearbyBoard } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { dataSource } from '../adapters/datasource'
+import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { StopCard } from '../components/StopCard'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveNearby } from '../hooks/useLiveNearby'
 import { useLocation } from '../hooks/useLocation'
+import { useOnline } from '../hooks/useOnline'
 import { useLocale } from '../providers/LocaleProvider'
 
 /** One array, so "no cards yet" has a stable identity — see `useLiveNearby`'s note on the storm. */
@@ -68,6 +70,28 @@ export function Nearby() {
   })
   // The whole screen's content, in one call. Nothing below this line decides anything.
   const cards = nearbyView(query.data ?? [], { locale, now, policy })
+
+  /**
+   * The screen's freshness notice (ADR-133, wired here by ADR-150).
+   *
+   * The boards it reads are the **cached payload's**, which is what makes this honest on the screen whose
+   * readings arrive by subscription: `useLiveNearby` writes each round into the query cache, so a
+   * subscription that has quietly stopped delivering ages these timestamps exactly as a dead refetch would.
+   * A notice derived from "did the last fetch succeed" could not see that at all.
+   *
+   * `trouble` is `unreachable` only for a failure that reached *us*. An **upstream** board refusing is not
+   * passed here and never will be: the card says that itself (`StopCardView.incomplete`, ADR-077), and a
+   * live round asks each pole separately, so a screen-level sentence would be wrong about the other five
+   * cards.
+   */
+  const online = useOnline()
+  const notice = feedNotice({
+    lastUpdatedIso: newestNearbyBoard(query.data ?? []),
+    now,
+    online,
+    trouble: query.isError ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
 
   return (
     <main className="min-h-dvh bg-bg">
@@ -152,6 +176,11 @@ export function Nearby() {
         </Centred>
       ) : (
         <div>
+          {/* The screen's own freshness line, and it lives **inside the arm that has something to show**
+              — the shape Route detail uses (ADR-133). When the whole screen is the reason a fetch failed,
+              that reason is the sentence; a second line above it saying we cannot be reached would be the
+              same fact twice, and ADR-133's rule is one line, one message. */}
+          <FeedNotice notice={notice} />
           {cards.map((card, i) => (
             <div key={card.stopId} className={i === 0 ? '' : 'border-t border-border'}>
               {/* The same two destinations, spelled the same way, as `apps/mobile/app/(tabs)/index.tsx`:

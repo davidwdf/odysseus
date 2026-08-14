@@ -1,4 +1,5 @@
 import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
+import { FEED_NOTICE } from './feed-notice'
 
 /**
  * **The Route screen** (WP6-6b) — the vertical schematic, its bus tokens, and the twenty states it can be
@@ -242,7 +243,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The route number, both ends of the journey, the facts strip, and one row per stop in sequence with its printed code, its boarding fare and its upcoming times.',
       mustNot:
         'A row for a stop the route does not call at, or a sequence number that is the row’s index rather than the wire’s. A rider counts stops to know when to get off.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /**
@@ -270,7 +271,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'Keeping the "live times unavailable" line above rows that now show minutes — the screen contradicting itself — or leaving a refused kerb looking like a stop with no bus due, which is the ADR-073 confusion one level down from where ADR-114 fixed it.',
       why: 'Most routes are KMB, whose bulk feed answers, so most of the time no subscription is wanted and this state is never entered.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /**
@@ -286,7 +287,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A shorter list. The rows before the boarding stop are how a rider checks they are waiting on the right side of the road.',
       why: '`hereIndex` and each row’s own `here` are one answer from one call, so the row that is highlighted and the row that is scrolled to cannot differ — which is a bug that looks like a scroll bug and is not (ADR-093 decision 8). A corpus property asserts they agree on every case.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /**
@@ -299,7 +300,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The reverse direction’s stops, with no row emphasised and nothing scrolled to.',
       mustNot:
         'A row still marked as the rider’s boarding stop. A terminus is often one pole for both bounds, so the id can still match — which is exactly why `flipped` is an argument and not something to infer.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** A loop: one journey line and no direction toggle. */
@@ -308,7 +309,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'An arrow pointing at the loop line, which reads as travelling *to* the loop rather than around it — nor "A → A", which is faithful and tells a rider nothing (ADR-046).',
       why: 'HK operators carry the loop marker in the destination **name** ("TAI KOK TSUI (CIRCULAR)"), read from the **English** field whatever the display locale because it is the one field the three feeds spell consistently. Upstream ships GMB circulars with a blank `en`, so that is an exposure rather than a tidy assumption, and the corpus pins what a rider then sees.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** A bus standing at the origin, nearly leaving. */
@@ -317,7 +318,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A token drawn on a segment leading into the first stop. There is no such segment — stop 0 has nothing before it — so a renderer that treated every bus the same would place it at an offset it cannot compute.',
       why: 'Two rules composed, and the composition is what a renderer cannot be trusted with: the bus earns a token at all only because it is within two minutes of departing (`ORIGIN_BUS_DEPARTS_WITHIN_SEC` — otherwise it is furniture parked permanently at every terminus, reading as a bus a rider could catch), and it is drawn on the node because the origin has no approach.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** A bus between two stops — the common case, and what the schematic exists for. */
@@ -325,7 +326,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'A token per inferred bus, each named for the stop it is approaching.',
       mustNot:
         'A token per stop with a reading. Every stop ahead of a bus reports it, so that would draw the same bus a dozen times — which is what `inferBusMarkers`’ drop-off detection exists to prevent.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** A bus inside the "Due" band, at the stop rather than approaching it. */
@@ -333,7 +334,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'A token named for the stop it is **at**, on that stop’s node.',
       mustNot:
         'The approaching sentence, when the row beside it says the bus is due. The token and the word are the same judgement and read the same `dueUnderSec`.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /**
@@ -346,7 +347,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The rows and their times, with nothing on the rail.',
       mustNot:
         'A token at the origin for a bus that is not nearly leaving — and equally, no row hidden because the rail is empty. The times and the tokens are two readings of one payload and only one of them is suppressed.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** A row the rider has saved this route at. */
@@ -355,7 +356,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A flag on every row of a saved route. A favourite is a route **at a pole** (ADR-042), so starring the line everywhere claims the rider saved a dozen stops, and the Favourites tab would list one.',
       why: 'The key is `formatFavoriteRouteKey`’s and is built from the row’s **raw** pole id — the same id `?pole=` carries and the same one `favouritesView` reads back. A corpus property reconstructs it rather than trusting the flag.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /**
@@ -371,16 +372,16 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The row, with its number, its name, its code and its fare.',
       mustNot:
         'A dash, a spinner, or the row omitted. A stop with no reading is still a stop the bus calls at, and dropping it would silently shorten the route.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** A board old enough to say so. */
     stale: {
-      must: 'The readings we have, dimmed, with the fresh rows beside them undimmed.',
+      must: 'The readings we have, unchanged, and one line above the schematic saying when the newest board on it was published.',
       mustNot:
-        'Colour alone (ADR-008), or a whole-screen staleness banner. Staleness is the **board’s** — one `dataTimestamp` per stop — so one row can be old while the next is current, and a screen-level cue would be wrong about both.',
-      why: 'The projection cannot see opacity, so what it pins is that a stale row shows the **same text** as a fresh one: the value does not change, because a reading only changes when a fresh one arrives, and there is no client-side countdown. That is the honest half of the assertion, and each suite asserts the dimming itself.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+        'A cue on each reading, and never colour alone (ADR-008). Two per-reading treatments were built and withdrawn — a 45 % fade, then a muted `~` — because a schematic with 78 readouts off **one** board drew a single fact 78 times, and *"this number is two minutes old"* is not something a rider can act on (ADR-123).',
+      why: 'This state used to read *"the readings we have, dimmed"* and to forbid *"a whole-screen staleness banner"* on the argument that one row can be old while the next is current. That argument was wrong about this screen and it is the reason ADR-123 exists: a route’s rows come off one operator board with one `dataTimestamp`, so the screen-level statement is the one at the fact’s own grain. What the projection pins is that the readings themselves do **not** change while the notice is up — a value moves only when a fresh one arrives.',
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** A service block with only some of its facts. */
@@ -388,7 +389,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'A pill for each fact the dataset carries, and none for the rest.',
       mustNot:
         'A pill reading "—" or a fixed four-pill row. The Static tier shows what the open data says and nothing else (ADR-036); a placeholder claims a fact we do not have.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /**
@@ -403,7 +404,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The fare pill, then a separator, then the holiday fare — inside the one pill.',
       mustNot:
         'A fifth pill. A holiday fare is not a fact beside the fare; it is the same fact on a different day, and a strip that listed it separately would read as two fares in force at once.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /** No service block at all — a real state, and the one where the list is the whole screen. */
@@ -411,7 +412,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The list, with no strip above it.',
       mustNot:
         'An empty strip holding space. It is the schematic’s first sibling, so an empty one shifts every measured row offset for no content.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     /**
@@ -425,7 +426,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The route number and both ends from the route’s **own** labels, and no stop-count pill.',
       mustNot:
         'An empty header, or a "0 stops" pill. A route length of zero is a broken payload and printing it as a fact states something we do not believe.',
-      enforcement: { shows: [FACTS, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
 
     loading: {
@@ -476,6 +477,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
             invariant:
               'Once, above the schematic — not per row. A rider cannot act on *which* rows, and 34 copies of one sentence is not more honest than one. Never a warning colour: nothing is wrong with the route, and nothing about it will change if they wait.',
           },
+          FEED_NOTICE,
           STOP_ROWS,
         ],
       },
@@ -509,20 +511,18 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
             invariant:
               'The same line, in the same place, as `noLiveBoard` — a rider is told what they can act on (no live times here) and not which of our two reasons produced it.',
           },
+          FEED_NOTICE,
           STOP_ROWS,
         ],
       },
     },
 
     offline: {
-      must: 'The whole screen, from the cached payload, with its readings dimmed.',
+      must: 'The whole screen, from the cached payload, under the line that says the rider’s own network is gone.',
       mustNot:
-        'A blank screen or an error, when a usable route payload is sitting in the persisted query cache. The stop sequence, the fares and the facts are static and do not go out of date offline.',
-      why: 'The half that *is* checkable is `stale`, and it is: an offline screen is a stale screen whose refetch never lands, so the text is identical and the dimming is the same rule. What is not observable at this layer is the **cause** — a suite cannot tell a reading that aged from a network that stopped. ADR-058’s own coverage asserts the cache path where a cold start is measurable.',
-      enforcement: {
-        unenforced:
-          'Textually identical to `stale` by construction, which is the point: a rider offline sees the last thing we knew, labelled as old. Asserting it here would be asserting `stale` twice.',
-      },
+        'A blank screen or an error, when a usable route payload is sitting in the persisted query cache. The stop sequence, the fares and the facts are static and do not go out of date offline. And not `stale`’s sentence: no network **explains** old data, so a rider is told the cause and not the symptom (ADR-133’s precedence).',
+      why: 'This state was `unenforced` here and on the three other screens for the same stated reason — *textually identical to `stale`, so asserting it would be asserting `stale` twice* — and that was a description of what the app lacked rather than of what it should do: the **cause** was genuinely unobservable because nothing said it. ADR-150 gives it a sentence, so the two states differ in a word a harness can read. ADR-058’s own coverage still asserts the cache-replay half, where a cold start is measurable.',
+      enforcement: { shows: [FACTS, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
     },
   },
 
