@@ -1,6 +1,6 @@
 import { parseRouteId } from './ids'
 import { CLIENT_POLICY_DEFAULTS } from './policy'
-import type { Eta, I18nText, Locale, RemarkKind } from './types'
+import type { Eta, I18nText, Locale, NearbyStop, RemarkKind, StopDetail } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
 // JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
@@ -300,10 +300,10 @@ const HK_UTC_OFFSET_MS = 8 * 60 * 60 * 1000
 /**
  * The newest board among the ones a screen drew, or `null` when it drew none — the data half of `feedNotice`.
  *
- * **One rule, four callers.** Route detail carries the answer on its view; Nearby, Place detail and
- * Favourites hand their payload's timestamps straight in. The alternative was each screen taking its own
- * maximum, which is four chances to disagree about a tie or about an unreadable value — and taking a maximum
- * is arithmetic, which a renderer may not do (`check-no-derivation`).
+ * **One rule, four callers.** Route detail carries the answer on its view; the other three screens reach it
+ * through the two payload adapters below. The alternative was each screen taking its own maximum, which is
+ * four chances to disagree about a tie or about an unreadable value — and taking a maximum is arithmetic,
+ * which a renderer may not do (`check-no-derivation`).
  *
  * **Unreadable and absent values are skipped, not treated as epoch zero.** Upstream really does publish
  * fields this app cannot parse — that is the whole of ADR-128's fare defect — and a `NaN` folded into a
@@ -323,6 +323,46 @@ export function newestBoard(timestamps: readonly (string | null | undefined)[]):
     if (Number.isNaN(best) || t > best) best = t
   }
   return Number.isNaN(best) ? null : new Date(best).toISOString()
+}
+
+/**
+ * The newest board on a **nearby list** — `newestBoard` over the readings `/v1/nearby` attached to every
+ * card on screen.
+ *
+ * ## Why the payload comes in here rather than a list of timestamps
+ *
+ * ADR-133 wired Route detail first, where the answer is already on the view (`RouteDetailView.lastUpdatedIso`)
+ * because `routeDetailView` is handed the whole payload. The other three screens have no such field, and the
+ * shape this note originally proposed — each screen mapping its payload to timestamps and calling
+ * `newestBoard` — puts one domain decision in the renderers: **which field is the board's clock.**
+ *
+ * It is `dataTimestamp`, when the *operator* generated the reading, and never `observedAt`, when we fetched
+ * it — the same distinction `isStale` exists to make, and for the same reason: a reading refetched every 30 s
+ * has a fresh `observedAt` for ever, so a screen that read it would say *"last updated 21:34"* about a feed
+ * that stopped publishing at lunchtime. That is a mistake a renderer can make silently and both renderers
+ * can make differently, so it lives here with a corpus row rather than at six call sites (ADR-150).
+ *
+ * @spec eta#newestNearbyBoard
+ */
+export function newestNearbyBoard(stops: readonly NearbyStop[]): string | null {
+  return newestBoard(stops.flatMap((stop) => stop.etas.map((eta) => eta.dataTimestamp)))
+}
+
+/**
+ * The newest board across one or more **place documents** — Place detail's one, and every place Favourites
+ * resolved its saved poles to.
+ *
+ * A list rather than a single document precisely because Favourites is the caller with several: it fans out
+ * one query per saved pole, and *"the newest board on this screen"* is a fact about the screen, not about
+ * whichever query answered last. Place detail passes the one it has.
+ *
+ * A row whose `eta` is `null` contributes nothing — absent, not epoch zero — which is what makes a place with
+ * one live route and nine timetabled ones say *"last updated"* about the board that actually exists.
+ *
+ * @spec eta#newestPlaceBoard
+ */
+export function newestPlaceBoard(places: readonly StopDetail[]): string | null {
+  return newestBoard(places.flatMap((place) => place.routes.map((row) => row.eta?.dataTimestamp)))
 }
 
 /**

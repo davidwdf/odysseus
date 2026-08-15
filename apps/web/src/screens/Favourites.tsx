@@ -1,10 +1,12 @@
-import { favouritePoleIds, favouritesView } from '@nextbus/core'
+import { favouritePoleIds, favouritesView, newestPlaceBoard } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { useQueries } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { dataSource } from '../adapters/datasource'
+import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { StopCard } from '../components/StopCard'
 import { useClientPolicy } from '../hooks/useClientPolicy'
+import { useOnline } from '../hooks/useOnline'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
 
@@ -50,11 +52,31 @@ export function Favourites() {
   // that took their clock out of a hook did so because a *subscription* replaced their interval.
   const now = Date.now()
 
+  const places = results.flatMap((r) => (r.data ? [r.data] : []))
+
   // The whole screen's content, in one call. Nothing below this line decides anything.
-  const cards = favouritesView(
-    { saved, places: results.flatMap((r) => (r.data ? [r.data] : [])) },
-    { locale, now, policy },
-  )
+  const cards = favouritesView({ saved, places }, { locale, now, policy })
+
+  /**
+   * The screen's freshness notice (ADR-133, wired here by ADR-150).
+   *
+   * `newestPlaceBoard` takes the **whole list** rather than one document per query, and that is the point of
+   * its shape: this screen fans out one request per saved pole, and *"the newest board on this screen"* is a
+   * fact about the screen. A per-query answer would report whichever place happened to resolve last.
+   *
+   * `trouble` fires when **any** query has errored, which is deliberate on the one screen that has several:
+   * a rider whose third saved pole is unreachable is looking at an incomplete list, and the missing card is
+   * not something the remaining cards can say for themselves. It is still a failure that reached *us* — an
+   * upstream board refusing arrives as `incomplete` on the card that owns it, never here.
+   */
+  const online = useOnline()
+  const notice = feedNotice({
+    lastUpdatedIso: newestPlaceBoard(places),
+    now,
+    online,
+    trouble: results.some((r) => r.isError) ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
 
   // Three states, not one — see the RN twin's note: guarding only on `isLoading` is what made a screen whose
   // every query had failed render its heading and an empty list, which reads as "you have nothing saved".
@@ -105,6 +127,9 @@ export function Favourites() {
         <p className="m-0 px-4 text-body text-danger">{(failure as Error).message}</p>
       ) : (
         <div>
+          {/* Inside the arm that has cards to show, for the reason Route detail and Nearby give: when the
+              screen *is* the reason a fetch failed, that reason is already the sentence. */}
+          <FeedNotice notice={notice} />
           {cards.map((card, i) => (
             <div key={card.stopId} className={i === 0 ? '' : 'border-t border-border'}>
               {/* The same two destinations, spelled the same way, as the RN screen's — declared once, in

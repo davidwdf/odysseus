@@ -222,8 +222,11 @@ now**), and **WP6-8a — the hardening sweep — closed nine open rider-facing d
 (ADR-123–131)**. Four things from that sweep change how you should work here:
 **(1) a suite that configures away the environment cannot see an environmental defect** — two 🔴 rows filed
 months apart were one parked-query bug that jsdom could not reach, and the same shape hid a `ResizeObserver`
-leak and a colour regression; **(2) staleness is a muted `~` before the figure, not a fade** (ADR-123), so
-never reach for `opacity.etaStale` — it is retired in place with a warning in the generated native tokens;
+leak and a colour regression; **(2) staleness is a **screen-level sentence**, not a mark on a reading** — a fade (Wave 1) and then a muted
+`~` (ADR-123) were both built and withdrawn, because a board has one `dataTimestamp` and a per-figure cue
+draws that one fact once per row. `feedNotice` in the kernel decides it and `FeedNotice` says it once per
+screen, on all four screens of both renderers (ADR-133, ADR-150); never reach for `opacity.etaStale`, which
+is retired in place with a warning in the generated native tokens;
 **(3) preferences are merged, not overwritten** (ADR-125) — and that fix caused the data loss it was written
 to prevent, twice, both times a *sequencing* error around correct arithmetic, so read the ADR before touching
 either store; **(4) an ADR number is a permanent address** (ADR-127) — never renumber, and `pnpm boundaries`

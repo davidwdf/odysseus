@@ -650,8 +650,17 @@ written down.
       the `opacity.etaStale` fade three days after ADR-123 removed it from every renderer, invisible because
       the state was `unenforced` and so nothing read it. **A gallery that renders prose is a gate on prose**,
       which nothing else here is.
-      **Still owed:** a live sample per leaf component from a corpus case (cheap for `StopRow`/`PlaceRow`,
-      not for whole screens), and the review section below.
+      **The live samples landed 2026-08-13** (ADR-150, at the owner's request while reviewing the freshness
+      notice): `lab/samples.tsx` draws `FeedNotice`, `StopRow` and `PlaceRow` in several states at once —
+      every panel a **corpus golden** or the kernel call the screen makes, so a rule change moves the
+      pictures and a renamed case is a red build (`test/gallery-samples.test.tsx` renders every one).
+      🟠 **It found that the lab has no Tailwind of its own**: `tailwind.config.cjs` scans `./src/**` and not
+      `./lab/**`, so a utility the app does not already use is never generated — `w-96` computed to the width
+      of its own caption. Adding `lab/` to the content glob would let lab-only classes into the *shipped*
+      stylesheet, which is what ADR-112's three assertions exist to prevent, so lab-only geometry is written
+      as a style and everything semantic stays a token class. Worth knowing before adding a panel.
+      **Still owed:** samples for the components that are whole screens (they take a router, a query client
+      and a location fix — the screens themselves are one click away), and the review section below.
 - [ ] 🟡 **Review the app's error and placeholder texts as a set** — asked for by the owner 2026-08-12:
       *"add these errors and placeholder texts to the list of components we're going to review later."*
       The wording shipped so far is **accepted as the default** and is not blocking anything; what is wanted
@@ -709,10 +718,11 @@ written down.
       an adapter return shape that carries the header out (or a header sink threaded into `fetchUpstream`),
       which touches every adapter's signature — hence a row rather than a rider on ADR-135. The arithmetic
       is already corpus-pinned, so the wiring is the whole job.
-- [ ] 🟠 **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
-      **The mechanism is built and Route detail is wired (2026-08-12,
-      [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence));
-      demoted from 🔴 because ADR-008 is satisfied again.** `feedNotice` in the kernel with a 9-case corpus
+- [x] ✅ **A screen never says that it has stopped being fed — "last updated", and four different reasons.**
+      **Built on Route detail 2026-08-12
+      ([ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence)),
+      and wired on all four screens of both renderers 2026-08-13
+      ([ADR-150](./08-decision-log.md#adr-150--the-freshness-notice-reaches-all-four-screens-and-offline-stops-being-a-state-nothing-could-see)).** `feedNotice` in the kernel with a 9-case corpus
       decides which of the states a screen is in — precedence `offline` → `unreachable` → `lastUpdated` →
       `none`, because each earlier state *explains* the later ones — and one shared `FeedNotice` component
       draws it in `text-muted`, silent in the ordinary case.
@@ -720,12 +730,34 @@ written down.
       an upstream board refusing already has vocabulary, and a screen-level duplicate could disagree with it,
       because a live round asks each pole separately. Route detail can therefore show *two* lines at once,
       and that is right — they answer different questions.
-      **Still owed:** `lastUpdatedIso` and a `trouble` value for **Nearby, Place detail and Favourites**,
-      each of which reaches its readings through a different hook. Until then **three screens still say
-      nothing.** Plus: the wording is a placeholder awaiting the owner (ADR-114/122 precedent), a reading
-      from yesterday reads as today (`formatClock` has no date), and `trouble` currently collapses *"the
-      Worker said no"* and *"the fetch never arrived"* into one sentence — ADR-124 showed they are
-      distinguishable when one earns its own.
+      **What ADR-150 added:** two kernel adapters (`newestNearbyBoard`, `newestPlaceBoard`) so the decision
+      *which field is the board's clock* — `dataTimestamp`, never the `observedAt` our own layer restamps on
+      every fetch — stays out of six call sites; the notice as a `oneOf` slot in all four screen specs; and
+      **`stale` and `offline` promoted from `unenforced` to projected on eight surfaces.** That last one is
+      the part worth carrying: all four specs had refused to enforce `offline` in the same words —
+      *"textually identical to `stale`"* — which was a statement about the gap, not the design. A screen with
+      nothing to say about *why* it stopped being fed is one a harness cannot tell from a stale one, because
+      a rider cannot either.
+      **Still owed, and none of it blocks:**
+      · the wording is a placeholder awaiting the owner (ADR-114/122 precedent) — it is on the
+        error-and-placeholder review row above;
+      · **a reading from yesterday reads as today** — `formatClock` is `HH:MM` with no date, so a payload
+        replayed from the persisted cache after midnight says *"Last updated 23:58"*. Visible in this repo's
+        own goldens now: several Place-detail conformance states are driven from corpus payloads captured two
+        days before their `now`, and they project a time from another day. The honest fix is a date-aware,
+        locale-aware format;
+      · `trouble` still collapses *"the Worker said no"* and *"the fetch never arrived"* into one sentence —
+        ADR-124 showed they are distinguishable (an `EdgeRequestError` carries the Worker's own `code` and
+        `retryable`, a bare `TypeError` does not) when one earns its own words.
+- [ ] 🟡 **`apps/mobile` has no network signal on iOS or Android, so it never says *"You're offline"*.**
+      `useOnline` reads `navigator.onLine`, which is a web API: real under `react-native-web` (the Expo PWA,
+      and both conformance suites), absent on native, where the hook type-guards the read and answers `true`.
+      That is the honest value — ADR-133's asymmetry is that `false` is evidence and `true` is only the
+      absence of it — so a native build falls through to the `unreachable` arm when its requests start
+      failing, which is also what covers a captive portal on the web. A real signal is `expo-network`'s
+      `useNetworkState()` or NetInfo, version-aligned per CLAUDE.md rule 6, and probably an **eighth port** in
+      `packages/ports` rather than a screen-level import: "does the platform have a network" is a platform
+      fact handed in like a clock, and `ls packages/ports/src` is the porting checklist a native repo reads.
 
       <details><summary>The original scoping, kept because the four-state table is still the plan</summary>
 

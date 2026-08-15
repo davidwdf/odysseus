@@ -41,6 +41,44 @@
             }
           },
           {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
             "name": "routesLabel",
             "invariant": "The flat list’s only heading. `grouped` decides which shape is drawn and it is a field of the view, never `members.length > 1` recomputed by a renderer.",
             "text": {
@@ -79,6 +117,44 @@
             "invariant": "A **licence obligation, not decoration**: the Lands Department require the credit on the map face wherever their tiles are drawn (ADR-049), which is why it is a required member of the `TileSource` port and an asserted slot here rather than something a view layer decides to include. It must stay on the visible map at every collapse point, which is why the clipping container renders it and not the map canvas.",
             "text": {
               "message": "mapAttribution"
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
             }
           },
           {
@@ -156,6 +232,44 @@
             }
           },
           {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
             "name": "groups",
             "each": "groups",
             "of": [
@@ -227,6 +341,44 @@
             "invariant": "A **licence obligation, not decoration**: the Lands Department require the credit on the map face wherever their tiles are drawn (ADR-049), which is why it is a required member of the `TileSource` port and an asserted slot here rather than something a view layer decides to include. It must stay on the visible map at every collapse point, which is why the clipping container renders it and not the map canvas.",
             "text": {
               "message": "mapAttribution"
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
             }
           },
           {
@@ -304,6 +456,44 @@
             }
           },
           {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
             "name": "groups",
             "each": "groups",
             "of": [
@@ -378,6 +568,44 @@
             }
           },
           {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
             "name": "routesLabel",
             "text": {
               "message": "routesAtStop"
@@ -414,6 +642,44 @@
             "invariant": "A **licence obligation, not decoration**: the Lands Department require the credit on the map face wherever their tiles are drawn (ADR-049), which is why it is a required member of the `TileSource` port and an asserted slot here rather than something a view layer decides to include. It must stay on the visible map at every collapse point, which is why the clipping container renders it and not the map canvas.",
             "text": {
               "message": "mapAttribution"
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
             }
           },
           {
@@ -456,6 +722,44 @@
             }
           },
           {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
             "name": "routesLabel",
             "text": {
               "message": "routesAtStop"
@@ -495,6 +799,44 @@
             }
           },
           {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
             "name": "routesLabel",
             "text": {
               "message": "routesAtStop"
@@ -531,6 +873,44 @@
             "invariant": "A **licence obligation, not decoration**: the Lands Department require the credit on the map face wherever their tiles are drawn (ADR-049), which is why it is a required member of the `TileSource` port and an asserted slot here rather than something a view layer decides to include. It must stay on the visible map at every collapse point, which is why the clipping container renders it and not the map canvas.",
             "text": {
               "message": "mapAttribution"
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
             }
           },
           {
@@ -616,6 +996,44 @@
             }
           },
           {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
             "name": "routesLabel",
             "text": {
               "message": "routesAtStop"
@@ -649,11 +1067,80 @@
       }
     },
     "offline": {
-      "must": "The last known place, its rows aged and marked stale, on the remembered position.",
-      "mustNot": "A blank screen, and never a fresh-looking arrival time.",
-      "why": "ADR-058: a service worker plus a persisted query cache. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it.",
+      "must": "The last known place and its rows, under the line that says the rider’s own network is gone.",
+      "mustNot": "A blank screen, a fresh-looking arrival time, or `stale`’s sentence in place of this one — no network **explains** old data, so a rider is told the cause (ADR-133’s precedence).",
+      "why": "ADR-058: a service worker plus a persisted query cache. What is restored is a *labelled old reading*, never a new one — each arrives with its original `observedAt`, so the ETA helpers age it. **This state was `unenforced` until ADR-150**, on the stated ground that it was textually identical to a loaded screen — which was true, and was a fact about the gap rather than about the design: the screen had nothing to say about *why* it had stopped being fed. Now it does, and the difference is a word a harness can read.",
       "enforcement": {
-        "unenforced": "Textually identical to `groupedKerbs` at this level, and deliberately so: offline *is* a remembered fix plus replayed readings, and which network failed is not something this screen says. What distinguishes it is the readings’ age and the dimming, which are inside the row and are opacity rather than text. The cache-replay half is asserted where a cold start is measurable — `apps/web/test/shell.test.tsx`."
+        "shows": [
+          {
+            "name": "summary",
+            "invariant": "One string from the kernel, **two separator widths and all** — `\" · \"` binds a distance to its own walk time, the wider `\"  ·  \"` separates the parts. HTML collapses consecutive whitespace, so a DOM renderer needs `white-space: pre-wrap` for this to be true rather than nearly true (ADR-069).",
+            "text": {
+              "field": "summary"
+            }
+          },
+          {
+            "name": "mapAttribution",
+            "invariant": "A **licence obligation, not decoration**: the Lands Department require the credit on the map face wherever their tiles are drawn (ADR-049), which is why it is a required member of the `TileSource` port and an asserted slot here rather than something a view layer decides to include. It must stay on the visible map at every collapse point, which is why the clipping container renders it and not the map canvas.",
+            "text": {
+              "message": "mapAttribution"
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "routesLabel",
+            "text": {
+              "message": "routesAtStop"
+            }
+          },
+          {
+            "name": "rows",
+            "each": "rows",
+            "of": [
+              {
+                "name": "row",
+                "component": "PlaceRow"
+              }
+            ]
+          }
+        ]
       }
     },
     "incomplete": {

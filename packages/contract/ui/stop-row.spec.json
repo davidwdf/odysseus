@@ -179,7 +179,7 @@
       "mustNot": "Colour alone, and never a value presented as fresh.",
       "why": "ADR-008. A replayed reading from the persisted cache arrives with its original `observedAt`, so it is aged and labelled rather than shown as live (ADR-058).",
       "enforcement": {
-        "unenforced": "Nothing on the CARD says this, and since ADR-123 nothing is meant to: two per-reading treatments (a 45% fade, then a muted `~`) were built and withdrawn because staleness is a property of the BOARD, so a per-figure cue draws one fact once per reading. The sentence is the screen’s — ADR-133’s `feedNotice`, held by `eta#feedNotice`’s corpus and wired on Route detail so far. This row stays `unenforced` until it is wired on the screens that draw this card."
+        "unenforced": "Nothing on the CARD says this, and since ADR-123 nothing is meant to: two per-reading treatments (a 45% fade, then a muted `~`) were built and withdrawn because staleness is a property of the BOARD, so a per-figure cue draws one fact once per reading. The sentence is the screen’s — ADR-133’s `feedNotice` — and since ADR-150 **both screens that draw this card say it**: `nearby.spec.json` and `favourites.spec.json` project it as a slot of their own, and each drives its `stale` state through it. It stays `unenforced` HERE because there is nothing on this component to enforce; the claim is checked one level up, which is where the fact lives."
       }
     },
     "offline": {

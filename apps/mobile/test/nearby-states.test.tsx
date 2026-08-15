@@ -22,8 +22,10 @@ import nearbySpec from '@nextbus/contract/ui/nearby.spec.json'
 import stopRowSpec from '@nextbus/contract/ui/stop-row.spec.json'
 import {
   CLIENT_POLICY_DEFAULTS,
+  feedNotice,
   type Locale,
   type NearbyStop,
+  newestNearbyBoard,
   type StopCardView,
 } from '@nextbus/core'
 import corpus from '@nextbus/core/spec/stop-card.spec.json'
@@ -151,8 +153,37 @@ async function mountSettled(): Promise<RenderedTree> {
 const READY = { status: 'ready', lat: 22.38, lng: 114.19, stale: false } as const
 const FETCH_FAILURE = 'nearby: 502 upstream'
 
+/**
+ * The freshness notice the screen will have computed for these stops — the same kernel call it makes, over
+ * the same clock and the same policy (ADR-150). Computed rather than restated, for the reason the cards are:
+ * a golden written by hand is a second specification.
+ */
+function noticeFor(stops: readonly NearbyStop[], opts: { online: boolean }) {
+  return feedNotice({
+    lastUpdatedIso: newestNearbyBoard(stops),
+    now: NOW,
+    online: opts.online,
+    trouble: 'none',
+    staleAfterMs: CLIENT_POLICY_DEFAULTS.staleAfterMs,
+  })
+}
+
+/**
+ * `navigator.onLine` is a prototype getter, so the state a screen reads is set by redefining it.
+ *
+ * **This suite runs under `react-native-web`, where `useOnline` is reading the browser's own API** — the
+ * same code path the Expo PWA takes. On iOS and Android there is no `onLine` at all and the hook answers
+ * `true`, which is what the field means (`false` is evidence, `true` is the absence of it); a native build
+ * therefore reaches the `unreachable` arm rather than this one. That divergence is recorded in the hook.
+ */
+function setOnline(online: boolean): void {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
+}
+
 async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTree } | null> {
   const cards = fromCorpus<StopCardView[]>(WITH_STOPS.expect)
+  const stops = fromCorpus<NearbyStop[]>(WITH_STOPS.args.stops)
+  const notice = noticeFor(stops, { online: true })
   switch (state) {
     case 'undetermined':
       locationState = { status: 'undetermined' }
@@ -171,16 +202,31 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
       return { view: {}, tree: mount() }
     case 'content':
       locationState = READY
-      nearby = () => Promise.resolve(fromCorpus<NearbyStop[]>(WITH_STOPS.args.stops))
-      return { view: { cards }, tree: await mountSettled() }
+      nearby = () => Promise.resolve(stops)
+      return { view: { cards, notice }, tree: await mountSettled() }
     case 'stale':
       locationState = { ...READY, stale: true }
-      nearby = () => Promise.resolve(fromCorpus<NearbyStop[]>(WITH_STOPS.args.stops))
-      return { view: { cards }, tree: await mountSettled() }
-    case 'empty':
+      nearby = () => Promise.resolve(stops)
+      return { view: { cards, notice }, tree: await mountSettled() }
+    case 'offline':
+      // **The state that could not be told from `stale` until ADR-150.** A remembered fix *and* no network:
+      // the subtitle says where the list is anchored, the notice says the rider's own network is gone.
+      setOnline(false)
+      locationState = { ...READY, stale: true }
+      nearby = () => Promise.resolve(stops)
+      return {
+        view: { cards, notice: noticeFor(stops, { online: false }) },
+        tree: await mountSettled(),
+      }
+    case 'empty': {
+      const none = fromCorpus<NearbyStop[]>(WITHOUT_STOPS.args.stops)
       locationState = READY
-      nearby = () => Promise.resolve(fromCorpus<NearbyStop[]>(WITHOUT_STOPS.args.stops))
-      return { view: { cards: [] }, tree: await mountSettled() }
+      nearby = () => Promise.resolve(none)
+      return {
+        view: { cards: [], notice: noticeFor(none, { online: true }) },
+        tree: await mountSettled(),
+      }
+    }
     case 'failed':
       locationState = READY
       nearby = () => Promise.reject(new Error(FETCH_FAILURE))
@@ -193,6 +239,9 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
 beforeEach(() => {
   locationState = { status: 'loading' }
   nearby = () => Promise.resolve([])
+  // Restored per test, because `offline` redefines it and a leaked `false` would silently add a sentence to
+  // every state that ran after it.
+  setOnline(true)
   document.body.innerHTML = '<div id="host"></div>'
   const host = document.getElementById('host')
   if (!host) throw new Error('unreachable: the host div was just written')

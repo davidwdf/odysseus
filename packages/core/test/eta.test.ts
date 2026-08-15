@@ -30,10 +30,12 @@ import {
   formatServiceHours,
   isStale,
   newestBoard,
+  newestNearbyBoard,
+  newestPlaceBoard,
   type RemarkView,
   remarkView,
 } from '../src/eta'
-import type { Eta, I18nText, Locale, RemarkKind } from '../src/types'
+import type { Eta, I18nText, Locale, NearbyStop, RemarkKind, StopDetail } from '../src/types'
 import { at, nullToUndefined, specCases } from './corpus'
 
 // Every `describe` below is one `@spec` group in ../spec/eta.spec.json, driven by the corpus rather
@@ -348,6 +350,27 @@ describe('eta#newestBoard', () => {
   )) {
     it(c.name, () => {
       expect(newestBoard(c.args.timestamps)).toBe(c.expect)
+    })
+  }
+})
+
+// The two payload adapters. Their cases carry whole wire documents rather than a list of strings, and that
+// is the point of having them at all: the field a board's clock lives on is a domain decision, so each
+// group has a case that fails if anyone reads `observedAt` — the one our own layer stamps, which is fresh
+// on every refetch for ever (ADR-150).
+
+describe('eta#newestNearbyBoard', () => {
+  for (const c of specCases<{ stops: NearbyStop[] }, string | null>(corpus, 'newestNearbyBoard')) {
+    it(c.name, () => {
+      expect(newestNearbyBoard(c.args.stops)).toBe(c.expect)
+    })
+  }
+})
+
+describe('eta#newestPlaceBoard', () => {
+  for (const c of specCases<{ places: StopDetail[] }, string | null>(corpus, 'newestPlaceBoard')) {
+    it(c.name, () => {
+      expect(newestPlaceBoard(c.args.places)).toBe(c.expect)
     })
   }
 })

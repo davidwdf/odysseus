@@ -2,6 +2,74 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-13 — the freshness notice reaches every screen, and `offline` becomes checkable
+
+> **Shipped:** the debt [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence)
+> booked and [ADR-123](./08-decision-log.md#adr-123--staleness-is-a-board-level-fact-so-a-per-reading-cue-is-the-wrong-unit)
+> created — *"three screens still say nothing"* — paid in full, on **both** renderers, plus the enforcement
+> that was missing from all four
+> ([ADR-150](./08-decision-log.md#adr-150--the-freshness-notice-reaches-all-four-screens-and-offline-stops-being-a-state-nothing-could-see)).
+> Nearby, Place detail, Favourites and Route detail each say once, in `text-muted`, that they have stopped
+> being fed — and say nothing at all while they are being fed.
+>
+> **Four things a maintainer should know before touching this:**
+>
+> · **`offline` was `unenforced` on all four screens for the same stated reason, and the reason was about
+>   the gap rather than the design.** Every spec said *"textually identical to `stale`, so asserting it would
+>   be asserting `stale` twice."* True — because the screens had no sentence for *why* they had stopped being
+>   fed, so a harness could not tell "your network is gone" from "this data is old" **because a rider could
+>   not either**. Giving them different words made four states observable; they are projected now, driven by
+>   redefining `navigator.onLine`, which both suites can do because both run under jsdom.
+> · **Which field is the board's clock is a kernel decision, not a screen's.** `newestNearbyBoard` and
+>   `newestPlaceBoard` take the *payload*, because `dataTimestamp` (the operator's clock) and `observedAt`
+>   (ours, restamped on every fetch) are one keystroke apart and only one of them can tell you a feed has
+>   stopped. Six call sites, one rule, two corpus rows that fail on the swap.
+> · **A `stale` fixture must move the clock, not carry an old board.** Route detail's was a corpus case whose
+>   *one* row had an old board — chosen when the state was about that row dimming. Since ADR-123 there is
+>   nothing per-row to see, so it would have passed while asserting nothing. Both renderers now run the
+>   `content` payload past `staleAfterMs` and build the view from the same clock, so the readings age with
+>   the fixture instead of diverging from a golden taken at another moment.
+> · **`apps/mobile` is wired too, and `online` is `true` on native by design.** ADR-113 keeps the RN app as
+>   the reference and *"the specs still bind it"* — a sentence a rider reads is content, so a projected slot
+>   binds both renderers. `navigator.onLine` is a web API: real under `react-native-web`, absent on native,
+>   where the hook answers `true` — which is exactly what the field means (`false` is evidence, `true` is the
+>   absence of it), so a native build reaches the `unreachable` arm instead. A real signal is probably an
+>   **eighth port**; `docs/07` carries it.
+>
+> **Three things it found:**
+>
+> 🔴 **A corpus case pinned impossible data and nothing could read it.** `placeDetailView`'s
+> `a-served-policy-moves-the-imminence-band` had its arrival re-timed to five minutes out and its board left
+> at the capture date **two days earlier** — a feed that published on the 27th predicting a bus on the 29th,
+> with `stale: true` beside a live reading. Repaired. The eight other 47-hour-old cases are *coherent*
+> snapshots (board and arrival both from the 27th) and are left alone — which is why several Place-detail
+> states now project *"Last updated 11:59"*: the screen is right, and the date-less clock is ADR-133's
+> recorded limitation, now visible in the goldens.
+> 🟠 **Route detail's spec forbade what Route detail does.** Its `stale` state still read *"the readings we
+> have, dimmed"* and banned *"a whole-screen staleness banner"* — three days after ADR-133 put exactly that
+> banner on that screen. Same class as the drift ADR-134's gallery caught, in the file the gallery does not
+> surface.
+> 🟠 **A fixture had run for nothing since ADR-123.** `apps/mobile`'s Favourites driver kept a clock-shifted
+> `stale` fixture while the spec state was `unenforced`, so the walker skipped it every run. *A projected
+> state with no fixture is a loud finding; a fixture with no projected state is a silent one*, and the format
+> has no guard in that direction.
+>
+> **The gallery now shows it, at the owner's request** — `/lab/#gallery` has a **Live samples** section:
+> `FeedNotice`, `StopRow` and `PlaceRow` drawn several states at a time at a phone's width, each panel a
+> corpus golden or the kernel call the screen makes, with the inputs beside it and a suite that renders every
+> one. Two things came out of building it: a *"capped"* panel that was pixel-identical to *"content"* (the
+> two corpus cases are the same shape — swapped for the urgency bands, which show three tones at once), and
+> 🟠 **the lab has no Tailwind of its own** — `tailwind.config.cjs` scans `./src/**`, not `./lab/**`, so any
+> class the app does not already use is silently dead on that page. Lab-only geometry is an inline style now;
+> putting `lab/` in the content glob would put lab classes in the shipped CSS.
+>
+> **Walked in a real browser on live KMB data** (Nelson Street Mong Kok, three kerbs): silent while healthy,
+> *"You're offline — showing the last times we had"* the moment the platform reports no network, silent again
+> when it returns, and *"Last updated HH:MM"* once the local Worker was killed and the boards aged past the
+> served 120 s. The `unreachable` arm — our edge down while the rider's cards are still on screen — cannot be
+> a spec state (`trouble` is a property of the last *request*, not of any fixture), so it has its own suite,
+> `apps/web/test/feed-notice.test.tsx`, watched failing on an injected `trouble: 'none'`.
+
 ## 🔵 Snapshot 2026-08-12 (later) — WP6-8b: the live path stops assuming the network behaves
 
 > **Shipped:** nine reliability fixes from an owner-requested review of the socket system, the CTB/GMB

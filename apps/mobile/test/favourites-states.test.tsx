@@ -24,7 +24,14 @@
 
 import favouritesSpec from '@nextbus/contract/ui/favourites.spec.json'
 import stopRowSpec from '@nextbus/contract/ui/stop-row.spec.json'
-import { CLIENT_POLICY_DEFAULTS, favouritesView, type Locale, type StopDetail } from '@nextbus/core'
+import {
+  CLIENT_POLICY_DEFAULTS,
+  favouritesView,
+  feedNotice,
+  type Locale,
+  newestPlaceBoard,
+  type StopDetail,
+} from '@nextbus/core'
 import corpus from '@nextbus/core/spec/favourites.spec.json'
 import { CATALOGUE, type MessageKey, t } from '@nextbus/i18n'
 import { conformStates, type RenderedTree, type StatefulHarness } from '@nextbus/ui-spec'
@@ -55,10 +62,17 @@ const FIXTURE: Record<string, string> = {
   // **The same payload as `content`, one whole stale window later on the clock** — the same fixture the DOM
   // suite uses, for the same reason: a synthetic view with `stale: true` set by hand would only prove that
   // the card draws a flag it was handed, where running `content`'s own readings past `staleAfterMs` proves
-  // that `isStale` fires and the card says so, through the identical kernel call the screen makes. The two
-  // states share a case on purpose — the only difference in the projection is the `~` in front of each
-  // figure, so `content` passing and `stale` failing can mean one thing.
+  // that the kernel's own rule fires through the identical call the screen makes.
+  //
+  // **What the projection differs by has changed twice, and the second time this fixture went dark.** It was
+  // a 45 % fade (invisible to a text harness), then a `~` in front of each figure, and since ADR-123 the
+  // readings carry no cue at all — so from ADR-123 until ADR-150 this state was `unenforced` in the spec and
+  // this fixture ran for nothing. What it proves now is the screen's one line: `content` and `stale` are the
+  // same cards, and the difference between them is a sentence (ADR-133).
   stale: 'two-saved-poles-of-one-place-are-one-card',
+  // The same payload again, with the platform reporting no network — the state that was textually identical
+  // to `content` until the notice existed.
+  offline: 'two-saved-poles-of-one-place-are-one-card',
 }
 
 /**
@@ -194,6 +208,17 @@ function isSkeleton(): boolean {
 
 const FETCH_FAILURE = 'unknown stop: CTB:001992'
 
+/**
+ * `navigator.onLine` is a prototype getter, so the state a screen reads is set by redefining it.
+ *
+ * This suite runs under `react-native-web`, where `useOnline` reads the browser's own API — the path the
+ * Expo PWA takes. On iOS and Android there is no `onLine` at all and the hook answers `true`, which is what
+ * the field means; a native build reaches the `unreachable` arm instead. Recorded in the hook.
+ */
+function setOnline(online: boolean): void {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
+}
+
 /** How this renderer is put into each declared state, and the view each corresponds to. */
 async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTree } | null> {
   if (state === 'empty') {
@@ -212,8 +237,8 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     return { view: { error: FETCH_FAILURE }, tree: await mountSettled() }
   }
   const name = FIXTURE[state]
-  // `null` for the one state declared without a projection (`offline`) — `conformStates` skips it itself,
-  // and never silently: a projected state with no fixture is a finding.
+  // `null` only for a state this screen does not declare; `conformStates` treats an unreachable projected
+  // state as a finding rather than a skip.
   if (name === undefined) return null
   const c = caseNamed(name)
   const now = clockFor(state, c)
@@ -224,6 +249,8 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
   // without this the arrivals are months past and every readout renders `—`: a divergence for the wrong
   // reason, which is the same class of harness mistake WP6-2 and WP6-3b each found once.
   vi.spyOn(Date, 'now').mockReturnValue(now)
+  const online = state !== 'offline'
+  setOnline(online)
   usePreferences.setState({ favoriteRoutes: [...c.args.saved] })
   // Every saved pole of these fixtures resolves to the same place document, which is the shape the corpus
   // records: `getStop` promotes a member id to its place.
@@ -234,6 +261,15 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
         { saved: c.args.saved, places },
         { locale: c.args.locale, now, policy: CLIENT_POLICY_DEFAULTS },
       ),
+      // The same two kernel calls the screen makes (ADR-150), over the same clock: silent for `content`,
+      // a time for `stale`, and the network's own sentence for `offline`.
+      notice: feedNotice({
+        lastUpdatedIso: newestPlaceBoard(places),
+        now,
+        online,
+        trouble: 'none',
+        staleAfterMs: CLIENT_POLICY_DEFAULTS.staleAfterMs,
+      }),
     },
     tree: await mountSettled(),
   }
@@ -241,6 +277,9 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  // Restored per test: `offline` redefines it, and a leaked `false` would add a sentence to every state
+  // that ran after it.
+  setOnline(true)
   usePreferences.setState({ favoriteRoutes: [] })
   stop = () => Promise.reject(new Error('no fixture set'))
   document.body.innerHTML = '<div id="host"></div>'
@@ -259,7 +298,9 @@ describe('apps/mobile conforms to Favourites’ published spec, state by state',
     const projected = Object.entries(favouritesSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(6)
+    // Eight of eight since ADR-150: `stale` and `offline` stopped being `unenforced` when the screen got a
+    // sentence that tells them from `content`.
+    expect(projected.length).toBeGreaterThanOrEqual(8)
     for (const state of projected) {
       expect(
         FIXTURE[state] !== undefined || ['empty', 'loading', 'failed'].includes(state),

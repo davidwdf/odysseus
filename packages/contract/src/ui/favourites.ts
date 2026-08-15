@@ -1,4 +1,5 @@
 import type { ComponentSpec, SlotNode } from '@nextbus/ui-spec'
+import { FEED_NOTICE } from './feed-notice'
 
 /**
  * **The Favourites screen** (WP6-4b) — a rider's own list, and the eight states it can be in.
@@ -66,7 +67,7 @@ export const FAVOURITES_SPEC: ComponentSpec = {
       must: 'One card per saved place, each carrying only the rows the rider saved.',
       mustNot:
         'A row the rider did not save, or a place they saved nothing at. The list is theirs, not the data’s.',
-      enforcement: { shows: [CARDS] },
+      enforcement: { shows: [FEED_NOTICE, CARDS] },
     },
 
     /** A saved route with no live reading — the empty card, closed. */
@@ -75,7 +76,7 @@ export const FAVOURITES_SPEC: ComponentSpec = {
       mustNot:
         'A card with a name and nothing under it, which cannot be told from a favourite key that no longer resolves.',
       why: 'A peak-only service at 23:00 — most of a rider’s list overnight. Found by WP5-11 and unowned for a wave: the card was never the place to fix it, because the row was never built. `docs/11`’s open bug, closed by `favouritesView` emitting a row per saved route rather than per reading.',
-      enforcement: { shows: [CARDS] },
+      enforcement: { shows: [FEED_NOTICE, CARDS] },
     },
 
     /** One line saved at two kerbs of one place — WP5-12's residual, from the favourites side. */
@@ -84,7 +85,7 @@ export const FAVOURITES_SPEC: ComponentSpec = {
       mustNot:
         'One merged row. The collapse-to-one-row-per-line is right for a card summarising a place and wrong for a list the rider curated — it hid the other kerb’s bus entirely.',
       why: 'ADR-072 declined this and WP5-12 left it open, both because a *label* naming the two kerbs needs room a compact row does not have. Measured before it was declined again: across five Hong Kong neighbourhoods **not one** line published at two kerbs of a place had *distinct* printed codes on them, and it could not — a place’s poles are clustered by sharing a name and the code is part of the name. So the rows are two and the kerbs are unnamed, and Place detail, which has room for ADR-080’s ladder, is one tap away.',
-      enforcement: { shows: [CARDS] },
+      enforcement: { shows: [FEED_NOTICE, CARDS] },
     },
 
     empty: {
@@ -117,23 +118,19 @@ export const FAVOURITES_SPEC: ComponentSpec = {
     },
 
     stale: {
-      must: 'The cards, with each reading aged and marked stale.',
-      mustNot: 'A value presented as fresh.',
-      why: 'ADR-008. Unlike Nearby there is no *position* to be stale here — this screen measures no distance and has nothing to say about where the rider is — so the only stale thing is a reading.',
-      enforcement: {
-        unenforced:
-          'Since ADR-123 the card draws no staleness cue at all — staleness is the board’s, not each figure’s. The screen says it once instead (ADR-133’s `feedNotice`), and this screen has yet to be wired for it, which is why this stays `unenforced` rather than becoming a projection.',
-      },
+      must: 'The cards, and one line saying when the newest board on screen was published.',
+      mustNot:
+        'A value presented as fresh, and — since ADR-123 — a cue on each reading. Staleness is the **board’s**: one `dataTimestamp` per board, so a per-figure mark draws one fact once per row and a rider can act on none of it.',
+      why: 'ADR-008. Unlike Nearby there is no *position* to be stale here — this screen measures no distance and has nothing to say about where the rider is — so the only stale thing is a reading. The sentence is the screen’s (`eta#feedNotice`), and the figures beside it do not change while it is up: a reading only moves when a fresh one arrives.',
+      enforcement: { shows: [FEED_NOTICE, CARDS] },
     },
 
     offline: {
-      must: 'The last known cards, aged and marked stale.',
-      mustNot: 'A blank list, and never a fresh-looking arrival time.',
-      why: 'ADR-058: the queries this screen fans out are persisted like any other, so a cold offline start replays them with their original `observedAt` and the ETA helpers age them.',
-      enforcement: {
-        unenforced:
-          'Textually identical to `content` at this level, and deliberately so: which network failed is not something this screen says. The cache-replay half is asserted where a cold start is measurable — `apps/web/test/shell.test.tsx`.',
-      },
+      must: 'The last known cards, and the line that says the rider’s own network is gone.',
+      mustNot:
+        'A blank list, a fresh-looking arrival time, or the same sentence as `stale` — a rider whose network is down is told that, not that their data is old, because the first explains the second (ADR-133’s precedence).',
+      why: 'ADR-058: the queries this screen fans out are persisted like any other, so a cold offline start replays them with their original `observedAt` and the ETA helpers age them. **This state was `unenforced` on all four screens until ADR-150**, with the same reason each time — *textually identical to `stale`, so asserting it would be asserting `stale` twice* — and that reason was a description of the gap rather than of the design: the screen had no sentence of its own. Now it has one, and the difference is a word a harness can read.',
+      enforcement: { shows: [FEED_NOTICE, CARDS] },
     },
   },
 

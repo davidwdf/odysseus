@@ -19,7 +19,14 @@
 
 import favouritesSpec from '@nextbus/contract/ui/favourites.spec.json'
 import stopRowSpec from '@nextbus/contract/ui/stop-row.spec.json'
-import { CLIENT_POLICY_DEFAULTS, favouritesView, type Locale, type StopDetail } from '@nextbus/core'
+import {
+  CLIENT_POLICY_DEFAULTS,
+  favouritesView,
+  feedNotice,
+  type Locale,
+  newestPlaceBoard,
+  type StopDetail,
+} from '@nextbus/core'
 import corpus from '@nextbus/core/spec/favourites.spec.json'
 import { CATALOGUE, type MessageKey, t } from '@nextbus/i18n'
 import { conformStates, type RenderedTree, type StatefulHarness } from '@nextbus/ui-spec'
@@ -147,6 +154,11 @@ async function mountSettled(): Promise<RenderedTree> {
 
 const FETCH_FAILURE = 'unknown stop: CTB:001992'
 
+/** jsdom's `navigator.onLine` is a prototype getter, so the state a screen reads is set by redefining it. */
+function setOnline(online: boolean): void {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
+}
+
 /** How this renderer is put into each declared state, and the view each corresponds to. */
 async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTree } | null> {
   if (state === 'empty') {
@@ -164,9 +176,41 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     stop = () => Promise.reject(new Error(FETCH_FAILURE))
     return { view: { error: FETCH_FAILURE }, tree: await mountSettled() }
   }
+  // **The two states the notice made observable** (ADR-150). Both are the `content` fixture with one thing
+  // changed — the clock for `stale`, the platform's network for `offline` — which is exactly the claim: the
+  // cards are the same cards, and what tells the three states apart is one sentence.
+  if (state === 'stale' || state === 'offline') {
+    const c = caseNamed(FIXTURE.content as string)
+    const places = fromCorpus<StopDetail[]>(c.args.places)
+    // Past the served threshold for `stale`, and the *same* clock is handed to `favouritesView`, so the
+    // readouts age with it rather than diverging from a golden taken at another moment.
+    const now =
+      state === 'stale'
+        ? Date.parse(c.args.now) + CLIENT_POLICY_DEFAULTS.staleAfterMs + 1_000
+        : Date.parse(c.args.now)
+    const online = state !== 'offline'
+    setOnline(online)
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    usePreferences.setState({ favoriteRoutes: [...c.args.saved] })
+    stop = () => Promise.resolve(places[0] as StopDetail)
+    return {
+      view: {
+        cards: favouritesView(
+          { saved: c.args.saved, places },
+          { locale: c.args.locale, now, policy: CLIENT_POLICY_DEFAULTS },
+        ),
+        notice: feedNotice({
+          lastUpdatedIso: newestPlaceBoard(places),
+          now,
+          online,
+          trouble: 'none',
+          staleAfterMs: CLIENT_POLICY_DEFAULTS.staleAfterMs,
+        }),
+      },
+      tree: await mountSettled(),
+    }
+  }
   const name = FIXTURE[state]
-  // `null` for the two states declared without a projection (`stale`, `offline`) — `conformStates` skips
-  // those itself, and never silently: a projected state with no fixture is a finding.
   if (name === undefined) return null
   const c = caseNamed(name)
   const places = fromCorpus<StopDetail[]>(c.args.places)
@@ -186,6 +230,15 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
         { saved: c.args.saved, places },
         { locale: c.args.locale, now: Date.parse(c.args.now), policy: CLIENT_POLICY_DEFAULTS },
       ),
+      // Silent for every one of these fixtures — their boards are 20 s old — which is the state the notice
+      // is in whenever the app is working, and the reason it is declared as a branch rather than a line.
+      notice: feedNotice({
+        lastUpdatedIso: newestPlaceBoard(places),
+        now: Date.parse(c.args.now),
+        online: true,
+        trouble: 'none',
+        staleAfterMs: CLIENT_POLICY_DEFAULTS.staleAfterMs,
+      }),
     },
     tree: await mountSettled(),
   }
@@ -193,6 +246,9 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  // Restored per test: `offline` redefines it, and a leaked `false` would add a sentence to every state
+  // that ran after it.
+  setOnline(true)
   usePreferences.setState({ favoriteRoutes: [] })
   stop = () => Promise.reject(new Error('no fixture set'))
   document.body.innerHTML = '<div id="host"></div>'
@@ -211,10 +267,13 @@ describe('apps/web conforms to Favourites’ published spec, state by state', ()
     const projected = Object.entries(favouritesSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(6)
+    // Eight of eight since ADR-150: `stale` and `offline` stopped being `unenforced` when the screen got a
+    // sentence that tells them from `content`.
+    expect(projected.length).toBeGreaterThanOrEqual(8)
     for (const state of projected) {
       expect(
-        FIXTURE[state] !== undefined || ['empty', 'loading', 'failed'].includes(state),
+        FIXTURE[state] !== undefined ||
+          ['empty', 'loading', 'failed', 'stale', 'offline'].includes(state),
         `${state} is projected and this driver cannot reach it`,
       ).toBe(true)
     }

@@ -1,5 +1,5 @@
 import type { PlaceRouteRow } from '@nextbus/core'
-import { placeDetailView } from '@nextbus/core'
+import { newestPlaceBoard, placeDetailView } from '@nextbus/core'
 import { operatorName, poleSideLabel, t } from '@nextbus/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BearingArrow } from '../../components/BearingArrow'
 import { COLLAPSE, collapsedHeaderH, expandedHeaderH } from '../../components/CollapsingHeader'
 import { EtaBadge } from '../../components/EtaBadge'
+import { FeedNotice, feedNotice } from '../../components/FeedNotice'
 import { MapAttribution, MiniMap } from '../../components/MiniMap'
 import { RemarkTag } from '../../components/RemarkTag'
 import { RouteChip } from '../../components/RouteChip'
@@ -37,6 +38,7 @@ import { dataSource } from '../../lib/datasource'
 import { useClientPolicy } from '../../lib/useClientPolicy'
 import { useLiveEtas } from '../../lib/useLiveEtas'
 import { useLocation } from '../../lib/useLocation'
+import { useOnline } from '../../lib/useOnline'
 import { useScrollToY } from '../../lib/useScrollToY'
 import { useLocale } from '../../providers/LocaleProvider'
 
@@ -135,6 +137,23 @@ export default function StopDetail() {
         },
       })
     : undefined
+  /**
+   * The screen's freshness notice (ADR-133, wired on this renderer by ADR-150).
+   *
+   * Read off the **payload** rather than the view: `PlaceDetailView` carries no `lastUpdatedIso` the way
+   * `RouteDetailView` does, and the answer is the same `newestBoard` rule either way — see
+   * `newestPlaceBoard`. `useLiveEtas` writes each round into the query cache, so these timestamps age when
+   * the feed stops, whatever the last fetch did.
+   */
+  const online = useOnline()
+  const notice = feedNotice({
+    lastUpdatedIso: newestPlaceBoard(query.data === undefined ? [] : [query.data]),
+    now,
+    online,
+    trouble: query.isError ? 'unreachable' : 'none',
+    staleAfterMs: policy.staleAfterMs,
+  })
+
   const cleanName = view?.name.label ?? ''
   // `poleDist` used to be measured here and handed to nothing but the map. The map takes `view.pins` now
   // (WP6-3b) and every group carries its own `walk`, so the last piece of geometry has left this file.
@@ -284,6 +303,12 @@ export default function StopDetail() {
                 deferAttribution
               />
             </StickyMap>
+
+            {/* The screen's own freshness line, above the list and below the map — the same position
+                `apps/web` puts it in, and the one that reads as being about the times rather than about
+                the place. It answers a different question from a kerb's own refusal marker: that one says
+                an upstream board would not answer, this says we have stopped being fed at all (ADR-133). */}
+            <FeedNotice notice={notice} />
 
             {/* Flat list, no card chrome (docs/09: data is the hero). For a multi-pole place the
                 routes are grouped under their pole; otherwise one flat list under "Routes". */}
