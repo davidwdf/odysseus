@@ -2,6 +2,63 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-15 — the lab holds every component now, and the directory is what proves it
+
+> **Open it at `/lab/`** — the tabs are **Components · Design system · Rail motion · Bus glyphs**, Components
+> is the default, and appearance (`auto`/`light`/`dark`) is top-right on every one of them. A component is a
+> URL: `#components/RouteStopRow`.
+>
+> **Shipped:** the owner's ask — *"find all the components (both primitive components and multi-part
+> components) … render each one in each state so I can review individual parts and see the complex parts
+> too"* — as **94 panels over all 24 exported components**
+> ([ADR-154](./08-decision-log.md#adr-154--the-gallery-covers-every-component-in-the-renderer-and-the-directory-is-what-says-so)).
+> `lab/samples.tsx` holds the groups, `lab/goldens.ts` the corpus access, and
+> `test/gallery-covers-components.test.ts` the gate.
+>
+> **The first cut was one flat scroll, and *"this is helpful, but now it's very cluttered"* is why there is
+> a `lab/Components.tsx` at all.** Coverage and reading are two jobs. The sample **data** never changed —
+> `lab/samples.tsx` is still the one declaration and the gate still reads it — and the browser over it has a
+> sidebar that **selects** (one component's states, nothing else on screen), a filter over component names
+> *and state names*, a **Notes** toggle so the page becomes pictures, and **Light + dark** panes side by
+> side. That last one is not a convenience: it is what showed that `StopName`'s `emphasis` is a **no-op in
+> light** — `--accent` and `--text` are the same value there — as well as near-invisible in dark.
+>
+> **Four things to know before adding a panel:**
+>
+> · **The gate's subject is `apps/web/src/components/`, not the published specs.** Most of that directory has
+>   no `.spec.json` — `BusGlyph`, `MiniMap`, `SlideNumber`, `BottomSheet`, `RailBusToken`, `JourneyLines` —
+>   so `gallery-covers-specs.test.ts` could never have noticed any of them missing. A new `export function`
+>   with a PascalCase name and no sample group is a red build.
+> · **Never index into a corpus view; find in it.** The urgency sweep asked for row 8 of an 8-row card,
+>   because `stopCardView` caps at the served `maxRows`. `cardRowWhere`, `stopRowWhere` and
+>   `stopRowWithArrivals` ask for the *property* the panel is about, so a policy change cannot silently point
+>   a panel at the wrong row — or, as here, at nothing.
+> · **A panel that draws nothing says which kind of nothing.** `draws: 'no-text'` (a glyph) must draw an
+>   element and no words; `draws: 'nothing'` (`FeedNotice`'s silent arm, `SaveStar`'s `hideWhenEmpty`) must
+>   draw neither. It was one boolean until the gate demanded an element from a component that correctly
+>   renders `null`.
+>
+> · **The lab has three CSS rules of its own and they live in `lab/index.html`.** `tailwind.config.cjs`
+>   scans `./src/**`, so `max-w-3xl` and `border-r` were never generated — the gallery's prose had been
+>   running the full window width since ADR-134. Inline style for geometry, token classes for everything
+>   semantic, and that one `<style>` block for what can be neither. Never add `lab/` to the content glob.
+>
+> **Found by looking — twice in one day, which is the argument for the page:**
+> · 🟠 **`StopName`'s `emphasis` does nothing** (a no-op in light, near-invisible in dark). In `docs/07`,
+>   with `apps/mobile`'s missing gallery and the page's fixed `en` locale.
+> · 🔴 **LWB's route chip had white text on its gold at 2.16:1** and had since Wave 1 — **fixed**
+>   ([ADR-155](./08-decision-log.md#adr-155--an-operator-chips-two-colours-are-a-pair-and-the-pair-is-measured)):
+>   both *light* accents take `#0F172A` now, from one edit in `tokens.json` that regenerates all seven
+>   artefacts including the Swift and Kotlin ones. The old rule named CTB as an example and was applied as
+>   an example. `search-contrast.test.ts` measures every operator pair at 4.5:1 with an anti-vacuous control
+>   over `OPERATOR_ACCENT`'s keys, so a fifth operator cannot arrive unmeasured — **and GMB at 4.71 and KMB
+>   at 4.96 are both within a nudge of failing**, tabulated in `docs/09`.
+>
+> **Walked in a browser** on `:8084` with `pnpm dev:edge` up: 94 panels, exactly three of them empty (the
+> three declared `nothing`), no console output beyond Vite's, sheets opening and dismissing, LandsD tiles
+> under every `MiniMap`, the sidebar filter narrowing to 2 components on `stale`, and light/dark both
+> applied through the real preference.
+
 ## 🔵 Snapshot 2026-08-13 — the freshness notice reaches every screen, and `offline` becomes checkable
 
 > **Shipped:** the debt [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence)
@@ -57,7 +114,8 @@
 > **The gallery now shows it, at the owner's request** — `/lab/#gallery` has a **Live samples** section:
 > `FeedNotice`, `StopRow` and `PlaceRow` drawn several states at a time at a phone's width, each panel a
 > corpus golden or the kernel call the screen makes, with the inputs beside it and a suite that renders every
-> one. Two things came out of building it: a *"capped"* panel that was pixel-identical to *"content"* (the
+> one. (**Since 2026-08-15 that section covers all 24 components**, in three tiers — see ADR-154 below.)
+> Two things came out of building it: a *"capped"* panel that was pixel-identical to *"content"* (the
 > two corpus cases are the same shape — swapped for the urgency bands, which show three tones at once), and
 > 🟠 **the lab has no Tailwind of its own** — `tailwind.config.cjs` scans `./src/**`, not `./lab/**`, so any
 > class the app does not already use is silently dead on that page. Lab-only geometry is an inline style now;

@@ -78,11 +78,18 @@ describe('the gallery’s live samples', () => {
     for (const sample of group.samples) {
       it(`renders ${group.component} · ${sample.state}`, () => {
         const shown = draw(sample.render())
-        // `none` is the one sample whose correct output is nothing — asserted as such rather than skipped,
-        // because "renders nothing" and "failed to render" look identical on the page and a silent notice is
-        // the state the app is in almost all of the time.
-        if (sample.state.startsWith('none')) expect(shown).toEqual([])
-        else expect(shown.length, 'the panel drew nothing at all').toBeGreaterThan(0)
+        // Three expectations, not two, because on the page they are all one empty box: a glyph that drew, a
+        // state whose whole correctness is drawing nothing, and a panel that threw. A declared-silent panel
+        // is therefore asserted MORE strictly than a wordy one — `no-text` must draw an element and no
+        // words, `nothing` must draw neither. "Renders nothing" and "failed to render" must never be one
+        // observation, and a silent notice is the state the app is in almost all of the time.
+        if (sample.draws === 'nothing') {
+          expect(shown, 'a `nothing` panel drew words').toEqual([])
+          expect(container.querySelector('*'), 'a `nothing` panel drew an element').toBeNull()
+        } else if (sample.draws === 'no-text') {
+          expect(shown, 'a `no-text` panel drew words').toEqual([])
+          expect(container.querySelector('*'), 'the panel drew nothing at all').not.toBeNull()
+        } else expect(shown.length, 'the panel drew nothing at all').toBeGreaterThan(0)
       })
     }
   }

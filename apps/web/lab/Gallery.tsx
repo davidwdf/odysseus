@@ -1,4 +1,3 @@
-import { SAMPLES } from './samples'
 import specs from './specIndex'
 
 /**
@@ -23,12 +22,14 @@ import specs from './specIndex'
  * enforces it) are printed from the spec itself. That is the part a porter needs and the part that cannot go
  * stale.
  *
- * It does **not** try to render every component from a fixture. Ten components take ten different sets of
- * props, so a generic renderer would either be a pile of adapters or a lie — and the *conformance suites*
- * already render each one against its corpus, which is a stronger check than a picture. Where a component is
- * cheap to mount in isolation it gets a live sample (`lab/samples.tsx`, ADR-150 — the leaf components, each
- * in several states at once); where it is a whole screen, the spec is the listing and the screen itself is
- * one click away in the app.
+ * It draws **no components at all**, and that is the split this page was reorganised around. It listed the
+ * specs *and* mounted every component for one day, and the owner's verdict was *"very cluttered"* — two
+ * different jobs sharing one scroll. `lab/Components.tsx` (the **Components** tab, and the lab's default
+ * now) is the place a component is looked at; this is the place its *contract* is read. So a reader here is
+ * asking "what does the published spec require, and what holds it?", and one tab over is the picture.
+ *
+ * Where a component is a whole *screen*, this listing is still all there is: a screen takes a router, a
+ * query client and a location fix, and the screen itself is one click away in the app.
  *
  * ## The motions are the half a native porter cannot infer
  *
@@ -36,13 +37,6 @@ import specs from './specIndex'
  * *principle*: what moves, **on what occasion**, and how fast. So each motion row names the occasion in
  * words first and runs the real CSS second, which is the order a porter needs to read them in.
  */
-
-/**
- * A sample panel's width: a phone's, because that is the surface these components are laid out for and a
- * card reviewed at desk width is a card nobody ships. Two fit side by side on a laptop, which is the point —
- * the states are meant to be compared, not scrolled past.
- */
-const SAMPLE_W = 380
 
 /** The app's named animations, with the one thing a port actually needs: the occasion. */
 const MOTIONS = [
@@ -133,7 +127,7 @@ export function Gallery() {
     <div className="min-h-dvh bg-bg px-6 pb-24">
       <header className="flex flex-col gap-3 py-6">
         <h1 className="font-bold text-h1 text-text">Design system</h1>
-        <p className="max-w-3xl text-body text-muted">
+        <p className="lab-prose text-body text-muted">
           Enumerated from <code>packages/contract/ui/*.spec.json</code> — the same ten files a
           native repo vendors — so this page cannot drift from what is published. A component with a
           spec and no row here is a <strong>red build</strong> (
@@ -144,11 +138,44 @@ export function Gallery() {
           <span className="text-danger">knownDefect</span> is a target no renderer meets yet — never
           behaviour to copy.
         </p>
+        <p className="lab-prose m-0 text-caption text-subtle">
+          The <strong>pictures</strong> are on the Components tab — this page is the contract, and
+          the two shared one scroll until they were split. Most of what <code>src/components/</code>{' '}
+          holds has no spec at all, so this listing is the smaller half.
+        </p>
+        {/* A jump list rather than a sidebar: ten sections is a page you skim, where ninety-four
+            panels is a page you navigate. Anchors are the spec's own `component`, so a link into
+            this page survives a reorder of `specIndex.ts`. */}
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="#components"
+            className="rounded-pill border border-border bg-surface-2 px-3 py-1 text-caption text-text"
+          >
+            ← Components
+          </a>
+          {specs.map((spec) => (
+            <a
+              key={spec.component}
+              href={`#gallery/${spec.component}`}
+              onClick={(event) => {
+                // The hash is the *lab router's*, so letting the browser navigate would swap the page
+                // out from under the anchor. Scroll by hand and leave the address bar alone.
+                event.preventDefault()
+                document
+                  .getElementById(`spec-${spec.component}`)
+                  ?.scrollIntoView({ block: 'start' })
+              }}
+              className="rounded-pill border border-border bg-surface px-3 py-1 text-caption text-text"
+            >
+              {spec.component}
+            </a>
+          ))}
+        </div>
       </header>
 
       <section className="flex flex-col gap-3 border-border border-b py-6">
         <h2 className="font-semibold text-h2 text-text">Motions</h2>
-        <p className="max-w-3xl text-caption text-muted">
+        <p className="lab-prose text-caption text-muted">
           A keyframe name and a duration port to nothing — Compose and SwiftUI have neither. What
           ports is the <strong>occasion</strong> and the principle, so those come first and the CSS
           runs second.
@@ -159,66 +186,17 @@ export function Gallery() {
             <p className="m-0 text-caption text-text">
               <strong>On:</strong> {m.occasion}
             </p>
-            <p className="m-0 max-w-3xl text-caption text-muted">{m.principle}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="flex flex-col gap-6 border-border border-b py-6">
-        <div>
-          <h2 className="m-0 font-semibold text-h2 text-text">Live samples</h2>
-          <p className="m-0 max-w-3xl text-caption text-muted">
-            The real components, in several states at once — every one drawn from a{' '}
-            <strong>corpus golden</strong> or from the kernel call the screen makes, so a rule
-            change moves these pictures and a state that stopped being reachable is a red build (
-            <code>test/gallery-samples.test.tsx</code>). Seeing a component&rsquo;s states side by
-            side is the only way to review whether its <em>register</em> holds; one screen at a
-            time, four sentences can read fine and still not belong together.
-          </p>
-        </div>
-        {SAMPLES.map((group) => (
-          <div key={group.component} className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-baseline gap-3">
-              <h3 className="m-0 font-semibold text-h3 text-text">{group.component}</h3>
-              <code className="text-caption text-subtle">{group.spec}</code>
-            </div>
-            <p className="m-0 max-w-3xl text-caption text-muted">{group.note}</p>
-            {/*
-              **The panel's geometry is inline style, and that is not a shortcut.** `tailwind.config.cjs`
-              scans `./src/**` and **not** `./lab/**`, so a utility this page uses and the app does not is
-              simply never generated — `w-96` computed to 1016 px here, the width of its own caption, and the
-              panels were three different sizes. Adding `lab/` to the content glob would fix it by letting
-              lab-only classes into the *shipped* stylesheet, which is the one thing ADR-112's three
-              assertions exist to prevent. So anything the app's own vocabulary does not already carry is
-              written as a style, and everything semantic (colour, type, surface) stays a token class.
-            */}
-            <div className="flex flex-wrap gap-3">
-              {group.samples.map((sample) => (
-                <figure
-                  key={sample.state}
-                  className="m-0 flex flex-col gap-2 rounded-2xl bg-surface-2 p-3"
-                  style={{ width: SAMPLE_W }}
-                >
-                  <figcaption className="flex flex-col gap-1">
-                    <code className="text-caption text-accent">{sample.state}</code>
-                    <span className="text-caption text-muted">{sample.how}</span>
-                  </figcaption>
-                  {/* On `bg-bg` and at a phone's width, because both are what the component is drawn
-                      against in the app — a sample reviewed on the wrong surface is a sample of
-                      something else. The minimum height is what makes the silent state visibly
-                      *nothing* rather than a panel that failed to render. */}
-                  <div className="rounded-xl bg-bg" style={{ minHeight: 40, paddingBlock: 4 }}>
-                    {sample.render()}
-                  </div>
-                </figure>
-              ))}
-            </div>
+            <p className="lab-prose m-0 text-caption text-muted">{m.principle}</p>
           </div>
         ))}
       </section>
 
       {specs.map((spec) => (
-        <section key={spec.component} className="flex flex-col gap-3 border-border border-b py-6">
+        <section
+          key={spec.component}
+          id={`spec-${spec.component}`}
+          className="flex flex-col gap-3 border-border border-b py-6"
+        >
           <div className="flex flex-wrap items-baseline gap-3">
             <h2 className="font-semibold text-h2 text-text">{spec.component}</h2>
             <span className="text-caption text-subtle">
@@ -226,7 +204,7 @@ export function Gallery() {
               state(s)
             </span>
           </div>
-          <p className="m-0 max-w-3xl text-caption text-muted">{spec.doc}</p>
+          <p className="lab-prose m-0 text-caption text-muted">{spec.doc}</p>
 
           <div className="flex flex-wrap gap-8">
             <div className="min-w-64">

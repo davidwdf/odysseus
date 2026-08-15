@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RailBusToken } from '../src/components/RailBusToken'
 import { RouteStopRow } from '../src/components/RouteStopRow'
 import { useRailFlip } from '../src/hooks/useRailFlip'
+import { NAV_H } from './chrome'
 
 /**
  * **The rail motion lab — local-only scaffolding, never committed** (see the repo's `info/exclude`).
@@ -159,7 +160,14 @@ function Panel(props: {
   buses: RailBus[]
 }) {
   return (
-    <div className="sticky top-0 z-20 border-b border-border bg-surface/90 px-4 py-3 backdrop-blur">
+    // `top` is `NAV_H` and not `top-0`: the lab's tab bar is sticky at 0 with a higher z-index now, so a
+    // panel that stuck to the viewport top slid underneath it and took the controls with it. Inline,
+    // because `top-11` is a utility the app never uses and `tailwind.config.cjs` does not scan `./lab/**`
+    // — the same trap `lab/index.html` documents.
+    <div
+      className="sticky z-20 border-b border-border bg-surface/90 px-4 py-3"
+      style={{ top: NAV_H }}
+    >
       <p className="m-0 mb-2 text-label font-semibold text-text">Rail motion lab — not committed</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={() => props.setRunning(!props.running)} lit={props.running}>

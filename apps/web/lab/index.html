@@ -4,6 +4,43 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lab — NextBus HK</title>
+    <!--
+      The lab's own three rules, and the ONLY place they may live.
+
+      `apps/web/tailwind.config.cjs` scans `./src/**` and not `./lab/**`, so a utility this page needs and
+      the app does not is simply never generated — `max-w-3xl` had been silently dead on the gallery since
+      ADR-134, which is why every paragraph there ran the full width of a 1400 px window. Adding `lab/` to
+      the content glob would fix that by letting lab-only classes into the *shipped* stylesheet, which is
+      exactly what ADR-112's three assertions exist to prevent.
+
+      So: lab-only geometry is an inline style, everything semantic stays a token class, and the two rules
+      that cannot be either live here — in a file Vite serves for this page alone and `build:web` never
+      sees. They read tokens (`rgb(var(--border))`), they never restate one.
+    -->
+    <style>
+      /* Prose measure. The app has no long-form text, so it has no width for it either. */
+      .lab-prose {
+        max-width: 48rem;
+      }
+
+      /* The component browser's sidebar rule. `border-r` is not generated — the app never uses one. */
+      .lab-sidebar {
+        border-right: 1px solid rgb(var(--border));
+      }
+
+      /*
+        The light half of a "Light + dark" comparison.
+
+        `Pane` sets the token values inline from `@nextbus/ui`'s `themes`, which handles every token —
+        but a few rules in `src/index.css` key off the `.dark` CLASS rather than off a token, and a
+        light pane inside a dark document still sits under one. The basemap inversion is the only such
+        rule that reaches a component here, and without this the MiniMap panels would show an inverted
+        map in the pane labelled "light".
+      */
+      .lab-pane-light .map-tiles-invert {
+        filter: none;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

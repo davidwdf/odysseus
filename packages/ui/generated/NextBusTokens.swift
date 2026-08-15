@@ -103,11 +103,15 @@ public enum NextBusTokens {
         public static let gmb = Color(red: 0 / 255, green: 132 / 255, blue: 92 / 255)
     }
 
-    /// The contrast-safe text colour to sit on each operator accent. The yellow CTB accent always
-    /// pairs with dark text, never white (docs/09 §2).
+    /// The contrast-safe text colour to sit on each operator accent. The LIGHT accents — CTB's
+    /// yellow and LWB's gold — always pair with dark text, never white (docs/09 §2). This is
+    /// arithmetic, not taste: white on the gold is 2.16:1 and on the yellow 1.60:1, where WCAG asks
+    /// 4.5:1 of a 14 px bold chip; the dark ink gives 8.28:1 and 11.13:1.
+    /// `apps/web/test/search-contrast.test.ts` measures every pair, so a fifth operator cannot ship
+    /// an unreadable chip.
     public enum OperatorTextColor {
         public static let kmb = Color(red: 255 / 255, green: 255 / 255, blue: 255 / 255)
-        public static let lwb = Color(red: 255 / 255, green: 255 / 255, blue: 255 / 255)
+        public static let lwb = Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255)
         public static let ctb = Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255)
         public static let gmb = Color(red: 255 / 255, green: 255 / 255, blue: 255 / 255)
     }
