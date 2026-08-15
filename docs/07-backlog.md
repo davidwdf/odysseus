@@ -659,6 +659,26 @@ written down.
       of its own caption. Adding `lab/` to the content glob would let lab-only classes into the *shipped*
       stylesheet, which is what ADR-112's three assertions exist to prevent, so lab-only geometry is written
       as a style and everything semantic stays a token class. Worth knowing before adding a panel.
+      **The set was completed 2026-08-15**
+      ([ADR-154](./08-decision-log.md#adr-154--the-gallery-covers-every-component-in-the-renderer-and-the-directory-is-what-says-so)),
+      at the owner's request — *"find all the components (both primitive components and multi-part
+      components) … render each one in each state."* All **24** exported components now have panels (94 of
+      them) in three tiers — **Primitives · Composed · Overlays** — with the corpus access split into
+      `lab/goldens.ts`. The new gate `test/gallery-covers-components.test.ts` takes
+      **`src/components/` itself** as its subject, which is the only thing that can be complete: most of what
+      that directory holds (`BusGlyph`, `MiniMap`, `SlideNumber`, `BottomSheet`, `RailBusToken`,
+      `JourneyLines`) has no published spec, so the spec-driven gate could never have noticed them missing.
+      Overlays sit behind a trigger and mount for real when tapped; a panel that draws nothing declares
+      **which kind** of nothing (`draws: 'no-text' | 'nothing'`), because on the page a glyph, a deliberate
+      silence and a thrown component are one empty box.
+      🟠 **The first cut was a flat scroll and the owner's verdict was *"very cluttered"*** — coverage and
+      *reading* are two jobs and only the first had shipped. `lab/Components.tsx` is the browser over the
+      same data: a sidebar that **selects** (one component, nothing else on screen), a filter over names
+      **and state names**, a **Notes** toggle for pictures-only, and **Light + dark** side by side. The tabs
+      are **Components · Design system · Rail motion · Bus glyphs** with Components the default, appearance
+      (`auto`/`light`/`dark`) sits on every tab and writes the **real** preference, and a component is a URL
+      (`#components/RouteStopRow`). The design-system page keeps `#gallery` and stops drawing components at
+      all — it lists contracts, and most of `src/components/` has none.
       **Still owed:** samples for the components that are whole screens (they take a router, a query client
       and a location fix — the screens themselves are one click away), and the review section below.
 - [ ] 🟡 **Review the app's error and placeholder texts as a set** — asked for by the owner 2026-08-12:
@@ -668,8 +688,49 @@ written down.
       register stays consistent. On the list: `feedNotice`'s three sentences (ADR-133), `etasUnavailable`
       (ADR-077), `liveArrivals`'s notices (ADR-114), the retired `etaStaleMark` label (ADR-123), Search's
       empty and recents prose, the FAQ answers, and every skeleton or placeholder that stands in for data.
-      The gallery is where they should be surfaced — it lists components today and does not review their
-      words.
+      The gallery is where they should be surfaced, and since ADR-154 it is finally **able** to host the
+      sitting: every component that carries one of these sentences now draws its states side by side.
+      What it still does not do is *review* them — the words are shown, not compared.
+- [x] ✅ **The LWB route chip's white text was unreadable — 2.16:1** — **done 2026-08-15**
+      ([ADR-155](./08-decision-log.md#adr-155--an-operator-chips-two-colours-are-a-pair-and-the-pair-is-measured)).
+      Reported by the owner off ADR-154's livery sweep, the first thing in this repo to draw all four
+      side by side. `color.operatorText.LWB` is the dark ink now, like CTB's — the rule in `tokens.json`
+      had said *"the yellow CTB accent always pairs with dark text"*, which is a rule stated as an
+      example and was applied as one, while LWB's gold is barely darker. One edit, seven regenerated
+      artefacts, both native targets fixed without being touched.
+      🟢 `apps/web/test/search-contrast.test.ts` now measures **every** operator pair at `AA_BODY`
+      (a route number is 14 px bold — two points short of the 18.66 px that would buy 3:1), enumerating
+      `OPERATOR_ACCENT`'s own keys so a fifth operator cannot arrive unmeasured, plus an injected control
+      asserting the old value **would** have failed.
+      🟠 **GMB 4.71 and KMB 4.96 both pass by a hair** — the table is in `docs/09` §Operator accents;
+      read it before lightening that red or that green.
+      **Still unmeasured:** the operator *line* on the route schematic and the map pin's core-against-ring.
+      The helper is in that file for whoever takes them.
+- [ ] 🟠 **`StopName`'s `emphasis` is a no-op in light and all but invisible in dark** — found by ADR-154's
+      component browser: first by putting the `here` row beside the four rows it is meant to stand out from,
+      then by the **Light + dark** compare, which is what showed the worse half. `RouteStopRow` passes
+      `emphasis={here}` to `StopName`, which resolves to `--accent`. In **light** that token and `--text` are
+      *the same value* — `17 24 39` — so the prop changes nothing at all; in **dark** it is `226 232 240`
+      against `244 246 250`. So the boarding stop is emphasised in three places (row background, rail node,
+      **name**) and the third contributes nothing on either appearance — including on `apps/mobile`, whose
+      `StopName` carries the identical rule and whose absence on the web was written up as a *defect* until
+      WP6-7b.
+      This is the Ink identity working as designed ([ADR-029](./08-decision-log.md) makes the accent the
+      *ink*), which is why it is a decision rather than a fix: either the boarding stop earns an emphasis
+      token of its own, or the rule stops claiming the name is one of its cues. **Do not "fix" it by
+      reaching for a brand colour** — the restraint is the point (docs/09).
+- [ ] 🟠 **`apps/mobile` has 31 components and no gallery at all** — the ADR-069 asymmetry, in the place a
+      reviewer notices it most. `/lab/#gallery` is a DOM page and cannot render RN components; the RN app's
+      own `/workbench` route lists **tokens**, not components. So the set that was just made reviewable is
+      reviewable on one renderer. Cheap version: a `workbench/components` route driving the same corpus
+      goldens through the RN components, with the shared half (`lab/goldens.ts`) lifted somewhere both can
+      import. Whether it is worth building depends on when `apps/mobile` retires (WP6-8).
+- [ ] 🟡 **The gallery is fixed at `en`** — every panel is composed in its corpus golden's own language, so
+      the bilingual half of rule 5 is reviewable only where a golden happens to be Chinese (`EtaBadge`'s due
+      arm, `RemarkTag`, `StopName`'s CJK case). A locale switch over the whole page is the obvious ask and
+      the obvious trap: the goldens' *data* is English, so switching only the chrome would show English stop
+      names under Chinese labels — a worse picture than none. It needs per-locale goldens, or a switch that
+      is honest about covering the chrome only.
 - [ ] 🟠 **Header rules, written down and testable — and yes, this belongs in the design system.**
       *"I want us to be a bit more thorough with how we go about things."* Today the rules are scattered
       across ADR-033 (the title morphs into a pill beside the back lens), the `CollapsingHeader` component

@@ -25,7 +25,16 @@
 // About the data and Route detail too, and each of those is in `docs/07` rather than fixed here, because a
 // screen at a time is how the RN original is checked for what it actually uses.
 
-import { SEMANTIC_TOKENS, THEME_VARS, type ThemeMode } from '@nextbus/ui'
+// IT ALSO MEASURES THE OPERATOR CHIPS, for the same reason one layer over.
+// `RouteChip` is the one sanctioned use of an operator accent as a *background* (docs/09 §2), so its two
+// colours are a **pair** and only their ratio matters. That pairing lived as prose in `tokens.json` — "the
+// yellow CTB accent always pairs with dark text" — and LWB's gold was left on white anyway, at **2.16:1**,
+// on every KMB-adjacent Long Win row in the app since Wave 1. Nobody caught it because a chip is a colour
+// and, again, a colour is not a word. Reported by the owner looking at the lab's livery sweep, which is the
+// first thing in this repo to draw all four side by side.
+
+import type { OperatorAccent, ThemeMode } from '@nextbus/ui'
+import { OPERATOR_ACCENT, OPERATOR_ACCENT_TEXT, SEMANTIC_TOKENS, THEME_VARS } from '@nextbus/ui'
 import { describe, expect, it } from 'vitest'
 
 const MODES: ThemeMode[] = ['light', 'dark']
@@ -131,5 +140,67 @@ describe('the tokens a string may be drawn in', () => {
         ).toBeGreaterThanOrEqual(AA_LARGE)
       }
     }
+  })
+})
+
+/** `#RRGGBB` — the form the operator tables publish, where the theme vars are `"R G B"` triplets. */
+function hex(value: string): [number, number, number] {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value)
+  if (!match) throw new Error(`\`${value}\` is not the #RRGGBB this reads`)
+  return [
+    Number.parseInt(match[1] as string, 16),
+    Number.parseInt(match[2] as string, 16),
+    Number.parseInt(match[3] as string, 16),
+  ]
+}
+
+function pairContrast(operator: OperatorAccent): number {
+  const a = luminance(hex(OPERATOR_ACCENT_TEXT[operator]))
+  const b = luminance(hex(OPERATOR_ACCENT[operator]))
+  const [hi, lo] = a > b ? [a, b] : [b, a]
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+describe('the operator chip’s two colours are a pair', () => {
+  const operators = Object.keys(OPERATOR_ACCENT) as OperatorAccent[]
+
+  it('measures every operator, so a fifth cannot arrive unmeasured', () => {
+    // The anti-vacuous control, and it is not hypothetical: `searchView` derives its operator chips from
+    // the dataset index precisely so that a new operator lights up the day its adapter lands (ADR-037).
+    // The colours are the one part of that which is NOT automatic, and this is what will say so.
+    expect(operators.length, 'no operator liveries published').toBeGreaterThan(1)
+    for (const operator of operators) {
+      expect(
+        OPERATOR_ACCENT_TEXT[operator],
+        `${operator} has an accent and no text colour`,
+      ).toMatch(/^#[0-9a-f]{6}$/i)
+    }
+  })
+
+  it('clears AA body contrast for every livery', () => {
+    // **`AA_BODY`, not `AA_LARGE`.** A route number is `text-label` — 14 px — and bold, which is two
+    // points short of the 18.66 px that would buy the 3:1 threshold. It is also the single most
+    // information-dense string in the app: a rider scanning a column of chips for "969C" is reading, not
+    // glancing.
+    //
+    // The readings this passes on today:
+    //   KMB #D7282F on white 4.96 · LWB #E8A33D on ink 8.28 · CTB #F6C700 on ink 11.13 · GMB #00845C on white 4.71
+    //
+    // GMB is the tight one at 4.71:1 and KMB is next at 4.96:1 — both within a nudge of failing, which is
+    // worth knowing before anyone lightens that red or that green.
+    for (const operator of operators) {
+      expect(
+        pairContrast(operator),
+        `${operator}: ${OPERATOR_ACCENT_TEXT[operator]} on ${OPERATOR_ACCENT[operator]} is ${pairContrast(operator).toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(AA_BODY)
+    }
+  })
+
+  it('would have failed on the white LWB text it shipped with', () => {
+    // The control that proves the assertion above can fail — an injected defect, kept rather than run once
+    // and deleted, because "every livery passes" is only reassuring if the check can tell.
+    const white = luminance([255, 255, 255])
+    const gold = luminance(hex(OPERATOR_ACCENT.LWB))
+    expect((white + 0.05) / (gold + 0.05)).toBeLessThan(AA_BODY)
   })
 })

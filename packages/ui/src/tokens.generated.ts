@@ -114,12 +114,16 @@ export const OPERATOR_ACCENT = {
 export type OperatorAccent = keyof typeof OPERATOR_ACCENT
 
 /**
- * The contrast-safe text colour to sit on each operator accent. The yellow CTB accent always
- * pairs with dark text, never white (docs/09 §2).
+ * The contrast-safe text colour to sit on each operator accent. The LIGHT accents — CTB's
+ * yellow and LWB's gold — always pair with dark text, never white (docs/09 §2). This is
+ * arithmetic, not taste: white on the gold is 2.16:1 and on the yellow 1.60:1, where WCAG asks
+ * 4.5:1 of a 14 px bold chip; the dark ink gives 8.28:1 and 11.13:1.
+ * `apps/web/test/search-contrast.test.ts` measures every pair, so a fifth operator cannot ship
+ * an unreadable chip.
  */
 export const OPERATOR_ACCENT_TEXT: Record<OperatorAccent, string> = {
   KMB: '#FFFFFF',
-  LWB: '#FFFFFF',
+  LWB: '#0F172A',
   CTB: '#0F172A',
   GMB: '#FFFFFF',
 }

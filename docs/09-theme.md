@@ -168,13 +168,37 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
   lands there is **no staleness indication at all**, which is a live ADR-008 debt and is tracked as 🔴.
 
 ### Operator accents (used **sparingly** — a route-number chip, a thin route line; not backgrounds)
-`KMB` `#D7282F` · `CTB` `#F6C700` (dark text on it) · `LWB` `#E8A33D` · `GMB` `#00845C`. Each pairs with
-a contrast-safe text colour (`color.operatorText`): white, except CTB's yellow, which takes `#0F172A`.
-These do **not** invert with the appearance — operator identity is constant (§7).
+`KMB` `#D7282F` · `CTB` `#F6C700` · `LWB` `#E8A33D` · `GMB` `#00845C`. Each pairs with a contrast-safe
+text colour (`color.operatorText`), and **the two light accents — CTB's yellow and LWB's gold — take
+`#0F172A`**; the other two take white. These do **not** invert with the appearance — operator identity is
+constant (§7).
 
-**Contrast rules:** body text ≥ 4.5:1, large/UI ≥ 3:1, in both modes. The yellow accent **always**
-pairs with dark text, never white. Verify every theme against [ADR-008](./08-decision-log.md) honesty +
-WCAG-AA before shipping.
+**The pairing is arithmetic, not taste, and it is measured.** A route number is `text-label` (14 px) and
+bold — two points short of the 18.66 px that would buy the 3:1 threshold — so it owes **4.5:1**. As
+published:
+
+| | accent | text | ratio |
+|---|---|---|---|
+| KMB | `#D7282F` | `#FFFFFF` | 4.96 |
+| LWB | `#E8A33D` | `#0F172A` | 8.28 |
+| CTB | `#F6C700` | `#0F172A` | 11.13 |
+| GMB | `#00845C` | `#FFFFFF` | 4.71 |
+
+**GMB at 4.71 and KMB at 4.96 are both within a nudge of failing** — read this table before lightening
+that red or that green. `apps/web/test/search-contrast.test.ts` asserts every pair with an anti-vacuous
+control, so a **fifth operator cannot arrive unmeasured**: `searchView` derives its operator chips from
+the dataset index precisely so a new operator lights up the day its adapter lands (ADR-037), and the
+colours are the one part of that which is not automatic.
+
+⚠️ **LWB shipped on white for four waves, at 2.16:1.** The rule above said "the yellow accent always pairs
+with dark text" and named only CTB, and the gold is barely darker (relative luminance 0.437 against
+0.604) — so every Long Win chip in the app was unreadable and nothing caught it, because `conformStates`
+reads *words* and a colour is not a word. Found by the owner looking at the component lab's livery sweep,
+which is the first thing in this repo to draw all four side by side. Both halves of that are the lesson:
+**a rule stated as an example gets applied as an example**, and a set is only reviewable side by side.
+
+**Contrast rules:** body text ≥ 4.5:1, large/UI ≥ 3:1, in both modes. Verify every theme against
+[ADR-008](./08-decision-log.md) honesty + WCAG-AA before shipping.
 
 ---
 
