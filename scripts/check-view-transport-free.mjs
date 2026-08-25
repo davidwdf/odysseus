@@ -349,6 +349,10 @@ function selftest() {
       name: 'the rule it was granted for, on a line it names → allowed',
       got: allows(
         entry,
+        // The string below is a SAMPLE OF SOURCE the gate is meant to flag, not a template literal
+        // someone forgot to backtick — making it a real template would interpolate at selftest time
+        // and stop exercising the rule.
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: deliberate, see above
         finding('api-path', entry.file, 'return `${API_URL}/v1/tiles/basemap/...`'),
       ),
       want: true,
@@ -358,6 +362,8 @@ function selftest() {
       why: 'The measured defect: the entry argues only about a URL template, and without the `pattern` clause it silently exempted a `fetch(` — or a `new WebSocket(` — that happened to share the line. Both rules fire on one-line arrows returning a template literal, which is the ordinary shape in that file.',
       got: allows(
         entry,
+        // As above: a sample of the source shape this scenario measures, which must stay uninterpolated.
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: deliberate, see above
         finding('raw-fetch', entry.file, 'const warm = (z) => fetch(`${API_URL}/v1/tiles/${z}`)'),
       ),
       want: false,

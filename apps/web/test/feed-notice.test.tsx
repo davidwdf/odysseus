@@ -24,7 +24,7 @@ import corpus from '@nextbus/core/spec/stop-card.spec.json'
 import { t } from '@nextbus/i18n'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot } from 'react-dom/client'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

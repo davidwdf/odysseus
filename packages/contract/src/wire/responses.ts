@@ -13,13 +13,10 @@ import { NearbyStopSchema, RouteDetailSchema, StopDetailSchema } from './detail'
 // forced it (`detail.ts` needs `EtaFailure`, and this module imports `detail.ts`). Re-exported below
 // so every existing importer of `ERROR_CODES` / `WireErrorSchema` / `ErrorResponseSchema` /
 // `EtaFailureSchema` from here keeps working, and so `@nextbus/contract`'s public surface is unchanged.
-import {
-  ERROR_CODES,
-  ErrorCodeSchema,
-  ErrorResponseSchema,
-  EtaFailureSchema,
-  WireErrorSchema,
-} from './errors'
+// Only the two this module actually *uses* are imported; the back-compat surface is the
+// `export … from './errors'` at the foot of the file, which re-exports straight from the source and
+// so never consumed these bindings. Importing the other three as well made them dead code.
+import { EtaFailureSchema, WireErrorSchema } from './errors'
 import { EtaSchema } from './eta'
 import { ClientPolicySchema } from './policy'
 import { SearchIndexSchema } from './search'

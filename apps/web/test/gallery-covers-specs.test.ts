@@ -30,7 +30,7 @@ function specDir(): string {
       return candidate
     } catch {
       const parent = dirname(dir)
-      if (parent === dir) throw new Error('packages/contract/ui not found from ' + process.cwd())
+      if (parent === dir) throw new Error(`packages/contract/ui not found from ${process.cwd()}`)
       dir = parent
     }
   }
