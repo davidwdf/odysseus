@@ -122,6 +122,20 @@ const ALLOWLIST = [
       'Expo env read cannot follow it (see the note in `packages/ports/src/tile-source.ts`).',
   },
   {
+    file: 'apps/web/src/adapters/mapProvider.ts',
+    pattern: 'api-path',
+    snippet: '/v1/tiles/',
+    why:
+      'The interactive-map twin of the `tileSource.ts` entry below, and it earns its exception for the ' +
+      'same reason (ADR-154): a `MapProvider`’s `raster-xyz` arm **is** a URL template — `basemap(z, x, y) ' +
+      '=> string` is its whole contract — and the view (`components/MapView.tsx`) consumes the port, never ' +
+      'the path. The two lines compose a path on **our own Worker** (`apps/edge/src/tiles.ts` proxies ' +
+      'LandsD, ADR-049) from the same `DEFAULT_API_URL` this app’s DataSource uses, so there is no upstream ' +
+      'host and no second base URL. It is a separate entry rather than a widened `tileSource.ts` one ' +
+      'because the two ports coexist deliberately: `MiniMap` keeps `TileSource` until a screen moves, and ' +
+      'an allowlist that covered both files with one line would stop naming which seam it is excusing.',
+  },
+  {
     file: 'apps/web/src/adapters/tileSource.ts',
     pattern: 'api-path',
     snippet: '/v1/tiles/',

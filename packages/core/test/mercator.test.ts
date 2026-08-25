@@ -6,6 +6,7 @@ import {
   latToWorldY,
   lngToWorldX,
   metresPerPixel,
+  tileZoomPlan,
   worldScale,
   type ZoomRange,
 } from '../src/mercator'
@@ -109,4 +110,29 @@ describe('mercator#fitZoom', () => {
       expect(z).toBeLessThanOrEqual(zooms.maxZoom)
     }
   })
+})
+
+describe('tileZoomPlan', () => {
+  interface Args {
+    zoom: number
+    devicePixelRatio: number
+    zooms: ZoomRange
+  }
+  interface Expected {
+    base: number
+    label: number
+    scale: number
+    tolerance: number
+  }
+  for (const c of cases<Args, Expected>('tileZoomPlan')) {
+    it(c.name, () => {
+      const actual = tileZoomPlan(c.args.zoom, c.args.devicePixelRatio, c.args.zooms)
+      // Levels are integers and compare exactly; only `scale` is a float.
+      expect(actual.base).toBe(c.expect.base)
+      expect(actual.label).toBe(c.expect.label)
+      expect(Math.abs(actual.scale - c.expect.scale)).toBeLessThanOrEqual(c.expect.tolerance)
+      // The invariant the two levels exist to preserve: labels are never deeper than the base.
+      expect(actual.label).toBeLessThanOrEqual(actual.base)
+    })
+  }
 })

@@ -21,6 +21,7 @@
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-query-persist-client": "^5.101.4",
     "lucide-react": "^0.549.0",
+    "maplibre-gl": "^6.6.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-router": "7.18.2",

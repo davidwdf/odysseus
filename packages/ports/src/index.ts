@@ -14,6 +14,7 @@
  * | {@link LinkOpener} | `window.open` | `UIApplication.open` | `Intent` |
  * | {@link Clock} | `Date.now()` | `Date()` | `System.currentTimeMillis()` |
  * | {@link TileSource} | `MiniMap` raster compositor | `MKTileOverlay` / MapLibre | `TileProvider` / MapLibre |
+ * | {@link MapProvider} | MapLibre GL JS | MapLibre Native | MapLibre Native |
  * | {@link LiveTransport} | `WebSocket` | `URLSessionWebSocketTask` | OkHttp `WebSocket` |
  *
  * Each file's doc comment is the actual specification — read it before implementing, because in
@@ -65,4 +66,10 @@ export type {
   LocationProvider,
   LocationState,
 } from './location-provider'
+export type {
+  MapProvider,
+  MapProviderBase,
+  RasterXyzSource,
+  VectorStyleSource,
+} from './map-provider'
 export type { TileAttribution, TileSource } from './tile-source'

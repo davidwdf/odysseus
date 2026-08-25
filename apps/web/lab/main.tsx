@@ -4,6 +4,7 @@ import '../src/tokens.css'
 import { applyMode, currentMode } from '../src/lib/appearance'
 import { Gallery } from './Gallery'
 import { GlyphLab } from './GlyphLab'
+import { MapLab } from './MapLab'
 import { RailLab } from './RailLab'
 
 // The lab's entry. Deliberately NOT `<StrictMode>`: the app runs in it, and it is worth being able to
@@ -20,6 +21,7 @@ const LABS = {
   '#rail': { title: 'Rail motion', render: () => <RailLab /> },
   '#glyphs': { title: 'Bus glyphs', render: () => <GlyphLab /> },
   '#gallery': { title: 'Design system', render: () => <Gallery /> },
+  '#map': { title: 'Interactive map', render: () => <MapLab /> },
 } as const
 
 type LabKey = keyof typeof LABS

@@ -38,6 +38,16 @@ export interface ZoomRange {
   maxZoom: number
 }
 
+/** What {@link tileZoomPlan} decides: which levels to fetch, and how big to draw a base tile. */
+export interface TileZoomPlan {
+  /** Level to request BASE tiles from. Overzoomed on a hi-DPI screen. */
+  base: number
+  /** Level to request LABEL tiles from. **Never** overzoomed — see {@link tileZoomPlan}. */
+  label: number
+  /** Multiplier a base tile is drawn at: `2 ** (zoom - base)`. Below 1 on a hi-DPI screen. */
+  scale: number
+}
+
 /** Width of the whole world in pixels at `zoom` — the `scale` every projection below multiplies by.
  *
  * @spec mercator#worldScale
@@ -83,6 +93,39 @@ export function metresPerPixel(lat: number, zoom: number): number {
  */
 export function clampZoom(zoom: number, zooms: ZoomRange): number {
   return Math.min(zooms.maxZoom, Math.max(zooms.minZoom, zoom))
+}
+
+/**
+ * How a raster basemap should be requested at a given zoom on a given screen — the base level, the
+ * label level, and the scale a base tile is drawn at.
+ *
+ * **Why the two levels differ, and why this is a rule rather than a renderer's business.** A raster
+ * source that serves only 256 px tiles (LandsD does; there is no `@2x`) is upscaled on a DPR-2 screen
+ * and looks soft. Requesting the tile one zoom deeper and drawing it at half size restores true 2×
+ * density. But the *labels* must NOT be overzoomed: LandsD bakes label size into the raster, so a
+ * label tile from one level deeper arrives with a denser, half-size label set — sharper text that is
+ * harder to read, which is a worse trade than the softness it cures. The base carries no text, so it
+ * loses nothing. Splitting them is only possible because the labels are a separate service, which is
+ * the same property ADR-049 relies on for per-locale labels.
+ *
+ * A native renderer with a real map engine expresses this differently (MapLibre's `tileSize`), but it
+ * has to make the same call, which is why the numbers live here rather than in a component.
+ *
+ * `devicePixelRatio` is clamped to 2: no raster source we use has a level worth fetching beyond that,
+ * and a 3× phone would otherwise ask for two extra levels and 16× the tiles for no visible gain.
+ *
+ * @spec mercator#tileZoomPlan
+ */
+export function tileZoomPlan(
+  zoom: number,
+  devicePixelRatio: number,
+  zooms: ZoomRange,
+): TileZoomPlan {
+  const dpr = Math.max(1, Math.min(2, devicePixelRatio))
+  const overzoom = Math.round(Math.log2(dpr))
+  const nominal = Math.round(zoom)
+  const base = clampZoom(nominal + overzoom, zooms)
+  return { base, label: clampZoom(nominal, zooms), scale: 2 ** (zoom - base) }
 }
 
 /** Framing zoom before layout has measured a width. Nothing is drawn in that pass — the tile loop

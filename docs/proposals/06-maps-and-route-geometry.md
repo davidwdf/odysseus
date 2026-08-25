@@ -789,7 +789,7 @@ answered late rather than up front.
 | ~~**M0**~~ | ~~Retain `gtfsId` for KMB/CTB/NLB~~ | — | ✅ **Done 2026-08-24** (ADR-152). Also carried on `RouteDoc`. |
 | ~~**M1**~~ | ~~`resolveRoutePath` + corpus~~ | M0 | ✅ **Done 2026-08-24** (ADR-153). 5 groups, 20 rows, expected values from a second implementation. `packages/core` still 100% covered. |
 | ~~**M2**~~ | ~~`/v1/route/:id/path`~~ | M1 | ✅ **Done 2026-08-24** (ADR-152). Measured: **444 ms / 7.9 KB** for KMB 1 outbound. `available:false`, never 404. |
-| **M3** | `MapProvider` seam; interactive MapLibre on **LandsD raster** | — | **Not ready** — see §8c for what it owes first. |
+| ~~**M3**~~ | ~~`MapProvider` seam; interactive MapLibre~~ | — | ✅ **Done 2026-08-25** (ADR-154). Seam + `tileZoomPlan` + a `#map` lab page. **Web only, and not visually verified** — see the ADR. |
 | **M4** | Route polyline on Route detail, with the §5 fallback | M2, M3 | First rider-visible payoff. |
 | **M5** | Live user location + accuracy radius + permission states | M3 | Existing `LocationProvider`. |
 | **M6** | Scroll-linked camera, with pan-to-suspend and recentre | M4 | The §6 loop-avoidance is the whole job. |
