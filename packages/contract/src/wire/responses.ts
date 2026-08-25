@@ -8,7 +8,7 @@
 // cannot drift from what the Worker returns without a red test.
 
 import { z } from 'zod'
-import { NearbyStopSchema, RouteDetailSchema, StopDetailSchema } from './detail'
+import { NearbyStopSchema, RouteDetailSchema, RoutePathSchema, StopDetailSchema } from './detail'
 // The failure taxonomy moved to `./errors` in ADR-077 — see that file's header for the cycle that
 // forced it (`detail.ts` needs `EtaFailure`, and this module imports `detail.ts`). Re-exported below
 // so every existing importer of `ERROR_CODES` / `WireErrorSchema` / `ErrorResponseSchema` /
@@ -246,6 +246,22 @@ export const WIRE_ENDPOINTS = [
         required: true,
         type: 'string',
         description: 'Canonical route id, e.g. "KMB:6:outbound:1". Percent-encode it.',
+      },
+    ],
+  },
+  {
+    operationId: 'getRoutePath',
+    path: '/v1/route/{id}/path',
+    summary:
+      'The road-following line for one route direction (ADR-152). Answers **200 with `available: false`** for the ~7% of route-directions the Transport Department does not separately register — a 404 would confuse “no geometry” with “no such route”. Cached for a day: the upstream republishes on the order of a fortnight.',
+    response: RoutePathSchema,
+    params: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        type: 'string',
+        description: 'Canonical route id, e.g. "KMB:1:outbound:1". Percent-encode it.',
       },
     ],
   },

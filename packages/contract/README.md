@@ -24,8 +24,8 @@ One framing to start with, because it decides how you spend your first week:
 <!-- BEGIN GENERATED: artefacts -->
 | Artefact | What it is today | What you do with it |
 | --- | --- | --- |
-| `packages/contract/openapi.json` | OpenAPI 3.1, v2.0.0 — **8 paths, 38 component schemas** | Generate your models. This is the only artefact you *must* consume. |
-| `packages/contract/asyncapi.json` | AsyncAPI 3.0.0 for the `/v1/live` socket — **6 frames, 49 component schemas** | Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7. |
+| `packages/contract/openapi.json` | OpenAPI 3.1, v2.0.0 — **9 paths, 39 component schemas** | Generate your models. This is the only artefact you *must* consume. |
+| `packages/contract/asyncapi.json` | AsyncAPI 3.0.0 for the `/v1/live` socket — **6 frames, 50 component schemas** | Read it. **Do not plan to generate from it** — there is no AsyncAPI→Swift generator at all, and the Kotlin one cannot serialise. See §7. |
 | `packages/contract/src/ids/id-grammar.abnf` | ABNF (RFC 5234) for every id that crosses the wire | Hand-write a parser against it. The `ids` corpus below is what proves your parser agrees with ours. |
 | `packages/core/spec/` | **16 corpora, 127 groups, 1057 cases, 3 `knownDefect` rows** | Drive your XCTest/JUnit suite from these bytes. This is the domain-rule half of the port. |
 | `packages/contract/ui/` | **10 component spec(s)** — AboutData, Faq, Favourites, Nearby, PlaceDetail, PlaceRow, RouteDetail, Search, Settings, StopRow; each declares its slots and their order, all five states with what each must *not* look like, its interaction targets and its a11y role (4 state(s) marked `knownDefect`) | The **view** half of the port, and the newest thing here — read §7 before you rely on it. Two renderers drive these today; yours would be the third and the first independent one. |

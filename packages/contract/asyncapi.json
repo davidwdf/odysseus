@@ -950,6 +950,64 @@
           "routeCount"
         ]
       },
+      "RoutePath": {
+        "type": "object",
+        "properties": {
+          "routeId": {
+            "type": "string",
+            "description": "The canonical route id this line belongs to."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "False when this route has no surveyed line. `path` is then empty. Not an error."
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "minItems": 2,
+              "maxItems": 2,
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "Vertices as [longitude, latitude], 5 decimal places (±1 m). Empty when `available` is false."
+          },
+          "fitMetres": {
+            "description": "Mean distance from the route’s own stops to the chosen line, metres. Present when available.",
+            "type": "number"
+          },
+          "matchedBy": {
+            "description": "`routeNumber` means the ambiguous operator+number fallback won, so the line is less certain.",
+            "type": "string",
+            "enum": [
+              "gtfsId",
+              "routeNumber"
+            ]
+          },
+          "reversed": {
+            "description": "True when the upstream vertices ran against the rider’s stop order and were flipped.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "const": "csdi",
+            "description": "Which upstream published the geometry."
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Required credit line for the geometry’s publisher."
+          }
+        },
+        "required": [
+          "routeId",
+          "available",
+          "path",
+          "source",
+          "attribution"
+        ],
+        "description": "The road-following line for one route direction, or an explicit “there isn’t one”."
+      },
       "ClientPolicy": {
         "type": "object",
         "properties": {

@@ -1,3 +1,4 @@
+import type { RoutePathSchema } from '@nextbus/contract'
 import {
   type PathPoint,
   type ResolvedRoutePath,
@@ -6,6 +7,7 @@ import {
 } from '@nextbus/core'
 import type { RouteDoc } from '@nextbus/data-normalize'
 import { UPSTREAM_TIMEOUT_MS } from '@nextbus/data-normalize'
+import type { z } from 'zod'
 
 // `GET /v1/route/:id/path` — the road-following line for one route (WP-M2 of docs/proposals/06,
 // ADR-152/153).
@@ -114,20 +116,16 @@ async function fetchCandidates(
   return out
 }
 
-export interface RoutePathResponse {
-  routeId: string
-  /** `[lng, lat]` vertices, 5 dp. Never empty — a route with no line answers `available: false`. */
-  path: PathPoint[]
-  available: boolean
-  /** Present when `available`. How well the line covered the route's own stops, in metres. */
-  fitMetres?: number
-  /** Present when `available`. `'routeNumber'` means the ambiguous operator+number fallback won. */
-  matchedBy?: 'gtfsId' | 'routeNumber'
-  /** Present when `available`. True when CSDI's vertices ran against the rider's stop order. */
-  reversed?: boolean
-  source: 'csdi'
-  attribution: string
-}
+/**
+ * The wire shape is `RoutePathSchema` in `@nextbus/contract` — the ONE declaration (ADR-052). This
+ * alias exists so a drift between the two is a typecheck failure rather than something a reader has
+ * to notice.
+ *
+ * It was NOT declared when this endpoint shipped in M2: the contract's own gate only checks endpoints
+ * that appear in `WIRE_ENDPOINTS`, so an undeclared one passed silently. Recorded because the gap was
+ * invisible by construction, which is the kind that lasts.
+ */
+export type RoutePathResponse = z.infer<typeof RoutePathSchema>
 
 /**
  * Resolve one route's line.
@@ -177,7 +175,8 @@ export async function routePath(doc: RouteDoc, routeId: string): Promise<RoutePa
 
   return {
     ...empty,
-    path: resolved.path.map((p) => [round(p[0]), round(p[1])] as PathPoint),
+    // The wire type is a mutable `number[][]`; the kernel's `PathPoint` is a readonly tuple.
+    path: resolved.path.map((p) => [round(p[0]), round(p[1])]),
     available: true,
     fitMetres: Math.round(resolved.fitMetres * 10) / 10,
     matchedBy: resolved.matchedBy,

@@ -1,9 +1,9 @@
 import type { ErrorCode } from '@nextbus/core'
-import { CLIENT_POLICY_DEFAULTS, ETAS_BATCH_MAX_IDS } from '@nextbus/core'
+import { CLIENT_POLICY_DEFAULTS, ETAS_BATCH_MAX_IDS, parseRouteId } from '@nextbus/core'
 import { fetchEta } from '@nextbus/data-normalize'
 import { type DatasetSource, datasetBuildCount, getDataset } from './dataset'
 import type { Env } from './env'
-import { errorResponse, fail as failWith, notFound } from './errors'
+import { badRequest, errorResponse, fail as failWith, notFound } from './errors'
 import { ETA_TTL_SEC } from './eta-cache'
 import { LIVE_PATH, liveUpgrade } from './live'
 import { nearby } from './nearby'
@@ -382,6 +382,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       env,
       ROUTE_PATH_TTL_SEC,
       async (dataset) => {
+        // The same split `routeDetail` makes, and for the same reason: unparseable is the caller's
+        // fault, absent is nobody's, and neither is worth retrying. `KMB:6:sideways:1` is a 400;
+        // `KMB:999X:outbound:1` is a 404. Without this the malformed id fell through to the lookup
+        // and answered 404, which tells a client to stop asking rather than to fix its id.
+        if (!parseRouteId(id)) throw badRequest(`not a route id: ${id}`)
         const doc = await dataset.route(id)
         if (!doc) throw notFound(`unknown route: ${id}`)
         return routePath(doc, id)

@@ -36,6 +36,46 @@ import { datasetJson, kmbStopEtaJson, ORIGIN } from './fixtures'
 const DATASET_URL = 'https://data.hkbus.app/routeFareList.min.json'
 const KMB_STOP_ETA = /^https:\/\/data\.etabus\.gov\.hk\/v1\/transport\/kmb\/stop-eta\/(.+)$/
 
+const CSDI_QUERY_PREFIX = 'https://portal.csdi.gov.hk/server/rest/services/common/'
+
+/**
+ * One CSDI feature whose line runs through the fixture route's stops, so `resolveRoutePath` finds a
+ * real fit rather than being handed something it must reject. The coordinates come from the dataset
+ * fixture's own stops, which is what makes the fit small enough to pass the 100 m threshold.
+ */
+interface FixtureRoute {
+  co?: string[]
+  gtfsId?: string
+  stops?: Record<string, string[]>
+}
+interface FixtureStop {
+  location?: { lat: number; lng: number }
+}
+function csdiRouteLineJson() {
+  const data = datasetJson() as unknown as {
+    routeList: Record<string, FixtureRoute>
+    stopList: Record<string, FixtureStop>
+  }
+  const key = Object.keys(data.routeList)[0] as string
+  const line = data.routeList[key]
+  const co = line?.co?.[0] ?? ''
+  const seq = line?.stops?.[co] ?? []
+  const coords = seq
+    .map((id) => data.stopList[id]?.location)
+    .filter((l): l is { lat: number; lng: number } => !!l)
+    .map((l) => [l.lng, l.lat])
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { ROUTE_ID: Number(line?.gtfsId ?? 1), ROUTE_SEQ: 1 },
+        geometry: { type: 'LineString', coordinates: coords },
+      },
+    ],
+  }
+}
+
 const realFetch = globalThis.fetch
 
 const jsonResponse = (body: unknown) =>
@@ -74,6 +114,10 @@ beforeEach(() => {
     if (url === DATASET_URL) return jsonResponse(datasetJson())
     const stopEta = KMB_STOP_ETA.exec(url)
     if (stopEta?.[1]) return jsonResponse(kmbStopEtaJson(stopEta[1]))
+    // The CSDI route-line query (ADR-152). Answered from a fixture for the same three reasons the
+    // comment below gives: a gate that reaches HK over somebody's wifi is a gate people re-run
+    // rather than read.
+    if (url.startsWith(CSDI_QUERY_PREFIX)) return jsonResponse(csdiRouteLineJson())
     // **Throw rather than fall through to the network.** This line used to be
     // `return realFetch(input, init)`, which made the conformance suite — the gate that decides whether
     // the Worker's responses match the published contract — reach the live internet for any URL the two
@@ -124,6 +168,7 @@ async function resolvePaths(): Promise<Map<string, string>> {
     ['getNearby', nearbyPath],
     ['getStop', `/v1/stop/${encodeURIComponent(placeId)}`],
     ['getRoute', `/v1/route/${encodeURIComponent(routeId)}`],
+    ['getRoutePath', `/v1/route/${encodeURIComponent(routeId)}/path`],
     ['getStopEtas', `/v1/etas/${encodeURIComponent(placeId)}`],
     // Two ids, so the batch is exercised as a batch rather than as a one-element list — and one of them
     // is a **member pole** of the place, which the dataset's alias table promotes back to it. That is
@@ -367,6 +412,18 @@ const ERROR_CASES: ErrorCase[] = [
     code: 'not_found',
     endpoint: 'getRoute',
     path: `/v1/route/${encodeURIComponent(ABSENT_ROUTE)}`,
+  },
+  {
+    name: 'a route path for an id whose direction is not a direction',
+    code: 'bad_request',
+    endpoint: 'getRoutePath',
+    path: `/v1/route/${encodeURIComponent('KMB:6:sideways:1')}/path`,
+  },
+  {
+    name: 'a route path for a well-formed id nothing serves',
+    code: 'not_found',
+    endpoint: 'getRoutePath',
+    path: `/v1/route/${encodeURIComponent(ABSENT_ROUTE)}/path`,
   },
   {
     name: 'etas for an id that is not an id',

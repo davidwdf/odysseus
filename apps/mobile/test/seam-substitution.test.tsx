@@ -193,6 +193,7 @@ function fakeSocketDataSource(): DataSource {
     },
     getNearby: unsupported('getNearby'),
     getRoute: unsupported('getRoute'),
+    getRoutePath: unsupported('getRoutePath'),
     // Unsupported for the same reason as the rest: this fake exists to prove the Place screen reaches the
     // seam and nothing else, and a route watch is a different screen's subscription (ADR-116). If one ever
     // appeared on this path, this is what would say so.
