@@ -275,3 +275,67 @@ export function resolveRoutePath(
     trimmedEnd: trimmed.trimmedEnd,
   }
 }
+
+// ── What a screen draws when there is no surveyed line ────────────────────────────────────────
+
+/**
+ * Longest mean gap between consecutive stops for which joining them with straight lines is still
+ * *roughly* the road.
+ *
+ * Measured rather than chosen. KMB 1 runs 25 stops over ~8 km — a **333 m** mean gap, and its chords
+ * hug Nathan Road closely enough to be a fair sketch. CTB `20R` runs **4 stops over 7.6 km** — a
+ * 2.5 km mean gap, where the chords cut straight across Kowloon Bay and the "route" is three lines
+ * through places the bus never goes. 500 m sits between the two with room either side.
+ *
+ * The test is the **gap**, not the stop count, and that is the point: a 4-stop shuttle whose stops
+ * are 200 m apart is perfectly well approximated, while a 30-stop express with motorway running
+ * between them is not. Counting stops would get both backwards.
+ */
+export const APPROXIMATION_MAX_MEAN_GAP_M = 500
+
+/** Fewest stops that can make a line at all. Two points are a chord, not a route. */
+export const APPROXIMATION_MIN_STOPS = 4
+
+/** What a screen should draw for a route's geography. */
+export type RoutePathPresentation =
+  | { kind: 'surveyed'; line: PathPoint[] }
+  | { kind: 'approximate'; line: PathPoint[] }
+  | { kind: 'none' }
+
+/**
+ * Decide what to draw for a route: the surveyed line, an honest sketch, or nothing.
+ *
+ * **This exists because the obvious fallback is a lie.** hkbus.app draws a `LineString` through the
+ * ordered stops whenever geometry is missing — unmarked, with no styling difference and no message
+ * (`useRoutePath.tsx`). For KMB `101R` that line crosses Victoria Harbour through the water. Under
+ * rule 3 — *never fake precision* (ADR-008) — an unmarked crow-flies line is the cartographic twin of
+ * a client-side per-second countdown: it draws a confidence the data does not have.
+ *
+ * So the three answers are distinct, and a caller must render them differently: `surveyed` is the
+ * road; `approximate` is a sketch and must be drawn as one (dashed, and said once in words —
+ * `docs/proposals/06 §5`); `none` is stops with no line between them, which is the honest output when
+ * the stops are too far apart for a chord to mean anything.
+ *
+ * @spec route-path#routePathView
+ */
+export function routePathView(
+  available: boolean,
+  line: readonly PathPoint[],
+  stops: readonly LatLng[],
+): RoutePathPresentation {
+  if (available && line.length >= 2) return { kind: 'surveyed', line: [...line] }
+  if (stops.length < APPROXIMATION_MIN_STOPS) return { kind: 'none' }
+
+  const lat0 = stops.reduce((a, s) => a + s.lat, 0) / stops.length
+  const cos0 = Math.cos((lat0 * Math.PI) / 180)
+  let total = 0
+  for (let i = 1; i < stops.length; i++) {
+    const a = toLocal(stops[i - 1] as LatLng, cos0)
+    const b = toLocal(stops[i] as LatLng, cos0)
+    total += Math.hypot(b.x - a.x, b.y - a.y)
+  }
+  const meanGap = total / (stops.length - 1)
+  if (meanGap > APPROXIMATION_MAX_MEAN_GAP_M) return { kind: 'none' }
+
+  return { kind: 'approximate', line: stops.map((s) => [s.lng, s.lat] as PathPoint) }
+}

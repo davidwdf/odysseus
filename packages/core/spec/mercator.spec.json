@@ -767,6 +767,232 @@
           }
         }
       ]
+    },
+    "boundsOf": {
+      "doc": "The smallest lat/lng box containing a set of points, named by compass edge. Degrees, exact equality: a bounding box is a selection of extremes, not a calculation, so there is no trigonometry to disagree about and no tolerance to grant. Deliberately NOT antimeridian-aware — the last row pins the long-way-round answer so a port does not “fix” it into a different function. Points are real Hong Kong coordinates where the row is about a route.",
+      "cases": [
+        {
+          "name": "empty-has-no-box",
+          "why": "An empty set has no extremes. Returning a degenerate box at 0,0 would frame a map on the Gulf of Guinea, which is why this is `undefined` rather than zeroes — and why a caller must handle the absence.",
+          "args": {
+            "points": []
+          },
+          "expect": null
+        },
+        {
+          "name": "a-single-point-is-its-own-box",
+          "why": "Zero span in both axes. An implementation seeded with ±Infinity and one that seeds from the first point agree here; one seeded with 0 does not.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.3193,
+                "lng": 114.1694
+              }
+            ]
+          },
+          "expect": {
+            "south": 22.3193,
+            "west": 114.1694,
+            "north": 22.3193,
+            "east": 114.1694
+          }
+        },
+        {
+          "name": "two-points-span-both-axes",
+          "why": "KMB 1’s termini: Chuk Yuen Estate in the north, Tsim Sha Tsui in the south. The everyday case, and the one that catches a south/north swap because the box is taller than it is wide.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.3418,
+                "lng": 114.1899
+              },
+              {
+                "lat": 22.2954,
+                "lng": 114.169
+              }
+            ]
+          },
+          "expect": {
+            "south": 22.2954,
+            "west": 114.169,
+            "north": 22.3418,
+            "east": 114.1899
+          }
+        },
+        {
+          "name": "the-extremes-can-come-from-four-different-points",
+          "why": "The failure a two-point corpus cannot see: an implementation that tracks a single “most extreme point” rather than four independent scalars passes every row above and fails this one. No point here is on more than one edge of the answer.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.4,
+                "lng": 114.15
+              },
+              {
+                "lat": 22.3,
+                "lng": 114.25
+              },
+              {
+                "lat": 22.35,
+                "lng": 114.1
+              },
+              {
+                "lat": 22.25,
+                "lng": 114.2
+              }
+            ]
+          },
+          "expect": {
+            "south": 22.25,
+            "west": 114.1,
+            "north": 22.4,
+            "east": 114.25
+          }
+        },
+        {
+          "name": "order-does-not-matter",
+          "why": "The same four points reversed. A bounding box is order-free; an implementation that walked pairwise, or that stopped early, would not be.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.25,
+                "lng": 114.2
+              },
+              {
+                "lat": 22.35,
+                "lng": 114.1
+              },
+              {
+                "lat": 22.3,
+                "lng": 114.25
+              },
+              {
+                "lat": 22.4,
+                "lng": 114.15
+              }
+            ]
+          },
+          "expect": {
+            "south": 22.25,
+            "west": 114.1,
+            "north": 22.4,
+            "east": 114.25
+          }
+        },
+        {
+          "name": "negative-and-southern-coordinates-are-ordered-numerically",
+          "why": "Not a Hong Kong case, and there on purpose: a port that compared coordinates as strings, or that took absolute values before comparing, gets −22.4 wrong and every HK row right. South of the equator and west of Greenwich at once.",
+          "args": {
+            "points": [
+              {
+                "lat": -22.4,
+                "lng": -43.2
+              },
+              {
+                "lat": -22.9,
+                "lng": -43.1
+              }
+            ]
+          },
+          "expect": {
+            "south": -22.9,
+            "west": -43.2,
+            "north": -22.4,
+            "east": -43.1
+          }
+        },
+        {
+          "name": "a-pair-across-the-antimeridian-spans-the-long-way",
+          "why": "Pinning the documented limitation so it is a decision, not a bug waiting to be “fixed”. The short span between 179°E and 179°W is 2°; this returns 358°. Hong Kong is 66° from the seam and no route we serve approaches it, so the simple answer is the correct-here answer — but a port that silently normalised would disagree with the JS on a row that exists to say so.",
+          "args": {
+            "points": [
+              {
+                "lat": 1.0,
+                "lng": 179.0
+              },
+              {
+                "lat": 2.0,
+                "lng": -179.0
+              }
+            ]
+          },
+          "expect": {
+            "south": 1.0,
+            "west": -179.0,
+            "north": 2.0,
+            "east": 179.0
+          }
+        }
+      ]
+    },
+    "centreOf": {
+      "doc": "The middle of a box, in DEGREES — the camera an engine opens on before it is told to fit. Not the Mercator midpoint: an engine's `center` is a lat/lng. `latToWorldY` lives two functions away and using it here would be wrong, so the third row is placed far enough north that the two answers differ by more than any tolerance could absorb. Exact equality.",
+      "cases": [
+        {
+          "name": "a-degenerate-box-is-its-own-centre",
+          "why": "A one-point route. The average of a number with itself must be that number, which an implementation using a span-plus-half-span form can still get right — and one that added an epsilon would not.",
+          "args": {
+            "bounds": {
+              "south": 22.3193,
+              "west": 114.1694,
+              "north": 22.3193,
+              "east": 114.1694
+            }
+          },
+          "expect": {
+            "lat": 22.3193,
+            "lng": 114.1694
+          }
+        },
+        {
+          "name": "the-midpoint-of-a-hong-kong-route-box",
+          "why": "KMB 1’s extent. The everyday case; the answer is what a rider sees for the one frame before `fitBounds` runs, so being wrong here is a visible flash of the wrong district.",
+          "args": {
+            "bounds": {
+              "south": 22.2954,
+              "west": 114.169,
+              "north": 22.3418,
+              "east": 114.1899
+            }
+          },
+          "expect": {
+            "lat": 22.3186,
+            "lng": 114.17945
+          }
+        },
+        {
+          "name": "a-tall-far-northern-box-is-halved-in-degrees-not-in-mercator",
+          "why": "The row that discriminates. Between 50°N and 70°N the degree midpoint is 60°; the Mercator midpoint is 61.5683°N — about 175 km further north. A port that projected before averaging passes every Hong Kong row and fails this one.",
+          "args": {
+            "bounds": {
+              "south": 50.0,
+              "west": 0.0,
+              "north": 70.0,
+              "east": 10.0
+            }
+          },
+          "expect": {
+            "lat": 60.0,
+            "lng": 5.0
+          }
+        },
+        {
+          "name": "a-box-straddling-the-equator-and-greenwich",
+          "why": "Signs cancel. An implementation using `min + (max - min) / 2` and one using `(min + max) / 2` agree; one that took magnitudes does not.",
+          "args": {
+            "bounds": {
+              "south": -4.0,
+              "west": -6.0,
+              "north": 4.0,
+              "east": 2.0
+            }
+          },
+          "expect": {
+            "lat": 0.0,
+            "lng": -2.0
+          }
+        }
+      ]
     }
   }
 }

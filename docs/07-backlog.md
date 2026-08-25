@@ -718,6 +718,27 @@ written down.
         Removing it is a bigger call than a layout change and would amend that ADR. **Reframing worth
         considering: the tab bar is probably not the question — what is *in* it is.**
 
+## Corpus fidelity — a sampled route is a different shape from the route it samples
+
+- [ ] **Give `routeDetailView` at least one corpus case carrying a route's *whole* stop sequence.**
+      Found by ADR-155. Every one of the 24 cases is real Hong Kong coordinates *sampled* — five stops
+      standing in for forty — so consecutive stops sit ~6.9 km apart. That was free for two years
+      because nothing in the view model read a `location` beyond the distance pill, and it stopped
+      being free the moment a rule asked about the space *between* stops: by `routePathView`'s measure
+      **every case in the corpus is an express with no line**, so the sketch state cannot be driven
+      from the corpus unmodified.
+
+      The web driver works around it by respacing the stops onto a 300 m pitch
+      (`respaced` in `apps/web/test/route-detail-states.test.tsx`), which is honest — the view is
+      recomputed from the respaced payload, so golden and tree still come from one input — but it is a
+      workaround, and the first attempt at it was *wrong in a way that passed*: it fixed the latitudes
+      and left 16 km of longitude spread, so the arm never changed and deleting the caption entirely
+      went unnoticed. A real full-sequence case would let the respacing go and would make the next
+      geometry rule cheaper to specify than this one was.
+
+      Worth considering more broadly than this screen: the same sampling is in every corpus that
+      carries stops, so **any future rule about distance, order or adjacency inherits the problem.**
+
 ## Infra / hardening
 - [ ] 🟡 **Wire the `age` header into the route watch's not-advanced retry** ([ADR-135](./08-decision-log.md#adr-135--the-live-path-hardened-against-the-networks-own-failure-modes-wp6-8b)
       decision 7). `nextRouteRoundMs` has an arm that answers `ttl − age` when a round was handed a stale

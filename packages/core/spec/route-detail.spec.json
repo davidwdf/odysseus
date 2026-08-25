@@ -9522,7 +9522,7 @@
         },
         {
           "name": "the-overview-states-the-stop-count-the-journey-and-the-distance",
-          "why": "Three whole-route figures, each present only where the dataset supports it, and each flagged for whether it is an **estimate** — because one of them is a straight-line sum through the stops (there are no polylines upstream) and one is upstream’s own timing. A renderer that treated them alike would either over- or under-claim. `estimate` is a flag rather than a `~` in the string because the caveat under it is a whole sentence the catalogue owns.",
+          "why": "Three whole-route figures, each present only where the dataset supports it, and each flagged for whether it is an **estimate** — because one of them is a straight-line sum through the stops (a surveyed line exists since ADR-151 and is deliberately not read here — it arrives on a second request, so a static fact would end up waiting on a network round) and one is upstream’s own timing. A renderer that treated them alike would either over- or under-claim. `estimate` is a flag rather than a `~` in the string because the caveat under it is a whole sentence the catalogue owns.",
           "args": {
             "kind": "stops",
             "detail": {

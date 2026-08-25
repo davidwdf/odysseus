@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/mercator.spec.json'
 import {
+  boundsOf,
+  centreOf,
   clampZoom,
   fitZoom,
+  type LatLngBounds,
   latToWorldY,
   lngToWorldX,
   metresPerPixel,
@@ -32,6 +35,25 @@ interface ApproxValue {
 function expectApprox(actual: number, e: ApproxValue) {
   expect(Math.abs(actual - e.value)).toBeLessThanOrEqual(e.tolerance)
 }
+
+describe('mercator#boundsOf', () => {
+  // Exact equality, and `toEqual` rather than `toStrictEqual` so a port's extra fields would not be
+  // the thing that fails. `undefined` for the empty row: the corpus writes it as JSON `null`, which
+  // `specCases` hands back as `null`, so the assertion normalises rather than the function.
+  for (const c of cases<{ points: LatLng[] }, LatLngBounds | null>('boundsOf')) {
+    it(c.name, () => {
+      expect(boundsOf(c.args.points) ?? null).toEqual(c.expect)
+    })
+  }
+})
+
+describe('mercator#centreOf', () => {
+  for (const c of cases<{ bounds: LatLngBounds }, LatLng>('centreOf')) {
+    it(c.name, () => {
+      expect(centreOf(c.args.bounds)).toEqual(c.expect)
+    })
+  }
+})
 
 describe('mercator#worldScale', () => {
   for (const c of cases<{ zoom: number }, ApproxValue>('worldScale')) {

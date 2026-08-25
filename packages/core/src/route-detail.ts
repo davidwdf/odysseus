@@ -527,7 +527,7 @@ export interface RouteDetailView {
   /**
    * Straight-line-through-stops distance in metres, `0` when the sequence is too short to have one.
    *
-   * Explicitly an estimate — there are no polylines upstream (ADR-044) — and it is the kernel's because
+   * Explicitly an estimate — a straight-line sum through the stops (ADR-044) — and it is the kernel's because
    * the alternative is two renderers summing the same haversines in two languages.
    */
   distanceM: number
@@ -849,7 +849,12 @@ export interface RouteStatRow {
   /**
    * True where the figure is an explicit estimate, so a renderer must say so.
    *
-   * The route distance is a straight-line sum through the stops — there are no polylines upstream — and the
+   * The route distance is a straight-line sum through the stops, which always understates the road — and
+   * the `~` on the pill is what says so. **A surveyed line exists since ADR-151 and would measure this
+   * exactly**, which is a real improvement and deliberately not taken here: the line arrives on a second
+   * request that a route screen renders long before (ADR-152), so reading it would make a static fact wait
+   * on a network round, and would make one route show two different distances depending on what had loaded.
+   * The
    * journey time is the dataset's own origin→terminus figure. One is a guess and one is not, and a renderer
    * that treated them alike would either over- or under-claim. It is a flag rather than a `~` in the string
    * because the *caveat* is a whole sentence the catalogue owns, where the `~` on a concession fare is a

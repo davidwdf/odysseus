@@ -137,9 +137,12 @@ object NextBusTokens {
     }
 
     /**
-     * Basemap overlay colours. The map is not themed (the LandsD tiles are inverted by filter
-     * instead — ADR-041/049), so these are fixed values chosen to read over both the light and
-     * the inverted-dark tiles.
+     * Basemap overlay colours. The tiles are not themed — they are inverted by filter instead
+     * (ADR-041/049) — and the filter applies to the TILES ONLY, so anything drawn over the map
+     * keeps its true colour. `pin` gets away with one fixed value because rose is
+     * mid-luminance and reads either way. A route LINE does not: dark enough to read on paper
+     * is invisible on the inverted map, which is why the route entries below come in pairs
+     * (ADR-154, `docs/proposals/06 §8c`).
      */
     object MapColor {
         /**
@@ -150,6 +153,28 @@ object NextBusTokens {
         val pin: Color = Color(0xFFE11D48)
         /** The ring that separates a pin from the tiles underneath it. */
         val pinBorder: Color = Color(0xFFFFFFFF)
+        /**
+         * The route line on the light basemap. Neutral rather than the operator accent: the
+         * line answers “where does it go”, and the header badge already answers “who runs it”.
+         * CTB’s accent is the same yellow LandsD uses for major roads, so colouring the line
+         * by operator makes one operator’s routes disappear.
+         */
+        val route: Color = Color(0xFF2C3343)
+        /**
+         * The same line on the inverted (dark) basemap. Its pair, not a tint: the tile filter
+         * does not touch the overlay, so without this the line would stay dark on a dark map.
+         */
+        val routeInverted: Color = Color(0xFFE2E8F0)
+        /**
+         * The halo that separates the route line from the tiles under it — the thing that
+         * makes the line legible over dense cartography rather than the line’s own colour.
+         */
+        val routeCasing: Color = Color(0xFFFFFFFF)
+        /**
+         * The casing’s dark-map pair. White separates a line from paper and from nothing at
+         * all on an inverted map.
+         */
+        val routeCasingInverted: Color = Color(0xFF0D111C)
     }
 
     /**

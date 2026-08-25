@@ -80,7 +80,7 @@
 "faqOfflineQ" = "Does the app work offline?";
 "faqOfflineA" = "Partly. The app opens offline, and route and stop search keeps working from the index saved on your device the first time you used it. Arrivals you have already seen come back from the cache, faded rather than shown as current — a new reading always needs a connection.";
 "faqMapQ" = "Why isn't there a live bus map?";
-"faqMapA" = "Hong Kong's open data publishes stop-by-stop arrival estimates, not live vehicle positions or route shapes — so we can't honestly show buses moving on a map. What we can do is place a bus on the route's stop list, between the two stops its own arrival times put it between.";
+"faqMapA" = "The route's own line is real — the Transport Department surveys and publishes it, and that is what you see drawn on the map. What Hong Kong's open data does not publish is live vehicle positions: the feeds give stop-by-stop arrival estimates, so we can't honestly show a bus moving along that line. What we can do is place it on the route's stop list, between the two stops its own arrival times put it between.";
 "faqRemarksQ" = "What do \"Scheduled\" and \"Last bus\" mean?";
 "faqRemarksA" = "They are notes from the operator, shown in its own words, so the exact wording varies. Anything about a schedule — \"Scheduled\", say — means the time is timetable-based, i.e. lower confidence than a live estimate; a last-bus note flags the final departure of the day. Other notes are passed through as the operator wrote them.";
 "routesAtStop" = "Routes";
@@ -94,6 +94,8 @@
 /* stopCount: plural — see Localizable.stringsdict */
 /* moreRoutes: plural — see Localizable.stringsdict */
 "etasUnavailable" = "Live times unavailable";
+"routePathApproximate" = "Approximate path — stops shown in order";
+"routePathLabel" = "Route on a map";
 "mapAttribution" = "Map from Lands Department";
 "mapAttributionAction" = "Map from Lands Department — open the copyright notice and disclaimer";
 "keypadBackspace" = "Backspace";

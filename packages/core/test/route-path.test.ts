@@ -7,6 +7,7 @@ import {
   type PathPoint,
   type RoutePathCandidate,
   resolveRoutePath,
+  routePathView,
   trimPathToStops,
 } from '../src/route-path'
 import type { LatLng } from '../src/types'
@@ -186,6 +187,28 @@ describe('resolveRoutePath', () => {
       expect(Math.abs((actual?.fitMetres ?? 0) - c.expect.fitMetres)).toBeLessThanOrEqual(
         c.expect.tolerance,
       )
+    })
+  }
+})
+
+describe('routePathView', () => {
+  interface Args {
+    available: boolean
+    line: number[][]
+    stops: number[][]
+  }
+  interface Expected {
+    kind: 'surveyed' | 'approximate' | 'none'
+    lineLength: number
+  }
+  for (const c of cases<Args, Expected>('routePathView')) {
+    it(c.name, () => {
+      const actual = routePathView(c.args.available, line(c.args.line), c.args.stops.map(toLatLng))
+      expect(actual.kind).toBe(c.expect.kind)
+      const drawn = actual.kind === 'none' ? [] : actual.line
+      expect(drawn).toHaveLength(c.expect.lineLength)
+      // The invariant a caller depends on: `none` never carries a line to draw by accident.
+      if (actual.kind === 'none') expect('line' in actual).toBe(false)
     })
   }
 })

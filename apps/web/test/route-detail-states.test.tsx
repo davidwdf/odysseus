@@ -1,5 +1,5 @@
 // The DOM renderer's Route detail conformance suite: it drives the published spec (WP6-6b, ADR-094) —
-// `packages/contract/ui/route-detail.spec.json`, twenty states, nineteen of them projected.
+// `packages/contract/ui/route-detail.spec.json`, twenty-five states, every one of them projected.
 //
 // WHAT IS DIFFERENT ABOUT THIS SCREEN
 // `proposals/04` picked it as *"the motion test"*, and the answer is narrower than "motion is idiom": **motion
@@ -23,7 +23,9 @@ import {
   type Locale,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
+  type RoutePath,
   routeDetailView,
+  routePathView,
 } from '@nextbus/core'
 import corpus from '@nextbus/core/spec/route-detail.spec.json'
 import { CATALOGUE, type MessageKey, t } from '@nextbus/i18n'
@@ -95,7 +97,69 @@ const FIXTURE: Record<string, string> = {
   // ADR-116's answer to the first of those two: the same Citybus route, once a live route watch has
   // answered it. Reached from a payload a round produced, which is what a driver is allowed to do.
   liveRouteTimes: 'a-live-route-watch-fills-the-rows-a-citybus-route-cannot-fill-itself',
+  // The four map states (ADR-152/154). All from the same payload: what separates them is the *geometry
+  // answer*, which is a second request, so driving them from one route is the point rather than a saving
+  // — a renderer that let the schematic change with the line would be wrong.
+  pathSurveyed: 'a-bus-mid-route-rides-the-segment-leading-into-its-stop',
+  pathApproximate: 'a-bus-mid-route-rides-the-segment-leading-into-its-stop',
+  pathAbsent: 'a-bus-mid-route-rides-the-segment-leading-into-its-stop',
+  pathPending: 'a-bus-mid-route-rides-the-segment-leading-into-its-stop',
 }
+
+/**
+ * **Every `routeDetailView` corpus route is a *sample* of a route, and a sampled route is a different
+ * shape from the route it samples.** This is what that costs, and it is worth knowing before writing any
+ * future state about geometry.
+ *
+ * The coordinates are real — the `content` case runs Tuen Mun to Tsim Sha Tsui — but there are **five
+ * stops standing in for forty**, so consecutive stops sit 6.9 km apart where the real route's are a few
+ * hundred metres apart. Sampling keeps a golden legible and it was free for two years, because nothing
+ * in the view model read a `location` beyond the distance pill. It stops being free the moment a rule
+ * asks about the space *between* stops: `routePathView` decides whether joining them describes a road,
+ * and by that measure every case in the corpus is an express with no line. The corpus can only reach the
+ * `none` arm — which is why deleting the caption altogether passed this suite the first time it was run.
+ *
+ * So the sketch state respaces: the same stops, the same order, the same names and readings, moved onto
+ * one meridian at a realistic 300 m pitch (KMB 1 is 25 stops over 8 km). **Both** axes, which the first
+ * attempt got wrong — fixing the latitudes while keeping 16 km of longitude spread leaves the gaps
+ * exactly as they were. The view is recomputed from the respaced payload, so the golden and the tree
+ * still come from one input; the distance pill simply reads a shorter route.
+ *
+ * A corpus case carrying a route's *whole* stop sequence would be better than this and would let the
+ * respacing go. It is a `docs/07` row, not this milestone's work.
+ */
+const SKETCHABLE_PITCH_DEG = 300 / 110_540
+
+function respaced(detail: RouteDetailPayload): RouteDetailPayload {
+  const stops = detail.stops.map((row, i) => ({
+    ...row,
+    stop: { ...row.stop, location: { lat: 22.32 + i * SKETCHABLE_PITCH_DEG, lng: 114.17 } },
+  }))
+  return { ...detail, stops }
+}
+
+/**
+ * The two geometry answers, written out in full because the wire's are — `routeId`, `source` and
+ * `attribution` ride every response including a negative one (ADR-152). A licence notice is not
+ * conditional on there being something to license.
+ */
+const ANSWER = {
+  routeId: 'KMB:264X:outbound:1',
+  source: 'csdi',
+  attribution: 'Transport Department, HKSAR',
+} as const
+
+/** A surveyed line — two vertices is all `routePathView` asks for, and all a `LineString` needs. */
+const SURVEYED: RoutePath = {
+  ...ANSWER,
+  available: true,
+  path: [
+    [114.17, 22.32],
+    [114.172, 22.34],
+    [114.175, 22.36],
+  ],
+}
+const NO_LINE: RoutePath = { ...ANSWER, available: false, path: [] }
 
 function caseNamed(name: string): CorpusCase {
   const found = CASES.find((c) => c.name === name)
@@ -127,9 +191,19 @@ function viewFor(c: CorpusCase, at = Date.parse(c.args.now)): RouteDetailView {
 
 let route: () => Promise<RouteDetailPayload> = () => Promise.reject(new Error('no fixture set'))
 
+/**
+ * The geometry answer, on its own seam because it is on its own **request** (ADR-152): a route's line is
+ * cached for a day at the edge where its arrivals are cached for thirty seconds, so the screen asks twice
+ * and the two land independently. Defaulted to *no line* rather than to a fixture, because that is what
+ * every state but the four map ones is about — and because a default that drew something would put a map
+ * into twenty states whose subject is the schematic.
+ */
+let path: () => Promise<RoutePath> = () => Promise.resolve(NO_LINE)
+
 vi.mock('../src/adapters/datasource', () => ({
   dataSource: {
     getRoute: () => route(),
+    getRoutePath: () => path(),
     // Declared because the screen now subscribes when the wire says its times are per-stop (ADR-116/119).
     // A no-op subscription rather than a fake round: this suite is about what the screen *draws* for a given
     // payload, and a live round would make the payload under test a moving target. The subscription itself is
@@ -218,11 +292,25 @@ function mount(url: string): void {
   })
 }
 
-/** Mount, then wait — bounded — until the skeleton has gone. A timeout is a finding, not a flake. */
-async function mountSettled(url: string): Promise<RenderedTree> {
+/**
+ * Mount, then wait — bounded — until the screen has settled. A timeout is a finding, not a flake.
+ *
+ * Two settle conditions because there are now two independent requests (ADR-152). *No skeleton left* is
+ * the right one for every state whose subject is the schematic. It is the **wrong** one for `pathPending`,
+ * whose subject is precisely a map area still holding its height while the stop list is already usable —
+ * waiting for that placeholder to go would be waiting for the state under test to end.
+ */
+async function mountSettled(
+  url: string,
+  opts: { settleOn: 'skeleton' | 'rows' } = { settleOn: 'skeleton' },
+): Promise<RenderedTree> {
   mount(url)
+  const settled = () =>
+    opts.settleOn === 'skeleton'
+      ? !container.querySelector('.animate-pulse')
+      : container.querySelectorAll('.relative > button').length > 0
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (!container.querySelector('.animate-pulse')) return readTree(container)
+    if (settled()) return readTree(container)
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
@@ -270,7 +358,21 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
   const name = FIXTURE[state]
   if (name === undefined) return null
   const c = caseNamed(name)
-  const detail = fromCorpus<RouteDetailPayload>(c.args.detail)
+  // The four map states differ in the geometry answer and — for the sketch alone — in where the stops
+  // are. Everything else about the payload is identical, which is the claim: a route's schematic does
+  // not move when its line arrives.
+  const MAP: Record<string, { answer: RoutePath; respace: boolean }> = {
+    pathSurveyed: { answer: SURVEYED, respace: false },
+    pathApproximate: { answer: NO_LINE, respace: true },
+    pathAbsent: { answer: NO_LINE, respace: false },
+  }
+  const map = MAP[state]
+  path =
+    state === 'pathPending'
+      ? () => new Promise<RoutePath>(() => {})
+      : () => Promise.resolve(map?.answer ?? NO_LINE)
+  const raw = fromCorpus<RouteDetailPayload>(c.args.detail)
+  const detail = map?.respace ? respaced(raw) : raw
   route = () => Promise.resolve(detail)
   usePreferences.setState({ favoriteRoutes: [...(c.args.savedRouteKeys ?? [])] })
   /**
@@ -298,10 +400,34 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     c.args.flipped === true || c.args.arrivedFromStop === undefined
       ? ''
       : `?stop=${encodeURIComponent(c.args.arrivedFromStop)}`
-  const view = viewFor(c, at)
+  const view = viewFor({ ...c, args: { ...c.args, detail } }, at)
+  /**
+   * The presentation the screen will have computed — the same kernel call over the same two inputs,
+   * exactly as `noticeFor` does for the freshness line, and for the same reason: neither is a field of
+   * `routeDetailView`, so a driver that made one up would be grading its own homework. `undefined` while
+   * the request is in flight, which is what `ROUTE_PATH`'s `when` gates on — *not asked yet* is not one
+   * of the three answers.
+   */
+  const presentation =
+    state === 'pathPending'
+      ? undefined
+      : routePathView(
+          map?.answer.available ?? false,
+          (map?.answer.path ?? []).map((p) => [p[0] as number, p[1] as number] as const),
+          detail.stops.map((row) => row.stop.location),
+        )
   return {
-    view: { ...view, notice: noticeFor(view, at, { online: state !== 'offline' }) },
-    tree: await mountSettled(`/route/${encodeURIComponent(detail.route.id)}${anchor}`),
+    view: {
+      ...view,
+      notice: noticeFor(view, at, { online: state !== 'offline' }),
+      ...(presentation === undefined ? {} : { path: presentation }),
+    },
+    tree: await mountSettled(`/route/${encodeURIComponent(detail.route.id)}${anchor}`, {
+      // `pathPending` holds the map area open with a pulsing placeholder for ever, deliberately — so
+      // "the skeleton has gone" is the wrong settle condition for it. The stop rows are what has to
+      // have arrived, and they are the state's whole point: the schematic is useful before the line is.
+      settleOn: state === 'pathPending' ? 'rows' : 'skeleton',
+    }),
   }
 }
 
@@ -327,11 +453,11 @@ beforeEach(() => {
 describe('apps/web conforms to Route detail’s published spec, state by state', () => {
   it('has the states the spec declares, and a fixture for each projected one', () => {
     expect(routeDetailSpec.component).toBe('RouteDetail')
-    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(21)
+    expect(Object.keys(routeDetailSpec.states).length).toBeGreaterThanOrEqual(25)
     const projected = Object.entries(routeDetailSpec.states)
       .filter(([, declared]) => 'shows' in declared.enforcement)
       .map(([state]) => state)
-    expect(projected.length).toBeGreaterThanOrEqual(20)
+    expect(projected.length).toBeGreaterThanOrEqual(25)
     for (const state of projected) {
       expect(
         FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',
@@ -388,6 +514,45 @@ describe('apps/web conforms to Route detail’s published spec, state by state',
       views.some((v) => v.stops.some((s) => s.incomplete === true && s.arrivals.length > 0)),
       'no fixture has a refused kerb that kept its last reading — the row shape where the marker and a time must both show',
     ).toBe(true)
+  })
+
+  it('drives all three arms of the geometry answer, and the absence that is not one of them', () => {
+    /**
+     * **The control that would have caught this suite's own first draft.** `pathApproximate` was written,
+     * declared and run, and it reached the `none` arm — because the respacing fixed the latitudes and left
+     * 16 km of longitude spread. Both defects the state exists to catch (no caption; a caption on every
+     * line) were injected: the second failed, and the **first passed**, which is exactly the WP6-3b shape
+     * — an arm declared, projected by nothing, and an injected defect passing.
+     *
+     * So the arms are asserted from the fixtures rather than assumed, using the identical kernel call the
+     * screen and the driver both make. A future edit to `respaced`, to `SURVEYED`, or to the corpus case
+     * behind these states turns this red before it turns a projection quietly vacuous.
+     */
+    const answerFor = (state: string): RoutePath => (state === 'pathSurveyed' ? SURVEYED : NO_LINE)
+    const arms = new Map<string, string>()
+    for (const state of ['pathSurveyed', 'pathApproximate', 'pathAbsent']) {
+      const raw = fromCorpus<RouteDetailPayload>(caseNamed(FIXTURE[state] as string).args.detail)
+      const detail = state === 'pathApproximate' ? respaced(raw) : raw
+      const answer = answerFor(state)
+      arms.set(
+        state,
+        routePathView(
+          answer.available,
+          answer.path.map((p) => [p[0] as number, p[1] as number] as const),
+          detail.stops.map((row) => row.stop.location),
+        ).kind,
+      )
+    }
+    expect(Object.fromEntries(arms)).toEqual({
+      pathSurveyed: 'surveyed',
+      pathApproximate: 'approximate',
+      pathAbsent: 'none',
+    })
+    // And the fourth, which is deliberately *not* an arm: a query that has not answered has no model at
+    // all, so `ROUTE_PATH`'s `when` gates the whole slot off. A driver that handed it one of the three
+    // would be asserting that "not asked yet" and "asked and told no" look the same, which is the single
+    // thing this feature must never do.
+    expect(FIXTURE.pathPending).toBeDefined()
   })
 
   it('draws a skeleton whenever it has no answer, whatever the query state', () => {

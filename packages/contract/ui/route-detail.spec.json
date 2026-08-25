@@ -75,6 +75,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -230,7 +250,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -278,6 +298,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -433,7 +473,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -481,6 +521,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -636,7 +696,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -683,6 +743,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -838,7 +918,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -886,6 +966,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -1041,7 +1141,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -1089,6 +1189,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -1244,7 +1364,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -1291,6 +1411,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -1446,7 +1586,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -1493,6 +1633,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -1648,7 +1808,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -1695,6 +1855,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -1850,7 +2030,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -1898,6 +2078,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -2053,7 +2253,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -2100,6 +2300,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -2255,7 +2475,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -2303,6 +2523,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -2458,7 +2698,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -2505,6 +2745,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -2660,7 +2920,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -2707,6 +2967,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -2862,7 +3142,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -2909,6 +3189,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -3064,7 +3364,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -3111,6 +3411,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -3266,7 +3586,897 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "text": {
+                  "field": "label"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "pathSurveyed": {
+      "must": "The line the bus follows, drawn solid over the basemap, and no sentence about it.",
+      "mustNot": "A caption. This *is* the road; saying so is noise, and it would spend the word that the approximated case needs.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "facts",
+            "each": "facts",
+            "of": [
+              {
+                "name": "factValue",
+                "invariant": "Printed **verbatim**, and the strip is the pills the model hands over — in its order, with nothing added. Which facts exist, the fare’s fallback from a sectional span to the origin’s full fare, and the omission of the whole-route journey time were all inside `RouteMeta.tsx` until WP6-6a (ADR-093 decision 10). A route whose dataset carries no service block gets **no strip at all** rather than four pills reading \"—\".",
+                "text": {
+                  "field": "value"
+                }
+              },
+              {
+                "name": "factNoteSeparator",
+                "when": "note",
+                "why": "There is no qualifier to separate. Upstream publishes a holiday fare only where it differs.",
+                "text": {
+                  "literal": "·",
+                  "why": "The renderer’s glyph between a fare and its holiday qualifier, in its own node — React emits an expression and an adjacent literal as separate text nodes (ADR-092), so this is what the RN strip already produces and what the projection can therefore see. What it pins is the **order**: the fare, then the separator, then the qualifier."
+                }
+              },
+              {
+                "name": "factNote",
+                "when": "note",
+                "why": "Only where upstream published a holiday fare that differs from the ordinary one.",
+                "invariant": "A **note on the fare pill, never a pill of its own** — it qualifies the fare rather than standing beside it as a fifth fact. The qualifier word is the catalogue’s and the `$` is the kernel’s.",
+                "text": {
+                  "field": "note"
+                }
+              }
+            ]
+          },
+          {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "stops",
+            "each": "stops",
+            "of": [
+              {
+                "name": "seq",
+                "invariant": "The stop’s **1-based position on the route**, as the wire numbers it — not the row’s index. They agree today and a payload that skipped a sequence number would make them differ, at which point the node a bus is drawn beside and the number printed in it would disagree.",
+                "text": {
+                  "field": "seq"
+                }
+              },
+              {
+                "name": "stopName",
+                "invariant": "Title-cased with its printed code split off by `displayName`, never by the renderer (ADR-034). This is also the string the tapped-stop sheet is titled with — the screen used to compute that separately as `titleCaseName(splitStopCode(…).label)`, eleven lines away, which is one answer written twice (ADR-093 decision 11).",
+                "text": {
+                  "field": "name.label"
+                }
+              },
+              {
+                "name": "stopCode",
+                "when": "name.code",
+                "why": "A stop whose upstream name carries no parenthetical — common for GMB poles, and for a Citybus stop whose name is a plain place.",
+                "invariant": "What is printed on the physical flag, which is what a rider standing at the kerb is matching against. Latin letters and digits, so it is the same string in every locale — **except** where the parenthetical is a translated place phrase rather than a code, which `splitStopCode` cannot tell apart and does not try to: it understands ASCII parentheses only, so an English `CENTRAL (EXCHANGE SQUARE)` splits and a Chinese `中環（交易廣場）` does not. Pinned in `stop-name.spec.json`, and both renderers must reproduce it identically.",
+                "text": {
+                  "field": "name.code"
+                }
+              },
+              {
+                "name": "stopFare",
+                "when": "fareLabel",
+                "why": "The dataset carries no boarding fare for this stop — usually the last one, where boarding is not possible.",
+                "invariant": "The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.",
+                "text": {
+                  "field": "fareLabel"
+                }
+              },
+              {
+                "name": "stopArrivals",
+                "invariant": "Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.",
+                "each": "arrivals",
+                "of": [
+                  {
+                    "name": "arrival",
+                    "oneOf": "label.kind",
+                    "cases": {
+                      "mins": [
+                        {
+                          "name": "arrivalValue",
+                          "text": {
+                            "field": "label.value"
+                          }
+                        },
+                        {
+                          "name": "arrivalUnit",
+                          "invariant": "The unit rides **every** numeric slot, so the row reads \"12 min  27 min  42 min\" rather than \"12  27  42 min\". It is a separate node because the two are styled differently — the figure is tabular and emphasised on the first slot, the unit is muted — which is also why they are two fields on the model.",
+                          "text": {
+                            "field": "label.unit"
+                          }
+                        }
+                      ],
+                      "due": [
+                        {
+                          "name": "arrivalDue",
+                          "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
+                          "text": {
+                            "field": "label.label"
+                          }
+                        }
+                      ],
+                      "headway": [
+                        {
+                          "name": "arrivalHeadway",
+                          "invariant": "Unreachable on this screen and declared anyway, because the union carries the arm: `upcoming` yields arrivals and a published frequency is not one. Declared rather than omitted so that a renderer falling through to the dash — losing a real sentence — is a spec failure rather than a silent one. The screen-level equivalent is the facts strip’s `freq` pill.",
+                          "text": {
+                            "field": "label.text"
+                          }
+                        }
+                      ],
+                      "departed": [
+                        {
+                          "name": "arrivalDeparted",
+                          "text": {
+                            "literal": "—",
+                            "why": "The em dash a renderer draws where there is nothing to count down. Also unreachable here — `upcoming` filters departed readings out before they reach a row — and declared for the same reason as `headway`."
+                          }
+                        }
+                      ],
+                      "none": [
+                        {
+                          "name": "arrivalNone",
+                          "text": {
+                            "literal": "—",
+                            "why": "As `departed`: the same dash, and the arm a row reaches by having no reading at all rather than a spent one. A row with no arrivals shows **nothing** on its right, which is a different thing again — see the `noReading` state."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "stopIncomplete",
+                "when": "incomplete",
+                "why": "Nothing refused at this kerb — or the **screen** is already saying it, which is the case when a round answered nothing at all and `liveArrivals` still stands. Absent on every payload the server builds: a route is fetched in one upstream call, so only a **live route watch** (ADR-116) has a per-pole answer to give.",
+                "invariant": "The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of — and never both at once, which is what the kernel’s `refused` set enforces: 42 copies of one sentence down a screen is what `noLiveBoard`’s own invariant forbids. **After the arrivals, not instead of them.** A refused pole keeps its previous readings (`retainFailedPoles`, ADR-073), so a row can honestly carry an ageing time *and* the reason it is not moving; a renderer that showed only the time would hide the outage, and one that showed only the sentence would throw away the rider’s last known bus. Muted, never a warning colour: nothing is wrong with the route.",
+                "text": {
+                  "message": "etasUnavailable"
+                }
+              }
+            ]
+          },
+          {
+            "name": "buses",
+            "invariant": "One per bus the model says is on the rail, in **route order**, and the order is the model’s: `visibleBusMarkers` has already dropped a bus still parked at the origin (ADR-008 — a permanent token at a terminus reads as a bus a rider could catch), and `railBus` has already decided node-or-segment. A renderer that drew a token per *stop with a reading* would draw one for every stop on the route.",
+            "each": "buses",
+            "of": [
+              {
+                "name": "busLabel",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "text": {
+                  "field": "label"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "pathApproximate": {
+      "must": "The stops joined in order and drawn as a sketch — dashed — with one line under the map saying that is what it is.",
+      "mustNot": "A line that looks like the other kind. An unmarked crow-flies path is the cartographic twin of a client-side per-second countdown: it draws a confidence the data does not have (ADR-008).",
+      "why": "A surveyed line needs no caption and must not have one — see `pathSurveyed`.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "facts",
+            "each": "facts",
+            "of": [
+              {
+                "name": "factValue",
+                "invariant": "Printed **verbatim**, and the strip is the pills the model hands over — in its order, with nothing added. Which facts exist, the fare’s fallback from a sectional span to the origin’s full fare, and the omission of the whole-route journey time were all inside `RouteMeta.tsx` until WP6-6a (ADR-093 decision 10). A route whose dataset carries no service block gets **no strip at all** rather than four pills reading \"—\".",
+                "text": {
+                  "field": "value"
+                }
+              },
+              {
+                "name": "factNoteSeparator",
+                "when": "note",
+                "why": "There is no qualifier to separate. Upstream publishes a holiday fare only where it differs.",
+                "text": {
+                  "literal": "·",
+                  "why": "The renderer’s glyph between a fare and its holiday qualifier, in its own node — React emits an expression and an adjacent literal as separate text nodes (ADR-092), so this is what the RN strip already produces and what the projection can therefore see. What it pins is the **order**: the fare, then the separator, then the qualifier."
+                }
+              },
+              {
+                "name": "factNote",
+                "when": "note",
+                "why": "Only where upstream published a holiday fare that differs from the ordinary one.",
+                "invariant": "A **note on the fare pill, never a pill of its own** — it qualifies the fare rather than standing beside it as a fifth fact. The qualifier word is the catalogue’s and the `$` is the kernel’s.",
+                "text": {
+                  "field": "note"
+                }
+              }
+            ]
+          },
+          {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "stops",
+            "each": "stops",
+            "of": [
+              {
+                "name": "seq",
+                "invariant": "The stop’s **1-based position on the route**, as the wire numbers it — not the row’s index. They agree today and a payload that skipped a sequence number would make them differ, at which point the node a bus is drawn beside and the number printed in it would disagree.",
+                "text": {
+                  "field": "seq"
+                }
+              },
+              {
+                "name": "stopName",
+                "invariant": "Title-cased with its printed code split off by `displayName`, never by the renderer (ADR-034). This is also the string the tapped-stop sheet is titled with — the screen used to compute that separately as `titleCaseName(splitStopCode(…).label)`, eleven lines away, which is one answer written twice (ADR-093 decision 11).",
+                "text": {
+                  "field": "name.label"
+                }
+              },
+              {
+                "name": "stopCode",
+                "when": "name.code",
+                "why": "A stop whose upstream name carries no parenthetical — common for GMB poles, and for a Citybus stop whose name is a plain place.",
+                "invariant": "What is printed on the physical flag, which is what a rider standing at the kerb is matching against. Latin letters and digits, so it is the same string in every locale — **except** where the parenthetical is a translated place phrase rather than a code, which `splitStopCode` cannot tell apart and does not try to: it understands ASCII parentheses only, so an English `CENTRAL (EXCHANGE SQUARE)` splits and a Chinese `中環（交易廣場）` does not. Pinned in `stop-name.spec.json`, and both renderers must reproduce it identically.",
+                "text": {
+                  "field": "name.code"
+                }
+              },
+              {
+                "name": "stopFare",
+                "when": "fareLabel",
+                "why": "The dataset carries no boarding fare for this stop — usually the last one, where boarding is not possible.",
+                "invariant": "The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.",
+                "text": {
+                  "field": "fareLabel"
+                }
+              },
+              {
+                "name": "stopArrivals",
+                "invariant": "Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.",
+                "each": "arrivals",
+                "of": [
+                  {
+                    "name": "arrival",
+                    "oneOf": "label.kind",
+                    "cases": {
+                      "mins": [
+                        {
+                          "name": "arrivalValue",
+                          "text": {
+                            "field": "label.value"
+                          }
+                        },
+                        {
+                          "name": "arrivalUnit",
+                          "invariant": "The unit rides **every** numeric slot, so the row reads \"12 min  27 min  42 min\" rather than \"12  27  42 min\". It is a separate node because the two are styled differently — the figure is tabular and emphasised on the first slot, the unit is muted — which is also why they are two fields on the model.",
+                          "text": {
+                            "field": "label.unit"
+                          }
+                        }
+                      ],
+                      "due": [
+                        {
+                          "name": "arrivalDue",
+                          "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
+                          "text": {
+                            "field": "label.label"
+                          }
+                        }
+                      ],
+                      "headway": [
+                        {
+                          "name": "arrivalHeadway",
+                          "invariant": "Unreachable on this screen and declared anyway, because the union carries the arm: `upcoming` yields arrivals and a published frequency is not one. Declared rather than omitted so that a renderer falling through to the dash — losing a real sentence — is a spec failure rather than a silent one. The screen-level equivalent is the facts strip’s `freq` pill.",
+                          "text": {
+                            "field": "label.text"
+                          }
+                        }
+                      ],
+                      "departed": [
+                        {
+                          "name": "arrivalDeparted",
+                          "text": {
+                            "literal": "—",
+                            "why": "The em dash a renderer draws where there is nothing to count down. Also unreachable here — `upcoming` filters departed readings out before they reach a row — and declared for the same reason as `headway`."
+                          }
+                        }
+                      ],
+                      "none": [
+                        {
+                          "name": "arrivalNone",
+                          "text": {
+                            "literal": "—",
+                            "why": "As `departed`: the same dash, and the arm a row reaches by having no reading at all rather than a spent one. A row with no arrivals shows **nothing** on its right, which is a different thing again — see the `noReading` state."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "stopIncomplete",
+                "when": "incomplete",
+                "why": "Nothing refused at this kerb — or the **screen** is already saying it, which is the case when a round answered nothing at all and `liveArrivals` still stands. Absent on every payload the server builds: a route is fetched in one upstream call, so only a **live route watch** (ADR-116) has a per-pole answer to give.",
+                "invariant": "The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of — and never both at once, which is what the kernel’s `refused` set enforces: 42 copies of one sentence down a screen is what `noLiveBoard`’s own invariant forbids. **After the arrivals, not instead of them.** A refused pole keeps its previous readings (`retainFailedPoles`, ADR-073), so a row can honestly carry an ageing time *and* the reason it is not moving; a renderer that showed only the time would hide the outage, and one that showed only the sentence would throw away the rider’s last known bus. Muted, never a warning colour: nothing is wrong with the route.",
+                "text": {
+                  "message": "etasUnavailable"
+                }
+              }
+            ]
+          },
+          {
+            "name": "buses",
+            "invariant": "One per bus the model says is on the rail, in **route order**, and the order is the model’s: `visibleBusMarkers` has already dropped a bus still parked at the origin (ADR-008 — a permanent token at a terminus reads as a bus a rider could catch), and `railBus` has already decided node-or-segment. A renderer that drew a token per *stop with a reading* would draw one for every stop on the route.",
+            "each": "buses",
+            "of": [
+              {
+                "name": "busLabel",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "text": {
+                  "field": "label"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "pathAbsent": {
+      "must": "The schematic, entire, with no map above it.",
+      "mustNot": "An empty map frame, or a sentence apologising for one. There is nothing to draw and nothing a rider can do about it — the stop list is the answer, and it is complete.",
+      "why": "Every route dense enough to sketch, which is nearly all of them.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "facts",
+            "each": "facts",
+            "of": [
+              {
+                "name": "factValue",
+                "invariant": "Printed **verbatim**, and the strip is the pills the model hands over — in its order, with nothing added. Which facts exist, the fare’s fallback from a sectional span to the origin’s full fare, and the omission of the whole-route journey time were all inside `RouteMeta.tsx` until WP6-6a (ADR-093 decision 10). A route whose dataset carries no service block gets **no strip at all** rather than four pills reading \"—\".",
+                "text": {
+                  "field": "value"
+                }
+              },
+              {
+                "name": "factNoteSeparator",
+                "when": "note",
+                "why": "There is no qualifier to separate. Upstream publishes a holiday fare only where it differs.",
+                "text": {
+                  "literal": "·",
+                  "why": "The renderer’s glyph between a fare and its holiday qualifier, in its own node — React emits an expression and an adjacent literal as separate text nodes (ADR-092), so this is what the RN strip already produces and what the projection can therefore see. What it pins is the **order**: the fare, then the separator, then the qualifier."
+                }
+              },
+              {
+                "name": "factNote",
+                "when": "note",
+                "why": "Only where upstream published a holiday fare that differs from the ordinary one.",
+                "invariant": "A **note on the fare pill, never a pill of its own** — it qualifies the fare rather than standing beside it as a fifth fact. The qualifier word is the catalogue’s and the `$` is the kernel’s.",
+                "text": {
+                  "field": "note"
+                }
+              }
+            ]
+          },
+          {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "stops",
+            "each": "stops",
+            "of": [
+              {
+                "name": "seq",
+                "invariant": "The stop’s **1-based position on the route**, as the wire numbers it — not the row’s index. They agree today and a payload that skipped a sequence number would make them differ, at which point the node a bus is drawn beside and the number printed in it would disagree.",
+                "text": {
+                  "field": "seq"
+                }
+              },
+              {
+                "name": "stopName",
+                "invariant": "Title-cased with its printed code split off by `displayName`, never by the renderer (ADR-034). This is also the string the tapped-stop sheet is titled with — the screen used to compute that separately as `titleCaseName(splitStopCode(…).label)`, eleven lines away, which is one answer written twice (ADR-093 decision 11).",
+                "text": {
+                  "field": "name.label"
+                }
+              },
+              {
+                "name": "stopCode",
+                "when": "name.code",
+                "why": "A stop whose upstream name carries no parenthetical — common for GMB poles, and for a Citybus stop whose name is a plain place.",
+                "invariant": "What is printed on the physical flag, which is what a rider standing at the kerb is matching against. Latin letters and digits, so it is the same string in every locale — **except** where the parenthetical is a translated place phrase rather than a code, which `splitStopCode` cannot tell apart and does not try to: it understands ASCII parentheses only, so an English `CENTRAL (EXCHANGE SQUARE)` splits and a Chinese `中環（交易廣場）` does not. Pinned in `stop-name.spec.json`, and both renderers must reproduce it identically.",
+                "text": {
+                  "field": "name.code"
+                }
+              },
+              {
+                "name": "stopFare",
+                "when": "fareLabel",
+                "why": "The dataset carries no boarding fare for this stop — usually the last one, where boarding is not possible.",
+                "invariant": "The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.",
+                "text": {
+                  "field": "fareLabel"
+                }
+              },
+              {
+                "name": "stopArrivals",
+                "invariant": "Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.",
+                "each": "arrivals",
+                "of": [
+                  {
+                    "name": "arrival",
+                    "oneOf": "label.kind",
+                    "cases": {
+                      "mins": [
+                        {
+                          "name": "arrivalValue",
+                          "text": {
+                            "field": "label.value"
+                          }
+                        },
+                        {
+                          "name": "arrivalUnit",
+                          "invariant": "The unit rides **every** numeric slot, so the row reads \"12 min  27 min  42 min\" rather than \"12  27  42 min\". It is a separate node because the two are styled differently — the figure is tabular and emphasised on the first slot, the unit is muted — which is also why they are two fields on the model.",
+                          "text": {
+                            "field": "label.unit"
+                          }
+                        }
+                      ],
+                      "due": [
+                        {
+                          "name": "arrivalDue",
+                          "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
+                          "text": {
+                            "field": "label.label"
+                          }
+                        }
+                      ],
+                      "headway": [
+                        {
+                          "name": "arrivalHeadway",
+                          "invariant": "Unreachable on this screen and declared anyway, because the union carries the arm: `upcoming` yields arrivals and a published frequency is not one. Declared rather than omitted so that a renderer falling through to the dash — losing a real sentence — is a spec failure rather than a silent one. The screen-level equivalent is the facts strip’s `freq` pill.",
+                          "text": {
+                            "field": "label.text"
+                          }
+                        }
+                      ],
+                      "departed": [
+                        {
+                          "name": "arrivalDeparted",
+                          "text": {
+                            "literal": "—",
+                            "why": "The em dash a renderer draws where there is nothing to count down. Also unreachable here — `upcoming` filters departed readings out before they reach a row — and declared for the same reason as `headway`."
+                          }
+                        }
+                      ],
+                      "none": [
+                        {
+                          "name": "arrivalNone",
+                          "text": {
+                            "literal": "—",
+                            "why": "As `departed`: the same dash, and the arm a row reaches by having no reading at all rather than a spent one. A row with no arrivals shows **nothing** on its right, which is a different thing again — see the `noReading` state."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "stopIncomplete",
+                "when": "incomplete",
+                "why": "Nothing refused at this kerb — or the **screen** is already saying it, which is the case when a round answered nothing at all and `liveArrivals` still stands. Absent on every payload the server builds: a route is fetched in one upstream call, so only a **live route watch** (ADR-116) has a per-pole answer to give.",
+                "invariant": "The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of — and never both at once, which is what the kernel’s `refused` set enforces: 42 copies of one sentence down a screen is what `noLiveBoard`’s own invariant forbids. **After the arrivals, not instead of them.** A refused pole keeps its previous readings (`retainFailedPoles`, ADR-073), so a row can honestly carry an ageing time *and* the reason it is not moving; a renderer that showed only the time would hide the outage, and one that showed only the sentence would throw away the rider’s last known bus. Muted, never a warning colour: nothing is wrong with the route.",
+                "text": {
+                  "message": "etasUnavailable"
+                }
+              }
+            ]
+          },
+          {
+            "name": "buses",
+            "invariant": "One per bus the model says is on the rail, in **route order**, and the order is the model’s: `visibleBusMarkers` has already dropped a bus still parked at the origin (ADR-008 — a permanent token at a terminus reads as a bus a rider could catch), and `railBus` has already decided node-or-segment. A renderer that drew a token per *stop with a reading* would draw one for every stop on the route.",
+            "each": "buses",
+            "of": [
+              {
+                "name": "busLabel",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "text": {
+                  "field": "label"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "pathPending": {
+      "must": "The complete schematic, and a map area holding its height with no line and no sentence in it.",
+      "mustNot": "The approximation. A pending answer is not a negative answer, and drawing the fallback while waiting would caption the map of every route that has a perfectly good line coming.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "facts",
+            "each": "facts",
+            "of": [
+              {
+                "name": "factValue",
+                "invariant": "Printed **verbatim**, and the strip is the pills the model hands over — in its order, with nothing added. Which facts exist, the fare’s fallback from a sectional span to the origin’s full fare, and the omission of the whole-route journey time were all inside `RouteMeta.tsx` until WP6-6a (ADR-093 decision 10). A route whose dataset carries no service block gets **no strip at all** rather than four pills reading \"—\".",
+                "text": {
+                  "field": "value"
+                }
+              },
+              {
+                "name": "factNoteSeparator",
+                "when": "note",
+                "why": "There is no qualifier to separate. Upstream publishes a holiday fare only where it differs.",
+                "text": {
+                  "literal": "·",
+                  "why": "The renderer’s glyph between a fare and its holiday qualifier, in its own node — React emits an expression and an adjacent literal as separate text nodes (ADR-092), so this is what the RN strip already produces and what the projection can therefore see. What it pins is the **order**: the fare, then the separator, then the qualifier."
+                }
+              },
+              {
+                "name": "factNote",
+                "when": "note",
+                "why": "Only where upstream published a holiday fare that differs from the ordinary one.",
+                "invariant": "A **note on the fare pill, never a pill of its own** — it qualifies the fare rather than standing beside it as a fifth fact. The qualifier word is the catalogue’s and the `$` is the kernel’s.",
+                "text": {
+                  "field": "note"
+                }
+              }
+            ]
+          },
+          {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "stops",
+            "each": "stops",
+            "of": [
+              {
+                "name": "seq",
+                "invariant": "The stop’s **1-based position on the route**, as the wire numbers it — not the row’s index. They agree today and a payload that skipped a sequence number would make them differ, at which point the node a bus is drawn beside and the number printed in it would disagree.",
+                "text": {
+                  "field": "seq"
+                }
+              },
+              {
+                "name": "stopName",
+                "invariant": "Title-cased with its printed code split off by `displayName`, never by the renderer (ADR-034). This is also the string the tapped-stop sheet is titled with — the screen used to compute that separately as `titleCaseName(splitStopCode(…).label)`, eleven lines away, which is one answer written twice (ADR-093 decision 11).",
+                "text": {
+                  "field": "name.label"
+                }
+              },
+              {
+                "name": "stopCode",
+                "when": "name.code",
+                "why": "A stop whose upstream name carries no parenthetical — common for GMB poles, and for a Citybus stop whose name is a plain place.",
+                "invariant": "What is printed on the physical flag, which is what a rider standing at the kerb is matching against. Latin letters and digits, so it is the same string in every locale — **except** where the parenthetical is a translated place phrase rather than a code, which `splitStopCode` cannot tell apart and does not try to: it understands ASCII parentheses only, so an English `CENTRAL (EXCHANGE SQUARE)` splits and a Chinese `中環（交易廣場）` does not. Pinned in `stop-name.spec.json`, and both renderers must reproduce it identically.",
+                "text": {
+                  "field": "name.code"
+                }
+              },
+              {
+                "name": "stopFare",
+                "when": "fareLabel",
+                "why": "The dataset carries no boarding fare for this stop — usually the last one, where boarding is not possible.",
+                "invariant": "The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.",
+                "text": {
+                  "field": "fareLabel"
+                }
+              },
+              {
+                "name": "stopArrivals",
+                "invariant": "Up to the served `maxArrivals`, soonest first, in the **feed’s** order rather than one we impose: the operators publish soonest-first and `arrivals[0]` is what the bus inference reads, so sorting here would hide a feed that had stopped doing that from the one place a rider would notice.",
+                "each": "arrivals",
+                "of": [
+                  {
+                    "name": "arrival",
+                    "oneOf": "label.kind",
+                    "cases": {
+                      "mins": [
+                        {
+                          "name": "arrivalValue",
+                          "text": {
+                            "field": "label.value"
+                          }
+                        },
+                        {
+                          "name": "arrivalUnit",
+                          "invariant": "The unit rides **every** numeric slot, so the row reads \"12 min  27 min  42 min\" rather than \"12  27  42 min\". It is a separate node because the two are styled differently — the figure is tabular and emphasised on the first slot, the unit is muted — which is also why they are two fields on the model.",
+                          "text": {
+                            "field": "label.unit"
+                          }
+                        }
+                      ],
+                      "due": [
+                        {
+                          "name": "arrivalDue",
+                          "invariant": "Under a minute the app prints a **word**, never a fabricated sub-minute number (ADR-008), and the band is the served `dueUnderSec` rather than a compiled-in 60 — the corpus row `a-served-policy-caps-the-arrivals-and-moves-the-due-band-with-them` exists to catch a port that honours the cap and keeps the band.",
+                          "text": {
+                            "field": "label.label"
+                          }
+                        }
+                      ],
+                      "headway": [
+                        {
+                          "name": "arrivalHeadway",
+                          "invariant": "Unreachable on this screen and declared anyway, because the union carries the arm: `upcoming` yields arrivals and a published frequency is not one. Declared rather than omitted so that a renderer falling through to the dash — losing a real sentence — is a spec failure rather than a silent one. The screen-level equivalent is the facts strip’s `freq` pill.",
+                          "text": {
+                            "field": "label.text"
+                          }
+                        }
+                      ],
+                      "departed": [
+                        {
+                          "name": "arrivalDeparted",
+                          "text": {
+                            "literal": "—",
+                            "why": "The em dash a renderer draws where there is nothing to count down. Also unreachable here — `upcoming` filters departed readings out before they reach a row — and declared for the same reason as `headway`."
+                          }
+                        }
+                      ],
+                      "none": [
+                        {
+                          "name": "arrivalNone",
+                          "text": {
+                            "literal": "—",
+                            "why": "As `departed`: the same dash, and the arm a row reaches by having no reading at all rather than a spent one. A row with no arrivals shows **nothing** on its right, which is a different thing again — see the `noReading` state."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "stopIncomplete",
+                "when": "incomplete",
+                "why": "Nothing refused at this kerb — or the **screen** is already saying it, which is the case when a round answered nothing at all and `liveArrivals` still stands. Absent on every payload the server builds: a route is fetched in one upstream call, so only a **live route watch** (ADR-116) has a per-pole answer to give.",
+                "invariant": "The same sentence the screen-level `noLiveBoard` line uses, on the row it is true of — and never both at once, which is what the kernel’s `refused` set enforces: 42 copies of one sentence down a screen is what `noLiveBoard`’s own invariant forbids. **After the arrivals, not instead of them.** A refused pole keeps its previous readings (`retainFailedPoles`, ADR-073), so a row can honestly carry an ageing time *and* the reason it is not moving; a renderer that showed only the time would hide the outage, and one that showed only the sentence would throw away the rider’s last known bus. Muted, never a warning colour: nothing is wrong with the route.",
+                "text": {
+                  "message": "etasUnavailable"
+                }
+              }
+            ]
+          },
+          {
+            "name": "buses",
+            "invariant": "One per bus the model says is on the rail, in **route order**, and the order is the model’s: `visibleBusMarkers` has already dropped a bus still parked at the origin (ADR-008 — a permanent token at a terminus reads as a bus a rider could catch), and `railBus` has already decided node-or-segment. A renderer that drew a token per *stop with a reading* would draw one for every stop on the route.",
+            "each": "buses",
+            "of": [
+              {
+                "name": "busLabel",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -3341,6 +4551,26 @@
             "invariant": "Once, above the schematic — not per row. A rider cannot act on *which* rows, and 34 copies of one sentence is not more honest than one. Never a warning colour: nothing is wrong with the route, and nothing about it will change if they wait.",
             "text": {
               "message": "etasUnavailable"
+            }
+          },
+          {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
             }
           },
           {
@@ -3541,6 +4771,26 @@
             }
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -3730,6 +4980,26 @@
             ]
           },
           {
+            "name": "routePath",
+            "when": "path",
+            "why": "The geometry request has not answered yet. The strip holds its height and draws no line — see the note above on why “pending” is an absent model rather than a fourth arm.",
+            "invariant": "Said **once, under the map**, in the muted text token — the same shape as the freshness notice and for the same reason (ADR-133): the fact is about the whole line, so a per-segment cue would draw one fact several hundred times. Never a warning colour: an approximated line is a fact about the dataset, not a failure, and it is still the most useful thing we can draw.",
+            "oneOf": "path.kind",
+            "cases": {
+              "surveyed": [],
+              "approximate": [
+                {
+                  "name": "routePathApproximate",
+                  "invariant": "Says what the line **is** — \"Approximate path — stops shown in order\" — rather than what is missing. \"No route data\" would be a fact about us; a rider cannot act on it, and it is not even true, because the stops are real and in the right order. The dashes carry the same meaning to anyone who reads dashes; this is the half that survives a screen reader, and neither is sufficient alone (never colour or texture alone — ADR-008).",
+                  "text": {
+                    "message": "routePathApproximate"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
             "name": "feedNotice",
             "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
             "oneOf": "notice.kind",
@@ -3885,7 +5155,7 @@
             "of": [
               {
                 "name": "busLabel",
-                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030, no polylines upstream), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
+                "invariant": "The token’s **accessible name**, composed by the kernel from injected words — *\"Bus at X\"* for one standing at a stop, *\"Bus approaching X\"* for one on the segment leading into it. Two sentences rather than one with a degree, because a bus at a stop is one a rider standing there can board. Neither says a distance or a fraction of a segment: the token sits at a midpoint because that is the only position the data supports (ADR-030 — and a surveyed route line exists since ADR-151, which does *not* change this: knowing the road is not knowing where on it a bus is), so *\"halfway to X\"* would assert precision the pixel does not have (ADR-008).",
                 "text": {
                   "field": "label"
                 }
@@ -3927,6 +5197,7 @@
     "reducedMotion": "Everything that moves here is decoration over a resting state that is already legible, and each piece honours the setting independently: the bus token’s slide-in from the origin and its tween to a new position become cuts, its idle bob stops, the direction-flip cascade does not stagger, and the auto-scroll to the boarding stop is instant rather than smooth. The **content is identical** without any of it — which is the claim, and it is checkable because the projection never sees a transform."
   },
   "idiom": [
+    "**the map engine, and — for now — whether there is a map at all.** `apps/web` draws the route line with MapLibre GL JS over the Lands Department raster (ADR-049/154); `apps/mobile` draws no map, because the React Native equivalent is a native module and adding it would end that app’s ability to run in Expo Go. So `pathSurveyed`, `pathApproximate`, `pathAbsent` and `pathPending` are declared, measured on the DOM renderer, and **explicitly excused on the native one** — recorded here rather than left in a test file, which is ADR-069’s finding: an asymmetry that lives only in a driver is one nobody sees. What is *not* idiom is any of it: which of the three answers to draw is `route-path#routePathView`, and the caption is `routePathApproximate` in the shared catalogue, so an RN map added later inherits a settled contract rather than re-deciding it",
     "**every curve, duration and physic of the bus token** — the 650 ms tween to a new position, the 550 ms bob, the 2 200 ms rock, the fade-in from the origin. What is *not* idiom is which node it is at, which is why the model says `{kind:\"node\", index}` or `{kind:\"segment\", from, to}` and never a pixel (ADR-093)",
     "**whether the header collapses at all** — `apps/mobile` cross-fades a full journey card into a one-line pill on scroll and therefore needs both composed labels; `apps/web` has one size and puts the resting label in `document.title`",
     "**how the boarding stop is reached** — the RN screen measures each row and scrolls to a computed offset as ADR-043’s deliberate second beat; the DOM screen sets `scroll-margin-top` and lets the browser do it, which also means it honours reduced motion without owning the decision",

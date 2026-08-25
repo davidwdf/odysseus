@@ -12,7 +12,7 @@ import {
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat, Star } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
@@ -21,12 +21,14 @@ import { JourneyLines } from '../components/JourneyLines'
 import { RailBusToken } from '../components/RailBusToken'
 import { RouteChip } from '../components/RouteChip'
 import { RouteFactSheet } from '../components/RouteFactSheet'
+import { RouteMap } from '../components/RouteMap'
 import { RouteStopRow } from '../components/RouteStopRow'
 import { RouteStopSheet } from '../components/RouteStopSheet'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveRoute } from '../hooks/useLiveRoute'
 import { useOnline } from '../hooks/useOnline'
 import { useRailFlip } from '../hooks/useRailFlip'
+import { useRoutePath } from '../hooks/useRoutePath'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
@@ -114,6 +116,20 @@ export function RouteDetail() {
     // flashes the skeleton (ADR-046).
     placeholderData: keepPreviousData,
   })
+
+  // The line, on its own clock — a day-cached body has no business sharing an entry with a
+  // 30-second one, and the stop list is useful long before the geography arrives (ADR-152).
+  const routePath = useRoutePath(id)
+  /**
+   * The stops as plain coordinates, in travel order — the map's framing, and the raw material for
+   * the sketch it falls back to. Taken from the **static** payload rather than the live-merged one:
+   * a stop's position is not a reading, and deriving it from `detail` would recompute the array
+   * every time an arrival ticked.
+   */
+  const stopPoints = useMemo(
+    () => (query.data?.stops ?? []).map((s) => s.stop.location),
+    [query.data?.stops],
+  )
 
   /**
    * The whole screen's content, in one call. Nothing below this line decides anything.
@@ -436,6 +452,18 @@ export function RouteDetail() {
               can be true, and they are two sentences because a rider acts on them differently — one is
               nothing they can do, the other may be their network. ADR-133. */}
           <FeedNotice notice={notice} />
+
+          {/* The route's geography, above the rail rather than instead of it (ADR-154). The rail is a
+              SCHEMATIC — it answers "how many stops until mine, and where is the bus in that sequence"
+              (ADR-093), which a map answers badly because a bus 200 m along a 40 km route is a
+              sub-pixel move. The map answers "where does this go", which the rail cannot. They are two
+              questions, so both are drawn. */}
+          <RouteMap
+            path={routePath.data}
+            pending={routePath.isPending}
+            stops={stopPoints}
+            className="mt-3 px-4"
+          />
 
           {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read
               against — the only thing left on this element now the overlay is gone. */}

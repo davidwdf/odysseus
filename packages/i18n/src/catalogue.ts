@@ -482,17 +482,22 @@ export const CATALOGUE = {
     'zh-Hant': '為何沒有即時巴士地圖？',
     'zh-Hans': '为何没有实时巴士地图？',
   },
-  // The claim is still literally true — HK open data publishes no vehicle positions and no polylines — but
-  // since ADR-093/094 the route schematic draws bus tokens inferred from the per-stop arrival sequence, so
-  // a rider who has just watched one slide down the rail reads this as a refusal the app appears to make a
-  // liar of. The distinction is the honesty point worth making out loud: a stop list is not a map, and an
-  // inference is not a position. Hence one added sentence rather than a softened first half.
+  // **Half of this answer was false and had to be rewritten** (2026-08-26, ADR-151/155). It said HK open data
+  // publishes no "route shapes", which was our own record repeating itself: the Transport Department has
+  // surveyed and published bus-route lines on CSDI since 2021, ~97% of route-directions resolve, and since
+  // M4 we draw them. A rider looking at a route line while being told there is no route line is the worst
+  // kind of dishonesty for an app whose whole pitch is not overclaiming.
+  //
+  // The half that IS still true is the one that matters: there are no live **vehicle positions**. So the
+  // answer now separates the two — the line is surveyed and real, where the bus is on it is inferred from
+  // arrival times and is drawn on the stop list rather than the map. A stop list is not a map, and an
+  // inference is not a position; that distinction is the point of the question.
   faqMapA: {
-    en: "Hong Kong's open data publishes stop-by-stop arrival estimates, not live vehicle positions or route shapes — so we can't honestly show buses moving on a map. What we can do is place a bus on the route's stop list, between the two stops its own arrival times put it between.",
+    en: "The route's own line is real — the Transport Department surveys and publishes it, and that is what you see drawn on the map. What Hong Kong's open data does not publish is live vehicle positions: the feeds give stop-by-stop arrival estimates, so we can't honestly show a bus moving along that line. What we can do is place it on the route's stop list, between the two stops its own arrival times put it between.",
     'zh-Hant':
-      '香港的開放資料只提供逐站到站時間估算，並無即時車輛位置或路線圖形，因此我們無法如實在地圖上顯示巴士位置。我們能做的，是根據各站的到站時間，把巴士標示在路線的車站列表上、它應在的兩站之間。',
+      '路線本身的走線是真實的 — 由運輸署實地測繪並公開發布，地圖上畫的就是它。香港的開放資料沒有提供的，是即時車輛位置：資料只有逐站到站時間估算，因此我們無法如實顯示巴士在走線上移動。我們能做的，是根據各站的到站時間，把巴士標示在路線的車站列表上、它應在的兩站之間。',
     'zh-Hans':
-      '香港的开放数据只提供逐站到站时间估算，并无实时车辆位置或路线图形，因此我们无法如实在地图上显示巴士位置。我们能做的，是根据各站的到站时间，把巴士标示在路线的车站列表上、它应在的两站之间。',
+      '路线本身的走线是真实的 — 由运输署实地测绘并公开发布，地图上画的就是它。香港的开放数据没有提供的，是实时车辆位置：数据只有逐站到站时间估算，因此我们无法如实显示巴士在走线上移动。我们能做的，是根据各站的到站时间，把巴士标示在路线的车站列表上、它应在的两站之间。',
   },
   faqRemarksQ: {
     en: 'What do "Scheduled" and "Last bus" mean?',
@@ -599,6 +604,26 @@ export const CATALOGUE = {
   // The basemap credit (ADR-049). These lived as two ad-hoc `Record<Locale, string>` tables in
   // `apps/mobile/lib/tileSource.ts` — outside this package, so no gate compared them and no
   // translator ever saw them. `localeRecord()` in ./index.ts rebuilds the shape `TileSource` wants.
+  /**
+   * Said once, under the map, when the route has no surveyed line and the drawn line is the stops
+   * joined in order (ADR-152, `docs/proposals/06 §5`). The dashes carry the same meaning visually;
+   * this is the half a rider can read. Deliberately says what it IS rather than what is missing —
+   * "approximate" is a fact about the line, where "no route data" would be a fact about us.
+   */
+  routePathApproximate: {
+    en: 'Approximate path — stops shown in order',
+    'zh-Hant': '約略路線 — 依次顯示各站',
+    'zh-Hans': '约略路线 — 依次显示各站',
+  },
+  /**
+   * The map strip's accessible name on Route detail. A `<figure>` with no name is announced as an
+   * unlabelled group, and its only child is a canvas — so without this the whole map is silent.
+   */
+  routePathLabel: {
+    en: 'Route on a map',
+    'zh-Hant': '路線地圖',
+    'zh-Hans': '路线地图',
+  },
   mapAttribution: {
     en: 'Map from Lands Department',
     'zh-Hant': '地圖由地政總署提供',
@@ -748,7 +773,8 @@ export const CATALOGUE = {
    * walker could not see the tokens, and the honest fix was to give them a name rather than to exempt them.
    *
    * It says *approaching*, not a distance and not a fraction of a segment: the token sits at the midpoint
-   * of a segment because that is the only position the data supports (ADR-030, and no polylines upstream),
+   * of a segment because that is the only position the data supports (ADR-030 — a surveyed line exists
+   * since ADR-151, but knowing the ROAD is not knowing where on it a bus is),
    * so a label claiming "halfway to X" would assert precision the pixel does not have (ADR-008).
    */
   busApproaching: {

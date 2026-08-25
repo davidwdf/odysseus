@@ -3,7 +3,32 @@ import { Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef } from 'react'
 import { mapProvider as defaultProvider, type MapProvider } from '../adapters/mapProvider'
+import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
+
+/**
+ * Dark mode, as raster paint rather than a CSS filter.
+ *
+ * `MiniMap` inverts with `.map-tiles-invert` — `invert(1) hue-rotate(180deg) brightness(1.2)` — and
+ * can, because its tiles are `<img>` elements with the overlay in separate DOM. Here the basemap and
+ * everything drawn over it share **one canvas**, so the same filter would invert the route line with
+ * the map and hand back exactly the colour the light theme already rejected. The style spec can
+ * express it per source instead: `brightness-min: 1, brightness-max: 0` is the inversion, the hue
+ * rotation is its own property, and `contrast` stands in for the brightness lift — which the CSS
+ * recipe needs because inverting a cartography drawn for white paper flattens it (`index.css`).
+ */
+const DARK_RASTER = {
+  'raster-brightness-min': 1,
+  'raster-brightness-max': 0,
+  'raster-hue-rotate': 180,
+  'raster-contrast': 0.12,
+} as const
+const LIGHT_RASTER = {
+  'raster-brightness-min': 0,
+  'raster-brightness-max': 1,
+  'raster-hue-rotate': 0,
+  'raster-contrast': 0,
+} as const
 
 /**
  * An **interactive** basemap — drag, zoom, and a camera something else can drive (ADR-154).
@@ -56,6 +81,7 @@ export function MapView({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const locale = useLocale()
+  const mode = useAppearance()
 
   // The map is created ONCE. `centre`, `zoom` and `onReady` are read here as INITIAL values only;
   // everything that changes afterwards is applied to the live instance by the effect below. Listing
@@ -105,8 +131,17 @@ export function MapView({
             : {}),
         },
         layers: [
-          { id: 'base', type: 'raster', source: 'base' },
-          ...(provider.label ? [{ id: 'labels', type: 'raster' as const, source: 'labels' }] : []),
+          { id: 'base', type: 'raster', source: 'base', paint: { ...LIGHT_RASTER } },
+          ...(provider.label
+            ? [
+                {
+                  id: 'labels',
+                  type: 'raster' as const,
+                  source: 'labels',
+                  paint: { ...LIGHT_RASTER },
+                },
+              ]
+            : []),
         ],
       },
     })
@@ -125,6 +160,25 @@ export function MapView({
       mapRef.current = null
     }
   }, [provider, interactive, locale])
+
+  // Appearance goes to the live map's raster layers, not to the canvas — see `DARK_RASTER`. Guarded
+  // on the source's own `invertForDark`, because a vector basemap with a real dark style would want
+  // this off entirely (ADR-041).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !provider.invertForDark) return
+    const paint = mode === 'dark' ? DARK_RASTER : LIGHT_RASTER
+    const apply = () => {
+      for (const id of ['base', 'labels']) {
+        if (!map.getLayer(id)) continue
+        for (const [key, value] of Object.entries(paint)) {
+          map.setPaintProperty(id, key as 'raster-hue-rotate', value)
+        }
+      }
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('load', apply)
+  }, [mode, provider.invertForDark])
 
   // Camera changes go to the live map.
   useEffect(() => {

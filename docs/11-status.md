@@ -1446,7 +1446,10 @@ than any in its own row.
   (route 1 → fare $6.7, ~45 min, every 10–30 min, 05:35–23:40; Nearby/Stop boarding fares); typecheck 7/7, Biome clean.
 - **Research + proposals docs** (2026-06-10): a deep dive into all HK bus open data, our feature inventory/gaps,
   competitive analysis, and data-display ideas in [`docs/research`](./research/README.md); fast-win + bigger-bet
-  proposals in [`docs/proposals`](./proposals/README.md). Key facts: no live GPS / no GTFS-RT / no route polylines in HK open data.
+  proposals in [`docs/proposals`](./proposals/README.md). Key facts: no live GPS / no GTFS-RT. *(The third
+  claim in that list — "no route polylines" — was **false**, and was corrected on 2026-08-24: the Transport
+  Department has published surveyed bus-route lines on CSDI since 2021, ~97% of route-directions resolve, and
+  they now ship. See [ADR-151](./08-decision-log.md#adr-151--hong-kong-does-publish-bus-route-lines-and-has-since-2021).)*
 - **Search — its own page** ([ADR-037](./08-decision-log.md#adr-037--search-on-device-index-a-smart-route-keypad-and-extensible-filter-chips)):
   edge **`/v1/index`** (`apps/edge/src/search-index.ts`) ships a compact `SearchIndex` (2002 routes collapsed to
   one per operator+number+direction, 8126 stops with 1179 same-kerb places pre-merged, ~2 MB) off the shared
@@ -1468,7 +1471,8 @@ than any in its own row.
   external-link icon, a **Licence** link row to the locale-aware **data.gov.hk terms**, and the app **version**
   (`expo-constants`) — satisfying the launch-blocking attribution requirement. **`app/faq.tsx`** — an
   **accordion** (collapsed by default, no dividers; tap to expand) owning the **freshness/honesty notes** plus a
-  broader rider set: operator coverage, same-kerb merges, offline, no-live-map (no HK GPS/polylines), and what
+  broader rider set: operator coverage, same-kerb merges, offline, no-live-map (no HK GPS — the *polyline* half of
+  that answer is now wrong and the FAQ string needs the same correction as the note above, ADR-151), and what
   "Scheduled"/"Last bus" remarks mean. Trilingual strings in `@nextbus/i18n`. typecheck 7/7, Biome clean.
   *(The **offline** answer — `faqOfflineA` — predates ADR-058 and now **understates** what the app does: the
   shell opens offline and the last-seen arrivals replay, labelled stale. Refresh the three locale strings.)*

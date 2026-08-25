@@ -48,6 +48,58 @@ export interface TileZoomPlan {
   scale: number
 }
 
+/** The smallest lat/lng box containing a set of points. Named by compass edge rather than
+ *  min/max because every mapping engine's `fitBounds` is, and a south/north mix-up is silent. */
+export interface LatLngBounds {
+  south: number
+  west: number
+  north: number
+  east: number
+}
+
+/**
+ * The box a set of points fits in — the framing a route line asks its map for.
+ *
+ * Lives here rather than in the renderer that wanted it because a bounding box is a *number the
+ * renderer would otherwise compute*, and two renderers computing it separately is how they drift
+ * (ADR-068). It is also not as obvious as it looks: it is deliberately **not** antimeridian-aware.
+ * The honest span of a set of points crossing 180° is the short way round, and this returns the long
+ * way; Hong Kong is at 114° E and no bus route we serve comes within 60° of the seam, so the
+ * correct-here answer is the simple one, stated rather than assumed.
+ *
+ * `undefined` for no points: an empty set has no box, and returning a degenerate one at 0,0 would
+ * frame a map on the Gulf of Guinea.
+ *
+ * @spec mercator#boundsOf
+ */
+export function boundsOf(points: readonly LatLng[]): LatLngBounds | undefined {
+  const first = points[0]
+  if (!first) return undefined
+  let { lat: south, lng: west } = first
+  let north = south
+  let east = west
+  for (const p of points) {
+    if (p.lat < south) south = p.lat
+    if (p.lat > north) north = p.lat
+    if (p.lng < west) west = p.lng
+    if (p.lng > east) east = p.lng
+  }
+  return { south, west, north, east }
+}
+
+/**
+ * The middle of a box, as a point — the camera an engine opens on before it is told to fit.
+ *
+ * The midpoint in **degrees**, not the Mercator midpoint: an engine's `center` is a lat/lng, and at
+ * Hong Kong's latitude over a route's span the two differ by metres. The distinction matters enough
+ * to name because {@link latToWorldY} exists two functions away and using it here would be wrong.
+ *
+ * @spec mercator#centreOf
+ */
+export function centreOf(bounds: LatLngBounds): LatLng {
+  return { lat: (bounds.south + bounds.north) / 2, lng: (bounds.west + bounds.east) / 2 }
+}
+
 /** Width of the whole world in pixels at `zoom` — the `scale` every projection below multiplies by.
  *
  * @spec mercator#worldScale

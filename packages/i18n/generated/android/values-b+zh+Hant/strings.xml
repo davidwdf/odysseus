@@ -80,7 +80,7 @@
 	<string name="faqOfflineQ">App 可以離線使用嗎？</string>
 	<string name="faqOfflineA">部分可以。App 可離線開啟，路線及車站搜尋亦可繼續使用（索引在首次使用時已下載至裝置）。之前看過的到站時間會從快取重現，並以淡色顯示，不會當作最新資料 — 要取得新的讀數則必須連接網絡。</string>
 	<string name="faqMapQ">為何沒有即時巴士地圖？</string>
-	<string name="faqMapA">香港的開放資料只提供逐站到站時間估算，並無即時車輛位置或路線圖形，因此我們無法如實在地圖上顯示巴士位置。我們能做的，是根據各站的到站時間，把巴士標示在路線的車站列表上、它應在的兩站之間。</string>
+	<string name="faqMapA">路線本身的走線是真實的 — 由運輸署實地測繪並公開發布，地圖上畫的就是它。香港的開放資料沒有提供的，是即時車輛位置：資料只有逐站到站時間估算，因此我們無法如實顯示巴士在走線上移動。我們能做的，是根據各站的到站時間，把巴士標示在路線的車站列表上、它應在的兩站之間。</string>
 	<string name="faqRemarksQ">「預定班次」和「尾班車」是什麼意思？</string>
 	<string name="faqRemarksA">這些是巴士公司的提示，按對方原文顯示，因此措辭並不固定。凡提到「原定」「預定」或「未開出」，即表示該時間根據時間表（準確度低於即時估算）；「尾班車」則標示當天最後一班車。其他提示會照原文顯示。</string>
 	<string name="routesAtStop">路線</string>
@@ -98,6 +98,8 @@
 		<item quantity="other">另外 %1$d 條路線</item>
 	</plurals>
 	<string name="etasUnavailable">無法取得即時班次</string>
+	<string name="routePathApproximate">約略路線 — 依次顯示各站</string>
+	<string name="routePathLabel">路線地圖</string>
 	<string name="mapAttribution">地圖由地政總署提供</string>
 	<string name="mapAttributionAction">地圖由地政總署提供 — 開啟版權公告及免責聲明</string>
 	<string name="keypadBackspace">退格</string>

@@ -436,6 +436,23 @@ beforeEach(() => {
   root = null
 })
 
+/**
+ * **The four map states this renderer has no map for** (ADR-154) — named here rather than filtered
+ * silently, because ADR-069's whole finding was that an asymmetry living only in a driver is an
+ * asymmetry nobody sees. The published spec carries the same statement in its `idiom` list, so the
+ * gap is legible to a reader who never opens this file.
+ *
+ * The map is MapLibre GL JS, which is WebGL and web-only. The React Native equivalent is a **native
+ * module** (`@maplibre/maplibre-react-native`), so adding it would end this app's ability to run in
+ * Expo Go — which is how it is developed. That is a real cost against a renderer ADR-075 is in the
+ * process of retiring, so the map ships on `apps/web` and this list is the receipt.
+ *
+ * If `apps/mobile` outlives that plan, these four are the row to close, and closing it is a fixture
+ * table and a component rather than a spec change: the states are already declared and already
+ * measured on the other side.
+ */
+const NO_MAP_ON_NATIVE = new Set(['pathSurveyed', 'pathApproximate', 'pathAbsent', 'pathPending'])
+
 describe('apps/mobile conforms to Route detail’s published spec, state by state', () => {
   it('has the states the spec declares, and a corpus case for each projected one', () => {
     expect(routeDetailSpec.component).toBe('RouteDetail')
@@ -445,10 +462,17 @@ describe('apps/mobile conforms to Route detail’s published spec, state by stat
       .map(([state]) => state)
     expect(projected.length).toBeGreaterThanOrEqual(21)
     for (const state of projected) {
+      // `NO_MAP_ON_NATIVE` is the declared, documented exception — and it is checked rather than
+      // trusted: a state named there that the spec has dropped would sit in this set for ever,
+      // quietly excusing nothing.
+      if (NO_MAP_ON_NATIVE.has(state)) continue
       expect(
         FIXTURE[state] !== undefined || state === 'loading' || state === 'failed',
         `${state} is projected and this driver cannot reach it`,
       ).toBe(true)
+    }
+    for (const state of NO_MAP_ON_NATIVE) {
+      expect(state in routeDetailSpec.states, `${state} is excused and no longer exists`).toBe(true)
     }
   })
 
@@ -537,6 +561,10 @@ describe('apps/mobile conforms to Route detail’s published spec, state by stat
   })
 
   for (const state of Object.keys(routeDetailSpec.states)) {
+    if (NO_MAP_ON_NATIVE.has(state)) {
+      it.skip(`in ${state} — no map on this renderer, see NO_MAP_ON_NATIVE`, () => {})
+      continue
+    }
     it(`in ${state}`, async () => {
       const rendered = await fixture(state)
       const harness: StatefulHarness = {
