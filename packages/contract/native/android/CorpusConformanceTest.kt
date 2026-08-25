@@ -109,6 +109,7 @@ object Corpus {
         "mercator",
         "policy",
         "route-detail",
+        "route-path",
         "route-position",
         "search",
         "settings",

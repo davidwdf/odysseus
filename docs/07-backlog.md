@@ -334,6 +334,15 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       data question before it is a rendering one** (`docs/research/01`: HK publishes no polylines). Against
       all of it: §4 valued LandsD's survey detail — footbridges, subways, landmark buildings — as *the*
       feature, and OSM does not carry it. Prettier and less useful is a real possibility, not a rhetorical one.
+      > **Correction, 2026-08-22 — the caution about their route geometry was wrong, and so was the doc it
+      > cited.** hkbus's waypoints repo is not a community survey; it is a **daily mirror of two Transport
+      > Department datasets on the CSDI portal**, and their `waypoints.py` says so in its first ten lines.
+      > Route lines have been open data since **Dec 2021** (buses) and **Oct 2023** (green minibuses), cover
+      > **93%** of our route-directions, and join on a key we already carry. A real route line is therefore
+      > **not** a data question — it is exactly the rendering question this item was weighing all along.
+      > See [`research/07`](./research/07-route-geometry-and-maps.md) and
+      > [ADR-151](./08-decision-log.md#adr-151--the-route-line-geometry-we-said-hong-kong-did-not-publish-has-existed-since-2021);
+      > the plan that acts on it is [`proposals/06`](./proposals/06-maps-and-route-geometry.md).
 
 ### Smart timing (utility that feels magic)
 - [ ] **"Leave now" alerts** — combine walking time to the stop with the ETA: "leave in 3 min to

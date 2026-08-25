@@ -90,6 +90,18 @@ export interface IndexRouteMeta extends IndexRouteRef {
   faresHoliday?: Array<string | null>
   /** Computed static service facts (fare/journey-time/frequency/hours) — ADR-036. */
   service?: RouteServiceInfo
+  /**
+   * The Transport Department's numeric route id, as a string — `ROUTE_ID` in the CSDI spatial
+   * datasets and `gtfsId` in the consolidated set. **The join key for route geometry** (ADR-152):
+   * CSDI publishes road-following route lines keyed on exactly this.
+   *
+   * Retained for **every** operator. It used to be kept for GMB alone, where ADR-047 needs it to
+   * disambiguate a canonical id, and dropped elsewhere — which is why `docs/research/02 §4` could
+   * conclude route lines were underivable. ~91% of KMB, 86% of CTB and 83% of NLB route-directions
+   * carry one; the rest are racecourse/school/peak-hour variants the TD does not separately
+   * register, so **absence is normal and is not an error**.
+   */
+  gtfsId?: string
 }
 
 export interface IndexRouteStop {
@@ -878,6 +890,9 @@ export async function fetchConsolidatedIndex(
         fares: operator === 'GMB' ? undefined : (entry.fares ?? undefined),
         faresHoliday: operator === 'GMB' ? undefined : (entry.faresHoliday ?? undefined),
         service: buildService(entry, data.serviceDayMap),
+        // Kept for every operator, not just GMB — it is the CSDI route-geometry join key
+        // (ADR-152). `gmbId` above still folds it into the canonical id for GMB only.
+        gtfsId: entry.gtfsId ?? undefined,
       })
 
       const ref: IndexRouteRef = { operator, route: entry.route, bound, serviceType }

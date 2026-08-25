@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route detail — round 3: collapsing header over a map shell</title>
+<!-- PROTOTYPE ONLY. Tiles direct from LandsD (the app goes through our Worker, ADR-049);
+     raw hex not tokens; hand-rolled slippy map. See ./README.md -->
+<style>
+ :root{--bg:#fbfbfa;--surface:#fff;--text:#1a1a19;--muted:#7a7975;--line:#e6e5e1;--accent:#c8102e;
+       --positive:#0a7d4a;--warn:#a8620a;--shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.08)}
+ *{box-sizing:border-box}
+ body{margin:0;background:#f0efec;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--text)}
+ header.page{max-width:1240px;margin:0 auto;padding:26px 20px 6px}
+ header.page h1{font-size:20px;margin:0 0 6px}
+ header.page p{margin:0 0 14px;color:var(--muted);max-width:80ch}
+ .wrap{max-width:1240px;margin:0 auto;padding:0 20px 60px;display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:start}
+ @media(max-width:920px){.wrap{grid-template-columns:1fr}}
+ .phone{width:390px;height:800px;background:#dfe3e0;border-radius:38px;box-shadow:var(--shadow);
+        overflow:hidden;position:relative;border:1px solid var(--line)}
+
+ /* map is FULL BLEED — the chrome floats over it */
+ .map{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
+ .map.dragging{cursor:grabbing}
+ .layer{position:absolute;inset:0;transform-origin:0 0}
+ img.tile{position:absolute;user-select:none;-webkit-user-drag:none}
+ svg.ov{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+
+ /* ---- glass ---- */
+ .glass{background:rgba(255,255,255,.62);-webkit-backdrop-filter:blur(13px) saturate(1.8);
+        backdrop-filter:blur(13px) saturate(1.8);
+        box-shadow:inset 0 0 0 .5px rgba(255,255,255,.55),0 2px 10px rgba(0,0,0,.13)}
+
+ /* ---- floating chrome ---- */
+ .back{position:absolute;left:16px;top:16px;width:44px;height:44px;border-radius:50%;z-index:40;
+       display:grid;place-items:center;border:0;cursor:pointer;padding:0}
+ .back svg{width:20px;height:20px}
+ .pill{position:absolute;left:70px;top:16px;height:44px;border-radius:22px;z-index:39;
+       display:flex;align-items:center;gap:8px;padding:0 14px 0 10px;pointer-events:none}
+ .pillLabel{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
+ .badge{position:absolute;z-index:41;background:var(--accent);color:#fff;font-weight:700;
+        border-radius:9px;display:grid;place-items:center;pointer-events:none;font-size:16px;
+        width:38px;height:27px;line-height:1;box-shadow:0 2px 8px rgba(200,16,46,.35);transform-origin:center}
+ .bigLabel{position:absolute;left:0;right:0;z-index:38;text-align:center;pointer-events:none;padding:0 20px}
+ .bigLabel b{display:block;font-size:15px;line-height:1.25;text-shadow:0 1px 4px rgba(255,255,255,.95),0 0 10px rgba(255,255,255,.8)}
+ .bigLabel span{display:block;font-size:12px;color:#4a4a47;margin-top:1px;text-shadow:0 1px 4px rgba(255,255,255,.95),0 0 10px rgba(255,255,255,.8)}
+
+ /* ---- sheet ---- */
+ .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--bg);border-radius:20px 20px 0 0;
+        box-shadow:0 -4px 26px rgba(0,0,0,.16);display:flex;flex-direction:column;z-index:30}
+ .grab{padding:8px 0 6px;flex:none;cursor:grab;display:grid;place-items:center;touch-action:none}
+ .grab i{display:block;width:38px;height:4px;border-radius:2px;background:#dedcd7}
+ .list{flex:1;overflow-y:auto;overscroll-behavior:contain}
+
+ .meta{display:flex;gap:7px;padding:2px 14px 12px;flex-wrap:wrap}
+ .fact{display:flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--line);
+       border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer}
+ .fact b{font-weight:650}
+ .fact svg{width:13px;height:13px;color:var(--muted)}
+
+ .row{position:relative;border-bottom:1px solid var(--line)}
+ .row:last-child{border-bottom:0}
+ .rowhit{display:flex;align-items:center;width:100%;background:transparent;border:0;padding:0 12px 0 0;
+         font:inherit;color:inherit;text-align:left;cursor:pointer}
+ .rail{width:40px;flex:none;align-self:stretch;position:relative}
+ .rail::before{content:"";position:absolute;left:19px;top:0;bottom:0;width:2px;background:var(--line)}
+ .row:first-of-type .rail::before{top:50%} .row:last-child .rail::before{bottom:50%}
+ .dot{position:absolute;left:13px;top:50%;width:13px;height:13px;margin-top:-6.5px;border-radius:50%;
+      background:var(--surface);border:2.5px solid #bdbcb7;transition:all .18s}
+ .row.active .dot{border-color:var(--accent);background:var(--accent);transform:scale(1.25)}
+ .row.active{background:var(--surface)}
+ .rowbody{flex:1;min-width:0;padding:12px 8px 12px 0}
+ .nm{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+ .zh{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+ .row.active .nm{font-weight:650}
+ .eta{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;color:var(--positive);flex:none;width:52px;text-align:right}
+ .eta.due{color:var(--accent)} .eta.none{color:var(--muted);font-weight:400}
+ .selbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:0;transition:opacity .18s}
+ .row.active .selbar{opacity:1}
+ .savedot{position:absolute;left:24px;top:50%;margin-top:-3px;width:6px;height:6px;border-radius:50%;background:#f5a623}
+
+ /* H' card */
+ .card{position:absolute;left:10px;right:10px;z-index:35;background:var(--surface);border:1px solid var(--line);
+       border-radius:15px;box-shadow:var(--shadow);padding:11px 12px 10px;opacity:0;
+       transform:translateY(10px);pointer-events:none;transition:opacity .2s,transform .24s}
+ .card.on{opacity:1;transform:none;pointer-events:auto}
+ .card .top{display:flex;align-items:flex-start;gap:8px;margin-bottom:9px}
+ .card .top div{flex:1;min-width:0}
+ .cn{font-size:13.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .cz{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .ce{font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--positive);flex:none}
+ .acts{display:flex;gap:7px}
+ .act{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);
+      border-radius:999px;padding:7px 12px;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap}
+ .act.on{background:#fff6e6;border-color:#f0d3a8;color:#7a4d06;font-weight:600}
+ .act svg{width:15px;height:15px}
+ .close{width:24px;height:24px;border-radius:7px;border:0;background:#f2f1ed;cursor:pointer;flex:none;
+        display:grid;place-items:center;font-size:14px;color:var(--muted);padding:0}
+
+ .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow)}
+ .panel h2{font-size:15px;margin:0 0 3px} .panel .lede{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+ .desc{background:#f7f6f3;border-radius:11px;padding:13px 15px;font-size:13px;margin-bottom:14px;border:1px solid var(--line)}
+ .desc b.h{display:block;margin-bottom:5px}
+ .desc ul{margin:7px 0 0;padding-left:17px} .desc li{margin:3px 0}
+ fieldset{border:1px solid var(--line);border-radius:11px;padding:10px 14px 12px;margin:0 0 12px}
+ legend{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.55px;padding:0 5px}
+ label.opt{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:13px;cursor:pointer}
+ label.opt input{margin-top:2px;flex:none}
+ label.opt span small{display:block;color:var(--muted);font-size:11.5px}
+ .meter{height:6px;background:#eceae5;border-radius:3px;overflow:hidden;margin:4px 0 10px}
+ .meter i{display:block;height:100%;background:var(--accent);width:0}
+ .log{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:#1a1a19;color:#d6d5d0;
+      border-radius:11px;padding:11px 13px;height:110px;overflow:auto;white-space:pre-wrap}
+ .log .t{color:#7a7975} .log .hi{color:#7fd1a3}
+</style></head>
+<body>
+<header class="page">
+  <h1>Round 3 — the collapsing header, over a map shell</h1>
+  <p>
+    The map is <b>full bleed</b>; the header floats over it with no bar background, exactly as
+    <code>apps/mobile/components/CollapsingHeader.tsx</code> intends. The badge morphs into a glass pill
+    beside the floating back lens — but here it is driven <b>continuously</b> by sheet travel, then by list
+    scroll, so one upward drag collapses the header and scrolls the list as a single motion.
+    <b>Scroll with the wheel over the list</b> to feel the chain.
+  </p>
+</header>
+
+<div class="wrap">
+  <div class="phone" id="phone">
+    <div class="map" id="map">
+      <div class="layer" id="tiles"></div><div class="layer" id="labels"></div>
+      <svg class="ov" id="ov"></svg>
+    </div>
+
+    <div class="bigLabel" id="bigLabel"><b id="blT">—</b><span id="blS">—</span></div>
+    <div class="pill glass" id="pill"><span class="pillLabel" id="pillLabel">—</span></div>
+    <div class="badge" id="badge">1</div>
+    <button class="back glass" id="back" title="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+
+    <div class="card" id="card">
+      <div class="top"><div><div class="cn" id="cardN">—</div><div class="cz" id="cardZ">—</div></div>
+        <span class="ce" id="cardE">—</span><button class="close" id="cardX">×</button></div>
+      <div class="acts" id="cardActs"></div>
+    </div>
+
+    <div class="sheet" id="sheet">
+      <div class="grab" id="grab"><i></i></div>
+      <div class="list" id="list"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>How it fits together</h2>
+    <p class="lede">Collapse progress <code>t</code> — driven by sheet travel, then list scroll.</p>
+    <div class="meter"><i id="meter"></i></div>
+    <div class="desc">
+      <b class="h">One gesture, three consumers</b>
+      An upward drag raises the <b>sheet</b> until it reaches the top detent, and only then does the
+      <b>list</b> scroll — standard bottom-sheet chaining. The header collapses across the first part of
+      that travel, so to a rider it still reads as "collapse on scroll", which is the behaviour you liked.
+      <ul>
+        <li><b>Sheet position</b> → how much map is showing, and <code>t</code></li>
+        <li><b>List scroll</b> → which stop is selected (the camera follows)</li>
+        <li><b>Map pan</b> → suspends following until you recentre</li>
+      </ul>
+    </div>
+    <fieldset><legend>Try</legend>
+      <label class="opt"><input type="checkbox" id="optChain" checked>
+        <span>Chain list scroll → sheet <small>Off = the sheet only moves by its grab handle, and the header collapse decouples from scrolling. Turn it off to feel why chaining matters.</small></span></label>
+      <label class="opt"><input type="checkbox" id="optContinuous" checked>
+        <span>Continuous morph <small>Off = a boolean threshold with a 200 ms cross-fade — what <code>apps/web</code> does today, and what reads as "not quite right".</small></span></label>
+      <label class="opt"><input type="checkbox" id="optFollow" checked>
+        <span>Camera follows the list</span></label>
+    </fieldset>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+<script>
+const TILE='https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png';
+const LABEL='https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png';
+const TS=256;
+const I={star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+ starF:'<svg viewBox="0 0 24 24" fill="#f5a623" stroke="#d68910" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+ bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 8a6 6 0 10-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 003 0"/></svg>',
+ pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1116 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+ info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>'};
+
+const phone=document.getElementById('phone'),mapEl=document.getElementById('map'),tilesEl=document.getElementById('tiles'),
+ labelsEl=document.getElementById('labels'),ov=document.getElementById('ov'),listEl=document.getElementById('list'),
+ sheet=document.getElementById('sheet'),card=document.getElementById('card'),badge=document.getElementById('badge'),
+ pill=document.getElementById('pill'),bigLabel=document.getElementById('bigLabel'),logEl=document.getElementById('log');
+
+// sheet top as a fraction of phone height. SMALLER top = sheet higher = more list.
+const DET={full:.045,rest:.42,map:.74};
+let DATA=null,active=0,saved=new Set([0]),cam={lat:22.3,lng:114.17,zoom:12.5},anim=null,
+    sheetTop=0,userPanned=false,spyT=null,suppressSpy=false;
+
+function log(m,hi){const t=new Date().toLocaleTimeString('en-GB',{hour12:false});
+ logEl.insertAdjacentHTML('afterbegin',`<div><span class="t">${t}</span> ${hi?`<span class="hi">${m}</span>`:m}</div>`);
+ while(logEl.children.length>40)logEl.lastChild.remove();}
+
+const wx=(lng,z)=>(lng+180)/360*TS*2**z;
+const wy=(lat,z)=>{const s=Math.sin(lat*Math.PI/180);return(0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*TS*2**z};
+const lngAt=(x,z)=>x/(TS*2**z)*360-180;
+const latAt=(y,z)=>{const n=Math.PI-2*Math.PI*y/(TS*2**z);return 180/Math.PI*Math.atan(.5*(Math.exp(n)-Math.exp(-n)))};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ---------------- map ---------------- */
+function grid(el,zz,tpl,W,H){
+  const sc=2**(cam.zoom-zz),px=TS*sc,n=2**zz;
+  const oX=wx(cam.lng,zz)-W/(2*sc),oY=wy(cam.lat,zz)-H/(2*sc);
+  const x0=Math.floor(oX/TS),x1=Math.floor((oX+W/sc)/TS),y0=Math.floor(oY/TS),y1=Math.floor((oY+H/sc)/TS);
+  el.style.transform=`translate(${((x0*TS-oX)*sc).toFixed(2)}px,${((y0*TS-oY)*sc).toFixed(2)}px)`;
+  const keys=[];let h='';
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
+    if(y<0||y>=n)continue;const xx=((x%n)+n)%n;keys.push(`${zz}/${xx}/${y}`);
+    const st=`left:${((x-x0)*px).toFixed(2)}px;top:${((y-y0)*px).toFixed(2)}px;width:${px.toFixed(2)}px;height:${px.toFixed(2)}px`;
+    h+=`<img class="tile" src="${tpl.replace('{z}',zz).replace('{x}',xx).replace('{y}',y)}" style="${st}" alt="">`;}
+  const k=keys.join();if(el.dataset.k!==k){el.innerHTML=h;el.dataset.k=k;}
+}
+function render(){
+  if(!DATA)return;const W=mapEl.clientWidth,H=mapEl.clientHeight;if(!W||!H)return;
+  const dpr=Math.round(Math.log2(Math.min(2,devicePixelRatio||1)));
+  const zB=clamp(Math.round(cam.zoom)+dpr,10,20), zL=clamp(Math.round(cam.zoom),10,20);
+  grid(tilesEl,zB,TILE,W,H); grid(labelsEl,zL,LABEL,W,H);
+  const z=zB,scale=2**(cam.zoom-z),ox=wx(cam.lng,z)-W/(2*scale),oy=wy(cam.lat,z)-H/(2*scale);
+  const p=(la,lo)=>[(wx(lo,z)-ox)*scale,(wy(la,z)-oy)*scale];
+  const pts=DATA.lines['1'].map(c=>p(c[1],c[0]));
+  const d='M'+pts.map(q=>`${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L');
+  let s=`<path d="${d}" fill="none" stroke="#fff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+         <path d="${d}" fill="none" stroke="#c8102e" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  let acc=0;
+  for(let i=1;i<pts.length;i++){const dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1],L=Math.hypot(dx,dy);acc+=L;
+    if(acc>76&&L>.5){acc=0;s+=`<path d="M-4 -3.4L4 0L-4 3.4Z" fill="#fff" opacity=".95" transform="translate(${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)}) rotate(${(Math.atan2(dy,dx)*180/Math.PI).toFixed(0)})"/>`;}}
+  DATA.stops.O.forEach((st,i)=>{const q=p(st.lat,st.lng),on=i===active;
+    s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${on?7.5:4}" fill="${on?'#c8102e':'#fff'}" stroke="${on?'#fff':'#8a8985'}" stroke-width="${on?3:1.8}"/>`;
+    if(saved.has(i))s+=`<circle cx="${q[0].toFixed(1)}" cy="${(q[1]-11).toFixed(1)}" r="3.4" fill="#f5a623" stroke="#fff" stroke-width="1.2"/>`;});
+  const me=DATA.stops.O[6],q=p(me.lat+.0016,me.lng-.0021);
+  const rp=45/(156543.03392*Math.cos(cam.lat*Math.PI/180)/2**cam.zoom);
+  s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${rp.toFixed(1)}" fill="#2f6fed" opacity=".13"/>
+      <circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="6" fill="#2f6fed" stroke="#fff" stroke-width="2.5"/>`;
+  ov.innerHTML=s;
+}
+function flyTo(la,lo,zm,ms=560){
+  if(anim)cancelAnimationFrame(anim);
+  const a={...cam},b={lat:la,lng:lo,zoom:zm??cam.zoom},t0=performance.now();
+  const dip=Math.min(.85,Math.hypot(b.lat-a.lat,b.lng-a.lng)*38);
+  (function step(t){const k=Math.min(1,(t-t0)/ms),e=k<.5?4*k*k*k:1-((-2*k+2)**3)/2;
+   cam.lat=a.lat+(b.lat-a.lat)*e;cam.lng=a.lng+(b.lng-a.lng)*e;
+   cam.zoom=a.zoom+(b.zoom-a.zoom)*e-Math.sin(e*Math.PI)*dip;render();
+   anim=k<1?requestAnimationFrame(step):null;})(t0);
+}
+
+/* ---------------- the header morph ---------------- */
+const BADGE={x0:0,y0:86,s0:1.5, x1:0,y1:24,s1:.72};
+function applyHeader(){
+  const H=phone.clientHeight, restTop=H*DET.rest, fullTop=H*DET.full;
+  // t: 0 at the rest detent (and below), 1 once the sheet has travelled to the full detent
+  let t=clamp((restTop-sheetTop)/(restTop-fullTop),0,1);
+  if(!document.getElementById('optContinuous').checked) t = t>.4?1:0;   // the apps/web behaviour
+  document.getElementById('meter').style.width=(t*100).toFixed(0)+'%';
+
+  const W=phone.clientWidth;
+  const bw=badge.offsetWidth||34;
+  const cx0=W/2, cx1=70+12+bw*BADGE.s1/2;             // centred → inside the pill
+  const x=cx0+(cx1-cx0)*t, y=BADGE.y0+(BADGE.y1-BADGE.y0)*t, sc=BADGE.s0+(BADGE.s1-BADGE.s0)*t;
+  badge.style.transform=`translate(${(x-bw/2).toFixed(1)}px,${y.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+  bigLabel.style.top=(y+27*BADGE.s0+10).toFixed(1)+'px';
+  bigLabel.style.opacity=(1-clamp(t*1.9,0,1)).toFixed(3);
+  pill.style.opacity=clamp((t-.35)/.5,0,1).toFixed(3);
+  pill.style.paddingLeft=(10+bw*BADGE.s1+8).toFixed(0)+'px';
+}
+function setSheetTop(px,quiet){
+  const H=phone.clientHeight;
+  sheetTop=clamp(px,H*DET.full,H*DET.map);
+  sheet.style.top=sheetTop+'px';
+  card.style.bottom=(H-sheetTop+10)+'px';
+  applyHeader();
+  if(!quiet)clearTimeout(window._rt),window._rt=setTimeout(render,80);
+}
+function snap(){
+  const H=phone.clientHeight;let best='rest',bd=1e9;
+  for(const k in DET){const d=Math.abs(H*DET[k]-sheetTop);if(d<bd){bd=d;best=k;}}
+  const target=H*DET[best],from=sheetTop,t0=performance.now();
+  (function step(t){const k=Math.min(1,(t-t0)/260),e=1-(1-k)**3;
+   setSheetTop(from+(target-from)*e,k<1);if(k<1)requestAnimationFrame(step);else{render();log('sheet → '+best,true);} })(t0);
+}
+
+/* ---------------- list ---------------- */
+function actionsHTML(i){const sv=saved.has(i);
+ return `<button class="act${sv?' on':''}" data-do="star" data-i="${i}">${sv?I.starF:I.star}<span>${sv?'Saved':'Save'}</span></button>
+         <button class="act" data-do="notify" data-i="${i}">${I.bell}<span>Notify me</span></button>
+         <button class="act" data-do="view" data-i="${i}">${I.pin}<span>Stop</span></button>`;}
+function buildList(){
+ const facts=[['Fare','$5.40'],['Every','8–12 min'],['End to end','≈45 min'],['First / last','05:30 · 00:15']];
+ listEl.innerHTML='<div class="meta">'+facts.map(([k,v])=>
+   `<button class="fact" data-do="fact">${I.info}<span>${k} <b>${v}</b></span></button>`).join('')+'</div>'
+  +DATA.stops.O.map((s,i)=>{
+   const e=['1','3','6','—','12','2'][i%6],c=e==='—'?'none':(+e<=2?'due':'');
+   const txt=e==='—'?'—':(+e<=1?'Due':e+' min');
+   return `<div class="row${i===active?' active':''}" data-i="${i}"><span class="selbar"></span>
+     <button class="rowhit" data-do="row" data-i="${i}">
+       <span class="rail"><span class="dot"></span>${saved.has(i)?'<span class="savedot"></span>':''}</span>
+       <span class="rowbody"><span class="nm">${s.n}</span><span class="zh">${s.zh}</span></span>
+       <span class="eta ${c}">${txt}</span></button></div>`;}).join('');
+}
+function showCard(i){const s=DATA.stops.O[i];
+ document.getElementById('cardN').textContent=s.n;document.getElementById('cardZ').textContent=s.zh;
+ document.getElementById('cardE').textContent=['1 min','3 min','6 min','—','12 min','2 min'][i%6];
+ document.getElementById('cardActs').innerHTML=actionsHTML(i);card.classList.add('on');}
+document.getElementById('cardX').onclick=()=>card.classList.remove('on');
+
+document.addEventListener('click',e=>{
+ const b=e.target.closest('[data-do]');if(!b)return;const i=+b.dataset.i,w=b.dataset.do;
+ if(w==='fact'){log('fact sheet — these scroll away under the header, as they do today');return;}
+ if(w==='row'){active=i;buildList();showCard(i);userPanned=false;
+   const s=DATA.stops.O[i];flyTo(s.lat,s.lng,15.4);log('tap → flyTo '+s.n,true);return;}
+ if(w==='star'){saved.has(i)?saved.delete(i):saved.add(i);buildList();showCard(i);render();
+   log('★ '+(saved.has(i)?'saved':'removed'),true);return;}
+ if(w==='notify'){log('🔔 notify when approaching '+DATA.stops.O[i].n,true);return;}
+ if(w==='view'){log('→ Place detail');return;}
+});
+
+/* chained wheel: sheet first, then list */
+listEl.addEventListener('wheel',e=>{
+ if(!document.getElementById('optChain').checked)return;
+ const H=phone.clientHeight,top=H*DET.full;
+ if(e.deltaY>0&&sheetTop>top+.5){setSheetTop(sheetTop-e.deltaY);e.preventDefault();}
+ else if(e.deltaY<0&&listEl.scrollTop<=0&&sheetTop<H*DET.map){setSheetTop(sheetTop-e.deltaY);e.preventDefault();}
+},{passive:false});
+listEl.addEventListener('scroll',()=>{
+ if(!document.getElementById('optFollow').checked||suppressSpy)return;
+ clearTimeout(spyT);spyT=setTimeout(()=>{
+  const box=listEl.getBoundingClientRect();let best=null,bd=1e9;
+  listEl.querySelectorAll('.row').forEach(r=>{const b=r.getBoundingClientRect();
+   const d=Math.abs(b.top+b.height/2-(box.top+50));if(d<bd){bd=d;best=+r.dataset.i;}});
+  if(best!=null&&best!==active){active=best;buildList();if(card.classList.contains('on'))showCard(best);
+   const s=DATA.stops.O[best];if(!userPanned){flyTo(s.lat,s.lng,15.4,480);}else render();}
+ },90);
+});
+
+/* sheet drag */
+let sd=null;
+document.getElementById('grab').addEventListener('pointerdown',e=>{
+ sd={y:e.clientY,top:sheetTop};e.target.setPointerCapture(e.pointerId);});
+addEventListener('pointermove',e=>{if(sd)setSheetTop(sd.top+(e.clientY-sd.y),true);});
+addEventListener('pointerup',()=>{if(sd){sd=null;snap();}});
+
+/* map gestures */
+let drag=null;
+mapEl.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,m:0};mapEl.setPointerCapture(e.pointerId);
+ mapEl.classList.add('dragging');if(anim){cancelAnimationFrame(anim);anim=null;}});
+mapEl.addEventListener('pointermove',e=>{if(!drag)return;
+ const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.m+=Math.hypot(dx,dy);drag.x=e.clientX;drag.y=e.clientY;
+ const z=cam.zoom;cam.lng=lngAt(wx(cam.lng,z)-dx,z);cam.lat=latAt(wy(cam.lat,z)-dy,z);render();
+ if(drag.m>26&&!userPanned){userPanned=true;log('panned → following suspended',true);}});
+addEventListener('pointerup',()=>{if(drag){mapEl.classList.remove('dragging');drag=null;}});
+mapEl.addEventListener('wheel',e=>{e.preventDefault();
+ const r=mapEl.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+ const z0=cam.zoom,z1=clamp(z0-e.deltaY*.0022,10.5,18.5);
+ const la=latAt(wy(cam.lat,z0)+(my-r.height/2),z0),lo=lngAt(wx(cam.lng,z0)+(mx-r.width/2),z0);
+ cam.zoom=z1;cam.lng=lngAt(wx(lo,z1)-(mx-r.width/2),z1);cam.lat=latAt(wy(la,z1)-(my-r.height/2),z1);
+ render();},{passive:false});
+document.getElementById('back').onclick=()=>log('← back (floating lens, always visible)');
+['optChain','optContinuous','optFollow'].forEach(id=>document.getElementById(id).onchange=()=>applyHeader());
+
+fetch('./kmb1.json').then(r=>r.json()).then(j=>{
+ DATA=j;const term=j.stops.O[j.stops.O.length-1].n.replace(/\s*\(\w+\)\s*$/,'');
+ document.getElementById('blT').textContent='towards '+term;
+ document.getElementById('blS').textContent='KMB · from Chuk Yuen Estate';
+ document.getElementById('pillLabel').textContent='towards '+term;
+ const ln=j.lines['1'],la=ln.map(c=>c[1]),lo=ln.map(c=>c[0]);
+ cam={lat:(Math.min(...la)+Math.max(...la))/2,lng:(Math.min(...lo)+Math.max(...lo))/2,zoom:12.5};
+ buildList();setSheetTop(phone.clientHeight*DET.rest);render();
+ log('KMB 1 — real CSDI geometry; base z+1, labels z',true);
+}).catch(()=>{document.querySelector('.desc').innerHTML='<b class="h">Could not load kmb1.json</b>Serve over HTTP.';});
+addEventListener('resize',()=>{if(DATA){setSheetTop(sheetTop);render();}});
+</script></body></html>

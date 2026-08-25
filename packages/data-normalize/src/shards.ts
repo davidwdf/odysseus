@@ -136,6 +136,13 @@ export interface RouteDoc {
   stops: RouteDocStop[]
   /** The same number in the opposite bound, when the dataset has a loadable one (ADR-046). */
   reverse?: { id: string; origin: I18nText; destination: I18nText }
+  /**
+   * The Transport Department's numeric route id — CSDI's `ROUTE_ID`, the join key for route
+   * geometry (ADR-152). Deliberately on the **shard** and not on the wire `Route`: only the edge
+   * needs it, to look a line up on the rider's behalf, so putting it on the contract would be a
+   * breaking wire change that bought a client nothing. Absent for ~7% of route-directions.
+   */
+  gtfsId?: string
 }
 
 /**
@@ -435,6 +442,7 @@ export function routeDocFor(index: StaticIndex, id: string): RouteDoc | null {
   return {
     route,
     stops,
+    ...(meta.gtfsId ? { gtfsId: meta.gtfsId } : {}),
     ...(best
       ? {
           reverse: {

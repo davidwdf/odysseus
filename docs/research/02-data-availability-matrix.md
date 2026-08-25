@@ -20,7 +20,7 @@
 | **Live vehicle GPS (lat/lng)** | ❌ | ❌ | ❌ | ❌ | ❌ (`busLocation`=`0,0`) | — *none in HK* |
 | **Stop coordinates** | ✅ | ✅ | ✅ | ✅ | 🟦 | operator APIs / GTFS (WGS84) |
 | **Ordered stop sequence** | ✅ | ✅ | ⚠️ (array order) | ✅ | ✅ | operator APIs |
-| **Route line geometry (polyline)** | ❌→🟡 | ❌→🟡 | ❌→🟡 | ❌→🟡 | ❌→🟡 | *derive* (snap stops→road/OSM) |
+| **Route line geometry (polyline)** | 🟦 91% | 🟦 86% | 🟦 83% | 🟦 100% | ❌ | **CSDI** Bus Route + GMB Route (§4) |
 | **Section/stage fares (adult)** | 🟦 | 🟦 | ✅ inline | 🟦 | 🟦 | GTFS `fare_*` / Routes-&-Fares / NLB inline |
 | **Holiday fare variant** | 🟦 | 🟦 | ✅ inline | 🟦 | ⚠️ | as above (+ consolidated `faresHoliday`) |
 | **Concessions ($2, BBI, passes, Octopus)** | ❌ | ❌ | ❌ | ❌ | ❌ | policy/prose only |
@@ -56,10 +56,57 @@ There is **no GTFS-Realtime feed** and **no published per-vehicle position** for
 - **The consolidated dataset we already fetch** carries `fares`/`faresHoliday` arrays per route ([03 §11](./03-app-feature-inventory.md)).
 - **Not data:** Octopus-vs-cash, the **$2 concession** (note: from **3 Apr 2026** it's "$2 flat *or* 80% off" for elderly/PwD), monthly/day passes, **bus-bus interchange (BBI)** discounts, PTFSS, Fare Saver machine locations — all **prose** on TD/operator pages. Only **full adult fares** exist as data (no child/elderly/student fare field anywhere).
 
-### 4. Route geometry "on a map" — stops yes, lines no ❌→🟡
-- Official "geometry" is **stop points only**: the TD bus GeoJSON is **56,048 `Point` features, zero `LineString`** (verified); GTFS has **no `shapes.txt`**. The community consolidated set is also stops-only.
-- A coloured **road-following route line must be derived** — snap the ordered stops to a road graph (TD **Road Network 2nd-gen** or **OSM**) or use a routing engine. This is exactly what hkbus.app does downstream.
-- Stop-point coverage is good (KMB 26k, CTB 17.5k, joint 4.9k, LWB 3.6k, NLB 2.6k, MTR-feeder 0.8k points). Quality = accurate stop coords + sequence, **not** turn-by-turn alignment.
+### 4. Route geometry "on a map" — lines DO exist, on CSDI 🟦
+
+> **Corrected 2026-08-22.** This section used to say *"Official 'geometry' is stop points only … a road-following
+> route line must be derived."* That was wrong. It was measured on the right department's **wrong file**: the
+> `data.gov.hk` routes-and-fares GeoJSON really is 56,048 `Point` features with zero `LineString` — but the route
+> **lines** are published as two *separate* datasets on the **CSDI portal**, which that survey never opened.
+> Full write-up, resolver algorithm and per-route coverage: [`07`](./07-route-geometry-and-maps.md);
+> [ADR-151](../08-decision-log.md#adr-151--the-route-line-geometry-we-said-hong-kong-did-not-publish-has-existed-since-2021).
+
+- **The lines are official, free and road-following.** Transport Department, on CSDI:
+
+  | Dataset | CSDI id | Features | Geometry | Published |
+  |---|---|---|---|---|
+  | **Bus Route** (KMB · LWB · CTB · NLB) | `td_rcd_1638844988873_41214` | 2,255 | `MultiLineString` | Dec 2021 |
+  | **Green Minibus Route** | `td_rcd_1697082463580_57453` | 1,161 | `LineString` | Oct 2023 |
+
+  These are true road alignments, not stops joined up: KMB route 1 outbound is **391 vertices**, a 30 km GMB circular
+  is **1,405**. Median GMB route: 365. Same [DATA.GOV.HK terms](https://data.gov.hk/en/terms-and-conditions) as
+  everything else — commercial use, redistribution and caching permitted, attribution required.
+- **It joins to a key we already carry.** CSDI `ROUTE_ID` **is** the consolidated dataset's `gtfsId` — verified on
+  `ROUTE_ID 2000410` → GMB 69 Cyberport↔Quarry Bay circular, start/end stop names matching exactly. `gtfsId` is
+  already the GMB canonical-id component (ADR-047); it is **dropped for KMB/CTB/NLB** today, and retaining it is the
+  one prerequisite.
+- **Coverage, against our own route list:** GMB **100%**, KMB **91%**, CTB **86%**, NLB **83%** — **93%** of the 3,625
+  bus + minibus route-directions. A fallback that matches on operator + route number instead of `gtfsId` lifts it to
+  **96%**, at the cost of ambiguity that needs resolving (§4a).
+- **Three ways to fetch it**, all verified: per-route via the ArcGIS **FeatureServer**
+  (`…/FeatureServer/0/query?where=ROUTE_ID=1001&outSR=4326&f=geojson`, 33 KB for both directions — no bulk download);
+  **bulk** GeoJSON from `static.csdi.gov.hk` (the bus file is **1.53 GB** unzipped, 240 MB zipped — the FGDB is 38 MB
+  but needs GDAL); or piggybacking **hkbus's** daily-synced, 5dp-truncated mirror at
+  `hkbus.github.io/route-waypoints/{gtfsId}-{O|I}.json`.
+- **Payload is small once truncated.** 5 decimal places (±1 m) + gzip: KMB route 1 **both** directions = **4 KB**. All
+  1,161 GMB route-directions together = **2.8 MB**.
+- **What is still genuinely absent:** MTR feeder buses, Light Rail and ferries are **0%** — hkbus hand-maintains static
+  files for those in its own repo. And there is still no `shapes.txt` in the TD GTFS.
+- Stop-point coverage remains as before (KMB 26k, CTB 17.5k, joint 4.9k, LWB 3.6k, NLB 2.6k, MTR-feeder 0.8k points).
+
+### 4a. Two traps in the route-line data
+
+Both are real, both are cheap to handle, and both were found by measurement rather than by reading the schema.
+
+1. **`ROUTE_SEQ` (1/2) does not reliably mean outbound/inbound.** hkbus hit this too (their issue #14) and it silently
+   swaps some routes' directions. Resolve it geometrically instead: score each candidate line against the *rider's own
+   ordered stops*. Measured on KMB 101, mean stop-to-line distance is **8.6 m** for the correct direction and **41.9 m**
+   for the reverse — a 5× separation, so this is not a marginal test.
+2. **A route number can match several lines, and a short-working scores the same as its parent.** NLB 1 matches five
+   CSDI `ROUTE_ID`s; CTB 11 matches five. Endpoint matching separates most of them (CTB 11 circular vs the Loong Fung
+   Terrace short-working differ by 4 m at the differing end), but *mean stop-to-line distance cannot tell a
+   short-working from the full route it runs along* — both score 8.6 m, because the short-working's stops all lie on
+   the parent's line. The fix is not a better score: **pick by coverage, then trim the line to the rider's own first and
+   last stop.** That also handles circulars and makes variant selection stop mattering.
 
 ### 5. Service hours / frequency / journey time 🟦 / ✅
 - **GMB Route API** gives these inline (`start_time`/`end_time`/`frequency` + weekday/PH flags) — best-in-class.

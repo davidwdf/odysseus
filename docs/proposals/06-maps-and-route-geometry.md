@@ -1,0 +1,563 @@
+# 06 — Maps & Route Geometry
+
+> **Proposal, nothing built.** Written 2026-08-22 off [`research/07`](../research/07-route-geometry-and-maps.md)
+> and [ADR-151](../08-decision-log.md#adr-151--the-route-line-geometry-we-said-hong-kong-did-not-publish-has-existed-since-2021),
+> which found that the Transport Department has published road-following route lines since 2021 and that
+> our record said otherwise.
+>
+> Six asks from the owner: **draggable/zoomable maps** with **swappable providers**, **route polylines**
+> (per-route on demand), **live user location**, **camera follows the stop list**, and — nice to have —
+> a **map ⇄ street view** toggle. Plus: rethink the route-detail interaction, because the action sheet
+> may be in the wrong place once a map is on screen.
+>
+> §§1–7 are the build. **§8 is the UI brainstorm** and is the part that wants an opinion before
+> anything is written. Interactive mockups: [`mockups/route-detail/`](./mockups/route-detail/).
+
+---
+
+## 1. What we have, honestly
+
+`MiniMap` (both renderers) is a **hand-composited grid of `<img>` raster tiles**. It does not drag, zoom,
+rotate or animate. It draws pins from `PlaceDetailView.pins` and nothing else. The projection maths is
+`@nextbus/core/mercator`, pinned by `mercator.spec.json` and shared by all three platforms — that part is
+good and survives everything below.
+
+`TileSource` (`packages/ports/src/tile-source.ts`) is a genuinely well-built port, but it answers **"what
+is the URL of one tile"**. That is the right question only while *we* composite. Every interactive engine
+composites for you and wants a **style** or an **archive** instead. So the seam has to widen — and the
+widening is the whole of the owner's "swap providers without too much trouble" ask.
+
+Route detail today is a **schematic rail**, not a map: `RailBus` is `{kind:'node', index}` or
+`{kind:'segment', from, to}` (ADR-093). That is deliberate and stays — see §8.
+
+---
+
+## 2. The provider seam — `MapProvider` alongside `TileSource`
+
+**Recommendation: adopt MapLibre as the engine, and make the basemap a declared provider.** MapLibre is
+the only engine covering web *and* native from one style definition:
+
+| Package | Version (checked 2026-08-22) | Note |
+|---|---|---|
+| `maplibre-gl` | 6.5.0 | `apps/web` |
+| `@maplibre/maplibre-react-native` | 11.3.6 | peer `expo >= 54`; ours is `~56.0.12` ✅. Config plugin → **dev client**, not Expo Go |
+
+Crucially, **adopting MapLibre does not mean leaving the Lands Department.** MapLibre renders a raster XYZ
+source as happily as a vector one. LandsD becomes the `raster` source inside a style *we* own; Protomaps
+becomes a later one-file swap if it earns it. That is what makes ADR-049 survive this proposal intact.
+
+```ts
+// packages/ports/src/map-provider.ts  — sketch, not final
+export type MapProvider<LocaleId extends string = string, ImageAsset = unknown> = {
+  id: string
+  attribution: TileAttribution<LocaleId, ImageAsset>   // reused verbatim from TileSource
+  minZoom: number; maxZoom: number
+  invertForDark: boolean
+} & (
+  | { kind: 'raster-xyz'; basemap(z,x,y): string; label?(z,x,y,locale): string }  // ← today's LandsD, unchanged
+  | { kind: 'vector-style'; styleUrl: string; labelOverlay?: RasterLabelLayer }   // ← Protomaps, MapTiler, …
+)
+```
+
+Three things this shape buys, and they are the reasons to prefer it over a bare `styleUrl`:
+
+1. **`TileSource` is not thrown away** — the `raster-xyz` arm *is* today's interface, so `MiniMap` keeps
+   working unchanged during the migration and the LandsD implementation is re-used, not rewritten.
+2. **Attribution stays a required member.** It is licence compliance, not decoration, and the existing
+   port already got that right.
+3. **The label overlay stays orthogonal to the base.** [`proposals/02 §11`](./02-basemap-and-street-imagery.md)
+   found that hkbus puts **LandsD's label raster over an OSM base** — their style has *zero* `symbol`
+   layers. So per-locale labels are independent of which base sits underneath, and switching base never
+   touches localization. This is the single most useful thing we learnt from reading their map.
+
+**Open question for the owner:** whether the vector base is worth it *at all*. Trade, stated fairly —
+LandsD carries surveyor's detail (footbridges, subways, landmark buildings) that OSM does not; Protomaps
+gives rotation, pitch, real dark mode and smooth zoom, but hkbus's implementation blocks all tiles for
+5–30 s on a first visit while it downloads a 29.6 MB archive. **Prettier and less useful is a real
+possibility.** The plan below deliberately does not require choosing: rows M1–M3 ship on LandsD raster,
+and the provider swap is a later, cheap experiment.
+
+### 2a. Two things measured while building the mockups
+
+**The map looks pixelated, and that is our fault, not LandsD's.** Verified 2026-08-22 against their
+service: they serve **256×256 tiles only**, and `@2x`, `?dpi=2` and a `basemap_hd` path all return
+nothing. On a DPR-2 screen a 256 px tile drawn at 256 CSS px is upscaled 2× — exactly the softness we
+see. **The first fix needs no new data source:** request one zoom level deeper and draw the tile at half
+size, for true 2× density. It works up to z19 (their max is 20) and costs 4× the tile requests — cheap,
+since tiles are 3–19 KB and the Worker already caches them.
+
+**But overzooming everything makes the labels half-size**, which is worse than the softness it cures:
+LandsD bakes label size into the raster, so a z17 tile shown at z16's scale has z16's ground coverage
+with z17's *denser, smaller* label set. Measured on the mockup, it is a clear regression in legibility.
+
+**The fix that works is to overzoom the base and NOT the labels** — base from z+1, labels from z, drawn
+as two independently-zoomed grids. Roads, coastlines and building footprints get true 2× density (they
+carry no text, so nothing shrinks), while place names stay exactly the size the cartographer intended.
+**This is only possible because LandsD publishes labels as a separate service**, which is the same
+property ADR-049 already relies on for per-locale labels — the overlay is now earning its keep twice.
+`round-2.html` has all three modes side by side.
+
+The residual: the label layer is still 1× on a 2× screen, so text is sharp-*ish* rather than sharp. The
+only way to get both is client-rendered text — i.e. a **vector** basemap, where labels are drawn at
+device resolution at any size. That is a real, concrete argument for the Protomaps option that §2 left
+open, and the first one that is about legibility rather than aesthetics.
+
+**MapLibre handles the raster half for us** via `tileSize` on a raster source, and the vector half by
+definition — a third argument for the engine.
+
+**Do not put world coordinates in CSS.** Positioning tiles at their absolute world-pixel offset works at
+low zoom and tears at high zoom: at z17 a world coordinate is ~2.7×10⁷, and Chrome serialises a CSS
+length that large in exponential form with about six significant figures (`2.74181e+07px`), so tiles that
+belong 256 px apart land 200–300 px apart. Subtract the grid origin in JavaScript, where the value is
+still a double, and put only the sub-tile remainder on the layer transform. Recorded because it is
+invisible until someone zooms in, and because any hand-rolled tile layer on any platform hits it.
+MapLibre does not.
+
+---
+
+## 3. Route polylines — per-route on demand (the owner's preference, and it holds up)
+
+Verified: `…/FeatureServer/0/query?where=ROUTE_ID=1001&outFields=*&returnGeometry=true&outSR=4326&f=geojson`
+returns **both directions of KMB route 1 in 33 KB**. Truncated to 5dp and gzipped that is **4 KB**.
+
+**It goes through the edge, not the client.** Three reasons, all of which are existing rules rather than
+new opinions: rule 2 forbids a view knowing a URL; `check-view-transport-free` would catch the literal
+anyway; and the Worker is where caching and attribution compliance already live for tiles (ADR-049). So:
+
+```
+GET /v1/route/:id/path   →   { path: [[lng,lat], …], trimmedTo: {from, to}, source: 'csdi', quality: 'surveyed' }
+```
+
+with a long `Cache-Control` — this data moves biweekly. The response is a *resolved, trimmed* line, not
+raw CSDI: **the resolver is a kernel decision and must not be re-implemented per renderer** (ADR-068/069,
+and `check-no-derivation` would flag it).
+
+### 3a. The resolver — this is the part with teeth
+
+Two traps, both measured in `research/07 §4`, both of which will silently produce a wrong-looking map:
+
+**`ROUTE_SEQ` is not a direction.** hkbus flag it (their issue #14) and it swaps some routes. Their fix
+compares each line's *first vertex* to each direction's *first stop* by haversine with a 500 m guard —
+one point deciding a whole route, at Hong Kong termini where both directions board within 40 m.
+
+**Use all the evidence instead:** score a candidate by the **mean distance from every one of the rider's
+ordered stops to the nearest point on the line.** Measured on KMB 101 — correct direction **8.6 m**,
+reverse **41.9 m**, wrong route **432 m**. A 5× and a 50× separation.
+
+**Then trim.** That metric provably *cannot* separate a short-working from its parent (KMB 101's two
+variants both score 8.6 m — a short-working's stops all lie on the parent's line). The answer is not a
+better score, it is a different final step: pick by coverage, then **cut the line at the projections of
+the rider's own first and last stop**. Circulars, short-workings and variant ambiguity all collapse into
+one code path, and no line can draw a tail past the terminus on screen.
+
+```
+resolveRoutePath(route, candidates):
+  scored ← [(meanStopToLine(route.stops, c), c) for c in candidates]
+  best   ← min(scored)
+  if best.score > REJECT_THRESHOLD: return none      # guards the name-match fallback
+  return trim(best.line, at: project(route.stops.first), to: project(route.stops.last))
+```
+
+`REJECT_THRESHOLD` **must be pinned by a corpus, not chosen by eye** — good scores cluster under 10 m and
+the observed bad one was 432 m, so the gap is wide, but that is exactly the kind of constant that rots.
+This belongs in `packages/core` with fixtures, next to `mercator.spec.json`.
+
+### 3b. Coverage, and the fallback question
+
+93% on `gtfsId` alone; **96%** if we also match on operator + route number (which is what makes the
+resolver's reject threshold load-bearing). The prerequisite for any of it: **retain `gtfsId` for
+KMB/CTB/NLB in `dataset.ts`** — the field exists on the entry type and is currently GMB-only.
+
+---
+
+## 4. Live user location
+
+The port already exists — `packages/ports/src/location-provider.ts`, one of the seven — and Nearby
+already consumes it through the location controller in `packages/api-client`. So this is **wiring, not
+architecture**: the map subscribes to the same controller Nearby uses, and draws a dot.
+
+Three things worth deciding rather than defaulting:
+
+- **Accuracy is data.** Draw the accuracy radius, not a confident dot. This is rule 3 applied to
+  position: a 60 m GPS fix rendered as an 8 px dot claims a precision we do not have — the same error as
+  a per-second countdown.
+- **Permission is a state, not an error.** `denied` / `prompt` / `granted` / `unavailable` need declared
+  projections in the screen spec, or they will be handled twice and differently.
+- **A hidden tab does not move.** Browser verification is already known to be limited here (the driven
+  tab is hidden, so no scroll/IntersectionObserver events); location on the web will need the same care.
+
+---
+
+## 5. The missing-geometry fallback — decide, don't inherit
+
+hkbus draws a **straight line through the ordered stops**, unmarked, whenever geometry is missing *or any
+fetch fails* (`useRoutePath.tsx`, quoted in `research/07 §3`). For CTB `20R` that is four stops over
+7.6 km — three chords across Kowloon Bay. For KMB `101R` the line runs through the harbour.
+
+Under rule 3, shipping that unmarked is the cartographic twin of a fake countdown. Four options:
+
+| | Behaviour | For | Against |
+|---|---|---|---|
+| **a** | **No line.** Pins only, plus a sentence. | Cannot lie. Cheapest. | Loses a useful shape on 7% of routes; a rider may read "no line" as "no data at all". |
+| **b** | **hkbus's line, unmarked.** | Matches what riders see elsewhere. | Draws buses over water. Fails rule 3. |
+| **c** | **Dashed//tinted line + one sentence** ("approximate path — stops shown in order"). | Honest *and* useful; reuses the `FeedNotice` pattern of saying it once per screen. | A dashed line is still a line; some riders will not read the notice. |
+| **d** | **(c), plus snap to roads later.** | Best ceiling — TD's Road Network 2nd-gen or OSM could make the 7% real. | Whole extra pipeline. Not now. |
+
+**Recommendation: (c), with (a) as the honest fallback when the route has too few stops for a chord to
+mean anything** (`20R`'s four stops is exactly that case). It matches how ADR-133/150 already handle a
+degraded feed: one sentence, screen-level, said once. And it keeps the door open for (d).
+
+---
+
+## 6. Camera follows the stop list
+
+The owner's *"not quite sure how this would go"* is the right instinct — this is the ask with the most
+ways to feel wrong. What we already know from this codebase:
+
+- **The scroll-spy exists.** Place detail already lights the pin for the pole the list is scrolled to,
+  and a tap on a pin scrolls the list back (ADR-086/087). This is the same mechanism, pointed at a
+  camera instead of a highlight.
+- **hkbus's camera flight is bare `map.flyTo({ center })`** — MapLibre's default curve arcs out and back
+  in for free. The only authored part is that *a new stop animates and a new route jumps*
+  ([`proposals/02 §11`](./02-basemap-and-street-imagery.md) (c)). Steal exactly that.
+- **`reanimated` v4's `scrollTo()` is a no-op on web** (known; use the `scrollToY` helper). Any
+  list↔camera coupling has to route through the existing helper on the RN side.
+
+**The failure mode to design against is the feedback loop**: camera moves → map fires a move event →
+something scrolls the list → camera moves. Whatever ships needs a single owner of "who moved last", and
+user-initiated pans must **suspend** following rather than fight it. A "recentre" affordance that
+reappears once the rider has panned away is the standard answer and the one to copy.
+
+---
+
+## 7. Street view — a nice-to-have gated on an email
+
+LandsD's **Streetscape 360** is real, documented, and — unlike Google's — actually embeddable:
+`https://data.map.gov.hk/api/3d-mms-data/{panorama}?key={key}`. Panorama locations ship as a downloadable
+GeoJSON, so *"is there a panorama at this kerb"* is a spatial lookup we can precompute into the dataset
+rather than a live call.
+
+**A key is required. It is free but must be requested** — `3dmap@landsd.gov.hk`. The docs publish a
+sample key, which is fine for a spike and not something to ship on. Google Street View is not an
+alternative: its terms forbid caching *and* forbid placing it beside a non-Google map, so it can only be
+a deep link out.
+
+**Action now: send the email.** It costs nothing and it gates the row.
+
+---
+
+## 8. The interaction question — where the action sheet belongs
+
+The owner's instinct is worth taking seriously: *"I quite like the action sheet … but now I wonder if
+that's the right design flow."* Once a map is on screen, a stop row has **two** plausible meanings —
+*act on this stop* and *show me this stop* — and one tap cannot mean both.
+
+### The constraint nobody should discover late
+
+**That sheet is the app's only favourite-creating affordance.** ADR-032 makes route-at-stop the unit of a
+favourite; `RouteStopSheet`'s own doc comment records that `apps/web` once navigated straight to the
+place instead, which left `toggleFavoriteRoute` with **zero callers** — a web-only rider could never fill
+their Favourites tab. Four auditors found it; no gate did, because `conformStates` asserts text and
+nesting and **never interaction destinations**.
+
+So: *any* option that takes the tap away from the sheet must give favouriting a new, declared home, and
+the spec cannot currently prove it. That is a real cost, not a detail — and it is the strongest argument
+for the options that keep a visible, dedicated control.
+
+### Four paradigms
+
+|  | Tap a stop row | Long-press / overflow | Favourite lives | Feel |
+|---|---|---|---|---|
+| **A — Sheet stays primary** *(today)* | opens the sheet | — | in the sheet (unchanged) | Safest. But with a map on screen, the commonest wish ("where is that?") is two taps and a dismiss. |
+| **B — Tap focuses the map, `⋯` opens the sheet** | flies the camera, selects the row | explicit `⋯` per row | in the sheet, reached by `⋯` | The owner's own suggestion. Direct manipulation; the map becomes the point. Cost: a per-row control on every row, and favouriting gets one step further away. |
+| **C — Tap focuses, sheet moves to the header** | flies the camera | header ★ acts on *the selected stop* | one header control, retargeted by selection | Fewest controls, and the map reads as the subject. Risk: a header star whose meaning silently depends on selection is the kind of thing that reads fine to its author and confuses everyone else. |
+| **D — Split row: body focuses, ★ toggles inline** | flies the camera | ★ on the row toggles directly; `⋯` only for the rest | **on the row, always visible** | Favouriting gets *closer*, not further — the ADR-032 risk inverts. Cost: two hit targets per row, so it needs real thought at 44 px and for a screen reader. |
+
+**Recommendation: D, with B as the fallback.** D is the only one that makes the map primary *without*
+weakening the affordance ADR-032 depends on, and an always-visible star is easier to declare in a spec
+than a sheet action reached through an overflow. B is a perfectly good second choice and is closest to
+what the owner described.
+
+**Whichever wins, two things must land with it:** the chosen destination gets declared in
+`route-detail.spec.json`, and — because `conformStates` cannot see interaction destinations — the gap
+that let the original bug through gets closed or explicitly re-filed. Repeating that bug while
+redesigning the very screen it happened on would be an unusually annoying way to lose a week.
+
+### Mockups
+
+Four clickable prototypes with the real animations —
+[`mockups/route-detail/`](./mockups/route-detail/) (open `index.html`). They run on **KMB 1's real
+geometry and real stops**, fetched live from CSDI, so the camera flights, the scroll-linked following and
+the pan-to-suspend behaviour are all exercised against real data rather than a straight line.
+
+### Round 2 — the owner's verdict, and what replaced it (2026-08-22)
+
+**C and D are out. B leads, with a reservation.** The owner's reasoning, which reframes the problem:
+
+- **D — dropped.** Two control columns per row is distracting, and other apps that do it read as cluttered.
+  Decisive point: *"we may want to add other options later (e.g. notify me when the bus is approaching)"* —
+  a per-row control set does not scale past about two actions.
+- **C — dropped**, for the reason already stated against it.
+- **B — preferred so far**, but *"I don't love the repeated menu icons."*
+- **A — clean, but no easy way to find stops on the map."*
+
+So the real constraint set is **(1) no permanent per-row chrome, (2) a one-tap way to see a stop on the
+map, (3) unbounded room for future actions**. A and B each satisfy two of the three; nothing in round 1
+satisfies all three. Two designs that do:
+
+| | **E — the selected row expands in place** | **H′ — a floating stop card at the map seam** |
+|---|---|---|
+| Tap a row | camera flies **and** that row opens to reveal its actions | camera flies **and** a card appears over the bottom of the map |
+| Chrome at rest | none | none |
+| Room for actions | unbounded (the strip grows) | unbounded (the card grows) |
+| Layout shift | **yes — the list moves** | **none — the list never changes shape** |
+| Precedent | hkbus's `StopAccordion`; riders know accordions | Google/Apple Maps place card |
+
+**Recommendation: H′.** Not because it is prettier but because of the one row in that table that
+interacts with a feature already on the plan: **E shifts the list, and §6's scroll-linked camera means
+selection changes while you scroll.** With E, following the list would open and close rows under the
+rider's thumb. That can be forbidden — *expand on tap, never on scroll* — but it is a rule that has to be
+held in two renderers and cannot be expressed in a spec, so it will eventually be broken. H′ has no such
+rule to break, which is why it is safe to let scroll-spy drive the selection at all. It also names its
+target, so it never inherits C's ambiguity.
+
+**Pushing back on my own recommendation**, because two of these are real:
+
+1. **H′ is a third surface.** Nav, list, and now a card — one more thing to keep identical across two
+   renderers and to declare in `route-detail.spec.json`. E adds no new surface; it is a state of a row.
+2. **It covers the map exactly where the selected pin is.** Solvable — offset the camera target by half
+   the card's height, which the mockup does — but it is authored behaviour, not a freebie.
+3. **A card that changes content as you scroll may read as noise.** Unproven either way. Worth watching
+   for in the mockup before committing.
+
+And one point *for* E that survives all of the above: if the map is small (the list-dominant shape),
+H′'s card eats a serious fraction of it, whereas E's strip costs nothing that was showing map.
+
+### Round 2 — the screen shape, and the "peek" idea
+
+The owner's *"map as an inset, peeking through a layer of the chrome"* is worth taking literally: make
+the **map the shell** and the stop list a sheet resting over it, with detents.
+
+| Detent | Sheet top | Reads as |
+|---|---|---|
+| **List-dominant** | 62% | Almost exactly today's screen — map band on top, list below |
+| **Half** | 42% | Camera flight finally *reads* as following; five or six stops still visible |
+| **Map-first** | 20% | The map is the screen; the list peeks. Best for *choosing* a stop |
+
+**Recommendation: ship list-dominant as the default and let the sheet be draggable.** The default must
+stay close to today, because the job a rider opens this screen to do is *when is my bus*, not *where is
+my bus* — map-first is the wrong default for the 90% case even though it is the nicest of the three to
+look at. Making it a drag rather than a mode means nobody has to decide on the rider's behalf.
+
+**The cost, stated plainly:** nested gestures — drag-the-sheet vs scroll-the-list vs pan-the-map — are
+genuinely fiddly on React Native, and this is the one item in this proposal most likely to be
+under-estimated. If it fights us, the fallback is a fixed map band with a two-state toggle, which loses
+very little.
+
+Both are in [`mockups/route-detail/round-2.html`](./mockups/route-detail/round-2.html), where the action
+surface and the screen shape are **independent controls** so the combinations can be felt rather than
+argued about.
+
+---
+
+### Round 3 — how this meets the collapsing header (2026-08-22)
+
+The owner's attachment to the existing route header is worth honouring exactly: *"a large badge of the
+route at the top and some additional information that collapses below on scroll"*, with a **floating**
+back button and a floating header once collapsed — and the note that
+[`apps/mobile/components/CollapsingHeader.tsx`](../../apps/mobile/components/CollapsingHeader.tsx)
+(ADR-033) is closer to the intent than the `apps/web` twin.
+
+**The good news is that the sheet model does not fight that header — it is what the header was built
+for.** `CollapsingHeader`'s own doc says **"No bar background — the chrome floats over the scrolling
+content."** Make the map full-bleed and the header floats over *the map* instead, which is the same
+component doing the same thing over a nicer backdrop.
+
+**The apparent conflict, and the resolution.** With a draggable sheet there are two vertical gestures
+(drag the sheet, scroll the list) and only one header. Resolve it with **standard bottom-sheet
+chaining**: an upward drag raises the *sheet* until it reaches the top detent, and only then does the
+*list* begin to scroll. It is one continuous motion, so to a rider it still reads as *collapse on
+scroll* — the behaviour the owner likes — while the three gestures stay cleanly separated:
+
+| Gesture | Owns |
+|---|---|
+| Sheet position | how much map is visible, **and the header's collapse fraction `t`** |
+| List scroll | which stop is selected (the camera follows) |
+| Map pan | suspends following until recentre |
+
+Three consequences worth writing down:
+
+1. **`topSpacer` goes away, and that is a simplification.** Today the list must reserve the expanded
+   header's height at the top of its scroll content. Once the header floats over the map and the list
+   lives in a separate surface, the sheet's own top edge is what content scrolls under. One less number
+   to keep in sync across two renderers.
+2. **`RouteMeta` stays exactly where it is** — the first thing in the scroll content, scrolling away
+   under the chrome. That is precisely *"additional information that collapses below on scroll"*, and it
+   needs no redesign.
+3. **The `H′` card and the collapsed pill never collide** — pill at the top, card at the map/list seam.
+
+**Why the `apps/web` header "isn't quite right", concretely.** `apps/mobile` interpolates the morph
+**continuously** off a Reanimated `scrollY` shared value. `apps/web` drives it from a **boolean**
+`data-collapsed` attribute with a 200 ms CSS transition (`index.css`, `.collapsing-header[data-collapsed]`),
+so it *snaps* between two states at a threshold instead of tracking the gesture. That is almost certainly
+the difference the owner is feeling, and it is a fixable one: a CSS custom property updated on scroll
+gives the DOM the same continuous interpolation. `round-3.html` has both, behind a **Continuous morph**
+toggle, so the difference can be felt rather than argued about.
+
+This is not a new ADR — ADR-033 already decided the header. It is a note that the header survives the map
+shell unchanged, and that closing the web twin's continuity gap is a prerequisite for M3 rather than a
+separate nicety.
+
+---
+
+### Round 4 — the owner's counter-proposal, which is better than mine (2026-08-22)
+
+Round 3 was rejected on **layer count**, and the objection is right: map base · back button · header ·
+list · action sheet is five stacked surfaces, and the action sheet lands on top of four things that are
+already floating.
+
+**The counter-proposal.** One **floating card** tucked behind the back lens, badge centred on the back
+button's row, fare/frequency/journey-time/schedule *inside it*. **Any map drag or list scroll shrinks it
+by width** into a pill — badge left, destination after. **Tap to expand.** Split starts 50/50.
+
+Built as [`round-4.html`](./mockups/route-detail/round-4.html). Three things it gets right that round 3
+did not:
+
+1. **Width-collapse is a single transition, so renderer parity is cheap.** The round-3 badge-morph
+   interpolated position *and* scale *and* cross-faded two labels — which is precisely why
+   `apps/web`'s version drifted into a boolean threshold while `apps/mobile` interpolates continuously
+   (§8, round 3). A card that changes *width* keeps badge and destination in one row that never
+   re-flows. Both renderers can express that identically, and the ADR-033 parity gap stops being a
+   thing we have to fix to ship the map.
+2. **Binary + tap-to-expand is predictable.** Nothing re-expands under the rider's thumb, which was the
+   unresolved risk in every scroll-linked variant.
+3. **The facts move to where they are actually read.** Fare and frequency are *route* facts, and a
+   route-level card is a more honest home for them than the top of a stop list.
+
+**One addition was tried and rejected.** Once collapsed the card is a pill with no purpose, so it could
+carry **the selected stop** — 4 layers instead of 5, measured. The owner rejected it and was right: an
+action sheet is modal, so a mis-tap dismisses; a card that silently swaps its contents has no dismissal
+ritual, and *"how do I get back to the fare?"* has no obvious answer. **The action sheet stays.** Recorded
+because the layer-count argument was genuinely tempting and someone will propose it again.
+
+### The settled header behaviour
+
+After one more round, this is what `round-4.html` now does and what should be built:
+
+| | Expanded (on landing) | Collapsed |
+|---|---|---|
+| Card left edge | `14` — tucks **behind** the back lens | `68` — steps **right**, clear of the lens |
+| Card width | full (`W − 28`) | **still full** (`W − 82`), so the destination gets all the room there is |
+| Content padding-left | `56` (clears the lens) | `15` — content shifts **left** |
+| Badge | `48` px tall, `23` px type, centred | `28` px tall, `15.5` px type, left |
+| Row height | `70` px — the taller badge pushes the destination clear of the back button | `48` px |
+| Body (dest · sub · four facts) | open | folded |
+
+Everything animates on one shared easing, and the whole thing is **`left` · `width` · `height` ·
+`padding` · `min-width` · `font-size` · `max-height` · `opacity`** — all straightforwardly expressible in
+both renderers, which was the point.
+
+**Two findings from building it, both worth knowing before anyone commits:**
+
+- **The pill shrinks less than you would hope, because Hong Kong destination names are long.** With
+  *"towards STAR FERRY, HARBOUR CITY"* the collapsed card measured **341 px against an expanded 360 px** —
+  a 19 px "collapse". It only becomes a real pill (**193 px**) once the label is the bare destination and
+  is ellipsised at ~158 px. `CollapsingHeader` already exports a **`Marquee`** for exactly this problem,
+  which is the existing answer and should be reused rather than re-solved.
+- **Losing scroll-linked collapse also loses the "scroll back to the top and the header returns"
+  reflex.** Restoring it costs one rule — *re-expand when the list is at `scrollTop === 0`* — which keeps
+  the collapse binary while making the gesture feel two-way. It is a toggle in the mockup and I would
+  ship it on.
+
+---
+
+## 8b. Build now, or keep refining? — split it
+
+The design is not finished, but **most of this plan does not depend on the design**. Recommended split:
+
+**Start building — none of it touches a screen spec:**
+
+| Row | Why it is safe to start |
+|---|---|
+| **M0** `gtfsId` for KMB/CTB/NLB | A field that already exists on the entry type. Unblocks everything. |
+| **M1** `resolveRoutePath` + corpus | Pure kernel. Both traps are measured (§3a); the corpus is the deliverable. Zero UI. |
+| **M2** `/v1/route/:id/path` | Pure edge, verifiable by `curl`. Long-cached. |
+| **M3** `MapProvider` seam + MapLibre on LandsD raster | Independent of every open question, and carries the §2a tile rules. |
+
+**Keep in the mockup — all of it lands against `route-detail.spec.json`:** the context card, what a stop
+tap does, and the detent set.
+
+**The reason to split rather than wait** is specific to this repo: a screen spec is expensive to change
+(ADR-083/084 — the spec, both renderers' drivers and the coverage control all move together), so writing
+one against a design still in motion means churning it. M0–M3 have **no spec implications at all**.
+
+**The reason to split rather than build everything** is that M3 adds `maplibre-gl` and
+`@maplibre/maplibre-react-native`, and the native side needs a **dev-client build** — MapLibre is not in
+Expo Go. That has a long tail of setup surprises, and it is much better to hit them while the UI is still
+fluid than to hit them when it is the last thing blocking a release. (It does not make things worse:
+Expo Go already cannot run this app on a physical device under SDK 56.)
+
+**Suggested order:** M0 → M1 → M2 (each with its ADR), then M3 in parallel with continued header
+refinement. Revisit the interaction rows once the mockup stops moving.
+
+---
+
+## 8c. What M3 owes before it is ready (2026-08-24)
+
+M0–M2 are built. **M3 is not ready**, and the owner's list of what is missing is the substance of why.
+Four of the five were reproduced in the mockup and fixed there, which is the cheapest place to find
+out what the real thing has to do.
+
+| Owed | Status | Note |
+|---|---|---|
+| **The line drifts against the basemap on zoom** | ✅ diagnosed + fixed in mockup | Measured **2.81 m per wheel event** — sub-pixel each time, so it only shows as accumulated drift. Cause: holding the camera centre as **lat/lng** means every zoom-about-a-point does two Mercator round-trips, and `log`/`exp` lose ~0.3 px each. Fix: hold the centre in **normalised Mercator units** and convert only for display; the same operation is then exact arithmetic. Verified **0 m drift over 40 wheel events**, zoom returning to exactly 14.0. |
+| **Centring must use the *visible* centre** | ✅ implemented in mockup | The visible map is not the map element: the context card covers the top and the stop sheet the bottom, and with the card expanded at the 50/50 detent the visible band is only ~178 px of an 800 px screen. Every camera move now targets the inset rect. **MapLibre calls this `padding`** on `easeTo`/`fitBounds`, so this is one more thing the engine gives us rather than something to hand-roll. |
+| **Map controls** | ✅ proposed in mockup | Zoom in/out · centre-on-me · fit-whole-route · centre-on-selected-stop · street view. Plus **attribution**, which is not optional chrome — LandsD's licence requires it on the map face, so it is a persistent chip that opens the full notice. Two deliberately *excluded*: a compass (only earns its place if rotation is enabled) and a basemap switcher (nothing to switch to until the vector question is settled). |
+| **Street view button** | 🟡 blocked on an email | LandsD **Streetscape 360** can be embedded (§7); Google's terms forbid it beside a non-Google map. The free key must be requested from `3dmap@landsd.gov.hk`. The button exists in the mockup and logs its intent. |
+| **Tile resolution** | ✅ settled | Base at z+1, labels at z (§2a). |
+
+**Three more that the owner's list did not name and that M3 also owes:**
+
+0. **A non-finite value must never reach the camera.** Found the hard way in the mockup: `fitRoute(ms: 0)`
+   fell into the easing, where `(t0 - t0) / 0` is `0/0` — **`NaN`, not `Infinity`**, so it did not clamp
+   to the end of the flight, it poisoned `cam.u/v`. Every projected point derives from those, so one
+   bad value became ~10,500 `<circle cx="NaN">` errors a second and a blank overlay. Two guards, both
+   cheap: reject a non-finite target in the camera-move function, and refuse to draw a frame from a
+   non-finite camera (warn once instead). Worth stating as a rule because MapLibre will not save us
+   here — a `NaN` handed to `easeTo` is still ours to have produced.
+
+
+1. **Geometry simplification per zoom.** CTB 11 outbound is **2,747 vertices**. At z12 the whole route
+   is a few hundred pixels wide and most of those vertices are sub-pixel. Douglas–Peucker per zoom
+   band is the obvious answer; nothing does it yet, and it should be decided before the line is drawn
+   at speed rather than after.
+2. **A decision on what `available: false` draws.** ADR-152 deliberately left it open and §5
+   recommends the dashed approximation, which the owner has agreed. It needs to exist as a declared
+   state in `route-detail.spec.json` before M4, not after.
+
+**Recommendation: M3 stays in the mockup until the header interaction settles**, because the visible-
+centre rule depends on the card and sheet geometry, and re-deriving it against a changed layout is
+the kind of rework that is cheap now and expensive later. Everything M3 owes is understood; none of
+it is blocked on a question we cannot answer.
+
+---
+
+## 9. Suggested rows
+
+Ordered so each earns its keep alone, and so the two open questions (§2 vector base, §8 paradigm) can be
+answered late rather than up front.
+
+| Row | What | Prereq | Notes |
+|---|---|---|---|
+| ~~**M0**~~ | ~~Retain `gtfsId` for KMB/CTB/NLB~~ | — | ✅ **Done 2026-08-24** (ADR-152). Also carried on `RouteDoc`. |
+| ~~**M1**~~ | ~~`resolveRoutePath` + corpus~~ | M0 | ✅ **Done 2026-08-24** (ADR-153). 5 groups, 20 rows, expected values from a second implementation. `packages/core` still 100% covered. |
+| ~~**M2**~~ | ~~`/v1/route/:id/path`~~ | M1 | ✅ **Done 2026-08-24** (ADR-152). Measured: **444 ms / 7.9 KB** for KMB 1 outbound. `available:false`, never 404. |
+| **M3** | `MapProvider` seam; interactive MapLibre on **LandsD raster** | — | **Not ready** — see §8c for what it owes first. |
+| **M4** | Route polyline on Route detail, with the §5 fallback | M2, M3 | First rider-visible payoff. |
+| **M5** | Live user location + accuracy radius + permission states | M3 | Existing `LocationProvider`. |
+| **M6** | Scroll-linked camera, with pan-to-suspend and recentre | M4 | The §6 loop-avoidance is the whole job. |
+| **M7** | Route-detail interaction paradigm (§8) + spec update | M4 | Decide **before** M6 — it determines what a tap means. |
+| **M8** | *(nice to have)* Street view toggle | §7 key | Send the email now; the row can wait. |
+
+**Two things to settle before M3 and M7 respectively:** whether the vector base is worth trying at all,
+and which interaction paradigm wins. Everything else can start.

@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route detail — round 2: no per-row chrome</title>
+<!-- PROTOTYPE ONLY. Same caveats as index.html: tiles direct from LandsD (the app goes through our
+     Worker, ADR-049), raw hex instead of tokens, hand-rolled slippy map. See ./README.md -->
+<style>
+  :root{--bg:#fbfbfa;--surface:#fff;--text:#1a1a19;--muted:#7a7975;--line:#e6e5e1;--accent:#c8102e;
+        --positive:#0a7d4a;--warn:#a8620a;--shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.08)}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f0efec;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--text)}
+  header.page{max-width:1240px;margin:0 auto;padding:26px 20px 6px}
+  header.page h1{font-size:20px;margin:0 0 6px}
+  header.page p{margin:0 0 14px;color:var(--muted);max-width:78ch}
+  .wrap{max-width:1240px;margin:0 auto;padding:0 20px 60px;display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:start}
+  @media(max-width:920px){.wrap{grid-template-columns:1fr}}
+
+  .phone{width:390px;height:800px;background:var(--bg);border-radius:38px;box-shadow:var(--shadow);
+         overflow:hidden;position:relative;border:1px solid var(--line)}
+  .nav{display:flex;align-items:center;gap:10px;padding:14px 14px 10px;background:var(--surface);
+       border-bottom:1px solid var(--line);position:relative;z-index:20}
+  .chip{background:var(--accent);color:#fff;font-weight:700;border-radius:8px;padding:4px 9px;font-size:15px}
+  .nav .dest{flex:1;min-width:0}
+  .nav .dest b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav .dest span{display:block;font-size:11.5px;color:var(--muted)}
+  .iconbtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+           display:grid;place-items:center;cursor:pointer;flex:none;padding:0}
+  .iconbtn svg{width:17px;height:17px}
+
+  /* map fills everything under the nav; the sheet floats over it */
+  .stage{position:absolute;left:0;right:0;top:59px;bottom:0}
+  .map{position:absolute;inset:0;overflow:hidden;background:#dfe3e0;touch-action:none;cursor:grab}
+  .map.dragging{cursor:grabbing}
+  .layer{position:absolute;inset:0;transform-origin:0 0}
+  img.tile{position:absolute;user-select:none;-webkit-user-drag:none}
+  svg.ov{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+  .attrib{position:absolute;right:6px;font-size:9px;color:#3a3a38;background:rgba(255,255,255,.82);
+          padding:2px 6px;border-radius:5px;z-index:3;pointer-events:none;transition:bottom .28s}
+  .zoomers{position:absolute;right:10px;z-index:6;display:flex;flex-direction:column;gap:5px;transition:bottom .28s}
+  .zoomers button{width:30px;height:30px;border-radius:9px;border:1px solid var(--line);background:var(--surface);
+                  font-size:17px;cursor:pointer;box-shadow:var(--shadow);padding:0;line-height:1}
+  .recentre{position:absolute;left:10px;z-index:6;background:var(--surface);border:1px solid var(--line);
+            border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);
+            opacity:0;pointer-events:none;transition:opacity .18s,bottom .28s}
+  .recentre.on{opacity:1;pointer-events:auto}
+
+  /* ---------- the sheet that holds the list ---------- */
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--bg);border-radius:18px 18px 0 0;
+         box-shadow:0 -4px 22px rgba(0,0,0,.13);display:flex;flex-direction:column;z-index:10;
+         transition:top .32s cubic-bezier(.32,.72,0,1)}
+  .grab{padding:7px 0 5px;flex:none;cursor:grab;display:grid;place-items:center}
+  .grab i{display:block;width:36px;height:4px;border-radius:2px;background:#dedcd7}
+  .sheethdr{display:none;padding:0 14px 8px;font-size:11.5px;color:var(--muted);font-weight:600;flex:none}
+  .list{flex:1;overflow-y:auto;overscroll-behavior:contain;scroll-behavior:smooth}
+
+  /* ---------- rows: NO permanent chrome ---------- */
+  .row{position:relative;border-bottom:1px solid var(--line);background:transparent}
+  .row:last-child{border-bottom:0}
+  .rowhit{display:flex;align-items:center;width:100%;background:transparent;border:0;padding:0 12px 0 0;
+          font:inherit;color:inherit;text-align:left;cursor:pointer}
+  .rail{width:40px;flex:none;align-self:stretch;position:relative}
+  .rail::before{content:"";position:absolute;left:19px;top:0;bottom:0;width:2px;background:var(--line)}
+  .row:first-child .rail::before{top:50%}
+  .row:last-child .rail::before{bottom:50%}
+  .dot{position:absolute;left:13px;top:50%;width:13px;height:13px;margin-top:-6.5px;border-radius:50%;
+       background:var(--surface);border:2.5px solid #bdbcb7;transition:all .18s}
+  .row.active .dot{border-color:var(--accent);background:var(--accent);transform:scale(1.25)}
+  .row.active{background:var(--surface)}
+  .rowbody{flex:1;min-width:0;padding:12px 8px 12px 0}
+  .nm{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .zh{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .row.active .nm{font-weight:650}
+  .eta{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;color:var(--positive);flex:none;width:52px;text-align:right}
+  .eta.due{color:var(--accent)} .eta.none{color:var(--muted);font-weight:400}
+  .selbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:0;transition:opacity .18s}
+  .row.active .selbar{opacity:1}
+  .fav{position:absolute;left:24px;top:50%;margin-top:-11px;width:15px;height:15px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .row.saved .fav{opacity:1}
+
+  /* E — inline expansion */
+  .exp{max-height:0;overflow:hidden;transition:max-height .3s cubic-bezier(.32,.72,0,1);background:var(--surface)}
+  .row.open .exp{max-height:64px}
+  .expinner{display:flex;gap:7px;padding:2px 12px 12px 40px}
+  .act{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);
+       border-radius:999px;padding:7px 13px;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap}
+  .act:hover{background:#f2f1ed}
+  .act svg{width:15px;height:15px}
+  .act.on{background:#fff6e6;border-color:#f0d3a8;color:#7a4d06;font-weight:600}
+
+  /* H′ — floating card at the map seam */
+  .card{position:absolute;left:10px;right:10px;z-index:12;background:var(--surface);border:1px solid var(--line);
+        border-radius:15px;box-shadow:var(--shadow);padding:11px 12px 10px;
+        opacity:0;transform:translateY(10px) scale(.98);pointer-events:none;
+        transition:opacity .22s,transform .26s cubic-bezier(.32,.72,0,1),bottom .32s cubic-bezier(.32,.72,0,1)}
+  .card.on{opacity:1;transform:none;pointer-events:auto}
+  .card .top{display:flex;align-items:flex-start;gap:8px;margin-bottom:9px}
+  .card .top div{flex:1;min-width:0}
+  .card .cn{font-size:13.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .cz{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .ce{font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--positive);flex:none}
+  .card .row2{display:flex;gap:7px}
+  .close{width:24px;height:24px;border-radius:7px;border:0;background:#f2f1ed;cursor:pointer;flex:none;
+         display:grid;place-items:center;font-size:14px;line-height:1;color:var(--muted);padding:0}
+
+  /* panel */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow)}
+  .panel h2{font-size:15px;margin:0 0 3px}
+  .panel .lede{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .tab{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 13px;cursor:pointer;font:inherit;font-size:13px}
+  .tab[aria-selected=true]{background:var(--text);color:#fff;border-color:var(--text);font-weight:600}
+  .desc{background:#f7f6f3;border-radius:11px;padding:13px 15px;font-size:13px;margin-bottom:14px;border:1px solid var(--line)}
+  .desc > b:first-child{display:block;margin-bottom:5px}
+  .desc ul{margin:7px 0 0;padding-left:17px} .desc li{margin:3px 0}
+  .desc .warn{color:var(--warn);font-weight:600}
+  fieldset{border:1px solid var(--line);border-radius:11px;padding:10px 14px 12px;margin:0 0 12px}
+  legend{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.55px;padding:0 5px}
+  label.opt{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:13px;cursor:pointer}
+  label.opt input{margin-top:2px;flex:none}
+  label.opt span small{display:block;color:var(--muted);font-size:11.5px}
+  .log{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:#1a1a19;color:#d6d5d0;border-radius:11px;
+       padding:11px 13px;height:118px;overflow:auto;white-space:pre-wrap}
+  .log .t{color:#7a7975} .log .hi{color:#7fd1a3}
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Round 2 — no per-row chrome, and the map as the shell</h1>
+  <p>
+    Your three constraints: <b>a clean list</b> (kills B's repeated <code>⋯</code> and D's second column),
+    <b>an easy way to find a stop on the map</b> (kills A), and <b>room for actions we haven't invented yet</b>
+    ("notify me when it's approaching"). Two independent choices below — where actions live, and what shape
+    the screen is. Try them in combination.
+  </p>
+</header>
+
+<div class="wrap">
+  <div class="phone">
+    <div class="nav">
+      <span class="chip">1</span>
+      <span class="dest"><b id="destEn">—</b><span id="destZh">—</span></span>
+      <button class="iconbtn" id="flip"></button>
+    </div>
+    <div class="stage">
+      <div class="map" id="map">
+        <div class="layer" id="tiles"></div>
+        <div class="layer" id="labels"></div>
+        <svg class="ov" id="ov"></svg>
+      </div>
+      <div class="zoomers" id="zoomers"><button id="zin">+</button><button id="zout">−</button></div>
+      <button class="recentre" id="recentre">Recentre</button>
+      <div class="attrib" id="attrib">© Lands Department · route © Transport Department</div>
+
+      <div class="card" id="card">
+        <div class="top">
+          <div><div class="cn" id="cardN">—</div><div class="cz" id="cardZ">—</div></div>
+          <span class="ce" id="cardE">—</span>
+          <button class="close" id="cardX">×</button>
+        </div>
+        <div class="row2" id="cardActs"></div>
+      </div>
+
+      <div class="sheet" id="sheet">
+        <div class="grab" id="grab"><i></i></div>
+        <div class="sheethdr" id="sheethdr">25 stops · towards Star Ferry</div>
+        <div class="list" id="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Where the actions live</h2>
+    <p class="lede">Neither option puts anything permanent on a row.</p>
+    <div class="tabs" id="tabsA">
+      <button class="tab" role="tab" data-a="E">E — Row expands in place</button>
+      <button class="tab" role="tab" data-a="H">H′ — Floating stop card</button>
+      <button class="tab" role="tab" data-a="A">A — Sheet (today, for contrast)</button>
+    </div>
+    <div class="desc" id="descA"></div>
+
+    <h2>Screen shape</h2>
+    <p class="lede">Your "map peeking through the chrome" idea, made concrete.</p>
+    <div class="tabs" id="tabsS">
+      <button class="tab" role="tab" data-s="list">List-dominant <small>(like today)</small></button>
+      <button class="tab" role="tab" data-s="half">Half — map and list share</button>
+      <button class="tab" role="tab" data-s="map">Map-first <small>(list peeks)</small></button>
+    </div>
+    <div class="desc" id="descS"></div>
+
+    <fieldset><legend>Behaviour</legend>
+      <label class="opt"><input type="checkbox" id="optFollow" checked>
+        <span>Camera follows the list <small>Scroll-spy → <code>flyTo</code>. Suspends when you pan.</small></span></label>
+      <label class="opt"><input type="checkbox" id="optExpandOnScroll">
+        <span>…and scroll also opens the row <small class="warn">Turn this ON with E selected to feel why it must be OFF.</small></span></label>
+      <div style="margin:8px 0 2px;font-size:12px;font-weight:600">Tile resolution</div>
+      <label class="opt"><input type="radio" name="ret" value="off">
+        <span>Native (z) <small>256px tiles at 256 CSS px. Soft on a 2× screen.</small></span></label>
+      <label class="opt"><input type="radio" name="ret" value="both">
+        <span>Overzoom both (z+1) <small class="warn">Sharp, but the labels come out half-size.</small></span></label>
+      <label class="opt"><input type="radio" name="ret" value="split" checked>
+        <span>Split: base z+1, labels z <small>Sharp base, labels at their intended size — only possible because LandsD ships labels as a separate service.</small></span></label>
+    </fieldset>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+const TILE='https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png';
+const LABEL='https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png';
+const TS=256;
+const I={
+ star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+ starF:'<svg viewBox="0 0 24 24" fill="#f5a623" stroke="#d68910" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+ bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 8a6 6 0 10-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 003 0"/></svg>',
+ pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1116 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+ flip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4L3 8l4 4"/><path d="M3 8h13a4 4 0 014 4"/><path d="M17 20l4-4-4-4"/><path d="M21 16H8a4 4 0 01-4-4"/></svg>'};
+document.getElementById('flip').innerHTML=I.flip;
+
+const DESC_A={
+ E:{t:'E — the selected row expands in place',
+    b:'Tap a stop: the camera flies <i>and</i> that row opens to show its actions. Only ever one row is open, so there is no repeated chrome anywhere — the controls exist exactly where you tapped, and the list is untouched otherwise.',
+    p:['Nothing permanent on any row — the list keeps the design you already have.',
+       'Unlimited room for future actions; "Notify me" is already sitting there.',
+       'Same tap count as today (tap row → tap action), and the map moves for free.',
+       'Reads as an accordion, which riders already understand — hkbus uses one.'],
+    c:['<b>It shifts the list.</b> Opening a row pushes everything below it down. Harmless on tap; <span class="warn">actively horrible if scroll-spy also opens rows</span> — tick the box in Behaviour to feel it.',
+       'The open row can be scrolled off-screen, leaving actions you cannot see.']},
+ H:{t:'H′ — a floating card at the map/list seam',
+    b:'Tap a stop: the camera flies and a compact card appears over the bottom of the map, naming the stop and carrying its actions. The list <b>never changes shape</b>.',
+    p:['<b>Zero layout shift</b> — which is what makes it safe to let scroll-spy drive the selection.',
+       'It names its target, so it dodges C\'s "what does this star apply to" problem entirely.',
+       'Sits between the pin above and the row below — the thing it acts on is visible in both places.',
+       'Scales to more actions, and can grow a second line without touching the list.'],
+    c:['It covers ~70px of map, exactly where the selected pin often is. Needs the camera to offset for it.',
+       'Two dismiss affordances to get right (× and tapping the map).',
+       '<span class="warn">It is a third surface</span> — nav, list, and now a card. More to keep consistent across renderers.']},
+ A:{t:'A — the sheet (today), for contrast',
+    b:'Tap a stop, a modal sheet slides up. Included so you can feel the difference in directness, not as a candidate.',
+    p:['Familiar; already built and already specced.'],
+    c:['Covers the map and the list.','Nothing about the tap tells you where the stop <i>is</i>.','Every action costs a dismiss.']}};
+
+const DESC_S={
+ list:{t:'List-dominant — closest to today',
+   b:'The map is a fixed band under the header; the list owns the rest. Drag the grab handle to change it.',
+   p:['The rider\'s actual job — <i>when is my bus</i> — is what fills the screen.'],
+   c:['The map is small enough that a camera flight is easy to miss.']},
+ half:{t:'Half — the two share',
+   b:'Equal billing. The camera flight is clearly visible while you still see five or six stops.',
+   p:['Following the list finally <i>reads</i> as following.','Good compromise while a rider is choosing a stop rather than checking a time.'],
+   c:['Fewer stops visible than today — a regression for the common case.']},
+ map:{t:'Map-first — the list peeks',
+   b:'Your "peeking through the chrome" idea. The map is the screen; the list is a sheet resting over it, draggable up.',
+   p:['Genuinely the nicest way to <i>choose</i> a stop.','The map is the shell, so the inset/peek aesthetic comes free.'],
+   c:['<span class="warn">Wrong default for the 90% case.</span> Someone opening a route wants times.',
+      'Nested gestures (drag sheet vs scroll list vs pan map) are genuinely fiddly on RN — a real cost, not a detail.']}};
+
+const DET={list:0.62,half:0.42,map:0.20};   /* sheet top as a fraction of the stage */
+let DATA=null,surface='E',shape='list',active=0,open=-1,saved=new Set([0]),
+    cam={lat:22.3,lng:114.17,zoom:12.5},anim=null,userPanned=false,suppressSpy=false,spyT=null;
+const mapEl=document.getElementById('map'),tilesEl=document.getElementById('tiles'),ov=document.getElementById('ov'),
+      listEl=document.getElementById('list'),sheet=document.getElementById('sheet'),card=document.getElementById('card'),
+      stage=document.querySelector('.stage'),logEl=document.getElementById('log');
+
+function log(m,hi){const t=new Date().toLocaleTimeString('en-GB',{hour12:false});
+ logEl.insertAdjacentHTML('afterbegin',`<div><span class="t">${t}</span> ${hi?`<span class="hi">${m}</span>`:m}</div>`);
+ while(logEl.children.length>50)logEl.lastChild.remove();}
+
+const wx=(lng,z)=>(lng+180)/360*TS*2**z;
+const wy=(lat,z)=>{const s=Math.sin(lat*Math.PI/180);return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*TS*2**z};
+const lngAt=(x,z)=>x/(TS*2**z)*360-180;
+const latAt=(y,z)=>{const n=Math.PI-2*Math.PI*y/(TS*2**z);return 180/Math.PI*Math.atan(.5*(Math.exp(n)-Math.exp(-n)))};
+
+function render(){
+  const W=mapEl.clientWidth,H=mapEl.clientHeight; if(!W||!H||!DATA)return;
+  const mode=document.querySelector('input[name=ret]:checked').value;
+  const dpr=Math.round(Math.log2(Math.min(2,devicePixelRatio||1)));
+  const zBase=Math.max(10,Math.min(20,Math.round(cam.zoom)+(mode==='off'?0:dpr)));
+  const zLab =Math.max(10,Math.min(20,Math.round(cam.zoom)+(mode==='both'?dpr:0)));
+  const z=zBase, scale=2**(cam.zoom-z);
+
+  // One grid per layer, each at its OWN zoom. The base overzooms for sharpness; the label layer does
+  // not, because LandsD bakes label size into the raster — overzooming it halves the text.
+  function grid(el,zz,tpl){
+    const sc=2**(cam.zoom-zz), px=TS*sc, n=2**zz;
+    const cX=wx(cam.lng,zz), cY=wy(cam.lat,zz);
+    const oX=cX-W/(2*sc), oY=cY-H/(2*sc);
+    const gx0=Math.floor(oX/TS), gx1=Math.floor((oX+W/sc)/TS);
+    const gy0=Math.floor(oY/TS), gy1=Math.floor((oY+H/sc)/TS);
+    el.style.transform=`translate(${((gx0*TS-oX)*sc).toFixed(2)}px,${((gy0*TS-oY)*sc).toFixed(2)}px)`;
+    const keys=[]; let h='';
+    for(let x=gx0;x<=gx1;x++)for(let y=gy0;y<=gy1;y++){
+      if(y<0||y>=n)continue; const xx=((x%n)+n)%n; keys.push(`${zz}/${xx}/${y}`);
+      const st=`left:${((x-gx0)*px).toFixed(2)}px;top:${((y-gy0)*px).toFixed(2)}px;width:${px.toFixed(2)}px;height:${px.toFixed(2)}px`;
+      h+=`<img class="tile" src="${tpl.replace('{z}',zz).replace('{x}',xx).replace('{y}',y)}" style="${st}" alt="">`;
+    }
+    const kk=keys.join(); if(el.dataset.k!==kk){el.innerHTML=h;el.dataset.k=kk;}
+  }
+  grid(tilesEl,zBase,TILE);
+  grid(document.getElementById('labels'),zLab,LABEL);
+
+  const ox=wx(cam.lng,z)-W/(2*scale), oy=wy(cam.lat,z)-H/(2*scale);
+
+  const p=(lat,lng)=>[(wx(lng,z)-ox)*scale,(wy(lat,z)-oy)*scale];
+  const pts=DATA.lines['1'].map(c=>p(c[1],c[0]));
+  const d='M'+pts.map(q=>`${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L');
+  let s=`<path d="${d}" fill="none" stroke="#fff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+         <path d="${d}" fill="none" stroke="#c8102e" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  let acc=0;
+  for(let i=1;i<pts.length;i++){const dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1],L=Math.hypot(dx,dy);acc+=L;
+    if(acc>76&&L>.5){acc=0;s+=`<path d="M-4 -3.4L4 0L-4 3.4Z" fill="#fff" opacity=".95" transform="translate(${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)}) rotate(${(Math.atan2(dy,dx)*180/Math.PI).toFixed(0)})"/>`;}}
+  DATA.stops.O.forEach((st,i)=>{const q=p(st.lat,st.lng),on=i===active;
+    s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${on?7.5:4}" fill="${on?'#c8102e':'#fff'}" stroke="${on?'#fff':'#8a8985'}" stroke-width="${on?3:1.8}"/>`;
+    if(on)s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="12" fill="none" stroke="#c8102e" stroke-width="1.6" opacity=".45"><animate attributeName="r" values="9;17" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values=".5;0" dur="1.6s" repeatCount="indefinite"/></circle>`;
+    if(saved.has(i))s+=`<circle cx="${q[0].toFixed(1)}" cy="${(q[1]-11).toFixed(1)}" r="3.4" fill="#f5a623" stroke="#fff" stroke-width="1.2"/>`;});
+  const me=DATA.stops.O[6],q=p(me.lat+.0016,me.lng-.0021);
+  const rpx=45/(156543.03392*Math.cos(cam.lat*Math.PI/180)/2**cam.zoom);
+  s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${rpx.toFixed(1)}" fill="#2f6fed" opacity=".13"/>
+      <circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="6" fill="#2f6fed" stroke="#fff" stroke-width="2.5"/>`;
+  ov.innerHTML=s;
+}
+
+function flyTo(lat,lng,zoom,ms=600){
+  if(anim)cancelAnimationFrame(anim);
+  const a={...cam},b={lat,lng,zoom:zoom??cam.zoom},t0=performance.now();
+  const dip=Math.min(.85,Math.hypot(b.lat-a.lat,b.lng-a.lng)*38);
+  (function step(t){const k=Math.min(1,(t-t0)/ms),e=k<.5?4*k*k*k:1-((-2*k+2)**3)/2;
+    cam.lat=a.lat+(b.lat-a.lat)*e;cam.lng=a.lng+(b.lng-a.lng)*e;
+    cam.zoom=a.zoom+(b.zoom-a.zoom)*e-Math.sin(e*Math.PI)*dip;
+    render();anim=k<1?requestAnimationFrame(step):null;})(t0);
+}
+
+/* ---------- list ---------- */
+function actionsHTML(i,cls){
+  const sv=saved.has(i);
+  return `<button class="${cls}${sv?' on':''}" data-do="star" data-i="${i}">${sv?I.starF:I.star}<span>${sv?'Saved':'Save'}</span></button>
+          <button class="${cls}" data-do="notify" data-i="${i}">${I.bell}<span>Notify me</span></button>
+          <button class="${cls}" data-do="view" data-i="${i}">${I.pin}<span>Stop</span></button>`;
+}
+function buildList(){
+  listEl.innerHTML=DATA.stops.O.map((s,i)=>{
+    const eta=['1','3','6','—','12','2'][i%6],cls=eta==='—'?'none':(+eta<=2?'due':'');
+    const txt=eta==='—'?'—':(+eta<=1?'Due':eta+' min');
+    return `<div class="row${i===active?' active':''}${i===open?' open':''}${saved.has(i)?' saved':''}" data-i="${i}">
+      <span class="selbar"></span>
+      <button class="rowhit" data-do="row" data-i="${i}">
+        <span class="rail"><span class="dot"></span>${saved.has(i)?`<span class="fav">${I.starF}</span>`:''}</span>
+        <span class="rowbody"><span class="nm">${s.n}</span><span class="zh">${s.zh}</span></span>
+        <span class="eta ${cls}">${txt}</span>
+      </button>
+      <div class="exp"><div class="expinner">${actionsHTML(i,'act')}</div></div>
+    </div>`;}).join('');
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-do]');if(!b)return;
+  const i=+b.dataset.i,what=b.dataset.do;
+  if(what==='row'){
+    active=i;
+    if(surface==='E'){open=open===i?-1:i;}
+    if(surface==='H'){showCard(i);}
+    if(surface==='A'){showCard(i);}
+    buildList();userPanned=false;updChrome();
+    const s=DATA.stops.O[i];flyTo(s.lat,s.lng,15.4);
+    log(`tap ${s.n} → camera flies${surface==='E'?(open===i?' + row opens':' + row closes'):' + card'}`,true);
+    return;}
+  if(what==='star'){saved.has(i)?saved.delete(i):saved.add(i);buildList();if(card.classList.contains('on'))showCard(i,true);render();
+    log(`★ ${saved.has(i)?'saved':'removed'} — ${DATA.stops.O[i].n}`,true);return;}
+  if(what==='notify'){log(`🔔 notify me when the bus nears ${DATA.stops.O[i].n} — the action D/B had no room for`,true);return;}
+  if(what==='view'){log(`→ Place detail for ${DATA.stops.O[i].n}`);return;}
+});
+
+function showCard(i,keep){
+  const s=DATA.stops.O[i];
+  document.getElementById('cardN').textContent=s.n;
+  document.getElementById('cardZ').textContent=s.zh;
+  document.getElementById('cardE').textContent=['1 min','3 min','6 min','—','12 min','2 min'][i%6];
+  document.getElementById('cardActs').innerHTML=actionsHTML(i,'act');
+  card.classList.add('on');card.dataset.i=i;
+  if(!keep)log('card shown — list did not move');
+}
+document.getElementById('cardX').onclick=()=>{card.classList.remove('on');log('card dismissed');};
+
+/* scroll-spy */
+listEl.addEventListener('scroll',()=>{
+  if(!document.getElementById('optFollow').checked||suppressSpy)return;
+  clearTimeout(spyT);
+  spyT=setTimeout(()=>{
+    const box=listEl.getBoundingClientRect();let best=null,bd=1e9;
+    listEl.querySelectorAll('.row').forEach(r=>{const b=r.getBoundingClientRect();
+      const d=Math.abs(b.top+Math.min(b.height,52)/2-(box.top+56));if(d<bd){bd=d;best=+r.dataset.i;}});
+    if(best!=null&&best!==active){
+      active=best;
+      if(document.getElementById('optExpandOnScroll').checked&&surface==='E')open=best;
+      if(surface==='H'&&card.classList.contains('on'))showCard(best,true);
+      buildList();
+      const s=DATA.stops.O[best];
+      if(!userPanned){flyTo(s.lat,s.lng,15.4,500);log(`scrolled → flyTo ${s.n}`);}else render();
+    }},90);
+});
+
+/* gestures */
+let drag=null;
+mapEl.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,m:0};mapEl.setPointerCapture(e.pointerId);
+  mapEl.classList.add('dragging');if(anim){cancelAnimationFrame(anim);anim=null;}});
+mapEl.addEventListener('pointermove',e=>{if(!drag)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.m+=Math.hypot(dx,dy);drag.x=e.clientX;drag.y=e.clientY;
+  const z=cam.zoom;cam.lng=lngAt(wx(cam.lng,z)-dx,z);cam.lat=latAt(wy(cam.lat,z)-dy,z);render();
+  if(drag.m>26&&!userPanned){userPanned=true;updChrome();log('you panned → following suspended',true);}});
+addEventListener('pointerup',()=>{if(drag){mapEl.classList.remove('dragging');drag=null;}});
+mapEl.addEventListener('wheel',e=>{e.preventDefault();
+  const r=mapEl.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const z0=cam.zoom,z1=Math.max(10.5,Math.min(18.5,z0-e.deltaY*.0022));
+  const la=latAt(wy(cam.lat,z0)+(my-r.height/2),z0),lo=lngAt(wx(cam.lng,z0)+(mx-r.width/2),z0);
+  cam.zoom=z1;cam.lng=lngAt(wx(lo,z1)-(mx-r.width/2),z1);cam.lat=latAt(wy(la,z1)-(my-r.height/2),z1);
+  render();},{passive:false});
+document.getElementById('zin').onclick=()=>{cam.zoom=Math.min(18.5,cam.zoom+1);render()};
+document.getElementById('zout').onclick=()=>{cam.zoom=Math.max(10.5,cam.zoom-1);render()};
+document.getElementById('recentre').onclick=()=>{userPanned=false;updChrome();
+  const s=DATA.stops.O[active];flyTo(s.lat,s.lng,15.4);log('recentred',true);};
+
+/* sheet drag */
+let sd=null;
+document.getElementById('grab').addEventListener('pointerdown',e=>{
+  sd={y:e.clientY,top:sheet.offsetTop};e.target.setPointerCapture(e.pointerId);sheet.style.transition='none';});
+addEventListener('pointermove',e=>{if(!sd)return;
+  const h=stage.clientHeight,t=Math.max(h*0.16,Math.min(h*0.78,sd.top+(e.clientY-sd.y)));
+  sheet.style.top=t+'px';placeChrome(t);});
+addEventListener('pointerup',()=>{if(!sd)return;sd=null;sheet.style.transition='';
+  const h=stage.clientHeight,f=sheet.offsetTop/h;
+  let best='list',bd=9;for(const k in DET){const d=Math.abs(DET[k]-f);if(d<bd){bd=d;best=k;}}
+  setShape(best);log(`sheet snapped → ${best}`,true);});
+
+function placeChrome(top){
+  const h=stage.clientHeight,gap=h-top;
+  document.getElementById('zoomers').style.bottom=(gap+12)+'px';
+  document.getElementById('recentre').style.bottom=(gap+14)+'px';
+  document.getElementById('attrib').style.bottom=(gap+4)+'px';
+  card.style.bottom=(gap+10)+'px';
+}
+function setShape(s){
+  shape=s;const h=stage.clientHeight;sheet.style.top=(h*DET[s])+'px';placeChrome(h*DET[s]);
+  document.querySelectorAll('#tabsS .tab').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.s===s)));
+  const d=DESC_S[s];document.getElementById('descS').innerHTML=
+    `<b>${d.t}</b>${d.b}<ul>${d.p.map(x=>`<li>✓ ${x}</li>`).join('')}${d.c.map(x=>`<li>✗ ${x}</li>`).join('')}</ul>`;
+  document.getElementById('sheethdr').style.display=s==='map'?'block':'none';
+  setTimeout(render,340);
+}
+function setSurface(a){
+  surface=a;open=-1;card.classList.remove('on');
+  document.querySelectorAll('#tabsA .tab').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.a===a)));
+  const d=DESC_A[a];document.getElementById('descA').innerHTML=
+    `<b>${d.t}</b>${d.b}<ul>${d.p.map(x=>`<li>✓ ${x}</li>`).join('')}${d.c.map(x=>`<li>✗ ${x}</li>`).join('')}</ul>`;
+  buildList();log(`— action surface ${a} —`,true);
+}
+function updChrome(){document.getElementById('recentre').classList.toggle('on',userPanned);}
+document.getElementById('tabsA').onclick=e=>{const t=e.target.closest('.tab');if(t)setSurface(t.dataset.a);};
+document.getElementById('tabsS').onclick=e=>{const t=e.target.closest('.tab');if(t){setShape(t.dataset.s);log(`shape → ${t.dataset.s}`,true);}};
+['optFollow','optExpandOnScroll'].forEach(id=>document.getElementById(id).onchange=()=>{tilesEl.dataset.k='';render();});
+
+fetch('./kmb1.json').then(r=>r.json()).then(j=>{
+  DATA=j;const term=j.stops.O[j.stops.O.length-1];
+  document.getElementById('destEn').textContent='towards '+term.n.replace(/\s*\(\w+\)\s*$/,'');
+  document.getElementById('destZh').textContent=term.zh.replace(/\s*\(\w+\)\s*$/,'');
+  const ln=j.lines['1'],la=ln.map(c=>c[1]),lo=ln.map(c=>c[0]);
+  cam={lat:(Math.min(...la)+Math.max(...la))/2,lng:(Math.min(...lo)+Math.max(...lo))/2,zoom:12.6};
+  setSurface('E');setShape('list');render();
+  log('KMB 1 — real CSDI geometry, 391 vertices',true);
+}).catch(()=>{document.getElementById('descA').innerHTML=
+  '<b>Could not load kmb1.json</b>Serve over HTTP (<code>python3 -m http.server</code>), do not open the file directly.';});
+document.querySelectorAll('input[name=ret]').forEach(r=>r.onchange=()=>{tilesEl.dataset.k='';document.getElementById('labels').dataset.k='';render();log('tiles → '+r.value,true);});
+addEventListener('resize',()=>{if(DATA){setShape(shape);render();}});
+</script>
+</body></html>

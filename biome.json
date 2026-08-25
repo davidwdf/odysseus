@@ -18,7 +18,8 @@
       "!**/*.gen.ts",
       "!packages/contract/openapi.json",
       "!packages/contract/asyncapi.json",
-      "!scripts/boundaries/fixtures"
+      "!scripts/boundaries/fixtures",
+      "!docs/proposals/mockups"
     ]
   },
   "formatter": {
