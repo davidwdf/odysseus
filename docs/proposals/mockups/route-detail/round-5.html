@@ -2,7 +2,8 @@
 <html lang="en-GB">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Route detail — round 4: one context card</title>
+<link rel="icon" href="./favicon.svg">
+<title>Route detail — round 5: path & marker styling</title>
 <!-- PROTOTYPE ONLY. Tiles direct from LandsD (the app goes through our Worker, ADR-049);
      raw hex not tokens; hand-rolled slippy map. See ./README.md -->
 <style>
@@ -23,6 +24,7 @@
  .layer{position:absolute;inset:0;transform-origin:0 0}
  img.tile{position:absolute;user-select:none;-webkit-user-drag:none}
  svg.ov{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+ svg.ov .hit{pointer-events:auto}
 
  .glass{background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(14px) saturate(1.8);
         backdrop-filter:blur(14px) saturate(1.8);
@@ -37,7 +39,7 @@
          transition:height .36s cubic-bezier(.32,.72,0,1),padding .36s cubic-bezier(.32,.72,0,1)}
  .ctx.expanded .ctxRow{justify-content:center;padding-right:56px}
  .ctx.collapsed .ctxRow{height:48px;padding-left:15px;padding-right:15px;justify-content:flex-start}
- .ctxBadge{background:var(--accent);color:#fff;font-weight:700;border-radius:13px;min-width:60px;height:48px;
+ .ctxBadge{background:var(--op,var(--accent));color:#fff;font-weight:700;border-radius:13px;min-width:60px;height:48px;
            display:grid;place-items:center;font-size:23px;flex:none;padding:0 11px;
            box-shadow:0 2px 8px rgba(26,26,25,.24);
            transition:min-width .36s cubic-bezier(.32,.72,0,1),height .36s cubic-bezier(.32,.72,0,1),
@@ -97,7 +99,7 @@
 
  .row{position:relative;border-bottom:1px solid var(--line)}
  .row:last-child{border-bottom:0}
- .rowhit{display:flex;align-items:center;width:100%;background:transparent;border:0;padding:0 12px 0 0;
+ .rowhit{display:flex;align-items:center;flex:1;min-width:0;background:transparent;border:0;padding:0 12px 0 0;
          font:inherit;color:inherit;text-align:left;cursor:pointer}
  .rail{width:40px;flex:none;align-self:stretch;position:relative}
  .rail::before{content:"";position:absolute;left:19px;top:0;bottom:0;width:2px;background:var(--line)}
@@ -105,11 +107,17 @@
  .dot{position:absolute;left:13px;top:50%;width:13px;height:13px;margin-top:-6.5px;border-radius:50%;
       background:var(--surface);border:2.5px solid #bdbcb7;transition:all .18s}
  .row.active .dot{border-color:var(--accent);background:var(--accent);transform:scale(1.25)}
+ /* termini read as squares in the list too, so the map and the rail agree */
+ .row:first-child .dot,.row:last-child .dot{border-radius:4px;width:15px;height:15px;margin-top:-7.5px;left:12px}
  .row.active{background:var(--surface)}
  .rowbody{flex:1;min-width:0;padding:12px 8px 12px 0}
  .nm{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
  .zh{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
  .row.active .nm{font-weight:650}
+ .more{flex:none;width:34px;align-self:stretch;border:0;background:transparent;cursor:pointer;padding:0;
+       display:grid;place-items:center;color:var(--muted)}
+ .more:hover{background:#eceae5;color:var(--text)}
+ .more svg{width:16px;height:16px}
  .eta{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;color:var(--positive);flex:none;width:52px;text-align:right}
  .eta.due{color:var(--accent)} .eta.none{color:var(--muted);font-weight:400}
  .selbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:0;transition:opacity .18s}
@@ -125,6 +133,14 @@
  .asheet h3{margin:6px 0 0;font-size:15.5px} .asheet p{margin:1px 0 12px;font-size:12px;color:var(--muted)}
 
  .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow)}
+ .seg{display:flex;flex-wrap:wrap;gap:6px}
+ .seg button{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);
+             border-radius:9px;padding:6px 11px;font:inherit;font-size:12.5px;cursor:pointer}
+ .seg button.on{background:var(--text);color:#fff;border-color:var(--text);font-weight:600}
+ .seg button i{width:11px;height:11px;border-radius:3px;display:inline-block;
+                box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+ .hint{margin:9px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+ .hint b{color:var(--text)}
  .panel h2{font-size:15px;margin:0 0 3px} .panel .lede{color:var(--muted);font-size:12.5px;margin:0 0 14px}
  .desc{background:#f7f6f3;border-radius:11px;padding:13px 15px;font-size:13px;margin-bottom:14px;border:1px solid var(--line)}
  .desc b.h{display:block;margin-bottom:5px}
@@ -158,6 +174,7 @@
     <div class="map" id="map">
       <div class="layer" id="tiles"></div><div class="layer" id="labels"></div>
       <svg class="ov" id="ov"></svg>
+      <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><path id="measure" fill="none"/></svg>
     </div>
 
     <div class="ctx glass expanded" id="ctx">
@@ -205,32 +222,110 @@
   </div>
 
   <div class="panel">
-    <h2>Layers on screen</h2>
-    <div class="layers" id="layerList"></div>
-    <div class="desc">
-      <b class="h">Collapsed = full width, clear of the back lens</b>
-      Expanded, the card runs the full width and tucks <i>behind</i> the back lens; the badge is large and
-      centred, which pushes the destination clear of the button. Collapsed, the card's left edge moves
-      <b>right</b> to clear the lens, its content shifts <b>left</b>, and the badge shrinks — so the pill is
-      still full width and gives the destination as much room as it can.
-      <br><br>
-      <b class="h">Why the width-collapse beats the badge-morph I built in round 3</b>
-      Collapsing by <b>width</b> keeps the badge and the destination in one row that never re-flows — so
-      it is a <i>single</i> CSS/layout transition, which both renderers can express identically. The
-      badge-morph in round 3 needed interpolated position <i>and</i> scale <i>and</i> two cross-fading
-      labels, which is exactly why <code>apps/web</code>'s version drifted from <code>apps/mobile</code>'s.
-      <ul>
-        <li>✓ Fewer moving parts, so parity is cheap rather than hard-won.</li>
-        <li>✓ Binary state + tap-to-expand is <b>predictable</b>: it never re-expands under your thumb.</li>
-        <li>✗ It no longer re-expands when you scroll back to the top — see the toggle.</li>
-      </ul>
-    </div>
-    <fieldset><legend>Try</legend>
-      <label class="opt"><input type="checkbox" id="optAutoExpand" checked>
-        <span>Re-expand when the list returns to the top <small>Restores the "scroll back up and the header comes back" reflex without making collapse continuous.</small></span></label>
-      <label class="opt"><input type="checkbox" id="optFollow" checked>
-        <span>Camera follows the list</span></label>
+    <h2>Path &amp; marker styling</h2>
+    <p class="lede">Colours are real tokens, not hand-picked hex. Current zoom: <b id="zRead">—</b></p>
+
+
+    <fieldset><legend>Line</legend>
+      <div class="seg" id="segLine">
+        <button data-line="neutral" class="on">Neutral dark <i style="background:#33322F"></i></button>
+        <button data-line="ink">BRAND.ink <i style="background:#111827"></i></button>
+        <button data-line="rose">Map rose <i style="background:#E11D48"></i></button>
+        <button data-line="violet">Violet <i style="background:#6D28D9"></i></button>
+        <button data-line="accent">Operator accent</button>
+        <button data-line="safe">Map-safe accent</button>
+      </div>
+      <p class="hint"><b>Neutral dark is <code>#33322F</code> — a warm grey, and it is NOT our ink.</b>
+      <code>BRAND.ink</code> is <code>#111827</code> and is declared "theme-independent … does not invert
+      with the appearance", which is exactly what a route line cannot be. Every colour here now carries a
+      <b>light/dark pair</b>: toggle <b>Dark map</b> and the line goes light, marker fills go dark, their
+      borders and the hairline go light, and the chevrons stay in the casing colour so they darken with
+      it. The tiles invert by filter; the overlay inverts by design.</p>
     </fieldset>
+
+      <div style="margin:12px 0 5px;font-size:12px;font-weight:600">Line colour in dark mode</div>
+      <div class="seg" id="segDarkLine">
+        <button data-darkline="amber">Amber <i style="background:#F5B942"></i></button>
+        <button data-darkline="cyan">Cyan <i style="background:#5CC8E0"></i></button>
+        <button data-darkline="mint">Mint <i style="background:#63D9A0"></i></button>
+        <button data-darkline="coral">Coral <i style="background:#FF8F6B"></i></button>
+        <button data-darkline="rose">Rose <i style="background:#FF7E9B"></i></button>
+        <button data-darkline="violet">Violet <i style="background:#B69CF5"></i></button>
+        <button data-darkline="paper">Paper <i style="background:#E9E7E2"></i></button>
+        <button data-darkline="paired" class="on">Paired with light</button>
+      </div>
+      <p class="hint">Turn on <b>Dark map</b> below to compare. Two things the inversion does, both of
+      which decide this: LandsD's black label text becomes <b>white</b>, so a near-white line ("Paper")
+      reads as one more label rather than as the route; and the yellow road fills become <b>warm tan</b>,
+      so <b>Amber</b> collides with the road network — the same mistake CTB's yellow makes on the light
+      map, in the opposite direction. <b>Cyan</b> and <b>Mint</b> sit furthest from both, which is why
+      cyan is the default. Markers, hairlines and chevrons keep their inverted pair regardless.</p>
+    </fieldset>
+
+    <fieldset><legend>Direction marks</legend>
+      <div class="seg" id="segArrow">
+        <button data-arrow="double" class="on">Double chevron</button>
+        <button data-arrow="dart">Dart</button>
+        <button data-arrow="none">None</button>
+      </div>
+      <div style="margin:10px 0 5px;font-size:12px;font-weight:600">Gap between the two chevrons</div>
+      <div class="seg" id="segChevGap">
+        <button data-chevgap="2.5">Tight</button>
+        <button data-chevgap="5" class="on">Normal</button>
+        <button data-chevgap="7.5">Wide</button>
+        <button data-chevgap="10">Wider</button>
+      </div>
+      <div style="margin:10px 0 5px;font-size:12px;font-weight:600">Avoid bends</div>
+      <div class="seg" id="segBend">
+        <button data-bend="10" class="on">Strict (10°)</button>
+        <button data-bend="20">Normal (20°)</button>
+        <button data-bend="40">Loose (40°)</button>
+        <button data-bend="999">Off</button>
+      </div>
+      <p class="hint">A mark that straddles a corner points along neither leg of it. Each mark now
+      measures the heading change across <i>its own footprint</i> and slides along its slot to the
+      straightest spot it can reach; if even the best position is still a corner, <b>nothing is drawn
+      there</b> — a missing mark costs nothing, a misleading one does.</p>
+      <p class="hint">The pair is now <b>one glyph</b>: a single rotated group placed at the mark's
+      centre, with the two chevrons offset inside that group's own frame. Previously each was placed at
+      its own arc position and rotated by the tangent <i>there</i>, so on a bend the two splayed apart
+      and stopped reading as one mark.</p>
+      <p class="hint">Marks are placed <b>between consecutive stops</b> — one for a short hop, two
+      for a long one — rather than at a fixed interval. The stops are the rhythm a rider already reads,
+      so the direction marks follow it instead of landing on top of them.</p>
+    </fieldset>
+
+
+
+    <fieldset><legend>Markers &amp; map</legend>
+      <div style="margin:0 0 5px;font-size:12px;font-weight:600">Marker position</div>
+      <div class="seg" id="segAnchor">
+        <button data-anchor="left" class="on">Left of travel (forced)</button>
+        <button data-anchor="side">Side the data says</button>
+        <button data-anchor="true">True kerb position</button>
+        <button data-anchor="snap">Snapped to the centre</button>
+      </div>
+      <p class="hint">You were right: Hong Kong drives on the left and riders board on the left, so every
+      stop should sit on the <b>left of its direction of travel</b>. Measured on KMB 1: of the 19 stops
+      whose coordinate is offset from the line at all, <b>19 are on the left and 0 on the right</b> (the
+      other 6 sit within 1.5 px of it). So <b>Left of travel</b> and <b>Side the data says</b> agree here
+      — the forced version is still the safer default, because one noisy coordinate cannot flip a marker
+      onto the wrong kerb.</p>
+      <label class="opt" style="margin-top:6px"><input type="checkbox" id="optDark">
+        <span>Dark map <small>Inverts the tiles the way the app does — the overlay is deliberately
+        <i>not</i> inverted, which is the constraint on the line colour.</small></span></label>
+    </fieldset>
+
+    <fieldset><legend>Label size</legend>
+      <div class="seg" id="segLabel">
+        <button data-label="0" class="on">Native (z)</button>
+        <button data-label="-1">Larger (z−1)</button>
+      </div>
+      <p class="hint">LandsD bakes label size into the raster, so the only way to get bigger text is to
+      draw a <i>lower</i> zoom level's labels scaled up: bigger and sparser, but softer. A vector
+      basemap is the only way to have both.</p>
+    </fieldset>
+
     <div class="log" id="log"></div>
   </div>
 </div>
@@ -241,6 +336,7 @@ const TS=256;
 const I={star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
  starF:'<svg viewBox="0 0 24 24" fill="#f5a623" stroke="#d68910" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 8a6 6 0 10-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 003 0"/></svg>',
+ dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>',
  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1116 0z"/><circle cx="12" cy="10" r="3"/></svg>',
  info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>'};
 
@@ -254,6 +350,10 @@ const DET={full:.06,rest:.50,map:.80};
 // Zoom-about-a-point in lat/lng needs two Mercator round-trips per event; the log/exp
 // loses ~0.3 px each time, which accumulates into visible drift of the route line.
 // In normalised units the same operation is exact arithmetic.
+// Real tokens from packages/ui/src/tokens.generated.ts — not hand-picked hex.
+const OPERATOR_ACCENT={KMB:'#D7282F',LWB:'#E8A33D',CTB:'#F6C700',GMB:'#00845C'};
+const MAP_PIN='#E11D48', PIN_BORDER='#FFFFFF', BRAND_INK='#111827';
+const STYLE={op:'KMB',line:'neutral',arrow:'double',stops:'hybrid',labelZ:0,width:5.4,chev:1.6,stopSize:1.35,smooth:true,dark:false,anchor:'left',bbi:true,darkLine:'paired',chevGap:5,avoidBend:10};
 let DATA=null,active=0,saved=new Set([0]),cam={u:0.5,v:0.5,zoom:12.5},anim=null,
     sheetTop=0,userPanned=false,spyT=null,mode='route';
 
@@ -287,6 +387,9 @@ function grid(el,zz,tpl,W,H){
   const st=`left:${(x-x0)*TS}px;top:${(y-y0)*TS}px;width:${TS}px;height:${TS}px`;
   h+=`<img class="tile" src="${tpl.replace('{z}',zz).replace('{x}',xx).replace('{y}',y)}" style="${st}" alt="">`;}
  const k=keys.join();if(el.dataset.k!==k){el.innerHTML=h;el.dataset.k=k;}}
+function showZoom(){const el=document.getElementById('zRead'); if(el)el.textContent='z'+cam.zoom.toFixed(2);}
+let _lastLoggedZoom=null;
+function logZoom(){const z=+cam.zoom.toFixed(2); if(z!==_lastLoggedZoom){_lastLoggedZoom=z; log('zoom → z'+z.toFixed(2),true);} }
 function render(){
  if(!DATA)return;const mr=mapEl.getBoundingClientRect(),W=mr.width,H=mr.height;if(!W||!H)return;
  // Cheap, and worth it: a single non-finite camera value otherwise emits thousands of SVG
@@ -294,25 +397,217 @@ function render(){
  if(!Number.isFinite(cam.u)||!Number.isFinite(cam.v)||!Number.isFinite(cam.zoom)){
   console.warn('render skipped — non-finite camera',{...cam});return;}
  const dpr=Math.round(Math.log2(Math.min(2,devicePixelRatio||1)));
- const zB=clamp(Math.round(cam.zoom)+dpr,10,20),zL=clamp(Math.round(cam.zoom),10,20);
+ const zB=clamp(Math.round(cam.zoom)+dpr,10,20),zL=clamp(Math.round(cam.zoom)+STYLE.labelZ,10,20);
  grid(tilesEl,zB,TILE,W,H);grid(labelsEl,zL,LABEL,W,H);
  const z=zB,sc=2**(cam.zoom-z),ox=cam.u*worldPx(z)-W/(2*sc),oy=cam.v*worldPx(z)-H/(2*sc);
  const p=(la,lo)=>[(wx(lo,z)-ox)*sc,(wy(la,z)-oy)*sc];
  const pts=DATA.lines['1'].map(c=>p(c[1],c[0]));
- const d='M'+pts.map(q=>`${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L');
- let s=`<path d="${d}" fill="none" stroke="#fff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
-        <path d="${d}" fill="none" stroke="#c8102e" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>`;
- let acc=0;
- for(let i=1;i<pts.length;i++){const dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1],L=Math.hypot(dx,dy);acc+=L;
-  if(acc>76&&L>.5){acc=0;s+=`<path d="M-4 -3.4L4 0L-4 3.4Z" fill="#fff" opacity=".95" transform="translate(${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)}) rotate(${(Math.atan2(dy,dx)*180/Math.PI).toFixed(0)})"/>`;}}
- DATA.stops.O.forEach((st,i)=>{const q=p(st.lat,st.lng),on=i===active;
-  s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${on?7.5:4}" fill="${on?'#c8102e':'#fff'}" stroke="${on?'#fff':'#8a8985'}" stroke-width="${on?3:1.8}"/>`;
-  if(saved.has(i))s+=`<circle cx="${q[0].toFixed(1)}" cy="${(q[1]-11).toFixed(1)}" r="3.4" fill="#f5a623" stroke="#fff" stroke-width="1.2"/>`;});
+ // Quadratic-through-midpoints: every segment becomes a curve whose control point is the shared
+ // vertex, so corners round off without the line leaving the road. Cheap, and it removes the
+ // stair-stepping that dense survey vertices produce at low zoom.
+ const d=(()=>{
+  if(!STYLE.smooth||pts.length<3) return 'M'+pts.map(q=>`${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L');
+  const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  let out=`M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for(let i=1;i<pts.length-1;i++){const m=mid(pts[i],pts[i+1]);
+   out+=`Q${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)} ${m[0].toFixed(1)} ${m[1].toFixed(1)}`;}
+  const e=pts[pts.length-1];
+  return out+`L${e[0].toFixed(1)} ${e[1].toFixed(1)}`;
+ })();
+ // Where does a stop sit relative to the line? A stop's coordinate is the KERB, and the line is the
+ // ROAD CENTRELINE, so the offset is real information — it is which side of the road you wait on,
+ // which is the whole point of ADR-080. `snap` throws that away; `tick` keeps it and makes the
+ // relationship explicit.
+ // cumulative chord length along the polyline, so a stop can be located by ARC LENGTH
+ const cum=[0]; for(let i=1;i<pts.length;i++)cum[i]=cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);
+ const polyLen=cum[cum.length-1]||1;
+ const nearestOnLine=(q)=>{
+  let bx=q[0],by=q[1],bd=Infinity,tx=1,ty=0,bl=0;
+  for(let i=1;i<pts.length;i++){
+   const a=pts[i-1],b=pts[i],dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy;
+   const u=l2?Math.max(0,Math.min(1,((q[0]-a[0])*dx+(q[1]-a[1])*dy)/l2)):0;
+   const px=a[0]+u*dx,py=a[1]+u*dy,d=Math.hypot(px-q[0],py-q[1]);
+   if(d<bd){bd=d;bx=px;by=py;const L=Math.hypot(dx,dy)||1;tx=dx/L;ty=dy/L;bl=cum[i-1]+u*L;}}
+  return {x:bx,y:by,d:bd,tx,ty,L:bl};};
+ const accent=OPERATOR_ACCENT[STYLE.op];
+ // A "map-safe" variant: operator hue, darkened until it holds against LandsD's yellow/orange road
+ // fills. CTB's #F6C700 is the case that forces it to exist.
+ const safe={KMB:'#B21F26',LWB:'#9A6414',CTB:'#8A6E00',GMB:'#00694A'}[STYLE.op];
+ const PALETTE={accent, safe, rose:MAP_PIN, violet:'#6D28D9', neutral:'#33322F', ink:BRAND_INK};
+ // Dark mode inverts the TILES only (MiniMap.tsx), so the overlay has to carry its own dark values:
+ // a light line on a dark map, and markers whose fill/border swap with it. This is the light/dark
+ // PAIR the §8c note says any route-line colour needs — `BRAND.ink` cannot supply it because it is
+ // declared theme-independent.
+ const DARK_ACCENT={KMB:'#FF8A8E',LWB:'#F5C77E',CTB:'#F7DE6A',GMB:'#4FD3A5'}[STYLE.op];
+ const DARK_SAFE={KMB:'#F2A9AC',LWB:'#E4C08A',CTB:'#E0D089',GMB:'#6FCFAE'}[STYLE.op];
+ const PALETTE_DARK={accent:DARK_ACCENT, safe:DARK_SAFE, rose:'#FF7A96', violet:'#B69CF5',
+                     neutral:'#E9E7E2', ink:'#E7EAF2'};
+ // In dark mode LandsD's black label text inverts to WHITE, so a near-white route line competes with
+ // every place name on the map. A chromatic line separates the route from the labels instead of
+ // joining them — which is why the dark line is its own choice rather than a tint of the light one.
+ const DARK_LINE={amber:'#F5B942', cyan:'#5CC8E0', mint:'#63D9A0', coral:'#FF8F6B',
+                  rose:'#FF7E9B', violet:'#B69CF5', paper:'#E9E7E2',
+                  paired:(PALETTE_DARK[STYLE.line]??DARK_ACCENT)};
+ const stroke=STYLE.dark ? (DARK_LINE[STYLE.darkLine]??DARK_LINE.amber)
+                         : (PALETTE[STYLE.line]??accent);
+ // In dark mode the TILES are inverted by a filter and the overlay is not (MiniMap.tsx: "applied to
+ // the tiles only"). So the casing — the thing that separates the line from the map — has to flip.
+ const casing=STYLE.dark?'#0B0B0C':'#FFFFFF';
+ const hair=STYLE.dark?'#E7E5E0':'#33322F';
+ const W_LINE=STYLE.width, W_CASE=STYLE.width+3.3;
+ let s=`<path d="${d}" fill="none" stroke="${casing}" stroke-width="${W_CASE}" stroke-linecap="round" stroke-linejoin="round" opacity=".92"/>
+        <path d="${d}" fill="none" stroke="${stroke}" stroke-width="${W_LINE}" stroke-linecap="round" stroke-linejoin="round"/>`;
+ if(STYLE.arrow==='drift'){
+   // The base line stays SOLID and fully opaque; this is a faint highlight travelling along it, so
+   // it can never be read as the dashed line that means "approximate path" (§5).
+   s+=`<path d="${d}" fill="none" stroke="#fff" stroke-width="${(W_LINE*0.55).toFixed(1)}" stroke-linecap="round"
+             opacity=".34" stroke-dasharray="14 210">
+         <animate attributeName="stroke-dashoffset" values="224;0" dur="5.5s" repeatCount="indefinite"/></path>`;
+ }
+ // direction marks — placed by ARC LENGTH along the ACTUAL drawn path, not at polyline vertices.
+ // Vertices are unevenly spaced and, once the path is smoothed, they are not even ON the curve; a
+ // glyph offset along a straight tangent leaves the line wherever it bends. `getPointAtLength` is
+ // the browser's own answer to "where is this curve at distance L", so spacing is exact and a
+ // double/triple chevron stays on the curve because its siblings are offset along the ARC too.
+ if(STYLE.arrow!=='none'&&STYLE.arrow!=='drift'){
+  const mp=document.getElementById('measure');
+  mp.setAttribute('d',d);
+  const total=mp.getTotalLength();
+  const k=W_LINE/4.2, cw=STYLE.chev;
+  // One glyph, one heading. Both chevrons are children of a SINGLE rotated group placed at the
+  // glyph's centre, and the pair is offset inside that group's own frame — not along the arc.
+  // Offsetting along the arc gave each chevron the tangent at *its own* position, so on a bend the
+  // two splayed apart and stopped reading as one mark. A double chevron is one icon that happens to
+  // be drawn twice, and its direction is the direction at its centre.
+  const chevAt=(x,y)=>`<path d="M${(-3.2*k+x).toFixed(2)} ${(-3.2*k).toFixed(2)}L${(1.6*k+x).toFixed(2)} ${y.toFixed(2)}L${(-3.2*k+x).toFixed(2)} ${(3.2*k).toFixed(2)}" fill="none" stroke="${casing}" stroke-width="${cw.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`;
+  const at=(L)=>{const q=mp.getPointAtLength(Math.max(0,Math.min(total,L)));
+                 const q2=mp.getPointAtLength(Math.max(0,Math.min(total,L+1.2)));
+                 return [q.x,q.y,Math.atan2(q2.y-q.y,q2.x-q.x)*180/Math.PI];};
+  // Marks are placed BETWEEN CONSECUTIVE STOPS, evenly — one for a short hop, two for a long one.
+  // Fixed-interval spacing put marks on top of stop markers and bunched them where stops are close;
+  // the stops are the rhythm a rider already reads, so the direction marks should follow it.
+  const scaleL=total/polyLen;
+  const stopL=DATA.stops.O.map(st=>nearestOnLine(p(st.lat,st.lng)).L*scaleL).sort((a,b)=>a-b);
+  const marks=[];
+  for(let i=1;i<stopL.length;i++){
+   const A=stopL[i-1],B=stopL[i],span=B-A;
+   const clear=18+W_LINE;                       // keep clear of the markers at each end
+   if(span<clear*2+16)continue;                 // too close together to fit anything legible
+   const n=span<150?1:2;
+   const slack=Math.min(26,(span-clear*2)/(n+1)/2);   // room to slide without hitting a marker
+   for(let j=1;j<=n;j++)marks.push({L:A+span*(j/(n+1)), slack:Math.max(0,slack)});
+  }
+  const G=STYLE.chevGap;
+  // A mark that straddles a corner points along neither leg of it. Measure the heading change across
+  // the glyph's OWN footprint, and slide the mark along its slot to the straightest spot it can reach;
+  // if even the best position is still a corner, draw nothing there rather than something misleading.
+  const halfGlyph=G/2+3.2*k;
+  const headingAt=(L)=>{
+   if(!Number.isFinite(L))return 0;                 // getPointAtLength throws on NaN
+   const a=mp.getPointAtLength(Math.max(0,Math.min(total,L-0.6)));
+   const b=mp.getPointAtLength(Math.max(0,Math.min(total,L+0.6)));
+   return Math.atan2(b.y-a.y,b.x-a.x);};
+  const bendAt=(L)=>{let d=Math.abs(headingAt(L-halfGlyph)-headingAt(L+halfGlyph));
+                     if(d>Math.PI)d=2*Math.PI-d; return d*180/Math.PI;};
+  const maxBend=STYLE.avoidBend;
+  const placed=[]; let skipped=0;
+  for(const m of marks){
+   if(maxBend>=180){placed.push({...m,bend:bendAt(m.L)});continue;}
+   let best=m,bb=bendAt(m.L);
+   for(let d=2; d<=m.slack; d+=2){
+    for(const cand of [m.L-d,m.L+d]){
+     const b=bendAt(cand);
+     if(b<bb){bb=b;best={...m,L:cand};}
+    }
+    if(bb<=maxBend*0.4)break;                  // straight enough, stop looking
+   }
+   if(bb<=maxBend)placed.push({...best,bend:bb});  // otherwise: no mark here at all
+   else skipped++;
+  }
+  // debug aid: what the placement actually achieved, without re-deriving it from the DOM
+  window.__marks={placed:placed.length, skipped, worstDeg:+Math.max(0,...placed.map(x=>x.bend)).toFixed(1),
+                  medianDeg:+(placed.map(x=>x.bend).sort((a,b)=>a-b)[Math.floor(placed.length/2)]??0).toFixed(1)};
+  for(const {L} of placed){
+   const [gx,gy,ang]=at(L);
+   const t=`translate(${gx.toFixed(2)},${gy.toFixed(2)}) rotate(${ang.toFixed(2)})`;
+   if(STYLE.arrow==='double')
+    s+=`<g transform="${t}">${chevAt(-G/2,0)}${chevAt(G/2,0)}</g>`;
+   else if(STYLE.arrow==='dart')
+    s+=`<path d="M${(-3.4*k).toFixed(1)} ${(-2.6*k).toFixed(1)}L${(2.6*k).toFixed(1)} 0L${(-3.4*k).toFixed(1)} ${(2.6*k).toFixed(1)}L${(-1.9*k).toFixed(1)} 0Z" fill="${casing}" opacity=".95" transform="${t}"/>`;
+  }
+ }
+
+ // stops — drawn as: white core · coloured ring · thin dark hairline on the OUTSIDE edge.
+ // The hairline is what stops a white-cored marker dissolving into LandsD's pale cartography;
+ // a white ring alone was getting lost.
+ const last=DATA.stops.O.length-1, SZ=STYLE.stopSize;
+ let hits='';
+ DATA.stops.O.forEach((st,i)=>{
+  const q0=p(st.lat,st.lng),on=i===active,term=i===0||i===last;
+  let q=q0;
+  if(STYLE.anchor!=='true'){
+   const n=nearestOnLine(q0);
+   if(n.d<40){
+    if(STYLE.anchor==='snap')q=[n.x,n.y];
+    else if(STYLE.anchor==='side'||STYLE.anchor==='left'){
+     // Sit the marker ON the line but on the side the kerb is actually on: project to the nearest
+     // point, then step out along the normal in the direction of the real coordinate. Keeps the
+     // "which side do I wait on" fact of ADR-080 while looking as tidy as a snap.
+     // Screen y points DOWN, so the traveller's LEFT is the normal (ty, -tx) — check it with
+     // t=(1,0) heading east, which gives (0,-1), i.e. up/north. Positive cross ⇒ the kerb is left.
+     // Hong Kong drives on the left and riders board on the left, so every stop SHOULD be on the
+     // left of its direction of travel. Measured on KMB 1: of the 19 stops whose coordinate is
+     // offset from the line at all, 19 are on the left and 0 on the right. `left` forces it (an
+     // outlier from a noisy coordinate cannot flip a marker to the wrong kerb); `side` trusts the
+     // coordinate, and on this route the two are identical.
+     const cross=(q0[0]-n.x)*n.ty-(q0[1]-n.y)*n.tx;
+     const sgn=STYLE.anchor==='left'?1:(cross===0?1:Math.sign(cross));
+     const R0=(on?6.4:4.4)*SZ, off=W_LINE/2+R0*0.55;
+     // Step along the SAME normal the test above measures against — (ty, -tx). Writing the offset
+     // with (-ty, tx) mirrored every marker to the far kerb: the sign test said "left" and the
+     // placement then went right, so the markers looked consistent and were consistently wrong.
+     q=[n.x + n.ty*sgn*off, n.y - n.tx*sgn*off];
+    } else if(STYLE.anchor==='tick'&&n.d>3)
+     s+=`<path d="M${n.x.toFixed(1)} ${n.y.toFixed(1)}L${q0[0].toFixed(1)} ${q0[1].toFixed(1)}" stroke="${hair}" stroke-width="1.3" opacity=".5" stroke-linecap="round"/>`;
+   }
+  }
+  const cx=q[0].toFixed(1),cy=q[1].toFixed(1);
+  const termSq=(STYLE.stops==='graded'||STYLE.stops==='hybrid');
+  const bbi=/\bBBI\b/i.test(st.n)&&STYLE.bbi;
+  if(bbi&&termSq&&!term){
+   // Bus–bus interchange: a hexagon, because it is a different KIND of stop, not a bigger one.
+   const R=(on?6.6:4.6)*SZ;
+   const hex=(rr)=>Array.from({length:6},(_,v)=>{const a=Math.PI/180*(60*v-90);
+     return `${(+cx+rr*Math.cos(a)).toFixed(1)},${(+cy+rr*Math.sin(a)).toFixed(1)}`;}).join(' ');
+   s+=`<polygon points="${hex(R)}" fill="${on?stroke:casing}" stroke="${on?casing:stroke}" stroke-width="${(2.1*SZ).toFixed(1)}" stroke-linejoin="round"/>
+       <polygon points="${hex(R+1.2)}" fill="none" stroke="${hair}" stroke-width=".9" opacity=".5" stroke-linejoin="round"/>`;
+  } else if(term&&termSq){
+   // A terminus differs from a stop by SHAPE, not by treatment: unfocused it is a white square with a
+   // coloured border, exactly as an unfocused stop is a white circle with one. Only focus fills it.
+   // A square reads larger than a circle of the same half-size, so trim it slightly: the goal is
+   // for a terminus and a stop to look the SAME SIZE, differing only in shape.
+   const h=(on?6.4:4.4)*SZ*0.92, r=2*SZ;
+   s+=`<rect x="${(+cx-h).toFixed(1)}" y="${(+cy-h).toFixed(1)}" width="${(h*2).toFixed(1)}" height="${(h*2).toFixed(1)}" rx="${r.toFixed(1)}" fill="${on?stroke:casing}" stroke="${on?casing:stroke}" stroke-width="${(2.1*SZ).toFixed(1)}"/>
+       <rect x="${(+cx-h-1.15).toFixed(1)}" y="${(+cy-h-1.15).toFixed(1)}" width="${(h*2+2.3).toFixed(1)}" height="${(h*2+2.3).toFixed(1)}" rx="${(r+1).toFixed(1)}" fill="none" stroke="${hair}" stroke-width=".9" opacity=".5"/>`;
+  } else if(STYLE.stops==='plain'){
+   s+=`<circle cx="${cx}" cy="${cy}" r="${(on?7.5:4)*SZ}" fill="${on?stroke:'#fff'}" stroke="${on?'#fff':'#8a8985'}" stroke-width="${on?3:1.8}"/>`;
+  } else {
+   const R=(on?6.4:4.4)*SZ;
+   s+=`<circle cx="${cx}" cy="${cy}" r="${R.toFixed(1)}" fill="${on?stroke:casing}" stroke="${on?casing:stroke}" stroke-width="${(2.1*SZ).toFixed(1)}"/>
+       <circle cx="${cx}" cy="${cy}" r="${(R+1.15).toFixed(1)}" fill="none" stroke="${hair}" stroke-width=".9" opacity=".5"/>`;
+  }
+  if(on)
+   s+=`<circle cx="${cx}" cy="${cy}" r="12" fill="none" stroke="${stroke}" stroke-width="1.5" opacity=".4"><animate attributeName="r" values="9;18" dur="1.7s" repeatCount="indefinite"/><animate attributeName="opacity" values=".45;0" dur="1.7s" repeatCount="indefinite"/></circle>`;
+  if(saved.has(i))s+=`<circle cx="${cx}" cy="${(+cy-13).toFixed(1)}" r="3.6" fill="#f5a623" stroke="${casing}" stroke-width="1.3"/>`;
+  // cursor affordance only — the tap itself is resolved by hit-test on pointerup (see selectStop)
+  hits+=`<circle class="hit" data-stop="${i}" cx="${cx}" cy="${cy}" r="${(15*SZ).toFixed(0)}" fill="transparent" style="cursor:pointer"/>`;
+ });
+ s+=hits;
  const me=DATA.stops.O[6],q=p(me.lat+.0016,me.lng-.0021);
  const rp=45/(156543.03392*Math.cos(latOf(cam.v)*Math.PI/180)/2**cam.zoom);
  s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${rp.toFixed(1)}" fill="#2f6fed" opacity=".13"/>
      <circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="6" fill="#2f6fed" stroke="#fff" stroke-width="2.5"/>`;
- ov.innerHTML=s;}
+ ov.innerHTML=s; showZoom();}
 /**
  * The visible map is not the map element: the context card covers the top and the stop sheet the
  * bottom. `insets()` returns what is actually on screen, and every camera move centres on THAT —
@@ -382,7 +677,7 @@ function acts(i){const sv=saved.has(i);
          <button class="act" data-do="notify" data-i="${i}">${I.bell}<span>Notify me</span></button>
          <button class="act" data-do="view" data-i="${i}">${I.pin}<span>Stop</span></button>`;}
 
-function layerReadout(){
+function layerReadout(){ if(!document.getElementById('layerList'))return;
  const L=['<code>1</code> map'];
  L.push('<code>2</code> context card '+(ctx.classList.contains('expanded')?'(expanded)':'(collapsed pill)'));
  L.push('<code>3</code> back lens');L.push('<code>4</code> stop-list sheet');
@@ -390,25 +685,42 @@ function layerReadout(){
  document.getElementById('layerList').innerHTML='<b>'+L.length+' layers</b><br>'+L.join(' · ');}
 
 /* ---------- list ---------- */
+let suppressSpy=false;
+/**
+ * Change WHICH row is selected without rebuilding the list.
+ *
+ * `buildList()` replaces `innerHTML`, which resets `scrollTop` to 0 — and the scroll listener then
+ * re-runs the spy, which picks row 0, which calls `buildList()` again. That is an infinite loop, and
+ * it is the list↔camera feedback the plan warns about (§6) in its most literal form. Selection is a
+ * class, so treat it as one; `buildList()` is only for changes that alter the list's CONTENT.
+ */
+function markActive(i){
+ active=i;
+ listEl.querySelectorAll('.row').forEach(r=>r.classList.toggle('active',+r.dataset.i===i));}
 function buildList(){
  listEl.innerHTML=DATA.stops.O.map((s,i)=>{
   const e=['1','3','6','—','12','2'][i%6],c=e==='—'?'none':(+e<=2?'due':'');
   const txt=e==='—'?'—':(+e<=1?'Due':e+' min');
   return `<div class="row${i===active?' active':''}" data-i="${i}"><span class="selbar"></span>
-   <button class="rowhit" data-do="row" data-i="${i}">
+   <button class="rowhit" data-do="row" data-i="${i}" aria-label="Show ${s.n} on the map">
     <span class="rail"><span class="dot"></span>${saved.has(i)?'<span class="savedot"></span>':''}</span>
     <span class="rowbody"><span class="nm">${s.n}</span><span class="zh">${s.zh}</span></span>
-    <span class="eta ${c}">${txt}</span></button></div>`;}).join('');}
+    <span class="eta ${c}">${txt}</span></button>
+   <button class="more" data-do="more" data-i="${i}" aria-label="More for ${s.n}">${I.dots}</button></div>`;}).join('');}
 
 document.addEventListener('click',e=>{
  const b=e.target.closest('[data-do]');if(!b)return;const i=+b.dataset.i,w=b.dataset.do;
  if(w==='fact'){log('fact detail — lives in the header, as you asked');return;}
- if(w==='row'){active=i;buildList();userPanned=false;
-  const s=DATA.stops.O[i];flyTo(s.lat,s.lng,15.4);
+ if(w==='row'){markActive(i);userPanned=false;
+  const s=DATA.stops.O[i];flyTo(s.lat,s.lng,Math.max(cam.zoom,15.4));
+  log('tap row → focus '+s.n+' on the map',true);
+  return;}
+ if(w==='more'){markActive(i);
+  const s=DATA.stops.O[i];
   document.getElementById('asN').textContent=s.n;document.getElementById('asZ').textContent=s.zh;
   document.getElementById('asActs').innerHTML=acts(i);
   asheet.classList.add('on');scrim.classList.add('on');layerReadout();
-  log('tap → camera flies + action sheet',true);
+  log('⋯ → action sheet for '+s.n,true);
   return;}
  if(w==='star'){saved.has(i)?saved.delete(i):saved.add(i);buildList();render();
   document.getElementById('asActs').innerHTML=acts(i);
@@ -418,15 +730,11 @@ document.addEventListener('click',e=>{
 scrim.onclick=()=>{asheet.classList.remove('on');scrim.classList.remove('on');layerReadout();};
 
 listEl.addEventListener('scroll',()=>{
+ // The card still collapses on scroll. The scroll-SPY is deliberately gone: letting the selection
+ // (and the camera) chase the scroll position read as finicky in use — every flick of the list moved
+ // the map. Selection is now something the rider does, never something scrolling does to them.
  if(listEl.scrollTop>4)setExpanded(false,'list scrolled');
- else if(document.getElementById('optAutoExpand').checked&&listEl.scrollTop<=0)setExpanded(true,'list back at top');
- if(!document.getElementById('optFollow').checked)return;
- clearTimeout(spyT);spyT=setTimeout(()=>{
-  const box=listEl.getBoundingClientRect();let best=null,bd=1e9;
-  listEl.querySelectorAll('.row').forEach(r=>{const b=r.getBoundingClientRect();
-   const d=Math.abs(b.top+b.height/2-(box.top+50));if(d<bd){bd=d;best=+r.dataset.i;}});
-  if(best!=null&&best!==active){active=best;buildList();
-   const s=DATA.stops.O[best];if(!userPanned)flyTo(s.lat,s.lng,15.4,480);else render();}},90);});
+ else if(listEl.scrollTop<=0)setExpanded(true,'list back at top');});
 
 /* sheet + map gestures */
 function placeMapChrome(){const H=phone.clientHeight,gap=H-sheetTop+10;
@@ -449,17 +757,64 @@ mapEl.addEventListener('pointermove',e=>{if(!drag)return;
  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.m+=Math.hypot(dx,dy);drag.x=e.clientX;drag.y=e.clientY;
  const s=worldPx(cam.zoom);cam.u-=dx/s;cam.v-=dy/s;render();
  if(drag.m>18){setExpanded(false,'map dragged');if(!userPanned){userPanned=true;log('panned → following suspended');}}});
-addEventListener('pointerup',()=>{if(drag){mapEl.classList.remove('dragging');drag=null;}});
+/**
+ * Tap-to-select is resolved HERE, not by a click handler on the SVG.
+ * `mapEl.setPointerCapture()` on pointerdown retargets the whole gesture — including the eventual
+ * `click` — to the map, so a listener on the marker never fires. (A synthetic `dispatchEvent(click)`
+ * does fire it, which is how this passed a test and failed a finger.) Hit-testing on pointerup works
+ * regardless of capture and gives the same generous target.
+ */
+function selectStop(i){
+ const st=DATA.stops.O[i];
+ markActive(i); userPanned=false;
+ flyTo(st.lat,st.lng,Math.max(cam.zoom,15.2));
+ const row=listEl.querySelector(`.row[data-i="${i}"]`); if(row)row.scrollIntoView({block:'center'});
+ log('tapped marker → '+st.n+' (row scrolled into view)',true);}
+function stopAtScreen(sx,sy,tol){
+ const mr=mapEl.getBoundingClientRect();
+ const dpr=Math.round(Math.log2(Math.min(2,devicePixelRatio||1)));
+ const zz=clamp(Math.round(cam.zoom)+dpr,10,20), sc=2**(cam.zoom-zz);
+ const oX=cam.u*worldPx(zz)-mr.width/(2*sc), oY=cam.v*worldPx(zz)-mr.height/(2*sc);
+ let best=-1,bd=tol;
+ DATA.stops.O.forEach((st,i)=>{
+  const px=(wx(st.lng,zz)-oX)*sc, py=(wy(st.lat,zz)-oY)*sc;
+  const d=Math.hypot(px-(sx-mr.left),py-(sy-mr.top));
+  if(d<bd){bd=d;best=i;}});
+ return best;}
+addEventListener('pointerup',e=>{
+ if(!drag){return;}
+ const moved=drag.m; mapEl.classList.remove('dragging'); drag=null;
+ if(moved>6)return;                       // it was a pan, not a tap
+ const i=stopAtScreen(e.clientX,e.clientY,18*STYLE.stopSize);
+ if(i>=0)selectStop(i);});
 mapEl.addEventListener('wheel',e=>{e.preventDefault();setExpanded(false,'map zoomed');
  const r=mapEl.getBoundingClientRect(),mx=e.clientX-r.left-r.width/2,my=e.clientY-r.top-r.height/2;
  const z0=cam.zoom,z1=clamp(z0-e.deltaY*.0022,10.5,18.5);
  const s0=worldPx(z0),s1=worldPx(z1);
  // exact: the point under the cursor keeps its normalised coordinate
  cam.u=(cam.u+mx/s0)-mx/s1; cam.v=(cam.v+my/s0)-my/s1; cam.zoom=z1;
- render();},{passive:false});
+ render();
+ clearTimeout(window._zl); window._zl=setTimeout(logZoom,220);},{passive:false});
 document.getElementById('back').onclick=e=>{e.stopPropagation();log('← back');};
-document.getElementById('zin').onclick=()=>{cam.zoom=clamp(cam.zoom+1,10.5,18.5);render();};
-document.getElementById('zout').onclick=()=>{cam.zoom=clamp(cam.zoom-1,10.5,18.5);render();};
+/** Zoom about the visible centre, not the element centre — otherwise the +/- buttons pull the map
+ *  out from under the card and the sheet, which is exactly where the rider is looking. */
+function easeTo(u,v,zoom,ms=420){
+ if(anim)cancelAnimationFrame(anim); anim=null;
+ if(![u,v,zoom].every(Number.isFinite))return;
+ if(ms<=0){cam.u=u;cam.v=v;cam.zoom=zoom;render();return;}
+ const a={...cam},t0=performance.now();
+ (function step(tm){const k=Math.min(1,Math.max(0,(tm-t0)/ms));
+  const e=k<.5?4*k*k*k:1-((-2*k+2)**3)/2;      // same curve the stop flights use
+  cam.u=a.u+(u-a.u)*e; cam.v=a.v+(v-a.v)*e; cam.zoom=a.zoom+(zoom-a.zoom)*e;
+  render(); anim=k<1?requestAnimationFrame(step):null; if(k>=1)logZoom();})(t0);}
+function zoomBy(d){
+ const o=centreOffset(), z0=cam.zoom, z1=clamp(z0+d,10.5,18.5);
+ if(z1===z0)return;
+ const s0=worldPx(z0), s1=worldPx(z1);
+ // hold the ground point at the VISIBLE centre, then ease into it
+ easeTo((cam.u+o.x/s0)-o.x/s1, (cam.v+o.y/s0)-o.y/s1, z1, 420);}
+document.getElementById('zin').onclick=()=>zoomBy(1);
+document.getElementById('zout').onclick=()=>zoomBy(-1);
 document.getElementById('fit').onclick=()=>{userPanned=false;fitRoute();log('fit whole route',true);};
 document.getElementById('locate').onclick=()=>{const me=DATA.stops.O[6];
  userPanned=true;flyTo(me.lat+.0016,me.lng-.0021,16);log('centre on me — following suspended',true);};
@@ -468,7 +823,26 @@ document.getElementById('centreStop').onclick=()=>{const s2=DATA.stops.O[active]
 document.getElementById('street').onclick=()=>log('street view — LandsD Streetscape 360 for '+DATA.stops.O[active].n+' (needs the free key)',true);
 document.getElementById('attrib').onclick=()=>document.getElementById('lic').classList.add('on');
 document.getElementById('licClose').onclick=()=>document.getElementById('lic').classList.remove('on');
-['optAutoExpand','optFollow'].forEach(id=>document.getElementById(id).onchange=()=>layerReadout());
+function seg(id,key,cast){
+ const el=document.getElementById(id); if(!el)return;
+ el.onclick=e=>{const b=e.target.closest('button'); if(!b)return;
+  [...el.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b));
+  const K={stopsize:'stopSize',darkline:'darkLine',chevgap:'chevGap',bend:'avoidBend'}[key]??key;
+  STYLE[K]=cast?cast(b.dataset[key]):b.dataset[key];
+  if(key==='labelZ'){document.getElementById('labels').dataset.k='';}
+  render(); log(`${K} → ${STYLE[K]}`,true);};
+}
+seg('segLine','line'); seg('segDarkLine','darkline'); seg('segChevGap','chevgap',Number); seg('segBend','bend',Number); seg('segArrow','arrow'); seg('segStops','stops');
+seg('segAnchor','anchor');
+document.getElementById('optDark')?.addEventListener('change',e=>{
+ STYLE.dark=e.target.checked;
+ tilesEl.style.filter=labelsEl.style.filter=STYLE.dark?'invert(1) hue-rotate(180deg) brightness(1.2)':'';
+ render(); log('dark map → '+STYLE.dark,true);});
+
+document.getElementById('segLabel')?.addEventListener('click',e=>{const b=e.target.closest('button'); if(!b)return;
+ [...e.currentTarget.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b));
+ STYLE.labelZ=Number(b.dataset.label); document.getElementById('labels').dataset.k='';
+ render(); log('labels → z'+(STYLE.labelZ?STYLE.labelZ:''),true);});
 
 fetch('./kmb1.json').then(r=>r.json()).then(j=>{
  DATA=j;const term=j.stops.O[j.stops.O.length-1].n.replace(/\s*\(\w+\)\s*$/,'');

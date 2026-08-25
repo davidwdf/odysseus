@@ -471,6 +471,44 @@ both renderers, which was the point.
 
 ---
 
+## 8d. Settled (2026-08-25)
+
+After five rounds, the route-detail design is fixed. Recording it as an outcome so M4/M7 can be written
+against it rather than re-litigating.
+
+**Interaction — this is option B from round 1, arrived at the long way round.** §8 recommended D, then
+B as the fallback; the owner rejected both, we explored E, H′, the context card and a reuse-the-card
+idea, and landed back on B. That is not wasted work — B was rejected in round 1 for *"repeated menu
+icons"*, and it is acceptable now because everything around it changed: the map became the point of
+the screen, so a tap that focuses the map is worth a permanent control, which it was not when the map
+was a decorative band.
+
+| | |
+|---|---|
+| **Tap a stop row** | Focuses that stop on the map. Nothing else. |
+| **`⋯` on the far right of every row** | Opens the action sheet — Save · Notify me · Stop |
+| **Tap a marker on the map** | Selects the stop and scrolls its row into view |
+| **Scrolling the list** | Collapses the context card. **Does not change the selection.** |
+
+**The scroll-spy is deliberately gone.** Letting the selection — and therefore the camera — chase the
+scroll position was built, demonstrated and then cut: every flick of the list moved the map, which read
+as finicky. Selection is now something the rider does, never something scrolling does to them. §6's
+"camera follows the stop list" is answered by *tap*, not by scroll, and the loop-avoidance machinery
+that row worried about is unnecessary as a result.
+
+**Styling.** Neutral-dark line (`#33322F`) at medium width, dark mode simply **the inverted light
+colour** — the chromatic alternatives (cyan, mint) are recorded below and are better chosen against the
+app's real tokens than against a prototype · **double
+chevron**, normal gap, **strict 10° bend avoidance** · smooth corners · hybrid markers at the largest
+size, no halo, thin dark hairline on the outside edge · squares for termini, sized to match the circles
+· hexagons for `BBI` stops · markers offset to the **left of travel**. Base tiles at z+1, labels at z.
+
+**Two things this leaves for M4:** the `available: false` state still needs declaring in
+`route-detail.spec.json` (§5's dashed approximation), and the whole styling set above needs to become
+tokens rather than the literals the mockup uses.
+
+---
+
 ## 8b. Build now, or keep refining? — split it
 
 The design is not finished, but **most of this plan does not depend on the design**. Recommended split:
@@ -516,7 +554,148 @@ out what the real thing has to do.
 | **Street view button** | 🟡 blocked on an email | LandsD **Streetscape 360** can be embedded (§7); Google's terms forbid it beside a non-Google map. The free key must be requested from `3dmap@landsd.gov.hk`. The button exists in the mockup and logs its intent. |
 | **Tile resolution** | ✅ settled | Base at z+1, labels at z (§2a). |
 
-**Three more that the owner's list did not name and that M3 also owes:**
+**Five more that the owner's list did not name and that M3 also owes:**
+
+-4. **A map that captures the pointer swallows taps on its own markers.** The markers had a click
+   handler and a generous hit target, and tapping one did nothing. Cause: the pan gesture calls
+   `setPointerCapture()` on pointerdown, which retargets the whole gesture — **including the eventual
+   `click`** — to the map element, so a listener on the marker never fires. Resolve the tap by
+   hit-testing on `pointerup` instead: it works regardless of capture, and it lets the hit radius be
+   whatever touch needs rather than whatever the glyph is. **A synthetic `dispatchEvent(new
+   MouseEvent('click'))` fires the handler perfectly**, which is exactly how this passed a test and
+   failed a finger — the test exercised the handler, not the interaction.
+
+-3. **Never rebuild the list to change which row is selected.** Re-rendering `innerHTML` resets
+   `scrollTop` to 0, which fires `scroll`, which re-runs the scroll-spy, which picks row 0, which
+   rebuilds the list — an infinite loop, and the §6 list↔camera feedback in its most literal form.
+   Selection is a class; treat it as one, and keep a rebuild for changes that alter the list's
+   *content*. Also suppress the spy across any scroll the app itself caused, or it reads that motion
+   as the rider's and fights it.
+
+-2. **Never cache tile geometry on the tile *key set* alone.** The reported "path misaligns on
+   two-finger zoom" survived the fix below, and this was the real cause. Tile `left`/`width` were baked
+   into the markup, which is only rebuilt when the set of tile keys changes — but they were computed
+   from `TS × scale`, and scale changes *continuously*. Inside one integer zoom level the keys never
+   change, so the tiles kept the scale they were built at while the SVG overlay recomputed every frame
+   and slid away from them. A trackpad pinch spends almost all its time between integer levels, which
+   is why it showed up there and not on discrete wheel clicks. **Fix: the scale rides on the layer
+   transform, never on the tiles** — tiles sit at a constant 256 px in the layer's own space, so their
+   geometry is scale-independent. Verified at 0.000 px offset through a 60-step simulated pinch.
+   MapLibre never has this problem; a hand-rolled layer always can.
+
+-1. **Measure the viewport from ONE source.** `render()` used `mapEl.clientWidth` (integer CSS px) and
+   the zoom handler used `getBoundingClientRect().width` (fractional). At 100% page zoom they agree, so
+   nothing shows; under **trackpad pinch or browser page zoom** the rect goes fractional, the zoom
+   anchor computes a different viewport centre than the renderer, and the route line walks away from
+   the basemap. Reported as "the path misaligns on two-finger zoom" and reproduced exactly. Fixed in
+   the mockup by using the rect everywhere. MapLibre owns its own viewport, so this is a hand-rolled
+   hazard — but it is also a reminder that **any** measurement we feed a camera must come from one place.
+
+0.5. **A shadow colour derived from one operator's accent is a bug waiting for the other three.** The
+   mockup's route badge carried `box-shadow: … rgba(200,16,46,.34)` — KMB red — which put a red halo
+   around the *green* GMB badge. Trivial, and exactly the class of thing that survives review because
+   nobody opens a GMB route. Operator-derived colour belongs on the fill, never baked into a shared
+   shadow.
+
+0.7. **The route line needs a light/dark PAIR, and `BRAND.ink` is documented not to be one.** Dark mode
+   does not restyle the map — it applies `invert(1) hue-rotate(180deg) brightness(1.2)` to the raster,
+   and `MiniMap.tsx` is explicit that it is "applied to the tiles only — the pin and attribution sit
+   outside it". So the overlay keeps its true colour while the map behind it flips. A **neutral dark
+   line is excellent on the light map and nearly invisible on the dark one**, and the same goes for the
+   casing: white separates the line from a light map and nothing from a dark one. Whatever colour wins
+   therefore needs two values, which rules out reusing `BRAND.ink` (`#111827`) — that token exists
+   precisely because it is *"theme-independent … does not invert with the appearance"*.
+
+   **Resolved in round 5: the tiles invert by filter, the overlay inverts by design.** Every route-line
+   colour now carries a light/dark pair, and the markers swap with it — fill and border trade places,
+   so a white-filled stop with a dark border becomes a dark-filled stop with a light border. Direction
+   marks are drawn in the *casing* colour, so they follow for free. Verified: line `#33322F` →
+   `#E9E7E2`, stop fill `#FFFFFF` → `#0B0B0C`, stop border `#33322F` → `#E9E7E2`, hairline `#33322F` →
+   `#E7E5E0`. The rule for M3: **anything drawn over the map needs a pair, and the casing is what
+   separates it from the map in either mode.**
+
+   **And the dark line is a separate choice, not a tint of the light one.** Inverting the tiles does two
+   things that constrain it: LandsD's black label text becomes **white**, so a near-white line reads as
+   one more label rather than as the route; and the yellow road fills become **warm tan**, so an amber
+   line collides with the road network — the *same* mistake CTB's yellow makes on the light map, which
+   I duly made again in the opposite direction before looking at it. **Cyan** sits furthest from both
+   and is the cleanest of the chromatic options; **mint** is the near alternative. The mockup
+   nonetheless defaults to the plain inverted colour: this is a decision to take against the app's real
+   tokens, not against a prototype, and the alternatives are recorded here so the work is not redone.
+
+1.1. **Hong Kong stops belong on the LEFT of the direction of travel, and the data agrees.** Traffic
+   drives on the left and riders board on the left, so a stop is on the left-hand kerb. Measured on
+   KMB 1 by projecting each stop onto its route line: of the 19 stops whose coordinate is offset from
+   the line at all, **19 are on the left and 0 on the right** (the remaining 6 lie within 1.5 px of the
+   line at z15). The median offset is only **2.2 px at z15** — a few metres — so the true offset is
+   nearly unreadable at normal zooms anyway. Draw the marker at a *deterministic* left-hand offset
+   derived from the line width instead: it makes the side legible at all, and one noisy coordinate
+   cannot flip a marker onto the wrong kerb. This is ADR-080's question answered by cartography.
+
+   **The bug worth remembering:** the side *test* used the normal `(ty, -tx)` and the *placement* used
+   `(-ty, tx)`. Every marker therefore landed on the far kerb — and because the error was uniform, the
+   markers looked perfectly consistent while being consistently wrong. Nothing catches that but
+   checking the drawn output against the direction of travel, which is now done by reading the marker
+   centres back out of the DOM rather than by re-running the formula that produced them.
+
+1.0. **Space direction marks BETWEEN STOPS, not at a fixed interval.** Fixed spacing put chevrons on
+   top of stop markers and bunched them where stops are close together. Placing one mark between a
+   short pair of stops and two between a long pair follows the rhythm a rider is already reading, and
+   keeps a guaranteed clearance from every marker — measured at **15.7 px** minimum, from ~0 before.
+
+0.9. **Place marks along a line by ARC LENGTH, not at its vertices.** Direction chevrons were drawn at
+   polyline vertices and rotated by the local segment — so they bunched where vertices were dense,
+   thinned where they were sparse, and drifted off the line at curves. Two causes: survey vertices are
+   unevenly spaced, and once the path is smoothed the vertices are not even *on* the drawn curve.
+   `getPointAtLength()` on the rendered path is the browser's own answer to "where is this curve at
+   distance L" — spacing becomes exact, and a double or triple chevron stays on the curve because its
+   siblings are offset **along the arc** rather than along a straight tangent. Measured on KMB 1:
+   worst deviation **0.08 px** over a 4,603 px path, from several px before. MapLibre's `symbol` layer
+   with `symbol-placement: line` does this natively — one more thing not to hand-roll.
+
+   **A multi-part mark is ONE glyph with one heading.** The double chevron initially placed each half at
+   its own arc position, so each took the tangent *there* — and on a bend the two splayed apart and
+   stopped reading as a single mark. Place the glyph once at its centre, rotate once, and offset the
+   parts inside the glyph's own frame. The cost is that on a very tight curve the outer part sits a
+   fraction off the line; at a ≤10 px separation that is sub-pixel to about a pixel, and far less than
+   the splay it replaces.
+
+   **And a direction mark must not straddle a corner.** A glyph placed on a bend points along neither
+   leg of it — KMB 1's sharpest corner is **124°**. Each mark now measures the heading change across
+   *its own footprint*, slides along its slot to the straightest reachable spot, and is **dropped
+   entirely** if even the best position is still a corner: a missing mark costs nothing, a misleading
+   one costs trust. Measured on the whole route, worst bend under any placed mark:
+
+   | Zoom | No avoidance | 20° threshold | Marks kept |
+   |---|---|---|---|
+   | z14.6 | 38.2° | **16.7°** | 9/9 |
+   | z15.4 | 67.7° | **8.0°** | 25/26 |
+   | z16.2 | 49.2° | **8.0°** | 39/39 |
+   | z17 | 26.4° | **7.0°** | 48/48 |
+
+   Sliding does almost all the work — one mark is dropped across four zooms. Note for whoever measures
+   this next: locating a glyph by scanning the path from the DOM gives garbage near a corner, because
+   that is exactly where a small arc-length error becomes a large heading error. Record the value at
+   placement time instead.
+
+0.8. **A stop's offset from the route line is information, not error.** The stop coordinate is the
+   **kerb**; the line is the **road centreline**; the gap between them is *which side of the road you
+   wait on*, which is the whole subject of ADR-080. Snapping markers onto the line looks tidier and
+   destroys that. The best answer came from the owner: **snap the marker to the line but on the side the kerb
+   is actually on** — project onto the line, then step out along the *normal* toward the real
+   coordinate. It sits as tidily as a centre-snap and still says which side of the road to wait on. A
+   circle keeps it consistent with every other stop, which is why it beats a half-on/half-off pill.
+   All four modes are switchable in `round-5.html`.
+
+0. **The operator accent cannot always be the line colour.** `OPERATOR_ACCENT` is
+   KMB `#D7282F` · LWB `#E8A33D` · CTB `#F6C700` · GMB `#00845C`. **CTB's is the same yellow LandsD
+   uses for major roads**, and a CTB route drawn straight in it is close to invisible; LWB's amber has
+   a milder version of the same problem. Colouring the line by operator is right — it matches the pins
+   and ADR-015's liveries — but it needs a **map-safe variant per operator**: same hue, darkened until
+   it holds against the road fills. That is the map's analogue of `OPERATOR_ACCENT_TEXT`, which already
+   exists because the yellow accent broke contrast on chips. Compare them in `round-5.html`.
+
+
 
 0. **A non-finite value must never reach the camera.** Found the hard way in the mockup: `fitRoute(ms: 0)`
    fell into the easing, where `(t0 - t0) / 0` is `0/0` — **`NaN`, not `Infinity`**, so it did not clamp

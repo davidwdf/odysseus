@@ -121,3 +121,60 @@ comes back" reflex without making the collapse continuous.
 
 Note: HK destination names are long, so the pill relies on ellipsis. `CollapsingHeader` already exports a
 `Marquee` for exactly this and should be reused rather than re-solved.
+
+---
+
+## `round-5.html` — path & marker styling
+
+`round-4`'s layout with a styling panel instead of the interaction one. Colours are the real
+`OPERATOR_ACCENT` tokens, not hand-picked hex.
+
+- **Operator** — KMB · LWB · CTB · GMB. **Try CTB**: its accent is `#F6C700`, the same yellow LandsD
+  uses for major roads, and the line all but disappears. That single case is what decides whether the
+  route line can be the operator colour straight.
+- **Line** — operator accent · map-safe accent (same hue, darkened) · neutral dark · hairline.
+- **Direction marks** — chevron · casing chevron (reads as a notch in the line, not a symbol on it) ·
+  filled triangle (what round 1–4 used) · flowing dash (animated) · none.
+- **Stop markers** — haloed · graded (termini square, selection large, intermediate small and quiet) ·
+  declutter by zoom · plain.
+- **Label size** — native `z`, or `z−1` for larger, sparser, softer text. LandsD bakes label size into
+  the raster, so this is the only lever short of a vector basemap.
+
+Round 5 also carries a **zoom readout** (top of the panel, and logged on every change), so a zoom at
+which the stop markers stack unhelpfully can be named precisely rather than described.
+
+**Round 5 defaults after review:** neutral-dark line · casing chevron at its own (thinner) weight ·
+smooth corners · hybrid markers — haloed circles for stops, squares for termini, each with a thin dark
+hairline on its outside edge — bigger, and tappable. Termini are squares in the stop list too.
+The **Dark map** toggle exists to show why the line colour needs a light/dark pair.
+
+**Round 5, later passes.** Zoom buttons ease rather than jump, and hold the *visible* centre.
+Direction marks are placed by **arc length on the rendered path** (`getPointAtLength`), so spacing is
+exact and double/triple chevrons stay on the curve — 0.08 px worst deviation over a 4,603 px route,
+where vertex placement drifted visibly at bends. Stop markers can **snap to their own side of the
+line**: tidy like a centre-snap, but it still says which kerb. Termini are squares sized to match the
+circles. A stop whose name contains `BBI` is drawn as a **hexagon** — KMB 1 has exactly one, Tsim Sha
+Tsui BBI · Middle Road.
+
+**Settled in round 5:** neutral-dark line, medium width · double chevron at fine weight, spaced
+*between stops* · smooth corners · hybrid markers at the largest size, **no halo** · termini as squares
+sized to match the circles · BBI stops as hexagons · markers offset to the **left of travel**, which is
+the kerb a Hong Kong rider boards from · direction marks reduced to **double chevron** and **dart**.
+
+**Dark mode is done too.** The tiles invert by filter and the overlay inverts by design: a light line,
+dark marker fills, light borders and hairlines, and chevrons that follow the casing. Label size stays at
+native `z` — with a raster basemap that is the ceiling, and only a vector base would lift it.
+
+The **dark line is its own choice**, not a tint: inverting the tiles turns LandsD's label text white and
+its road fills warm tan, so a near-white line reads as a label and an amber one collides with the roads.
+The default is simply the **inverted light colour** — cyan and mint are the better chromatic options
+and are one click away, but that choice belongs against the app's real tokens, not a prototype. The **double chevron is one glyph** — a
+single rotated group with both halves offset inside it — the gap between them is adjustable, and
+placement is **bend-aware**: a mark slides along its slot to the straightest spot it can reach, and is
+dropped if even that is a corner.
+
+**Final settled interaction (round 5).** Tapping a stop row **focuses it on the map** and does nothing
+else; a permanent `⋯` at the far right of every row opens the action sheet; tapping a marker selects the
+stop and scrolls its row into view. Scrolling collapses the context card but **no longer changes the
+selection** — the scroll-spy was built, demonstrated and cut, because having the camera chase the scroll
+read as finicky in use.
