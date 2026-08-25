@@ -242,7 +242,65 @@ sample key, which is fine for a spike and not something to ship on. Google Stree
 alternative: its terms forbid caching *and* forbid placing it beside a non-Google map, so it can only be
 a deep link out.
 
-**Action now: send the email.** It costs nothing and it gates the row.
+### What a spike found (2026-08-25) — the bill is far smaller than §7 first assumed
+
+Tested against the published sample key. **Nothing here needs the Cesium SDK, and almost nothing needs
+runtime access to LandsD at all.**
+
+**The key works and is genuinely enforced.** HTTP 200 with a JPEG payload; 401 with no key and 401 with
+a wrong one. It is a real credential published in their own docs for evaluation — fine for a spike,
+not something to ship on.
+
+**The `.pano` format is not proprietary.** It is an **8-byte header (big-endian length, then four zero
+bytes) followed by a plain JPEG**. Verified across faces, tiles and two different panoramas: strip
+eight bytes and you have an image any library can read.
+
+**The tiles are a standard cubemap**, six faces `px nx py ny pz nz`, in a 2×2 grid per face, with two
+pyramid levels:
+
+| Level | Tile | Face | Whole panorama |
+|---|---|---|---|
+| `r0` | 128×128 | 256×256 | 24 requests, ~50 KB — a preview |
+| `r2` | 1024×1024 | **2048×2048** | 24 requests, **~10.6 MB** — full quality |
+
+(`r1`, `r3`, `r4` return 404. The level appears in both the directory and the filename and the two must
+agree.) The live demo loads `r0` then upgrades to `r2`, which is where the pyramid was confirmed.
+
+**So Cesium was never doing anything we need.** It is their 3D-globe viewer chrome. Assembling six
+JPEG faces into a cubemap — or reprojecting to a flat crop — is ordinary image work.
+
+### The two questions this raises, answered
+
+**Can we proxy and cache to get past "100 concurrent users"?** Yes, and it is
+[ADR-049](../08-decision-log.md#adr-049--the-basemap-is-the-hk-lands-departments-self-cached-with-labels-as-a-per-locale-overlay)'s
+pattern exactly: the terms permit caching and redistribution with attribution, so our Worker becomes
+the only client LandsD sees and cache hits never reach them. But the owner's instinct goes further and
+is better — **precompute at build time**. Then LandsD sees a *single sequential consumer* during
+`dataset:build`, the concurrency limit stops being about our riders entirely, and at runtime we serve
+our own R2 objects.
+
+**Does that remove the need for the SDK?** Completely, and it removes more than that. If the build picks
+the panorama nearest each stop, orients the view toward it and crops a still, then at runtime a street
+view is **an `<img>`** — no panorama viewer, no WebView shim on native, no API call, no key on the
+client, and full control over framing (which is where "avoid a lorry parked across the stop" would
+live). The nice-to-have becomes genuinely cheap.
+
+### The one real blocker, now precisely stated
+
+**The panorama index has coordinates and no ids.** All 3,370,477 features carry an empty `properties`,
+and the path (`…/20220204/r0/20220204G10799_py_r0_0_0.pano`) encodes a survey date and run number that
+cannot be derived from a coordinate. Watching the demo's network traffic settles where the mapping
+lives: **40 requests, every one a tile of a single hardcoded panorama — it never performs a lookup at
+all**, so the mapping is not in the SDK's public surface either.
+
+**That makes the email worth sending, and turns it into one specific question:** *the panorama-location
+GeoJSON has empty properties — is there a version carrying the panorama id or path, or a documented way
+to resolve a coordinate to one?* Everything else is now known and cheap. If the answer is no, the
+honest fallback is a **deep link out** to their viewer and M8 closes at that; if it is yes, M8 is a
+build-step and an `<img>`.
+
+Worth asking in the same message, since it is cheap to ask and expensive to assume: whether
+**5 GB/s and 100 concurrent** are per key or service-wide.
 
 ---
 
