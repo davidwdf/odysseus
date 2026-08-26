@@ -236,6 +236,63 @@ something scrolls the list → camera moves. Whatever ships needs a single owner
 user-initiated pans must **suspend** following rather than fight it. A "recentre" affordance that
 reappears once the rider has panned away is the standard answer and the one to copy.
 
+> **Superseded by §6b (2026-08-26).** The scroll-spy was cut, so there is no loop to arbitrate. The
+> paragraph above is kept because the analysis is still correct *if* anything ever couples the two again
+> — but nothing does today, and the camera that survived moves only on a tap.
+
+---
+
+## 6b. Settled (2026-08-26) — what the camera does, and what marks the rider
+
+The owner's answers to the two questions §6 left open. Recording them so M5 and M7 can be built against
+a decision rather than re-argue one.
+
+### M6 is closed, and the camera it worried about is not
+
+**The scroll-spy is gone** — §8d cut it after building and demonstrating it, because a camera chasing the
+scroll read as finicky in use. That removes the feedback loop this whole section was written around: if
+scrolling never moves the camera, there is no loop between them, no "who moved last" to arbitrate, and no
+pan-to-suspend to design.
+
+**What is *not* removed is the camera itself.** The map must still pan and zoom to a stop when the rider
+makes it the focus — that is §8d's *"tap a stop row focuses it on the map"* — and to the rider's own
+position when M5 lands. The distinction that matters:
+
+| | |
+|---|---|
+| **Scroll-driven camera** | Cut. The rider did not ask for it, and it moved on every flick. |
+| **Focus camera** | Kept, and it is **M7's**. A tap is a request; answering it is not a loop. |
+
+`flyTo` for a new stop on the same route and a `jumpTo` for a new route, which is the distinction
+`proposals/02 §11` (c) already identified and the one hkbus relies on. Pan-to-suspend and a recentre
+affordance are **not needed for focus** — a rider who pans after tapping has simply looked elsewhere, and
+nothing is going to move the camera again until they ask.
+
+### M5 draws a dart when it knows the direction, and a dot when it does not
+
+The rider's own position is one mark with two forms, and which one appears is a claim about what we know:
+
+| | |
+|---|---|
+| **Dart** | Preferred. Only where a **heading** is actually available, pointed along it. |
+| **Dot** | The fallback, and not a lesser one — it is the honest mark for *"here, facing unknown"*. |
+
+This is ADR-008 applied to cartography, and the same rule as the dashed line one section up: a dart is a
+*direction claim*, and a dart pointing north because north is the default is the same class of lie as a
+client-side countdown. A rider orienting themselves at a bus stop will trust it.
+
+**Heading is more conditional than it looks, and that is the design constraint.** Two sources, neither
+reliable: `GeolocationPosition.coords.heading` is the *course over ground*, so it is `null` when stationary
+and is exactly what a rider standing at a kerb produces; `DeviceOrientationEvent.webkitCompassHeading` is a
+true compass but needs an explicit, gesture-triggered permission on iOS 13+ and is absent on most desktop
+browsers. So the dot is not an edge case to tidy away later — **it is the common case on a stationary
+phone**, and the dart is the enhancement. Build the dot first and let the dart light up when a heading
+arrives.
+
+Both go behind the existing `LocationProvider` seam; whether heading joins that port is M5's first
+question. An accuracy radius rides with either form, since it is a claim about the *position* rather than
+the direction.
+
 ---
 
 ## 7. Street view — a nice-to-have gated on an email
@@ -799,9 +856,9 @@ answered late rather than up front.
 | ~~**M2**~~ | ~~`/v1/route/:id/path`~~ | M1 | ✅ **Done 2026-08-24** (ADR-152). Measured: **444 ms / 7.9 KB** for KMB 1 outbound. `available:false`, never 404. |
 | ~~**M3**~~ | ~~`MapProvider` seam; interactive MapLibre~~ | — | ✅ **Done 2026-08-25** (ADR-154). Seam + `tileZoomPlan` + a `#map` lab page. **Web only, and not visually verified** — see the ADR. |
 | **M4** | Route polyline on Route detail, with the §5 fallback | M2, M3 | ✅ **Done 2026-08-26** (ADR-155). `routePathView` decides the arm, `RouteMap` draws it, and four states in `route-detail.spec.json` measure it — including the one where nothing is drawn. **Visually verified** in dev and against the built `dist/`; the first look found that MapLibre's worker never loaded, so no line drew at all (ADR-155 decision 7). |
-| **M5** | Live user location + accuracy radius + permission states | M3 | Existing `LocationProvider`. |
-| **M6** | Scroll-linked camera, with pan-to-suspend and recentre | M4 | The §6 loop-avoidance is the whole job. |
-| **M7** | Route-detail interaction paradigm (§8) + spec update | M4 | Decide **before** M6 — it determines what a tap means. |
+| **M5** | Live user location + accuracy radius + permission states | M3 | Existing `LocationProvider`. **A dot is the fallback and a dart is preferred** — see §6b. |
+| **M6** | ~~Scroll-linked camera, with pan-to-suspend and recentre~~ | — | ❌ **Closed 2026-08-26, answered by §8d.** The scroll-spy was built, demonstrated and cut, so there is no loop to avoid. **The camera still moves — on a tap — and that is M7's**, not a lost requirement: see §6b. |
+| **M7** | Route-detail interaction paradigm (§8d) + markers + chevrons + **focus camera** + spec update | M4 | Design settled; this is a build. Absorbs M6's camera. |
 | **M8** | *(nice to have)* Street view toggle | §7 key | Send the email now; the row can wait. |
 
 **Two things to settle before M3 and M7 respectively:** whether the vector base is worth trying at all,

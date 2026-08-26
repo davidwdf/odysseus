@@ -10369,3 +10369,11 @@ pre-existing and unaddressed; it earned its keep here.
   built `dist/` served with an SPA fallback. That capability is the durable part of this row.
 - 🟠 **Markers, direction chevrons and tap-to-focus are not built.** `proposals/06 §8d` settles what a
   tap means; building selectable markers before M7 would ship an interaction no spec covers.
+- ✅ **The map lab draws geometry now**, which is the hole this ADR blamed for the worker bug surviving
+  M3. `/lab/#map` puts all three of `routePathView`'s answers side by side on **real routes** — `KMB 1`
+  surveyed, `KMB R215` sketched, `CTB 20R` drawing nothing — through the shipping `RouteMap` rather than
+  a copy of it. Two jobs in one section: a porter can see the difference between *"this is the road"* and
+  *"these are the stops, in order"*, and the page finally exercises the worker, so a basemap-only lab can
+  never again vouch for geometry it does not draw. The design-system gallery needed no change — it is
+  built from the published specs, so the four new states and the `routePath` slot were listed the moment
+  they were emitted.

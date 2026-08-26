@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import type { LatLng, RoutePath } from '@nextbus/core'
+import { useEffect, useState } from 'react'
+import { dataSource } from '../src/adapters/datasource'
 import { landsdMapProvider } from '../src/adapters/mapProvider'
 import { MapView } from '../src/components/MapView'
+import { RouteMap } from '../src/components/RouteMap'
 
 /**
  * The interactive basemap, on its own, so it can be judged before any screen depends on it (ADR-154).
@@ -8,6 +11,20 @@ import { MapView } from '../src/components/MapView'
  * It lives here rather than on Place detail for the reason ADR-112 gives for the lab existing at all:
  * a spec'd screen is an expensive place to try something. `MiniMap` still owns every shipping screen;
  * this proves the `MapProvider` seam and the engine, and M4 is what moves a screen onto it.
+ *
+ * ## Why the second half of this page exists
+ *
+ * For one milestone this lab drew **tiles and nothing else**, a human looked at it and said the map was
+ * good, and both of those were true. What neither could show is that MapLibre's **worker was dead** the
+ * whole time (ADR-155 decision 7): raster tiles decode on the main thread, so the basemap was perfect
+ * while every source needing geometry was silently empty. It surfaced a milestone later, when a route
+ * line was finally asked to draw.
+ *
+ * So the route-line section below is not decoration. It is the part of this page that **exercises the
+ * worker**, and a lab that renders a basemap and no geometry cannot vouch for geometry. It also puts all
+ * three of `routePathView`'s answers side by side, which is the thing a porter most needs to see: the
+ * difference between *"this is the road"* and *"these are the stops, in order"* is a whole design
+ * decision (ADR-152) and it is invisible in a spec listing.
  */
 const PLACES = [
   { name: 'Chuk Yuen Estate', lat: 22.34544, lng: 114.19268 },
@@ -56,6 +73,8 @@ export function MapLab() {
         </button>
       </div>
 
+      <RouteLines />
+
       <MapView
         centre={place}
         zoom={zoom}
@@ -82,5 +101,90 @@ export function MapLab() {
         level means smaller, denser type.
       </p>
     </div>
+  )
+}
+
+/**
+ * The three answers `routePathView` can give, on real routes, through the shipping component.
+ *
+ * **Real ids rather than fixtures**, because the arm is a property of real geometry and a hand-made
+ * fixture would only prove the code agrees with itself. These three are the ones ADR-155 measured:
+ * `KMB 1` has a surveyed line; `KMB R215` has none but its 34 stops sit ~433 m apart, close enough that
+ * joining them describes a road; `CTB 20R` is 4 stops over 7.6 km, where a chord would draw three
+ * straight lines across Kowloon and the honest output is nothing at all.
+ *
+ * Needs `pnpm dev:edge`, as the tiles above already do.
+ */
+const ROUTES = [
+  { id: 'KMB:1:outbound:1', label: 'KMB 1', expect: 'surveyed — the road, solid, no caption' },
+  { id: 'KMB:R215:outbound:1', label: 'KMB R215', expect: 'approximate — dashed, and says so' },
+  { id: 'CTB:20R:outbound:1', label: 'CTB 20R', expect: 'none — no map at all' },
+] as const
+
+function RouteLines() {
+  const [i, setI] = useState(0)
+  const [path, setPath] = useState<RoutePath | undefined>(undefined)
+  const [stops, setStops] = useState<readonly LatLng[]>([])
+  const [pending, setPending] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const route = ROUTES[i] ?? ROUTES[0]
+
+  useEffect(() => {
+    // `cancelled` rather than an AbortController: two clicks in a row must not let the slower answer
+    // land last and contradict the button that is lit.
+    let cancelled = false
+    setPending(true)
+    setError(null)
+    Promise.all([dataSource.getRoutePath(route.id), dataSource.getRoute(route.id)])
+      .then(([p, detail]) => {
+        if (cancelled) return
+        setPath(p)
+        setStops(detail.stops.map((row) => row.stop.location))
+        setPending(false)
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+        setPending(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [route.id])
+
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {ROUTES.map((r, idx) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => setI(idx)}
+            className={`rounded-full px-3 py-1 text-caption ${
+              idx === i ? 'bg-accent text-accent-contrast' : 'bg-surface-2 text-muted'
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
+        <span className="ml-2 text-caption text-muted">{route.expect}</span>
+      </div>
+
+      {error ? (
+        <p className="text-caption text-negative">
+          {error} — this section needs <code>pnpm dev:edge</code>.
+        </p>
+      ) : (
+        <RouteMap path={path} pending={pending} stops={stops} className="w-full" />
+      )}
+
+      <p className="max-w-[70ch] text-caption text-muted">
+        The <strong>only</strong> geometry on this page, and therefore the only thing here that
+        proves MapLibre&rsquo;s worker is alive — a dead one leaves the basemap above perfect and
+        every line silently missing (ADR-155). <code>CTB 20R</code> drawing nothing is the correct
+        answer, not a failure: check the caption under <code>KMB R215</code> to tell &ldquo;no
+        line&rdquo; from &ldquo;no map&rdquo;.
+      </p>
+    </section>
   )
 }
