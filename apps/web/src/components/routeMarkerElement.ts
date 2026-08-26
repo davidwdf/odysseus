@@ -34,7 +34,11 @@ const SHAPE: Record<StopMarkerKind, { size: number; path: string }> = {
   terminus: { size: 14, path: 'M2.6 2.6 h8.8 v8.8 h-8.8 Z' },
   // A hexagon, for a bus-bus interchange. Flat-topped, which stays distinguishable from a circle at a
   // size where a pointed top would just read as a blob.
-  interchange: { size: 15, path: 'M4.6 2.2 h5.8 l2.9 5.3 -2.9 5.3 h-5.8 l-2.9 -5.3 Z' },
+  // Regular: vertices every 60° on a circle of radius 5.6 about the centre, as in the rail node.
+  interchange: {
+    size: 15,
+    path: 'M13.1 7.5 L10.3 12.35 L4.7 12.35 L1.9 7.5 L4.7 2.65 L10.3 2.65 Z',
+  },
   stop: { size: 12, path: 'M6 1.9 a4.1 4.1 0 1 0 0.01 0 Z' },
 }
 
@@ -130,6 +134,12 @@ function accessibleName({ kind, name, locale }: RouteMarkerOptions): string {
  *
  * `aria-hidden` on the SVG: the accessible name lives on the button, and a nested graphic with no name
  * of its own would otherwise be announced as an empty image inside it.
+ *
+ * **The stroke is heavy on purpose** — 2.2 of a 9–15 px glyph, where the first attempt used 1.4. The
+ * markers are a *hole punched in the line* rather than a bead resting on it, and that reading depends
+ * on the outline being substantial enough to look like an edge of the line itself; a hairline reads as
+ * a thin ring around a separate object. The mockups had this balance and it was lost in translating
+ * their much larger sizes down to a 220 px strip.
  */
 function svg(shape: { size: number; path: string }, selected: boolean, dark: boolean): string {
   const scale = selected ? 1.45 : 1
@@ -142,5 +152,5 @@ function svg(shape: { size: number; path: string }, selected: boolean, dark: boo
   const stroke = dark ? MAP_COLOR.routeInverted : MAP_COLOR.route
   return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker${
     selected ? ' route-marker-selected' : ''
-  }" fill="${fill}" stroke="${stroke}" stroke-width="${selected ? 1.8 : 1.4}"><path d="${shape.path}" /></svg>`
+  }" fill="${fill}" stroke="${stroke}" stroke-width="${selected ? 2.6 : 2.2}"><path d="${shape.path}" /></svg>`
 }

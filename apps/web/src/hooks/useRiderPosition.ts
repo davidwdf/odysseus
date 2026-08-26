@@ -62,8 +62,8 @@ export function useRiderPosition(): RiderPosition {
     () =>
       typeof window !== 'undefined' &&
       typeof window.DeviceOrientationEvent !== 'undefined' &&
-      typeof (window.DeviceOrientationEvent as unknown as OrientationPermission).requestPermission !==
-        'function',
+      typeof (window.DeviceOrientationEvent as unknown as OrientationPermission)
+        .requestPermission !== 'function',
   )
   const cancelled = useRef(false)
 

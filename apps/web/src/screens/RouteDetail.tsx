@@ -33,6 +33,7 @@ import { useRailFlip } from '../hooks/useRailFlip'
 import { useRiderPosition } from '../hooks/useRiderPosition'
 import { useRoutePath } from '../hooks/useRoutePath'
 import { usePreferences } from '../lib/preferences'
+import { useStableValue } from '../lib/useStableValue'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
 import { CollapsingHeader } from '../shell/CollapsingHeader'
@@ -135,13 +136,15 @@ export function RouteDetail() {
    * `titleCaseName` keeps that in capitals; nothing else states that coupling, so `route-markers.test.ts`
    * pins it.
    */
-  const stopPoints = useMemo(
-    () =>
-      (query.data?.stops ?? []).map((s) => ({
-        location: s.stop.location,
-        name: displayName(s.stop.name[locale]).label,
-      })),
-    [query.data?.stops, locale],
+  const stopPoints = useStableValue(
+    useMemo(
+      () =>
+        (query.data?.stops ?? []).map((s) => ({
+          location: s.stop.location,
+          name: displayName(s.stop.name[locale]).label,
+        })),
+      [query.data?.stops, locale],
+    ),
   )
 
   /**
@@ -345,8 +348,17 @@ export function RouteDetail() {
     // position (ADR-030). It is carried explicitly now rather than left implicit in a map's index, because a
     // row renders only its own and `useRailFlip` matches a moved token to its old place by it.
     const token = (
-      // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is the point — see above and ADR-030
-      <RailBusToken key={ordinal} ordinal={ordinal} bus={bus} vehicle={view.vehicle} />
+      <RailBusToken
+        // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is the point — see above and ADR-030
+        key={ordinal}
+        ordinal={ordinal}
+        bus={bus}
+        // Only a bus standing AT a node wears that node's shape. One on the segment between two stops
+        // is at no stop, and giving it the shape of one it has not reached would be a claim the data
+        // does not support — the same reason it sits at the midpoint rather than a fraction along.
+        shape={bus.kind === 'node' ? (markers[bus.index]?.kind ?? 'stop') : 'stop'}
+        vehicle={view.vehicle}
+      />
     )
     const carried = busesByRow.get(owner)
     if (carried === undefined) busesByRow.set(owner, [token])

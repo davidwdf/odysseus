@@ -10422,6 +10422,26 @@ pre-existing and unaddressed; it earned its keep here.
   reads as a broken app rather than as a privacy feature. What makes the raw fix legitimate is that it
   **never leaves the device**: it is drawn, and then it is gone. `useRiderPosition` carries that
   reasoning, and nothing from it may reach a query, a URL or a fetch.
+- 🔴 **A 30-second arrivals refresh re-framed the map**, throwing away wherever the rider had panned
+  to. Reported as *"the map repositions frequently"* and found by measurement rather than by reading:
+  pan away, and 31 seconds later the camera is back on the route.
+
+  The cause is a **derivation chain over a query result**. TanStack hands back a new object on every
+  refetch; structural sharing preserves unchanged subtrees, but a route's `stops` array carries each
+  row's `eta`, so the array is new on every tick even though not one coordinate moved. That churn ran
+  four derivations deep — stop coordinates → path presentation → drawn line → bounds — and `fitBounds`
+  saw a "new" box. The markers were torn down and rebuilt on the same beat.
+
+  Fixed with `useStableValue`, which keeps the previous value when a new one is equal **by content**.
+  Deliberately not by a hand-written signature: a key like "the stop ids, joined" is one more thing to
+  keep in step with the value it summarises, and it fails silently in the case nobody tests — a dataset
+  rebuild that moves a stop without changing its id would leave the marker at the old coordinate for
+  ever. Comparing what is there cannot drift from what is there.
+
+  **The general lesson is bigger than this screen.** Anything derived from a query result inherits its
+  identity churn, and a `useEffect` is where that stops being invisible and starts moving something a
+  rider was looking at. `fitBounds` was the visible one; the markers were doing it too and nobody had
+  noticed.
 - 🟠 **An iPhone cannot reach the dart.** iOS 13+ gates `deviceorientation` behind a
   `requestPermission()` that must run inside a user gesture; every other platform emits freely and the
   hook listens by itself. So `enableCompass` exists with **no caller** on the one platform where a

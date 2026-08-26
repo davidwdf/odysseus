@@ -362,7 +362,10 @@ export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; fir
  */
 const NODE_SHAPE: Record<StopMarkerKind, string> = {
   terminus: 'M2 2 h20 v20 h-20 Z',
-  interchange: 'M7 1.5 h10 l5 10.5 -5 10.5 h-10 l-5 -10.5 Z',
+  // A **regular** hexagon — all six sides equal — rather than the stretched one this started as.
+  // Vertices every 60° on a circle of radius 10 about the centre, which is also what makes it share the
+  // circle's optical weight: both are inscribed in the same circle, so neither reads as the heavier.
+  interchange: 'M22 12 L17 20.66 L7 20.66 L2 12 L7 3.34 L17 3.34 Z',
   stop: 'M12 1.5 a10.5 10.5 0 1 0 0.01 0 Z',
 }
 

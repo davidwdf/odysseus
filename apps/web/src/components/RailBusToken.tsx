@@ -1,4 +1,4 @@
-import type { RailBus, RouteVehicle } from '@nextbus/core'
+import type { RailBus, RouteVehicle, StopMarkerKind } from '@nextbus/core'
 import { useLayoutEffect, useRef } from 'react'
 import { BusGlyph } from './BusGlyph'
 
@@ -45,10 +45,17 @@ import { BusGlyph } from './BusGlyph'
 export function RailBusToken({
   bus,
   ordinal,
+  shape = 'stop',
   vehicle = 'bus',
 }: {
   bus: RailBus
   ordinal: number
+  /**
+   * The shape of the node this bus is standing at, so the token matches it (see {@link TOKEN_SHAPE}).
+   * Defaults to `stop` — a disc — which is what a bus on a segment gets and what every caller that has
+   * no opinion should leave it as.
+   */
+  shape?: StopMarkerKind
   /**
    * Which vehicle to draw — the kernel's word, never this component's guess. `routeVehicle` decides it from
    * the operator, because selecting on data and reaching into an id are both things a view may not do.
@@ -99,8 +106,11 @@ export function RailBusToken({
         A single ordered coordinate answers both, where the ordinal answers neither.
       */
       data-bus-at={bus.kind === 'node' ? bus.index : bus.from + HALF_STEP}
-      className="pointer-events-none absolute flex items-center justify-center rounded-full bg-accent"
+      className={`pointer-events-none absolute flex items-center justify-center bg-accent ${TOKEN_SHAPE[shape]}`}
       style={{
+        // A hexagon has no border-radius, so it is clipped. `clip-path` is safe here where it is not on
+        // the rail node: the token is a flat fill with no outline to clip away.
+        ...(shape === 'interchange' ? { clipPath: HEX_CLIP } : {}),
         top: bus.kind === 'node' ? AT_NODE : ON_SEGMENT,
         left: RAIL_WIDTH / 2 - TOKEN / 2,
         width: TOKEN,
@@ -137,6 +147,24 @@ export function RailBusToken({
  * row that draws the node and the token that rides it need the same centre line.
  */
 export const RAIL_WIDTH = 44
+/**
+ * **The token wears the shape of the node it is standing at** — a square at a terminus, a hexagon at an
+ * interchange, a disc everywhere else — so the map, the rail and the bus all speak one vocabulary.
+ *
+ * Only where the bus is **at a node**. A bus on the segment *between* two stops is at no stop at all,
+ * and giving it the shape of one it has not reached yet would be the token making a claim the data does
+ * not support — the same reason it sits at a midpoint rather than a fraction of the way along (ADR-030).
+ * Those stay discs, which is also the shape they have always had.
+ */
+const TOKEN_SHAPE: Record<StopMarkerKind, string> = {
+  terminus: 'rounded-[5px]',
+  interchange: '',
+  stop: 'rounded-full',
+}
+
+/** A regular hexagon, in `clip-path`'s percentage space — the same six vertices as the rail node's. */
+const HEX_CLIP = 'polygon(100% 50%, 75% 93.3%, 25% 93.3%, 0% 50%, 25% 6.7%, 75% 6.7%)'
+
 export const NODE = 26
 export const NODE_TOP = 12
 export const NODE_CENTRE = NODE_TOP + NODE / 2
