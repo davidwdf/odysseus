@@ -238,6 +238,18 @@ export function strip(source) {
  */
 const ALLOWLIST = [
   {
+    file: 'apps/web/src/components/sheet/detents.ts',
+    why:
+      'A whole file of **gesture geometry with no NextBus vocabulary in it** — the arithmetic half of a ' +
+      'draggable sheet, deliberately separated from the component so the component holds none of it. ' +
+      'Every value is a fraction of a container or a speed in fractions per second; nothing here reads ' +
+      'a stop, a route, an arrival or a fare, and the `.sort()` orders DETENTS by height rather than ' +
+      'rows by a domain rule. It is the sort of thing that would move to a shared component library ' +
+      'unchanged, which is the test for whether it belongs to this app at all — and it does not. ' +
+      'Whole-file rather than per-rule because the file has exactly one subject: if anything in it ' +
+      'ever reads a domain quantity, the entry is wrong and should be deleted rather than narrowed.',
+  },
+  {
     file: 'apps/web/src/components/routeChevronImage.ts',
     rule: 'arithmetic',
     why:
