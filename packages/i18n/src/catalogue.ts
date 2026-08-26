@@ -790,6 +790,19 @@ export const CATALOGUE = {
    * token on the *origin* node gets, which is the only token on the rail a rider can act on immediately.
    */
   /**
+   * The `⋯` beside a stop row, whose whole content is a glyph — so this is its accessible name and the
+   * only thing a screen reader has to go on (ADR-097: every state and name on this side is an `aria-*`
+   * attribute, because `react-native-web@0.21` drops `accessibilityState` silently).
+   *
+   * Names the **stop**, not the control: forty rows each announcing "More options" tells a rider
+   * nothing about which one they are on, and the stop is the thing the actions act upon.
+   */
+  routeStopActions: {
+    en: 'Actions for {stop}',
+    'zh-Hant': '{stop}的操作',
+    'zh-Hans': '{stop}的操作',
+  },
+  /**
    * A stop's marker on the route map. `{stop}` is the stop's display name.
    *
    * The marker is a **graphic with no text**, so this is the whole of what a screen reader gets — and

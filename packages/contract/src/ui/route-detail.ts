@@ -609,8 +609,8 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
     },
     {
       target: 'stopName',
-      goes: 'a sheet offering to save this route at this stop, or to open the stop’s place',
-      note: 'Deliberately **not** straight to the place: the row’s primary purpose is saving the route at that pole (ADR-042), and a tap that navigated away would make the common action the harder one.',
+      goes: 'that stop — focused on the map where there is one, and otherwise a sheet offering to save this route at this stop or to open the stop’s place',
+      note: 'Deliberately **not** straight to the place: the row’s primary purpose is saving the route at that pole (ADR-042), and a tap that navigated away would make the common action the harder one.\n\n**The two halves of that sentence are one destination behind a capability, not two designs.** §8d makes a row tap focus the stop on the map and moves the actions to a permanent `⋯` beside every row — round 1 rejected that icon as clutter when the map was a decorative band, and it earns its space now the map is the point of the screen. `apps/mobile` has no map (see `idiom`), so there is nothing for its row tap to focus and it keeps the sheet. The **destination is the same in both**: the stop the rider touched. What differs is what this app can show them about it.',
     },
     {
       target: 'factValue',
@@ -633,6 +633,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
   },
 
   idiom: [
+    '**what a row tap can do, which follows from whether there is a map at all.** On `apps/web` it focuses the stop on the map and a permanent `⋯` beside every row carries the actions (§8d); on `apps/mobile`, which has no map, the row tap keeps the action sheet and there is no `⋯`. Recorded here rather than declared as two interactions because the spec has one target per control and this is **one destination behind a capability** — both take a rider to the stop they touched. It is the smaller half of the same asymmetry the four `path*` states record, and it closes the same way: an RN map would inherit a settled interaction rather than re-decide one. Until then the `⋯` and the markers are **undeclared controls on the web renderer**, which is a real gap and the honest name for it is: not yet specified',
     '**the map engine, and — for now — whether there is a map at all.** `apps/web` draws the route line with MapLibre GL JS over the Lands Department raster (ADR-049/154); `apps/mobile` draws no map, because the React Native equivalent is a native module and adding it would end that app’s ability to run in Expo Go. So `pathSurveyed`, `pathApproximate`, `pathAbsent` and `pathPending` are declared, measured on the DOM renderer, and **explicitly excused on the native one** — recorded here rather than left in a test file, which is ADR-069’s finding: an asymmetry that lives only in a driver is one nobody sees. What is *not* idiom is any of it: which of the three answers to draw is `route-path#routePathView`, and the caption is `routePathApproximate` in the shared catalogue, so an RN map added later inherits a settled contract rather than re-deciding it',
     '**every curve, duration and physic of the bus token** — the 650 ms tween to a new position, the 550 ms bob, the 2 200 ms rock, the fade-in from the origin. What is *not* idiom is which node it is at, which is why the model says `{kind:"node", index}` or `{kind:"segment", from, to}` and never a pixel (ADR-093)',
     '**whether the header collapses at all** — `apps/mobile` cross-fades a full journey card into a one-line pill on scroll and therefore needs both composed labels; `apps/web` has one size and puts the resting label in `document.title`',

@@ -8,11 +8,28 @@ import { mapProvider } from '../adapters/mapProvider'
 import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
 import { MapView } from './MapView'
+import { routeChevronImage } from './routeChevronImage'
 import { routeMarkerElement } from './routeMarkerElement'
 
 const SOURCE = 'route-line'
 const CASING_LAYER = 'route-line-casing'
 const LINE_LAYER = 'route-line-fill'
+const CHEVRON_LAYER = 'route-line-direction'
+const CHEVRON_IMAGE = 'route-chevron'
+/**
+ * Distance between direction marks, in pixels along the rendered line.
+ *
+ * Round 5 settled *"spaced between stops"*, which a mockup could do because it placed each mark by arc
+ * length on an SVG path it owned. MapLibre spaces symbols itself and has no notion of where the stops
+ * are, so this is the same intent expressed in the engine's vocabulary.
+ *
+ * **60, chosen by counting rather than by taste.** The value is in *tile* pixels, not screen pixels, so
+ * it does not mean what it appears to: at the zoom a whole route is framed at, 110 put four marks on an
+ * 8 km route — technically present and useless as a direction cue. Sampling the drawn symbols at 110 /
+ * 60 / 35 / 20 gave roughly 4 / 8 / 10 / 20 marks; 8 is about one per three stops, which reads as a
+ * current along the line rather than a row of arrows.
+ */
+const CHEVRON_SPACING = 60
 
 /** The strip's height, shared with the placeholder so an arriving line does not move the list. */
 const HEIGHT = 220
@@ -192,6 +209,56 @@ export function RouteMap({
     // one runs — and on every later change `map` is unchanged, so listing `drawn` would only
     // re-set four properties to the values they already hold.
   }, [map, mode, presentation?.kind])
+
+  /**
+   * **Which way the bus goes**, as a repeating mark along the line (§8d).
+   *
+   * A `symbol-placement: 'line'` layer rather than marks this component positions: MapLibre already
+   * knows the line's screen geometry at every zoom, and re-deriving it here to place arrows would be
+   * the mockup's `getPointAtLength` machinery rewritten against an engine that does not need it.
+   *
+   * **The direction is real, and it is `orientToStops` that makes it so** (ADR-152). MapLibre rotates
+   * each icon to the local vertex order; the edge has already reversed the surveyed line where it ran
+   * against the stop sequence, so vertex order *is* travel order. Without that step this layer would
+   * point half the network's routes backwards, and it would look completely deliberate.
+   *
+   * ⚠️ **Round 5's bend avoidance is not reproduced.** The mockup slid each mark along its slot to the
+   * straightest spot it could reach and dropped it if even that was a corner; MapLibre places symbols
+   * on its own schedule and exposes no such hook. In practice its own collision handling covers the
+   * worst of it — a mark on a tight bend is rotated, not mangled — and the alternative is owning
+   * placement, which is the thing this layer exists to avoid. Recorded rather than quietly dropped.
+   */
+  useEffect(() => {
+    if (!map || !drawn?.length) return
+    const casing = mode === 'dark' ? MAP_COLOR.routeCasingInverted : MAP_COLOR.routeCasing
+    const image = routeChevronImage(casing, window.devicePixelRatio || 1)
+    // Re-added rather than recoloured: `icon-color` only applies to SDF images, and an SDF would mean
+    // a build step for a two-stroke glyph. Removing first because `addImage` throws on a duplicate id.
+    if (map.hasImage(CHEVRON_IMAGE)) map.removeImage(CHEVRON_IMAGE)
+    map.addImage(CHEVRON_IMAGE, image, { pixelRatio: window.devicePixelRatio || 1 })
+    if (!map.getLayer(CHEVRON_LAYER)) {
+      map.addLayer({
+        id: CHEVRON_LAYER,
+        type: 'symbol',
+        source: SOURCE,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': CHEVRON_SPACING,
+          'icon-image': CHEVRON_IMAGE,
+          'icon-rotation-alignment': 'map',
+          // Overlap allowed, padding zero: these are a texture along one line, and letting MapLibre
+          // drop them for collisions would thin the marks out exactly where the route bends most —
+          // which is where a rider most wants to know which way it goes.
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      })
+    }
+    return () => {
+      if (map.getLayer(CHEVRON_LAYER)) map.removeLayer(CHEVRON_LAYER)
+      if (map.hasImage(CHEVRON_IMAGE)) map.removeImage(CHEVRON_IMAGE)
+    }
+  }, [map, drawn, mode])
 
   /**
    * The markers, rebuilt whenever what they say changes.

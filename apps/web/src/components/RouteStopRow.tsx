@@ -27,6 +27,7 @@ export function RouteStopRow({
   arrivalsPending = false,
   tokens,
   onPress,
+  onMenu,
   registerRow,
 }: {
   row: RouteStopRowView
@@ -55,7 +56,15 @@ export function RouteStopRow({
    * in an order of its own.
    */
   tokens: ReactNode
-  onPress: (row: RouteStopRowView) => void
+  /**
+   * The row itself was tapped. Since §8d that **focuses the stop on the map** and does nothing else —
+   * it used to open the action sheet, which is now `onMenu`'s job. The swap is the whole of WP M7d:
+   * a tap that moves the map is worth a permanent control beside it, which it was not when the map
+   * was a decorative band (`docs/proposals/06 §8d`).
+   */
+  onPress: (row: RouteStopRowView, index: number) => void
+  /** The `⋯` was tapped — open the actions for this stop. */
+  onMenu: (row: RouteStopRowView) => void
   /** Reports this row's element so the reveal can scroll to it — geometry, not a decision. */
   registerRow: (index: number, el: HTMLElement | null) => void
 }) {
@@ -91,7 +100,7 @@ export function RouteStopRow({
       <button
         type="button"
         ref={(el) => registerRow(index, el)}
-        onClick={() => onPress(row)}
+        onClick={() => onPress(row, index)}
         // The cascade's per-row beat, capped so a 60-stop route does not drag for two seconds — the delay
         // `apps/mobile` applies with `withDelay(Math.min(index, 10) * 26, …)`, value for value.
         style={
@@ -218,6 +227,44 @@ export function RouteStopRow({
             <span className="mt-1 block text-label text-muted">{t(locale, 'etasUnavailable')}</span>
           ) : null}
         </span>
+      </button>
+      {/*
+        **The permanent `⋯`, and a SIBLING of the row rather than a child of it** (ADR-024's rule, and
+        what the spec's `sibling-not-nested` check enforces): a button inside a button is invalid HTML
+        and folds into one control for a screen reader, which is how the star beside a stop row had to
+        be built too.
+
+        Absolutely positioned so it costs the row no layout — the row's own box is unchanged, which
+        matters because `RailBusToken` is placed against it with constant CSS expressions and any
+        change to the row's height would move every bus on the schematic (ADR-110).
+
+        Round 1 rejected this as "repeated menu icons" and round 5 accepted it, because everything
+        around it changed: once the map is the point of the screen, a tap that focuses it is worth a
+        permanent control, and the actions need somewhere to go.
+      */}
+      <button
+        type="button"
+        onClick={() => onMenu(row)}
+        aria-label={t(locale, 'routeStopActions', { stop: row.name.label })}
+        className="absolute top-0 right-0 flex h-16 w-11 items-center justify-center border-0 bg-transparent text-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+      >
+        {/*
+          **Three drawn dots, not the character `⋯`** — and that is a conformance decision, not a
+          styling one. The walker reads TEXT NODES and sees presence rather than visibility (ADR-097),
+          so a literal `⋯` lands in every state's projection as a stray glyph after the stop's
+          sequence number. It cannot be declared away either: the RN row has no such control, and a
+          slot the other renderer cannot produce is a red build there or a fake `knownDefect`.
+
+          Drawn, it is a control with **no text** — which is exactly what the saved-state star on
+          `PlaceRow` is, and it is `idiom` for the same stated reason: no slot can declare it, so each
+          renderer draws it its own way. The button still carries its accessible name, so a screen
+          reader loses nothing and the count of tap targets is unchanged.
+        */}
+        <svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true" fill="currentColor">
+          <circle cx="2" cy="2" r="1.6" />
+          <circle cx="8" cy="2" r="1.6" />
+          <circle cx="14" cy="2" r="1.6" />
+        </svg>
       </button>
       {tokens}
     </div>

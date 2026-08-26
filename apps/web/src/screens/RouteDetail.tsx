@@ -273,6 +273,18 @@ export function RouteDetail() {
     rows.current.get(index)?.scrollIntoView({ block: 'nearest' })
   }, [])
 
+  /**
+   * A row tap. §8d: it **focuses the stop on the map and does nothing else** — the actions moved to the
+   * `⋯` beside it. It keeps the `RouteStopRowView` argument even though only the index is used, because
+   * the sheet still takes the row and the two handlers must not disagree about what a row is.
+   */
+  const onRowPress = useCallback(
+    (_row: RouteStopRowView, index: number) => {
+      focusStop(index)
+    },
+    [focusStop],
+  )
+
   const list = useRef<HTMLDivElement | null>(null)
   const stopCount = view?.stops.length ?? 0
 
@@ -528,7 +540,8 @@ export function RouteDetail() {
                 // row is about to gain a line at once — see the skeleton's note in `RouteStopRow`.
                 arrivalsPending={wantsLive && round === null}
                 tokens={busesByRow.get(index)}
-                onPress={setSheetRow}
+                onPress={onRowPress}
+                onMenu={setSheetRow}
                 registerRow={registerRow}
               />
             ))}

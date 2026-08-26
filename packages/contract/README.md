@@ -33,7 +33,7 @@ One framing to start with, because it decides how you spend your first week:
 | `packages/contract/native/android/CorpusConformanceTest.kt` | **Template — never compiled, never run** | Ditto, for `src/test/kotlin`. |
 | `packages/ui/generated/NextBusTokens.swift` | 126 design tokens — **never compiled** | Compile it. A compile error here is a bug in the emitter, not something to patch in place. |
 | `packages/ui/generated/NextBusTokens.kt` | 126 design tokens — **never compiled** | Ditto. |
-| `packages/i18n/generated/ios/` | 3 locales × 143 strings + 2 plural messages | `.lproj` bundles — drop in as-is; do not retype a string. |
+| `packages/i18n/generated/ios/` | 3 locales × 144 strings + 2 plural messages | `.lproj` bundles — drop in as-is; do not retype a string. |
 | `packages/i18n/generated/android/` | 3 resource folders | `values*/strings.xml` — drop in as-is. |
 <!-- END GENERATED: artefacts -->
 

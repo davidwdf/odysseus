@@ -647,13 +647,22 @@ describe('a stop row opens the save sheet — the interaction no projection can 
     usePreferences.setState({ favoriteRoutes: saved })
     vi.setSystemTime(Date.parse(c.args.now))
     await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
-    const rows = [...container.querySelectorAll('button')].filter((b) =>
-      b.className.includes('w-full'),
+    // **The `⋯`, not the row** — which is the whole of what M7 changed here (`proposals/06 §8d`).
+    // A row tap now focuses the stop on the map and opens nothing; the actions moved to a permanent
+    // sibling control. Found by this suite going red on six sheet tests the moment the swap landed,
+    // which is the check working: the sheet is reached by an interaction, and an interaction nothing
+    // drives is a component no state projection sees.
+    //
+    // Selected by its accessible name rather than by a class, because the name is the part the spec
+    // and a screen reader agree on — a class is this renderer's private business and would make the
+    // test pass for a control announced as nothing at all.
+    const menus = [...container.querySelectorAll('button')].filter((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Actions for'),
     )
-    const row = rows[0]
-    if (!row) throw new Error('no stop row to press')
+    const menu = menus[0]
+    if (!menu) throw new Error('no ⋯ control to press — the row’s actions have no way in')
     act(() => {
-      row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      menu.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     return { detail, dialog: container.querySelector('dialog') }
   }
@@ -898,6 +907,7 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
             />,
           ]}
           onPress={() => {}}
+          onMenu={() => {}}
           registerRow={() => {}}
         />,
       )

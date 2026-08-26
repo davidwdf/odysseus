@@ -238,6 +238,18 @@ export function strip(source) {
  */
 const ALLOWLIST = [
   {
+    file: 'apps/web/src/components/routeChevronImage.ts',
+    rule: 'arithmetic',
+    why:
+      'A canvas drawing, and every number in it is a coordinate on that canvas: the bitmap size at the ' +
+      'device pixel ratio, and the two stroke paths. There is no domain quantity anywhere in the file — ' +
+      "the only thing it is told is a colour, and the direction the mark points is the ENGINE's, from " +
+      '`symbol-placement: line` over a line the edge already oriented in travel order (ADR-152). It is a ' +
+      'sprite that happens to be drawn at runtime rather than shipped as a file, and a sprite is not a ' +
+      'rule. Scoped to `arithmetic`: a `.filter()` or a comparison against a minutes value would still be ' +
+      'a finding here, and either would mean this had stopped being a drawing.',
+  },
+  {
     file: 'apps/web/src/components/routeMarkerElement.ts',
     rule: 'arithmetic',
     why:

@@ -308,6 +308,43 @@ the direction.
 
 ---
 
+## 8e. What M7 did not close (2026-08-26)
+
+Recorded rather than left as a silence, because the gap is in the *spec* and a spec's whole value is
+that it does not have silences.
+
+**The `⋯` and the stop markers are undeclared controls on `apps/web`.** Both are real, both carry
+accessible names, both are exercised by tests — and neither appears in `route-detail.spec.json` as a
+slot. Two things block it, and they compound:
+
+1. **A slot needs text.** The format's five words are `field` / `message` / `literal` / `each` /
+   `oneOf`, and all of them project a *string*. A control whose whole content is a drawn glyph has
+   none. That is not new: the saved-state star on `PlaceRow` is `idiom` for exactly this reason, and
+   the bus token only became declarable once it had an accessible **name** the driver could append.
+2. **The spec is shared with a renderer that has neither control.** `apps/mobile` has no map, so a
+   row tap there has nothing to focus and it keeps the action sheet; there is no `⋯` beside it either.
+   A slot declared for both would be a red build on native or a `knownDefect` standing in for a
+   decision nobody has taken.
+
+The honest options, none of which is free:
+
+| | |
+|---|---|
+| **Declare via accessible name** | The bus-token route: each driver appends the control's `aria-label` into the tree it hands the walker. Works, and needs the control to exist on **both** renderers first. |
+| **Build the `⋯` on `apps/mobile` too** | Makes the slot declarable. But the row tap there would still have no map to focus, so the two renderers would carry the same control for different reasons. |
+| **Wait for the native map** | ADR-075 is retiring `apps/mobile`; if that lands first the question dissolves. |
+
+**Recommended: wait, and keep the gap named.** The controls are covered by the interaction tests either
+way; what is missing is the *published* claim, and inventing a native `⋯` to make a JSON file complete
+would be the spec wagging the app.
+
+**Also not built:** round 5's **bend avoidance** for the direction marks. The mockup slid each mark to
+the straightest spot in its slot and dropped it if even that was a corner; MapLibre places symbols on
+its own schedule and exposes no such hook, and the alternative is owning placement — which is the thing
+the symbol layer exists to avoid. Its own collision handling covers the worst of it.
+
+---
+
 ## 7. Street view — a nice-to-have gated on an email
 
 LandsD's **Streetscape 360** is real, documented, and — unlike Google's — actually embeddable:
@@ -871,7 +908,7 @@ answered late rather than up front.
 | **M4** | Route polyline on Route detail, with the §5 fallback | M2, M3 | ✅ **Done 2026-08-26** (ADR-155). `routePathView` decides the arm, `RouteMap` draws it, and four states in `route-detail.spec.json` measure it — including the one where nothing is drawn. **Visually verified** in dev and against the built `dist/`; the first look found that MapLibre's worker never loaded, so no line drew at all (ADR-155 decision 7). |
 | **M5** | Live user location + accuracy radius + permission states | M3 | Existing `LocationProvider`. **A dot is the fallback and a dart is preferred** — see §6b. |
 | **M6** | ~~Scroll-linked camera, with pan-to-suspend and recentre~~ | — | ❌ **Closed 2026-08-26, answered by §8d.** The scroll-spy was built, demonstrated and cut, so there is no loop to avoid. **The camera still moves — on a tap — and that is M7's**, not a lost requirement: see §6b. |
-| **M7** | Route-detail interaction paradigm (§8d) + markers + chevrons + **focus camera** + spec update | M4 | Design settled; this is a build. Absorbs M6's camera. |
+| **M7** | Route-detail interaction paradigm (§8d) + markers + chevrons + **focus camera** + spec update | M4 | 🟡 **Mostly done 2026-08-26** (ADR-155). Markers, chevrons, the focus camera and the whole §8d interaction ship on `apps/web`. **The spec half is partial** — `stopName`'s destination is updated and the divergence is an `idiom` entry, but the `⋯` and the markers are *undeclared controls*: a slot needs text, and the native row has neither control, so declaring one would be a red build there. See §8e. |
 | **M8** | *(nice to have)* Street view toggle | §7 key | Send the email now; the row can wait. |
 
 **Two things to settle before M3 and M7 respectively:** whether the vector base is worth trying at all,

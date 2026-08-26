@@ -121,6 +121,7 @@ export function RailLab() {
             animateIn={false}
             tokens={byRow.get(index)}
             onPress={() => {}}
+            onMenu={() => {}}
             registerRow={() => {}}
           />
         ))}

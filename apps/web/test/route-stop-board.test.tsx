@@ -152,12 +152,19 @@ const LABELS = {
   busAtStop: (stop: string) => `Bus at ${stop}`,
 }
 
-/** Tap the nth stop row, which is what opens the sheet (ADR-032, ADR-098). */
+/**
+ * Open the nth stop's action sheet (ADR-032, ADR-098).
+ *
+ * **Via the `⋯`, not the row.** Since §8d a row tap focuses the stop on the map and opens nothing; the
+ * actions live on a permanent sibling control. Selected by its accessible name rather than a class,
+ * because the name is the part a screen reader and the spec agree on — matching a class would let this
+ * pass for a control announced as nothing at all.
+ */
 async function tapRow(index: number): Promise<void> {
   const row = [...container.querySelectorAll('button')].filter((b) =>
-    b.className.includes('min-h-16'),
+    (b.getAttribute('aria-label') ?? '').startsWith('Actions for'),
   )[index]
-  if (!row) throw new Error(`no stop row ${index} to tap`)
+  if (!row) throw new Error(`no ⋯ control for stop ${index} to tap`)
   await act(async () => {
     row.click()
     await Promise.resolve()

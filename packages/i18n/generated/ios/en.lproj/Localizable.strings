@@ -119,6 +119,8 @@
 /* {stop} → %1$@ */
 "busApproaching" = "Bus approaching %1$@";
 /* {stop} → %1$@ */
+"routeStopActions" = "Actions for %1$@";
+/* {stop} → %1$@ */
 "routeStopMarker" = "Stop: %1$@";
 "routeStopTerminus" = "Terminus";
 "routeStopInterchange" = "Interchange";
