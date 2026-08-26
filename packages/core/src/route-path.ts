@@ -214,9 +214,12 @@ export function trimPathToStops(
   last: LatLng,
 ): { path: PathPoint[]; trimmedStart: number; trimmedEnd: number } {
   const whole = { path: [...line], trimmedStart: 0, trimmedEnd: 0 }
-  if (line.length < 2) return whole
   const a = nearestOnPath(line, first)
   const b = nearestOnPath(line, last)
+  // One guard, not two. A separate `line.length < 2` check sat above this until it was noticed that
+  // `nearestOnPath` already answers `null` for exactly that case — so the second test could never
+  // fire, which made it the kind of unreachable branch a coverage threshold is supposed to expose and
+  // could not, because this module had been left out of the threshold's list entirely (ADR-155).
   if (!a || !b) return whole
   const posA = a.index + a.t
   const posB = b.index + b.t

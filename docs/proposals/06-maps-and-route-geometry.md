@@ -286,8 +286,21 @@ reliable: `GeolocationPosition.coords.heading` is the *course over ground*, so i
 and is exactly what a rider standing at a kerb produces; `DeviceOrientationEvent.webkitCompassHeading` is a
 true compass but needs an explicit, gesture-triggered permission on iOS 13+ and is absent on most desktop
 browsers. So the dot is not an edge case to tidy away later — **it is the common case on a stationary
-phone**, and the dart is the enhancement. Build the dot first and let the dart light up when a heading
-arrives.
+phone**, and the dart is the enhancement.
+
+**Precedence, settled: compass → course → dot.**
+
+1. `webkitCompassHeading` where it is available and permitted. It answers *"which way is the rider
+   facing"*, which is the question someone standing at a kerb is actually asking.
+2. `coords.heading` otherwise, when it is non-null. It answers *"which way are they moving"* — a
+   different question, and a good enough answer while they are moving, which is the only time it has one.
+3. The dot. Not a failure state; the correct mark for a position with no direction attached.
+
+The order is worth stating because the fallback is the *weaker* signal rather than the more common one —
+so a rider who grants compass permission and then stands still keeps a dart, where course-over-ground
+alone would drop them back to a dot the moment they stopped walking. Which source produced a heading
+should not be visible to the rider: both are the same claim (*this is the way you are facing*) at
+different confidences, and drawing two darts would be inventing a distinction they cannot act on.
 
 Both go behind the existing `LocationProvider` seam; whether heading joins that port is M5's first
 question. An accuracy radius rides with either form, since it is a claim about the *position* rather than

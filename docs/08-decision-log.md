@@ -10343,7 +10343,23 @@ pre-existing and unaddressed; it earned its keep here.
 
 ### What this cost, and what it found
 
-- ✅ `packages/core` keeps 100% coverage — 1 111 tests.
+- 🔴 **That "100% coverage" was measured over a set that excluded the module this ADR is about.**
+  `packages/core/vitest.config.ts` names the modules the threshold applies to **by hand**, and
+  `src/route-path.ts` — added in M1, extended in M4 and M4b — was never added to it. Measured once it
+  was: **95.4% statements, 87.0% branches**, with a dead branch in `trimPathToStops` that a threshold
+  is exactly the thing meant to expose. Closed with six corpus rows for real branches nobody had
+  exercised (a zero-length segment, a line too short to project onto, a candidate with no geometry, and
+  both orders of the two-candidate comparison), and by deleting the unreachable guard.
+
+  The config's own comment already recorded this happening to `src/favourites.ts` in Wave 6, and then
+  said the mitigation was that *"a module with no rows fails the threshold loudly rather than
+  silently"* — **which is false.** A module absent from the list is not measured at all, so it fails
+  nothing; it is invisible, which is worse than red. Writing the warning down did not stop the second
+  occurrence, so `check-spec-coverage.mjs` gained a **third direction**: a module carrying an `@spec`
+  tag must appear in the coverage `include`. A rule worth pinning to a corpus is a rule worth
+  measuring, and declaration-only modules carry no tags and are correctly ignored. The historical bug
+  was re-injected and the gate names it.
+- ✅ `packages/core` is at 100% again, now genuinely including `route-path.ts` — 1 124 tests.
 - 🔴 **The spec passed while the caption could be deleted.** `pathApproximate` was declared, driven and
   green, and it was reaching the `none` arm the whole time: the fixture respacing fixed the stops'
   latitudes and left 16 km of longitude spread, so the gaps never changed. Only injecting the defect

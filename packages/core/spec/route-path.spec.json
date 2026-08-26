@@ -204,6 +204,20 @@
             "point": [114.0, 22.3]
           },
           "expect": null
+        },
+        {
+          "name": "a-repeated-vertex-makes-a-segment-with-no-length",
+          "why": "Upstream lines do carry duplicated consecutive vertices, and a zero-length segment divides by its own squared length. Without the guard this is a NaN that propagates into every distance, silently poisoning the fit score that picks a route — so the guard answers the distance to the point itself, at `t = 0`. The projection lands on the vertex either way, which is why the row asserts the SEGMENT it chose.",
+          "args": {
+            "line": [[114.0, 22.3], [114.0, 22.32], [114.0, 22.32], [114.0, 22.34]],
+            "point": [114.0005, 22.32]
+          },
+          "expect": {
+            "index": 0,
+            "t": 1.0,
+            "distanceMetres": 51.4319,
+            "tolerance": 0.5
+          }
         }
       ]
     },
@@ -281,6 +295,18 @@
           "expect": {
             "reversed": false
           }
+        },
+        {
+          "name": "a-line-too-short-to-project-onto-is-returned-untouched",
+          "why": "A one-vertex line has no segment, so `nearestOnPath` has nothing to answer and orientation is unanswerable. Returning it unchanged and unreversed is the only honest option — and this is the row that exercises the guard at all, which went unwritten because the module sat outside the coverage threshold (ADR-155).",
+          "args": {
+            "line": [[114.0, 22.32]],
+            "first": [114.0, 22.32],
+            "last": [114.0, 22.38]
+          },
+          "expect": {
+            "reversed": false
+          }
         }
       ]
     },
@@ -340,6 +366,23 @@
             "pathFirst": [114.0, 22.3],
             "pathLast": [114.0, 22.4],
             "pathLength": 11,
+            "trimmedStart": 0,
+            "trimmedEnd": 0,
+            "tolerance": 1e-5
+          }
+        },
+        {
+          "name": "a-line-too-short-to-project-onto-is-kept-whole",
+          "why": "The same shape as `orientToStops`, and it must give the same answer: nothing to cut, nothing cut. This used to be reached by a `line.length < 2` test of its own, which could never fire because `nearestOnPath` already answers `null` for exactly that case — one guard now, and this row is what proves it still covers the short line.",
+          "args": {
+            "line": [[114.0, 22.32]],
+            "first": [114.0, 22.32],
+            "last": [114.0, 22.38]
+          },
+          "expect": {
+            "pathFirst": [114.0, 22.32],
+            "pathLast": [114.0, 22.32],
+            "pathLength": 1,
             "trimmedStart": 0,
             "trimmedEnd": 0,
             "tolerance": 1e-5
@@ -537,6 +580,195 @@
             ]
           },
           "expect": null
+        },
+        {
+          "name": "a-candidate-with-no-line-is-skipped-not-scored",
+          "why": "A candidate whose geometry came back empty scores `Infinity`, and `Infinity > rejectMetres` would reject the WHOLE route rather than that one candidate — losing a perfectly good line because a sibling was malformed. Skipping a non-finite score is what keeps one bad candidate from speaking for the rest.",
+          "args": {
+            "stops": [[114.0005, 22.32], [114.0005, 22.35], [114.0005, 22.38]],
+            "candidates": [
+              {
+                "id": "empty",
+                "seq": 1,
+                "matchedBy": "gtfsId",
+                "line": []
+              },
+              {
+                "id": "1001",
+                "seq": 2,
+                "matchedBy": "gtfsId",
+                "line": [
+                  [114.0, 22.3],
+                  [114.0, 22.31],
+                  [114.0, 22.32],
+                  [114.0, 22.33],
+                  [114.0, 22.34],
+                  [114.0, 22.35],
+                  [114.0, 22.36],
+                  [114.0, 22.37],
+                  [114.0, 22.38],
+                  [114.0, 22.39],
+                  [114.0, 22.4]
+                ]
+              }
+            ]
+          },
+          "expect": {
+            "id": "1001",
+            "matchedBy": "gtfsId",
+            "fitMetres": 51.4209,
+            "reversed": false,
+            "trimmedStart": 2,
+            "trimmedEnd": 3,
+            "pathLength": 8,
+            "tolerance": 0.5
+          }
+        },
+        {
+          "name": "the-better-candidate-wins-even-when-it-is-not-first",
+          "why": "`best-of-several-wins` already had the winner first in the list, so the comparison that REPLACES a standing best was never executed — an implementation that kept whichever candidate it saw first passed every row in this group. Here the 2 km-away line is scored first and must be displaced.",
+          "args": {
+            "stops": [[114.0005, 22.32], [114.0005, 22.35], [114.0005, 22.38]],
+            "candidates": [
+              {
+                "id": "far",
+                "seq": 1,
+                "matchedBy": "gtfsId",
+                "line": [
+                  [114.02, 22.3],
+                  [114.02, 22.31],
+                  [114.02, 22.32],
+                  [114.02, 22.33],
+                  [114.02, 22.34],
+                  [114.02, 22.35],
+                  [114.02, 22.36],
+                  [114.02, 22.37],
+                  [114.02, 22.38],
+                  [114.02, 22.39],
+                  [114.02, 22.4]
+                ]
+              },
+              {
+                "id": "1001",
+                "seq": 2,
+                "matchedBy": "gtfsId",
+                "line": [
+                  [114.0, 22.3],
+                  [114.0, 22.31],
+                  [114.0, 22.32],
+                  [114.0, 22.33],
+                  [114.0, 22.34],
+                  [114.0, 22.35],
+                  [114.0, 22.36],
+                  [114.0, 22.37],
+                  [114.0, 22.38],
+                  [114.0, 22.39],
+                  [114.0, 22.4]
+                ]
+              }
+            ]
+          },
+          "expect": {
+            "id": "1001",
+            "matchedBy": "gtfsId",
+            "fitMetres": 51.4209,
+            "reversed": false,
+            "trimmedStart": 2,
+            "trimmedEnd": 3,
+            "pathLength": 8,
+            "tolerance": 0.5
+          }
+        },
+        {
+          "name": "a-candidate-that-does-not-say-how-it-matched-is-a-gtfsid-match",
+          "why": "`matchedBy` is optional on the way in and required on the way out, because the wire reports how a line was found (ADR-152) and a rider-facing endpoint should not carry an absent field for the ordinary case. `gtfsId` is the default because it is the join the resolver prefers; a route-number match has to say so.",
+          "args": {
+            "stops": [[114.0005, 22.32], [114.0005, 22.35], [114.0005, 22.38]],
+            "candidates": [
+              {
+                "id": "1001",
+                "seq": 1,
+                "line": [
+                  [114.0, 22.3],
+                  [114.0, 22.31],
+                  [114.0, 22.32],
+                  [114.0, 22.33],
+                  [114.0, 22.34],
+                  [114.0, 22.35],
+                  [114.0, 22.36],
+                  [114.0, 22.37],
+                  [114.0, 22.38],
+                  [114.0, 22.39],
+                  [114.0, 22.4]
+                ]
+              }
+            ]
+          },
+          "expect": {
+            "id": "1001",
+            "matchedBy": "gtfsId",
+            "fitMetres": 51.4209,
+            "reversed": false,
+            "trimmedStart": 2,
+            "trimmedEnd": 3,
+            "pathLength": 8,
+            "tolerance": 0.5
+          }
+        },
+        {
+          "name": "a-worse-candidate-arriving-later-does-not-displace-the-best",
+          "why": "The mirror of the row above, and the half that a `<=` instead of a `<` gets wrong: the winner is scored FIRST and a 2 km-away line follows it. Both orders are pinned because a comparison bug is invisible in whichever order happens to agree with it, and upstream does not promise an order.",
+          "args": {
+            "stops": [[114.0005, 22.32], [114.0005, 22.35], [114.0005, 22.38]],
+            "candidates": [
+              {
+                "id": "1001",
+                "seq": 1,
+                "matchedBy": "gtfsId",
+                "line": [
+                  [114.0, 22.3],
+                  [114.0, 22.31],
+                  [114.0, 22.32],
+                  [114.0, 22.33],
+                  [114.0, 22.34],
+                  [114.0, 22.35],
+                  [114.0, 22.36],
+                  [114.0, 22.37],
+                  [114.0, 22.38],
+                  [114.0, 22.39],
+                  [114.0, 22.4]
+                ]
+              },
+              {
+                "id": "far",
+                "seq": 2,
+                "matchedBy": "gtfsId",
+                "line": [
+                  [114.02, 22.3],
+                  [114.02, 22.31],
+                  [114.02, 22.32],
+                  [114.02, 22.33],
+                  [114.02, 22.34],
+                  [114.02, 22.35],
+                  [114.02, 22.36],
+                  [114.02, 22.37],
+                  [114.02, 22.38],
+                  [114.02, 22.39],
+                  [114.02, 22.4]
+                ]
+              }
+            ]
+          },
+          "expect": {
+            "id": "1001",
+            "matchedBy": "gtfsId",
+            "fitMetres": 51.4209,
+            "reversed": false,
+            "trimmedStart": 2,
+            "trimmedEnd": 3,
+            "pathLength": 8,
+            "tolerance": 0.5
+          }
         }
       ]
     },

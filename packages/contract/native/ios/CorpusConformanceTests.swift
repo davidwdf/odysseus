@@ -105,6 +105,7 @@ enum Corpus {
         "mercator",
         "policy",
         "route-detail",
+        "route-markers",
         "route-path",
         "route-position",
         "search",

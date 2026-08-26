@@ -301,6 +301,47 @@ function analyse({ srcDir, specDir, required = [] }) {
     }
   }
 
+  // Direction 3: every module carrying a tag is INSIDE the coverage threshold.
+  //
+  // Added after the same failure happened twice. `packages/core/vitest.config.ts` names the modules the
+  // 100 % threshold applies to, by hand, and its own comment records `src/favourites.ts` landing in
+  // Wave 6 and never being added — so the module holding the rule a rider's saved list survives on sat
+  // outside the threshold while the threshold reported green. That comment then says the mitigation is
+  // that "a module with no rows fails the threshold loudly", **which is not true**: a module that is not
+  // in the list is not measured at all, so it fails nothing. It is invisible, which is worse than red.
+  //
+  // It recurred immediately. `src/route-path.ts` was added in M4 of proposals/06, extended twice, and
+  // was never listed — and ADR-155 went on to claim "packages/core keeps 100 % coverage" while the
+  // module that ADR is *about* was measured at 95 % statements and 87 % branches, with a dead branch in
+  // it (ADR-155). A hand-written list is a fact that has to agree with another fact, which is the shape
+  // this whole script exists to police, so it is policed here rather than described in a comment again.
+  //
+  // The tag is the right trigger: `@spec` means "this rule is pinned by a corpus", and a rule worth
+  // pinning is a rule worth measuring. Declaration-only modules carry no tags and are correctly ignored.
+  const coverageConfig = join(srcDir, '..', 'vitest.config.ts')
+  let covered = null
+  try {
+    covered = new Set(
+      [...readFileSync(coverageConfig, 'utf8').matchAll(/'src\/([A-Za-z0-9._-]+\.ts)'/g)].map(
+        (m) => m[1],
+      ),
+    )
+  } catch {
+    fail(
+      'COVERAGE_CONFIG_UNREADABLE',
+      `${coverageConfig}: cannot be read to check the include list`,
+    )
+  }
+  if (covered) {
+    for (const file of [...new Set(tags.map((t) => t.file))].sort()) {
+      if (!covered.has(file))
+        fail(
+          'MODULE_OUTSIDE_COVERAGE',
+          `src/${file} carries an @spec tag but is not in packages/core/vitest.config.ts's coverage \`include\` — so the 100 % threshold does not measure it and can report green while it rots. Add it.`,
+        )
+    }
+  }
+
   // Direction 2: nothing in the corpus is unreferenced. An orphan is rot.
   for (const c of corpora) {
     if (!c.data?.groups) continue
@@ -361,10 +402,17 @@ function analyse({ srcDir, specDir, required = [] }) {
 /** A minimal well-formed pair, which each scenario then breaks in exactly one way. */
 function scaffold(
   dir,
-  { tag = true, group = true, cases = 1, extraGroup = false, extraFile = false },
+  { tag = true, group = true, cases = 1, extraGroup = false, extraFile = false, covered = true },
 ) {
   const src = join(dir, 'src')
   const spec = join(dir, 'spec')
+  // The coverage `include` list, because direction 3 reads it — a scaffold missing it would make every
+  // scenario report `COVERAGE_CONFIG_UNREADABLE` and drown the failure each one is actually about.
+  // `covered: false` is how the scenario for direction 3 removes the module from it.
+  writeFileSync(
+    join(dir, 'vitest.config.ts'),
+    `export default { test: { coverage: { include: [${covered ? "'src/demo.ts'" : ''}] } } }\n`,
+  )
   writeFileSync(
     join(src, 'demo.ts'),
     [
@@ -425,6 +473,11 @@ const SCENARIOS = [
     name: 'direction 1 — a tagged export whose corpus group is MISSING',
     build: (d) => scaffold(d, { group: false }),
     expect: ['CORPUS_GROUP_MISSING', 'ORPHAN_CORPUS_FILE'],
+  },
+  {
+    name: 'direction 3 — a tagged module missing from the coverage include list',
+    build: (d) => scaffold(d, { covered: false }),
+    expect: ['MODULE_OUTSIDE_COVERAGE'],
   },
   {
     name: 'direction 2 — a corpus GROUP no tag references',
