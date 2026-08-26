@@ -6,7 +6,7 @@
   "doc": "What glyph each stop on a route gets, and the direction of travel through it (`docs/proposals/06 §8d`). `kind` and `index` are exact equality. `bearing` is DEGREES clockwise from north, quoted to 4 decimal places and compared with a tolerance of 1e-4 — far finer than a marker could show, so a port failing one has a real formula difference and not a rounding one. Coordinates are laid out on clean north/east legs rather than taken from a real route, because every row here is about a RULE (which glyph, which neighbour, what happens at an end) and a real route's bearings would be unreadable numbers that hid what each row was testing. The offset distance is deliberately absent — see the module doc for why it cannot live in the data.",
   "groups": {
     "routeMarkers": {
-      "doc": "What glyph each stop on a route gets, and the direction of travel through it (`docs/proposals/06 §8d`). `kind` and `index` are exact equality. `bearing` is DEGREES clockwise from north, quoted to 4 decimal places and compared with a tolerance of 1e-4 — far finer than a marker could show, so a port failing one has a real formula difference and not a rounding one. Coordinates are laid out on clean north/east legs rather than taken from a real route, because every row here is about a RULE (which glyph, which neighbour, what happens at an end) and a real route's bearings would be unreadable numbers that hid what each row was testing. The offset distance is deliberately absent — see the module doc for why it cannot live in the data.",
+      "doc": "What glyph each stop on a route gets, where it is anchored, and the direction of travel through it (`docs/proposals/06 §8d`). `kind`, `index` and `at` are exact equality — `at` is a coordinate the renderer anchors to, so a port differing there differs on screen. `bearing` is DEGREES clockwise from north, quoted to 4 decimal places and compared with a tolerance of 1e-4, far finer than a marker could show. Coordinates are laid out on clean north/east legs rather than taken from a real route, because every row is about a RULE and a real route's bearings would be unreadable numbers that hid what each row was testing. `line` is optional: with one, stops are projected onto it (which is what keeps a marker on the road at every zoom); without one, both the anchor and the bearing fall back to the stops themselves. The offset DISTANCE is deliberately absent — see the module doc for why it cannot live in the data.",
       "cases": [
         {
           "name": "an-ordinary-route-caps-both-ends-and-circles-the-middle",
@@ -47,21 +47,37 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 2,
               "kind": "stop",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 3,
               "kind": "terminus",
+              "at": {
+                "lat": 22.349,
+                "lng": 114.17
+              },
               "bearing": 0.0
             }
           ]
@@ -105,21 +121,37 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 2,
               "kind": "interchange",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 3,
               "kind": "terminus",
+              "at": {
+                "lat": 22.349,
+                "lng": 114.17
+              },
               "bearing": 0.0
             }
           ]
@@ -156,16 +188,28 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 2,
               "kind": "terminus",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
               "bearing": 0.0
             }
           ]
@@ -209,21 +253,37 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 2,
               "kind": "stop",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 3,
               "kind": "terminus",
+              "at": {
+                "lat": 22.349,
+                "lng": 114.17
+              },
               "bearing": 0.0
             }
           ]
@@ -260,16 +320,28 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "interchange",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 2,
               "kind": "terminus",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
               "bearing": 0.0
             }
           ]
@@ -306,16 +378,28 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 50.9617
             },
             {
               "index": 2,
               "kind": "terminus",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.174
+              },
               "bearing": 89.9992
             }
           ]
@@ -352,16 +436,28 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 89.9992
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.174
+              },
               "bearing": 50.9617
             },
             {
               "index": 2,
               "kind": "terminus",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.174
+              },
               "bearing": 0.0
             }
           ]
@@ -405,21 +501,37 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 50.9617
             },
             {
               "index": 2,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.174
+              },
               "bearing": 180.0
             },
             {
               "index": 3,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 230.9633
             }
           ]
@@ -456,16 +568,28 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 1,
               "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 0.0
             },
             {
               "index": 2,
               "kind": "terminus",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
               "bearing": 0.0
             }
           ]
@@ -488,6 +612,10 @@
             {
               "index": 0,
               "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
               "bearing": 0.0
             }
           ]
@@ -499,6 +627,197 @@
             "stops": []
           },
           "expect": []
+        },
+        {
+          "name": "a-stop-beside-the-road-is-snapped-onto-the-line",
+          "why": "The reason `line` exists. A bus stop's published coordinate is beside the road — often 10–20 m off, sometimes inside a building — and anchoring a marker there looks fine at a whole-route zoom and falls apart at street level, where the markers scatter off the line they belong to. Each of these sits ~20 m east of a due-north line and every one comes back ON it, with the ROAD's bearing rather than the route's.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.3205,
+                  "lng": 114.1702
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.3245,
+                  "lng": 114.17019
+                },
+                "name": "Mid BBI"
+              },
+              {
+                "location": {
+                  "lat": 22.3285,
+                  "lng": 114.1702
+                },
+                "name": "B"
+              }
+            ],
+            "line": [
+              [114.17, 22.32],
+              [114.17, 22.322],
+              [114.17, 22.324],
+              [114.17, 22.326],
+              [114.17, 22.328],
+              [114.17, 22.33]
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.3205,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "interchange",
+              "at": {
+                "lat": 22.3245,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.3285,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "snapping-lands-between-vertices-not-on-them",
+          "why": "The projection is a point on a SEGMENT, interpolated, not the nearest vertex — a stop half-way along a 200 m straight must not jump to either end of it. This stop sits opposite the middle of the first segment, so a port that snapped to vertices returns a different latitude and every other row here would still pass.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.32,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.321,
+                  "lng": 114.1703
+                },
+                "name": "Between"
+              },
+              {
+                "location": {
+                  "lat": 22.33,
+                  "lng": 114.17
+                },
+                "name": "B"
+              }
+            ],
+            "line": [
+              [114.17, 22.32],
+              [114.17, 22.322],
+              [114.17, 22.324],
+              [114.17, 22.326],
+              [114.17, 22.328],
+              [114.17, 22.33]
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.32,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.321,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.33,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "a-line-too-short-to-project-onto-falls-back-to-the-stops",
+          "why": "`nearestOnPath` needs a segment, so a one-vertex line has nothing to offer. The answer is the stop-to-stop fallback rather than an invented position — the same values this function gives when no line is passed at all, which is what makes the fallback a real behaviour rather than a hole.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.32,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.321,
+                  "lng": 114.17
+                },
+                "name": "B"
+              },
+              {
+                "location": {
+                  "lat": 22.322,
+                  "lng": 114.17
+                },
+                "name": "C"
+              }
+            ],
+            "line": [[114.17, 22.32]]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.32,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.321,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.322,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
         }
       ]
     }

@@ -47,6 +47,7 @@ export default defineConfig({
         'src/geo-snap.ts',
         'src/ids.ts',
         'src/live.ts',
+        'src/location-mark.ts',
         'src/mercator.ts',
         'src/policy.ts',
         'src/route-detail.ts',

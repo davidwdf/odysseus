@@ -268,6 +268,24 @@ position when M5 lands. The distinction that matters:
 affordance are **not needed for focus** — a rider who pans after tapping has simply looked elsewhere, and
 nothing is going to move the camera again until they ask.
 
+### Markers snap to the line, at every zoom
+
+A bus stop's published coordinate is **beside** the road — often 10–20 m off, occasionally inside a
+building. Anchoring a marker there is invisible at a whole-route zoom, where 15 m is a fraction of a
+pixel, and falls apart at street level: the markers scatter off the line they belong to, and the kerb
+offset stops meaning anything because there is no kerb under it.
+
+So each stop is **projected onto the line** (`nearestOnPath`, already in the kernel from M1) and the
+glyph is anchored at the projection. Because the anchor is a real coordinate rather than a screen
+nudge, it holds at every zoom — which is what the mockups did. The bearing then comes from the segment
+the stop landed on, which is the direction of the road at that kerb rather than of the route through
+the neighbourhood.
+
+Without a line, the anchor and the bearing fall back to the stops themselves. In this app that is
+nearly unreachable — a route screen only draws markers once there is something to draw — but it is the
+right answer for the `approximate` arm, where the line *is* the stops and every projection is the
+identity.
+
 ### M5 draws a dart when it knows the direction, and a dot when it does not
 
 The rider's own position is one mark with two forms, and which one appears is a claim about what we know:

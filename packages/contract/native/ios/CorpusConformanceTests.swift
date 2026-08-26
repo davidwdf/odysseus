@@ -102,6 +102,7 @@ enum Corpus {
         "geo",
         "ids",
         "live",
+        "location-mark",
         "mercator",
         "policy",
         "route-detail",

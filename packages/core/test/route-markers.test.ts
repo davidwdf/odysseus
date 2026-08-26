@@ -6,6 +6,7 @@ import {
   routeMarkers,
   type StopMarker,
 } from '../src/route-markers'
+import type { PathPoint } from '../src/route-path'
 import { titleCaseName } from '../src/stop-name'
 import { specCases } from './corpus'
 
@@ -13,12 +14,22 @@ import { specCases } from './corpus'
 const BEARING_TOLERANCE = 1e-4
 
 describe('route-markers#routeMarkers', () => {
-  for (const c of specCases<{ stops: MarkerStop[] }, StopMarker[]>(corpus, 'routeMarkers')) {
+  for (const c of specCases<{ stops: MarkerStop[]; line?: PathPoint[] }, StopMarker[]>(
+    corpus,
+    'routeMarkers',
+  )) {
     it(c.name, () => {
-      const actual = routeMarkers(c.args.stops)
+      const actual = routeMarkers(c.args.stops, c.args.line)
       expect(actual.map((m) => ({ index: m.index, kind: m.kind }))).toEqual(
         c.expect.map((e) => ({ index: e.index, kind: e.kind })),
       )
+      // The anchor is a coordinate a renderer places a glyph at, so a port differing here differs on
+      // screen. Compared to the corpus's own 10 decimal places — about a tenth of a millimetre.
+      actual.forEach((m, i) => {
+        const e = c.expect[i] as StopMarker
+        expect(m.at.lat).toBeCloseTo(e.at.lat, 9)
+        expect(m.at.lng).toBeCloseTo(e.at.lng, 9)
+      })
       // Bearings compared with a tolerance, never equality: no two languages' `atan2` agree to the
       // last bit, and the corpus says so in its own `doc`.
       actual.forEach((m, i) => {
@@ -33,8 +44,11 @@ describe('route-markers#routeMarkers', () => {
     // A property rather than a value, and the one thing no single row above can state: a caller joins
     // these back to its own rows by `index`, so a dropped, added or reordered marker would put a
     // terminus square on an intermediate stop with nothing failing.
-    for (const c of specCases<{ stops: MarkerStop[] }, StopMarker[]>(corpus, 'routeMarkers')) {
-      const markers = routeMarkers(c.args.stops)
+    for (const c of specCases<{ stops: MarkerStop[]; line?: PathPoint[] }, StopMarker[]>(
+      corpus,
+      'routeMarkers',
+    )) {
+      const markers = routeMarkers(c.args.stops, c.args.line)
       expect(markers).toHaveLength(c.args.stops.length)
       expect(markers.map((m) => m.index)).toEqual(c.args.stops.map((_, i) => i))
     }

@@ -1,0 +1,206 @@
+{
+  "$schema": "../../../schemas/kernel-spec.schema.json",
+  "module": "location-mark",
+  "source": "src/location-mark.ts",
+  "version": 1,
+  "doc": "How to draw the rider's own position — the mark, and the circle of uncertainty around it (`docs/proposals/06 §6b`). Two rules, both exact equality. Neither invents a value it was not given: a missing heading is a DOT and not a north-pointing dart, and a missing accuracy is no circle rather than a guessed one. That is ADR-008 applied to position instead of time, and it has teeth here because a rider orienting themselves at a kerb acts on the answer immediately.\n\n**Non-finite readings are spelled `\"NaN\"` and `\"Infinity\"` as STRINGS**, because JSON has neither. A suite must decode them to its own language's non-finite values before calling — the rows that use them exist to pin that a non-finite reading is treated as *no reading*, so a port that passed the string straight through would be testing string handling and reporting a pass.",
+  "groups": {
+    "locationMark": {
+      "cases": [
+        {
+          "name": "a-compass-heading-is-the-dart",
+          "why": "The best case, and the question a rider standing still is actually asking — which way am I facing. Only a true compass answers it.",
+          "args": {
+            "sources": {
+              "compassDeg": 128.5,
+              "courseDeg": null
+            }
+          },
+          "expect": {
+            "kind": "dart",
+            "bearing": 128.5
+          }
+        },
+        {
+          "name": "the-compass-wins-over-course-when-both-are-present",
+          "why": "The precedence, and the row that matters most. A rider who granted compass permission and then stopped walking still has a compass and no course — but a rider WALKING has both, and taking the course there would swing their dart to their direction of travel every time they glanced at the map. Facing beats moving.",
+          "args": {
+            "sources": {
+              "compassDeg": 90,
+              "courseDeg": 270
+            }
+          },
+          "expect": {
+            "kind": "dart",
+            "bearing": 90
+          }
+        },
+        {
+          "name": "course-over-ground-is-the-fallback",
+          "why": "No compass — no permission, or a desktop browser that has none. Course answers a different question and answers it well enough while the rider is moving, which is the only time it answers at all. The value is 44.2 rather than a round number on purpose, and it earned its keep immediately: an implementation that normalises unconditionally returns 44.19999999999999, because `((deg % 360) + 360) % 360` is two operations that cannot be exact in binary. A bearing already in range must pass through untouched.",
+          "args": {
+            "sources": {
+              "compassDeg": null,
+              "courseDeg": 44.2
+            }
+          },
+          "expect": {
+            "kind": "dart",
+            "bearing": 44.2
+          }
+        },
+        {
+          "name": "a-stationary-rider-with-no-compass-gets-a-dot",
+          "why": "The COMMON case on a stationary phone, not an edge case: course over ground is null exactly when a rider is standing at a bus stop. This is the row that makes the dot the default rather than the failure.",
+          "args": {
+            "sources": {
+              "compassDeg": null,
+              "courseDeg": null
+            }
+          },
+          "expect": {
+            "kind": "dot"
+          }
+        },
+        {
+          "name": "absent-fields-are-the-same-as-null",
+          "why": "A platform that omits a key rather than nulling it — Android and iOS adapters differ here, and a JSON round-trip turns one into the other. Both mean the same thing and must produce the same mark.",
+          "args": {
+            "sources": {}
+          },
+          "expect": {
+            "kind": "dot"
+          }
+        },
+        {
+          "name": "due-north-is-a-heading-not-a-missing-one",
+          "why": "The falsy trap, and the one an `if (heading)` gets wrong: 0 is NORTH, a perfectly good answer, and a port testing truthiness turns every north-facing rider into a dot. The mirror of the row above; the two only make sense together.",
+          "args": {
+            "sources": {
+              "compassDeg": 0
+            }
+          },
+          "expect": {
+            "kind": "dart",
+            "bearing": 0
+          }
+        },
+        {
+          "name": "a-negative-bearing-is-normalised-not-rejected",
+          "why": "Adapters correct for platform differences by subtracting — device-orientation alpha runs the other way on some Android builds — and can land just below zero. Normalising means an adapter's arithmetic cannot produce a mark pointing at nothing, and the bug would otherwise be invisible on whichever platform did not have it.",
+          "args": {
+            "sources": {
+              "compassDeg": -5
+            }
+          },
+          "expect": {
+            "kind": "dart",
+            "bearing": 355
+          }
+        },
+        {
+          "name": "a-bearing-past-a-full-turn-wraps",
+          "why": "The other end of the same normalisation. 450 degrees is 90, and a port that clamped rather than wrapping would point a quarter-turn wrong instead of obviously wrong.",
+          "args": {
+            "sources": {
+              "compassDeg": 450
+            }
+          },
+          "expect": {
+            "kind": "dart",
+            "bearing": 90
+          }
+        },
+        {
+          "name": "a-non-finite-heading-is-no-heading-at-all",
+          "why": "A sensor that has not settled, or a division nobody guarded. A non-finite reading IS an absence and is treated as one — a dart at an undefined angle renders pointing north on some engines and vanishes on others, and both are worse than a dot. A port checking only for null passes every row above and fails this one.",
+          "args": {
+            "sources": {
+              "compassDeg": "NaN",
+              "courseDeg": null
+            }
+          },
+          "expect": {
+            "kind": "dot"
+          }
+        },
+        {
+          "name": "a-non-finite-compass-still-falls-through-to-the-course",
+          "why": "The same guard, and it must not swallow the fallback: an unusable compass reading leaves the course still worth reading. A port that returned a dot as soon as the compass was non-null would throw away a heading it had.",
+          "args": {
+            "sources": {
+              "compassDeg": "Infinity",
+              "courseDeg": 200
+            }
+          },
+          "expect": {
+            "kind": "dart",
+            "bearing": 200
+          }
+        }
+      ],
+      "doc": "Which mark to draw for the rider's own position: a dart where a heading is known, a dot where it is not. Exact equality; `bearing` is degrees clockwise from north. The dot is NOT a degraded dart — it is the correct mark for “here, facing unknown”, and a port that defaulted a missing heading to 0 would draw a north-pointing arrow at a rider standing at a kerb, who would act on it.\n\n**Non-finite readings are spelled `\"NaN\"` and `\"Infinity\"` as STRINGS**, because JSON has neither. A suite must decode them to its own language's non-finite values before calling — the rows that use them exist to pin that a non-finite reading is treated as *no reading*, so a port that passed the string straight through would be testing string handling and reporting a pass."
+    },
+    "accuracyRadiusM": {
+      "cases": [
+        {
+          "name": "an-ordinary-gps-fix-draws-its-circle",
+          "why": "A phone with a clear sky reports 10–30 m. The everyday case, and what the circle is for: the difference between \"you are here\" and \"you are somewhere in here\".",
+          "args": {
+            "accuracyM": 22
+          },
+          "expect": 22
+        },
+        {
+          "name": "no-accuracy-reported-draws-nothing",
+          "why": "A platform that gives a position and no confidence in it. Inventing a radius would be inventing the uncertainty as well as the position.",
+          "args": {
+            "accuracyM": null
+          },
+          "expect": null
+        },
+        {
+          "name": "a-desktop-ip-fix-is-too-coarse-to-draw",
+          "why": "A desktop browser geolocating by IP routinely answers tens of kilometres. A 15 km circle measures nothing a rider can use — it is a picture of the app being confused, and the honest output is the mark alone.",
+          "args": {
+            "accuracyM": 15000
+          },
+          "expect": null
+        },
+        {
+          "name": "a-circle-smaller-than-the-mark-is-not-drawn",
+          "why": "A 3 m radius is smaller than the dot painted over it, so it reads as a rendering artefact rather than as precision. Nothing useful to show either.",
+          "args": {
+            "accuracyM": 3
+          },
+          "expect": null
+        },
+        {
+          "name": "exactly-at-the-floor-is-drawn",
+          "why": "Inclusive boundary. An off-by-one written as `>` rather than `>=` shows up only here, and 8 m is a plausible real reading from a good fix.",
+          "args": {
+            "accuracyM": 8
+          },
+          "expect": 8
+        },
+        {
+          "name": "exactly-at-the-ceiling-is-drawn",
+          "why": "The other inclusive boundary, pinned separately because the two comparisons are written independently and only one is usually tested.",
+          "args": {
+            "accuracyM": 2000
+          },
+          "expect": 2000
+        },
+        {
+          "name": "a-non-finite-accuracy-draws-nothing",
+          "why": "The same guard as the heading rule: a non-finite reading is an absence, and a circle of undefined radius is a shape no engine agrees about.",
+          "args": {
+            "accuracyM": "NaN"
+          },
+          "expect": null
+        }
+      ],
+      "doc": "The radius to draw around a fix, in metres, or absent where a circle would say less than nothing. Exact equality; `null` is the language's absent value. A circle is a claim about uncertainty and a wrong one is worse than none — the thresholds are 8 m (below which the circle is smaller than the mark on top of it) and 2 000 m (above which it covers the screen and says only that the app is confused).\n\n**Non-finite readings are spelled `\"NaN\"` and `\"Infinity\"` as STRINGS**, because JSON has neither. A suite must decode them to its own language's non-finite values before calling — the rows that use them exist to pin that a non-finite reading is treated as *no reading*, so a port that passed the string straight through would be testing string handling and reporting a pass."
+    }
+  }
+}

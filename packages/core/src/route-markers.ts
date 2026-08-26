@@ -1,4 +1,5 @@
 import { initialBearingDeg } from './geo'
+import { nearestOnPath, type PathPoint } from './route-path'
 import type { LatLng } from './types'
 
 /**
@@ -50,11 +51,16 @@ export type StopMarkerKind =
  */
 export const KERB_OFFSET_DEG = -90
 
-/** One stop's marker: what it is, and the direction of travel through it. */
+/** One stop's marker: what it is, where it is drawn, and the direction of travel through it. */
 export interface StopMarker {
   /** Index into the stops that were passed in, so a caller can join back to its own rows. */
   index: number
   kind: StopMarkerKind
+  /**
+   * **Where to anchor the glyph** — the stop projected onto the route line, or the stop itself where
+   * no line was given. See {@link routeMarkers} for why this is not simply the stop's coordinate.
+   */
+  at: LatLng
   /**
    * Direction of travel at this stop, degrees clockwise from north. Add {@link KERB_OFFSET_DEG} for
    * the direction to nudge the glyph in. `0` where the route has no length to take a direction from.
@@ -94,27 +100,51 @@ const BBI = /\bBBI\b/
  * — it is what tells a rider they are looking at the right direction of the service — and a glyph can
  * only say one thing.
  *
- * ## Bearing comes from the STOPS, not from the surveyed line
+ * ## Markers snap to the LINE, at every zoom, when a line is given
  *
- * A central difference: the direction from the previous stop to the next one, which smooths the corner
- * a stop often sits on. At the ends there is only one neighbour, so it is a forward or backward
- * difference.
+ * A bus stop's published coordinate is beside the road, not on it — often 10–20 m off, sometimes
+ * inside a building. Anchoring a marker there looks fine at a whole-route zoom, where 15 m is a
+ * fraction of a pixel, and falls apart at street level: the markers scatter off the line they are
+ * supposed to belong to, and the kerb offset stops meaning anything because there is no kerb under it.
  *
- * Using the stops rather than the line is a deliberate approximation and the cheaper half of a real
- * trade. The surveyed line would give the true road direction at the kerb, but only by projecting each
- * stop onto it — a nearest-segment search per stop — and the line is a **second request** that arrives
- * later than the stop list (ADR-152), so markers would either wait for it or move once it landed.
- * Stop-to-stop is stable, available immediately, and identical on the `approximate` arm where the line
- * *is* the stops. The error it admits is a marker on the wrong side of a hairpin, which is rarer than
- * the flicker the accurate version would cost.
+ * So each stop is **projected onto the line** and the glyph is anchored at the projection. Because the
+ * anchor is a real coordinate rather than a screen nudge, it stays on the line at every zoom — which is
+ * what the mockups did and what makes the offset legible as *"this side of the road"*.
  *
- * Two stops at the same coordinates yield `0` rather than a bearing invented from nothing, and so does
- * a route too short to have a direction at all.
+ * The bearing then comes from the **segment the stop landed on**, which is better than the stop-to-stop
+ * estimate for the same reason: it is the direction of the road at that kerb rather than the direction
+ * of the route through the neighbourhood.
+ *
+ * ## Without a line, both fall back to the stops
+ *
+ * `line` is optional and the no-line answers are the honest ones rather than placeholders: the anchor
+ * is the stop itself, and the bearing is a **central difference** — previous stop to next stop, which
+ * smooths the corner a stop often sits on, with a forward or backward difference at the ends.
+ *
+ * In this app the fallback is nearly unreachable, and that is worth knowing rather than relying on: a
+ * route screen only draws markers once `routePathView` has given it something to draw, so the line is
+ * always there by then. It matters for the `approximate` arm, where the line **is** the stops — every
+ * projection is the identity, which is exactly right, and the code needs no special case for it.
+ *
+ * Two stops at the same coordinates yield a bearing of `0` rather than one invented from nothing, and
+ * so does a route too short to have a direction at all.
  *
  * @spec route-markers#routeMarkers
  */
-export function routeMarkers(stops: readonly MarkerStop[]): StopMarker[] {
+export function routeMarkers(
+  stops: readonly MarkerStop[],
+  line?: readonly PathPoint[],
+): StopMarker[] {
   return stops.map((stop, index) => {
+    const snapped = line === undefined ? undefined : snapToLine(stop.location, line)
+    if (snapped !== undefined) {
+      return {
+        index,
+        kind: kindOf(stop, index, stops.length),
+        at: snapped.at,
+        bearing: snapped.bearing,
+      }
+    }
     // The widest pair this stop has: its neighbours where it has two, and **itself** where it is an
     // end. Falling back to `stop` rather than clamping the index is what removes the impossible
     // `undefined` branch a clamp leaves behind — the callback's own `stop` is the one value here the
@@ -125,9 +155,35 @@ export function routeMarkers(stops: readonly MarkerStop[]): StopMarker[] {
     return {
       index,
       kind: kindOf(stop, index, stops.length),
+      at: stop.location,
       bearing: bearingBetween(from.location, to.location),
     }
   })
+}
+
+/**
+ * A stop, put on the line: where it lands, and which way the road runs there.
+ *
+ * `undefined` when the line is too short to project onto — `nearestOnPath` needs a segment — which
+ * leaves the caller on the stop-to-stop fallback rather than inventing a position.
+ */
+function snapToLine(
+  stop: LatLng,
+  line: readonly PathPoint[],
+): { at: LatLng; bearing: number } | undefined {
+  const hit = nearestOnPath(line, stop)
+  // One guard, and it covers the only reachable absence: `nearestOnPath` answers `null` exactly when
+  // the line has no segment to project onto, and otherwise guarantees `index` addresses a real pair —
+  // it is the loop bound inside it. The casts say that out loud rather than adding a second test
+  // nothing can take; `nearestOnPath` itself indexes its line the same way for the same reason.
+  if (!hit) return undefined
+  const a = line[hit.index] as PathPoint
+  const b = line[hit.index + 1] as PathPoint
+  // Linear interpolation in DEGREES along one segment. Over the tens of metres a segment spans, the
+  // difference from interpolating on the projected plane is far below the width of the glyph — and the
+  // alternative would be a second projection here whose only visible effect is a rounding difference.
+  const at = { lat: a[1] + (b[1] - a[1]) * hit.t, lng: a[0] + (b[0] - a[0]) * hit.t }
+  return { at, bearing: bearingBetween({ lat: a[1], lng: a[0] }, { lat: b[1], lng: b[0] }) }
 }
 
 function kindOf(stop: MarkerStop, index: number, count: number): StopMarkerKind {

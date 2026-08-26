@@ -119,10 +119,20 @@ export function RouteMap({
 
   const drawn = presentation && presentation.kind !== 'none' ? presentation.line : undefined
 
-  // What glyph each stop gets and which way it faces — a kernel rule, corpus-pinned (ADR-068), and
-  // **computed by the screen**, which also shapes the rail nodes from it. Passed in rather than
-  // recomputed so the map and the list cannot end up saying different things about one stop.
-  const markers = useMemo(() => routeMarkers(stops), [stops])
+  /**
+   * What glyph each stop gets, **where it is anchored**, and which way it faces — a kernel rule,
+   * corpus-pinned (ADR-068).
+   *
+   * Given the drawn line, so each stop is projected onto it. A stop's published coordinate is beside
+   * the road — often 10–20 m off — which is invisible at a whole-route zoom and scatters the markers
+   * off the line at street level, where the kerb offset stops meaning anything because there is no
+   * kerb under it. Anchoring at the projection is what keeps them on the road at **every** zoom, which
+   * is what the mockups did.
+   *
+   * The screen calls the same rule without a line to shape the rail's sequence nodes: it needs only
+   * `kind`, and the fallback answers that identically.
+   */
+  const markers = useMemo(() => routeMarkers(stops, drawn), [stops, drawn])
 
   // The line's extent and its middle, from the kernel. Both are *numbers a renderer would otherwise
   // compute*, which is the thing two renderers do differently (ADR-068) — so `boundsOf`/`centreOf`
@@ -285,9 +295,12 @@ export function RouteMap({
         selected: marker.index === focusedIndex,
         onSelect: () => onSelectStop?.(marker.index),
       })
-      return new Marker({ element, offset })
-        .setLngLat([stop.location.lng, stop.location.lat])
-        .addTo(map)
+      return (
+        new Marker({ element, offset })
+          // `marker.at`, not `stop.location` — the kernel has already put this on the line.
+          .setLngLat([marker.at.lng, marker.at.lat])
+          .addTo(map)
+      )
     })
     return () => {
       for (const m of placed) m.remove()
