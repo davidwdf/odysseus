@@ -236,7 +236,11 @@ function readTree(host: HTMLElement): RenderedTree {
   // `Set<string>` explicitly: `t()` returns the branded `LocalizedString`, so an inferred set could not be
   // queried with the plain strings read out of the tree. Invisible until WP6-7 put `test/**/*.tsx` into
   // this app's `tsconfig` — seven suites had never been typechecked.
-  const noise = new Set<string>([t(LOCALE, 'back')])
+  // Shell chrome, dropped for the same reason the back label is: it is a name for a *container*, not
+  // content, and it is asserted on its own below rather than left unchecked. The sheet's heading is
+  // `sr-only`, and the walker sees presence rather than visibility (ADR-097) — so an accessible name
+  // that is invisible to a rider is still a text node to this.
+  const noise = new Set<string>([t(LOCALE, 'back'), t(LOCALE, 'routeStopsSheet')])
   const text: string[] = []
   let node = walker.nextNode()
   while (node) {
@@ -560,6 +564,30 @@ describe('apps/web conforms to Route detail’s published spec, state by state',
     // would be asserting that "not asked yet" and "asked and told no" look the same, which is the single
     // thing this feature must never do.
     expect(FIXTURE.pathPending).toBeDefined()
+  })
+
+  it('names the sheet its stops live in, because a region without one is announced as nothing', async () => {
+    // Dropped from the projection above as chrome, so it is asserted here instead — the pattern the
+    // back label already follows. The heading and the drag handle carry the same name deliberately:
+    // one names the region, the other names the control that moves it, and a screen reader meeting
+    // either should learn what it is looking at.
+    const detail = fromCorpus<RouteDetailPayload>(caseNamed(FIXTURE.content as string).args.detail)
+    route = () => Promise.resolve(detail)
+    await mountSettled(`/route/${encodeURIComponent(detail.route.id)}`)
+    const region = container.querySelector('section[aria-labelledby]')
+    if (!region) throw new Error('the stop list is not in a labelled region')
+    // `getElementById` rather than a `#id` selector: React's `useId` produces ids containing `:`,
+    // which is a valid id and an invalid selector, and jsdom has no `CSS.escape` to get round it.
+    const labelledBy = region.getAttribute('aria-labelledby') ?? ''
+    expect(document.getElementById(labelledBy)?.textContent).toBe(t(LOCALE, 'routeStopsSheet'))
+    // The handle carries the same name: one names the region, the other names the control that moves
+    // it, and a screen reader meeting either should learn what it is looking at.
+    expect(
+      [...container.querySelectorAll('button')].some(
+        (b) => b.getAttribute('aria-label') === t(LOCALE, 'routeStopsSheet'),
+      ),
+      'the drag handle has no accessible name',
+    ).toBe(true)
   })
 
   it('draws a skeleton whenever it has no answer, whatever the query state', () => {

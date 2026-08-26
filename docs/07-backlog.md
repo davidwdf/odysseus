@@ -718,6 +718,29 @@ written down.
         Removing it is a bigger call than a layout change and would amend that ADR. **Reframing worth
         considering: the tab bar is probably not the question — what is *in* it is.**
 
+## Haptics on the sheet's detents — a native porting note (2026-08-26)
+
+- [ ] **Pair each detent crossing with a haptic tap on iOS and Android.** The draggable sheet
+      (ADR-156) has three rest positions, and on a phone a sheet that *clicks* as it passes one is
+      telling the hand something the eye is busy reading elsewhere. `UIImpactFeedbackGenerator(.light)`
+      and `HapticFeedbackConstants.CLOCK_TICK` are the two idioms.
+
+      **Deliberately not faked on the web.** `navigator.vibrate` is Android-Chrome-only, is blocked
+      without a user gesture in several engines, and its shortest pulse is far blunter than a detent
+      tick — a buzz where a tick belongs is worse than silence. The web renderer does nothing, which is
+      the honest option, and this row is the reminder that "nothing" is a platform gap rather than the
+      design.
+
+## Scroll chaining in the stop sheet (2026-08-26)
+
+- [ ] **Try raising the sheet before the list scrolls, behind a flag.** Round 3 of the mockups had this
+      as a toggle and the owner is curious about it; it is the Apple-Maps behaviour. Off today, and the
+      reason is not laziness: this list is 40 rows, so chaining makes **every flick a potential
+      resize** — and the sheet already has a handle, which is an explicit way to do the same thing.
+
+      Cheap to add: the sheet's scroll container would consume upward wheel/touch deltas while it is
+      below its tallest detent and it is scrolled to the top. Worth trying, low priority.
+
 ## The dart is unreachable on iOS (2026-08-26)
 
 - [ ] **Give `enableCompass` a caller.** M5 draws a dart when a heading is known and a dot when it is

@@ -44,8 +44,36 @@ const CHEVRON_IMAGE = 'route-chevron'
  */
 const CHEVRON_SPACING = 60
 
-/** The strip's height, shared with the placeholder so an arriving line does not move the list. */
-const HEIGHT = 220
+/**
+ * The camera's padding, in pixels, from the fractions of the map that something else is covering.
+ *
+ * A base inset on every side so a route never runs to the very edge, plus whatever the sheet and the
+ * floating chrome are hiding. MapLibre applies this to `fitBounds` and `flyTo` alike, which is what
+ * makes "centred" mean centred in the part a rider can actually see.
+ */
+function cameraPadding(
+  map: MapLibreMap,
+  inset: { top?: number; bottom?: number } | undefined,
+): { top: number; bottom: number; left: number; right: number } {
+  const height = map.getContainer().clientHeight
+  return {
+    top: EDGE_PADDING + (inset?.top ?? 0) * height,
+    bottom: EDGE_PADDING + (inset?.bottom ?? 0) * height,
+    left: EDGE_PADDING,
+    right: EDGE_PADDING,
+  }
+}
+
+/** Breathing room on every side, so a terminus marker is never half off the screen. */
+const EDGE_PADDING = 28
+
+/**
+ * **The map fills whatever it is given.** It was a fixed 220 px strip until the shell landed
+ * (`proposals/06 §8`); now it is the screen's base layer and its height is the container's. The
+ * placeholder matches, so a route whose geometry is still in flight reserves exactly the space the
+ * map will take rather than a guess at it.
+ */
+const FILL = 'h-full w-full'
 
 /** Victoria Harbour. The camera of last resort, and never seen in practice — see `centre` below. */
 const HONG_KONG: LatLng = { lat: 22.3193, lng: 114.1694 }
@@ -87,8 +115,9 @@ export function RouteMap({
   focusedIndex,
   onSelectStop,
   rider,
+  visibleInset,
+  onInteract,
   className,
-  style,
 }: {
   /** The edge's answer. `undefined` means it has not arrived — see `pending`. */
   path: RoutePath | undefined
@@ -102,9 +131,18 @@ export function RouteMap({
   onSelectStop?: ((index: number) => void) | undefined
   /** The rider's own position, if they have granted it. `undefined` means no mark is drawn. */
   rider?: { fix?: GeoFix; compassDeg?: number } | undefined
+  /**
+   * How much of the map is **covered by something else**, as fractions of its height — the sheet at
+   * the bottom, the floating chrome at the top.
+   *
+   * Every camera move is inset by it, which is the difference between "centred" and "centred where
+   * the rider can see". Without it a full-bleed map frames the route behind the sheet, and a rider
+   * looking at the visible half sees the top of their route and nothing else.
+   */
+  visibleInset?: { top?: number; bottom?: number } | undefined
+  /** The rider touched the map. The screen uses it to collapse its chrome; the map itself does not care. */
+  onInteract?: (() => void) | undefined
   className?: string
-  /** Inline geometry — the sticky offset, which is a layout value the screen owns (ADR-112). */
-  style?: React.CSSProperties
 }) {
   const locale = useLocale()
   const mode = useAppearance()
@@ -117,6 +155,29 @@ export function RouteMap({
   // the rider's mark on every arrival tick.
   const riderFix = rider?.fix
   const riderCompass = rider?.compassDeg
+
+  /**
+   * A rider touching the map is the screen's cue to get its chrome out of the way — reported rather
+   * than acted on, because this component has no opinion about anybody's header.
+   *
+   * **`originalEvent` is what makes it the rider's**, and leaving it out was a real bug: `fitBounds`
+   * fires `zoomstart` too, so the opening frame collapsed the card before anybody had touched
+   * anything. MapLibre attaches the DOM event that caused a camera move and attaches nothing when the
+   * app caused it, so the guard is exact rather than a heuristic — and it also covers the flight a
+   * stop tap starts, which must not count as the rider dismissing the header either.
+   */
+  useEffect(() => {
+    if (!map || !onInteract) return
+    const fromRider = (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent !== undefined) onInteract()
+    }
+    map.on('dragstart', fromRider)
+    map.on('zoomstart', fromRider)
+    return () => {
+      map.off('dragstart', fromRider)
+      map.off('zoomstart', fromRider)
+    }
+  }, [map, onInteract])
 
   const presentation = useMemo(() => {
     if (pending) return undefined
@@ -171,10 +232,10 @@ export function RouteMap({
   useEffect(() => {
     if (!map || !bounds) return
     map.fitBounds([bounds.west, bounds.south, bounds.east, bounds.north], {
-      padding: 28,
+      padding: cameraPadding(map, visibleInset),
       animate: false,
     })
-  }, [map, bounds])
+  }, [map, bounds, visibleInset])
 
   // Draw (or redraw) the line. Adding the source once and setting its data afterwards — rather than
   // removing and re-adding layers — is what keeps a redraw from flickering the whole overlay.
@@ -421,13 +482,14 @@ export function RouteMap({
     const stop = stops[focusedIndex]
     if (!stop) return
     map.flyTo({
+      padding: cameraPadding(map, visibleInset),
       center: [stop.location.lng, stop.location.lat],
       // The source's own range, not a compiled-in ceiling: LandsD answers 404 above z20 and the
       // map would render as a hole rather than a coarser map (ADR-049).
       zoom: focusZoom(map.getZoom(), mapProvider),
       essential: true,
     })
-  }, [map, focusedIndex, stops])
+  }, [map, focusedIndex, stops, visibleInset])
 
   // Nothing to show and nothing coming: no map. A basemap with no line on it is not a route screen's
   // job, and reserving space for a line that will never arrive is worse than the absence.
@@ -439,21 +501,11 @@ export function RouteMap({
   const centre = bounds ? centreOf(bounds) : HONG_KONG
 
   return (
-    <figure className={className} style={style} aria-label={t(locale, 'routePathLabel')}>
+    <figure className={`${className ?? ''} m-0`} aria-label={t(locale, 'routePathLabel')}>
       {presentation ? (
-        <MapView
-          centre={centre}
-          zoom={13}
-          className="w-full overflow-hidden rounded-md"
-          style={{ height: HEIGHT }}
-          onReady={setMap}
-        />
+        <MapView centre={centre} zoom={13} className={FILL} onReady={setMap} />
       ) : (
-        <div
-          className="w-full animate-pulse rounded-md bg-surface-2"
-          style={{ height: HEIGHT }}
-          aria-hidden="true"
-        />
+        <div className={`${FILL} animate-pulse bg-surface-2`} aria-hidden="true" />
       )}
       {presentation?.kind === 'approximate' ? (
         // Said ONCE, at the screen level — the same shape as the freshness notice (ADR-133/150), and

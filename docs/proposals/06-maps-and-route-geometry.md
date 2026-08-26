@@ -326,6 +326,29 @@ the direction.
 
 ---
 
+## 8f. The shell is built (2026-08-27)
+
+Rounds 3 and 4 land: the map is the base layer, the context card floats over it and steps aside into a
+pill, and the stop list lives in a draggable sheet with three detents opening at `half`. ADR-156 has
+the decisions; three things are worth having here where the design lives.
+
+**The strip was a compromise with a layout, and the layout is gone.** Every §8d interaction fought the
+scrolling page — a marker tap scrolled its row into view and took the map off screen, which needed
+`position: sticky` to survive. The mockups never met that because they had two independently scrolling
+panes. Nothing is sticky now; the sheet is the only thing that scrolls.
+
+**A full-bleed map's visible rectangle is not its bounding box**, and every camera move is inset by
+what covers it. Framing the whole viewport centres a route *behind* the sheet.
+
+**Built from parts, on the owner's instruction.** `detents.ts` (arithmetic, no React), `DraggableSheet`
+(no NextBus vocabulary — it could move to a shared library unchanged), `RouteContextCard`, and a screen
+that assembles them. The test for whether a piece belongs to this app is whether it could leave.
+
+**Deferred, both in `docs/07`:** haptics on the detents (native only — `navigator.vibrate` is too blunt
+to stand in) and scroll chaining (off; this list is 40 rows and chaining makes every flick a resize).
+
+---
+
 ## 8e. What M7 did not close (2026-08-26)
 
 Recorded rather than left as a silence, because the gap is in the *spec* and a spec's whole value is

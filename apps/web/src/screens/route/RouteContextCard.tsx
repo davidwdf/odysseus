@@ -27,11 +27,25 @@ import { CONTENT_INSET_TOP } from '../../shell/layout'
  */
 export function RouteContextCard({
   header,
+  journey,
+  swap,
   facts,
   collapsed,
   onExpand,
 }: {
   header: RouteDetailView['header']
+  /**
+   * Both ends of the journey — origin above, destination below — rendered by the screen so this file
+   * stays free of the flip's lyrics-style swap and of the circular-route wording (ADR-046).
+   *
+   * **Expanded only, and the origin is why.** The collapsed pill is a reminder, and what a rider needs
+   * reminding of is where they are *going*; the origin is behind them. It is also a declared slot in
+   * `route-detail.spec.json`, so dropping it from the screen entirely would be a real reduction rather
+   * than a layout choice — it moves out of sight when collapsed, not out of the document.
+   */
+  journey: ReactNode
+  /** The reverse-direction control. Expanded only: a pill has room for the destination and nothing else. */
+  swap?: ReactNode
   /** The facts strip, already rendered by the screen — this decides only whether there is room. */
   facts?: ReactNode
   collapsed: boolean
@@ -50,36 +64,53 @@ export function RouteContextCard({
         transition: 'left 240ms cubic-bezier(0.22, 1, 0.36, 1)',
       }}
     >
-      <button
-        type="button"
-        // Only a target when there is something to do. An expanded card is a label, and a label that
-        // reports itself as a control is worse than one that does not: a screen reader offers it, and
-        // pressing it does nothing.
-        {...(collapsed ? { onClick: onExpand } : { disabled: true, tabIndex: -1 })}
-        className={`glass-pane pointer-events-auto flex w-full items-center gap-2 overflow-hidden rounded-lg border border-border text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
-          collapsed ? 'h-12 px-3' : 'flex-col px-3 py-3'
-        }`}
-      >
-        <span
-          className={`flex items-center gap-2 ${collapsed ? 'w-full' : 'w-full justify-center'}`}
+      {/*
+        **Collapsed is a button; expanded is not**, and that is structural rather than stylistic. The
+        expanded card *contains* controls — the swap link and the fact pills — and a button cannot
+        contain a button: it is invalid HTML and folds into one control for a screen reader, which is
+        the same rule the row's `⋯` follows (ADR-024). Two elements, one at a time.
+      */}
+      {collapsed ? (
+        <button
+          type="button"
+          onClick={onExpand}
+          className="glass-pane pointer-events-auto flex h-12 w-full items-center gap-2 overflow-hidden rounded-lg border border-border px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
         >
-          <span
-            className={`shrink-0 rounded-md bg-accent px-2 font-semibold text-accent-contrast tabular-nums ${
-              collapsed ? 'text-body' : 'text-title'
-            }`}
-          >
-            {header.routeNo}
-          </span>
-          <span
-            className={`truncate font-semibold text-text ${collapsed ? 'text-body' : 'text-title'}`}
-          >
-            {header.destination}
-          </span>
-        </span>
-        {/* The facts fold away first: they are what a rider reads once, where the destination is what
-            they check repeatedly. */}
-        {collapsed ? null : facts}
-      </button>
+          <RouteBadge routeNo={header.routeNo} compact />
+          <span className="truncate font-semibold text-body text-text">{header.destination}</span>
+        </button>
+      ) : (
+        <div className="glass-pane pointer-events-auto flex w-full flex-col gap-2 overflow-hidden rounded-lg border border-border px-3 py-3">
+          {/*
+            **The badge is centred, not leading**, and that is round 4's actual arrangement rather
+            than a preference. The card runs *under* the floating back lens, so anything at its left
+            edge is hidden by a 48 px circle — the first build put the badge there and it vanished.
+            Centring it also does the other half of the job the mockup describes: it pushes the
+            journey text clear of the lens without the card needing to know the lens is there.
+          */}
+          <div className="flex w-full items-center justify-center gap-2 pl-9">
+            <RouteBadge routeNo={header.routeNo} />
+            <div className="min-w-0 flex-1 text-center">{journey}</div>
+            {swap}
+          </div>
+          {/* The facts fold away first: they are what a rider reads once, where the destination is
+              what they check repeatedly. */}
+          {facts}
+        </div>
+      )}
     </div>
+  )
+}
+
+/** The route number, at the two sizes the card has. Extracted so the pair cannot drift apart. */
+function RouteBadge({ routeNo, compact = false }: { routeNo: string; compact?: boolean }) {
+  return (
+    <span
+      className={`shrink-0 rounded-md bg-accent px-2 font-semibold text-accent-contrast tabular-nums ${
+        compact ? 'text-body' : 'text-title'
+      }`}
+    >
+      {routeNo}
+    </span>
   )
 }

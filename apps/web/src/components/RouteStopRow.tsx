@@ -126,7 +126,11 @@ export function RouteStopRow({
         // static list and `bg-surface-2` appended conditionally — two unvariant `background-color` utilities
         // of equal specificity, so the winner was whichever Tailwind happened to emit last, and it was the
         // transparent one. That is why the rider's boarding stop had no lighter background.
-        className={`relative flex min-h-16 w-full scroll-mt-28 gap-0 border-0 px-0 py-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
+        // `pr-11` clears the `⋯`, which is absolutely positioned over the row's right edge and was
+        // otherwise sitting on top of the fare. The padding is on the ROW rather than on its content
+        // so the tap target still spans the full width — the control is a sibling, and reserving room
+        // for it must not carve a hole in the thing it sits beside.
+        className={`relative flex min-h-16 w-full scroll-mt-28 gap-0 border-0 py-0 pr-11 pl-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
           here ? 'bg-surface-2' : 'bg-transparent'
         } ${rise ? 'row-rise' : ''}`}
       >

@@ -790,6 +790,15 @@ export const CATALOGUE = {
    * token on the *origin* node gets, which is the only token on the rail a rider can act on immediately.
    */
   /**
+   * The draggable sheet holding the route's stop list. It is a `<region>` and its handle is a control,
+   * so both need a name — an unnamed region is announced as nothing, and an unnamed handle as "button".
+   */
+  routeStopsSheet: {
+    en: 'Stops on this route',
+    'zh-Hant': '本路線的車站',
+    'zh-Hans': '本路线的车站',
+  },
+  /**
    * The rider's own position on a map, when no direction is known. The mark is a graphic, so this is
    * the whole of what a screen reader gets.
    *
