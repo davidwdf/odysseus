@@ -35,6 +35,10 @@ const labSlash = (): PluginOption => ({
 export default defineConfig({
   plugins: [react(), labSlash()],
   server: { port: 8082 },
+  // MapLibre's worker is imported as `?worker&url` (see `MapView.tsx`) and is an ES module that imports
+  // a sibling chunk. Vite's default worker format is `iife`, which cannot express that; `es` keeps the
+  // import graph intact so the bundle Vite emits is the one the worker actually needs.
+  worker: { format: 'es' },
   // The build a rider can quote back, for the About screen (WP6-7) — the DOM answer to what
   // `Constants.expoConfig.version` is on native.
   //

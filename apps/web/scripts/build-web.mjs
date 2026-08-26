@@ -21,7 +21,7 @@
  * bundle did would produce a service worker that caches nothing, with no error anywhere.
  */
 import { execFileSync } from 'node:child_process'
-import { readdirSync, rmSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_API_URL } from '@nextbus/api-client'
@@ -85,3 +85,44 @@ console.log(
 // `test/pwa-policy.test.ts`, where it can be checked against the declaration instead of against minified
 // output.
 assertServiceWorker(join(distDir, 'sw.js'), { apiUrl })
+
+/**
+ * **MapLibre's worker must be emitted, and must be self-contained** (ADR-155).
+ *
+ * This is here rather than in a vitest file because it is a claim about the *build output* and it cannot
+ * be made anywhere else: jsdom has no WebGL, so no unit test ever starts a map, and the failure it guards
+ * has no symptom a person would look for. `new Worker()` on a URL that 404s **still constructs** — it
+ * fails asynchronously on the worker's own `error` event, which MapLibre does not surface — so the map
+ * looks perfectly healthy while every source that needs geometry is silently dead. Raster tiles decode on
+ * the main thread and keep working, which is what makes it so convincing.
+ *
+ * Two distinct ways it has already broken, both caught here:
+ *
+ * 1. **No worker asset at all.** MapLibre derives its worker's path from `import.meta.url`, assuming the
+ *    file is its sibling — true in `node_modules`, false once Vite rolls the module into
+ *    `assets/index-<hash>.js`.
+ * 2. **An asset that imports a sibling nobody emitted.** The first fix used `?url`, which copies one file
+ *    and knows nothing about its imports. The `/* → /index.html` SPA fallback then turned that missing
+ *    sibling into **200 with HTML in it**, so the worker parsed a web page as JavaScript — a 404 that
+ *    cannot even be seen as a 404.
+ *
+ * Hence both halves: the file exists, and nothing inside it reaches for a neighbour.
+ */
+const assets = readdirSync(join(distDir, 'assets'))
+const workerAsset = assets.find((f) => /maplibre-gl-worker.*\.(m?js)$/.test(f))
+if (!workerAsset) {
+  throw new Error(
+    'no maplibre worker asset in dist/assets — MapLibre will request one that is not there, and every ' +
+      'GeoJSON/vector source will hang for ever with no error. See `setWorkerUrl` in MapView.tsx.',
+  )
+}
+const workerSource = readFileSync(join(distDir, 'assets', workerAsset), 'utf8')
+const siblingImport = workerSource.match(/(?:import|from)\s*["'](\.[^"']+)["']/)
+if (siblingImport) {
+  throw new Error(
+    `${workerAsset} imports ${siblingImport[1]}, which the build did not emit beside it. Under the SPA ` +
+      'fallback that resolves to index.html, so the worker parses HTML and dies silently. Import it ' +
+      'with `?worker&url` so Vite bundles the graph.',
+  )
+}
+console.log(`✓ maplibre worker self-contained → dist/assets/${workerAsset}`)

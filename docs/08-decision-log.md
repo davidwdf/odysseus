@@ -10226,6 +10226,14 @@ pre-existing and unaddressed; it earned its keep here.
     with no error and no requests. **A human has to open `/lab/#map` and look**; nothing about the
     behaviour under a real, foregrounded tab has been demonstrated. Recorded rather than glossed
     because "it typechecks" is not the same claim.
+
+    **Resolved, and it was hiding a real bug** ([ADR-155](#adr-155--route-detail-draws-its-line-and-the-specs-subject-is-the-sentence-under-it)
+    decision 7). The lab showed tiles, a human said it looked good, and that was true and insufficient:
+    raster tiles decode on the main thread, so a **dead MapLibre worker** — which this build had, in dev
+    and in `dist/` — leaves the basemap perfect and every geometry source silently empty. Nothing in the
+    lab drew geometry, so nothing could have caught it. Two lessons: *"a human looked at it"* is only
+    worth what the thing they looked at exercised, and the reason nobody looked sooner was that the
+    harness could not render — headless Chrome over CDP can, and now does.
   - 🟠 **Native is not started.** `@maplibre/maplibre-react-native` needs a config plugin and a
     **dev-client build**, so it cannot be added and verified in the same motion; `apps/mobile` still
     uses `MiniMap` and `TileSource`. Until it lands, the two renderers differ in *capability* rather
@@ -10309,6 +10317,30 @@ pre-existing and unaddressed; it earned its keep here.
   finding was that an asymmetry living only in a driver is one nobody sees, so it is an `idiom` entry
   in the published contract.
 
+- **Decision 7 — MapLibre must be *told* where its worker is, and a build gate has to check it.** Left
+  alone, MapLibre derives the path from `import.meta.url`, assuming the worker is its sibling on disk.
+  That is true in `node_modules` and false everywhere Vite puts the module: pre-bundled to
+  `.vite/deps/` in dev, rolled into `assets/index-<hash>.js` in a build. Both resolve to a 404.
+
+  **The failure has no symptom.** `new Worker()` on a 404 still *constructs* — it fails asynchronously
+  on the worker's own `error` event, which MapLibre does not surface — so `GeoJSONSource` sits with
+  `_isUpdatingWorker: true` for ever, `isSourceLoaded` stays `false`, and `queryRenderedFeatures`
+  returns nothing. Raster tiles decode on the **main thread**, so the basemap is untouched: the map
+  looks completely healthy and every source that needs geometry is dead. There is no error in the
+  console, no failed request that looks wrong, and nothing to search for.
+
+  `setWorkerUrl` with a bundler-resolved URL is the fix, and it took **two** goes. A bare `?url` copies
+  one file and knows nothing about its imports, so `dist/` got a worker whose first line is
+  `import … from "./maplibre-gl-shared.mjs"` — a sibling nobody emitted. The SPA fallback
+  (`/* → /index.html`, ADR-130) then turned that 404 into **200 with HTML in it**, so the worker parsed
+  a web page as JavaScript and died the same silent death one level down. `?worker&url` bundles the
+  graph; `worker: { format: 'es' }` keeps it able to.
+
+  Because none of this is reachable from a unit test — jsdom has no WebGL, so no suite ever starts a
+  map — the guard is in `build-web.mjs`, beside the service-worker assertions and for the same reason.
+  It checks both halves: a worker asset exists, and nothing inside it reaches for a neighbour. Both
+  bugs were re-injected and it names each one.
+
 ### What this cost, and what it found
 
 - ✅ `packages/core` keeps 100% coverage — 1 111 tests.
@@ -10325,11 +10357,15 @@ pre-existing and unaddressed; it earned its keep here.
   because nothing read a `location` beyond the distance pill, and it stops being free the moment a rule
   asks about the space *between* stops: **every case in the corpus is an express with no line.** A case
   carrying a route's whole stop sequence would let the driver's respacing go; filed in `docs/07`.
-- 🟠 **The map is still not visually verified.** Same limit as ADR-154 and worth repeating rather than
-  quietly dropping: MapLibre's whole lifecycle runs off `requestAnimationFrame`, the automated browser
-  drives a **backgrounded** tab, and rAF never fires there — so `load` never fires, `onReady` never
-  runs and no layer is ever added in that tab. What *is* verified is everything outside the canvas: the
-  labelled `<figure>` at its declared height, the caption's presence and absence, the request, and a
-  clean console. **A human has to open a route and look at the line.**
+- 🔴 **The line did not draw at all, in dev *or* in a production build, and nothing said so.** Found the
+  moment a human looked (see decision 7). Fixed the same day; the ADR is amended rather than rewritten
+  because the *shape* of the failure is the lesson.
+- ✅ **Visually verified, on a real rendering tab.** ADR-154 said "a human has to open it and look",
+  which was right and was also the wrong place to stop: the reason nobody had looked is that the harness
+  *could* not. Headless Chrome driven over CDP — `--headless=new` with an ANGLE/SwiftShader GL backend —
+  renders, fires `requestAnimationFrame`, and screenshots. `KMB 1` draws down Nathan Road; `KMB R215`
+  draws its dashed sketch with the caption under it, and the chord across the harbour is plainly not a
+  road, which is the whole argument for the dash made visible. Both checked in dev **and** against the
+  built `dist/` served with an SPA fallback. That capability is the durable part of this row.
 - 🟠 **Markers, direction chevrons and tap-to-focus are not built.** `proposals/06 §8d` settles what a
   tap means; building selectable markers before M7 would ship an interaction no spec covers.

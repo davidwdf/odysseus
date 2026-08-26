@@ -1,10 +1,45 @@
 import { type LatLng, tileZoomPlan } from '@nextbus/core'
-import { Map as MapLibreMap } from 'maplibre-gl'
+import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+// The worker as a BUNDLED asset, built by Vite rather than located by MapLibre at runtime.
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { useEffect, useRef } from 'react'
 import { mapProvider as defaultProvider, type MapProvider } from '../adapters/mapProvider'
 import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
+
+/**
+ * **Tell MapLibre where its worker is, because neither Vite mode can work it out.**
+ *
+ * Left alone, MapLibre derives the path itself: `new URL("./maplibre-gl-worker.mjs", import.meta.url)`,
+ * relative to its own module. That assumption — *my worker is my sibling on disk* — is true in
+ * `node_modules` and false everywhere Vite puts the module:
+ *
+ * - **dev**, it is pre-bundled to `.vite/deps/maplibre-gl.js`, and Vite pre-bundles the entry only, so
+ *   the sibling is not there;
+ * - **build**, it is rolled into `assets/index-<hash>.js`, and Rollup has no reason to emit a file
+ *   nothing imports.
+ *
+ * Both resolve to a 404. `new Worker()` on a 404 **still constructs** — it fails asynchronously, on the
+ * worker's own `error` event, which MapLibre does not surface — so every symptom is a silent absence:
+ * `GeoJSONSource._isUpdatingWorker` stays `true` for ever, `isSourceLoaded` stays `false`, and
+ * `queryRenderedFeatures` returns nothing. **The raster basemap is unaffected**, because raster tiles are
+ * decoded on the main thread — which is the cruel part: the map looks completely healthy and every
+ * source that needs geometry is dead. It cost an afternoon; a route line that would not draw over a
+ * basemap that would.
+ *
+ * `?worker&url` makes the bundler responsible instead: Vite builds the worker as its own bundle and
+ * hands back its real URL, in both modes. `setWorkerUrl` is MapLibre's supported way to be told, and it
+ * is called at module scope because the worker pool is built on the first map and never rebuilt.
+ *
+ * **`?worker`, not a bare `?url`** — and that distinction cost a second round. `?url` copies *one file*
+ * and knows nothing about what it imports, so `dist/` got `maplibre-gl-worker-<hash>.mjs` whose first
+ * line is `import … from "./maplibre-gl-shared.mjs"` — a sibling that was never emitted. The same silent
+ * death, one level down, and made harder to see by the SPA fallback: a missing asset under a
+ * `/* → /index.html` rule is not a 404, it is **200 with HTML in it**, so the worker parsed a web page
+ * as JavaScript. `?worker` bundles the graph, which is the whole difference.
+ */
+setWorkerUrl(maplibreWorkerUrl)
 
 /**
  * Dark mode, as raster paint rather than a CSS filter.
