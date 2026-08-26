@@ -718,6 +718,20 @@ written down.
         Removing it is a bigger call than a layout change and would amend that ADR. **Reframing worth
         considering: the tab bar is probably not the question — what is *in* it is.**
 
+## The dart is unreachable on iOS (2026-08-26)
+
+- [ ] **Give `enableCompass` a caller.** M5 draws a dart when a heading is known and a dot when it is
+      not (ADR-155, `proposals/06 §6c`). iOS 13+ gates `deviceorientation` behind a `requestPermission()`
+      that must run inside a user gesture; every other platform emits the events freely and
+      `useRiderPosition` listens automatically. So on iOS `enableCompass` exists with no caller, and an
+      iPhone rider gets course over ground while walking and a dot while standing still.
+
+      Correct under §6b's precedence rather than broken — and still a gap, because the dart is the
+      better mark and **iOS is the platform where a rider is most likely to be standing at a kerb
+      wondering which way to walk**. What it needs is a decision, not code: where the control lives,
+      whether it is a one-off prompt or a persistent toggle, and what it says. Inventing that quietly
+      inside a build row would be the wrong way to answer it.
+
 ## `apps/mobile` Route detail is no longer measured against its spec (2026-08-26)
 
 - [ ] **Decide whether `apps/mobile` is retired, and if so retire it deliberately.** M7 moved Route

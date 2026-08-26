@@ -30,6 +30,7 @@ import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveRoute } from '../hooks/useLiveRoute'
 import { useOnline } from '../hooks/useOnline'
 import { useRailFlip } from '../hooks/useRailFlip'
+import { useRiderPosition } from '../hooks/useRiderPosition'
 import { useRoutePath } from '../hooks/useRoutePath'
 import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
@@ -153,6 +154,16 @@ export function RouteDetail() {
    * *renderings* on this screen read the same answer.
    */
   const markers = useMemo(() => routeMarkers(stopPoints), [stopPoints])
+
+  /**
+   * The rider's own position, for the map's mark (M5).
+   *
+   * **Deliberately not `useLocation`.** That one is the shared controller and snaps every coordinate
+   * to a 25 m cell before it leaves the device, which is right for anything sent upstream and wrong
+   * for drawing where someone is standing: a snapped dot teleports between grid cells while the map
+   * scrolls smoothly under it. This one never leaves the device — see the hook's own note.
+   */
+  const rider = useRiderPosition()
 
   /**
    * The whole screen's content, in one call. Nothing below this line decides anything.
@@ -521,6 +532,7 @@ export function RouteDetail() {
             stops={stopPoints}
             focusedIndex={focusedIndex}
             onSelectStop={focusStop}
+            rider={rider}
             /**
              * **Sticky, and that is what makes a marker tappable at all.**
              *

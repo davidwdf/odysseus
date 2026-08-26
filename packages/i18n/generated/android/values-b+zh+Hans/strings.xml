@@ -122,6 +122,8 @@
 	<string name="reverseDirection">反方向</string>
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">巴士即将到达%1$s</string>
+	<string name="riderHere">你的位置</string>
+	<string name="riderHereFacing">你的位置和面向的方向</string>
 	<!-- {stop} → %1$s -->
 	<string name="routeStopActions">%1$s的操作</string>
 	<!-- {stop} → %1$s -->

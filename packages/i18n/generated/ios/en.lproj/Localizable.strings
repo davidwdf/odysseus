@@ -118,6 +118,8 @@
 "reverseDirection" = "Reverse direction";
 /* {stop} → %1$@ */
 "busApproaching" = "Bus approaching %1$@";
+"riderHere" = "Your location";
+"riderHereFacing" = "Your location and the way you are facing";
 /* {stop} → %1$@ */
 "routeStopActions" = "Actions for %1$@";
 /* {stop} → %1$@ */

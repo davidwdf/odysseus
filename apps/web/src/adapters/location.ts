@@ -52,7 +52,16 @@ export const browserLocationProvider: LocationProvider = {
 
   async currentFix(): Promise<GeoFix> {
     const pos = await getPosition()
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
+    // `accuracy` is always a number in the DOM spec and `heading` is `number | null`; both are read
+    // defensively anyway, because a fix arrives from the OS through two layers of vendor code and a
+    // `NaN` here would become a circle no engine agrees about (`accuracyRadiusM` guards it too).
+    const { accuracy, heading } = pos.coords
+    return {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      ...(Number.isFinite(accuracy) ? { accuracyM: accuracy } : {}),
+      ...(heading !== null && Number.isFinite(heading) ? { headingDeg: heading } : {}),
+    }
   },
 }
 

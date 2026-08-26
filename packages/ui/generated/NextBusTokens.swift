@@ -139,6 +139,21 @@ public enum NextBusTokens {
         /// The casing’s dark-map pair. White separates a line from paper and from nothing at all on
         /// an inverted map.
         public static let routeCasingInverted = Color(red: 13 / 255, green: 17 / 255, blue: 28 / 255)
+        /// The rider’s own position on a map — the dot, and the dart when a heading is known. A
+        /// colour of its own, and deliberately NOT the route line’s: the two answer different
+        /// questions (“where does this go” against “where am I”), and a rider scanning a busy map
+        /// for themselves finds one colour faster than one shape. Blue because every map a rider
+        /// has used marks them blue, and a convention that strong is not worth spending novelty on.
+        public static let rider = Color(red: 47 / 255, green: 125 / 255, blue: 246 / 255)
+        /// The ring around the rider’s mark, separating it from whatever is beneath it — the same
+        /// job `pinBorder` does for a stop pin, and today the same value. A separate entry because
+        /// the two would diverge the moment either mark is restyled, and sharing one would make
+        /// that a surprise.
+        public static let riderHalo = Color(red: 255 / 255, green: 255 / 255, blue: 255 / 255)
+        /// The circle of uncertainty around the rider’s mark. The same hue as the mark itself,
+        /// drawn at low opacity by the renderer — opacity is not a colour — so it reads as that
+        /// mark’s own uncertainty rather than as a second thing on the map.
+        public static let riderAccuracy = Color(red: 47 / 255, green: 125 / 255, blue: 246 / 255)
     }
 
     /// Corner radii (docs/09 §4). Cards `md`/`lg`; bottom sheets `sheet`; chips and pills `full`.

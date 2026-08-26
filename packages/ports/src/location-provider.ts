@@ -72,6 +72,28 @@ export type LocationPermission =
 export interface GeoFix {
   lat: number
   lng: number
+  /**
+   * The platform's own **radius of uncertainty**, in metres, where it reports one.
+   *
+   * Optional because not every platform does, and absent must stay distinguishable from zero: a
+   * missing accuracy means *we do not know how wrong this is*, where `0` would claim perfection. The
+   * rule for turning it into something drawable — including the two bands where the honest output is
+   * no circle at all — is `accuracyRadiusM` in `@nextbus/core`.
+   *
+   * **Not for filtering.** A coarse fix is still a fix, and Nearby snapped to a 25 m cell does not
+   * care; this exists so a map can say *"somewhere in here"* rather than pretending to a point.
+   */
+  accuracyM?: number
+  /**
+   * **Course over ground** in degrees clockwise from north — the direction the rider is *moving*,
+   * which is not the direction they are facing.
+   *
+   * `undefined` when stationary, which is the common case and not an error: a rider standing at a bus
+   * stop produces no course, by definition. A true compass answers the other question and is a
+   * separate concern from a position fix — see `locationMark` in `@nextbus/core` for the precedence
+   * between them, and note that it takes both rather than this port trying to reconcile them.
+   */
+  headingDeg?: number
 }
 
 /**

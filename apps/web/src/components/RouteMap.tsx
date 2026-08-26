@@ -1,6 +1,16 @@
 import type { LatLng, MarkerStop, RoutePath } from '@nextbus/core'
-import { boundsOf, centreOf, focusZoom, routeMarkers, routePathView } from '@nextbus/core'
+import {
+  accuracyRadiusM,
+  boundsOf,
+  centreOf,
+  focusZoom,
+  locationMark,
+  metresPerPixel,
+  routeMarkers,
+  routePathView,
+} from '@nextbus/core'
 import { t } from '@nextbus/i18n'
+import type { GeoFix } from '@nextbus/ports'
 import { MAP_COLOR } from '@nextbus/ui'
 import { type Map as MapLibreMap, Marker } from 'maplibre-gl'
 import { useEffect, useMemo, useState } from 'react'
@@ -8,6 +18,7 @@ import { mapProvider } from '../adapters/mapProvider'
 import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
 import { MapView } from './MapView'
+import { riderMarkElement } from './riderMarkElement'
 import { routeChevronImage } from './routeChevronImage'
 import { routeMarkerElement } from './routeMarkerElement'
 
@@ -15,6 +26,8 @@ const SOURCE = 'route-line'
 const CASING_LAYER = 'route-line-casing'
 const LINE_LAYER = 'route-line-fill'
 const CHEVRON_LAYER = 'route-line-direction'
+const ACCURACY_SOURCE = 'rider-accuracy'
+const ACCURACY_LAYER = 'rider-accuracy-fill'
 const CHEVRON_IMAGE = 'route-chevron'
 /**
  * Distance between direction marks, in pixels along the rendered line.
@@ -73,6 +86,7 @@ export function RouteMap({
   stops,
   focusedIndex,
   onSelectStop,
+  rider,
   className,
   style,
 }: {
@@ -86,6 +100,8 @@ export function RouteMap({
   focusedIndex?: number | undefined
   /** A marker was tapped. The screen decides what that means — here it is only reported. */
   onSelectStop?: ((index: number) => void) | undefined
+  /** The rider's own position, if they have granted it. `undefined` means no mark is drawn. */
+  rider?: { fix?: GeoFix; compassDeg?: number } | undefined
   className?: string
   /** Inline geometry — the sticky offset, which is a layout value the screen owns (ADR-112). */
   style?: React.CSSProperties
@@ -96,6 +112,11 @@ export function RouteMap({
   // assignment does not re-render. Getting this wrong loses the line whenever the geometry resolves
   // before the style loads — which, with `staleTime: Infinity`, is every visit after the first.
   const [map, setMap] = useState<MapLibreMap | null>(null)
+  // Destructured so the effects below depend on the two VALUES rather than on the wrapper, which
+  // `useRiderPosition` rebuilds every render — depending on the object would tear down and re-place
+  // the rider's mark on every arrival tick.
+  const riderFix = rider?.fix
+  const riderCompass = rider?.compassDeg
 
   const presentation = useMemo(() => {
     if (pending) return undefined
@@ -306,6 +327,81 @@ export function RouteMap({
       for (const m of placed) m.remove()
     }
   }, [map, markers, stops, locale, mode, focusedIndex, onSelectStop, presentation?.kind])
+
+  /**
+   * **The rider's own position**, and the circle of uncertainty around it (M5, `proposals/06 §6b`).
+   *
+   * Both are kernel answers: `locationMark` decides dart-or-dot from the two heading sources in their
+   * settled precedence, and `accuracyRadiusM` decides whether a circle says anything at all. Neither
+   * is re-taken here — this places what it is handed.
+   *
+   * The mark is a DOM `Marker` for the same reasons the stop markers are: it carries a real accessible
+   * name, and a canvas symbol would carry none. The **circle is a layer**, because it is measured in
+   * metres and has to grow and shrink with the zoom — a DOM element sized in pixels would claim a
+   * different accuracy at every zoom level, which is the opposite of what it is for.
+   */
+  useEffect(() => {
+    if (!map || !riderFix) return
+    const mark = locationMark({ compassDeg: riderCompass, courseDeg: riderFix.headingDeg })
+    const marker = new Marker({ element: riderMarkElement(mark, locale) })
+      .setLngLat([riderFix.lng, riderFix.lat])
+      .addTo(map)
+    return () => {
+      marker.remove()
+    }
+  }, [map, riderFix, riderCompass, locale])
+
+  useEffect(() => {
+    if (!map) return
+    const radius = accuracyRadiusM(riderFix?.accuracyM)
+    const fix = riderFix
+    if (!fix || radius === undefined) {
+      if (map.getLayer(ACCURACY_LAYER)) map.removeLayer(ACCURACY_LAYER)
+      if (map.getSource(ACCURACY_SOURCE)) map.removeSource(ACCURACY_SOURCE)
+      return
+    }
+    const data = {
+      type: 'Feature' as const,
+      properties: {},
+      geometry: { type: 'Point' as const, coordinates: [fix.lng, fix.lat] },
+    }
+    const existing = map.getSource(ACCURACY_SOURCE)
+    if (existing && 'setData' in existing) {
+      ;(existing as { setData: (d: unknown) => void }).setData(data)
+    } else {
+      map.addSource(ACCURACY_SOURCE, { type: 'geojson', data })
+      map.addLayer(
+        {
+          id: ACCURACY_LAYER,
+          type: 'circle',
+          source: ACCURACY_SOURCE,
+          paint: {
+            'circle-color': MAP_COLOR.riderAccuracy,
+            'circle-opacity': 0.16,
+            'circle-stroke-color': MAP_COLOR.riderAccuracy,
+            'circle-stroke-opacity': 0.35,
+            'circle-stroke-width': 1,
+            'circle-radius': 1,
+          },
+        },
+        // Beneath the route line: the circle is context for the rider's mark, and a translucent disc
+        // over the line would tint the one thing the screen is actually about.
+        CASING_LAYER,
+      )
+    }
+    // `circle-radius` is PIXELS, so the metres have to be converted at the current zoom and redone
+    // whenever it changes — which is the whole reason this is a layer rather than a sized DOM element.
+    // `metresPerPixel` is the kernel's, at the fix's own latitude.
+    const resize = () => {
+      const perPixel = metresPerPixel(fix.lat, map.getZoom())
+      map.setPaintProperty(ACCURACY_LAYER, 'circle-radius', radius / perPixel)
+    }
+    resize()
+    map.on('zoom', resize)
+    return () => {
+      map.off('zoom', resize)
+    }
+  }, [map, riderFix])
 
   /**
    * Fly to the focused stop — §8d's *"tap a stop row focuses it on the map"*, and the whole of what

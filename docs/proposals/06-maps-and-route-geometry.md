@@ -352,6 +352,38 @@ the symbol layer exists to avoid. Its own collision handling covers the worst of
 
 ---
 
+## 6c. What M5 shipped, and the one thing it cannot reach (2026-08-26)
+
+**Built.** `locationMark` applies §6b's precedence — compass, then course over ground, then a dot —
+and `accuracyRadiusM` decides whether a circle is worth drawing at all. Both are corpus-pinned.
+`GeoFix` grew `accuracyM` and `headingDeg`, the browser adapter passes both through, and Route
+detail's map draws the mark with its circle beneath the route line.
+
+**The rider's own position is deliberately NOT snapped.** Everything else goes through
+`createLocationController`, which passes coordinates through `snapFix`'s 25 m cells before they leave
+the device — privacy, edge cacheability and offline replay all depend on it. That is the **wrong**
+input for a self-position mark, and not as a matter of taste: a snapped position moves in 25 m steps,
+so a rider walking down a street watches their own dot teleport between grid cells while the map
+scrolls smoothly underneath. It reads as a broken app rather than as a privacy feature.
+
+What makes it legitimate is that this coordinate **never leaves the device** — it is drawn, and then it
+is gone. `useRiderPosition` says so in its own doc, and nothing from it may be handed to a query, a URL
+or a fetch; `useLocation` is what those take, and it is snapped.
+
+**The gap: an iPhone cannot reach the dart.** iOS 13+ gates `deviceorientation` behind a
+`requestPermission()` that must be called from a user gesture. Everywhere else the events simply flow
+and the hook listens automatically — a compass reading is not personal data in the way a position is,
+nothing is stored or sent, and requiring a tap to see which way you are facing would mean most riders
+never see it. On iOS there is no such option, so `enableCompass` exists with **no caller** and an
+iPhone rider gets course over ground while walking and a dot while standing still.
+
+That is correct under §6b's precedence rather than broken — and it is still a gap, because the dart is
+the better mark and the platform where a rider is most likely to be standing at a kerb is the one that
+cannot show it. It needs a control, and a control needs deciding rather than inventing: where it lives,
+whether it is a one-off prompt or a persistent toggle, and what it says. A `docs/07` row.
+
+---
+
 ## 7. Street view — a nice-to-have gated on an email
 
 LandsD's **Streetscape 360** is real, documented, and — unlike Google's — actually embeddable:
@@ -913,7 +945,7 @@ answered late rather than up front.
 | ~~**M2**~~ | ~~`/v1/route/:id/path`~~ | M1 | ✅ **Done 2026-08-24** (ADR-152). Measured: **444 ms / 7.9 KB** for KMB 1 outbound. `available:false`, never 404. |
 | ~~**M3**~~ | ~~`MapProvider` seam; interactive MapLibre~~ | — | ✅ **Done 2026-08-25** (ADR-154). Seam + `tileZoomPlan` + a `#map` lab page. **Web only, and not visually verified** — see the ADR. |
 | **M4** | Route polyline on Route detail, with the §5 fallback | M2, M3 | ✅ **Done 2026-08-26** (ADR-155). `routePathView` decides the arm, `RouteMap` draws it, and four states in `route-detail.spec.json` measure it — including the one where nothing is drawn. **Visually verified** in dev and against the built `dist/`; the first look found that MapLibre's worker never loaded, so no line drew at all (ADR-155 decision 7). |
-| **M5** | Live user location + accuracy radius + permission states | M3 | Existing `LocationProvider`. **A dot is the fallback and a dart is preferred** — see §6b. |
+| **M5** | Live user location + accuracy radius + permission states | M3 | ✅ **Done 2026-08-26** (ADR-155). `locationMark` and `accuracyRadiusM` in the kernel, `GeoFix` carries accuracy and course, the mark is on Route detail's map. **One gap: iOS cannot reach the dart** — it needs a gesture and nothing offers one yet. See §6c. |
 | **M6** | ~~Scroll-linked camera, with pan-to-suspend and recentre~~ | — | ❌ **Closed 2026-08-26, answered by §8d.** The scroll-spy was built, demonstrated and cut, so there is no loop to avoid. **The camera still moves — on a tap — and that is M7's**, not a lost requirement: see §6b. |
 | **M7** | Route-detail interaction paradigm (§8d) + markers + chevrons + **focus camera** + spec update | M4 | 🟡 **Mostly done 2026-08-26** (ADR-155). Markers, chevrons, the focus camera and the whole §8d interaction ship on `apps/web`. **The spec half is partial** — `stopName`'s destination is updated and the divergence is an `idiom` entry, but the `⋯` and the markers are *undeclared controls*: a slot needs text, and the native row has neither control, so declaring one would be a red build there. See §8e. |
 | **M8** | *(nice to have)* Street view toggle | §7 key | Send the email now; the row can wait. |

@@ -118,6 +118,8 @@
 "reverseDirection" = "反方向";
 /* {stop} → %1$@ */
 "busApproaching" = "巴士即将到达%1$@";
+"riderHere" = "你的位置";
+"riderHereFacing" = "你的位置和面向的方向";
 /* {stop} → %1$@ */
 "routeStopActions" = "%1$@的操作";
 /* {stop} → %1$@ */

@@ -124,6 +124,8 @@
 	<string name="reverseDirection">Reverse direction</string>
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">Bus approaching %1$s</string>
+	<string name="riderHere">Your location</string>
+	<string name="riderHereFacing">Your location and the way you are facing</string>
 	<!-- {stop} → %1$s -->
 	<string name="routeStopActions">Actions for %1$s</string>
 	<!-- {stop} → %1$s -->

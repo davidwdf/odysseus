@@ -175,6 +175,28 @@ object NextBusTokens {
          * all on an inverted map.
          */
         val routeCasingInverted: Color = Color(0xFF0D111C)
+        /**
+         * The rider’s own position on a map — the dot, and the dart when a heading is known. A
+         * colour of its own, and deliberately NOT the route line’s: the two answer different
+         * questions (“where does this go” against “where am I”), and a rider scanning a busy
+         * map for themselves finds one colour faster than one shape. Blue because every map a
+         * rider has used marks them blue, and a convention that strong is not worth spending
+         * novelty on.
+         */
+        val rider: Color = Color(0xFF2F7DF6)
+        /**
+         * The ring around the rider’s mark, separating it from whatever is beneath it — the
+         * same job `pinBorder` does for a stop pin, and today the same value. A separate entry
+         * because the two would diverge the moment either mark is restyled, and sharing one
+         * would make that a surprise.
+         */
+        val riderHalo: Color = Color(0xFFFFFFFF)
+        /**
+         * The circle of uncertainty around the rider’s mark. The same hue as the mark itself,
+         * drawn at low opacity by the renderer — opacity is not a colour — so it reads as that
+         * mark’s own uncertainty rather than as a second thing on the map.
+         */
+        val riderAccuracy: Color = Color(0xFF2F7DF6)
     }
 
     /**

@@ -10414,6 +10414,20 @@ pre-existing and unaddressed; it earned its keep here.
   holds the rule and CDP browser checks hold the rendering. That is weaker than a projection and it is
   the honest option: the alternative is a suite that configures the environment away, which is the
   failure ADR-123's sweep is named for.
+- ✅ **M5 is built** — the rider's own mark, its heading and its circle of uncertainty. The decision
+  worth carrying forward is what it is drawn *from*: **not the snapped position.** Everything else goes
+  through `createLocationController`, which passes coordinates through `snapFix`'s 25 m cells before
+  they leave the device. That is right for anything sent upstream and wrong for drawing where somebody
+  is standing — a snapped dot teleports between grid cells while the map scrolls smoothly under it, and
+  reads as a broken app rather than as a privacy feature. What makes the raw fix legitimate is that it
+  **never leaves the device**: it is drawn, and then it is gone. `useRiderPosition` carries that
+  reasoning, and nothing from it may reach a query, a URL or a fetch.
+- 🟠 **An iPhone cannot reach the dart.** iOS 13+ gates `deviceorientation` behind a
+  `requestPermission()` that must run inside a user gesture; every other platform emits freely and the
+  hook listens by itself. So `enableCompass` exists with **no caller** on the one platform where a
+  rider is most likely to be standing at a kerb wondering which way to walk. Correct under §6b's
+  precedence — they get course over ground while moving and a dot while still — and still a gap. It
+  needs a control, and a control needs deciding rather than inventing (`docs/07`).
 - 🟠 **Round 5's bend avoidance for the chevrons is not reproduced.** MapLibre places symbols on its own
   schedule and exposes no hook to slide a mark to the straightest spot in its slot; the alternative is
   owning placement, which is what a symbol layer exists to avoid.

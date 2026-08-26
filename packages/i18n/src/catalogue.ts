@@ -790,6 +790,28 @@ export const CATALOGUE = {
    * token on the *origin* node gets, which is the only token on the rail a rider can act on immediately.
    */
   /**
+   * The rider's own position on a map, when no direction is known. The mark is a graphic, so this is
+   * the whole of what a screen reader gets.
+   *
+   * Says *where*, not *which way* — the dot makes no direction claim, and a name implying one would
+   * put back in words exactly what `locationMark` refuses to draw (`docs/proposals/06 §6b`).
+   */
+  riderHere: {
+    en: 'Your location',
+    'zh-Hant': '你的位置',
+    'zh-Hans': '你的位置',
+  },
+  /**
+   * The same mark once a heading is known. A separate string rather than a parameterised one: the
+   * degrees themselves are not something a rider can act on — nobody reads "facing 128°" and turns —
+   * so the sentence says only that the direction shown is theirs.
+   */
+  riderHereFacing: {
+    en: 'Your location and the way you are facing',
+    'zh-Hant': '你的位置和面向的方向',
+    'zh-Hans': '你的位置和面向的方向',
+  },
+  /**
    * The `⋯` beside a stop row, whose whole content is a glyph — so this is its accessible name and the
    * only thing a screen reader has to go on (ADR-097: every state and name on this side is an `aria-*`
    * attribute, because `react-native-web@0.21` drops `accessibilityState` silently).
