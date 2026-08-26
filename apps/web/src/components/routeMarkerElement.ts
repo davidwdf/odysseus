@@ -135,11 +135,16 @@ function accessibleName({ kind, name, locale }: RouteMarkerOptions): string {
  * `aria-hidden` on the SVG: the accessible name lives on the button, and a nested graphic with no name
  * of its own would otherwise be announced as an empty image inside it.
  *
- * **The stroke is heavy on purpose** — 2.2 of a 9–15 px glyph, where the first attempt used 1.4. The
- * markers are a *hole punched in the line* rather than a bead resting on it, and that reading depends
- * on the outline being substantial enough to look like an edge of the line itself; a hairline reads as
- * a thin ring around a separate object. The mockups had this balance and it was lost in translating
- * their much larger sizes down to a 220 px strip.
+ * **The stroke is heavy on purpose** — 3.2 of a 12–15 px glyph, which is a quarter of the whole mark.
+ * The markers are a *hole punched in the line* rather than a bead resting on it, and that reading
+ * depends on the outline being substantial enough to read as an edge of the line itself; a hairline
+ * reads as a thin ring around a separate object. Two passes undershot this (1.4, then 2.2) because the
+ * mockups' balance was set against much larger glyphs and does not survive being scaled down — the
+ * *ratio* is what carries over, not the number.
+ *
+ * Note the contrast with the rail node, which is a hairline by comparison (2 px on a 26 px glyph) and
+ * deliberately so: it sits on a 2 px rail in a list, where the job is to be a tidy bead on a line. The
+ * map marker sits on a 5 px road over a dense basemap, where the job is to be legible at a glance.
  */
 function svg(shape: { size: number; path: string }, selected: boolean, dark: boolean): string {
   const scale = selected ? 1.45 : 1
@@ -152,5 +157,5 @@ function svg(shape: { size: number; path: string }, selected: boolean, dark: boo
   const stroke = dark ? MAP_COLOR.routeInverted : MAP_COLOR.route
   return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker${
     selected ? ' route-marker-selected' : ''
-  }" fill="${fill}" stroke="${stroke}" stroke-width="${selected ? 2.6 : 2.2}"><path d="${shape.path}" /></svg>`
+  }" fill="${fill}" stroke="${stroke}" stroke-width="${selected ? 3.6 : 3.2}"><path d="${shape.path}" /></svg>`
 }

@@ -158,14 +158,22 @@ export function RouteStopRow({
           */}
           <span
             className="absolute flex items-center justify-center text-caption tabular-nums"
-            style={{ top: NODE_TOP, left: (RAIL_WIDTH - NODE) / 2, width: NODE, height: NODE }}
+            style={{
+              top: NODE_TOP,
+              left: (RAIL_WIDTH - NODE_BOX[kind].width) / 2,
+              width: NODE_BOX[kind].width,
+              height: NODE,
+            }}
           >
             <svg
-              viewBox="0 0 24 24"
+              viewBox={NODE_BOX[kind].viewBox}
               aria-hidden="true"
               className={`absolute inset-0 h-full w-full ${
                 here ? 'fill-accent stroke-accent' : 'fill-surface stroke-border'
               }`}
+              // 2 **rendered** pixels, to match the rail line it sits on — so the width is expressed in
+              // viewBox units and the box is drawn 1:1, which is why every `viewBox` below is the glyph's
+              // real size rather than a tidy 24.
               strokeWidth={2}
             >
               <path d={NODE_SHAPE[kind]} />
@@ -360,13 +368,32 @@ export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; fir
  * Inset by 1 so a 2 px stroke sits inside the box rather than being clipped by the viewBox, which is
  * why none of these starts at 0.
  */
+/**
+ * Each glyph's box, in CSS pixels, and the `viewBox` that maps 1:1 onto it.
+ *
+ * **1:1 is the point.** A single 24-unit viewBox stretched to a 26 px box scales the stroke with it,
+ * so a `strokeWidth` of 2 renders at 2.17 — close enough to look right and wrong enough to never match
+ * the 2 px rail line beside it. Drawing each glyph at its true size means the number in the markup is
+ * the number on screen.
+ *
+ * **The hexagon is wider than the others, and has to be.** A regular hexagon 26 px tall is 30 px wide —
+ * `2r` against `r√3` — so forcing it into a 26 px square would either squash it out of regularity or
+ * shrink it until it read as the small one of the three. It overhangs the rail gutter symmetrically,
+ * which is invisible: the gutter has nothing else in it.
+ */
+const NODE_BOX: Record<StopMarkerKind, { width: number; viewBox: string }> = {
+  terminus: { width: NODE, viewBox: `0 0 ${NODE} ${NODE}` },
+  interchange: { width: 30.02, viewBox: `0 0 30.02 ${NODE}` },
+  stop: { width: NODE, viewBox: `0 0 ${NODE} ${NODE}` },
+}
+
 const NODE_SHAPE: Record<StopMarkerKind, string> = {
-  terminus: 'M2 2 h20 v20 h-20 Z',
-  // A **regular** hexagon — all six sides equal — rather than the stretched one this started as.
-  // Vertices every 60° on a circle of radius 10 about the centre, which is also what makes it share the
-  // circle's optical weight: both are inscribed in the same circle, so neither reads as the heavier.
-  interchange: 'M22 12 L17 20.66 L7 20.66 L2 12 L7 3.34 L17 3.34 Z',
-  stop: 'M12 1.5 a10.5 10.5 0 1 0 0.01 0 Z',
+  terminus: 'M1 1 h24 v24 h-24 Z',
+  // A **regular** hexagon — vertices every 60° on a circle — sized so its HEIGHT matches the circle's
+  // diameter, which is what makes the three read as one family. Inset by 1 so the 2 px stroke sits
+  // inside the box rather than being clipped by it.
+  interchange: 'M29.02 13 L22.02 25.13 L8.01 25.13 L1 13 L8.01 0.87 L22.02 0.87 Z',
+  stop: 'M13 1 a12 12 0 1 0 0.01 0 Z',
 }
 
 /** The flip cascade's beat and its cap — `apps/mobile`'s `Math.min(index, 10) * 26`, value for value. */
