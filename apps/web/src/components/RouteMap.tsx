@@ -119,8 +119,9 @@ export function RouteMap({
 
   const drawn = presentation && presentation.kind !== 'none' ? presentation.line : undefined
 
-  // What glyph each stop gets and which way it faces — a kernel rule, corpus-pinned, so the two
-  // renderers cannot disagree about which stops are termini (ADR-068).
+  // What glyph each stop gets and which way it faces — a kernel rule, corpus-pinned (ADR-068), and
+  // **computed by the screen**, which also shapes the rail nodes from it. Passed in rather than
+  // recomputed so the map and the list cannot end up saying different things about one stop.
   const markers = useMemo(() => routeMarkers(stops), [stops])
 
   // The line's extent and its middle, from the kernel. Both are *numbers a renderer would otherwise

@@ -313,30 +313,19 @@ the direction.
 Recorded rather than left as a silence, because the gap is in the *spec* and a spec's whole value is
 that it does not have silences.
 
-**The `⋯` and the stop markers are undeclared controls on `apps/web`.** Both are real, both carry
-accessible names, both are exercised by tests — and neither appears in `route-detail.spec.json` as a
-slot. Two things block it, and they compound:
+**The `⋯` is declared and measured** — `stopActionsLabel`, a sibling repeat over the stops, projected
+from its accessible name exactly as the bus tokens are. It got there by the owner dropping the parity
+requirement: the control depends on there being a map to focus, `apps/mobile` has none, and the shared
+spec cannot express "this control exists on one renderer". `apps/mobile`'s Route detail conformance
+suite is deleted; the cost of that is written down in `docs/07`.
 
-1. **A slot needs text.** The format's five words are `field` / `message` / `literal` / `each` /
-   `oneOf`, and all of them project a *string*. A control whose whole content is a drawn glyph has
-   none. That is not new: the saved-state star on `PlaceRow` is `idiom` for exactly this reason, and
-   the bus token only became declarable once it had an accessible **name** the driver could append.
-2. **The spec is shared with a renderer that has neither control.** `apps/mobile` has no map, so a
-   row tap there has nothing to focus and it keeps the action sheet; there is no `⋯` beside it either.
-   A slot declared for both would be a red build on native or a `knownDefect` standing in for a
-   decision nobody has taken.
-
-The honest options, none of which is free:
-
-| | |
-|---|---|
-| **Declare via accessible name** | The bus-token route: each driver appends the control's `aria-label` into the tree it hands the walker. Works, and needs the control to exist on **both** renderers first. |
-| **Build the `⋯` on `apps/mobile` too** | Makes the slot declarable. But the row tap there would still have no map to focus, so the two renderers would carry the same control for different reasons. |
-| **Wait for the native map** | ADR-075 is retiring `apps/mobile`; if that lands first the question dissolves. |
-
-**Recommended: wait, and keep the gap named.** The controls are covered by the interaction tests either
-way; what is missing is the *published* claim, and inventing a native `⋯` to make a JSON file complete
-would be the spec wagging the app.
+**The stop markers are not declared, and cannot be.** This one is environmental rather than editorial:
+a marker exists only once MapLibre has a **WebGL context**, and every conformance suite in this repo
+runs in jsdom, which has none — so a slot for them would be a claim no driver could ever satisfy. What
+holds them instead is `route-markers.spec.json` for the rule (which glyph, which kerb) and browser
+checks driven over CDP for the rendering. That is a weaker guarantee than a projection and it is the
+honest one available; pretending otherwise would mean a suite that configures the environment away,
+which is the failure ADR-123's sweep is named for.
 
 **Also not built:** round 5's **bend avoidance** for the direction marks. The mockup slid each mark to
 the straightest spot in its slot and dropped it if even that was a corner; MapLibre places symbols on

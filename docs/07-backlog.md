@@ -718,6 +718,25 @@ written down.
         Removing it is a bigger call than a layout change and would amend that ADR. **Reframing worth
         considering: the tab bar is probably not the question — what is *in* it is.**
 
+## `apps/mobile` Route detail is no longer measured against its spec (2026-08-26)
+
+- [ ] **Decide whether `apps/mobile` is retired, and if so retire it deliberately.** M7 moved Route
+      detail's row tap onto the map and its actions onto a permanent `⋯` (ADR-155, `proposals/06 §8d`).
+      Both depend on there being a map, which the native renderer does not have — so the shared spec
+      grew a control `apps/mobile` cannot produce, and its conformance suite
+      (`apps/mobile/test/route-detail-states.test.tsx`) was **deleted** on the owner's *"you can drop
+      the apps/mobile now"*.
+
+      **The cost, stated plainly:** that suite measured 21 states of the RN Route detail screen, and
+      nothing measures them now. The screen still works and still ships; it is simply no longer held to
+      the published contract, which is the thing ADR-069 spent a wave building. If `apps/mobile` outlives
+      the retirement plan this is the first thing to put back, and putting it back means giving the RN
+      row a `⋯` — the spec is already written and the corpus already exists.
+
+      **What was deliberately NOT done:** deleting the app. That is a real architectural change with CI,
+      deploy, docs and `packages/ports` consequences, and burying it inside a styling commit would be
+      the wrong way to take it. It wants its own commit and its own ADR.
+
 ## Corpus fidelity — a sampled route is a different shape from the route it samples
 
 - [ ] **Give `routeDetailView` at least one corpus case carrying a route's *whole* stop sequence.**

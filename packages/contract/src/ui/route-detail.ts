@@ -185,6 +185,28 @@ const STOP_ROWS: SlotNode = {
 }
 
 /** The buses on the rail, read through their accessible names — see the note at the top of this file. */
+/**
+ * **The `⋯` beside every row**, as its own repeat rather than a field inside the row.
+ *
+ * The same shape as `RAIL_BUSES` below, and for the same reason: its content is not text, so a driver
+ * has to *append* its accessible name to the tree it hands the walker, and an appended name cannot
+ * interleave with the row text it belongs to. Declaring it as a sibling repeat says exactly what the
+ * renderers can actually produce — all the rows, then all the controls — rather than a nesting the
+ * projection would have to lie about.
+ */
+const STOP_ACTIONS: SlotNode = {
+  name: 'stopActions',
+  each: 'stops',
+  of: [
+    {
+      name: 'stopActionsLabel',
+      text: { message: 'routeStopActions', args: { stop: 'name.label' } },
+      invariant:
+        'The control’s **accessible name is the whole of it** — its content is three drawn dots, so this string is all a screen reader has and all a projection can see. It names the **stop**, not the control: forty rows each announcing "More options" tells a rider nothing about which one they are on.\n\nA **sibling** of the row button, never nested (ADR-024): a button inside a button is invalid HTML and folds into one control for a screen reader, which is what the `sibling-not-nested` check catches. Permanent rather than revealed on hover or long-press — a control a rider has to discover is one most riders do not have.\n\nDrawn rather than typed, and that is a conformance decision: the literal `⋯` is a text node, and the walker reads text nodes, so it would land in every state’s projection as a stray glyph after the sequence number.',
+    },
+  ],
+}
+
 const RAIL_BUSES: SlotNode = {
   name: 'buses',
   each: 'buses',
@@ -244,7 +266,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The route number, both ends of the journey, the facts strip, and one row per stop in sequence with its printed code, its boarding fare and its upcoming times.',
       mustNot:
         'A row for a stop the route does not call at, or a sequence number that is the row’s index rather than the wire’s. A rider counts stops to know when to get off.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -272,7 +294,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'Keeping the "live times unavailable" line above rows that now show minutes — the screen contradicting itself — or leaving a refused kerb looking like a stop with no bus due, which is the ADR-073 confusion one level down from where ADR-114 fixed it.',
       why: 'Most routes are KMB, whose bulk feed answers, so most of the time no subscription is wanted and this state is never entered.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -288,7 +310,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A shorter list. The rows before the boarding stop are how a rider checks they are waiting on the right side of the road.',
       why: '`hereIndex` and each row’s own `here` are one answer from one call, so the row that is highlighted and the row that is scrolled to cannot differ — which is a bug that looks like a scroll bug and is not (ADR-093 decision 8). A corpus property asserts they agree on every case.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -301,7 +323,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The reverse direction’s stops, with no row emphasised and nothing scrolled to.',
       mustNot:
         'A row still marked as the rider’s boarding stop. A terminus is often one pole for both bounds, so the id can still match — which is exactly why `flipped` is an argument and not something to infer.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** A loop: one journey line and no direction toggle. */
@@ -310,7 +332,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'An arrow pointing at the loop line, which reads as travelling *to* the loop rather than around it — nor "A → A", which is faithful and tells a rider nothing (ADR-046).',
       why: 'HK operators carry the loop marker in the destination **name** ("TAI KOK TSUI (CIRCULAR)"), read from the **English** field whatever the display locale because it is the one field the three feeds spell consistently. Upstream ships GMB circulars with a blank `en`, so that is an exposure rather than a tidy assumption, and the corpus pins what a rider then sees.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** A bus standing at the origin, nearly leaving. */
@@ -319,7 +341,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A token drawn on a segment leading into the first stop. There is no such segment — stop 0 has nothing before it — so a renderer that treated every bus the same would place it at an offset it cannot compute.',
       why: 'Two rules composed, and the composition is what a renderer cannot be trusted with: the bus earns a token at all only because it is within two minutes of departing (`ORIGIN_BUS_DEPARTS_WITHIN_SEC` — otherwise it is furniture parked permanently at every terminus, reading as a bus a rider could catch), and it is drawn on the node because the origin has no approach.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** A bus between two stops — the common case, and what the schematic exists for. */
@@ -327,7 +349,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'A token per inferred bus, each named for the stop it is approaching.',
       mustNot:
         'A token per stop with a reading. Every stop ahead of a bus reports it, so that would draw the same bus a dozen times — which is what `inferBusMarkers`’ drop-off detection exists to prevent.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** A bus inside the "Due" band, at the stop rather than approaching it. */
@@ -335,7 +357,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'A token named for the stop it is **at**, on that stop’s node.',
       mustNot:
         'The approaching sentence, when the row beside it says the bus is due. The token and the word are the same judgement and read the same `dueUnderSec`.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -348,7 +370,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The rows and their times, with nothing on the rail.',
       mustNot:
         'A token at the origin for a bus that is not nearly leaving — and equally, no row hidden because the rail is empty. The times and the tokens are two readings of one payload and only one of them is suppressed.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** A row the rider has saved this route at. */
@@ -357,7 +379,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A flag on every row of a saved route. A favourite is a route **at a pole** (ADR-042), so starring the line everywhere claims the rider saved a dozen stops, and the Favourites tab would list one.',
       why: 'The key is `formatFavoriteRouteKey`’s and is built from the row’s **raw** pole id — the same id `?pole=` carries and the same one `favouritesView` reads back. A corpus property reconstructs it rather than trusting the flag.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -373,7 +395,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The row, with its number, its name, its code and its fare.',
       mustNot:
         'A dash, a spinner, or the row omitted. A stop with no reading is still a stop the bus calls at, and dropping it would silently shorten the route.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** A board old enough to say so. */
@@ -382,7 +404,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A cue on each reading, and never colour alone (ADR-008). Two per-reading treatments were built and withdrawn — a 45 % fade, then a muted `~` — because a schematic with 78 readouts off **one** board drew a single fact 78 times, and *"this number is two minutes old"* is not something a rider can act on (ADR-123).',
       why: 'This state used to read *"the readings we have, dimmed"* and to forbid *"a whole-screen staleness banner"* on the argument that one row can be old while the next is current. That argument was wrong about this screen and it is the reason ADR-123 exists: a route’s rows come off one operator board with one `dataTimestamp`, so the screen-level statement is the one at the fact’s own grain. What the projection pins is that the readings themselves do **not** change while the notice is up — a value moves only when a fresh one arrives.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** A service block with only some of its facts. */
@@ -390,7 +412,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'A pill for each fact the dataset carries, and none for the rest.',
       mustNot:
         'A pill reading "—" or a fixed four-pill row. The Static tier shows what the open data says and nothing else (ADR-036); a placeholder claims a fact we do not have.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -405,7 +427,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The fare pill, then a separator, then the holiday fare — inside the one pill.',
       mustNot:
         'A fifth pill. A holiday fare is not a fact beside the fare; it is the same fact on a different day, and a strip that listed it separately would read as two fares in force at once.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /** No service block at all — a real state, and the one where the list is the whole screen. */
@@ -413,7 +435,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The list, with no strip above it.',
       mustNot:
         'An empty strip holding space. It is the schematic’s first sibling, so an empty one shifts every measured row offset for no content.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -427,7 +449,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The route number and both ends from the route’s **own** labels, and no stop-count pill.',
       mustNot:
         'An empty header, or a "0 stops" pill. A route length of zero is a broken payload and printing it as a fact states something we do not believe.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -445,7 +467,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The line the bus follows, drawn solid over the basemap, and no sentence about it.',
       mustNot:
         'A caption. This *is* the road; saying so is noise, and it would spend the word that the approximated case needs.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -465,7 +487,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A line that looks like the other kind. An unmarked crow-flies path is the cartographic twin of a client-side per-second countdown: it draws a confidence the data does not have (ADR-008).',
       why: 'A surveyed line needs no caption and must not have one — see `pathSurveyed`.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -483,7 +505,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'An empty map frame, or a sentence apologising for one. There is nothing to draw and nothing a rider can do about it — the stop list is the answer, and it is complete.',
       why: 'Every route dense enough to sketch, which is nearly all of them.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     /**
@@ -499,7 +521,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       must: 'The complete schematic, and a map area holding its height with no line and no sentence in it.',
       mustNot:
         'The approximation. A pending answer is not a negative answer, and drawing the fallback while waiting would caption the map of every route that has a perfectly good line coming.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
 
     loading: {
@@ -553,6 +575,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
           ROUTE_PATH,
           FEED_NOTICE,
           STOP_ROWS,
+          STOP_ACTIONS,
         ],
       },
     },
@@ -588,6 +611,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
           ROUTE_PATH,
           FEED_NOTICE,
           STOP_ROWS,
+          STOP_ACTIONS,
         ],
       },
     },
@@ -597,7 +621,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       mustNot:
         'A blank screen or an error, when a usable route payload is sitting in the persisted query cache. The stop sequence, the fares and the facts are static and do not go out of date offline. And not `stale`’s sentence: no network **explains** old data, so a rider is told the cause and not the symptom (ADR-133’s precedence).',
       why: 'This state was `unenforced` here and on the three other screens for the same stated reason — *textually identical to `stale`, so asserting it would be asserting `stale` twice* — and that was a description of what the app lacked rather than of what it should do: the **cause** was genuinely unobservable because nothing said it. ADR-150 gives it a sentence, so the two states differ in a word a harness can read. ADR-058’s own coverage still asserts the cache-replay half, where a cold start is measurable.',
-      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, RAIL_BUSES] },
+      enforcement: { shows: [FACTS, ROUTE_PATH, FEED_NOTICE, STOP_ROWS, STOP_ACTIONS, RAIL_BUSES] },
     },
   },
 
@@ -611,6 +635,11 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       target: 'stopName',
       goes: 'that stop — focused on the map where there is one, and otherwise a sheet offering to save this route at this stop or to open the stop’s place',
       note: 'Deliberately **not** straight to the place: the row’s primary purpose is saving the route at that pole (ADR-042), and a tap that navigated away would make the common action the harder one.\n\n**The two halves of that sentence are one destination behind a capability, not two designs.** §8d makes a row tap focus the stop on the map and moves the actions to a permanent `⋯` beside every row — round 1 rejected that icon as clutter when the map was a decorative band, and it earns its space now the map is the point of the screen. `apps/mobile` has no map (see `idiom`), so there is nothing for its row tap to focus and it keeps the sheet. The **destination is the same in both**: the stop the rider touched. What differs is what this app can show them about it.',
+    },
+    {
+      target: 'stopActionsLabel',
+      goes: 'a sheet offering to save this route at this stop, or to open the stop’s place',
+      note: 'Where a row tap used to go, until §8d moved the row tap to the map and the actions here. Deliberately **not** straight to the place: the row’s primary purpose is saving the route at that pole (ADR-042), and a control that navigated away would make the common action the harder one.',
     },
     {
       target: 'factValue',
@@ -633,7 +662,7 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
   },
 
   idiom: [
-    '**what a row tap can do, which follows from whether there is a map at all.** On `apps/web` it focuses the stop on the map and a permanent `⋯` beside every row carries the actions (§8d); on `apps/mobile`, which has no map, the row tap keeps the action sheet and there is no `⋯`. Recorded here rather than declared as two interactions because the spec has one target per control and this is **one destination behind a capability** — both take a rider to the stop they touched. It is the smaller half of the same asymmetry the four `path*` states record, and it closes the same way: an RN map would inherit a settled interaction rather than re-decide one. Until then the `⋯` and the markers are **undeclared controls on the web renderer**, which is a real gap and the honest name for it is: not yet specified',
+    '**the stop markers on the map, which are declared nowhere and cannot be.** The line, the caption and the `⋯` are all projected; the markers are not, and the reason is environmental rather than editorial: a marker only exists once MapLibre has a WebGL context, and every conformance suite here runs in jsdom, which has none. A slot for them would be a claim no driver could ever satisfy. They are held to their shapes, their kerb side and their accessible names by `route-markers.spec.json` and by browser checks driven over CDP instead (ADR-155) — which is a weaker guarantee than a projection and is the honest one available. `apps/mobile` has no map at all and, since M7, no Route detail conformance suite either (`docs/07`)',
     '**the map engine, and — for now — whether there is a map at all.** `apps/web` draws the route line with MapLibre GL JS over the Lands Department raster (ADR-049/154); `apps/mobile` draws no map, because the React Native equivalent is a native module and adding it would end that app’s ability to run in Expo Go. So `pathSurveyed`, `pathApproximate`, `pathAbsent` and `pathPending` are declared, measured on the DOM renderer, and **explicitly excused on the native one** — recorded here rather than left in a test file, which is ADR-069’s finding: an asymmetry that lives only in a driver is one nobody sees. What is *not* idiom is any of it: which of the three answers to draw is `route-path#routePathView`, and the caption is `routePathApproximate` in the shared catalogue, so an RN map added later inherits a settled contract rather than re-deciding it',
     '**every curve, duration and physic of the bus token** — the 650 ms tween to a new position, the 550 ms bob, the 2 200 ms rock, the fade-in from the origin. What is *not* idiom is which node it is at, which is why the model says `{kind:"node", index}` or `{kind:"segment", from, to}` and never a pixel (ADR-093)',
     '**whether the header collapses at all** — `apps/mobile` cross-fades a full journey card into a one-line pill on scroll and therefore needs both composed labels; `apps/web` has one size and puts the resting label in `document.title`',

@@ -17,12 +17,13 @@ const KERB_OFFSET_PX = 7
 /**
  * The glyph, by kind.
  *
- * **Sized against the LINE, not against each other.** The route line is 5 px with an 8.4 px casing, and
- * a marker's job at route zoom is to read as a bead *on* that line rather than a row of buttons over
- * it. The first pass drew these at 11–14 px and a 25-stop route came out as an unbroken chain of blobs
- * with the line invisible underneath — technically correct and useless. These sizes are the same
- * shapes at the weight the strip can carry; the mockup's larger ones were chosen against a full-screen
- * map, which this is not.
+ * **Sized against the LINE, not against each other**, and it took three passes to find the range. The
+ * first drew them at 11–14 px filled with the line's own colour, and a 25-stop route came out as an
+ * unbroken chain of blobs with the line invisible underneath. Dropping to 9–11 fixed that and went too
+ * far the other way — the owner's *"the stop icons are too small"*. What actually made the first pass
+ * unreadable was the **fill**, not the size: a marker in the line's colour has nothing to separate it
+ * from the line. Inverted against the casing (below), the same sizes read cleanly, so these are back up
+ * at 12–15 and each stop is a distinct target.
  *
  * The three still differ enough to tell apart, because they differ in **shape** and only incidentally
  * in size — which is the accessibility argument as well as the aesthetic one.
@@ -30,11 +31,11 @@ const KERB_OFFSET_PX = 7
 const SHAPE: Record<StopMarkerKind, { size: number; path: string }> = {
   // A square, for an end of the line. Slightly larger than the circle: a square of equal side reads
   // smaller than a disc, so matching them numerically would make the termini look like the quiet ones.
-  terminus: { size: 10, path: 'M2 2 h6 v6 h-6 Z' },
+  terminus: { size: 14, path: 'M2.6 2.6 h8.8 v8.8 h-8.8 Z' },
   // A hexagon, for a bus-bus interchange. Flat-topped, which stays distinguishable from a circle at a
   // size where a pointed top would just read as a blob.
-  interchange: { size: 11, path: 'M3.2 1.6 h4.6 l2.3 3.9 -2.3 3.9 h-4.6 l-2.3 -3.9 Z' },
-  stop: { size: 9, path: 'M4.5 1.4 a3.1 3.1 0 1 0 0.01 0 Z' },
+  interchange: { size: 15, path: 'M4.6 2.2 h5.8 l2.9 5.3 -2.9 5.3 h-5.8 l-2.9 -5.3 Z' },
+  stop: { size: 12, path: 'M6 1.9 a4.1 4.1 0 1 0 0.01 0 Z' },
 }
 
 /** What a marker needs to draw itself and say what it is. */

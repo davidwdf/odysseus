@@ -7,6 +7,7 @@ import {
   type RouteStopRowView,
   routeDetailView,
   routeFactSheet,
+  routeMarkers,
   routeStopBoard,
   type ServiceDayType,
 } from '@nextbus/core'
@@ -141,6 +142,17 @@ export function RouteDetail() {
       })),
     [query.data?.stops, locale],
   )
+
+  /**
+   * What each stop **is** — terminus, interchange, or ordinary — computed once here and handed to both
+   * the map and the list.
+   *
+   * One call rather than two, and that is the point rather than a saving: a rider who sees a hexagon on
+   * the map and scrolls down to find a circle in the list is looking at two claims about one stop. The
+   * rule itself is corpus-pinned in `packages/core` (ADR-068), so what this guarantees is that the two
+   * *renderings* on this screen read the same answer.
+   */
+  const markers = useMemo(() => routeMarkers(stopPoints), [stopPoints])
 
   /**
    * The whole screen's content, in one call. Nothing below this line decides anything.
@@ -540,6 +552,7 @@ export function RouteDetail() {
                 // row is about to gain a line at once — see the skeleton's note in `RouteStopRow`.
                 arrivalsPending={wantsLive && round === null}
                 tokens={busesByRow.get(index)}
+                kind={markers[index]?.kind ?? 'stop'}
                 onPress={onRowPress}
                 onMenu={setSheetRow}
                 registerRow={registerRow}

@@ -10383,8 +10383,40 @@ pre-existing and unaddressed; it earned its keep here.
   draws its dashed sketch with the caption under it, and the chord across the harbour is plainly not a
   road, which is the whole argument for the dash made visible. Both checked in dev **and** against the
   built `dist/` served with an SPA fallback. That capability is the durable part of this row.
-- 🟠 **Markers, direction chevrons and tap-to-focus are not built.** `proposals/06 §8d` settles what a
-  tap means; building selectable markers before M7 would ship an interaction no spec covers.
+- ✅ **M7 is built** — markers, direction chevrons, the focus camera and the whole §8d interaction.
+  Three things from it are worth carrying forward:
+
+  **The shapes are one vocabulary across the map and the rail, from one call.** `routeMarkers` runs
+  once on the screen and feeds both the map's markers and the list's sequence nodes, because a rider
+  who sees a hexagon on the map and scrolls down to a circle is looking at two claims about one stop.
+
+  **Two wrong diagnoses of one symptom.** The first marker pass came out as an unbroken chain of blobs;
+  I read that as *too big* and halved them, and the owner then reported they were too small. The cause
+  was the **fill** — a marker in the line's own colour has nothing to separate it from the line — and
+  inverting against the casing let the original sizes read cleanly. A symptom with an obvious cause is
+  worth one more look before acting on it.
+
+  **The kerb offset was right, and only measurement could say so.** Asked whether the markers should
+  snap left of the path, the answer from the drawn pixels is that they already sit ~7 px left *of
+  travel* — which on a north–south route is screen-right. Reasoning is worthless here: the mockup's
+  version of this bug had reasoning that agreed with itself and put every marker on the far kerb.
+- 🔴 **The `⋯` was undeclared until `apps/mobile` was dropped**, and that is the shared spec's one
+  structural limit showing. It cannot express *"this control exists on one renderer"*, and the RN row
+  has no `⋯` because it has no map to focus. With the parity requirement lifted by the owner,
+  `stopActionsLabel` is a declared slot — a sibling repeat over the stops, projected from its accessible
+  name exactly as the bus tokens are — and injecting a defect into that name fails 29 states.
+  `apps/mobile/test/route-detail-states.test.tsx` is deleted; it measured 21 states of the RN screen and
+  nothing measures them now (`docs/07`). The app itself is deliberately **not** deleted: that is a real
+  architectural change and wants its own commit and ADR.
+- 🟠 **The stop markers cannot be declared at all, and the reason is environmental.** A marker exists
+  only once MapLibre has a WebGL context, and every conformance suite here runs in jsdom, which has
+  none — so a slot for them would be a claim no driver could ever satisfy. `route-markers.spec.json`
+  holds the rule and CDP browser checks hold the rendering. That is weaker than a projection and it is
+  the honest option: the alternative is a suite that configures the environment away, which is the
+  failure ADR-123's sweep is named for.
+- 🟠 **Round 5's bend avoidance for the chevrons is not reproduced.** MapLibre places symbols on its own
+  schedule and exposes no hook to slide a mark to the straightest spot in its slot; the alternative is
+  owning placement, which is what a symbol layer exists to avoid.
 - ✅ **The map lab draws geometry now**, which is the hole this ADR blamed for the worker bug surviving
   M3. `/lab/#map` puts all three of `routePathView`'s answers side by side on **real routes** — `KMB 1`
   surveyed, `KMB R215` sketched, `CTB 20R` drawing nothing — through the shipping `RouteMap` rather than

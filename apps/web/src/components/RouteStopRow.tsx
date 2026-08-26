@@ -1,4 +1,4 @@
-import type { EtaUrgency, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
+import type { EtaUrgency, RouteStopArrival, RouteStopRowView, StopMarkerKind } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { Star } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
@@ -26,10 +26,17 @@ export function RouteStopRow({
   animateIn,
   arrivalsPending = false,
   tokens,
+  kind,
   onPress,
   onMenu,
   registerRow,
 }: {
+  /**
+   * What this stop is — from `routeMarkers`, the same call that shapes the map's markers. Passed in
+   * rather than derived here so the list and the map cannot disagree: "the first stop is a terminus"
+   * is a domain rule (ADR-068), and a row deciding it for itself is the second spelling that drifts.
+   */
+  kind: StopMarkerKind
   row: RouteStopRowView
   /**
    * The route's live round has not answered yet, so a row with no arrivals is **waiting** rather than
@@ -137,15 +144,35 @@ export function RouteStopRow({
               style={{ top: NODE_CENTRE, bottom: 0, width: 2, left: RAIL_WIDTH / 2 - 1 }}
             />
           ) : null}
+          {/*
+            **The node's SHAPE is the same vocabulary the map uses** — a square for a terminus, a
+            hexagon for a bus-bus interchange, a circle for every other stop — and it is the *same
+            answer*, not a matching one: `routeMarkers` is called once on the screen and its result
+            feeds both the map's markers and this. A rider who sees a hexagon on the map and scrolls to
+            find a circle in the list would be looking at two claims about one stop.
+
+            Drawn as an SVG behind the number rather than as a CSS shape, because a border has to
+            follow the outline: `rounded-full` gives a circle for free and `clip-path` would give a
+            hexagon with its border clipped off. One `<path>` per kind, filled and stroked, is the same
+            technique the map marker uses and keeps the two files' geometry legibly related.
+          */}
           <span
-            className={`absolute flex items-center justify-center rounded-full border text-caption tabular-nums ${
-              here
-                ? 'border-accent bg-accent text-accent-contrast'
-                : 'border-border bg-surface text-subtle'
-            }`}
+            className="absolute flex items-center justify-center text-caption tabular-nums"
             style={{ top: NODE_TOP, left: (RAIL_WIDTH - NODE) / 2, width: NODE, height: NODE }}
           >
-            {row.seq}
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className={`absolute inset-0 h-full w-full ${
+                here ? 'fill-accent stroke-accent' : 'fill-surface stroke-border'
+              }`}
+              strokeWidth={2}
+            >
+              <path d={NODE_SHAPE[kind]} />
+            </svg>
+            <span className={`relative ${here ? 'text-accent-contrast' : 'text-subtle'}`}>
+              {row.seq}
+            </span>
           </span>
           {row.saved ? (
             // Drawn on the node's corner, and — as on the RN rail — the node itself is unchanged, so a saved
@@ -324,6 +351,19 @@ export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; fir
       )}
     </span>
   )
+}
+
+/**
+ * The rail node's outline, per kind, on a 24×24 grid — the list's half of the map's shape vocabulary
+ * (`routeMarkerElement.ts` draws the same three at marker sizes).
+ *
+ * Inset by 1 so a 2 px stroke sits inside the box rather than being clipped by the viewBox, which is
+ * why none of these starts at 0.
+ */
+const NODE_SHAPE: Record<StopMarkerKind, string> = {
+  terminus: 'M2 2 h20 v20 h-20 Z',
+  interchange: 'M7 1.5 h10 l5 10.5 -5 10.5 h-10 l-5 -10.5 Z',
+  stop: 'M12 1.5 a10.5 10.5 0 1 0 0.01 0 Z',
 }
 
 /** The flip cascade's beat and its cap — `apps/mobile`'s `Math.min(index, 10) * 26`, value for value. */

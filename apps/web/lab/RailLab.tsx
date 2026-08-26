@@ -122,6 +122,7 @@ export function RailLab() {
             tokens={byRow.get(index)}
             onPress={() => {}}
             onMenu={() => {}}
+            kind="stop"
             registerRow={() => {}}
           />
         ))}

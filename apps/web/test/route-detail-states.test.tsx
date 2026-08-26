@@ -244,9 +244,16 @@ function readTree(host: HTMLElement): RenderedTree {
     if (value && !noise.has(value)) text.push(value)
     node = walker.nextNode()
   }
-  // A bus token is a *graphic*: its accessible name is an attribute, not a text node, so the projection would
-  // never see it. Appending the labels in the model's order is this renderer's honest reading of an element
-  // whose whole content is its name — the same judgement the RN driver makes about its overlay.
+  // Two kinds of node whose whole content is their accessible NAME, appended in document order because
+  // a projection reads text and these have none.
+  //
+  // A bus token is a *graphic*: its name is an attribute, not a text node. The `⋯` beside each row is
+  // the same shape for a different reason — its content is three drawn dots, deliberately, because the
+  // literal character would land in every state's projection as a stray glyph (see `stopActions`).
+  // Appending both is this renderer's honest reading of an element that says nothing except its name.
+  for (const menu of host.querySelectorAll('button[aria-label^="Actions for"]')) {
+    text.push(menu.getAttribute('aria-label') ?? '')
+  }
   for (const token of host.querySelectorAll('[role="img"][aria-label]')) {
     text.push(token.getAttribute('aria-label') ?? '')
   }
@@ -908,6 +915,7 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
           ]}
           onPress={() => {}}
           onMenu={() => {}}
+          kind="stop"
           registerRow={() => {}}
         />,
       )

@@ -19,8 +19,16 @@
 const SIZE = 13
 /** Stroke weight. Finer than the line's 5 px, so the notch never reads as a break in it. */
 const WEIGHT = 1.9
-/** Gap between the two halves, settled in round 5 as the "normal" of three options. */
-const GAP = 3.1
+
+/**
+ * Gap between the two halves.
+ *
+ * Round 5 settled the "normal" of three options at 3.1, and on the real map that read as one thick
+ * mark rather than two — the mockup drew these much larger, and a gap that survives at 40 px closes up
+ * at 13. Opened by **one stroke width**, which is the smallest increment that makes the pair legible as
+ * a pair and is the owner's own measure for it.
+ */
+const GAP = 3.1 + WEIGHT
 
 /**
  * One double chevron, pointing **right** — which is along the line, because MapLibre rotates a
