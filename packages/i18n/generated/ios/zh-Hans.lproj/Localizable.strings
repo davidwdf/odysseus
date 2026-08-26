@@ -119,6 +119,10 @@
 /* {stop} → %1$@ */
 "busApproaching" = "巴士即将到达%1$@";
 /* {stop} → %1$@ */
+"routeStopMarker" = "车站：%1$@";
+"routeStopTerminus" = "总站";
+"routeStopInterchange" = "转乘站";
+/* {stop} → %1$@ */
 "busAtStop" = "巴士在%1$@";
 /* {place} → %1$@ */
 "circularVia" = "经%1$@循环线";

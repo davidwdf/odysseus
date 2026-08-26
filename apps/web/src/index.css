@@ -610,3 +610,24 @@
 .dark .map-tiles-invert {
   filter: invert(1) hue-rotate(180deg) brightness(1.2);
 }
+
+/* The route map's stop markers (ADR-155, `routeMarkerElement.ts`).
+   Structure only. The FILL and STROKE are set inline from `MAP_COLOR`, exactly as the route line is —
+   the map palette is a JS export rather than a CSS variable (`packages/ui/tokens.json` emits semantic
+   colours to `tokens.css`, not the map ones), so a rule here could not read them without a second
+   declaration of the same four values. Shape carries the meaning (square = terminus, hexagon =
+   interchange) and colour carries none, deliberately: a rider distinguishing termini by hue is a rider
+   who cannot in the dark. A selected marker grows rather than recolouring, for the same reason. */
+.route-marker {
+  display: block;
+  /* The markers sit ON the line. Without this the stroke is drawn under the fill, the hairline that
+     separates a marker from the line beneath it halves in width, and a marker over its own route
+     disappears at exactly the zoom a rider is looking for it. */
+  paint-order: stroke fill;
+}
+/* No `.route-marker-selected` rule, and that is a decision rather than an omission. The obvious
+   treatment is a drop-shadow, which is a halo — and halos were built, demonstrated and cut in round 5
+   of the mockups (`docs/proposals/06 §8d`), on the owner's *"cleaner without the halos"*. A selected
+   marker is 1.45× the size with a heavier stroke, which is the same signal without a second visual
+   language on the map. It would also have needed a raw `rgb()`, which `check-no-raw-colours` caught —
+   two reasons pointing the same way. */

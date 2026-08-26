@@ -1,5 +1,6 @@
 import {
   applyLiveEtasToRouteDetail,
+  displayName,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
   type RouteFactKey,
@@ -33,6 +34,7 @@ import { usePreferences } from '../lib/preferences'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
 import { CollapsingHeader } from '../shell/CollapsingHeader'
+import { COLLAPSED_HEADER_TOP } from '../shell/layout'
 
 /**
  * Route detail, rendered by React DOM from the identical kernel function the React Native screen uses
@@ -121,14 +123,23 @@ export function RouteDetail() {
   // 30-second one, and the stop list is useful long before the geography arrives (ADR-152).
   const routePath = useRoutePath(id)
   /**
-   * The stops as plain coordinates, in travel order — the map's framing, and the raw material for
-   * the sketch it falls back to. Taken from the **static** payload rather than the live-merged one:
-   * a stop's position is not a reading, and deriving it from `detail` would recompute the array
-   * every time an arrival ticked.
+   * The stops as the map needs them — where each one is, and what it is called — in travel order.
+   *
+   * Taken from the **static** payload rather than the live-merged one: a stop's position and name are
+   * not readings, and deriving them from `detail` would rebuild every marker each time an arrival
+   * ticked. The name is **`displayName`'s** — the kernel function `routeDetailView` builds every row's
+   * name with — rather than a second spelling of it, which is the mistake ADR-093 decision 11 records
+   * this screen making once already. It is also what `routeMarkers` reads its `BBI` token out of, and
+   * `titleCaseName` keeps that in capitals; nothing else states that coupling, so `route-markers.test.ts`
+   * pins it.
    */
   const stopPoints = useMemo(
-    () => (query.data?.stops ?? []).map((s) => s.stop.location),
-    [query.data?.stops],
+    () =>
+      (query.data?.stops ?? []).map((s) => ({
+        location: s.stop.location,
+        name: displayName(s.stop.name[locale]).label,
+      })),
+    [query.data?.stops, locale],
   )
 
   /**
@@ -240,6 +251,28 @@ export function RouteDetail() {
     if (el === null) rows.current.delete(index)
     else rows.current.set(index, el)
   }, [])
+  /**
+   * The stop the rider is looking at on the map — set by tapping a marker, and the camera follows it
+   * (`RouteMap`). `undefined` until they ask: a screen that opened with a stop pre-selected would be
+   * answering a question nobody put.
+   *
+   * ⚠️ **Row taps do not set this yet.** §8d makes a row tap the primary way to focus a stop and moves
+   * the action sheet onto a per-row `⋯`, but that is a *declared* interaction in
+   * `route-detail.spec.json` (`stopName` → "a sheet offering to save this route…"), so it moves with
+   * the spec and both drivers rather than ahead of them. Until then a marker is the only way in, which
+   * is a smaller surface than §8d describes and not a different one.
+   */
+  const [focusedIndex, setFocusedIndex] = useState<number | undefined>(undefined)
+  const focusStop = useCallback((index: number) => {
+    setFocusedIndex(index)
+    // `nearest`, not `start`. The map sits **above** the list in one scrolling page, so scrolling a row
+    // to the top would push the map — the thing the rider just tapped — off the screen to show them the
+    // row it was already about. `nearest` does nothing when the row is visible and moves the minimum
+    // when it is not. (The mockup had no such tension: it split the screen into a map pane and a list
+    // pane that scrolled independently. This layout is a single column, and that is the trade.)
+    rows.current.get(index)?.scrollIntoView({ block: 'nearest' })
+  }, [])
+
   const list = useRef<HTMLDivElement | null>(null)
   const stopCount = view?.stops.length ?? 0
 
@@ -462,7 +495,23 @@ export function RouteDetail() {
             path={routePath.data}
             pending={routePath.isPending}
             stops={stopPoints}
-            className="mt-3 px-4"
+            focusedIndex={focusedIndex}
+            onSelectStop={focusStop}
+            /**
+             * **Sticky, and that is what makes a marker tappable at all.**
+             *
+             * The mockup put the map and the list in two independently scrolling panes; this is one
+             * column, and without `sticky` the two halves of §8d's marker interaction contradict each
+             * other — tapping a marker scrolls its row into view, which on a 25-stop route moves the
+             * page ~1 000 px and takes the map the rider just touched entirely off screen. Measured, on
+             * the first build of it. `nearest` did not save it: the row genuinely is that far down.
+             *
+             * Sticky is the single-column equivalent of the mockup's split, and it earns its keep twice
+             * over: the camera flight is worth watching, and a rider scrolling the list can now see
+             * where each stop is without scrolling back up.
+             */
+            className="sticky z-10 mt-3 px-4"
+            style={{ top: COLLAPSED_HEADER_TOP }}
           />
 
           {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read

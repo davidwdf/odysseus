@@ -100,6 +100,33 @@ export function centreOf(bounds: LatLngBounds): LatLng {
   return { lat: (bounds.south + bounds.north) / 2, lng: (bounds.west + bounds.east) / 2 }
 }
 
+/**
+ * The zoom a **focused** stop is shown at: close enough to read which side of the road it is on.
+ *
+ * That is the question the kerb offset exists to answer (`route-markers.ts`), and it is unreadable at
+ * the zoom a whole route is framed at — so focusing a stop has to move the camera in as well as across.
+ * 16 is the level at which a Lands Department tile draws individual buildings and both kerbs of a road.
+ */
+export const FOCUS_STOP_ZOOM = 16
+
+/**
+ * How far to zoom when a rider focuses a stop, given where they already are.
+ *
+ * **A floor, not a target**, and that is the whole rule: `Math.max` means a rider who has zoomed in
+ * further keeps their zoom and only the centre moves. Pulling them back out to a fixed level would undo
+ * a deliberate action of theirs to satisfy a default of ours, and it is the mistake that makes a "find
+ * my stop" button feel like it is fighting you.
+ *
+ * Clamped, because a floor that exceeds what the source serves is a hole rather than a closer map — the
+ * same reason {@link clampZoom} exists at all, and the reason this composes with it rather than being a
+ * bare `Math.max` at a call site.
+ *
+ * @spec mercator#focusZoom
+ */
+export function focusZoom(current: number, zooms: ZoomRange): number {
+  return clampZoom(Math.max(current, FOCUS_STOP_ZOOM), zooms)
+}
+
 /** Width of the whole world in pixels at `zoom` — the `scale` every projection below multiplies by.
  *
  * @spec mercator#worldScale

@@ -1,12 +1,14 @@
-import type { LatLng, RoutePath } from '@nextbus/core'
-import { boundsOf, centreOf, routePathView } from '@nextbus/core'
+import type { LatLng, MarkerStop, RoutePath } from '@nextbus/core'
+import { boundsOf, centreOf, focusZoom, routeMarkers, routePathView } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { MAP_COLOR } from '@nextbus/ui'
-import type { Map as MapLibreMap } from 'maplibre-gl'
+import { type Map as MapLibreMap, Marker } from 'maplibre-gl'
 import { useEffect, useMemo, useState } from 'react'
+import { mapProvider } from '../adapters/mapProvider'
 import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
 import { MapView } from './MapView'
+import { routeMarkerElement } from './routeMarkerElement'
 
 const SOURCE = 'route-line'
 const CASING_LAYER = 'route-line-casing'
@@ -52,15 +54,24 @@ export function RouteMap({
   path,
   pending,
   stops,
+  focusedIndex,
+  onSelectStop,
   className,
+  style,
 }: {
   /** The edge's answer. `undefined` means it has not arrived — see `pending`. */
   path: RoutePath | undefined
   /** True while the answer is in flight. Not the same as an answer of “no line”. */
   pending: boolean
   /** The route's stops in travel order — the sketch's raw material, and the map's framing. */
-  stops: readonly LatLng[]
+  stops: readonly MarkerStop[]
+  /** The stop the rider has focused, by index. The camera goes there; the marker grows. */
+  focusedIndex?: number | undefined
+  /** A marker was tapped. The screen decides what that means — here it is only reported. */
+  onSelectStop?: ((index: number) => void) | undefined
   className?: string
+  /** Inline geometry — the sticky offset, which is a layout value the screen owns (ADR-112). */
+  style?: React.CSSProperties
 }) {
   const locale = useLocale()
   const mode = useAppearance()
@@ -82,10 +93,18 @@ export function RouteMap({
         ? [[c[0], c[1]] as [number, number]]
         : [],
     )
-    return routePathView(path?.available ?? false, line, stops)
+    return routePathView(
+      path?.available ?? false,
+      line,
+      stops.map((s) => s.location),
+    )
   }, [path, pending, stops])
 
   const drawn = presentation && presentation.kind !== 'none' ? presentation.line : undefined
+
+  // What glyph each stop gets and which way it faces — a kernel rule, corpus-pinned, so the two
+  // renderers cannot disagree about which stops are termini (ADR-068).
+  const markers = useMemo(() => routeMarkers(stops), [stops])
 
   // The line's extent and its middle, from the kernel. Both are *numbers a renderer would otherwise
   // compute*, which is the thing two renderers do differently (ADR-068) — so `boundsOf`/`centreOf`
@@ -174,6 +193,65 @@ export function RouteMap({
     // re-set four properties to the values they already hold.
   }, [map, mode, presentation?.kind])
 
+  /**
+   * The markers, rebuilt whenever what they say changes.
+   *
+   * `Marker` owns its own DOM and its own projection, so these are created imperatively and torn down
+   * together — cheap at a route's 13–41 stops, and the alternative (diffing 41 markers to move one
+   * selection) buys nothing at this size while adding a second place for the selected index to live.
+   *
+   * Deliberately keyed on `presentation` as well as `markers`: a route whose answer is `none` renders
+   * no map at all, so its markers must go with it rather than outliving the map they were anchored to.
+   */
+  useEffect(() => {
+    if (!map || presentation?.kind === undefined || presentation.kind === 'none') return
+    const dark = mode === 'dark'
+    const placed = markers.map((marker) => {
+      const stop = stops[marker.index] as MarkerStop
+      const { element, offset } = routeMarkerElement({
+        kind: marker.kind,
+        bearing: marker.bearing,
+        name: stop.name,
+        locale,
+        dark,
+        selected: marker.index === focusedIndex,
+        onSelect: () => onSelectStop?.(marker.index),
+      })
+      return new Marker({ element, offset })
+        .setLngLat([stop.location.lng, stop.location.lat])
+        .addTo(map)
+    })
+    return () => {
+      for (const m of placed) m.remove()
+    }
+  }, [map, markers, stops, locale, mode, focusedIndex, onSelectStop, presentation?.kind])
+
+  /**
+   * Fly to the focused stop — §8d's *"tap a stop row focuses it on the map"*, and the whole of what
+   * survived M6 (`proposals/06 §6b`).
+   *
+   * `flyTo` rather than `jumpTo` because the rider asked for this one: the arc is what connects where
+   * they were looking to where they are now, and a cut would leave them re-reading the map to find out
+   * what moved. `essential: true` so it still happens under *prefers-reduced-motion* — MapLibre would
+   * otherwise skip the animation, which here would silently become a jump rather than no motion, and a
+   * rider who asked to see a stop should see it either way.
+   *
+   * There is **no pan-to-suspend and no recentre affordance**, and that is the point of closing M6: the
+   * camera only ever moves because a rider tapped something, so nothing is fighting them for it.
+   */
+  useEffect(() => {
+    if (!map || focusedIndex === undefined) return
+    const stop = stops[focusedIndex]
+    if (!stop) return
+    map.flyTo({
+      center: [stop.location.lng, stop.location.lat],
+      // The source's own range, not a compiled-in ceiling: LandsD answers 404 above z20 and the
+      // map would render as a hole rather than a coarser map (ADR-049).
+      zoom: focusZoom(map.getZoom(), mapProvider),
+      essential: true,
+    })
+  }, [map, focusedIndex, stops])
+
   // Nothing to show and nothing coming: no map. A basemap with no line on it is not a route screen's
   // job, and reserving space for a line that will never arrive is worse than the absence.
   if (presentation?.kind === 'none') return null
@@ -184,7 +262,7 @@ export function RouteMap({
   const centre = bounds ? centreOf(bounds) : HONG_KONG
 
   return (
-    <figure className={className} aria-label={t(locale, 'routePathLabel')}>
+    <figure className={className} style={style} aria-label={t(locale, 'routePathLabel')}>
       {presentation ? (
         <MapView
           centre={centre}

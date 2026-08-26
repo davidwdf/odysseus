@@ -54,3 +54,15 @@ export const CONTENT_INSET = `calc(${BAR_BOTTOM} + ${TAB_BAR_HEIGHT}px + ${TAB_B
  * `useSafeAreaInsets().top`; the DOM has to ask.
  */
 export const CONTENT_INSET_TOP = 'env(safe-area-inset-top, 0px)'
+
+/**
+ * The height of the **collapsed** header bar, safe area included — what a sticky element must clear to
+ * pin below the chrome rather than under it.
+ *
+ * The 60 is `.collapsing-header[data-collapsed="true"]`'s own height in `index.css`, and the two are
+ * two spellings of one number: a sticky map offset by less pins *behind* the bar, which is not a subtle
+ * failure — it hides the top of whatever is stuck there. Declared here rather than inlined at the one
+ * call site because the next thing that sticks under this header will need it too, and because the pair
+ * being in two files is exactly the kind of thing that drifts silently.
+ */
+export const COLLAPSED_HEADER_TOP = `calc(${CONTENT_INSET_TOP} + 60px)`

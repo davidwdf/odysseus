@@ -119,6 +119,10 @@
 /* {stop} → %1$@ */
 "busApproaching" = "Bus approaching %1$@";
 /* {stop} → %1$@ */
+"routeStopMarker" = "Stop: %1$@";
+"routeStopTerminus" = "Terminus";
+"routeStopInterchange" = "Interchange";
+/* {stop} → %1$@ */
 "busAtStop" = "Bus at %1$@";
 /* {place} → %1$@ */
 "circularVia" = "Circular via %1$@";

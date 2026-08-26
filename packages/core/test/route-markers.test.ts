@@ -6,6 +6,7 @@ import {
   routeMarkers,
   type StopMarker,
 } from '../src/route-markers'
+import { titleCaseName } from '../src/stop-name'
 import { specCases } from './corpus'
 
 /** Degrees. Three orders finer than a marker could show — see the corpus `doc`. */
@@ -37,6 +38,22 @@ describe('route-markers#routeMarkers', () => {
       expect(markers).toHaveLength(c.args.stops.length)
       expect(markers.map((m) => m.index)).toEqual(c.args.stops.map((_, i) => i))
     }
+  })
+
+  it('sees the interchange token a renderer will actually hand it', () => {
+    // **A coupling across two modules that nothing else states.** A screen has the *display* name, not
+    // the upstream one, so `routeMarkers` is fed the output of `titleCaseName` — which lower-cases
+    // every all-caps word it does not recognise. `BBI` is only preserved because it is in that
+    // function's `KEEP_UPPER` set, and dropping it there would silently turn every interchange on the
+    // map back into an ordinary circle with no test failing anywhere near either module.
+    const upstream = 'TSIM SHA TSUI BBI'
+    expect(titleCaseName(upstream)).toContain('BBI')
+    const [, marker] = routeMarkers([
+      { location: { lat: 22.3, lng: 114.17 }, name: 'A' },
+      { location: { lat: 22.31, lng: 114.17 }, name: titleCaseName(upstream) },
+      { location: { lat: 22.32, lng: 114.17 }, name: 'B' },
+    ])
+    expect(marker?.kind).toBe('interchange')
   })
 
   it('offsets to the left of travel, which is the kerb a Hong Kong rider boards from', () => {

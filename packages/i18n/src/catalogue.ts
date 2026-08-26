@@ -789,6 +789,32 @@ export const CATALOGUE = {
    * stop is one a rider standing there can board, and a bus approaching one is not. It is also the label a
    * token on the *origin* node gets, which is the only token on the rail a rider can act on immediately.
    */
+  /**
+   * A stop's marker on the route map. `{stop}` is the stop's display name.
+   *
+   * The marker is a **graphic with no text**, so this is the whole of what a screen reader gets — and
+   * without it the map is a row of unlabelled buttons, which is how `react-native-web` silently lost
+   * six control states in WP6-7. Says "stop" rather than naming the shape: a rider cannot act on
+   * "hexagon", and the shape's meaning (terminus, interchange) is carried by `routeStopTerminus` and
+   * `routeStopInterchange` where it is true.
+   */
+  routeStopMarker: {
+    en: 'Stop: {stop}',
+    'zh-Hant': '車站：{stop}',
+    'zh-Hans': '车站：{stop}',
+  },
+  /** Appended to a terminus marker's name — the end of the line, which a shape alone cannot say. */
+  routeStopTerminus: {
+    en: 'Terminus',
+    'zh-Hant': '總站',
+    'zh-Hans': '总站',
+  },
+  /** Appended to an interchange marker's name. `BBI` is the operators' own abbreviation. */
+  routeStopInterchange: {
+    en: 'Interchange',
+    'zh-Hant': '轉乘站',
+    'zh-Hans': '转乘站',
+  },
   busAtStop: {
     en: 'Bus at {stop}',
     'zh-Hant': '巴士在{stop}',

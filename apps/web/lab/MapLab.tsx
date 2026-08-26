@@ -1,4 +1,4 @@
-import type { LatLng, RoutePath } from '@nextbus/core'
+import { displayName, type MarkerStop, type RoutePath } from '@nextbus/core'
 import { useEffect, useState } from 'react'
 import { dataSource } from '../src/adapters/datasource'
 import { landsdMapProvider } from '../src/adapters/mapProvider'
@@ -124,7 +124,7 @@ const ROUTES = [
 function RouteLines() {
   const [i, setI] = useState(0)
   const [path, setPath] = useState<RoutePath | undefined>(undefined)
-  const [stops, setStops] = useState<readonly LatLng[]>([])
+  const [stops, setStops] = useState<readonly MarkerStop[]>([])
   const [pending, setPending] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const route = ROUTES[i] ?? ROUTES[0]
@@ -139,7 +139,12 @@ function RouteLines() {
       .then(([p, detail]) => {
         if (cancelled) return
         setPath(p)
-        setStops(detail.stops.map((row) => row.stop.location))
+        setStops(
+          detail.stops.map((row) => ({
+            location: row.stop.location,
+            name: displayName(row.stop.name.en).label,
+          })),
+        )
         setPending(false)
       })
       .catch((e: unknown) => {

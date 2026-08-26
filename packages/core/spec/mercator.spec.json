@@ -993,6 +993,83 @@
           }
         }
       ]
+    },
+    "focusZoom": {
+      "doc": "How far to zoom when a rider focuses a stop. Returns a zoom, exact equality — the value is a camera instruction rather than a measurement, so there is nothing to be approximately right about. `zooms` is the tile source's range, LandsD's z10–20 in every row but the clamp ones. The constant is 16: the level at which a LandsD tile draws individual buildings and both kerbs of a road, which is what makes the stop markers' kerb offset legible at all.",
+      "cases": [
+        {
+          "name": "a-whole-route-view-is-pulled-in-to-the-floor",
+          "why": "The ordinary case. A rider looking at a 40 km route sits around z11, where a marker offset of a few pixels says nothing — focusing a stop has to move the camera IN as well as across, or the tap appears to do nothing but recentre.",
+          "args": {
+            "current": 11,
+            "zooms": {
+              "minZoom": 10,
+              "maxZoom": 20
+            }
+          },
+          "expect": 16
+        },
+        {
+          "name": "a-rider-already-closer-keeps-their-zoom",
+          "why": "The rule that matters, and the one a plain assignment gets wrong: this is a FLOOR. A rider who pinched to z19 to read a street name and then taps a stop must not be yanked back out to 16 — undoing a deliberate action of theirs to satisfy a default of ours is what makes a \"find my stop\" control feel like it is fighting you.",
+          "args": {
+            "current": 19,
+            "zooms": {
+              "minZoom": 10,
+              "maxZoom": 20
+            }
+          },
+          "expect": 19
+        },
+        {
+          "name": "exactly-at-the-floor-does-not-move",
+          "why": "The boundary. `Math.max` and a hand-written `>` agree everywhere except here, and a camera re-issued the same zoom would restart its flight animation on every tap.",
+          "args": {
+            "current": 16,
+            "zooms": {
+              "minZoom": 10,
+              "maxZoom": 20
+            }
+          },
+          "expect": 16
+        },
+        {
+          "name": "the-floor-is-clamped-to-what-the-source-serves",
+          "why": "A source that stops at z14 must not be asked for z16: LandsD answers 404 above its range and the map renders as a hole rather than a coarser map (ADR-049). This is why the rule composes with `clampZoom` rather than being a bare `Math.max` at a call site — a hand-written floor in a renderer would skip it.",
+          "args": {
+            "current": 11,
+            "zooms": {
+              "minZoom": 10,
+              "maxZoom": 14
+            }
+          },
+          "expect": 14
+        },
+        {
+          "name": "a-zoom-beyond-the-source-is-brought-back-into-range",
+          "why": "The other end of the same clamp. `current` comes from a live map and is not ours to trust — an engine mid-flight, or a source swapped for a shallower one, can hand back a zoom the tiles cannot answer.",
+          "args": {
+            "current": 22,
+            "zooms": {
+              "minZoom": 10,
+              "maxZoom": 20
+            }
+          },
+          "expect": 20
+        },
+        {
+          "name": "a-fractional-zoom-is-preserved-not-rounded",
+          "why": "A real map zoom is continuous — a rider pinches to 17.4, not to 17. `clampZoom` does not round and neither does this; a port that snapped to an integer would jerk the camera on every focus away from a zoom the rider chose.",
+          "args": {
+            "current": 17.4,
+            "zooms": {
+              "minZoom": 10,
+              "maxZoom": 20
+            }
+          },
+          "expect": 17.4
+        }
+      ]
     }
   }
 }

@@ -123,6 +123,10 @@
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">巴士即将到达%1$s</string>
 	<!-- {stop} → %1$s -->
+	<string name="routeStopMarker">车站：%1$s</string>
+	<string name="routeStopTerminus">总站</string>
+	<string name="routeStopInterchange">转乘站</string>
+	<!-- {stop} → %1$s -->
 	<string name="busAtStop">巴士在%1$s</string>
 	<!-- {place} → %1$s -->
 	<string name="circularVia">经%1$s循环线</string>

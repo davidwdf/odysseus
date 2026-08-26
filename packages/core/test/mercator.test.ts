@@ -5,6 +5,7 @@ import {
   centreOf,
   clampZoom,
   fitZoom,
+  focusZoom,
   type LatLngBounds,
   latToWorldY,
   lngToWorldX,
@@ -51,6 +52,15 @@ describe('mercator#centreOf', () => {
   for (const c of cases<{ bounds: LatLngBounds }, LatLng>('centreOf')) {
     it(c.name, () => {
       expect(centreOf(c.args.bounds)).toEqual(c.expect)
+    })
+  }
+})
+
+describe('mercator#focusZoom', () => {
+  // Exact equality, no tolerance: a zoom here is a camera instruction, not a measurement.
+  for (const c of cases<{ current: number; zooms: ZoomRange }, number>('focusZoom')) {
+    it(c.name, () => {
+      expect(focusZoom(c.args.current, c.args.zooms)).toBe(c.expect)
     })
   }
 })
