@@ -10546,6 +10546,27 @@ pre-existing and unaddressed; it earned its keep here.
 
   The general shape is worth keeping: **when a library positions an element, its `transform` is not
   yours**, and the symptom is a transition that silently does nothing rather than an error.
+- ✅ **The bus token morphs between stop shapes** rather than changing at the instant of a hop, and the
+  route to it is worth recording because the obvious one does not work.
+
+  All three shapes are **24-point polygons**. A browser interpolates `clip-path: polygon()` only
+  between polygons of equal point count, so a `border-radius` disc and a six-vertex hexagon have no
+  correspondence to animate through; giving every shape the same 24 vertices, with the extras spread
+  along each edge, creates one. An SVG `<path>` would have needed the same trick for the same reason —
+  the technique is not what was missing.
+
+  What *was* missing is that a token which moves between rows is **re-parented**, so React gives it a
+  fresh element with no previously-resolved style — and a CSS transition has nothing to start from.
+  Measured rather than assumed: the hop from a segment onto the node above it (a different row) ran no
+  `clip-path` transition at all, while the hop from a node onto the segment below it — the *same* row,
+  the *same* element — ran one happily. So the morph is `element.animate()`, exactly as the travel
+  beside it is, and for exactly the same reason. **A re-parent defeats CSS transitions for position and
+  for shape alike**, which is the sentence worth carrying forward.
+
+  Two dead ends on the way, both instructive: setting the departure shape inline and clearing it in the
+  same task is coalesced into one style resolution and transitions nothing; and putting the resting
+  shape in the same inline style you then clear removes the destination along with the override, which
+  is why the resting shape lives in a `--bus-clip` custom property.
 - 🟠 **Haptics on the detents are a native porting note, not a web feature.** Pairing a detent crossing
   with a tap is worth doing on iOS and Android; `navigator.vibrate` is Android-Chrome-only and far too
   blunt to stand in for it, so the web renderer does nothing rather than something worse.

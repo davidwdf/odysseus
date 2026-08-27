@@ -106,11 +106,20 @@ export function RailBusToken({
         A single ordered coordinate answers both, where the ordinal answers neither.
       */
       data-bus-at={bus.kind === 'node' ? bus.index : bus.from + HALF_STEP}
-      className={`pointer-events-none absolute flex items-center justify-center bg-accent ${TOKEN_SHAPE[shape]}`}
+      {...{ [BUS_SHAPE_ATTR]: shape }}
+      className="bus-shape pointer-events-none absolute flex items-center justify-center bg-accent"
       style={{
-        // A hexagon has no border-radius, so it is clipped. `clip-path` is safe here where it is not on
-        // the rail node: the token is a flat fill with no outline to clip away.
-        ...(shape === 'interchange' ? { clipPath: HEX_CLIP } : {}),
+        // **A custom property, not `clip-path` itself**, and that indirection is what makes the morph
+        // possible. `useRailFlip` starts a travelling token at the shape it is leaving by writing an
+        // inline `clip-path`, then clears it — and clearing has to fall back to the *destination*
+        // shape, which it cannot do if the destination is the very declaration being cleared. The
+        // stylesheet reads `clip-path: var(--bus-clip)`, so the inline value is an override and the
+        // variable is the resting truth.
+        //
+        // `clip-path` at all — rather than `border-radius` — because a clip is what one shape can
+        // become another through. Safe here where it would not be on the rail node: the token is a
+        // flat fill with no outline for a clip to cut away.
+        ...({ '--bus-clip': TOKEN_CLIP[shape] } as React.CSSProperties),
         top: bus.kind === 'node' ? AT_NODE : ON_SEGMENT,
         left: RAIL_WIDTH / 2 - TOKEN / 2,
         width: TOKEN,
@@ -152,18 +161,35 @@ export const RAIL_WIDTH = 44
  * interchange, a disc everywhere else — so the map, the rail and the bus all speak one vocabulary.
  *
  * Only where the bus is **at a node**. A bus on the segment *between* two stops is at no stop at all,
- * and giving it the shape of one it has not reached yet would be the token making a claim the data does
- * not support — the same reason it sits at a midpoint rather than a fraction of the way along (ADR-030).
+ * and giving it the shape of one it has not reached would be the token making a claim the data does not
+ * support — the same reason it sits at a midpoint rather than a fraction of the way along (ADR-030).
  * Those stay discs, which is also the shape they have always had.
+ *
+ * ## Why all three are 24-point polygons
+ *
+ * So they can **morph into one another**. A browser interpolates `clip-path: polygon()` only between
+ * polygons with the same number of points, so a disc drawn as `border-radius` and a hexagon drawn as
+ * six vertices cannot tween — there is no correspondence between them to animate. Giving every shape
+ * the same 24 vertices, with the extra ones spread evenly along each edge, creates that correspondence:
+ * a square's edge midpoints slide out into a circle's arc, a hexagon's into its own.
+ *
+ * 24 because it divides by 4 and by 6, and because at 26 px a 24-gon is a disc — no eye can find the
+ * flats, and generating them from `cos`/`sin` in a build step would be three constants' worth of
+ * machinery to save nothing.
  */
-const TOKEN_SHAPE: Record<StopMarkerKind, string> = {
-  terminus: 'rounded-[5px]',
-  interchange: '',
-  stop: 'rounded-full',
+const TOKEN_CLIP: Record<StopMarkerKind, string> = {
+  stop: 'polygon(100.00% 50.00%, 98.30% 62.94%, 93.30% 75.00%, 85.36% 85.36%, 75.00% 93.30%, 62.94% 98.30%, 50.00% 100.00%, 37.06% 98.30%, 25.00% 93.30%, 14.64% 85.36%, 6.70% 75.00%, 1.70% 62.94%, 0.00% 50.00%, 1.70% 37.06%, 6.70% 25.00%, 14.64% 14.64%, 25.00% 6.70%, 37.06% 1.70%, 50.00% 0.00%, 62.94% 1.70%, 75.00% 6.70%, 85.36% 14.64%, 93.30% 25.00%, 98.30% 37.06%)',
+  terminus:
+    'polygon(85.36% 85.36%, 73.57% 85.36%, 61.79% 85.36%, 50.00% 85.36%, 38.21% 85.36%, 26.43% 85.36%, 14.64% 85.36%, 14.64% 73.57%, 14.64% 61.79%, 14.64% 50.00%, 14.64% 38.21%, 14.64% 26.43%, 14.64% 14.64%, 26.43% 14.64%, 38.21% 14.64%, 50.00% 14.64%, 61.79% 14.64%, 73.57% 14.64%, 85.36% 14.64%, 85.36% 26.43%, 85.36% 38.21%, 85.36% 50.00%, 85.36% 61.79%, 85.36% 73.57%)',
+  interchange:
+    'polygon(100.00% 50.00%, 93.75% 60.83%, 87.50% 71.65%, 81.25% 82.48%, 75.00% 93.30%, 62.50% 93.30%, 50.00% 93.30%, 37.50% 93.30%, 25.00% 93.30%, 18.75% 82.48%, 12.50% 71.65%, 6.25% 60.83%, 0.00% 50.00%, 6.25% 39.17%, 12.50% 28.35%, 18.75% 17.52%, 25.00% 6.70%, 37.50% 6.70%, 50.00% 6.70%, 62.50% 6.70%, 75.00% 6.70%, 81.25% 17.52%, 87.50% 28.35%, 93.75% 39.17%)',
 }
 
-/** A regular hexagon, in `clip-path`'s percentage space — the same six vertices as the rail node's. */
-const HEX_CLIP = 'polygon(100% 50%, 75% 93.3%, 25% 93.3%, 0% 50%, 25% 6.7%, 75% 6.7%)'
+/** The attribute a token carries its shape in, so `useRailFlip` can see what it is morphing *from*. */
+export const BUS_SHAPE_ATTR = 'data-bus-shape'
+
+/** The polygons, exported so the travel can start a token at the shape it is leaving. */
+export { TOKEN_CLIP }
 
 export const NODE = 26
 export const NODE_TOP = 12

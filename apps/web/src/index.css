@@ -657,3 +657,24 @@
    marker is 1.45× the size with a heavier stroke, which is the same signal without a second visual
    language on the map. It would also have needed a raw `rgb()`, which `check-no-raw-colours` caught —
    two reasons pointing the same way. */
+
+/* The bus token's outline, as a shape that can become another one (`RailBusToken`).
+
+   All three of its shapes are 24-point polygons, which is what makes them interpolable — a browser
+   tweens `clip-path: polygon()` only between polygons of equal point count, so a `border-radius` disc
+   and a six-vertex hexagon have no correspondence to animate between. The 500 ms matches the rail's travel (`TRAVEL_MS`), because the shape is changing *because* the bus is moving: they are one event
+   and should take one length of time.
+
+   A rider who has asked for less motion gets the destination shape at once, as they get the position. */
+.bus-shape {
+  /* The resting shape comes from the variable the component sets; an inline `clip-path` is the
+     departure shape `useRailFlip` writes for the length of one hop, and removing it is what the
+     transition acts on. */
+  clip-path: var(--bus-clip);
+  transition: clip-path 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bus-shape {
+    transition: none;
+  }
+}
