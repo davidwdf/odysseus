@@ -625,6 +625,32 @@
      disappears at exactly the zoom a rider is looking for it. */
   paint-order: stroke fill;
 }
+/* A selected stop **grows into** its size rather than being replaced at it.
+
+   The scale is on `.route-marker-scale`, a wrapper inside the marker, and **not** on the marker
+   itself — MapLibre writes `transform` inline on the element it positions, so a scale there is
+   overwritten on the next camera frame. Measured before it was moved: the host's computed transform
+   was the engine's translate matrix and nothing else, so the transition had nothing to act on and the
+   growth never happened at all.
+
+   `transform-origin: center` because the marker is anchored by its centre; any other origin slides
+   the glyph off the point it is meant to mark as it grows. */
+.route-marker-scale {
+  display: block;
+  transform-origin: center;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.route-marker-host-selected .route-marker-scale {
+  transform: scale(1.45);
+}
+/* At 160 ms this is a state change with a shape rather than an animation — but a rider who has asked
+   for less motion gets the state and not the shape, which is the same call `row-rise` documents. */
+@media (prefers-reduced-motion: reduce) {
+  .route-marker-scale {
+    transition: none;
+  }
+}
+
 /* No `.route-marker-selected` rule, and that is a decision rather than an omission. The obvious
    treatment is a drop-shadow, which is a halo — and halos were built, demonstrated and cut in round 5
    of the mockups (`docs/proposals/06 §8d`), on the owner's *"cleaner without the halos"*. A selected

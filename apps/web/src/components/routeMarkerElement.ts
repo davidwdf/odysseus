@@ -88,13 +88,14 @@ export function routeMarkerElement(opts: RouteMarkerOptions): {
   const element = document.createElement('button')
   element.type = 'button'
   element.className =
-    'block cursor-pointer border-0 bg-transparent p-0 leading-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus'
+    'route-marker-host block cursor-pointer border-0 bg-transparent p-0 leading-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus'
   element.setAttribute('aria-label', accessibleName(opts))
-  // `aria-current` rather than `aria-selected`: the map is not a listbox, and `current` is the role-free
-  // way to say "this is the one being looked at". `react-native-web@0.21` dropping `accessibilityState`
-  // is why every state on this side is spelled as an `aria-*` attribute (ADR-097).
-  if (opts.selected) element.setAttribute('aria-current', 'true')
-  element.innerHTML = svg(shape, opts.selected, opts.dark)
+  setMarkerSelected(element, opts.selected)
+  // **The SVG is wrapped**, and the wrapper is what scales. MapLibre writes `transform` *inline* on
+  // the marker element to position it, so a `transform: scale()` on the host is overwritten on the
+  // next camera frame — measured: the host's computed transform is the engine's translate matrix and
+  // nothing else. An inner element the engine does not touch is the only place a scale can survive.
+  element.innerHTML = `<span class="route-marker-scale">${svg(shape, opts.dark)}</span>`
   element.addEventListener('click', (e) => {
     // The map is listening for clicks too; a marker tap must not also be read as a tap on the map.
     e.stopPropagation()
@@ -124,6 +125,29 @@ function accessibleName({ kind, name, locale }: RouteMarkerOptions): string {
 }
 
 /**
+ * **Selection, applied to an element that already exists** — which is the whole reason it is a class
+ * and a CSS transform rather than a different SVG.
+ *
+ * The first build changed the glyph's `width` and `height` on selection, and rebuilt every marker
+ * whenever the focused stop changed. Both together meant a tap replaced 25 DOM nodes and the new
+ * selected one simply *appeared* at its larger size — a pop, with nothing to transition from, which is
+ * exactly what it looked like. Toggling a class on the marker already on the map lets CSS ease the
+ * scale, and it stops a selection change from touching the other twenty-four at all.
+ *
+ * The class goes on the **host** and the transform lands on its child (`.route-marker-scale`), because
+ * MapLibre owns the host's own `transform` — see the note where the wrapper is created.
+ *
+ * `aria-current` rather than `aria-selected`: the map is not a listbox, and `current` is the role-free
+ * way to say "this is the one being looked at". Spelled as an `aria-*` attribute like every other state
+ * on this side, because `react-native-web@0.21` drops `accessibilityState` silently (ADR-097).
+ */
+export function setMarkerSelected(element: HTMLElement, selected: boolean): void {
+  element.classList.toggle('route-marker-host-selected', selected)
+  if (selected) element.setAttribute('aria-current', 'true')
+  else element.removeAttribute('aria-current')
+}
+
+/**
  * The glyph.
  *
  * Fill and stroke are **the same pair the route line uses** — `MAP_COLOR.route`/`routeInverted` for the
@@ -146,16 +170,14 @@ function accessibleName({ kind, name, locale }: RouteMarkerOptions): string {
  * deliberately so: it sits on a 2 px rail in a list, where the job is to be a tidy bead on a line. The
  * map marker sits on a 5 px road over a dense basemap, where the job is to be legible at a glance.
  */
-function svg(shape: { size: number; path: string }, selected: boolean, dark: boolean): string {
-  const scale = selected ? 1.45 : 1
-  const px = Math.round(shape.size * scale)
+function svg(shape: { size: number; path: string }, dark: boolean): string {
+  // One size, always. Selection scales the whole host in CSS — see `setMarkerSelected`.
+  const px = shape.size
   // **Inverted against the line, not matched to it.** A marker filled with the line's own colour
   // disappears into it; filling with the CASING colour and outlining with the line's makes each stop a
   // hole punched in the line, which is what the mockup's "hybrid" markers were reaching for and is
   // legible at every zoom. Still one pair, so dark mode is still one swap.
   const fill = dark ? MAP_COLOR.routeCasingInverted : MAP_COLOR.routeCasing
   const stroke = dark ? MAP_COLOR.routeInverted : MAP_COLOR.route
-  return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker${
-    selected ? ' route-marker-selected' : ''
-  }" fill="${fill}" stroke="${stroke}" stroke-width="${selected ? 3.6 : 3.2}"><path d="${shape.path}" /></svg>`
+  return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker" fill="${fill}" stroke="${stroke}" stroke-width="3.2"><path d="${shape.path}" /></svg>`
 }

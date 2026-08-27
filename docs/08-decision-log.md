@@ -10530,6 +10530,22 @@ pre-existing and unaddressed; it earned its keep here.
   node to it. Dropped as **chrome**, exactly as the back label is, and asserted on its own instead —
   both the region's name and the handle's, because one names the container and the other the control
   that moves it.
+- 🔴 **A selected marker popped instead of growing, and it took two fixes because there were two
+  causes.** Reported as *"the transition from circle to hex was not smooth, but instant"*.
+
+  First, `focusedIndex` was a dependency of the effect that **places** the markers, so every tap tore
+  down all 25 and rebuilt them — the newly selected one did not grow, it was created at its larger
+  size. Selection is now its own effect over the elements already on the map, and the placement effect
+  reads the focused index through a ref so it stays out of its dependencies.
+
+  Second — and this one is only findable by measuring — **MapLibre owns a marker's `transform`.** It
+  writes one inline to position the element, so a `transform: scale()` on the same node is overwritten
+  on the next camera frame. The computed style showed the engine's translate matrix and nothing else,
+  which is why the transition had nothing to act on. The scale lives on a wrapper inside the marker
+  now. Verified mid-flight: 1.0 → 1.187 → 1.45.
+
+  The general shape is worth keeping: **when a library positions an element, its `transform` is not
+  yours**, and the symptom is a transition that silently does nothing rather than an error.
 - 🟠 **Haptics on the detents are a native porting note, not a web feature.** Pairing a detent crossing
   with a tap is worth doing on iOS and Android; `navigator.vibrate` is Android-Chrome-only and far too
   blunt to stand in for it, so the web renderer does nothing rather than something worse.

@@ -13,14 +13,14 @@ import { t } from '@nextbus/i18n'
 import type { GeoFix } from '@nextbus/ports'
 import { MAP_COLOR } from '@nextbus/ui'
 import { type Map as MapLibreMap, Marker } from 'maplibre-gl'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { mapProvider } from '../adapters/mapProvider'
 import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
 import { MapView } from './MapView'
 import { riderMarkElement } from './riderMarkElement'
 import { routeChevronImage } from './routeChevronImage'
-import { routeMarkerElement } from './routeMarkerElement'
+import { routeMarkerElement, setMarkerSelected } from './routeMarkerElement'
 
 const SOURCE = 'route-line'
 const CASING_LAYER = 'route-line-casing'
@@ -150,6 +150,14 @@ export function RouteMap({
   // assignment does not re-render. Getting this wrong loses the line whenever the geometry resolves
   // before the style loads — which, with `staleTime: Infinity`, is every visit after the first.
   const [map, setMap] = useState<MapLibreMap | null>(null)
+  /** The placed marker elements, so selection can be moved between them without replacing any. */
+  const markerElements = useRef<HTMLElement[]>([])
+  // The focused stop as a REF as well as a value: the placement effect has to apply the current
+  // selection to markers it has just created, and reading it through a ref is what keeps it out of
+  // that effect's dependencies — which is the whole point, since depending on it is what used to
+  // rebuild all 25 markers on every tap.
+  const focusedRef = useRef(focusedIndex)
+  focusedRef.current = focusedIndex
   // Destructured so the effects below depend on the two VALUES rather than on the wrapper, which
   // `useRiderPosition` rebuilds every render — depending on the object would tear down and re-place
   // the rider's mark on every arrival tick.
@@ -362,7 +370,14 @@ export function RouteMap({
    *
    * Deliberately keyed on `presentation` as well as `markers`: a route whose answer is `none` renders
    * no map at all, so its markers must go with it rather than outliving the map they were anchored to.
+   *
+   * **`focusedIndex` is deliberately not a dependency**, and it is read through `focusedRef` so that
+   * stays true. Listing it would rebuild all 25 markers on every tap, which is what made a selected
+   * marker *appear* at its larger size rather than grow into it — the pop this effect's split was made
+   * to remove. Selection is the next effect's job; this one only needs to know where selection stands
+   * at the moment it creates an element.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `focusedIndex` is read via a ref, on purpose — see above
   useEffect(() => {
     if (!map || presentation?.kind === undefined || presentation.kind === 'none') return
     const dark = mode === 'dark'
@@ -384,10 +399,30 @@ export function RouteMap({
           .addTo(map)
       )
     })
+    markerElements.current = placed.map((m) => m.getElement())
+    // Markers created while a stop is already focused start selected — otherwise a re-place (a locale
+    // change, an appearance flip) would silently drop the rider's selection.
+    for (const [index, el] of markerElements.current.entries()) {
+      setMarkerSelected(el, index === focusedRef.current)
+    }
     return () => {
       for (const m of placed) m.remove()
+      markerElements.current = []
     }
-  }, [map, markers, stops, locale, mode, focusedIndex, onSelectStop, presentation?.kind])
+  }, [map, markers, stops, locale, mode, onSelectStop, presentation?.kind])
+
+  /**
+   * Move the selection between markers that are already on the map, so CSS can ease the scale.
+   *
+   * A separate effect from the one that places them, and that separation *is* the fix: placing depends
+   * on the geometry and the appearance, selecting depends on which stop the rider tapped, and folding
+   * the second into the first made every tap a teardown of the whole set.
+   */
+  useEffect(() => {
+    for (const [index, el] of markerElements.current.entries()) {
+      setMarkerSelected(el, index === focusedIndex)
+    }
+  }, [focusedIndex])
 
   /**
    * **The rider's own position**, and the circle of uncertainty around it (M5, `proposals/06 §6b`).

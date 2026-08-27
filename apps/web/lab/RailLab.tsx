@@ -1,4 +1,5 @@
 import type { RailBus, RouteStopRowView } from '@nextbus/core'
+import { routeMarkers } from '@nextbus/core'
 import { useEffect, useRef, useState } from 'react'
 import { RailBusToken } from '../src/components/RailBusToken'
 import { RouteStopRow } from '../src/components/RouteStopRow'
@@ -122,7 +123,7 @@ export function RailLab() {
             tokens={byRow.get(index)}
             onPress={() => {}}
             onMenu={() => {}}
-            kind="stop"
+            kind={NODE_KINDS[index] ?? 'stop'}
             registerRow={() => {}}
           />
         ))}
@@ -258,18 +259,34 @@ const NAMES = [
   'Ping Tin Estate',
   'Choi Ha Road',
   'Kwun Tong Road',
-  'Ngau Tau Kok Station',
+  'Ngau Tau Kok Station BBI',
   'Telford Gardens',
   'Kowloon Bay',
   'Choi Hung Road',
   'Prince Edward Road East',
   'Argyle Street',
-  'Nathan Road',
+  'Nathan Road BBI',
   'Jordan Road',
   'Canton Road',
   'Star Ferry, Harbour City',
 ]
 const STOPS = NAMES.length
+
+/**
+ * What glyph each row's node gets, from the **same kernel rule the screen and the map use** —
+ * `routeMarkers`, called without a line because only `kind` is wanted here.
+ *
+ * Two of the names above carry `BBI` on purpose, so the lab shows all three shapes rather than a
+ * column of circles. That is the point of driving the real rule instead of hard-coding: when the rule
+ * changes — a fourth kind, a different test for an interchange — this page changes with it, and a lab
+ * that had to be edited to keep up is a lab that quietly stops being true.
+ *
+ * The coordinates are filler. `kind` reads only the index and the name, and giving it a real geometry
+ * would imply this page had one.
+ */
+const NODE_KINDS = routeMarkers(
+  NAMES.map((name, i) => ({ name, location: { lat: 22.3 + i * 0.001, lng: 114.17 } })),
+).map((m) => m.kind)
 
 /** One row, with just enough shape to be the real component's input. */
 function stopRow(

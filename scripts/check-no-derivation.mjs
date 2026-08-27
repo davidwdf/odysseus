@@ -262,20 +262,6 @@ const ALLOWLIST = [
       'a finding here, and either would mean this had stopped being a drawing.',
   },
   {
-    file: 'apps/web/src/components/routeMarkerElement.ts',
-    rule: 'arithmetic',
-    why:
-      'This file draws a glyph and nothing else, and its two sums are both **screen geometry**: the ' +
-      'pixel size of an SVG at its selected scale, and the x/y components of the kerb nudge. Neither ' +
-      'reads a domain quantity — the decisions arrived already made, from `routeMarkers` (which glyph, ' +
-      'and the travel bearing) and `KERB_OFFSET_DEG` (which side of it), both corpus-pinned in ' +
-      '`packages/core`. What is left is the trigonometry of turning a bearing into a screen offset, and ' +
-      'the reason that CANNOT move to the kernel is in `route-markers.ts`: the honest offset distance is ' +
-      'zoom-dependent, so metres in the data would be wrong at one end of the range and pixels are right ' +
-      'at both. Scoped to `arithmetic`, so a `.filter()` over stops or a comparison against a minutes ' +
-      'value would still be a finding here — those would mean the glyph had taken a decision back.',
-  },
-  {
     file: 'apps/mobile/app/stop/[id].tsx',
     rule: 'arithmetic',
     why:
