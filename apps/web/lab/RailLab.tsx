@@ -72,7 +72,17 @@ export function RailLab() {
   // N, a bus on the segment INTO node N belongs to row N−1.
   const byRow = new Map<number, ReturnType<typeof token>[]>()
   function token(bus: RailBus, ordinal: number) {
-    return <RailBusToken key={ordinal} ordinal={ordinal} bus={bus} />
+    return (
+      <RailBusToken
+        key={ordinal}
+        ordinal={ordinal}
+        bus={bus}
+        // The token wears the shape of the node it is standing at, exactly as the screen does — which
+        // is the whole reason this lab drives the real components. A bus on the SEGMENT between two
+        // stops is at no stop, so it stays a disc.
+        shape={bus.kind === 'node' ? (NODE_KINDS[bus.index] ?? 'stop') : 'stop'}
+      />
+    )
   }
   buses.forEach((bus, ordinal) => {
     const owner = bus.kind === 'node' ? bus.index : bus.from
