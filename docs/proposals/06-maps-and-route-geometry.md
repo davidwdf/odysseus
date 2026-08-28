@@ -372,12 +372,27 @@ times a minute. What makes it work is the owner's own rule: the card returns whe
 the way at the top**, not when the scrolling stops. That is a place rather than a moment, a rider can
 return to it deliberately, and it cannot oscillate — the only way back to zero is to ask for it.
 
-**A wide muted chevron** hints at the state: down on the pill, up on the card. Chosen over a "menu"
-or "expand" glyph because it is the only one of the three that says which *way* — a rider sees both
-that something is hidden and where it will come from. Symmetrical on purpose, so whoever found the
-card by tapping it can put it away the same way.
+**A muted chevron** hints at the state: down on the pill, up on the card, always in the same corner.
+Chosen over a "menu" or "expand" glyph because it is the only one of the three that says which *way* —
+a rider sees both that something is hidden and where it will come from. It is a **control** on the
+expanded card, so the affordance is symmetrical: whoever found the card by tapping can put it away the
+same way. (It was 28 px wide and flattened for a pass, on the theory that a wide mark reads as an edge
+of the card; it read as a stretched icon instead, because nothing else here distorts a glyph.)
 
-Also: chips centred, and the card at `radius.pill` (24) so it and the 48 px lens read as one family.
+**The badge is `RouteChip`**, the same component every other route number in the app uses — operator
+livery, same corner, same minimum width, one size larger. It grew a bespoke square accent-coloured
+badge for a pass and read as a different object, which it was.
+
+Also: chips centred *on their own flex container* rather than on a wrapper around it, the swap on the
+journey line (it acts on the journey; beside the badge it read as a property of the route number), the
+card at `radius.pill` (24) to match the 48 px lens, and 500 ms rather than 240 — a collapse moves three
+things at once and at 240 they arrived together fast enough to read as a cut.
+
+**The auto-expand needed a guard, and the owner found it.** Returning the card when the list is back at
+the top is a good rule and `scrollIntoView` reaches the same place for a completely different reason:
+tapping stop 1 to see it on the map landed the list at zero and threw the card back over the map. A
+`programmaticScroll` ref is the difference between *the list is at the top* and *the rider put it
+there*.
 
 ---
 

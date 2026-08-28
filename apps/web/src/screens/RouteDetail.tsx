@@ -304,6 +304,15 @@ export function RouteDetail() {
    */
   const [chromeCollapsed, setChromeCollapsed] = useState(false)
   /**
+   * True while a scroll this screen *caused* is still settling.
+   *
+   * The header re-opens when the stop list is back at the top, which is a deliberate place a rider
+   * returns to — but `scrollIntoView` reaches the same place for a completely different reason, and a
+   * rider tapping stop 1 to see it on the map got the card thrown back over the map instead. The flag
+   * is the difference between "the list is at the top" and "the rider put it there".
+   */
+  const programmaticScroll = useRef(false)
+  /**
    * How much of the map the sheet is covering, as a fraction — the camera's `padding`.
    *
    * Kept here rather than read from the DOM because it is the sheet's own declared detent, and a
@@ -315,6 +324,10 @@ export function RouteDetail() {
   )
   const focusStop = useCallback((index: number) => {
     setFocusedIndex(index)
+    // The scroll below is OURS, and the header must not read it as the rider returning to the top.
+    // Tapping the first stop lands the list at zero as a side effect, and without this the card
+    // sprang open at the exact moment the rider was asking to look at the map instead.
+    programmaticScroll.current = true
     // `nearest`, not `start`. The map sits **above** the list in one scrolling page, so scrolling a row
     // to the top would push the map — the thing the rider just tapped — off the screen to show them the
     // row it was already about. `nearest` does nothing when the row is visible and moves the minimum
@@ -463,7 +476,7 @@ export function RouteDetail() {
    */
   const factsStrip =
     view !== undefined && view.facts.length > 0 ? (
-      <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
+      <div className="flex flex-wrap justify-center gap-2 px-4 pt-3 pb-1">
         {view.facts.map((fact) => (
           <button
             key={fact.key}
@@ -510,6 +523,8 @@ export function RouteDetail() {
           facts={factsStrip}
           collapsed={chromeCollapsed}
           expandLabel={t(locale, 'routeShowDetails')}
+          collapseLabel={t(locale, 'routeHideDetails')}
+          onCollapse={() => setChromeCollapsed(true)}
           onExpand={() => setChromeCollapsed(false)}
           journey={
             /* Origin small and muted above, destination larger below — two nodes, which is what
@@ -597,7 +612,14 @@ export function RouteDetail() {
           <DraggableSheet
             label={t(locale, 'routeStopsSheet')}
             initial={DEFAULT_DETENT}
-            onContentScroll={(top) => setChromeCollapsed(top > 0)}
+            onContentScroll={(top) => {
+              if (programmaticScroll.current) {
+                // One event only: `scrollIntoView` is a single jump here, not a smooth animation.
+                programmaticScroll.current = false
+                return
+              }
+              setChromeCollapsed(top > 0)
+            }}
             onDetentChange={(d) => {
               setSheetFraction(d.fraction)
               // Dragging off the opening detent is the rider saying they have started reading.

@@ -1,8 +1,12 @@
 import type { RouteDetailView } from '@nextbus/core'
-import { forwardRef, type ReactNode, useRef } from 'react'
+import { type ReactNode, useRef } from 'react'
+import { RouteChip } from '../../components/RouteChip'
 import { useFlip } from '../../hooks/useFlip'
 import { BACK_LENS_INSET, BACK_LENS_SIZE } from '../../shell/BackButton'
 import { CONTENT_INSET_TOP } from '../../shell/layout'
+
+/** The direction-swap control's box — 36 px, matching the fact pills' touch height. */
+const SWAP_SIZE = 36
 
 /**
  * **The route's identity, floating over the map** — round 4 of the mockups, which was the owner's own
@@ -33,7 +37,9 @@ export function RouteContextCard({
   facts,
   collapsed,
   onExpand,
+  onCollapse,
   expandLabel,
+  collapseLabel,
 }: {
   header: RouteDetailView['header']
   /**
@@ -53,9 +59,13 @@ export function RouteContextCard({
   collapsed: boolean
   /** Tapping a collapsed pill expands it again. Ignored while expanded. */
   onExpand: () => void
+  /** Tapping the expanded card's chevron puts it away. */
+  onCollapse: () => void
   /** The collapsed pill's accessible name — its content is a badge and a place, neither of which says
    *  what pressing it does. */
   expandLabel: string
+  /** The expanded card's chevron is a glyph; this is the whole of what a screen reader gets. */
+  collapseLabel: string
 }) {
   const badge = useRef<HTMLSpanElement | null>(null)
   // The badge travels between the two layouts rather than being re-drawn in each. See `useFlip`.
@@ -70,7 +80,7 @@ export function RouteContextCard({
       style={{
         top: `calc(${CONTENT_INSET_TOP} + 12px)`,
         left,
-        transition: 'left 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+        transition: 'left 500ms cubic-bezier(0.22, 1, 0.36, 1)',
       }}
     >
       {/*
@@ -93,10 +103,12 @@ export function RouteContextCard({
       >
         {collapsed ? (
           <div className="flex w-full items-center gap-2">
-            <RouteBadge ref={badge} routeNo={header.routeNo} compact />
+            <RouteChip operator={header.operator} routeNo={header.routeNo} chipRef={badge} />
             <span className="min-w-0 flex-1 truncate font-semibold text-body text-text">
               {header.destination}
             </span>
+            {/* Decorative on the pill: the overlay behind it is the target, and a button inside a
+                button is the thing ADR-024 forbids. The glyph still says which way the card opens. */}
             <Chevron direction="down" />
           </div>
         ) : (
@@ -117,9 +129,19 @@ export function RouteContextCard({
           >
             <span aria-hidden="true" />
             <span className="flex justify-center">
-              <RouteBadge ref={badge} routeNo={header.routeNo} />
+              <RouteChip
+                operator={header.operator}
+                routeNo={header.routeNo}
+                size="lg"
+                chipRef={badge}
+              />
             </span>
-            <span className="flex justify-end">{swap}</span>
+            {/* The collapse control, balancing the back lens across the badge. Right-aligned because
+                that is where its counterpart sits on the pill, so the one glyph a rider learns is
+                always in the same corner. */}
+            <span className="flex justify-end">
+              <ChevronButton direction="up" label={collapseLabel} onPress={onCollapse} />
+            </span>
           </div>
         )}
 
@@ -128,13 +150,19 @@ export function RouteContextCard({
             {/* The journey gets its own line and the **whole width** of it — which is the point of
                 putting the badge on its own row. HK destination names are long, and a name that has to
                 share a line with a badge and a control loses a third of the space it needs. */}
-            <div className="w-full text-center">{journey}</div>
+            {/* The journey and its direction swap share a line, because the swap acts **on** the
+                journey — beside the badge it read as a property of the route number. The spacer
+                opposite keeps the text optically centred against it. */}
+            <div className="flex w-full items-center gap-2">
+              <span aria-hidden="true" className="shrink-0" style={{ width: SWAP_SIZE }} />
+              <div className="min-w-0 flex-1 text-center">{journey}</div>
+              <span className="flex shrink-0 justify-end" style={{ width: SWAP_SIZE }}>
+                {swap}
+              </span>
+            </div>
             {/* Centred, because the strip is a row of facts about the route rather than a list that
                 begins somewhere — ragged-left pills under a centred journey read as a mistake. */}
             {facts ? <div className="flex w-full justify-center">{facts}</div> : null}
-            {/* Pointing UP while expanded: the affordance is symmetrical, so a rider who found the
-                card by tapping the chevron can put it away the same way. */}
-            <Chevron direction="up" />
           </>
         )}
 
@@ -152,34 +180,29 @@ export function RouteContextCard({
 }
 
 /**
- * The expand/collapse hint — **wide and muted**, so it reads as an edge of the card rather than as a
- * control competing with the badge beside it.
+ * The expand/collapse hint — **a normal chevron**, muted, in the same corner in both states.
+ *
+ * It was a 28 px-wide flattened one, on the theory that a wide mark reads as an edge of the card. It
+ * read as a stretched icon instead: everything else in this app uses ordinary glyph proportions, and
+ * one deliberately distorted mark looks like a mistake rather than a motif.
  *
  * A chevron over a "menu" or "expand" glyph because it is the only one of the three that says which
- * *way*: a rider seeing it pointing down learns both that something is hidden and where it will come
- * from. The other two say only "there is more", which they can already guess.
+ * *way* — a rider sees both that something is hidden and where it will come from. The other two say
+ * only "there is more", which they can already guess.
  */
 function Chevron({ direction }: { direction: 'up' | 'down' }) {
   return (
-    <span
-      aria-hidden="true"
-      className={`pointer-events-none flex shrink-0 justify-center text-subtle ${
-        direction === 'down' ? '' : 'w-full'
-      }`}
-    >
-      {/*  on the SVG as well as its wrapper: the hint is decoration, and the control it
-          hints at carries its own name. A <title> here would announce "chevron" to a screen reader,
-          which is the glyph rather than the meaning. */}
+    <span aria-hidden="true" className="flex shrink-0 items-center justify-center text-subtle">
       <svg
         aria-hidden="true"
-        width="28"
-        height="10"
-        viewBox="0 0 28 10"
+        width="18"
+        height="18"
+        viewBox="0 0 18 18"
         fill="none"
         stroke="currentColor"
       >
         <path
-          d={direction === 'down' ? 'M2 2.5 L14 7.5 L26 2.5' : 'M2 7.5 L14 2.5 L26 7.5'}
+          d={direction === 'down' ? 'M4.5 7 L9 11.5 L13.5 7' : 'M4.5 11.5 L9 7 L13.5 11.5'}
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -190,24 +213,29 @@ function Chevron({ direction }: { direction: 'up' | 'down' }) {
 }
 
 /**
- * The route number, at the two sizes the card has — and it is **one element**, forwarded a ref, so it
- * can travel between them (`useFlip`).
+ * The same chevron as a control, for the expanded card — where there is no overlay to tap because the
+ * card holds controls of its own.
  *
- * Expanded it is sized to the back lens: same height, so the two read as one row of chrome and the
- * journey below gets the card's whole width. Collapsed it is the pill's own height.
+ * Named, because its content is a glyph: a rider on a screen reader gets "collapse route details"
+ * rather than a button with no label at all.
  */
-const RouteBadge = forwardRef<HTMLSpanElement, { routeNo: string; compact?: boolean }>(
-  function RouteBadge({ routeNo, compact = false }, ref) {
-    return (
-      <span
-        ref={ref}
-        className={`flex shrink-0 items-center justify-center rounded-md bg-accent font-semibold text-accent-contrast tabular-nums ${
-          compact ? 'h-7 px-2 text-body' : 'px-3 text-title'
-        }`}
-        style={compact ? undefined : { height: BACK_LENS_SIZE, minWidth: BACK_LENS_SIZE }}
-      >
-        {routeNo}
-      </span>
-    )
-  },
-)
+function ChevronButton({
+  direction,
+  label,
+  onPress,
+}: {
+  direction: 'up' | 'down'
+  label: string
+  onPress: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      aria-label={label}
+      className="flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+    >
+      <Chevron direction={direction} />
+    </button>
+  )
+}

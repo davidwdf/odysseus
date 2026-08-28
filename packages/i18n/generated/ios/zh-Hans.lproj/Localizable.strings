@@ -119,6 +119,7 @@
 /* {stop} → %1$@ */
 "busApproaching" = "巴士即将到达%1$@";
 "routeShowDetails" = "显示路线详情";
+"routeHideDetails" = "隐藏路线详情";
 "routeStopsSheet" = "本路线的车站";
 "riderHere" = "你的位置";
 "riderHereFacing" = "你的位置和面向的方向";

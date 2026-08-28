@@ -125,6 +125,7 @@
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">Bus approaching %1$s</string>
 	<string name="routeShowDetails">Show route details</string>
+	<string name="routeHideDetails">Hide route details</string>
 	<string name="routeStopsSheet">Stops on this route</string>
 	<string name="riderHere">Your location</string>
 	<string name="riderHereFacing">Your location and the way you are facing</string>

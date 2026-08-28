@@ -71,6 +71,11 @@ export function useFlip(ref: RefObject<HTMLElement | null>, key: string | number
   })
 }
 
-/** Matches the card's own `left` transition, because they are one movement seen in two properties. */
-const FLIP_MS = 240
+/**
+ * Matches the card's own `left` transition, because they are one movement seen in two properties —
+ * and 500 rather than 240 because the owner watched it and wanted longer. A collapse moves three
+ * things at once (the card's edge, the badge's place, its size), and at 240 they arrived together
+ * fast enough to read as a cut.
+ */
+const FLIP_MS = 500
 const FLIP_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'

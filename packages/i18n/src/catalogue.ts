@@ -801,6 +801,12 @@ export const CATALOGUE = {
     'zh-Hant': '顯示路線詳情',
     'zh-Hans': '显示路线详情',
   },
+  /** The expanded header card's chevron, whose content is a glyph and nothing else. */
+  routeHideDetails: {
+    en: 'Hide route details',
+    'zh-Hant': '隱藏路線詳情',
+    'zh-Hans': '隐藏路线详情',
+  },
   /**
    * The draggable sheet holding the route's stop list. It is a `<region>` and its handle is a control,
    * so both need a name — an unnamed region is announced as nothing, and an unnamed handle as "button".
