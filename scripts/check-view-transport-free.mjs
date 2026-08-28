@@ -23,7 +23,7 @@
 // third is the subtle one and the reason a URL pattern exists at all — a path literal is how a screen starts
 // talking to the edge without importing anything, so no import-graph rule can ever see it.
 //
-// `apps/mobile/lib/` IS policed, and that is a deliberate widening of "view". It is this app's adapter
+// `apps/web/src/adapters/` IS policed, and that is a deliberate widening of "view". It is this app's adapter
 // directory — the twin of `apps/web/src/adapters/` — and adapters are where a *platform* API legitimately
 // lives (geolocation, storage, a tile template), not where HTTP does. Policing it is what makes the two
 // renderers symmetrical; the one legitimate exception it produces is in ALLOWLIST below, with its reason.
@@ -53,13 +53,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
  * dirs here in the same commit that creates them**, and the count printed on every successful run is the
  * cheap check that it happened.
  */
-const POLICED = [
-  'apps/mobile/app/',
-  'apps/mobile/components/',
-  'apps/mobile/lib/',
-  'apps/mobile/providers/',
-  'apps/web/src/',
-]
+const POLICED = ['apps/web/src/']
 
 const PATTERNS = [
   {
@@ -109,19 +103,6 @@ const PATTERNS = [
  */
 const ALLOWLIST = [
   {
-    file: 'apps/mobile/lib/tileSource.ts',
-    pattern: 'api-path',
-    snippet: '/v1/tiles/',
-    why:
-      'The `TileSource` port is a URL template by definition — its whole contract is `basemap(z, x, y) => string`, ' +
-      'and the view (`MiniMap`) consumes the port, never the path. These two lines compose a path on **our own ' +
-      'Worker** (`apps/edge/src/tiles.ts` proxies LandsD, ADR-049) from the same `DEFAULT_API_URL` the DataSource ' +
-      'uses, which is the opposite of the failure this gate is for: there is no upstream host here and no second ' +
-      'base URL. Removing the exception would mean either a `TileSource` implementation that cannot name its ' +
-      'tiles, or moving the LandsD template into `packages/api-client`, where a `require()`d logo asset and an ' +
-      'Expo env read cannot follow it (see the note in `packages/ports/src/tile-source.ts`).',
-  },
-  {
     file: 'apps/web/src/adapters/mapProvider.ts',
     pattern: 'api-path',
     snippet: '/v1/tiles/',
@@ -148,7 +129,7 @@ const ALLOWLIST = [
       'second base URL. Two entries rather than one shared implementation is the correct shape: the port ' +
       'is generic over its image asset because React Native wants a `require()`d `ImageSourcePropType` ' +
       'and a browser wants a URL string, which is the one genuinely per-platform part. It dies with ' +
-      '`apps/mobile`’s at WP6-8, leaving one.',
+      '`apps/mobile`’s when that app was retired (ADR-157), leaving one.',
   },
 ]
 

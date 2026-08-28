@@ -1,3 +1,3 @@
-import { accent } from '../../../apps/mobile/lib/theme'
+import { accent } from '../../../apps/web/lib/theme'
 
 export const token = accent

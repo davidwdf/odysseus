@@ -60,7 +60,6 @@
           "^packages/api-client/src/",
           "^packages/data-normalize/src/",
           "^apps/edge/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -109,7 +108,6 @@
           "^packages/api-client/src/",
           "^packages/data-normalize/src/",
           "^apps/edge/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -158,7 +156,6 @@
           "^packages/api-client/src/",
           "^packages/data-normalize/src/",
           "^apps/edge/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -237,7 +234,6 @@
           "^packages/api-client/src/",
           "^packages/data-normalize/src/",
           "^apps/edge/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -290,7 +286,6 @@
           "^packages/api-client/src/",
           "^packages/data-normalize/src/",
           "^apps/edge/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -343,7 +338,6 @@
           "^packages/i18n/src/",
           "^packages/data-normalize/src/",
           "^apps/edge/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -396,7 +390,6 @@
           "^packages/i18n/src/",
           "^packages/api-client/src/",
           "^apps/edge/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -416,7 +409,6 @@
           "^packages/ui/src/",
           "^packages/i18n/src/",
           "^packages/api-client/src/",
-          "^apps/mobile/",
           "^apps/web/"
         ]
       }
@@ -455,7 +447,6 @@
           "^packages/ui/src/",
           "^packages/i18n/src/",
           "^packages/api-client/src/",
-          "^apps/mobile/",
           "^apps/web/"
         ],
         "reachable": true
@@ -466,7 +457,7 @@
       "comment": "view may import only [contract, kernel, ports, tokens, client, uiSpec] — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
-        "path": ["^apps/mobile/", "^apps/web/"],
+        "path": ["^apps/web/"],
         "pathNot": "(^|/)node_modules/"
       },
       "to": {
@@ -478,7 +469,7 @@
       "comment": "view must not reach [adapters, server], not even via an allowed hop — boundary declared in layers.json (ADR-051)",
       "severity": "error",
       "from": {
-        "path": ["^apps/mobile/", "^apps/web/"],
+        "path": ["^apps/web/"],
         "pathNot": "(^|/)node_modules/"
       },
       "to": {

@@ -48,7 +48,7 @@ const CASES = [
     why: 'ports is a platform seam: not in the kernel, and `import type` does not excuse it',
   },
   {
-    fixture: 'kernel-imports-react-native',
+    fixture: 'kernel-imports-react',
     tool: 'cruise',
     expect: ['layer-kernel-npm'],
     why: 'the kernel has zero runtime dependencies, least of all a view framework',
@@ -75,7 +75,7 @@ const CASES = [
     fixture: 'kernel-reaches-view-via-contract',
     tool: 'cruise',
     expect: ['layer-contract', 'layer-kernel-reach'],
-    why: 'TRANSITIVE through a legal type-only hop: core → contract → apps/mobile',
+    why: 'TRANSITIVE through a legal type-only hop: core → contract → apps/web',
   },
   {
     fixture: 'circular',
