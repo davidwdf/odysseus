@@ -119,6 +119,9 @@
 /* {stop} → %1$@ */
 "busApproaching" = "Bus approaching %1$@";
 "routeShowDetails" = "Show route details";
+"fareFromHere" = "From here";
+"mapShowWholeRoute" = "Show the whole route";
+"mapShowMyLocation" = "Show my location";
 "routeHideDetails" = "Hide route details";
 "routeStopsSheet" = "Stops on this route";
 "riderHere" = "Your location";

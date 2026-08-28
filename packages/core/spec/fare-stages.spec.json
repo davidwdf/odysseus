@@ -1,0 +1,86 @@
+{
+  "$schema": "../../../schemas/kernel-spec.schema.json",
+  "module": "fare-stages",
+  "source": "src/fare-stages.ts",
+  "version": 1,
+  "doc": "Where a route's fare changes — `true` at each index that BEGINS a fare stage, so a screen can print the price once per stage instead of once per stop. Exact equality, and the array is always the same length as its input. A missing fare is never a stage start and never ENDS one either: the run continues through it, which is the rule most of these rows exist to pin.",
+  "groups": {
+    "fareStageStarts": {
+      "doc": "Where a route's fare changes — `true` at each index that BEGINS a fare stage, so a screen can print the price once per stage instead of once per stop. Exact equality, and the array is always the same length as its input. A missing fare is never a stage start and never ENDS one either: the run continues through it, which is the rule most of these rows exist to pin.",
+      "cases": [
+        {
+          "name": "a-single-fare-for-the-whole-route-starts-once",
+          "why": "The everyday case, and the whole point: 25 stops at $6.7 is one stage, so the figure is printed once rather than twenty-five times.",
+          "args": {
+            "fares": ["$6.7", "$6.7", "$6.7", "$6.7", "$6.7"]
+          },
+          "expect": [true, false, false, false, false]
+        },
+        {
+          "name": "a-fare-point-begins-a-new-stage",
+          "why": "A sectional fare: the price steps down past the fare point, and that stop is where a rider's cost changes. Two headers, two figures.",
+          "args": {
+            "fares": ["$6.7", "$6.7", "$5.8", "$5.8"]
+          },
+          "expect": [true, false, true, false]
+        },
+        {
+          "name": "a-stop-with-no-fare-does-not-end-the-stage",
+          "why": "THE row this rule exists for. A stop in the middle with no published boarding fare is a gap in the data, not a change in the price — treating it as one would restart the stage at the next stop and print the same figure twice with nothing between them.",
+          "args": {
+            "fares": ["$6.7", null, "$6.7", "$6.7"]
+          },
+          "expect": [true, false, false, false]
+        },
+        {
+          "name": "a-stop-with-no-fare-is-never-itself-a-start",
+          "why": "The last stop of most routes carries no boarding fare, because boarding is not possible there. A header over it would be a divider pretending to be information.",
+          "args": {
+            "fares": ["$6.7", "$6.7", null]
+          },
+          "expect": [true, false, false]
+        },
+        {
+          "name": "a-fare-returning-after-a-gap-to-a-different-value-does-start",
+          "why": "The other half of the gap rule, and the one a naive \"compare with the previous entry\" gets wrong in the opposite direction: the comparison is against the last fare actually SEEN, so a real change across a gap is still a change.",
+          "args": {
+            "fares": ["$6.7", null, "$5.8"]
+          },
+          "expect": [true, false, true]
+        },
+        {
+          "name": "a-fare-that-returns-to-an-earlier-value-starts-again",
+          "why": "Prices can go back up — a route that leaves and re-enters a zone. This is a new stage even though the figure is one a rider has already seen, because what a header marks is where the cost CHANGES, not where a number first appears.",
+          "args": {
+            "fares": ["$6.7", "$5.8", "$6.7"]
+          },
+          "expect": [true, true, true]
+        },
+        {
+          "name": "a-leading-gap-delays-the-first-stage",
+          "why": "A route whose first stop publishes no fare. The first stage begins at the first stop that has one, not at index 0.",
+          "args": {
+            "fares": [null, "$6.7", "$6.7"]
+          },
+          "expect": [false, true, false]
+        },
+        {
+          "name": "an-empty-route-has-no-stages",
+          "why": "An empty sequence is a shape the wire produces. The answer is an empty array, and the same length as the input, which is what lets a caller zip it against its rows without a bounds check.",
+          "args": {
+            "fares": []
+          },
+          "expect": []
+        },
+        {
+          "name": "an-empty-string-is-an-absent-fare",
+          "why": "A JSON round-trip or an over-eager formatter can turn an absent fare into an empty one. It means the same thing and must behave the same way — a port that tested only for null would print a header with nothing in it.",
+          "args": {
+            "fares": ["$6.7", "", "$6.7"]
+          },
+          "expect": [true, false, false]
+        }
+      ]
+    }
+  }
+}

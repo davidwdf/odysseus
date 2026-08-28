@@ -89,6 +89,22 @@ const STOP_ROWS: SlotNode = {
   each: 'stops',
   of: [
     {
+      name: 'fareStageLabel',
+      when: 'fareStageStart',
+      why: 'Every stop that is not the first of its fare stage — which is nearly all of them. A Hong Kong route is priced in stages, so the figure is news only where it changes.',
+      text: { message: 'fareFromHere' },
+      invariant:
+        'Says **"From here"**, not "Fare": the figure is what it costs to board at or after this point, and a bare `$6.7` over a list of stops could as easily be read as the fare to *reach* them. It is a sticky header pinned to the top of the list while its stage is on screen, which is why it is a slot of the stop that begins the stage rather than a field of the screen.',
+    },
+    {
+      name: 'fareStageValue',
+      when: 'fareStageStart',
+      why: 'As `fareStageLabel` — the two are one header and appear together or not at all.',
+      text: { field: 'fareLabel' },
+      invariant:
+        'The **printed** fare, `$` and all, from `formatFare` in the kernel — `fare` beside it is the raw decimal the fare-stage timeline compares, and a projection reading that would expect `18.9` where every renderer draws `$18.9`.\n\nIt used to be a per-row `stopFare`, on the right of every stop. That said the same figure on nearly every row — the same $6.7 forty times — while competing with the stop\u2019s name for the one edge the `\u22ef` also wants. Where a stage *starts* is `fare-stages#fareStageStarts`, because a comparison between adjacent rows is a claim about the route (ADR-068), and a stop with no fare is a gap in it rather than a change.',
+    },
+    {
       name: 'seq',
       text: { field: 'seq' },
       invariant:
@@ -107,14 +123,6 @@ const STOP_ROWS: SlotNode = {
       why: 'A stop whose upstream name carries no parenthetical — common for GMB poles, and for a Citybus stop whose name is a plain place.',
       invariant:
         'What is printed on the physical flag, which is what a rider standing at the kerb is matching against. Latin letters and digits, so it is the same string in every locale — **except** where the parenthetical is a translated place phrase rather than a code, which `splitStopCode` cannot tell apart and does not try to: it understands ASCII parentheses only, so an English `CENTRAL (EXCHANGE SQUARE)` splits and a Chinese `中環（交易廣場）` does not. Pinned in `stop-name.spec.json`, and both renderers must reproduce it identically.',
-    },
-    {
-      name: 'stopFare',
-      text: { field: 'fareLabel' },
-      when: 'fareLabel',
-      why: 'The dataset carries no boarding fare for this stop — usually the last one, where boarding is not possible.',
-      invariant:
-        'The **printed** fare, `$` and all, from `formatFare` in the kernel. `fare` beside it is the raw decimal the fare-stage timeline compares and is deliberately not what is drawn: a projection reading it would expect `18.9` where every renderer draws `$18.9`.',
     },
     {
       name: 'stopArrivals',

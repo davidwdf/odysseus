@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { mapProvider } from '../adapters/mapProvider'
 import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
+import { MapControls } from './MapControls'
 import { MapView } from './MapView'
 import { riderMarkElement } from './riderMarkElement'
 import { routeChevronImage } from './routeChevronImage'
@@ -113,10 +114,12 @@ export function RouteMap({
   pending,
   stops,
   focusedIndex,
+  boardingIndex,
   onSelectStop,
   rider,
   visibleInset,
   onInteract,
+  controlLabels,
   className,
 }: {
   /** The edge's answer. `undefined` means it has not arrived — see `pending`. */
@@ -127,6 +130,8 @@ export function RouteMap({
   stops: readonly MarkerStop[]
   /** The stop the rider has focused, by index. The camera goes there; the marker grows. */
   focusedIndex?: number | undefined
+  /** The stop they arrived from, by index — marked inside rather than by growing. */
+  boardingIndex?: number | undefined
   /** A marker was tapped. The screen decides what that means — here it is only reported. */
   onSelectStop?: ((index: number) => void) | undefined
   /** The rider's own position, if they have granted it. `undefined` means no mark is drawn. */
@@ -142,6 +147,8 @@ export function RouteMap({
   visibleInset?: { top?: number; bottom?: number } | undefined
   /** The rider touched the map. The screen uses it to collapse its chrome; the map itself does not care. */
   onInteract?: (() => void) | undefined
+  /** Names for the two floating controls — this component owns *when* they appear, not what they say. */
+  controlLabels: { recentre: string; locate: string }
   className?: string
 }) {
   const locale = useLocale()
@@ -150,6 +157,13 @@ export function RouteMap({
   // assignment does not re-render. Getting this wrong loses the line whenever the geometry resolves
   // before the style loads — which, with `staleTime: Infinity`, is every visit after the first.
   const [map, setMap] = useState<MapLibreMap | null>(null)
+  /**
+   * Whether the rider has moved the camera away from the opening frame.
+   *
+   * Gates the recentre control: before they have moved it, "show the whole route" is what they are
+   * already looking at, and a button that does nothing is a button that teaches them not to press it.
+   */
+  const [moved, setMoved] = useState(false)
   /** The placed marker elements, so selection can be moved between them without replacing any. */
   const markerElements = useRef<HTMLElement[]>([])
   // The focused stop as a REF as well as a value: the placement effect has to apply the current
@@ -186,6 +200,22 @@ export function RouteMap({
       map.off('zoomstart', fromRider)
     }
   }, [map, onInteract])
+
+  useEffect(() => {
+    if (!map) return
+    // Rider-driven only, by the same `originalEvent` test the chrome collapse uses: our own `fitBounds`
+    // and `flyTo` must not make the recentre control appear, or it would be offered from the first
+    // frame and mean nothing.
+    const moveEnd = (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent !== undefined) setMoved(true)
+    }
+    map.on('dragend', moveEnd)
+    map.on('zoomend', moveEnd)
+    return () => {
+      map.off('dragend', moveEnd)
+      map.off('zoomend', moveEnd)
+    }
+  }, [map])
 
   const presentation = useMemo(() => {
     if (pending) return undefined
@@ -409,7 +439,7 @@ export function RouteMap({
       for (const m of placed) m.remove()
       markerElements.current = []
     }
-  }, [map, markers, stops, locale, mode, onSelectStop, presentation?.kind])
+  }, [map, markers, stops, locale, mode, boardingIndex, onSelectStop, presentation?.kind])
 
   /**
    * Move the selection between markers that are already on the map, so CSS can ease the scale.
@@ -542,6 +572,34 @@ export function RouteMap({
       ) : (
         <div className={`${FILL} animate-pulse bg-surface-2`} aria-hidden="true" />
       )}
+      <MapControls
+        bottom={(visibleInset?.bottom ?? 0) * (map?.getContainer().clientHeight ?? 0)}
+        recentreLabel={controlLabels.recentre}
+        locateLabel={controlLabels.locate}
+        onRecentre={
+          map && bounds && moved
+            ? () => {
+                map.fitBounds([bounds.west, bounds.south, bounds.east, bounds.north], {
+                  padding: cameraPadding(map, visibleInset),
+                })
+                setMoved(false)
+              }
+            : undefined
+        }
+        onLocate={
+          map && riderFix
+            ? () => {
+                map.flyTo({
+                  center: [riderFix.lng, riderFix.lat],
+                  zoom: focusZoom(map.getZoom(), mapProvider),
+                  padding: cameraPadding(map, visibleInset),
+                  essential: true,
+                })
+                setMoved(true)
+              }
+            : undefined
+        }
+      />
       {presentation?.kind === 'approximate' ? (
         // Said ONCE, at the screen level — the same shape as the freshness notice (ADR-133/150), and
         // for the same reason: the fact is about the whole line, so a per-segment cue would draw one

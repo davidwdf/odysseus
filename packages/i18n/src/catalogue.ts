@@ -801,6 +801,40 @@ export const CATALOGUE = {
     'zh-Hant': '顯示路線詳情',
     'zh-Hans': '显示路线详情',
   },
+  /**
+   * Precedes the fare on a sticky stage header in the route's stop list.
+   *
+   * "From here" rather than "Fare": the figure is what it costs to board **at or after this point**,
+   * which is the question a rider scrolling the list is asking, and a bare "$6.7" over a list of stops
+   * could as easily be read as the fare to reach them.
+   */
+  fareFromHere: {
+    en: 'From here',
+    'zh-Hant': '由此起',
+    'zh-Hans': '由此起',
+  },
+  /**
+   * The map's "show the whole route again" control. Its content is a glyph, so this is its whole name.
+   *
+   * Named for the **result** rather than the gesture — a rider wants the route back, and "reset view"
+   * or "recentre" describe what the app does rather than what they get.
+   */
+  mapShowWholeRoute: {
+    en: 'Show the whole route',
+    'zh-Hant': '顯示整條路線',
+    'zh-Hans': '显示整条路线',
+  },
+  /**
+   * The map's "take me to my position" control.
+   *
+   * Only offered once a fix exists — a control that cannot do its job is worse than an absent one,
+   * because a rider presses it and learns nothing about why.
+   */
+  mapShowMyLocation: {
+    en: 'Show my location',
+    'zh-Hant': '顯示我的位置',
+    'zh-Hans': '显示我的位置',
+  },
   /** The expanded header card's chevron, whose content is a glyph and nothing else. */
   routeHideDetails: {
     en: 'Hide route details',

@@ -2,6 +2,26 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-28 — the fare becomes a stage, and the map says what it can do
+
+> **Shipped:** the four rider-facing items ADR-156 left open on Route detail
+> ([ADR-158](./08-decision-log.md#adr-158--the-fare-becomes-a-stage-header-the-map-gets-two-controls-and-a-tapped-stop-is-told-apart-from-an-arrived-at-one)).
+> The fare is no longer printed on all forty rows: `fare-stages#fareStageStarts` (9 corpus cases) says
+> where a stage *begins*, and a `position: sticky` **"From here $6.7"** header pins itself over its
+> stage — which hands the row's right edge back to the stop's name. The map grew two controls that
+> appear only when they have something to do: *show the whole route* once the rider has panned away,
+> *my location* once there is a fix. And a **tapped** stop (leading bar, `aria-current="true"`) is now
+> told apart from the one the bus **arrived from** (inner dot, `aria-current="location"`) by shape and
+> position rather than colour — with the same inner dot drawn on the map marker, which is what ties the
+> list to the line.
+>
+> **Two things worth carrying forward.** The fare-stage flag rides on the *driven view*, not in
+> `routeDetailView` — it is a rule about that function's output, so the conformance driver calls the
+> kernel over the view exactly as it already does for `feedNotice`. And **a synthetic
+> `pointerdown`/`pointermove` does not make MapLibre fire a drag**: two probes reported the recentre
+> control missing when the code was right and the gesture was not. Use real
+> `Input.dispatchMouseEvent` over CDP for anything gesture-driven.
+
 ## 🔵 Snapshot 2026-08-13 — the freshness notice reaches every screen, and `offline` becomes checkable
 
 > **Shipped:** the debt [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence)

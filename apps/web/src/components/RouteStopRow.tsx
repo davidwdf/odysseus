@@ -27,6 +27,7 @@ export function RouteStopRow({
   arrivalsPending = false,
   tokens,
   kind,
+  selected = false,
   onPress,
   onMenu,
   registerRow,
@@ -37,6 +38,23 @@ export function RouteStopRow({
    * is a domain rule (ADR-068), and a row deciding it for itself is the second spelling that drifts.
    */
   kind: StopMarkerKind
+  /**
+   * The stop the rider has **tapped** — the one the map is looking at.
+   *
+   * Deliberately a different kind of thing from `row.here`, which is the stop they *arrived from*, and
+   * the two are signalled differently on purpose:
+   *
+   * | | | |
+   * |---|---|---|
+   * | `here` | a fact about their journey, and permanent | a mark **inside** the node — a filled centre — plus the accent fill it already had |
+   * | `selected` | a transient state they change by tapping | a bar on the row's **leading edge**, and the node grows |
+   *
+   * One is a property of the *stop*, the other of the *row*, and putting them on different parts of
+   * the same object is what keeps them legible together — a rider can be looking at the stop they
+   * boarded at, and both marks have to survive that. Neither is carried by colour alone (ADR-008's
+   * rule, applied to state rather than to time): the dot and the bar are shapes.
+   */
+  selected?: boolean
   row: RouteStopRowView
   /**
    * The route's live round has not answered yet, so a row with no arrivals is **waiting** rather than
@@ -104,10 +122,30 @@ export function RouteStopRow({
       placed from `onLayout` values, and a transform does not move those.
     */
     <div className="relative">
+      {/*
+        The selected row's leading bar. Absolutely positioned so it costs the row no layout — the bus
+        tokens are placed against this row's own box with constant CSS expressions (ADR-110), and a
+        row that changed height on selection would move every bus on the schematic.
+      */}
+      {selected ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 bottom-0 left-0 w-[3px] rounded-r-sm bg-accent"
+        />
+      ) : null}
       <button
         type="button"
         ref={(el) => registerRow(index, el)}
         onClick={() => onPress(row, index)}
+        // Two different `aria-current` tokens, which is the one place ARIA already draws the
+        // distinction this row needs: `location` is "where you are in an environment" — the stop they
+        // boarded at — and `true` is "the one being looked at". Attributes rather than text, so a
+        // screen reader gets both facts and the conformance projection is unchanged.
+        {...(selected
+          ? { 'aria-current': 'true' as const }
+          : here
+            ? { 'aria-current': 'location' as const }
+            : {})}
         // The cascade's per-row beat, capped so a 60-stop route does not drag for two seconds — the delay
         // `apps/mobile` applies with `withDelay(Math.min(index, 10) * 26, …)`, value for value.
         style={
@@ -185,6 +223,16 @@ export function RouteStopRow({
             <span className={`relative ${here ? 'text-accent-contrast' : 'text-subtle'}`}>
               {row.seq}
             </span>
+            {/* The boarding stop's own mark: a hole in the middle of the node. A shape rather than a
+                second colour, so it survives a colour-blind rider and a monochrome screenshot alike —
+                and it reads as *this stop is special* rather than *this row is selected*, which is the
+                distinction the two states need. */}
+            {here ? (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full border-2 border-accent bg-surface"
+              />
+            ) : null}
           </span>
           {row.saved ? (
             // Drawn on the node's corner, and — as on the RN rail — the node itself is unchanged, so a saved
@@ -215,11 +263,10 @@ export function RouteStopRow({
             <span className="min-w-0 flex-1">
               <StopName name={row.name} emphasis={here} />
             </span>
-            {row.fareLabel ? (
-              <span className="shrink-0 text-caption text-subtle tabular-nums">
-                {row.fareLabel}
-              </span>
-            ) : null}
+            {/* The fare is **not** here any more. It said the same figure on nearly every row — the
+                same $6.7 forty times — while competing with the stop's name for the one edge the `⋯`
+                also wants. It is a sticky stage header now (`FareStage`), printed once per stage and
+                pinned to the top of the list while that stage is what you are looking at. */}
           </span>
           {row.arrivals.length > 0 ? (
             <span className="mt-1 flex flex-wrap items-baseline gap-x-3">

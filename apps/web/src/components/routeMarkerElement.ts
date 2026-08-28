@@ -47,6 +47,14 @@ export interface RouteMarkerOptions {
   kind: StopMarkerKind
   /** Direction of travel through the stop, from `routeMarkers`. Degrees clockwise from north. */
   bearing: number
+  /**
+   * The stop the rider **arrived from** — a fact about their journey rather than a selection.
+   *
+   * Drawn as a filled centre, the same mark the rail node carries, so the two views say it the same
+   * way. Deliberately not the treatment `selected` gets: selection grows the whole mark, arrival puts
+   * something *inside* it, and a rider looking at the stop they boarded at needs both at once.
+   */
+  boarding?: boolean
   name: string
   locale: Locale
   selected: boolean
@@ -95,7 +103,7 @@ export function routeMarkerElement(opts: RouteMarkerOptions): {
   // the marker element to position it, so a `transform: scale()` on the host is overwritten on the
   // next camera frame — measured: the host's computed transform is the engine's translate matrix and
   // nothing else. An inner element the engine does not touch is the only place a scale can survive.
-  element.innerHTML = `<span class="route-marker-scale">${svg(shape, opts.dark)}</span>`
+  element.innerHTML = `<span class="route-marker-scale">${svg(shape, opts.dark, opts.boarding === true)}</span>`
   element.addEventListener('click', (e) => {
     // The map is listening for clicks too; a marker tap must not also be read as a tap on the map.
     e.stopPropagation()
@@ -170,7 +178,7 @@ export function setMarkerSelected(element: HTMLElement, selected: boolean): void
  * deliberately so: it sits on a 2 px rail in a list, where the job is to be a tidy bead on a line. The
  * map marker sits on a 5 px road over a dense basemap, where the job is to be legible at a glance.
  */
-function svg(shape: { size: number; path: string }, dark: boolean): string {
+function svg(shape: { size: number; path: string }, dark: boolean, boarding: boolean): string {
   // One size, always. Selection scales the whole host in CSS — see `setMarkerSelected`.
   const px = shape.size
   // **Inverted against the line, not matched to it.** A marker filled with the line's own colour
@@ -179,5 +187,9 @@ function svg(shape: { size: number; path: string }, dark: boolean): string {
   // legible at every zoom. Still one pair, so dark mode is still one swap.
   const fill = dark ? MAP_COLOR.routeCasingInverted : MAP_COLOR.routeCasing
   const stroke = dark ? MAP_COLOR.routeInverted : MAP_COLOR.route
-  return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker" fill="${fill}" stroke="${stroke}" stroke-width="3.2"><path d="${shape.path}" /></svg>`
+  return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker" fill="${fill}" stroke="${stroke}" stroke-width="3.2"><path d="${shape.path}" />${
+    boarding
+      ? `<circle cx="${shape.size / 2}" cy="${shape.size / 2}" r="${shape.size * 0.13}" fill="${stroke}" stroke="none" />`
+      : ''
+  }</svg>`
 }

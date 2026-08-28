@@ -1,6 +1,7 @@
 import {
   applyLiveEtasToRouteDetail,
   displayName,
+  fareStageStarts,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
   type RouteFactKey,
@@ -14,10 +15,11 @@ import {
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat, Star } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
+import { FareStage } from '../components/FareStage'
 import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { JourneyLines } from '../components/JourneyLines'
 import { RailBusToken } from '../components/RailBusToken'
@@ -378,6 +380,12 @@ export function RouteDetail() {
    * keeps the sequence both conformance suites read — the tokens in document order — byte-identical to the
    * overlay's.
    */
+  /** Where the fare changes along the route — the kernel's answer, one flag per row. */
+  const stageStarts = useMemo(
+    () => fareStageStarts((view?.stops ?? []).map((row) => row.fareLabel)),
+    [view?.stops],
+  )
+
   const busesByRow = new Map<number, ReactNode[]>()
   view?.buses.forEach((bus, ordinal) => {
     const owner = bus.kind === 'node' ? bus.index : bus.from
@@ -594,10 +602,15 @@ export function RouteDetail() {
             pending={routePath.isPending}
             stops={stopPoints}
             focusedIndex={focusedIndex}
+            boardingIndex={view.hereIndex >= 0 ? view.hereIndex : undefined}
             onSelectStop={focusStop}
             rider={rider}
             visibleInset={{ bottom: sheetFraction, top: CHROME_INSET_FRACTION }}
             onInteract={() => setChromeCollapsed(true)}
+            controlLabels={{
+              recentre: t(locale, 'mapShowWholeRoute'),
+              locate: t(locale, 'mapShowMyLocation'),
+            }}
             className="absolute inset-0"
           />
 
@@ -630,21 +643,29 @@ export function RouteDetail() {
               against — the only thing left on this element now the overlay is gone. */}
             <div ref={list} className="relative mt-2">
               {view.stops.map((row, index) => (
-                <RouteStopRow
-                  key={`${row.seq}-${row.stopId}`}
-                  row={row}
-                  index={index}
-                  animateIn={swapNonce > 0}
-                  // Reserve the arrivals line while the round is still out. `round === null` is
-                  // `useLiveRoute` saying "no round has landed", which is exactly the window in which every
-                  // row is about to gain a line at once — see the skeleton's note in `RouteStopRow`.
-                  arrivalsPending={wantsLive && round === null}
-                  tokens={busesByRow.get(index)}
-                  kind={markers[index]?.kind ?? 'stop'}
-                  onPress={onRowPress}
-                  onMenu={setSheetRow}
-                  registerRow={registerRow}
-                />
+                <Fragment key={`${row.seq}-${row.stopId}`}>
+                  {/* The stage's price, printed where the price changes — `fareStageStarts`
+                      decides that, because a comparison between adjacent rows is a claim
+                      about the route (ADR-068) and a stop with no fare is a gap in it. */}
+                  {stageStarts[index] && row.fareLabel ? (
+                    <FareStage fare={row.fareLabel} label={t(locale, 'fareFromHere')} />
+                  ) : null}
+                  <RouteStopRow
+                    row={row}
+                    index={index}
+                    animateIn={swapNonce > 0}
+                    // Reserve the arrivals line while the round is still out. `round === null` is
+                    // `useLiveRoute` saying "no round has landed", which is exactly the window in which every
+                    // row is about to gain a line at once — see the skeleton's note in `RouteStopRow`.
+                    arrivalsPending={wantsLive && round === null}
+                    tokens={busesByRow.get(index)}
+                    kind={markers[index]?.kind ?? 'stop'}
+                    selected={index === focusedIndex}
+                    onPress={onRowPress}
+                    onMenu={setSheetRow}
+                    registerRow={registerRow}
+                  />
+                </Fragment>
               ))}
               {/* Where a departed bus is drawn out (ADR-111). Rendered **empty and never filled by React**,
                 which is the whole point: `useRailFlip` appends a stripped clone of the token here for the

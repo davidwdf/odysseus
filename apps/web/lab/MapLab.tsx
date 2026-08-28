@@ -180,7 +180,13 @@ function RouteLines() {
           {error} — this section needs <code>pnpm dev:edge</code>.
         </p>
       ) : (
-        <RouteMap path={path} pending={pending} stops={stops} className="w-full" />
+        <RouteMap
+          path={path}
+          pending={pending}
+          stops={stops}
+          controlLabels={{ recentre: 'Show the whole route', locate: 'Show my location' }}
+          className="relative h-[420px] w-full overflow-hidden rounded-lg"
+        />
       )}
 
       <p className="max-w-[70ch] text-caption text-muted">

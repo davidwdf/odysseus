@@ -119,6 +119,9 @@
 /* {stop} → %1$@ */
 "busApproaching" = "巴士即將到達%1$@";
 "routeShowDetails" = "顯示路線詳情";
+"fareFromHere" = "由此起";
+"mapShowWholeRoute" = "顯示整條路線";
+"mapShowMyLocation" = "顯示我的位置";
 "routeHideDetails" = "隱藏路線詳情";
 "routeStopsSheet" = "本路線的車站";
 "riderHere" = "你的位置";
