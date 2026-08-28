@@ -349,6 +349,38 @@ to stand in) and scroll chaining (off; this list is 40 rows and chaining makes e
 
 ---
 
+## 8g. The header card, second pass (2026-08-27)
+
+The owner's tweaks after living with the shell, and two of them changed a decision rather than a value.
+
+**The badge is its own row, at the back lens's height.** A badge that shares a line with the journey
+takes a third of it, and HK destination names need all of it — so the badge sits centred on a row of
+its own, balanced against the back lens on one side and the direction swap on the other, and the
+journey gets the card's whole width below. Centred with a **three-column grid**, not a centred flex
+row: flex centres the *group*, which leaves the badge off-centre by half the swap and the swap sitting
+next to it instead of at the edge.
+
+**It travels on collapse** — shrinking and sliding to the left end of the pill — via a generic
+`useFlip` extracted from the rail's. Worth knowing: it works even though the badge is a **different
+DOM node** on each side, because the hook keeps the previous *rect* rather than the previous element.
+The card itself is one element in both states, with the collapsed tap target as an overlay, so its
+radius, padding and offset transition rather than cut.
+
+**Scrolling the list collapses it now**, which §8f explicitly ruled out. The objection was real — a
+list flick is the most common gesture here, and collapsing on *movement* means collapsing dozens of
+times a minute. What makes it work is the owner's own rule: the card returns when the list is **all
+the way at the top**, not when the scrolling stops. That is a place rather than a moment, a rider can
+return to it deliberately, and it cannot oscillate — the only way back to zero is to ask for it.
+
+**A wide muted chevron** hints at the state: down on the pill, up on the card. Chosen over a "menu"
+or "expand" glyph because it is the only one of the three that says which *way* — a rider sees both
+that something is hidden and where it will come from. Symmetrical on purpose, so whoever found the
+card by tapping it can put it away the same way.
+
+Also: chips centred, and the card at `radius.pill` (24) so it and the 48 px lens read as one family.
+
+---
+
 ## 8e. What M7 did not close (2026-08-26)
 
 Recorded rather than left as a silence, because the gap is in the *spec* and a spec's whole value is

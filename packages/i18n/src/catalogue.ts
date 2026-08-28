@@ -790,6 +790,18 @@ export const CATALOGUE = {
    * token on the *origin* node gets, which is the only token on the rail a rider can act on immediately.
    */
   /**
+   * The collapsed route header, which is a tap target whose whole content is a route number and a
+   * place name — neither of which says what pressing it does.
+   *
+   * "Show" rather than "expand": what a rider gets back is the route's facts, and naming the thing
+   * is more useful than naming the gesture.
+   */
+  routeShowDetails: {
+    en: 'Show route details',
+    'zh-Hant': '顯示路線詳情',
+    'zh-Hans': '显示路线详情',
+  },
+  /**
    * The draggable sheet holding the route's stop list. It is a `<region>` and its handle is a control,
    * so both need a name — an unnamed region is announced as nothing, and an unnamed handle as "button".
    */

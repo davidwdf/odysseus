@@ -293,9 +293,14 @@ export function RouteDetail() {
    * Whether the context card has stepped aside into its pill (round 4).
    *
    * Collapsed by **anything that means the rider has started reading** — dragging the sheet off its
-   * opening detent, or touching the map. Not by a timer and not by scrolling the list, which round 4
-   * tried: a list flick is the most common gesture on this screen and collapsing on it made the card
-   * flicker. Expanding is only ever a tap on the pill, so the card never reappears under a moving hand.
+   * opening detent, touching the map, or scrolling the stop list.
+   *
+   * Scrolling was excluded at first, because round 4 tried it and the card flickered: a list flick is
+   * the most common gesture on this screen, and collapsing on *movement* means collapsing dozens of
+   * times a minute. What makes it work is the owner's own rule — the card comes back when the list is
+   * **all the way at the top**, not when the scrolling stops. That is a place rather than a moment, a
+   * rider can return to it deliberately, and it cannot oscillate: the only way back to zero is to ask
+   * for it.
    */
   const [chromeCollapsed, setChromeCollapsed] = useState(false)
   /**
@@ -504,6 +509,7 @@ export function RouteDetail() {
           header={view.header}
           facts={factsStrip}
           collapsed={chromeCollapsed}
+          expandLabel={t(locale, 'routeShowDetails')}
           onExpand={() => setChromeCollapsed(false)}
           journey={
             /* Origin small and muted above, destination larger below — two nodes, which is what
@@ -591,6 +597,7 @@ export function RouteDetail() {
           <DraggableSheet
             label={t(locale, 'routeStopsSheet')}
             initial={DEFAULT_DETENT}
+            onContentScroll={(top) => setChromeCollapsed(top > 0)}
             onDetentChange={(d) => {
               setSheetFraction(d.fraction)
               // Dragging off the opening detent is the rider saying they have started reading.

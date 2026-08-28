@@ -39,6 +39,7 @@ export function DraggableSheet({
   initial = DEFAULT_DETENT,
   onDetentChange,
   label,
+  onContentScroll,
 }: {
   children: ReactNode
   detents?: readonly Detent[]
@@ -48,6 +49,14 @@ export function DraggableSheet({
   onDetentChange?: (detent: Detent) => void
   /** The sheet's accessible name — it is a region, and an unnamed one is announced as nothing. */
   label: string
+  /**
+   * How far the content inside is scrolled, in pixels, whenever that changes.
+   *
+   * Reported rather than acted on: a sheet has no opinion about anybody's header. The screen uses it
+   * to decide whether its chrome is in the way, and *zero* is the value that matters — "back at the
+   * top" is a state a rider can reach deliberately, where "scrolled a bit" is not.
+   */
+  onContentScroll?: (scrollTop: number) => void
 }) {
   const resolved = resolveDetent(detents, initial)
   const [detent, setDetent] = useState<Detent>(resolved)
@@ -161,7 +170,12 @@ export function DraggableSheet({
       >
         <span aria-hidden="true" className="block h-1 w-9 rounded-pill bg-border" />
       </button>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        onScroll={(e) => onContentScroll?.(e.currentTarget.scrollTop)}
+      >
+        {children}
+      </div>
     </section>
   )
 }

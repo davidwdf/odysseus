@@ -1,5 +1,6 @@
 import type { RouteDetailView } from '@nextbus/core'
-import type { ReactNode } from 'react'
+import { forwardRef, type ReactNode, useRef } from 'react'
+import { useFlip } from '../../hooks/useFlip'
 import { BACK_LENS_INSET, BACK_LENS_SIZE } from '../../shell/BackButton'
 import { CONTENT_INSET_TOP } from '../../shell/layout'
 
@@ -32,6 +33,7 @@ export function RouteContextCard({
   facts,
   collapsed,
   onExpand,
+  expandLabel,
 }: {
   header: RouteDetailView['header']
   /**
@@ -51,7 +53,14 @@ export function RouteContextCard({
   collapsed: boolean
   /** Tapping a collapsed pill expands it again. Ignored while expanded. */
   onExpand: () => void
+  /** The collapsed pill's accessible name — its content is a badge and a place, neither of which says
+   *  what pressing it does. */
+  expandLabel: string
 }) {
+  const badge = useRef<HTMLSpanElement | null>(null)
+  // The badge travels between the two layouts rather than being re-drawn in each. See `useFlip`.
+  useFlip(badge, collapsed ? 'pill' : 'card')
+
   // Clear of the lens when collapsed, running underneath it when expanded. One number, two states.
   const left = collapsed ? BACK_LENS_INSET * 2 + BACK_LENS_SIZE : BACK_LENS_INSET
 
@@ -65,52 +74,140 @@ export function RouteContextCard({
       }}
     >
       {/*
-        **Collapsed is a button; expanded is not**, and that is structural rather than stylistic. The
-        expanded card *contains* controls — the swap link and the fact pills — and a button cannot
-        contain a button: it is invalid HTML and folds into one control for a screen reader, which is
-        the same rule the row's `⋯` follows (ADR-024). Two elements, one at a time.
+        **One card element in both states, with the collapsed tap target as an overlay** — not a
+        `<button>` swapped for a `<div>`, which is what this was.
+
+        The expanded card *contains* controls (the swap link, the fact pills) and a button cannot
+        contain a button (ADR-024), so the card itself cannot be the target. An absolutely positioned
+        overlay gives the collapsed state a full-size one without nesting anything.
+
+        What that buys is the **card**: its radius, padding and `left` are one element's properties
+        across the change, so they transition rather than cut. It is *not* what makes the badge travel
+        — measured, the badge is a different node on each side, and `useFlip` works anyway because it
+        keeps the previous rect rather than the previous element.
       */}
-      {collapsed ? (
-        <button
-          type="button"
-          onClick={onExpand}
-          className="glass-pane pointer-events-auto flex h-12 w-full items-center gap-2 overflow-hidden rounded-lg border border-border px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
-        >
-          <RouteBadge routeNo={header.routeNo} compact />
-          <span className="truncate font-semibold text-body text-text">{header.destination}</span>
-        </button>
-      ) : (
-        <div className="glass-pane pointer-events-auto flex w-full flex-col gap-2 overflow-hidden rounded-lg border border-border px-3 py-3">
-          {/*
-            **The badge is centred, not leading**, and that is round 4's actual arrangement rather
-            than a preference. The card runs *under* the floating back lens, so anything at its left
-            edge is hidden by a 48 px circle — the first build put the badge there and it vanished.
-            Centring it also does the other half of the job the mockup describes: it pushes the
-            journey text clear of the lens without the card needing to know the lens is there.
-          */}
-          <div className="flex w-full items-center justify-center gap-2 pl-9">
-            <RouteBadge routeNo={header.routeNo} />
-            <div className="min-w-0 flex-1 text-center">{journey}</div>
-            {swap}
+      <div
+        className={`glass-pane pointer-events-auto relative flex w-full flex-col overflow-hidden rounded-pill border border-border ${
+          collapsed ? 'gap-0 px-3 py-2' : 'gap-2 px-3 pt-3 pb-1'
+        }`}
+      >
+        {collapsed ? (
+          <div className="flex w-full items-center gap-2">
+            <RouteBadge ref={badge} routeNo={header.routeNo} compact />
+            <span className="min-w-0 flex-1 truncate font-semibold text-body text-text">
+              {header.destination}
+            </span>
+            <Chevron direction="down" />
           </div>
-          {/* The facts fold away first: they are what a rider reads once, where the destination is
-              what they check repeatedly. */}
-          {facts}
-        </div>
-      )}
+        ) : (
+          /*
+            **A three-column grid, not a centred flex row**, and the difference is the whole point: a
+            flex row centres the *group* — badge plus swap — which leaves the badge left of the card's
+            middle by half the swap's width, and the swap sitting next to it instead of at the edge.
+            Fixed side columns the width of the back lens put the badge dead centre and balance the
+            lens against the swap, so the row reads as chrome at both ends with the number between them.
+
+            The badge is **the back lens's height**, which is what buys the line below it the card's
+            whole width: a badge that shares a line with the journey takes a third of it, and HK
+            destination names need all of it.
+          */
+          <div
+            className="grid w-full items-center gap-2"
+            style={{ gridTemplateColumns: `${BACK_LENS_SIZE}px 1fr ${BACK_LENS_SIZE}px` }}
+          >
+            <span aria-hidden="true" />
+            <span className="flex justify-center">
+              <RouteBadge ref={badge} routeNo={header.routeNo} />
+            </span>
+            <span className="flex justify-end">{swap}</span>
+          </div>
+        )}
+
+        {collapsed ? null : (
+          <>
+            {/* The journey gets its own line and the **whole width** of it — which is the point of
+                putting the badge on its own row. HK destination names are long, and a name that has to
+                share a line with a badge and a control loses a third of the space it needs. */}
+            <div className="w-full text-center">{journey}</div>
+            {/* Centred, because the strip is a row of facts about the route rather than a list that
+                begins somewhere — ragged-left pills under a centred journey read as a mistake. */}
+            {facts ? <div className="flex w-full justify-center">{facts}</div> : null}
+            {/* Pointing UP while expanded: the affordance is symmetrical, so a rider who found the
+                card by tapping the chevron can put it away the same way. */}
+            <Chevron direction="up" />
+          </>
+        )}
+
+        {collapsed ? (
+          <button
+            type="button"
+            onClick={onExpand}
+            aria-label={expandLabel}
+            className="absolute inset-0 cursor-pointer border-0 bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+          />
+        ) : null}
+      </div>
     </div>
   )
 }
 
-/** The route number, at the two sizes the card has. Extracted so the pair cannot drift apart. */
-function RouteBadge({ routeNo, compact = false }: { routeNo: string; compact?: boolean }) {
+/**
+ * The expand/collapse hint — **wide and muted**, so it reads as an edge of the card rather than as a
+ * control competing with the badge beside it.
+ *
+ * A chevron over a "menu" or "expand" glyph because it is the only one of the three that says which
+ * *way*: a rider seeing it pointing down learns both that something is hidden and where it will come
+ * from. The other two say only "there is more", which they can already guess.
+ */
+function Chevron({ direction }: { direction: 'up' | 'down' }) {
   return (
     <span
-      className={`shrink-0 rounded-md bg-accent px-2 font-semibold text-accent-contrast tabular-nums ${
-        compact ? 'text-body' : 'text-title'
+      aria-hidden="true"
+      className={`pointer-events-none flex shrink-0 justify-center text-subtle ${
+        direction === 'down' ? '' : 'w-full'
       }`}
     >
-      {routeNo}
+      {/*  on the SVG as well as its wrapper: the hint is decoration, and the control it
+          hints at carries its own name. A <title> here would announce "chevron" to a screen reader,
+          which is the glyph rather than the meaning. */}
+      <svg
+        aria-hidden="true"
+        width="28"
+        height="10"
+        viewBox="0 0 28 10"
+        fill="none"
+        stroke="currentColor"
+      >
+        <path
+          d={direction === 'down' ? 'M2 2.5 L14 7.5 L26 2.5' : 'M2 7.5 L14 2.5 L26 7.5'}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </span>
   )
 }
+
+/**
+ * The route number, at the two sizes the card has — and it is **one element**, forwarded a ref, so it
+ * can travel between them (`useFlip`).
+ *
+ * Expanded it is sized to the back lens: same height, so the two read as one row of chrome and the
+ * journey below gets the card's whole width. Collapsed it is the pill's own height.
+ */
+const RouteBadge = forwardRef<HTMLSpanElement, { routeNo: string; compact?: boolean }>(
+  function RouteBadge({ routeNo, compact = false }, ref) {
+    return (
+      <span
+        ref={ref}
+        className={`flex shrink-0 items-center justify-center rounded-md bg-accent font-semibold text-accent-contrast tabular-nums ${
+          compact ? 'h-7 px-2 text-body' : 'px-3 text-title'
+        }`}
+        style={compact ? undefined : { height: BACK_LENS_SIZE, minWidth: BACK_LENS_SIZE }}
+      >
+        {routeNo}
+      </span>
+    )
+  },
+)
