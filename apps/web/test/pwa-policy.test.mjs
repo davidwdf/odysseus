@@ -198,11 +198,13 @@ describe('the shared SPA deep-link fallback', () => {
     })
   })
 
-  it('is emitted by BOTH apps’ build:web, and hand-copied into neither', () => {
-    // The finding itself, as an assertion. `apps/mobile` is the PWA that ships today and `apps/web` is the
-    // one that replaces it (ADR-075); a fallback only one of them emits is the ADR-082 split reintroduced
-    // one layer down, and it is invisible until a rider opens a shared link on a host.
-    for (const app of ['web', 'mobile']) {
+  it('is emitted by every app’s build:web, and hand-copied into none', () => {
+    // The finding itself, as an assertion. It read `['web', 'mobile']` while two renderers shipped a PWA
+    // — a fallback only one of them emitted was the ADR-082 split reintroduced one layer down, invisible
+    // until a rider opened a shared link on a host. `apps/mobile` is gone (ADR-157) and the loop stays a
+    // loop: the claim is about *every* app that builds a PWA, and a second one is exactly the thing this
+    // repo has had before and expects again.
+    for (const app of ['web']) {
       const { scripts } = readJson(`apps/${app}/package.json`)
       expect(scripts['build:web'], `apps/${app} does not emit the SPA fallback`).toContain(
         'scripts/pwa/redirects.mjs',

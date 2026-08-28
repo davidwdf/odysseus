@@ -10626,6 +10626,22 @@ pre-existing and unaddressed; it earned its keep here.
   nothing and the rule could not fire. The suite reported *"the engine is vacuous"* rather than passing,
   which is the property it was built for. The fixture is `kernel-imports-react` now: the same violation
   against a package this repo will always have.
+- 🔴 **Turbo's cache hid two failures the deletion caused, and I reported green on them.** `pnpm test`
+  passed because the web test task was cached from before the app was removed; the next unrelated
+  change invalidated it and two suites failed at once — `shell-parity.test.ts`, which reads
+  `apps/mobile`'s declarations by design, and `pwa-policy.test.mjs`, which asserts the SPA fallback is
+  emitted by *both* apps' `build:web`.
+
+  Neither is subtle and CI would have caught both. The habit is what is worth keeping: after deleting
+  anything a suite might read, **run `pnpm test --force`** — a task whose inputs no longer exist can
+  still be a cache hit, and a green run over a stale cache is precisely the shape of *a gate passing
+  because it is looking at nothing* that this repo keeps rediscovering.
+
+  `shell-parity.test.ts` is deleted, which its own header predicted: *"deliberately temporary… it dies
+  with `apps/mobile`."* What it bound — the destination set, ADR-058's cache policy and each store's
+  key — has no second declaration to be compared against now; `src/shell/destinations.ts` survives as
+  the declaration a third renderer would read. `pwa-policy` keeps its loop over apps rather than
+  collapsing to one path: the claim is about *every* app that builds a PWA.
 - 🟠 **21 states of the RN Route detail are no longer measured by anything**, because that suite went
   first (ADR-156). That is a real loss and it is now permanent rather than pending.
 - 🟠 **`packages/ports` is unchanged and still matters.** It is the type-only iOS/Android porting

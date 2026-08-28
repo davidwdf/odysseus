@@ -875,13 +875,16 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
       const token = tokens[ordinal]
       if (!(token instanceof window.HTMLElement))
         throw new Error(`bus ${ordinal} is not an element`)
-      // `13px` is NODE_CENTRE (25) less half a token (12). The segment case adds half of the *from* row,
+      // `12px` is NODE_CENTRE (25) less half a token (13). The segment case adds half of the *from* row,
       // and it is a percentage rather than a number precisely so a row that grows an arrivals line takes
       // its bus with it — which is the reflow the observer used to have to notice.
       expect(
         token.style.top,
         `bus ${ordinal} is positioned by a computed value — that is a number that can go stale`,
-      ).toBe(bus.kind === 'node' ? '13px' : 'calc(50% + 13px)')
+        // 12, not 13: the token is exactly as tall as the node now (26) rather than 24, which is what
+        // makes it cover the terminus square and the interchange hexagon instead of showing their
+        // outlines around itself. `NODE_CENTRE - TOKEN_H / 2` = 25 − 13.
+      ).toBe(bus.kind === 'node' ? '12px' : 'calc(50% + 12px)')
     })
   })
 
@@ -953,6 +956,6 @@ describe('a bus rides inside its own row, and nothing measures where it goes', (
       'at the terminus',
       'approaching stop 1',
     ])
-    expect(tokens.map((el) => (el as HTMLElement).style.top)).toEqual(['13px', 'calc(50% + 13px)'])
+    expect(tokens.map((el) => (el as HTMLElement).style.top)).toEqual(['12px', 'calc(50% + 12px)'])
   })
 })
