@@ -10632,6 +10632,18 @@ pre-existing and unaddressed; it earned its keep here.
   `apps/mobile`'s declarations by design, and `pwa-policy.test.mjs`, which asserts the SPA fallback is
   emitted by *both* apps' `build:web`.
 
+  **And it happened a second time, on a check with no dependency edge to follow.**
+  `packages/contract`'s README carries generated figures — a token count, a string count — that
+  `native-guide.mjs` reads out of `packages/i18n/generated` and `packages/ui/generated` by absolute
+  path. No package declares that dependency, so turbo had nothing to invalidate on: adding a string
+  left the staleness check cached green while the committed README said 144 strings against a tree
+  with 147. CI has no cache and would have failed the PR.
+
+  Fixed with `globalDependencies` in `turbo.json`, which is the one shape `^task` cannot express —
+  there is no dependency to be topological about. Blunt (any token or string change now invalidates
+  every task) and the right trade for a suite that runs in seconds against a check that silently stops
+  looking. Verified by staling the README on purpose: the cached run now fails.
+
   Neither is subtle and CI would have caught both. The habit is what is worth keeping: after deleting
   anything a suite might read, **run `pnpm test --force`** — a task whose inputs no longer exist can
   still be a cache hit, and a green run over a stale cache is precisely the shape of *a gate passing

@@ -1,6 +1,19 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  // Files that no package DECLARES a dependency on and several tasks nonetheless read.
+  //
+  // `packages/contract`'s README carries generated figures — the token count, the string count — which
+  // `native-guide.mjs` reads out of `packages/i18n/generated` and `packages/ui/generated` by absolute
+  // path. There is no package edge for turbo to follow, so adding a string left the staleness check
+  // cached green while the committed README said 144 strings and the tree had 147. CI has no cache and
+  // would have failed the PR; locally it reported success twice.
+  //
+  // This is the same failure the `typecheck` note below records, in the one shape `^task` cannot fix:
+  // there is no dependency to be topological about. A global dependency is blunt — any token or string
+  // change invalidates every task — and that is the correct trade for a suite that runs in seconds
+  // against a check that silently stops looking.
+  "globalDependencies": ["packages/i18n/generated/**", "packages/ui/generated/**"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
