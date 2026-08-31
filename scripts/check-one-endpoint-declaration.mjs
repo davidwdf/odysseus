@@ -188,7 +188,7 @@ export function findViolations(source, file = '') {
   codeLines(source).forEach((line, i) => {
     for (const pattern of PATTERNS) {
       const hit = pattern.re.exec(line)
-      if (hit && !(pattern.unless && pattern.unless.test(line))) {
+      if (hit && !pattern.unless?.test(line)) {
         found.push({ file, line: i + 1, code: normalize(line), value: hit[0], pattern })
       }
     }

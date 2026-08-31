@@ -138,3 +138,62 @@ export const NearbyStopSchema = z
       ),
   })
   .meta({ id: 'NearbyStop' })
+
+/**
+ * The road-following line for one route direction — `GET /v1/route/{id}/path` (ADR-152/153).
+ *
+ * **`available: false` is an ordinary answer, not an error.** About 7% of bus and minibus
+ * route-directions have no surveyed line: they are the racecourse (`R`), school (`S`), peak-hour
+ * (`P`) and `serviceType ≠ 1` variants the Transport Department does not separately register. The
+ * endpoint answers **200** for those, with an empty `path`, because a 404 would make *"no geometry"*
+ * indistinguishable from *"no such route"* — a different fact, already answered by `/v1/route/{id}`.
+ * What a screen draws instead is a design decision (`docs/proposals/06 §5`), not a transport one.
+ *
+ * **`path` is `[longitude, latitude]`** — GeoJSON order, which is what the upstream CSDI datasets
+ * return, and the reverse of `LatLng` everywhere else in this contract. Stated here because the two
+ * orders in one payload is exactly the kind of thing a hand-written client gets silently wrong; the
+ * tuple is deliberately not a `LatLngSchema` so nobody can pass one where the other belongs.
+ *
+ * `fitMetres` and `matchedBy` are diagnostics rather than anything a rider sees: they say how well
+ * the chosen line covered the route's own stops, and whether it was found by the `gtfsId` join or by
+ * the looser operator+number fallback. A client may use them to decide how much to trust the line;
+ * nothing in the UI is required to.
+ */
+export const RoutePathSchema = z
+  .object({
+    routeId: z.string().describe('The canonical route id this line belongs to.'),
+    available: z
+      .boolean()
+      .describe('False when this route has no surveyed line. `path` is then empty. Not an error.'),
+    // A length-2 array, NOT `z.tuple` — a Zod tuple emits `prefixItems`, which is JSON Schema
+    // 2020-12 only, and the vocabulary shared with AsyncAPI is draft-07 (the gate caught it). Kept as
+    // an array rather than `{ lng, lat }` because a route can carry 2,700 vertices and the object
+    // form roughly triples the bytes for the same information.
+    path: z
+      .array(z.array(z.number()).length(2))
+      .describe(
+        'Vertices as [longitude, latitude], 5 decimal places (±1 m). Empty when `available` is false.',
+      ),
+    fitMetres: z
+      .number()
+      .optional()
+      .describe(
+        'Mean distance from the route’s own stops to the chosen line, metres. Present when available.',
+      ),
+    matchedBy: z
+      .enum(['gtfsId', 'routeNumber'])
+      .optional()
+      .describe(
+        '`routeNumber` means the ambiguous operator+number fallback won, so the line is less certain.',
+      ),
+    reversed: z
+      .boolean()
+      .optional()
+      .describe(
+        'True when the upstream vertices ran against the rider’s stop order and were flipped.',
+      ),
+    source: z.literal('csdi').describe('Which upstream published the geometry.'),
+    attribution: z.string().describe('Required credit line for the geometry’s publisher.'),
+  })
+  .describe('The road-following line for one route direction, or an explicit “there isn’t one”.')
+  .meta({ id: 'RoutePath' })

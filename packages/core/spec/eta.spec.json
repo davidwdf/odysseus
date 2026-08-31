@@ -2529,6 +2529,75 @@
           "expect": "2026-08-12T04:00:00.000Z"
         }
       ]
+    },
+    "joyYouEligible": {
+      "doc": "Whether the $2 Scheme applies to a route at all, from its route number. The Transport Department excludes \"'A' and 'NA' routes to the airport, racecourse routes, new long-haul services, designated tourist-oriented routes and the routes on a pre-booking and group hire basis\" — of which ONLY the A/NA prefix is decidable from data we hold, so this is a narrowing of the error rather than an elimination of it (docs/07).",
+      "cases": [
+        {
+          "name": "an-ordinary-urban-route-is-eligible",
+          "why": "The overwhelming common case: every plain-numbered franchised route is covered, so the default answer is yes and the rule only ever takes things away.",
+          "args": {
+            "routeNo": "1"
+          },
+          "expect": true
+        },
+        {
+          "name": "an-airport-a-route-is-excluded",
+          "why": "The A21 costs $34.6. A JoyYou holder pays all of it, and quoting them ~$6.9 would be wrong by twenty-eight dollars — on exactly the routes where a concession would matter most, because they are the dear ones.",
+          "args": {
+            "routeNo": "A21"
+          },
+          "expect": false
+        },
+        {
+          "name": "an-overnight-airport-route-is-excluded-too",
+          "why": "'NA' is named in the exclusion beside 'A'. Pinned separately because a rule written as /^A/ passes every other case here and silently re-admits the whole overnight airport network.",
+          "args": {
+            "routeNo": "NA21"
+          },
+          "expect": false
+        },
+        {
+          "name": "an-e-route-to-the-airport-is-eligible",
+          "why": "The exclusion names the LETTER, not the destination. E11/E21/E22 serve the airport and ARE covered — they are the cheap ones an elderly rider actually takes. A rule matching \"goes to the airport\" would wrongly deny the concession here, which is the worse error: it keeps a rider off a bus they could afford.",
+          "args": {
+            "routeNo": "E22"
+          },
+          "expect": true
+        },
+        {
+          "name": "an-airport-estate-s-route-is-eligible",
+          "why": "S1/S52/S64 run within the airport estate and are neither A nor NA. The companion to the E case: two letter families that touch the airport and stay covered.",
+          "args": {
+            "routeNo": "S64"
+          },
+          "expect": true
+        },
+        {
+          "name": "a-number-that-merely-starts-with-a-letter-a-is-eligible",
+          "why": "The digit after the letter is required. Guards the day a route number like 'AP1' or a bare 'A' appears: an airport route is 'A' followed by a number, and matching a lone letter would exclude routes on the shape of their name rather than on what they are.",
+          "args": {
+            "routeNo": "AP1"
+          },
+          "expect": true
+        },
+        {
+          "name": "a-lowercase-route-number-is-still-excluded",
+          "why": "Upstream casing is not ours to trust — the id grammar (ADR-059) normalises ids, not the display number. A case-sensitive test would quietly re-admit 'a21'.",
+          "args": {
+            "routeNo": "a21"
+          },
+          "expect": false
+        },
+        {
+          "name": "an-absent-route-number-is-treated-as-eligible",
+          "why": "Absence is not evidence of exclusion. The scheme covers nearly everything, so the safe default when we cannot tell is to show the concession rather than to deny one a rider is entitled to.",
+          "args": {
+            "routeNo": null
+          },
+          "expect": true
+        }
+      ]
     }
   }
 }

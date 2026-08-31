@@ -1,12 +1,13 @@
 import type { ErrorCode } from '@nextbus/core'
-import { CLIENT_POLICY_DEFAULTS, ETAS_BATCH_MAX_IDS } from '@nextbus/core'
+import { CLIENT_POLICY_DEFAULTS, ETAS_BATCH_MAX_IDS, parseRouteId } from '@nextbus/core'
 import { fetchEta } from '@nextbus/data-normalize'
 import { type DatasetSource, datasetBuildCount, getDataset } from './dataset'
 import type { Env } from './env'
-import { errorResponse, fail as failWith } from './errors'
+import { badRequest, errorResponse, fail as failWith, notFound } from './errors'
 import { ETA_TTL_SEC } from './eta-cache'
 import { LIVE_PATH, liveUpgrade } from './live'
 import { nearby } from './nearby'
+import { ROUTE_PATH_TTL_SEC, routePath } from './route-path'
 import {
   LIST_CTB_BUDGET,
   routeDetail,
@@ -365,6 +366,35 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   // GET /v1/route/:id  → RouteDetail (canonical id, e.g. KMB:6:outbound:1, CTB:1:outbound:1)
   // Now carries live per-stop ETAs (ADR-030) → short TTL like the other live endpoints,
   // not the hour the static geometry alone could afford.
+  // GET /v1/route/{id}/path → the road-following line (ADR-152/153). Matched BEFORE the bare
+  // `/v1/route/{id}` branch, which would otherwise swallow it on `parts[2]` alone.
+  //
+  // Cached for a day: CSDI republishes on the order of a fortnight and an alignment is the most
+  // static thing we serve. A route with no line is a **200 with `available: false`**, never a 404 —
+  // see `routePath` for why that distinction matters.
+  if (parts[0] === 'v1' && parts[1] === 'route' && parts[2] && parts[3] === 'path') {
+    const id = decodeId(parts[2])
+    if (id === null) return fail('bad_request', `malformed percent-encoding: ${parts[2]}`)
+    return cached(
+      request,
+      url,
+      ctx,
+      env,
+      ROUTE_PATH_TTL_SEC,
+      async (dataset) => {
+        // The same split `routeDetail` makes, and for the same reason: unparseable is the caller's
+        // fault, absent is nobody's, and neither is worth retrying. `KMB:6:sideways:1` is a 400;
+        // `KMB:999X:outbound:1` is a 404. Without this the malformed id fell through to the lookup
+        // and answered 404, which tells a client to stop asking rather than to fix its id.
+        if (!parseRouteId(id)) throw badRequest(`not a route id: ${id}`)
+        const doc = await dataset.route(id)
+        if (!doc) throw notFound(`unknown route: ${id}`)
+        return routePath(doc, id)
+      },
+      'route path error',
+    )
+  }
+
   if (parts[0] === 'v1' && parts[1] === 'route' && parts[2]) {
     const id = decodeId(parts[2])
     if (id === null) return fail('bad_request', `malformed percent-encoding: ${parts[2]}`)

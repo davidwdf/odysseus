@@ -1,4 +1,5 @@
 import { type RefObject, useLayoutEffect, useRef } from 'react'
+import { BUS_SHAPE_ATTR, TOKEN_CLIP } from '../components/RailBusToken'
 import { prefersReducedMotion } from '../lib/motion'
 
 /**
@@ -111,6 +112,7 @@ export function useRailFlip(
         { duration: TRAVEL_MS, easing: TRAVEL_EASING },
       )
       if (travel) travelling.current.set(token.el, travel)
+      morphShape(was.el, token.el)
     }
     for (; j < before.current.length; j += 1) {
       const skipped = before.current[j]
@@ -120,6 +122,44 @@ export function useRailFlip(
     before.current = now
     if (still) return
     for (const bus of gone) leave(bus, ghosts.current)
+  })
+}
+
+/**
+ * **Morph a travelling token from the shape it left to the shape it is arriving at** — a disc becoming
+ * a hexagon over the length of the hop rather than at the instant of it.
+ *
+ * All three token shapes are 24-point polygons for exactly this (`RailBusToken`): a browser interpolates
+ * `clip-path: polygon()` only between polygons of equal point count, so a `border-radius` disc and a
+ * six-vertex hexagon have no correspondence to animate through.
+ *
+ * ## Why this is WAAPI and not the CSS transition next to it
+ *
+ * A bus that moves between rows is **re-parented**, and React gives it a fresh element. A brand-new
+ * node has no previously-resolved style, so there is nothing for a transition to start *from* — setting
+ * the departure shape and clearing it in the same task is coalesced into one style resolution and
+ * transitions nothing. That was measured rather than assumed: the hop from a segment onto the node
+ * above it (a different row, a new element) ran no `clip-path` transition at all, while the hop from a
+ * node onto the segment below it — the **same** row, so the same element — ran one happily.
+ *
+ * It is the same reason the travel beside this is `element.animate()`, and the pair is worth reading
+ * together: a re-parent defeats CSS transitions for position and for shape alike.
+ *
+ * The same-element case needs nothing from here — React has already written the new shape, the
+ * stylesheet's `transition: clip-path` picks it up, and `departing === arriving` returns early because
+ * both attributes are read after the commit.
+ */
+function morphShape(from: HTMLElement, to: HTMLElement): void {
+  if (from === to) return
+  const departing = from.getAttribute(BUS_SHAPE_ATTR)
+  const arriving = to.getAttribute(BUS_SHAPE_ATTR)
+  if (departing === null || arriving === null || departing === arriving) return
+  const was = TOKEN_CLIP[departing as keyof typeof TOKEN_CLIP]
+  const now = TOKEN_CLIP[arriving as keyof typeof TOKEN_CLIP]
+  if (was === undefined || now === undefined) return
+  to.animate?.([{ clipPath: was }, { clipPath: now }], {
+    duration: TRAVEL_MS,
+    easing: TRAVEL_EASING,
   })
 }
 

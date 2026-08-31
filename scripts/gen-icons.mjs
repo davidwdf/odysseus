@@ -1,22 +1,21 @@
-// Generate the app icon asset set from one master design (see apps/mobile/assets/icon.svg).
+// Generate the app icon asset set from one master design (see packages/ui/assets/icon.svg).
 // Run from repo root: `node scripts/gen-icons.mjs`. Requires `sharp` (already a dep).
 //
-// Outputs to apps/mobile/assets/:
+// Outputs to packages/ui/assets/:
 //   icon.png           1024, full-bleed ink (iOS/PWA; OS masks the corners)
 //   adaptive-icon.png  1024, white mark on transparent, scaled into Android's safe zone
 //   splash-icon.png    1024, white mark on transparent, smaller (shown on ink via app.json)
 //   favicon.png        196,  full-bleed ink (web tab) — enlarged full mark (fills the tab, crisper small)
 //   icon-mono.png      1024, white mark on transparent (reuse: in-app logo / iOS tinted source)
 //
-// And to EVERY web root in PUBLIC_DIRS below (apps/mobile/public, copied verbatim by `expo export`;
-// apps/web/public, copied verbatim by `vite build`) — the PWA install set:
+// And to EVERY web root in PUBLIC_DIRS below (apps/web/public, copied verbatim by `vite build`) — the
+// PWA install set:
 //   apple-touch-icon.png   180, opaque — iOS "Add to Home Screen" (iOS ignores the manifest here)
 //   icon-192.png           192, opaque — PWA manifest icon (purpose "any")
 //   icon-512.png           512, opaque — PWA manifest icon (purpose "any")
 //   icon-maskable-512.png  512, mark in the ~66% safe zone on ink — manifest "maskable" (Android)
 //   landsd-logo.png        the Lands Department credit mark — COPIED, not generated: it is a licence
-//                          obligation on the map face (ADR-049) and it is not ours to redraw. Only
-//                          apps/web needs it as a file; apps/mobile bundles it through Metro.
+//                          obligation on the map face (ADR-049) and it is not ours to redraw.
 //   manifest.webmanifest   the install manifest, whose two colours are the ink TOKEN rather than a
 //                          hand-copied hex — it was hand-maintained beside the icons until WP6-0,
 //                          which needed a second copy of it and would have made the hex a third
@@ -30,14 +29,25 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const ASSETS = join(ROOT, 'apps', 'mobile', 'assets')
 /**
- * Every web root that ships the PWA install set. **Two, for as long as two renderers ship a PWA** —
- * `apps/mobile` is the reference implementation until WP6-8 (ADR-075 decision 6) and `apps/web` is
- * the one that survives. The files are byte-identical by construction because they are written from
- * one run of one generator, which is the cheapest form of "one declaration" available for a binary.
+ * The brand's own assets — the icon master and the Lands Department credit mark.
+ *
+ * They lived in `apps/mobile/assets` while that app was the reference implementation, and moved here
+ * when it was retired (ADR-157). `packages/ui` is where they belong on the merits anyway: an icon
+ * master and a licence mark are design-system property, not one renderer's, and both are read by a
+ * build step rather than imported by either app.
  */
-const PUBLIC_DIRS = [join(ROOT, 'apps', 'mobile', 'public'), join(ROOT, 'apps', 'web', 'public')]
+const ASSETS = join(ROOT, 'packages', 'ui', 'assets')
+/**
+ * Every web root that ships the PWA install set. **One, since `apps/mobile` was retired** (ADR-157) —
+ * it was two while both renderers shipped a PWA, and the files were byte-identical by construction
+ * because they came from one run of one generator.
+ *
+ * Kept as a list rather than collapsed to a single path: a second renderer is exactly the thing this
+ * repo has had before and may have again, and "every web root" is the shape worth keeping even at a
+ * length of one.
+ */
+const PUBLIC_DIRS = [join(ROOT, 'apps', 'web', 'public')]
 const DOCS = join(ROOT, 'docs')
 // The mark's field colour is the brand-ink *token*, read from the generated token set rather
 // than repeated here — the icon, the splash, the PWA `theme-color` and any brand chrome are one
@@ -173,11 +183,11 @@ async function run() {
     for (const [name, bytes] of Object.entries(web)) writeFileSync(join(dir, name), bytes)
   }
 
-  // The **Lands Department credit logo** — not generated, and not ours. `apps/mobile` reads it through
-  // Metro (`require('../assets/landsd-logo.png')` in `lib/tileSource.ts`); a Vite app has to be handed a
-  // URL, so the same bytes are copied into `apps/web/public/` from the one source rather than committed
-  // twice by hand. It is a **licence** asset (ADR-049 requires the logo on the map face), so "the same
-  // bytes by construction" matters here for the same reason it does for the icons.
+  // The **Lands Department credit logo** — not generated, and not ours. A Vite app has to be handed a
+  // URL, so the bytes are copied into `apps/web/public/` from the one source in `packages/ui/assets`
+  // rather than committed twice by hand. It is a **licence** asset (ADR-049 requires the logo on the
+  // map face), so "the same bytes by construction" matters here for the same reason it does for the
+  // icons — and it is why the master lives with the design system rather than with a renderer.
   copyFileSync(
     join(ASSETS, 'landsd-logo.png'),
     join(ROOT, 'apps', 'web', 'public', 'landsd-logo.png'),

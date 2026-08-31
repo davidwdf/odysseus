@@ -1,1 +1,1 @@
-export type { Screen } from '../../../apps/mobile/lib/screen'
+export type { Screen } from '../../../apps/web/lib/screen'

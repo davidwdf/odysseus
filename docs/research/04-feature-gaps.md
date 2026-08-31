@@ -35,7 +35,7 @@
 | # | Gap | State | Notes |
 |---|-----|-------|-------|
 | B1 | **Map view for Nearby** | 🟥 | Roadmap Phase 2. We have coordinates for every stop; MapLibre is the planned lib. Nearby is list-only today. |
-| B2 | **Route shape on a map** (the actual road path) | 🟥 | Route detail is a *schematic* line-strip, not a geographic map. Needs route polylines/shapes (see data catalog — GTFS `shapes` / TD geometry). |
+| B2 | **Route shape on a map** (the actual road path) | 🟥 **unblocked** | Route detail is still a *schematic* line-strip. But this was filed as blocked on a **data** question, and it is not: the TD publishes road-following route lines on CSDI covering **93%** of our route-directions ([07](./07-route-geometry-and-maps.md), [ADR-151](../08-decision-log.md#adr-151--the-route-line-geometry-we-said-hong-kong-did-not-publish-has-existed-since-2021)). ~4 KB per route, joins on `gtfsId`. What remains is **rendering**, not sourcing. |
 | B3 | **Stop pin / "where exactly is this kerb"** | 🟥 | Confusing-stop disambiguation; we have lat/lng but never show a map. |
 | B4 | **Walking directions to the stop** | 🟥 | We show "{n} min walk" (straight-line) but can't draw the walk. |
 

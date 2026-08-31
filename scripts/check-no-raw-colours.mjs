@@ -43,14 +43,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
  * So: **add a renderer's source dirs here in the same commit that creates them.** The count printed on
  * every successful run ("N files in M policed dirs") is the cheap check that this happened.
  */
-const POLICED = [
-  'apps/mobile/app/',
-  'apps/mobile/components/',
-  'apps/mobile/lib/',
-  'apps/mobile/providers/',
-  'apps/web/src/',
-  'packages/ui/src/',
-]
+const POLICED = ['apps/web/src/', 'packages/ui/src/']
 
 const PATTERNS = [
   {
@@ -81,16 +74,7 @@ const TOKEN_FILES = new Set([
  * that stops matching anything fails the check just as loudly as an unallowed finding, so the
  * list can shrink but never quietly rot into a lie about what is protected.
  */
-const ALLOWLIST = [
-  {
-    file: 'apps/mobile/lib/liquidGlass.ts',
-    why:
-      'Not colours. This module builds an SVG displacement map for the liquid-glass refraction ' +
-      '(ADR-028): #808080 means "zero displacement", the red/green ramps encode the X and Y ' +
-      'channels, and #000080 is a base for the blue channel. Tokenising them would make the ' +
-      'filter unreadable and couple an optical encoding to the palette. Documented at its :1-10.',
-  },
-]
+const ALLOWLIST = []
 
 /** Whitespace-insensitive form of a source line, for stable snippet matching. */
 const normalize = (line) => line.trim().replace(/\s+/g, ' ')

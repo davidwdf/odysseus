@@ -152,12 +152,19 @@ const LABELS = {
   busAtStop: (stop: string) => `Bus at ${stop}`,
 }
 
-/** Tap the nth stop row, which is what opens the sheet (ADR-032, ADR-098). */
+/**
+ * Open the nth stop's action sheet (ADR-032, ADR-098).
+ *
+ * **Via the `⋯`, not the row.** Since §8d a row tap focuses the stop on the map and opens nothing; the
+ * actions live on a permanent sibling control. Selected by its accessible name rather than a class,
+ * because the name is the part a screen reader and the spec agree on — matching a class would let this
+ * pass for a control announced as nothing at all.
+ */
 async function tapRow(index: number): Promise<void> {
   const row = [...container.querySelectorAll('button')].filter((b) =>
-    b.className.includes('min-h-16'),
+    (b.getAttribute('aria-label') ?? '').startsWith('Actions for'),
   )[index]
-  if (!row) throw new Error(`no stop row ${index} to tap`)
+  if (!row) throw new Error(`no ⋯ control for stop ${index} to tap`)
   await act(async () => {
     row.click()
     await Promise.resolve()
@@ -364,10 +371,25 @@ describe('the sheet’s four arms, in order', () => {
   }
 
   it('shows the times when there are times', () => {
-    const text = render({ arrivals: [arrival(3), arrival(11)], incomplete: false, loading: false })
-    expect(text).toContain('3')
-    expect(text).toContain('11')
-    expect(text).not.toContain(t(LOCALE, 'noService'))
+    // **Scoped to the arrivals element, not to the sheet's whole text**, and that is not fussiness: the
+    // sheet gained a fare block whose child-concession label is "Child (3-11)". Against `textContent`
+    // this assertion's `toContain('3')` and `toContain('11')` would both have been satisfied by that
+    // label alone, and the test would have gone on passing with every arrival removed. One more
+    // instance of the shape ADR-131 collects — a check that passes because of what it is looking at.
+    render({ arrivals: [arrival(3), arrival(11)], incomplete: false, loading: false })
+    const times = container.querySelector('[data-arrivals]')?.textContent ?? ''
+    expect(times).toContain('3')
+    expect(times).toContain('11')
+    expect(container.textContent ?? '').not.toContain(t(LOCALE, 'noService'))
+  })
+
+  it('the previous test cannot pass without arrivals', () => {
+    // The control on the control. If the hook ever stops matching, this fails on the null assertion
+    // rather than the suite going quietly green on an empty string.
+    render({ arrivals: [], incomplete: false, loading: false })
+    const arrivalsEl = container.querySelector('[data-arrivals]')
+    expect(arrivalsEl, 'the scoped query must still find the arrivals element').not.toBeNull()
+    expect(arrivalsEl?.textContent ?? '').not.toContain('11')
   })
 
   it('says a board that refused us refused us, not that nothing is due', () => {

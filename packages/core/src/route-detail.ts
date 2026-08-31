@@ -14,6 +14,7 @@ import {
   formatJourney,
   formatServiceHours,
   isStale,
+  joyYouEligible,
   newestBoard,
 } from './eta'
 import { formatDistance, routeDistanceM } from './geo'
@@ -527,7 +528,7 @@ export interface RouteDetailView {
   /**
    * Straight-line-through-stops distance in metres, `0` when the sequence is too short to have one.
    *
-   * Explicitly an estimate — there are no polylines upstream (ADR-044) — and it is the kernel's because
+   * Explicitly an estimate — a straight-line sum through the stops (ADR-044) — and it is the kernel's because
    * the alternative is two renderers summing the same haversines in two languages.
    */
   distanceM: number
@@ -849,7 +850,12 @@ export interface RouteStatRow {
   /**
    * True where the figure is an explicit estimate, so a renderer must say so.
    *
-   * The route distance is a straight-line sum through the stops — there are no polylines upstream — and the
+   * The route distance is a straight-line sum through the stops, which always understates the road — and
+   * the `~` on the pill is what says so. **A surveyed line exists since ADR-151 and would measure this
+   * exactly**, which is a real improvement and deliberately not taken here: the line arrives on a second
+   * request that a route screen renders long before (ADR-152), so reading it would make a static fact wait
+   * on a network round, and would make one route show two different distances depending on what had loaded.
+   * The
    * journey time is the dataset's own origin→terminus figure. One is a guess and one is not, and a renderer
    * that treated them alike would either over- or under-claim. It is a flag rather than a `~` in the string
    * because the *caveat* is a whole sentence the catalogue owns, where the `~` on a concession fare is a
@@ -999,11 +1005,12 @@ function fareSheet(
         // The name from the row itself, so the timeline and the schematic cannot name one stop two ways.
         boardingStop: row.name.label,
         covers: labels.stopCount(stage.toSeq - stage.fromSeq + 1),
-        concessions: concessionFigures(stage.fare),
+        concessions: concessionFigures(stage.fare, view.header.routeNo),
       },
     ]
   })
-  const stages = sectional.length > 0 ? sectional : wholeRouteStage(rows, service, labels)
+  const stages =
+    sectional.length > 0 ? sectional : wholeRouteStage(rows, service, labels, view.header.routeNo)
   // The legend explains exactly the classes that appear, which is what makes it honest: a class with no
   // figure anywhere on screen has nothing to explain. Read off the **finished** timeline, fallback included,
   // so the legend cannot explain a class the sheet does not show or omit one it does.
@@ -1057,6 +1064,7 @@ function wholeRouteStage(
   rows: RouteStopRowView[],
   service: RouteServiceInfo | undefined,
   labels: RouteFactLabels,
+  routeNo: string | undefined,
 ): FareStageRow[] {
   const fullFare = service?.fareFull
   // The **same truthiness test the pill uses** (`routeFacts`), so a `fareFull` of `''` yields neither a pill
@@ -1068,7 +1076,7 @@ function wholeRouteStage(
     fare: formatFare(fullFare),
     boardingStop: row.name.label,
     covers: labels.stopCount(rows.length),
-    concessions: concessionFigures(fullFare),
+    concessions: concessionFigures(fullFare, routeNo),
   }))
 }
 
@@ -1076,9 +1084,40 @@ function wholeRouteStage(
 const CONCESSION_CLASSES: readonly ConcessionClass[] = ['child', 'elderly']
 
 /**
+ * **What it costs to board one stop — the adult fare and the two concession estimates.**
+ *
+ * The fare block in a stop's action sheet. `routeFactSheet`'s `fare` sheet answers the same question for
+ * the *whole route*, stage by stage; this answers it for the one stop a rider has just tapped, which is
+ * the question they asked by tapping it.
+ *
+ * **`undefined` means there is no fare to show at all**, and it is the ordinary case rather than an
+ * error: a terminus carries no boarding fare (you cannot board the last stop), and GMB fares are dropped
+ * upstream as non-sectional (ADR-047), so most GMB stops land here. A renderer's arm for it is to say
+ * nothing about fares — never to print an empty row or a `$—`.
+ *
+ * `concessions` is `concessionFigures`' answer and inherits its both-or-neither rule: a fare the
+ * estimators cannot parse yields the adult figure with an **empty** concession list, not two
+ * `~$undefined`s. So a caller has three shapes to render, not one.
+ *
+ * The fare is printed here, `$` and all — as `fareLabel` is on the row — because nothing downstream
+ * compares it.
+ *
+ * @spec route-detail#stopFares
+ */
+export function stopFares(
+  fare: string | undefined | null,
+  routeNo?: string | undefined,
+): { adult: string; concessions: ConcessionFigure[] } | undefined {
+  // `null` as well as `undefined`, because that is what the wire carries: the dataset's sectional array
+  // is `Array<string | null>`, so a stop with no fare arrives as an explicit null rather than a hole.
+  if (fare === undefined || fare === null || fare.trim() === '') return undefined
+  return { adult: formatFare(fare), concessions: concessionFigures(fare, routeNo) }
+}
+
+/**
  * The two estimates for one adult fare, or an empty list where the fare cannot be priced.
  */
-function concessionFigures(adultFare: string): ConcessionFigure[] {
+function concessionFigures(adultFare: string, routeNo: string | undefined): ConcessionFigure[] {
   // `fareStages` admits this fare on a **looser** test than the estimators apply, so the earlier
   // both-always-resolve claim was wrong. `fareStages` keeps any `f` where `Number(f)` is not NaN — which
   // lets a whitespace-only cell (`Number(' ')` is 0) or an `Infinity`-valued string survive as a stage —
@@ -1091,10 +1130,13 @@ function concessionFigures(adultFare: string): ConcessionFigure[] {
   const child = estimateChildFare(adultFare)
   const elderly = estimateElderlyFare(adultFare)
   if (child === undefined || elderly === undefined) return []
-  return [
-    { class: 'child', fare: `~${formatFare(child)}` },
-    { class: 'elderly', fare: `~${formatFare(elderly)}` },
-  ]
+  // **The $2 Scheme does not reach every route** (`joyYouEligible`): an `A`/`NA` airport route is
+  // excluded, so the figure is *omitted* rather than printed. A concession that does not apply is not a
+  // worse estimate of one that does — it is a different claim, and on the A21 the gap between them is
+  // twenty-eight dollars. The child halving is unaffected; it is the operator's, not the Government's.
+  const figures: ConcessionFigure[] = [{ class: 'child', fare: `~${formatFare(child)}` }]
+  if (joyYouEligible(routeNo)) figures.push({ class: 'elderly', fare: `~${formatFare(elderly)}` })
+  return figures
 }
 
 function freqSheet(

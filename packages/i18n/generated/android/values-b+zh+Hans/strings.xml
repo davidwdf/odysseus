@@ -80,7 +80,7 @@
 	<string name="faqOfflineQ">App 可以离线使用吗？</string>
 	<string name="faqOfflineA">部分可以。App 可离线打开，路线及车站搜索也可继续使用（索引在首次使用时已下载至设备）。之前看过的到站时间会从缓存重现，并以淡色显示，不会当作最新数据 — 要取得新的读数则必须连接网络。</string>
 	<string name="faqMapQ">为何没有实时巴士地图？</string>
-	<string name="faqMapA">香港的开放数据只提供逐站到站时间估算，并无实时车辆位置或路线图形，因此我们无法如实在地图上显示巴士位置。我们能做的，是根据各站的到站时间，把巴士标示在路线的车站列表上、它应在的两站之间。</string>
+	<string name="faqMapA">路线本身的走线是真实的 — 由运输署实地测绘并公开发布，地图上画的就是它。香港的开放数据没有提供的，是实时车辆位置：数据只有逐站到站时间估算，因此我们无法如实显示巴士在走线上移动。我们能做的，是根据各站的到站时间，把巴士标示在路线的车站列表上、它应在的两站之间。</string>
 	<string name="faqRemarksQ">“预定班次”和“尾班车”是什么意思？</string>
 	<string name="faqRemarksA">这些是巴士公司的提示，按对方原文显示，因此措辞并不固定。凡提到“原定”“预定”或“未开出”，即表示该时间根据时间表（准确度低于实时估算）；“尾班车”则标示当天最后一班车。其他提示会照原文显示。</string>
 	<string name="routesAtStop">路线</string>
@@ -98,6 +98,8 @@
 		<item quantity="other">另外 %1$d 条路线</item>
 	</plurals>
 	<string name="etasUnavailable">无法获取实时班次</string>
+	<string name="routePathApproximate">约略路线 — 依次显示各站</string>
+	<string name="routePathLabel">路线地图</string>
 	<string name="mapAttribution">地图由地政总署提供</string>
 	<string name="mapAttributionAction">地图由地政总署提供 — 打开版权公告及免责声明</string>
 	<string name="keypadBackspace">退格</string>
@@ -120,6 +122,21 @@
 	<string name="reverseDirection">反方向</string>
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">巴士即将到达%1$s</string>
+	<string name="routeShowDetails">显示路线详情</string>
+	<string name="fareNoJoyYou">$2 计划不适用于机场路线。</string>
+	<string name="fareFromHere">由此起</string>
+	<string name="mapShowWholeRoute">显示整条路线</string>
+	<string name="mapShowMyLocation">显示我的位置</string>
+	<string name="routeHideDetails">隐藏路线详情</string>
+	<string name="routeStopsSheet">本路线的车站</string>
+	<string name="riderHere">你的位置</string>
+	<string name="riderHereFacing">你的位置和面向的方向</string>
+	<!-- {stop} → %1$s -->
+	<string name="routeStopActions">%1$s的操作</string>
+	<!-- {stop} → %1$s -->
+	<string name="routeStopMarker">车站：%1$s</string>
+	<string name="routeStopTerminus">总站</string>
+	<string name="routeStopInterchange">转乘站</string>
 	<!-- {stop} → %1$s -->
 	<string name="busAtStop">巴士在%1$s</string>
 	<!-- {place} → %1$s -->
@@ -134,8 +151,8 @@
 	<string name="fareAdult">成人</string>
 	<string name="fareChild">小童（3–11 岁）</string>
 	<string name="fareChildNote">约为成人车费的一半。</string>
-	<string name="fareElderly">长者 65+／残疾人士</string>
-	<string name="fareElderlyNote">$2 计划，须使用「乐悠咭」或合资格八达通（不适用于现金）。</string>
+	<string name="fareElderly">乐悠咭 60+／残疾人士</string>
+	<string name="fareElderlyNote">车费 $10 或以下划一收 $2，超过则收两成。须使用「乐悠咭」或合资格八达通，不适用于现金。</string>
 	<string name="freqTitle">班次</string>
 	<string name="freqNote">巴士班次频率 — 为时间表数据，并非实时。</string>
 	<string name="hoursTitle">服务时间</string>

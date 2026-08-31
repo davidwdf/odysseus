@@ -15,6 +15,7 @@ import {
   routeStopBoard,
   routeTerminusNames,
   routeVehicle,
+  stopFares,
   upcoming,
   visibleBusMarkers,
 } from '../src/route-detail'
@@ -346,6 +347,36 @@ describe('route-detail#routeDetailView', () => {
         .filter(([, hit]) => !hit)
         .map(([arm]) => arm),
     ).toEqual([])
+  })
+})
+
+describe('route-detail#stopFares', () => {
+  interface FareArgs {
+    fare?: string | null
+    routeNo?: string
+  }
+  type Fares = ReturnType<typeof stopFares>
+
+  for (const c of specCases<FareArgs, Fares>(corpus, 'stopFares')) {
+    it(c.name, () => {
+      expect(stopFares(c.args.fare, c.args.routeNo)).toEqual(c.expect ?? undefined)
+    })
+  }
+
+  it('never prices a concession above the adult fare beside it', () => {
+    // The property behind the free-section case, over the whole group rather than one row: the $2 Scheme
+    // and the child halving are both CAPS on what the rider hands over, so a concession figure dearer
+    // than the adult one is not a rounding artefact, it is the rule inverted. It shipped once, as $2.0
+    // against a $0 interchange leg.
+    for (const c of specCases<FareArgs, Fares>(corpus, 'stopFares')) {
+      const out = stopFares(c.args.fare, c.args.routeNo)
+      if (!out) continue
+      const adult = Number(out.adult.replace('$', ''))
+      if (!Number.isFinite(adult)) continue
+      for (const figure of out.concessions) {
+        expect(Number(figure.fare.replace('~$', ''))).toBeLessThanOrEqual(adult)
+      }
+    }
   })
 })
 

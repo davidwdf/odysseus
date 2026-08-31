@@ -56,27 +56,14 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
  * React context, and the *rules* they wire (`resolveLocale`, `resolveMode`, `resolveClientPolicy`) live
  * outside this app already. Everything that renders is policed.
  *
- * **`apps/mobile` is policed per surface**, and only where a WP4-0 hoist has happened:
+ * **`apps/mobile` used to be policed here too, per surface**, and its paths left with the app
+ * (ADR-157). Its half of this list recorded which RN screens WP4-0 had hoisted — but the *rule* it
+ * encoded outlives the app, so it is restated here rather than deleted along with the paths:
  *
- *  · `app/stop/` — the Place screen, whose rules are `placeDetailView`'s since ADR-085/087.
- *  · `app/route/` — the Route screen, whose rules are `routeDetailView`'s since ADR-093, together with the
- *    four leaf components that hoist made projections: `RouteMeta` (the facts strip), `RouteFactSheets` (the
- *    four sheets a pill opens, `routeFactSheet`'s since ADR-095), `EtaTimes` (the readouts) and `Fare` (the
- *    printed figure). `RouteHeader` is **not** here and that is deliberate: it is `CollapsingHeader` with a
- *    from/to card on it, so it is nothing but arithmetic over viewport dimensions — the same reason
- *    `CollapsingHeader` itself is absent.
- *  · `components/MiniMap.tsx` — its map, whose pins are the kernel's since ADR-087.
- *  · the five leaf projections a place's rows and heading are made of, all of them already spec'd as part
- *    of `StopRow` (WP6-1) and therefore already rule-free.
- *
- * **What is deliberately absent, and it is not an oversight:** `app/search.tsx`, `app/workbench.tsx` and
- * `app/(tabs)/favorites.tsx` still hold rules WP4-0 has not hoisted, so the shape rules would fire on
- * legitimate un-migrated code and the gate would be switched off within a week. So
- * would `CollapsingHeader`, `StopHeader`, `Skeleton` and `GlassView`, which are chrome and motion —
- * `proposals/04` lists them with no corpus and no spec, *"becomes idiom"* — and are nothing but arithmetic
- * over viewport dimensions. Each surface joins this list in the commit that hoists it, which is this file's
- * standing rule and the one `check-no-raw-colours` states at length: a path absent from this list is the
- * `from` of no rule at all, so a whole renderer surface can be silently unpoliced while the gate reports ✓.
+ * **A path absent from this list is the `from` of no rule at all.** A whole renderer surface can be
+ * silently unpoliced while the gate reports ✓, which is why each surface joins in the commit that
+ * hoists it, and why a second renderer arriving one day must add itself here in the same breath as its
+ * first screen. `check-no-raw-colours` states the same rule at length for the same reason.
  */
 const POLICED = [
   'apps/web/src/components/',
@@ -87,27 +74,6 @@ const POLICED = [
   // "hoist it into a hook" becomes the way past the check. It joined with **no new allowlist entries** —
   // none of the six shape rules fires on any of the seven files already here.
   'apps/web/src/hooks/',
-  'apps/mobile/app/stop/',
-  'apps/mobile/app/route/',
-  // WP6-7's three, and they joined with **no new allowlist entries** — which is the cleanest signal that
-  // nothing derivable was left behind, and the same one WP6-6c's fact sheets gave. Worth knowing why it
-  // was free: a preference screen's derivations are *tables and selectedness* rather than arithmetic, so
-  // none of the six shape rules fires on them even before the hoist. The gate could not have found this
-  // row's work; `settingsView`/`aboutView`/`faqView` exist because a decision was written down twice, not
-  // because a regex caught it. The list is what keeps them from coming back.
-  'apps/mobile/app/(tabs)/settings.tsx',
-  'apps/mobile/app/about-data.tsx',
-  'apps/mobile/app/faq.tsx',
-  'apps/mobile/components/MiniMap.tsx',
-  'apps/mobile/components/RouteMeta.tsx',
-  'apps/mobile/components/RouteFactSheets.tsx',
-  'apps/mobile/components/EtaTimes.tsx',
-  'apps/mobile/components/Fare.tsx',
-  'apps/mobile/components/EtaBadge.tsx',
-  'apps/mobile/components/RemarkTag.tsx',
-  'apps/mobile/components/RouteChip.tsx',
-  'apps/mobile/components/StopName.tsx',
-  'apps/mobile/components/BearingArrow.tsx',
 ]
 
 const RULES = [
@@ -238,133 +204,28 @@ export function strip(source) {
  */
 const ALLOWLIST = [
   {
-    file: 'apps/mobile/app/stop/[id].tsx',
+    file: 'apps/web/src/components/sheet/detents.ts',
+    why:
+      'A whole file of **gesture geometry with no NextBus vocabulary in it** — the arithmetic half of a ' +
+      'draggable sheet, deliberately separated from the component so the component holds none of it. ' +
+      'Every value is a fraction of a container or a speed in fractions per second; nothing here reads ' +
+      'a stop, a route, an arrival or a fare, and the `.sort()` orders DETENTS by height rather than ' +
+      'rows by a domain rule. It is the sort of thing that would move to a shared component library ' +
+      'unchanged, which is the test for whether it belongs to this app at all — and it does not. ' +
+      'Whole-file rather than per-rule because the file has exactly one subject: if anything in it ' +
+      'ever reads a domain quantity, the entry is wrong and should be deleted rather than narrowed.',
+  },
+  {
+    file: 'apps/web/src/components/routeChevronImage.ts',
     rule: 'arithmetic',
     why:
-      'Every number this file computes is **layout**, and there are four of them: the picture-in-picture ' +
-      'width the map crops to (`Math.min(PIP_MAX_WIDTH, …)`), the scroll offset it docks at ' +
-      '(`Math.max(0, topSpacer + metaH - mapTop)`), the counter-scroll `translateY` that holds it there, and ' +
-      'the tail padding that lets the last kerb group reach the top of the list. All four read measured ' +
-      'viewport dimensions and none reads a domain quantity — the DOM twin needs none of them, because a ' +
-      'browser scrolls the document and `position: sticky` docks for free (ADR-045 is idiom). ' +
-      'Scoped to `arithmetic` rather than left open, deliberately: a `.slice()` over rows, a `.filter()` over ' +
-      'routes, a `.join()` composing a heading or a comparison against a minutes value would all still be ' +
-      'findings here, and those are the shapes that would actually mean this screen had taken a decision back.',
-  },
-  {
-    file: 'apps/mobile/app/route/[id].tsx',
-    rule: 'arithmetic',
-    why:
-      'Every number this file computes is **rail geometry**, and there are five: the node centre the ' +
-      'connectors meet at, the star badge’s offset on that node’s corner, the token’s half-width, the ' +
-      'midpoint between two measured node positions, and the flip cascade’s per-row delay cap ' +
-      '(`Math.min(index, 10) * 26`). None reads a domain quantity — *which* node a bus is at is ' +
-      '`RailBus`’s and *whether* it is drawn is `visibleBusMarkers`’ (ADR-093). Scoped to `arithmetic` ' +
-      'deliberately: a `.slice()` over stops, a `.filter()` over rows, a `.join()` composing a header label ' +
-      'or a comparison against a minutes value would all still be findings here, and those are the shapes ' +
-      'that would mean this screen had taken a decision back.',
-  },
-  {
-    file: 'apps/mobile/components/EtaTimes.tsx',
-    rule: 'arithmetic',
-    why:
-      'The odometer’s own arithmetic: the common prefix and suffix of the old and new figures (a `Math.min` ' +
-      'over two string lengths), and the rise distance as a fraction of the font size. It animates the ' +
-      '**difference between two strings the kernel produced** — `52` → `51` slides just the `2` — and reads ' +
-      'no threshold at all, which is the part that matters: this component was the fourth place the ' +
-      'imminence band had been written down, and since WP6-6a it has no clock and no policy.',
-  },
-  {
-    file: 'apps/mobile/app/route/[id].tsx',
-    rule: 'capping',
-    snippet: 'const next = prev.slice()',
-    why:
-      'A **copy**, not a cap: the measured-offsets array is cloned before one index is written, because a ' +
-      'zustand-style state update must not mutate. `slice()` with no arguments cannot drop a row, which is ' +
-      'the failure the rule exists for — `rows.slice(0, maxRows)` before the "+N more" count is computed.',
-  },
-  {
-    file: 'apps/mobile/components/EtaTimes.tsx',
-    rule: 'capping',
-    why:
-      'Three `.slice()`s over the **characters of two figures**, not over a list of rows: the odometer splits ' +
-      '`"52"` and `"51"` into a shared prefix, a differing middle and a shared suffix so only the digit that ' +
-      'changed slides. A whole-file exemption for the one rule, because all three are the same expression ' +
-      'and naming each line would rot on the next reformat. The list this component *could* have capped — ' +
-      'how many arrivals a row shows — is `policy.maxArrivals` applied by `upcoming` in the kernel, and this ' +
-      'component no longer receives a policy at all.',
-  },
-  {
-    file: 'apps/mobile/components/BearingArrow.tsx',
-    rule: 'arithmetic',
-    snippet: 'Math.round(size * 0.6)',
-    why:
-      'The glyph’s size inside its circular chip, as a fraction of the chip. The *rotation* — the only thing ' +
-      'about this component that could disagree with a word on screen — is `bearingOctantDeg`’s, which is ' +
-      'the same function `formatBearing` picks its word from.',
-  },
-  {
-    file: 'apps/mobile/app/stop/[id].tsx',
-    rule: 'selecting',
-    snippet: 'const rest = sectionOffsets.value.filter',
-    why:
-      'The scroll-spy’s registry, keyed by pole id: each group reports its own content offset on layout and ' +
-      'this replaces the previous entry for that id. It selects nothing a rider sees — the *set* of groups is ' +
-      '`placeDetailView.groups`, and this is a `Map`-shaped write spelled as an array because a shared value ' +
-      'has to be reassigned rather than mutated.',
-  },
-  {
-    file: 'apps/mobile/app/stop/[id].tsx',
-    rule: 'selecting',
-    snippet: 'const o = sectionOffsets.value.find',
-    why:
-      'The read side of the same registry: which y to scroll to for the kerb that was tapped. A position, ' +
-      'not a row.',
-  },
-  {
-    file: 'apps/mobile/components/MiniMap.tsx',
-    rule: 'arithmetic',
-    why:
-      'A whole-file exemption for the **one** file whose entire job is Web-Mercator layout, and the honest ' +
-      'shape for it: which tiles cover the viewport (`Math.floor(left / TILE_SIZE)`), where each dot lands, ' +
-      'how big the ring around it is. The *rules* it could have held are already elsewhere and this gate ' +
-      'would not have caught them either — `fitZoom`, `clampZoom`, `lngToWorldX`, `latToWorldY` and ' +
-      '`mergeCoincidentPins` are all in `packages/core`, pinned by `mercator.spec.json` and ' +
-      '`stop-detail.spec.json`. Narrowed to `arithmetic` rather than left open: a `.filter()` or a `.slice()` ' +
-      'here would still be a finding, because that would mean the map deciding which poles exist.',
-  },
-  {
-    file: 'apps/mobile/components/MiniMap.tsx',
-    rule: 'selecting',
-    snippet: 'pins.reduce((s, p) => s + p.location.',
-    why:
-      'The centroid of the pins, so all of them are framed. A `.reduce` over coordinates is a sum, not a ' +
-      'selection — and *which* pins exist is `placeDetailView.pins`, which this file no longer decides ' +
-      '(ADR-087).',
-  },
-  {
-    file: 'apps/mobile/components/MiniMap.tsx',
-    rule: 'string-composition',
-    snippet: 'ids.join(',
-    why:
-      'A **React key** for a folded pin, and the identity it is compared against. Not a caption: the codes a ' +
-      'rider reads are joined by `mergeCoincidentPins` in the kernel, separator and all (ADR-086), and this ' +
-      'joins ids with a `+` that never reaches a screen.',
-  },
-  {
-    file: 'apps/mobile/components/MiniMap.tsx',
-    rule: 'threshold',
-    snippet: 'o.cy - cy <',
-    why:
-      'Whether a dot’s label chip flips **above** its dot because another dot sits directly beneath it — a ' +
-      'comparison between two screen positions in pixels, at the current zoom. The case it cannot help with, ' +
-      'a separation of **zero**, is the kernel’s and is `mergeCoincidentPins` (ADR-086).',
-  },
-  {
-    file: 'apps/mobile/components/MiniMap.tsx',
-    rule: 'threshold',
-    snippet: 'Math.abs(o.cx - cx) <',
-    why: 'The horizontal half of the same question, in the same pixels.',
+      'A canvas drawing, and every number in it is a coordinate on that canvas: the bitmap size at the ' +
+      'device pixel ratio, and the two stroke paths. There is no domain quantity anywhere in the file — ' +
+      "the only thing it is told is a colour, and the direction the mark points is the ENGINE's, from " +
+      '`symbol-placement: line` over a line the edge already oriented in travel order (ADR-152). It is a ' +
+      'sprite that happens to be drawn at runtime rather than shipped as a file, and a sprite is not a ' +
+      'rule. Scoped to `arithmetic`: a `.filter()` or a comparison against a minutes value would still be ' +
+      'a finding here, and either would mean this had stopped being a drawing.',
   },
   {
     file: 'apps/web/src/components/MiniMap.tsx',

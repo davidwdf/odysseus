@@ -23,7 +23,7 @@
 // third is the subtle one and the reason a URL pattern exists at all — a path literal is how a screen starts
 // talking to the edge without importing anything, so no import-graph rule can ever see it.
 //
-// `apps/mobile/lib/` IS policed, and that is a deliberate widening of "view". It is this app's adapter
+// `apps/web/src/adapters/` IS policed, and that is a deliberate widening of "view". It is this app's adapter
 // directory — the twin of `apps/web/src/adapters/` — and adapters are where a *platform* API legitimately
 // lives (geolocation, storage, a tile template), not where HTTP does. Policing it is what makes the two
 // renderers symmetrical; the one legitimate exception it produces is in ALLOWLIST below, with its reason.
@@ -53,13 +53,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
  * dirs here in the same commit that creates them**, and the count printed on every successful run is the
  * cheap check that it happened.
  */
-const POLICED = [
-  'apps/mobile/app/',
-  'apps/mobile/components/',
-  'apps/mobile/lib/',
-  'apps/mobile/providers/',
-  'apps/web/src/',
-]
+const POLICED = ['apps/web/src/']
 
 const PATTERNS = [
   {
@@ -109,17 +103,18 @@ const PATTERNS = [
  */
 const ALLOWLIST = [
   {
-    file: 'apps/mobile/lib/tileSource.ts',
+    file: 'apps/web/src/adapters/mapProvider.ts',
     pattern: 'api-path',
     snippet: '/v1/tiles/',
     why:
-      'The `TileSource` port is a URL template by definition — its whole contract is `basemap(z, x, y) => string`, ' +
-      'and the view (`MiniMap`) consumes the port, never the path. These two lines compose a path on **our own ' +
-      'Worker** (`apps/edge/src/tiles.ts` proxies LandsD, ADR-049) from the same `DEFAULT_API_URL` the DataSource ' +
-      'uses, which is the opposite of the failure this gate is for: there is no upstream host here and no second ' +
-      'base URL. Removing the exception would mean either a `TileSource` implementation that cannot name its ' +
-      'tiles, or moving the LandsD template into `packages/api-client`, where a `require()`d logo asset and an ' +
-      'Expo env read cannot follow it (see the note in `packages/ports/src/tile-source.ts`).',
+      'The interactive-map twin of the `tileSource.ts` entry below, and it earns its exception for the ' +
+      'same reason (ADR-154): a `MapProvider`’s `raster-xyz` arm **is** a URL template — `basemap(z, x, y) ' +
+      '=> string` is its whole contract — and the view (`components/MapView.tsx`) consumes the port, never ' +
+      'the path. The two lines compose a path on **our own Worker** (`apps/edge/src/tiles.ts` proxies ' +
+      'LandsD, ADR-049) from the same `DEFAULT_API_URL` this app’s DataSource uses, so there is no upstream ' +
+      'host and no second base URL. It is a separate entry rather than a widened `tileSource.ts` one ' +
+      'because the two ports coexist deliberately: `MiniMap` keeps `TileSource` until a screen moves, and ' +
+      'an allowlist that covered both files with one line would stop naming which seam it is excusing.',
   },
   {
     file: 'apps/web/src/adapters/tileSource.ts',
@@ -134,7 +129,7 @@ const ALLOWLIST = [
       'second base URL. Two entries rather than one shared implementation is the correct shape: the port ' +
       'is generic over its image asset because React Native wants a `require()`d `ImageSourcePropType` ' +
       'and a browser wants a URL string, which is the one genuinely per-platform part. It dies with ' +
-      '`apps/mobile`’s at WP6-8, leaving one.',
+      '`apps/mobile`’s when that app was retired (ADR-157), leaving one.',
   },
 ]
 
@@ -349,6 +344,10 @@ function selftest() {
       name: 'the rule it was granted for, on a line it names → allowed',
       got: allows(
         entry,
+        // The string below is a SAMPLE OF SOURCE the gate is meant to flag, not a template literal
+        // someone forgot to backtick — making it a real template would interpolate at selftest time
+        // and stop exercising the rule.
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: deliberate, see above
         finding('api-path', entry.file, 'return `${API_URL}/v1/tiles/basemap/...`'),
       ),
       want: true,
@@ -358,6 +357,8 @@ function selftest() {
       why: 'The measured defect: the entry argues only about a URL template, and without the `pattern` clause it silently exempted a `fetch(` — or a `new WebSocket(` — that happened to share the line. Both rules fire on one-line arrows returning a template literal, which is the ordinary shape in that file.',
       got: allows(
         entry,
+        // As above: a sample of the source shape this scenario measures, which must stay uninterpolated.
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: deliberate, see above
         finding('raw-fetch', entry.file, 'const warm = (z) => fetch(`${API_URL}/v1/tiles/${z}`)'),
       ),
       want: false,

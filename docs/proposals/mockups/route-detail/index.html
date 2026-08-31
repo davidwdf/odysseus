@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route detail — four interaction paradigms (mockup)</title>
+<!--
+  PROTOTYPE ONLY — see ./README.md
+
+  Two things here are deliberately NOT how the app should be built:
+
+  1. Tiles are fetched straight from the Lands Department. The shipped app must go through our own
+     Worker (`/v1/tiles/...`) — that is where caching and licence compliance live (ADR-049), and
+     rule 2 forbids a view knowing a URL at all. A static file in docs/ has no Worker to talk to.
+  2. Colours are raw hex. The app uses semantic tokens only (rule 4). This file has no build step.
+
+  Everything else — the geometry, the stops, the camera behaviour — is real. The route line is
+  KMB route 1's actual surveyed alignment from the Transport Department's CSDI dataset
+  (ROUTE_ID 1001, 391 vertices outbound / 422 inbound), fetched 2026-08-22.
+-->
+<style>
+  :root{
+    --bg:#fbfbfa; --surface:#fff; --text:#1a1a19; --muted:#7a7975; --line:#e6e5e1;
+    --accent:#c8102e;           /* KMB red */
+    --positive:#0a7d4a; --warn:#a8620a;
+    --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#f0efec;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;color:var(--text)}
+  header.page{max-width:1180px;margin:0 auto;padding:28px 20px 8px}
+  header.page h1{font-size:20px;margin:0 0 6px}
+  header.page p{margin:0 0 14px;color:var(--muted);max-width:70ch}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px 60px;display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:start}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+
+  /* ---- phone frame ---- */
+  .phone{width:390px;height:800px;background:var(--bg);border-radius:38px;box-shadow:var(--shadow);
+         overflow:hidden;display:flex;flex-direction:column;position:relative;border:1px solid var(--line)}
+  .nav{display:flex;align-items:center;gap:10px;padding:14px 14px 10px;background:var(--surface);border-bottom:1px solid var(--line);z-index:6}
+  .chip{background:var(--accent);color:#fff;font-weight:700;border-radius:8px;padding:4px 9px;font-size:15px;letter-spacing:.2px}
+  .nav .dest{flex:1;min-width:0}
+  .nav .dest b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav .dest span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .iconbtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+           display:grid;place-items:center;cursor:pointer;flex:none;padding:0}
+  .iconbtn:hover{background:#f5f4f1}
+  .iconbtn[aria-pressed=true]{background:#fff5e9;border-color:#f0d3a8}
+  .iconbtn svg{width:17px;height:17px}
+
+  /* ---- map ---- */
+  .map{position:relative;height:310px;overflow:hidden;background:#dfe3e0;flex:none;touch-action:none;cursor:grab}
+  .map.dragging{cursor:grabbing}
+  .map .layer{position:absolute;inset:0;transform-origin:0 0}
+  .map img.tile{position:absolute;width:256px;height:256px;user-select:none;-webkit-user-drag:none;image-rendering:auto}
+  .map svg.ov{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+  .attrib{position:absolute;right:6px;bottom:5px;font-size:9.5px;color:#3a3a38;background:rgba(255,255,255,.82);
+          padding:2px 6px;border-radius:5px;z-index:4;pointer-events:none}
+  .recentre{position:absolute;left:10px;bottom:10px;z-index:5;display:flex;gap:6px;align-items:center;
+            background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;
+            font-size:12px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);
+            opacity:0;transform:translateY(6px);pointer-events:none;transition:opacity .18s,transform .18s}
+  .recentre.on{opacity:1;transform:none;pointer-events:auto}
+  .followpill{position:absolute;right:10px;top:10px;z-index:5;font-size:10.5px;font-weight:600;
+              background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--muted)}
+  .zoomers{position:absolute;right:10px;bottom:26px;z-index:5;display:flex;flex-direction:column;gap:5px}
+  .zoomers button{width:30px;height:30px;border-radius:9px;border:1px solid var(--line);background:var(--surface);
+                  font-size:17px;line-height:1;cursor:pointer;box-shadow:var(--shadow);padding:0}
+  .approxnote{position:absolute;left:10px;top:10px;z-index:5;background:#fff7ea;border:1px solid #f0d3a8;
+              color:#7a4d06;font-size:11px;border-radius:8px;padding:5px 9px;max-width:250px;display:none}
+  .approxnote.on{display:block}
+
+  /* ---- stop list ---- */
+  .list{flex:1;overflow-y:auto;overscroll-behavior:contain;background:var(--bg);scroll-behavior:smooth}
+  .row{display:flex;align-items:stretch;gap:0;padding:0 10px 0 0;background:transparent;border:0;width:100%;
+       text-align:left;font:inherit;color:inherit;position:relative;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .rowhit{display:flex;align-items:center;gap:0;flex:1;min-width:0;background:transparent;border:0;padding:0;
+          font:inherit;color:inherit;text-align:left;cursor:pointer}
+  .row .rail{width:40px;flex:none;align-self:stretch;position:relative}
+  .row .rail::before{content:"";position:absolute;left:19px;top:0;bottom:0;width:2px;background:var(--line)}
+  .row:first-child .rail::before{top:50%}
+  .row:last-child .rail::before{bottom:50%}
+  .row .dot{position:absolute;left:13px;top:50%;width:13px;height:13px;margin-top:-6.5px;border-radius:50%;
+            background:var(--surface);border:2.5px solid #bdbcb7;transition:all .18s}
+  .row.active .dot{border-color:var(--accent);background:var(--accent);transform:scale(1.25)}
+  .rowbody{flex:1;min-width:0;padding:12px 8px 12px 0;display:flex;flex-direction:column}
+  .rowbody .nm{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .rowbody .zh{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .row.active .rowbody .nm{font-weight:650}
+  .row.active{background:#fff}
+  .eta{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;color:var(--positive);flex:none;
+       width:50px;text-align:right;align-self:center}
+  .eta.due{color:var(--accent)}
+  .eta.none{color:var(--muted);font-weight:400}
+  .rowctl{flex:none;display:flex;align-items:center;gap:2px}
+  .mini{width:32px;height:32px;border-radius:9px;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;padding:0}
+  .mini:hover{background:#eceae5}
+  .mini svg{width:16px;height:16px}
+  .mini.starred svg{fill:#f5a623;stroke:#d68910}
+  .selbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:0;transition:opacity .18s}
+  .row.active .selbar{opacity:1}
+
+  /* ---- sheet ---- */
+  .scrim{position:absolute;inset:0;background:rgba(20,20,19,.34);opacity:0;pointer-events:none;transition:opacity .22s;z-index:8}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:20px 20px 0 0;
+         padding:8px 14px calc(14px + env(safe-area-inset-bottom));z-index:9;
+         transform:translateY(102%);transition:transform .3s cubic-bezier(.32,.72,0,1);box-shadow:0 -6px 28px rgba(0,0,0,.16)}
+  .sheet.on{transform:none}
+  .grab{width:36px;height:4px;border-radius:2px;background:#dedcd7;margin:2px auto 12px}
+  .sheet h3{margin:0;font-size:15.5px}
+  .sheet .sub{margin:1px 0 12px;font-size:12px;color:var(--muted)}
+  .sheet .etas{display:flex;gap:8px;margin-bottom:12px}
+  .sheet .etas span{background:#f4f3ef;border-radius:8px;padding:5px 11px;font-variant-numeric:tabular-nums;font-size:13px;font-weight:600}
+  .act{display:flex;align-items:center;gap:11px;width:100%;padding:12px 6px;border:0;border-top:1px solid var(--line);
+       background:transparent;font:inherit;color:inherit;cursor:pointer;text-align:left}
+  .act:hover{background:#f7f6f3}
+  .act svg{width:18px;height:18px;flex:none}
+
+  /* ---- controls panel ---- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow)}
+  .panel h2{font-size:15px;margin:0 0 3px}
+  .panel .lede{color:var(--muted);font-size:12.5px;margin:0 0 16px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .tab{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 13px;cursor:pointer;font:inherit;font-size:13px}
+  .tab[aria-selected=true]{background:var(--text);color:#fff;border-color:var(--text);font-weight:600}
+  .desc{background:#f7f6f3;border-radius:11px;padding:13px 15px;font-size:13px;margin-bottom:16px;border:1px solid var(--line)}
+  .desc > b:first-child{display:block;margin-bottom:5px;font-size:13px}
+  .desc ul{margin:7px 0 0;padding-left:17px}
+  .desc li{margin:3px 0}
+  .desc .warn{color:var(--warn);font-weight:600}
+  fieldset{border:1px solid var(--line);border-radius:11px;padding:11px 14px 13px;margin:0 0 13px}
+  legend{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.55px;padding:0 5px}
+  label.opt{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:13px;cursor:pointer}
+  label.opt input{margin-top:2px;flex:none}
+  label.opt span small{display:block;color:var(--muted);font-size:11.5px}
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:#1a1a19;color:#d6d5d0;
+       border-radius:11px;padding:11px 13px;height:132px;overflow:auto;white-space:pre-wrap}
+  .log .t{color:#7a7975}
+  .log .hi{color:#7fd1a3}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Route detail — four interaction paradigms</h1>
+  <p>
+    Real data: KMB route 1's <b>surveyed alignment</b> from the Transport Department's CSDI dataset
+    (<code>ROUTE_ID 1001</code>, 391 vertices outbound), with its 25 real stops. Drag and zoom the map;
+    scroll the stop list and watch the camera follow; pan the map yourself and watch following suspend.
+    Switch paradigm to compare what a tap on a stop <i>means</i>.
+  </p>
+</header>
+
+<div class="wrap">
+  <div class="phone" id="phone">
+    <div class="nav">
+      <span class="chip">1</span>
+      <span class="dest"><b id="destEn">Star Ferry</b><span id="destZh">尖沙咀碼頭</span></span>
+      <button class="iconbtn" id="hdrStar" title="Favourite" hidden></button>
+      <button class="iconbtn" id="hdrFlip" title="Reverse direction"></button>
+    </div>
+
+    <div class="map" id="map">
+      <div class="layer" id="tiles"></div>
+      <svg class="ov" id="ov"></svg>
+      <div class="followpill" id="followPill">following list</div>
+      <div class="approxnote" id="approxNote"></div>
+      <div class="zoomers"><button id="zin">+</button><button id="zout">−</button></div>
+      <button class="recentre" id="recentre">Recentre on list</button>
+      <div class="attrib">© Lands Department · route © Transport Department</div>
+    </div>
+
+    <div class="list" id="list"></div>
+
+    <div class="scrim" id="scrim"></div>
+    <div class="sheet" id="sheet">
+      <div class="grab"></div>
+      <h3 id="shTitle">—</h3>
+      <p class="sub" id="shSub">—</p>
+      <div class="etas" id="shEtas"></div>
+      <button class="act" id="shStar"></button>
+      <button class="act" id="shView"></button>
+      <button class="act" id="shMap"></button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Paradigm</h2>
+    <p class="lede">What a tap on a stop row does, and where favouriting lives.</p>
+    <div class="tabs" role="tablist" id="tabs">
+      <button class="tab" role="tab" data-p="A">A — Sheet primary <small>(today)</small></button>
+      <button class="tab" role="tab" data-p="B">B — Tap focuses, ⋯ opens sheet</button>
+      <button class="tab" role="tab" data-p="C">C — Tap focuses, header ★</button>
+      <button class="tab" role="tab" data-p="D">D — Split row (recommended)</button>
+    </div>
+    <div class="desc" id="desc"></div>
+
+    <fieldset>
+      <legend>Route geometry</legend>
+      <label class="opt"><input type="radio" name="geo" value="surveyed" checked>
+        <span>Surveyed line <small>What 93% of route-directions get — the real road alignment.</small></span></label>
+      <label class="opt"><input type="radio" name="geo" value="approx">
+        <span>Missing → dashed approximation <small>§5 option (c): stops joined, drawn as an estimate, said once.</small></span></label>
+      <label class="opt"><input type="radio" name="geo" value="hkbus">
+        <span>Missing → hkbus's unmarked straight line <small class="warn">What hkbus.app actually ships. Note the harbour.</small></span></label>
+      <label class="opt"><input type="radio" name="geo" value="none">
+        <span>Missing → no line <small>§5 option (a): pins only.</small></span></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Map behaviour</legend>
+      <label class="opt"><input type="checkbox" id="optFollow" checked>
+        <span>Camera follows the stop list <small>Scroll-spy → <code>flyTo</code>. Suspends when you pan.</small></span></label>
+      <label class="opt"><input type="checkbox" id="optLoc" checked>
+        <span>Show my location <small>Simulated fix with its accuracy radius drawn honestly.</small></span></label>
+      <label class="opt"><input type="checkbox" id="optArrows" checked>
+        <span>Direction arrowheads <small>Answers "which way does it go" with cartography, not prose.</small></span></label>
+      <label class="opt"><input type="checkbox" id="optRetina" checked>
+        <span>Retina tiles (z+1) <small>LandsD has no <code>@2x</code>. Fetch one zoom deeper, draw at half size. <b>Toggle to see the pixelation.</b></small></span></label>
+    </fieldset>
+
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+const TILE='https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png';
+const LABEL='https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png';
+const TS=256;
+
+const I={
+  star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1116 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
+  flip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4L3 8l4 4"/><path d="M3 8h13a4 4 0 014 4"/><path d="M17 20l4-4-4-4"/><path d="M21 16H8a4 4 0 01-4-4"/></svg>',
+  crosshair:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>'
+};
+document.getElementById('hdrFlip').innerHTML=I.flip;
+document.getElementById('hdrStar').innerHTML=I.star;
+
+const PARA={
+ A:{name:'A — Sheet primary (today)',tapRow:'sheet',rowStar:false,rowMore:false,headerStar:false,
+    body:`The shipping behaviour. A tap anywhere on a stop row opens the action sheet, which is
+    <b>the app's only favourite-creating affordance</b> (ADR-032/042).`,
+    pros:['Safest — changes nothing, breaks nothing.','Favouriting is one tap from the row.'],
+    cons:['With a map on screen, the commonest wish — <i>where is that?</i> — costs a tap, a read and a dismiss.',
+          'The map is decoration: nothing the rider does in the list moves it.']},
+ B:{name:'B — Tap focuses the map, ⋯ opens the sheet',tapRow:'focus',rowStar:false,rowMore:true,headerStar:false,
+    body:`Your suggestion. The row body is direct manipulation of the map; every row grows an explicit
+    <code>⋯</code> that opens the same sheet.`,
+    pros:['The map becomes the point of the screen.','<code>⋯</code> is a familiar, discoverable overflow.'],
+    cons:['<span class="warn">Favouriting moves one step further away</span> — and it is the affordance ADR-032 depends on.',
+          'A control on all 25 rows is visual noise on the screen that can least afford it.']},
+ C:{name:'C — Tap focuses, the header star acts on the selection',tapRow:'focus',rowStar:false,rowMore:false,headerStar:true,
+    body:`Fewest controls. The row body focuses the map; one star in the header favourites
+    <i>whichever stop is currently selected</i>.`,
+    pros:['Cleanest list — no per-row chrome at all.','The map unambiguously reads as the subject.'],
+    cons:['<span class="warn">A header control whose meaning depends on an invisible selection</span> reads fine to its author and confuses everyone else.',
+          'Hard to declare in a spec: the star\'s label changes with state the spec cannot see.']},
+ D:{name:'D — Split row: body focuses, ★ toggles inline',tapRow:'focus',rowStar:true,rowMore:true,headerStar:false,
+    body:` The recommendation. The row body focuses the map; an always-visible star on the row toggles the favourite <b>directly</b>, with no sheet in the way. <code>⋯</code> keeps the rest.`,
+    pros:['Favouriting gets <i>closer</i>, not further — the ADR-032 risk inverts.',
+          'An always-visible control is far easier to declare in a spec than a sheet action behind an overflow.',
+          'Map is primary and the star is still one tap.'],
+    cons:['Two hit targets per row — needs real care at 44 px and for a screen reader.','Densest row of the four.']}
+};
+
+/* ---------- mercator ---------- */
+const wx=(lng,z)=>(lng+180)/360*TS*2**z;
+const wy=(lat,z)=>{const s=Math.sin(lat*Math.PI/180);return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*TS*2**z};
+const lngAt=(x,z)=>x/(TS*2**z)*360-180;
+const latAt=(y,z)=>{const n=Math.PI-2*Math.PI*y/(TS*2**z);return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)))};
+
+/* ---------- state ---------- */
+let DATA=null, para='D', active=0, follow=true, userPanned=false, starred=new Set([0]);
+let cam={lat:22.3,lng:114.17,zoom:12.4}, anim=null, suppressSpy=false, spyTimer=null;
+const mapEl=document.getElementById('map'), tilesEl=document.getElementById('tiles'), ov=document.getElementById('ov');
+const listEl=document.getElementById('list'), logEl=document.getElementById('log');
+
+function log(m,hi){const t=new Date().toLocaleTimeString('en-GB',{hour12:false});
+  logEl.insertAdjacentHTML('afterbegin',`<div><span class="t">${t}</span> ${hi?`<span class="hi">${m}</span>`:m}</div>`);
+  while(logEl.children.length>60)logEl.lastChild.remove();}
+
+/* ---------- render map ---------- */
+function render(){
+  const W=mapEl.clientWidth,H=mapEl.clientHeight;
+  // Retina: LandsD serves ONLY 256px tiles and has no @2x variant, so on a DPR-2 screen a tile drawn
+  // at 256 CSS px is upscaled 2× and looks soft. Fetching one zoom level deeper and letting the
+  // existing scale factor shrink it to 128 CSS px gives true 2× density. Costs 4× the tiles.
+  const over = document.getElementById('optRetina').checked ? Math.round(Math.log2(Math.min(2,devicePixelRatio||1))) : 0;
+  const z=Math.max(10,Math.min(20,Math.round(cam.zoom)+over));
+  const scale=2**(cam.zoom-z);
+  const cx=wx(cam.lng,z), cy=wy(cam.lat,z);
+  // top-left world px of the viewport, in z-space
+  const ox=cx-W/(2*scale), oy=cy-H/(2*scale);
+  // NOTE: tiles are placed in SCREEN px, not world px, and the layer carries no transform.
+  // At z17 a world coordinate is ~27,000,000px, and Chrome serialises a CSS length that large in
+  // exponential form with ~6 significant figures ("2.74181e+07px") — so tiles that belong 256px
+  // apart land 200-300px apart and the grid tears. Subtract the origin in JS, where the number is
+  // still a double, and every CSS value stays in the hundreds. This is why real map engines never
+  // put world coordinates in CSS.
+  const px=TS*scale;
+  const n=2**z;
+  const x0=Math.floor(ox/TS), x1=Math.floor((ox+W/scale)/TS);
+  const y0=Math.floor(oy/TS), y1=Math.floor((oy+H/scale)/TS);
+  // Tiles sit at grid-relative positions (0, px, 2px, …) so the markup is stable while the set is
+  // unchanged; the sub-tile remainder rides on the layer transform, and is always < one tile.
+  tilesEl.style.transform=`translate(${((x0*TS-ox)*scale).toFixed(2)}px,${((y0*TS-oy)*scale).toFixed(2)}px)`;
+  const want=new Set(); let html='';
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
+    if(y<0||y>=n)continue; const xx=((x%n)+n)%n; const k=`${z}/${xx}/${y}`; want.add(k);
+    const u=TILE.replace('{z}',z).replace('{x}',xx).replace('{y}',y);
+    const l=LABEL.replace('{z}',z).replace('{x}',xx).replace('{y}',y);
+    const st=`left:${((x-x0)*px).toFixed(2)}px;top:${((y-y0)*px).toFixed(2)}px;`
+           + `width:${px.toFixed(2)}px;height:${px.toFixed(2)}px`;
+    html+=`<img class="tile" src="${u}" style="${st}" alt="" loading="eager">`
+        + `<img class="tile" src="${l}" style="${st}" alt="">`;
+  }
+  if(tilesEl.dataset.k!==[...want].join()){tilesEl.innerHTML=html;tilesEl.dataset.k=[...want].join();}
+
+  // overlay in screen px
+  const p=(lat,lng)=>[(wx(lng,z)-ox)*scale,(wy(lat,z)-oy)*scale];
+  const geo=document.querySelector('input[name=geo]:checked').value;
+  const stops=DATA.stops.O;
+  let d='',arrows='';
+  let pts = geo==='surveyed' ? DATA.lines['1'].map(c=>p(c[1],c[0]))
+          : (geo==='none' ? [] : stops.map(s=>p(s.lat,s.lng)));
+  if(pts.length){
+    d='M'+pts.map(q=>`${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L');
+    if(document.getElementById('optArrows').checked&&geo==='surveyed'){
+      let acc=0;
+      for(let i=1;i<pts.length;i++){
+        const dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1],len=Math.hypot(dx,dy);
+        acc+=len;
+        if(acc>72&&len>0.5){acc=0;const a=Math.atan2(dy,dx)*180/Math.PI;
+          arrows+=`<path d="M-4 -3.4L4 0L-4 3.4Z" fill="#fff" opacity=".95" transform="translate(${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)}) rotate(${a.toFixed(0)})"/>`;}
+      }
+    }
+  }
+  const dash = geo==='approx' ? 'stroke-dasharray="9 7"' : '';
+  let s = pts.length ? `<path d="${d}" fill="none" stroke="#fff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+      <path d="${d}" fill="none" stroke="${geo==='approx'?'#a8620a':'#c8102e'}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" ${dash}/>${arrows}` : '';
+
+  stops.forEach((st,i)=>{const q=p(st.lat,st.lng);const on=i===active;
+    s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${on?7.5:4}" fill="${on?'#c8102e':'#fff'}" stroke="${on?'#fff':'#8a8985'}" stroke-width="${on?3:1.8}"/>`;
+    if(on)s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="13" fill="none" stroke="#c8102e" stroke-width="1.6" opacity=".45"><animate attributeName="r" values="9;17" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values=".5;0" dur="1.6s" repeatCount="indefinite"/></circle>`;});
+
+  if(document.getElementById('optLoc').checked){
+    const me=DATA.stops.O[6], q=p(me.lat+0.0016,me.lng-0.0021);
+    const rpx=45/(156543.03392*Math.cos(cam.lat*Math.PI/180)/2**cam.zoom); // 45 m accuracy → px
+    s+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${rpx.toFixed(1)}" fill="#2f6fed" opacity=".13"/>
+        <circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="${rpx.toFixed(1)}" fill="none" stroke="#2f6fed" stroke-width="1" opacity=".35"/>
+        <circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="6" fill="#2f6fed" stroke="#fff" stroke-width="2.5"/>`;
+  }
+  ov.innerHTML=s;
+
+  const note=document.getElementById('approxNote');
+  note.classList.toggle('on',geo==='approx'||geo==='hkbus');
+  note.innerHTML = geo==='approx'
+    ? '<b>Approximate path.</b> No surveyed line for this route — stops shown in order.'
+    : (geo==='hkbus' ? '<b>hkbus draws this unmarked.</b> Same line, no notice — the rider cannot tell.' : '');
+  if(geo==='hkbus'){note.style.background='#fdeaea';note.style.borderColor='#f0b8b8';note.style.color='#8a1f1f';}
+  else{note.style.background='';note.style.borderColor='';note.style.color='';}
+}
+
+/* ---------- camera ---------- */
+function flyTo(lat,lng,zoom,ms=620){
+  if(anim)cancelAnimationFrame(anim);
+  const a={...cam}, b={lat,lng,zoom:zoom??cam.zoom}, t0=performance.now();
+  const dist=Math.hypot(b.lat-a.lat,b.lng-a.lng);
+  const dip=Math.min(0.85,dist*38);          // MapLibre-ish arc: zoom out, then back in
+  (function step(t){
+    const k=Math.min(1,(t-t0)/ms), e=k<.5?4*k*k*k:1-((-2*k+2)**3)/2;
+    cam.lat=a.lat+(b.lat-a.lat)*e; cam.lng=a.lng+(b.lng-a.lng)*e;
+    cam.zoom=a.zoom+(b.zoom-a.zoom)*e - Math.sin(e*Math.PI)*dip;
+    render(); if(k<1)anim=requestAnimationFrame(step); else anim=null;
+  })(t0);
+}
+function jumpTo(lat,lng,zoom){if(anim)cancelAnimationFrame(anim);anim=null;cam={lat,lng,zoom:zoom??cam.zoom};render();}
+
+/* ---------- list ---------- */
+function buildList(){
+  const p=PARA[para], stops=DATA.stops.O;
+  listEl.innerHTML=stops.map((s,i)=>{
+    const eta=[ '1','3','6','—','12','2' ][i%6];
+    const cls=eta==='—'?'none':(+eta<=2?'due':'');
+    const txt=eta==='—'?'—':(+eta<=1?'Due':eta+' min');
+    return `<div class="row${i===active?' active':''}" data-i="${i}">
+      <span class="selbar"></span>
+      <button class="rowhit" data-act="body" data-i="${i}">
+        <span class="rail"><span class="dot"></span></span>
+        <span class="rowbody"><span class="nm">${s.n}</span><span class="zh">${s.zh}</span></span>
+      </button>
+      <span class="eta ${cls}">${txt}</span>
+      <span class="rowctl">
+        ${p.rowStar?`<button class="mini${starred.has(i)?' starred':''}" data-act="star" data-i="${i}" title="Favourite this route here">${I.star}</button>`:''}
+        ${p.rowMore?`<button class="mini" data-act="more" data-i="${i}" title="More">${I.dots}</button>`:''}
+      </span>
+    </div>`;}).join('');
+}
+listEl.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]'); if(!b)return;
+  const i=+b.dataset.i, act=b.dataset.act, p=PARA[para];
+  if(act==='star'){ starred.has(i)?starred.delete(i):starred.add(i); buildList();
+    log(`★ ${starred.has(i)?'saved':'removed'} — route 1 at ${DATA.stops.O[i].n} <b>(no sheet)</b>`,true); return; }
+  if(act==='more'){ setActive(i,false); openSheet(i); return; }
+  if(p.tapRow==='sheet'){ setActive(i,false); openSheet(i); }
+  else { setActive(i,true); log(`tap → camera flies to ${DATA.stops.O[i].n}`,true); }
+});
+
+function setActive(i,fly){
+  active=i; buildList();
+  const row=listEl.querySelector(`.row[data-i="${i}"]`);
+  if(row&&!fly){suppressSpy=true;row.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>suppressSpy=false,600);}
+  const s=DATA.stops.O[i];
+  if(fly&&!userPanned)flyTo(s.lat,s.lng,15.4); else if(fly)flyTo(s.lat,s.lng,15.4);
+  if(fly){userPanned=false;updFollow();}
+  render();
+}
+
+/* scroll-spy → camera */
+listEl.addEventListener('scroll',()=>{
+  if(!document.getElementById('optFollow').checked||suppressSpy)return;
+  clearTimeout(spyTimer);
+  spyTimer=setTimeout(()=>{
+    const box=listEl.getBoundingClientRect(); let best=null,bd=1e9;
+    listEl.querySelectorAll('.row[data-i]').forEach(r=>{
+      const b=r.getBoundingClientRect(), d=Math.abs(b.top+b.height/2-(box.top+70));
+      if(d<bd){bd=d;best=+r.dataset.i;}});
+    if(best!=null&&best!==active){
+      active=best;buildList();
+      const s=DATA.stops.O[best];
+      if(!userPanned){flyTo(s.lat,s.lng,15.4,520);log(`list scrolled → flyTo ${s.n}`);}
+      else render();
+    }
+  },90);
+});
+
+/* ---------- gestures ---------- */
+let drag=null;
+mapEl.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,moved:0};mapEl.setPointerCapture(e.pointerId);mapEl.classList.add('dragging');if(anim){cancelAnimationFrame(anim);anim=null;}});
+mapEl.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.moved+=Math.hypot(dx,dy); drag.x=e.clientX; drag.y=e.clientY;
+  const z=cam.zoom, cx=wx(cam.lng,z)-dx, cy=wy(cam.lat,z)-dy;
+  cam.lng=lngAt(cx,z); cam.lat=latAt(cy,z); render();
+  if(drag.moved>26&&!userPanned){userPanned=true;updFollow();log('you panned → following suspended',true);}
+});
+addEventListener('pointerup',()=>{if(drag){mapEl.classList.remove('dragging');drag=null;}});
+mapEl.addEventListener('wheel',e=>{e.preventDefault();
+  const r=mapEl.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const z0=cam.zoom, z1=Math.max(10.5,Math.min(18.5,z0-e.deltaY*0.0022));
+  const lat0=latAt(wy(cam.lat,z0)+(my-r.height/2),z0), lng0=lngAt(wx(cam.lng,z0)+(mx-r.width/2),z0);
+  cam.zoom=z1;
+  cam.lng=lngAt(wx(lng0,z1)-(mx-r.width/2),z1); cam.lat=latAt(wy(lat0,z1)-(my-r.height/2),z1);
+  render();},{passive:false});
+document.getElementById('zin').onclick=()=>{cam.zoom=Math.min(18.5,cam.zoom+1);render()};
+document.getElementById('zout').onclick=()=>{cam.zoom=Math.max(10.5,cam.zoom-1);render()};
+
+function updFollow(){
+  document.getElementById('recentre').classList.toggle('on',userPanned);
+  const pill=document.getElementById('followPill');
+  const on=document.getElementById('optFollow').checked;
+  pill.textContent=!on?'following off':(userPanned?'following paused':'following list');
+  pill.style.color=userPanned?'#a8620a':'';
+}
+document.getElementById('recentre').onclick=()=>{userPanned=false;updFollow();
+  const s=DATA.stops.O[active];flyTo(s.lat,s.lng,15.4);log('recentred → following resumed',true);};
+
+/* ---------- sheet ---------- */
+const sheet=document.getElementById('sheet'),scrim=document.getElementById('scrim');
+function openSheet(i){
+  const s=DATA.stops.O[i], sv=starred.has(i);
+  document.getElementById('shTitle').textContent=s.n;
+  document.getElementById('shSub').textContent=s.zh+' · route 1 towards Star Ferry';
+  document.getElementById('shEtas').innerHTML=['1 min','8 min','15 min'].map(e=>`<span>${e}</span>`).join('');
+  document.getElementById('shStar').innerHTML=I.star+`<span>${sv?'Remove from favourites':'Save route 1 at this stop'}</span>`;
+  document.getElementById('shStar').onclick=()=>{sv?starred.delete(i):starred.add(i);buildList();closeSheet();
+    log(`★ ${sv?'removed':'saved'} via sheet — ${s.n}`,true);};
+  document.getElementById('shView').innerHTML=I.pin+'<span>View this stop</span>';
+  document.getElementById('shView').onclick=()=>{closeSheet();log('→ navigate to Place detail');};
+  document.getElementById('shMap').innerHTML=I.crosshair+'<span>Show on map</span>';
+  document.getElementById('shMap').onclick=()=>{closeSheet();setActive(i,true);log('sheet → show on map (the extra step B/C/D remove)',true);};
+  sheet.classList.add('on');scrim.classList.add('on');log(`sheet opened — ${s.n}`);
+}
+function closeSheet(){sheet.classList.remove('on');scrim.classList.remove('on');}
+scrim.onclick=closeSheet;
+
+/* ---------- paradigm ---------- */
+function setPara(p){
+  para=p; const d=PARA[p];
+  document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',String(t.dataset.p===p)));
+  document.getElementById('desc').innerHTML=`<b>${d.name}</b>${d.body}
+     <ul>${d.pros.map(x=>`<li>✓ ${x}</li>`).join('')}${d.cons.map(x=>`<li>✗ ${x}</li>`).join('')}</ul>`;
+  document.getElementById('hdrStar').hidden=!d.headerStar;
+  buildList(); closeSheet(); log(`— paradigm ${p} —`,true);
+}
+document.getElementById('tabs').onclick=e=>{const t=e.target.closest('.tab');if(t)setPara(t.dataset.p);};
+document.getElementById('hdrStar').onclick=()=>{const i=active;starred.has(i)?starred.delete(i):starred.add(i);
+  log(`★ header star acted on the SELECTED stop (${DATA.stops.O[i].n}) — meaning depends on invisible state`,true);buildList();};
+document.getElementById('hdrFlip').onclick=()=>log('reverse direction (not wired in this mockup)');
+
+document.querySelectorAll('input[name=geo]').forEach(r=>r.onchange=()=>{render();
+  log(`geometry → ${document.querySelector('input[name=geo]:checked').value}`,true);});
+['optFollow','optLoc','optArrows','optRetina'].forEach(id=>document.getElementById(id).onchange=()=>{updFollow();tilesEl.dataset.k='';render();});
+
+/* ---------- boot ---------- */
+fetch('./kmb1.json').then(r=>r.json()).then(j=>{
+  DATA=j;
+  // the terminus of the direction we are showing, taken from its own last stop
+  const term=j.stops.O[j.stops.O.length-1];
+  document.getElementById('destEn').textContent='towards '+term.n.replace(/\s*\(\w+\)\s*$/,'');
+  document.getElementById('destZh').textContent=term.zh.replace(/\s*\(\w+\)\s*$/,'');
+  const ln=j.lines['1'];
+  const lats=ln.map(c=>c[1]),lngs=ln.map(c=>c[0]);
+  cam={lat:(Math.min(...lats)+Math.max(...lats))/2,lng:(Math.min(...lngs)+Math.max(...lngs))/2,zoom:12.6};
+  setPara('D'); render(); updFollow();
+  log('KMB 1 — 391 surveyed vertices, 25 stops (CSDI ROUTE_ID 1001)',true);
+}).catch(e=>{
+  document.getElementById('desc').innerHTML='<b>Could not load kmb1.json</b>Serve this folder over HTTP — <code>python3 -m http.server</code> — rather than opening the file directly, or the browser will block the fetch.';
+});
+addEventListener('resize',()=>DATA&&render());
+</script>
+</body>
+</html>

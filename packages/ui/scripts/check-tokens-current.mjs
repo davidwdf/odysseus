@@ -65,18 +65,16 @@ const resolved = JSON.parse(
  * is asserted instead: the two files may still be edited, but they can no longer drift from the
  * brand ink in silence, which is the only property that actually mattered.
  */
-const PINNED = [
-  {
-    file: 'apps/mobile/app.json',
-    token: 'color.brand.ink',
-    paths: ['expo.splash.backgroundColor', 'expo.android.adaptiveIcon.backgroundColor'],
-  },
-  {
-    file: 'apps/mobile/public/manifest.webmanifest',
-    token: 'color.brand.ink',
-    paths: ['background_color', 'theme_color'],
-  },
-]
+/**
+ * Files that are **not** generated but must still agree with a token — asserted rather than emitted.
+ *
+ * **Empty since `apps/mobile` was retired** (ADR-157), and kept rather than deleted because the
+ * mechanism is the point: both entries were RN build config (`app.json`'s splash and adaptive-icon
+ * background, its `manifest.webmanifest`) which could not be regenerated without a device to verify
+ * on, so the coupling to the brand ink was asserted instead. `apps/web`'s manifest *is* generated, so
+ * nothing needs this today — and the next hand-maintained file that has to match a token will.
+ */
+const PINNED = []
 
 const wrong = []
 for (const { file, token, paths } of PINNED) {

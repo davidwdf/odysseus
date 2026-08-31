@@ -18,7 +18,8 @@
       "!**/*.gen.ts",
       "!packages/contract/openapi.json",
       "!packages/contract/asyncapi.json",
-      "!scripts/boundaries/fixtures"
+      "!scripts/boundaries/fixtures",
+      "!docs/proposals/mockups"
     ]
   },
   "formatter": {
@@ -79,7 +80,6 @@
                       "@nextbus/api-client",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -117,7 +117,6 @@
                       "@nextbus/api-client",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -155,7 +154,6 @@
                       "@nextbus/api-client",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -192,7 +190,6 @@
                       "@nextbus/api-client",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -248,7 +245,6 @@
                       "@nextbus/api-client",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -283,7 +279,6 @@
                       "@nextbus/i18n",
                       "@nextbus/data-normalize",
                       "@nextbus/edge",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -319,7 +314,6 @@
                       "@nextbus/i18n",
                       "@nextbus/api-client",
                       "@nextbus/edge",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -353,7 +347,6 @@
                       "@nextbus/ui",
                       "@nextbus/i18n",
                       "@nextbus/api-client",
-                      "@nextbus/mobile",
                       "@nextbus/web",
                       "react*",
                       "expo*",
@@ -373,7 +366,7 @@
       }
     },
     {
-      "includes": ["apps/mobile/**", "apps/web/**"],
+      "includes": ["apps/web/**"],
       "linter": {
         "rules": {
           "style": {

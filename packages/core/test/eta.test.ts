@@ -29,6 +29,7 @@ import {
   formatRelative,
   formatServiceHours,
   isStale,
+  joyYouEligible,
   newestBoard,
   newestNearbyBoard,
   newestPlaceBoard,
@@ -259,6 +260,14 @@ describe('eta#estimateElderlyFare', () => {
   for (const c of cases<{ adultFare: string }, string | null>('estimateElderlyFare')) {
     it(c.name, () => {
       expect(estimateElderlyFare(c.args.adultFare)).toBe(c.expect ?? undefined)
+    })
+  }
+})
+
+describe('eta#joyYouEligible', () => {
+  for (const c of cases<{ routeNo: string | null }, boolean>('joyYouEligible')) {
+    it(c.name, () => {
+      expect(joyYouEligible(c.args.routeNo)).toBe(c.expect)
     })
   }
 })

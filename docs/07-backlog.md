@@ -92,6 +92,17 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
+- [ ] 🟠 **Four of the $2 Scheme's five exclusions are invisible to us.** `eta#joyYouEligible`
+      ([ADR-160](./08-decision-log.md#adr-160--the-2-scheme-does-not-reach-every-route-and-the-fare-block-earns-its-height))
+      excludes `A`/`NA` airport routes from the JoyYou estimate, which is the only part of the Transport
+      Department's exclusion a route number can decide. The Department also excludes **racecourse
+      routes, new long-haul services, designated tourist-oriented routes and pre-booking/group-hire
+      services** — none of which any HK open-data feed marks, and none of which has a numbering
+      convention (a racecourse special is an ordinary-looking number). So on those we still quote a
+      concession a rider will not receive. Deliberately not guessed at: ADR-160 decision 2 argues that
+      wrongly *withholding* a concession is the worse error, because it keeps someone off a bus. A real
+      fix needs a curated route list — the Department publishes the exclusions as prose, not as data —
+      which is a maintenance commitment worth taking only once someone will keep it current.
 - [ ] 🟠 **The Place screen never says "live times unavailable"** — `PlaceDetailView.incomplete` has existed
       since [ADR-077](./08-decision-log.md) and this screen has never read it, so a rider who taps a Nearby
       card marked *"Live times unavailable"* lands on a screen that has quietly dropped the warning, where an
@@ -334,6 +345,15 @@ built on approximated data must respect the [honesty principle](./01-vision-and-
       data question before it is a rendering one** (`docs/research/01`: HK publishes no polylines). Against
       all of it: §4 valued LandsD's survey detail — footbridges, subways, landmark buildings — as *the*
       feature, and OSM does not carry it. Prettier and less useful is a real possibility, not a rhetorical one.
+      > **Correction, 2026-08-22 — the caution about their route geometry was wrong, and so was the doc it
+      > cited.** hkbus's waypoints repo is not a community survey; it is a **daily mirror of two Transport
+      > Department datasets on the CSDI portal**, and their `waypoints.py` says so in its first ten lines.
+      > Route lines have been open data since **Dec 2021** (buses) and **Oct 2023** (green minibuses), cover
+      > **93%** of our route-directions, and join on a key we already carry. A real route line is therefore
+      > **not** a data question — it is exactly the rendering question this item was weighing all along.
+      > See [`research/07`](./research/07-route-geometry-and-maps.md) and
+      > [ADR-151](./08-decision-log.md#adr-151--the-route-line-geometry-we-said-hong-kong-did-not-publish-has-existed-since-2021);
+      > the plan that acts on it is [`proposals/06`](./proposals/06-maps-and-route-geometry.md).
 
 ### Smart timing (utility that feels magic)
 - [ ] **"Leave now" alerts** — combine walking time to the stop with the ETA: "leave in 3 min to
@@ -708,6 +728,83 @@ written down.
         ported value-for-value from `apps/mobile` at the owner's own direction after the parity review.
         Removing it is a bigger call than a layout change and would amend that ADR. **Reframing worth
         considering: the tab bar is probably not the question — what is *in* it is.**
+
+## Haptics on the sheet's detents — a native porting note (2026-08-26)
+
+- [ ] **Pair each detent crossing with a haptic tap on iOS and Android.** The draggable sheet
+      (ADR-156) has three rest positions, and on a phone a sheet that *clicks* as it passes one is
+      telling the hand something the eye is busy reading elsewhere. `UIImpactFeedbackGenerator(.light)`
+      and `HapticFeedbackConstants.CLOCK_TICK` are the two idioms.
+
+      **Deliberately not faked on the web.** `navigator.vibrate` is Android-Chrome-only, is blocked
+      without a user gesture in several engines, and its shortest pulse is far blunter than a detent
+      tick — a buzz where a tick belongs is worse than silence. The web renderer does nothing, which is
+      the honest option, and this row is the reminder that "nothing" is a platform gap rather than the
+      design.
+
+## Scroll chaining in the stop sheet (2026-08-26)
+
+- [ ] **Try raising the sheet before the list scrolls, behind a flag.** Round 3 of the mockups had this
+      as a toggle and the owner is curious about it; it is the Apple-Maps behaviour. Off today, and the
+      reason is not laziness: this list is 40 rows, so chaining makes **every flick a potential
+      resize** — and the sheet already has a handle, which is an explicit way to do the same thing.
+
+      Cheap to add: the sheet's scroll container would consume upward wheel/touch deltas while it is
+      below its tallest detent and it is scrolled to the top. Worth trying, low priority.
+
+## The dart is unreachable on iOS (2026-08-26)
+
+- [ ] **Give `enableCompass` a caller.** M5 draws a dart when a heading is known and a dot when it is
+      not (ADR-155, `proposals/06 §6c`). iOS 13+ gates `deviceorientation` behind a `requestPermission()`
+      that must run inside a user gesture; every other platform emits the events freely and
+      `useRiderPosition` listens automatically. So on iOS `enableCompass` exists with no caller, and an
+      iPhone rider gets course over ground while walking and a dot while standing still.
+
+      Correct under §6b's precedence rather than broken — and still a gap, because the dart is the
+      better mark and **iOS is the platform where a rider is most likely to be standing at a kerb
+      wondering which way to walk**. What it needs is a decision, not code: where the control lives,
+      whether it is a one-off prompt or a persistent toggle, and what it says. Inventing that quietly
+      inside a build row would be the wrong way to answer it.
+
+## `apps/mobile` Route detail is no longer measured against its spec (2026-08-26)
+
+- [ ] **Decide whether `apps/mobile` is retired, and if so retire it deliberately.** M7 moved Route
+      detail's row tap onto the map and its actions onto a permanent `⋯` (ADR-155, `proposals/06 §8d`).
+      Both depend on there being a map, which the native renderer does not have — so the shared spec
+      grew a control `apps/mobile` cannot produce, and its conformance suite
+      (`apps/mobile/test/route-detail-states.test.tsx`) was **deleted** on the owner's *"you can drop
+      the apps/mobile now"*.
+
+      **The cost, stated plainly:** that suite measured 21 states of the RN Route detail screen, and
+      nothing measures them now. The screen still works and still ships; it is simply no longer held to
+      the published contract, which is the thing ADR-069 spent a wave building. If `apps/mobile` outlives
+      the retirement plan this is the first thing to put back, and putting it back means giving the RN
+      row a `⋯` — the spec is already written and the corpus already exists.
+
+      **What was deliberately NOT done:** deleting the app. That is a real architectural change with CI,
+      deploy, docs and `packages/ports` consequences, and burying it inside a styling commit would be
+      the wrong way to take it. It wants its own commit and its own ADR.
+
+## Corpus fidelity — a sampled route is a different shape from the route it samples
+
+- [ ] **Give `routeDetailView` at least one corpus case carrying a route's *whole* stop sequence.**
+      Found by ADR-155. Every one of the 24 cases is real Hong Kong coordinates *sampled* — five stops
+      standing in for forty — so consecutive stops sit ~6.9 km apart. That was free for two years
+      because nothing in the view model read a `location` beyond the distance pill, and it stopped
+      being free the moment a rule asked about the space *between* stops: by `routePathView`'s measure
+      **every case in the corpus is an express with no line**, so the sketch state cannot be driven
+      from the corpus unmodified.
+
+      The web driver works around it by respacing the stops onto a 300 m pitch
+      (`respaced` in `apps/web/test/route-detail-states.test.tsx`), which is honest — the view is
+      recomputed from the respaced payload, so golden and tree still come from one input — but it is a
+      workaround, and the first attempt at it was *wrong in a way that passed*: it fixed the latitudes
+      and left 16 km of longitude spread, so the arm never changed and deleting the caption entirely
+      went unnoticed. A real full-sequence case would let the respacing go and would make the next
+      geometry rule cheaper to specify than this one was.
+
+      Worth considering more broadly than this screen: the same sampling is in every corpus that
+      carries stops, so **any future rule about distance, order or adjacency inherits the problem.**
 
 ## Infra / hardening
 - [ ] 🟡 **Wire the `age` header into the route watch's not-advanced retry** ([ADR-135](./08-decision-log.md#adr-135--the-live-path-hardened-against-the-networks-own-failure-modes-wp6-8b)

@@ -7,7 +7,11 @@ import { useLocale } from '../providers/LocaleProvider'
 import { CONTENT_INSET_TOP } from './layout'
 
 /** The RN app's `GLASS_BUTTON_SIZE`. Circular, so the radius is half of it. */
-const SIZE = 48
+export const BACK_LENS_SIZE = 48
+const SIZE = BACK_LENS_SIZE
+
+/** The inset from the left edge — `left-3`, spelled as a number so a neighbour can clear it. */
+export const BACK_LENS_INSET = 12
 
 /**
  * Back, for the destinations that are pushed rather than switched to — **a floating glass lens fixed to

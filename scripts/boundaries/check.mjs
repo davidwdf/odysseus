@@ -27,11 +27,11 @@ export const presentDirs = (baseDir) =>
  *  we wrote, in the form we wrote it.
  *
  *  This mattered the moment `bannedSyntax` grew a `view` entry: the kernel's dir is
- *  `packages/core/src`, which has no `node_modules` beneath it, but `view`'s is all of `apps/mobile`,
+ *  `packages/core/src`, which has no `node_modules` beneath it, but `view`'s is all of `apps/web`,
  *  which does. Without this the gate would report hits inside React Native's own `.d.ts` files.
  *
  *  `dist` and the tool caches are skipped for a sharper reason, found at Wave 3 integration: a
- *  bundled `apps/mobile/dist/**` is a *snapshot of yesterday's source*. Three `view` rules fired on
+ *  bundled `apps/web/dist/**` is a *snapshot of yesterday's source*. Three `view` rules fired on
  *  a stale `build:web` output — flagging pre-ICU `.replace('{n}')` calls that no longer exist in any
  *  file a human edits. A gate that goes red because of a build artefact is a gate people learn to
  *  ignore, and it is red only for whoever happens to have built recently, which is worse than always.

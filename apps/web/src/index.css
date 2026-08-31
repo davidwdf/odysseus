@@ -610,3 +610,71 @@
 .dark .map-tiles-invert {
   filter: invert(1) hue-rotate(180deg) brightness(1.2);
 }
+
+/* The route map's stop markers (ADR-155, `routeMarkerElement.ts`).
+   Structure only. The FILL and STROKE are set inline from `MAP_COLOR`, exactly as the route line is —
+   the map palette is a JS export rather than a CSS variable (`packages/ui/tokens.json` emits semantic
+   colours to `tokens.css`, not the map ones), so a rule here could not read them without a second
+   declaration of the same four values. Shape carries the meaning (square = terminus, hexagon =
+   interchange) and colour carries none, deliberately: a rider distinguishing termini by hue is a rider
+   who cannot in the dark. A selected marker grows rather than recolouring, for the same reason. */
+.route-marker {
+  display: block;
+  /* The markers sit ON the line. Without this the stroke is drawn under the fill, the hairline that
+     separates a marker from the line beneath it halves in width, and a marker over its own route
+     disappears at exactly the zoom a rider is looking for it. */
+  paint-order: stroke fill;
+}
+/* A selected stop **grows into** its size rather than being replaced at it.
+
+   The scale is on `.route-marker-scale`, a wrapper inside the marker, and **not** on the marker
+   itself — MapLibre writes `transform` inline on the element it positions, so a scale there is
+   overwritten on the next camera frame. Measured before it was moved: the host's computed transform
+   was the engine's translate matrix and nothing else, so the transition had nothing to act on and the
+   growth never happened at all.
+
+   `transform-origin: center` because the marker is anchored by its centre; any other origin slides
+   the glyph off the point it is meant to mark as it grows. */
+.route-marker-scale {
+  display: block;
+  transform-origin: center;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.route-marker-host-selected .route-marker-scale {
+  transform: scale(1.45);
+}
+/* At 160 ms this is a state change with a shape rather than an animation — but a rider who has asked
+   for less motion gets the state and not the shape, which is the same call `row-rise` documents. */
+@media (prefers-reduced-motion: reduce) {
+  .route-marker-scale {
+    transition: none;
+  }
+}
+
+/* No `.route-marker-selected` rule, and that is a decision rather than an omission. The obvious
+   treatment is a drop-shadow, which is a halo — and halos were built, demonstrated and cut in round 5
+   of the mockups (`docs/proposals/06 §8d`), on the owner's *"cleaner without the halos"*. A selected
+   marker is 1.45× the size with a heavier stroke, which is the same signal without a second visual
+   language on the map. It would also have needed a raw `rgb()`, which `check-no-raw-colours` caught —
+   two reasons pointing the same way. */
+
+/* The bus token's outline, as a shape that can become another one (`RailBusToken`).
+
+   All three of its shapes are 24-point polygons, which is what makes them interpolable — a browser
+   tweens `clip-path: polygon()` only between polygons of equal point count, so a `border-radius` disc
+   and a six-vertex hexagon have no correspondence to animate between. The 500 ms matches the rail's travel (`TRAVEL_MS`), because the shape is changing *because* the bus is moving: they are one event
+   and should take one length of time.
+
+   A rider who has asked for less motion gets the destination shape at once, as they get the position. */
+.bus-shape {
+  /* The resting shape comes from the variable the component sets; an inline `clip-path` is the
+     departure shape `useRailFlip` writes for the length of one hop, and removing it is what the
+     transition acts on. */
+  clip-path: var(--bus-clip);
+  transition: clip-path 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bus-shape {
+    transition: none;
+  }
+}

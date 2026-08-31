@@ -1,0 +1,825 @@
+{
+  "$schema": "../../../schemas/kernel-spec.schema.json",
+  "module": "route-markers",
+  "source": "src/route-markers.ts",
+  "version": 1,
+  "doc": "What glyph each stop on a route gets, and the direction of travel through it (`docs/proposals/06 §8d`). `kind` and `index` are exact equality. `bearing` is DEGREES clockwise from north, quoted to 4 decimal places and compared with a tolerance of 1e-4 — far finer than a marker could show, so a port failing one has a real formula difference and not a rounding one. Coordinates are laid out on clean north/east legs rather than taken from a real route, because every row here is about a RULE (which glyph, which neighbour, what happens at an end) and a real route's bearings would be unreadable numbers that hid what each row was testing. The offset distance is deliberately absent — see the module doc for why it cannot live in the data.",
+  "groups": {
+    "routeMarkers": {
+      "doc": "What glyph each stop on a route gets, where it is anchored, and the direction of travel through it (`docs/proposals/06 §8d`). `kind`, `index` and `at` are exact equality — `at` is a coordinate the renderer anchors to, so a port differing there differs on screen. `bearing` is DEGREES clockwise from north, quoted to 4 decimal places and compared with a tolerance of 1e-4, far finer than a marker could show. Coordinates are laid out on clean north/east legs rather than taken from a real route, because every row is about a RULE and a real route's bearings would be unreadable numbers that hid what each row was testing. `line` is optional: with one, stops are projected onto it (which is what keeps a marker on the road at every zoom); without one, both the anchor and the bearing fall back to the stops themselves. The offset DISTANCE is deliberately absent — see the module doc for why it cannot live in the data.",
+      "cases": [
+        {
+          "name": "an-ordinary-route-caps-both-ends-and-circles-the-middle",
+          "why": "The everyday shape. Four stops due north: both ends square, the two between them circles, and every bearing 0° — which is also the row that would catch a port that returned a bearing in radians, or measured anticlockwise.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "Chuk Yuen Estate"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "Lok Fu"
+              },
+              {
+                "location": {
+                  "lat": 22.346,
+                  "lng": 114.17
+                },
+                "name": "Mong Kok"
+              },
+              {
+                "location": {
+                  "lat": 22.349,
+                  "lng": 114.17
+                },
+                "name": "Star Ferry"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "stop",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 3,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.349,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "a-bbi-stop-in-the-middle-is-a-hexagon",
+          "why": "The interchange claim, which is the whole reason a third kind exists: a rider asking “can I change here” is asking something the stop list already knows and a uniform dot throws away.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "Chuk Yuen Estate"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "Lok Fu"
+              },
+              {
+                "location": {
+                  "lat": 22.346,
+                  "lng": 114.17
+                },
+                "name": "Tsim Sha Tsui BBI"
+              },
+              {
+                "location": {
+                  "lat": 22.349,
+                  "lng": 114.17
+                },
+                "name": "Star Ferry"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "interchange",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 3,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.349,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "a-terminus-that-is-also-an-interchange-stays-a-terminus",
+          "why": "Precedence, on the one row where the two claims collide. End-of-line wins because it is what tells a rider they are looking at the right DIRECTION of the service, and a glyph can only say one thing. A port applying the tests in the other order passes every other row here.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "Kowloon Tong BBI"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "Lok Fu"
+              },
+              {
+                "location": {
+                  "lat": 22.346,
+                  "lng": 114.17
+                },
+                "name": "Star Ferry BBI"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "bbi-must-be-a-word-not-a-substring",
+          "why": "A name that CONTAINS the three letters and is not an interchange. `Abbie` is invented; the failure is not — a bare `includes(\"BBI\")` is the obvious implementation and this is the only row that rejects it. (Case matters too: the operators print the abbreviation in capitals in every locale.)",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "Abbie Lane"
+              },
+              {
+                "location": {
+                  "lat": 22.346,
+                  "lng": 114.17
+                },
+                "name": "Rabbit Road"
+              },
+              {
+                "location": {
+                  "lat": 22.349,
+                  "lng": 114.17
+                },
+                "name": "B"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "stop",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 3,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.349,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "a-chinese-name-carries-the-same-latin-token",
+          "why": "The abbreviation survives translation because the feed prints it in Latin letters in every locale — so the rule needs no localisation, and a port that lower-cased or normalised the name before testing would break this row and no other.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "竹園邨"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "尖沙咀 BBI"
+              },
+              {
+                "location": {
+                  "lat": 22.346,
+                  "lng": 114.17
+                },
+                "name": "天星碼頭"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "interchange",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.346,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "bearings-are-a-central-difference-so-a-corner-is-smoothed",
+          "why": "A right-angle turn: north, then east. The corner stop reads 45°, the average of the two legs, rather than either one — which is the point, since a marker offset from a stop sitting ON a corner should not swing with whichever leg was picked.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "B"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.174
+                },
+                "name": "C"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 50.9617
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.174
+              },
+              "bearing": 89.9992
+            }
+          ]
+        },
+        {
+          "name": "the-ends-use-their-one-neighbour",
+          "why": "There is no previous stop before the first, so the bearing is the forward leg — and the backward leg at the last. The row exists because clamping the index is how that falls out, and an off-by-one there returns a bearing for the WRONG leg rather than crashing.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.174
+                },
+                "name": "B"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.174
+                },
+                "name": "C"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 89.9992
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.174
+              },
+              "bearing": 50.9617
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.174
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "a-circular-route-marks-both-ends-at-one-place",
+          "why": "A loop has no second terminus (ADR-046) and both ends are still marked: drawing only one would make a loop look like it stops halfway. The co-located pair is a property of the route, not something to hide — and the shared coordinates make the ends’ bearings real rather than degenerate.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "Depot"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "North"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.174
+                },
+                "name": "East"
+              },
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "Depot"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 50.9617
+            },
+            {
+              "index": 2,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.174
+              },
+              "bearing": 180.0
+            },
+            {
+              "index": 3,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 230.9633
+            }
+          ]
+        },
+        {
+          "name": "two-stops-in-the-same-place-yield-no-direction",
+          "why": "A duplicated pole — which the feeds do publish. `atan2(0, 0)` is 0, and 0 is NORTH, so an implementation that just let the maths run would invent a direction and nudge the marker off a kerb it knows nothing about. Answering 0 deliberately is the same “no direction” a one-stop route gets.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "B"
+              },
+              {
+                "location": {
+                  "lat": 22.343,
+                  "lng": 114.17
+                },
+                "name": "B again"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.343,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "one-stop-is-a-terminus-with-no-direction",
+          "why": "The degenerate route. `index === 0` and `index === count - 1` are both true, which must not produce two markers or an error — and there is no pair to take a bearing from.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.34,
+                  "lng": 114.17
+                },
+                "name": "Only"
+              }
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.34,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "no-stops-yields-no-markers",
+          "why": "An empty sequence is a shape the wire produces (an empty route document) and the answer is an empty list, not a crash. Pinned because a port indexing `count - 1` on an empty array is the natural way to get this wrong.",
+          "args": {
+            "stops": []
+          },
+          "expect": []
+        },
+        {
+          "name": "a-stop-beside-the-road-is-snapped-onto-the-line",
+          "why": "The reason `line` exists. A bus stop's published coordinate is beside the road — often 10–20 m off, sometimes inside a building — and anchoring a marker there looks fine at a whole-route zoom and falls apart at street level, where the markers scatter off the line they belong to. Each of these sits ~20 m east of a due-north line and every one comes back ON it, with the ROAD's bearing rather than the route's.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.3205,
+                  "lng": 114.1702
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.3245,
+                  "lng": 114.17019
+                },
+                "name": "Mid BBI"
+              },
+              {
+                "location": {
+                  "lat": 22.3285,
+                  "lng": 114.1702
+                },
+                "name": "B"
+              }
+            ],
+            "line": [
+              [114.17, 22.32],
+              [114.17, 22.322],
+              [114.17, 22.324],
+              [114.17, 22.326],
+              [114.17, 22.328],
+              [114.17, 22.33]
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.3205,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "interchange",
+              "at": {
+                "lat": 22.3245,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.3285,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "snapping-lands-between-vertices-not-on-them",
+          "why": "The projection is a point on a SEGMENT, interpolated, not the nearest vertex — a stop half-way along a 200 m straight must not jump to either end of it. This stop sits opposite the middle of the first segment, so a port that snapped to vertices returns a different latitude and every other row here would still pass.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.32,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.321,
+                  "lng": 114.1703
+                },
+                "name": "Between"
+              },
+              {
+                "location": {
+                  "lat": 22.33,
+                  "lng": 114.17
+                },
+                "name": "B"
+              }
+            ],
+            "line": [
+              [114.17, 22.32],
+              [114.17, 22.322],
+              [114.17, 22.324],
+              [114.17, 22.326],
+              [114.17, 22.328],
+              [114.17, 22.33]
+            ]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.32,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.321,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.33,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        },
+        {
+          "name": "a-line-too-short-to-project-onto-falls-back-to-the-stops",
+          "why": "`nearestOnPath` needs a segment, so a one-vertex line has nothing to offer. The answer is the stop-to-stop fallback rather than an invented position — the same values this function gives when no line is passed at all, which is what makes the fallback a real behaviour rather than a hole.",
+          "args": {
+            "stops": [
+              {
+                "location": {
+                  "lat": 22.32,
+                  "lng": 114.17
+                },
+                "name": "A"
+              },
+              {
+                "location": {
+                  "lat": 22.321,
+                  "lng": 114.17
+                },
+                "name": "B"
+              },
+              {
+                "location": {
+                  "lat": 22.322,
+                  "lng": 114.17
+                },
+                "name": "C"
+              }
+            ],
+            "line": [[114.17, 22.32]]
+          },
+          "expect": [
+            {
+              "index": 0,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.32,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 1,
+              "kind": "stop",
+              "at": {
+                "lat": 22.321,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            },
+            {
+              "index": 2,
+              "kind": "terminus",
+              "at": {
+                "lat": 22.322,
+                "lng": 114.17
+              },
+              "bearing": 0.0
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

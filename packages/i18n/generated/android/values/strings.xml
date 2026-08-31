@@ -80,7 +80,7 @@
 	<string name="faqOfflineQ">Does the app work offline?</string>
 	<string name="faqOfflineA">Partly. The app opens offline, and route and stop search keeps working from the index saved on your device the first time you used it. Arrivals you have already seen come back from the cache, faded rather than shown as current — a new reading always needs a connection.</string>
 	<string name="faqMapQ">Why isn\'t there a live bus map?</string>
-	<string name="faqMapA">Hong Kong\'s open data publishes stop-by-stop arrival estimates, not live vehicle positions or route shapes — so we can\'t honestly show buses moving on a map. What we can do is place a bus on the route\'s stop list, between the two stops its own arrival times put it between.</string>
+	<string name="faqMapA">The route\'s own line is real — the Transport Department surveys and publishes it, and that is what you see drawn on the map. What Hong Kong\'s open data does not publish is live vehicle positions: the feeds give stop-by-stop arrival estimates, so we can\'t honestly show a bus moving along that line. What we can do is place it on the route\'s stop list, between the two stops its own arrival times put it between.</string>
 	<string name="faqRemarksQ">What do \"Scheduled\" and \"Last bus\" mean?</string>
 	<string name="faqRemarksA">They are notes from the operator, shown in its own words, so the exact wording varies. Anything about a schedule — \"Scheduled\", say — means the time is timetable-based, i.e. lower confidence than a live estimate; a last-bus note flags the final departure of the day. Other notes are passed through as the operator wrote them.</string>
 	<string name="routesAtStop">Routes</string>
@@ -100,6 +100,8 @@
 		<item quantity="other">+%1$d more routes</item>
 	</plurals>
 	<string name="etasUnavailable">Live times unavailable</string>
+	<string name="routePathApproximate">Approximate path — stops shown in order</string>
+	<string name="routePathLabel">Route on a map</string>
 	<string name="mapAttribution">Map from Lands Department</string>
 	<string name="mapAttributionAction">Map from Lands Department — open the copyright notice and disclaimer</string>
 	<string name="keypadBackspace">Backspace</string>
@@ -122,6 +124,21 @@
 	<string name="reverseDirection">Reverse direction</string>
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">Bus approaching %1$s</string>
+	<string name="routeShowDetails">Show route details</string>
+	<string name="fareNoJoyYou">The $2 Scheme does not cover airport routes.</string>
+	<string name="fareFromHere">From here</string>
+	<string name="mapShowWholeRoute">Show the whole route</string>
+	<string name="mapShowMyLocation">Show my location</string>
+	<string name="routeHideDetails">Hide route details</string>
+	<string name="routeStopsSheet">Stops on this route</string>
+	<string name="riderHere">Your location</string>
+	<string name="riderHereFacing">Your location and the way you are facing</string>
+	<!-- {stop} → %1$s -->
+	<string name="routeStopActions">Actions for %1$s</string>
+	<!-- {stop} → %1$s -->
+	<string name="routeStopMarker">Stop: %1$s</string>
+	<string name="routeStopTerminus">Terminus</string>
+	<string name="routeStopInterchange">Interchange</string>
 	<!-- {stop} → %1$s -->
 	<string name="busAtStop">Bus at %1$s</string>
 	<!-- {place} → %1$s -->
@@ -136,8 +153,8 @@
 	<string name="fareAdult">Adult</string>
 	<string name="fareChild">Child (3–11)</string>
 	<string name="fareChildNote">Roughly half the adult fare.</string>
-	<string name="fareElderly">Elderly 65+ / disabled</string>
-	<string name="fareElderlyNote">$2 Scheme, via a JoyYou or eligible Octopus (not cash).</string>
+	<string name="fareElderly">JoyYou 60+ / disabled</string>
+	<string name="fareElderlyNote">$2 up to a $10 fare, then 20 per cent of it. Needs a JoyYou or eligible Octopus — not cash.</string>
 	<string name="freqTitle">Frequency</string>
 	<string name="freqNote">How often buses run — scheduled frequencies, not live.</string>
 	<string name="hoursTitle">Service hours</string>

@@ -46,6 +46,7 @@ import type {
   PongFrameSchema,
   RemarkKindSchema,
   RouteDetailSchema,
+  RoutePathSchema,
   RouteRefSchema,
   RouteSchema,
   RouteServiceInfoSchema,
@@ -158,6 +159,8 @@ export type RouteRef = z.infer<typeof RouteRefSchema>
  *  next arrival *there* (`eta`), so a route view can show per-stop times and infer bus positions
  *  (ADR-030). `eta` is null where no live reading is available. */
 export type RouteDetail = z.infer<typeof RouteDetailSchema>
+/** The road-following line for one route direction — `GET /v1/route/{id}/path` (ADR-152). */
+export type RoutePath = z.infer<typeof RoutePathSchema>
 
 /** A stop (or merged same-kerb place) + the routes that serve it, each with its current ETA. For a
  *  multi-pole place, `stopId` on each route is the canonical id of the *pole* it departs from

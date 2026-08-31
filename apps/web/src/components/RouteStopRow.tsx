@@ -1,4 +1,4 @@
-import type { EtaUrgency, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
+import type { EtaUrgency, RouteStopArrival, RouteStopRowView, StopMarkerKind } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { Star } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
@@ -26,9 +26,35 @@ export function RouteStopRow({
   animateIn,
   arrivalsPending = false,
   tokens,
+  kind,
+  selected = false,
   onPress,
+  onMenu,
   registerRow,
 }: {
+  /**
+   * What this stop is — from `routeMarkers`, the same call that shapes the map's markers. Passed in
+   * rather than derived here so the list and the map cannot disagree: "the first stop is a terminus"
+   * is a domain rule (ADR-068), and a row deciding it for itself is the second spelling that drifts.
+   */
+  kind: StopMarkerKind
+  /**
+   * The stop the rider has **tapped** — the one the map is looking at.
+   *
+   * Deliberately a different kind of thing from `row.here`, which is the stop they *arrived from*, and
+   * the two are signalled differently on purpose:
+   *
+   * | | | |
+   * |---|---|---|
+   * | `here` | a fact about their journey, and permanent | a mark **inside** the node — a filled centre — plus the accent fill it already had |
+   * | `selected` | a transient state they change by tapping | a bar on the row's **leading edge**, and the node grows |
+   *
+   * One is a property of the *stop*, the other of the *row*, and putting them on different parts of
+   * the same object is what keeps them legible together — a rider can be looking at the stop they
+   * boarded at, and both marks have to survive that. Neither is carried by colour alone (ADR-008's
+   * rule, applied to state rather than to time): the dot and the bar are shapes.
+   */
+  selected?: boolean
   row: RouteStopRowView
   /**
    * The route's live round has not answered yet, so a row with no arrivals is **waiting** rather than
@@ -55,7 +81,15 @@ export function RouteStopRow({
    * in an order of its own.
    */
   tokens: ReactNode
-  onPress: (row: RouteStopRowView) => void
+  /**
+   * The row itself was tapped. Since §8d that **focuses the stop on the map** and does nothing else —
+   * it used to open the action sheet, which is now `onMenu`'s job. The swap is the whole of WP M7d:
+   * a tap that moves the map is worth a permanent control beside it, which it was not when the map
+   * was a decorative band (`docs/proposals/06 §8d`).
+   */
+  onPress: (row: RouteStopRowView, index: number) => void
+  /** The `⋯` was tapped — open the actions for this stop. */
+  onMenu: (row: RouteStopRowView) => void
   /** Reports this row's element so the reveal can scroll to it — geometry, not a decision. */
   registerRow: (index: number, el: HTMLElement | null) => void
 }) {
@@ -88,10 +122,30 @@ export function RouteStopRow({
       placed from `onLayout` values, and a transform does not move those.
     */
     <div className="relative">
+      {/*
+        The selected row's leading bar. Absolutely positioned so it costs the row no layout — the bus
+        tokens are placed against this row's own box with constant CSS expressions (ADR-110), and a
+        row that changed height on selection would move every bus on the schematic.
+      */}
+      {selected ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 bottom-0 left-0 w-[3px] rounded-r-sm bg-accent"
+        />
+      ) : null}
       <button
         type="button"
         ref={(el) => registerRow(index, el)}
-        onClick={() => onPress(row)}
+        onClick={() => onPress(row, index)}
+        // Two different `aria-current` tokens, which is the one place ARIA already draws the
+        // distinction this row needs: `location` is "where you are in an environment" — the stop they
+        // boarded at — and `true` is "the one being looked at". Attributes rather than text, so a
+        // screen reader gets both facts and the conformance projection is unchanged.
+        {...(selected
+          ? { 'aria-current': 'true' as const }
+          : here
+            ? { 'aria-current': 'location' as const }
+            : {})}
         // The cascade's per-row beat, capped so a 60-stop route does not drag for two seconds — the delay
         // `apps/mobile` applies with `withDelay(Math.min(index, 10) * 26, …)`, value for value.
         style={
@@ -110,7 +164,11 @@ export function RouteStopRow({
         // static list and `bg-surface-2` appended conditionally — two unvariant `background-color` utilities
         // of equal specificity, so the winner was whichever Tailwind happened to emit last, and it was the
         // transparent one. That is why the rider's boarding stop had no lighter background.
-        className={`relative flex min-h-16 w-full scroll-mt-28 gap-0 border-0 px-0 py-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
+        // `pr-11` clears the `⋯`, which is absolutely positioned over the row's right edge and was
+        // otherwise sitting on top of the fare. The padding is on the ROW rather than on its content
+        // so the tap target still spans the full width — the control is a sibling, and reserving room
+        // for it must not carve a hole in the thing it sits beside.
+        className={`relative flex min-h-16 w-full scroll-mt-28 gap-0 border-0 py-0 pr-11 pl-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
           here ? 'bg-surface-2' : 'bg-transparent'
         } ${rise ? 'row-rise' : ''}`}
       >
@@ -128,15 +186,53 @@ export function RouteStopRow({
               style={{ top: NODE_CENTRE, bottom: 0, width: 2, left: RAIL_WIDTH / 2 - 1 }}
             />
           ) : null}
+          {/*
+            **The node's SHAPE is the same vocabulary the map uses** — a square for a terminus, a
+            hexagon for a bus-bus interchange, a circle for every other stop — and it is the *same
+            answer*, not a matching one: `routeMarkers` is called once on the screen and its result
+            feeds both the map's markers and this. A rider who sees a hexagon on the map and scrolls to
+            find a circle in the list would be looking at two claims about one stop.
+
+            Drawn as an SVG behind the number rather than as a CSS shape, because a border has to
+            follow the outline: `rounded-full` gives a circle for free and `clip-path` would give a
+            hexagon with its border clipped off. One `<path>` per kind, filled and stroked, is the same
+            technique the map marker uses and keeps the two files' geometry legibly related.
+          */}
           <span
-            className={`absolute flex items-center justify-center rounded-full border text-caption tabular-nums ${
-              here
-                ? 'border-accent bg-accent text-accent-contrast'
-                : 'border-border bg-surface text-subtle'
-            }`}
-            style={{ top: NODE_TOP, left: (RAIL_WIDTH - NODE) / 2, width: NODE, height: NODE }}
+            className="absolute flex items-center justify-center text-caption tabular-nums"
+            style={{
+              top: NODE_TOP,
+              left: (RAIL_WIDTH - NODE_BOX[kind].width) / 2,
+              width: NODE_BOX[kind].width,
+              height: NODE,
+            }}
           >
-            {row.seq}
+            <svg
+              viewBox={NODE_BOX[kind].viewBox}
+              aria-hidden="true"
+              className={`absolute inset-0 h-full w-full ${
+                here ? 'fill-accent stroke-accent' : 'fill-surface stroke-border'
+              }`}
+              // 2 **rendered** pixels, to match the rail line it sits on — so the width is expressed in
+              // viewBox units and the box is drawn 1:1, which is why every `viewBox` below is the glyph's
+              // real size rather than a tidy 24.
+              strokeWidth={2}
+            >
+              <path d={NODE_SHAPE[kind]} />
+            </svg>
+            <span className={`relative ${here ? 'text-accent-contrast' : 'text-subtle'}`}>
+              {row.seq}
+            </span>
+            {/* The boarding stop's own mark: a hole in the middle of the node. A shape rather than a
+                second colour, so it survives a colour-blind rider and a monochrome screenshot alike —
+                and it reads as *this stop is special* rather than *this row is selected*, which is the
+                distinction the two states need. */}
+            {here ? (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full border-2 border-accent bg-surface"
+              />
+            ) : null}
           </span>
           {row.saved ? (
             // Drawn on the node's corner, and — as on the RN rail — the node itself is unchanged, so a saved
@@ -167,11 +263,10 @@ export function RouteStopRow({
             <span className="min-w-0 flex-1">
               <StopName name={row.name} emphasis={here} />
             </span>
-            {row.fareLabel ? (
-              <span className="shrink-0 text-caption text-subtle tabular-nums">
-                {row.fareLabel}
-              </span>
-            ) : null}
+            {/* The fare is **not** here any more. It said the same figure on nearly every row — the
+                same $6.7 forty times — while competing with the stop's name for the one edge the `⋯`
+                also wants. It was briefly a sticky stage header (ADR-158) and is now the fare block in
+                this stop's own action sheet (ADR-159), where "From here" has a stop to refer to. */}
           </span>
           {row.arrivals.length > 0 ? (
             <span className="mt-1 flex flex-wrap items-baseline gap-x-3">
@@ -218,6 +313,44 @@ export function RouteStopRow({
             <span className="mt-1 block text-label text-muted">{t(locale, 'etasUnavailable')}</span>
           ) : null}
         </span>
+      </button>
+      {/*
+        **The permanent `⋯`, and a SIBLING of the row rather than a child of it** (ADR-024's rule, and
+        what the spec's `sibling-not-nested` check enforces): a button inside a button is invalid HTML
+        and folds into one control for a screen reader, which is how the star beside a stop row had to
+        be built too.
+
+        Absolutely positioned so it costs the row no layout — the row's own box is unchanged, which
+        matters because `RailBusToken` is placed against it with constant CSS expressions and any
+        change to the row's height would move every bus on the schematic (ADR-110).
+
+        Round 1 rejected this as "repeated menu icons" and round 5 accepted it, because everything
+        around it changed: once the map is the point of the screen, a tap that focuses it is worth a
+        permanent control, and the actions need somewhere to go.
+      */}
+      <button
+        type="button"
+        onClick={() => onMenu(row)}
+        aria-label={t(locale, 'routeStopActions', { stop: row.name.label })}
+        className="absolute top-0 right-0 flex h-16 w-11 items-center justify-center border-0 bg-transparent text-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+      >
+        {/*
+          **Three drawn dots, not the character `⋯`** — and that is a conformance decision, not a
+          styling one. The walker reads TEXT NODES and sees presence rather than visibility (ADR-097),
+          so a literal `⋯` lands in every state's projection as a stray glyph after the stop's
+          sequence number. It cannot be declared away either: the RN row has no such control, and a
+          slot the other renderer cannot produce is a red build there or a fake `knownDefect`.
+
+          Drawn, it is a control with **no text** — which is exactly what the saved-state star on
+          `PlaceRow` is, and it is `idiom` for the same stated reason: no slot can declare it, so each
+          renderer draws it its own way. The button still carries its accessible name, so a screen
+          reader loses nothing and the count of tap targets is unchanged.
+        */}
+        <svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true" fill="currentColor">
+          <circle cx="2" cy="2" r="1.6" />
+          <circle cx="8" cy="2" r="1.6" />
+          <circle cx="14" cy="2" r="1.6" />
+        </svg>
       </button>
       {tokens}
     </div>
@@ -277,6 +410,41 @@ export function ArrivalSlot({ arrival, first }: { arrival: RouteStopArrival; fir
       )}
     </span>
   )
+}
+
+/**
+ * The rail node's outline, per kind, on a 24×24 grid — the list's half of the map's shape vocabulary
+ * (`routeMarkerElement.ts` draws the same three at marker sizes).
+ *
+ * Inset by 1 so a 2 px stroke sits inside the box rather than being clipped by the viewBox, which is
+ * why none of these starts at 0.
+ */
+/**
+ * Each glyph's box, in CSS pixels, and the `viewBox` that maps 1:1 onto it.
+ *
+ * **1:1 is the point.** A single 24-unit viewBox stretched to a 26 px box scales the stroke with it,
+ * so a `strokeWidth` of 2 renders at 2.17 — close enough to look right and wrong enough to never match
+ * the 2 px rail line beside it. Drawing each glyph at its true size means the number in the markup is
+ * the number on screen.
+ *
+ * **The hexagon is wider than the others, and has to be.** A regular hexagon 26 px tall is 30 px wide —
+ * `2r` against `r√3` — so forcing it into a 26 px square would either squash it out of regularity or
+ * shrink it until it read as the small one of the three. It overhangs the rail gutter symmetrically,
+ * which is invisible: the gutter has nothing else in it.
+ */
+const NODE_BOX: Record<StopMarkerKind, { width: number; viewBox: string }> = {
+  terminus: { width: NODE, viewBox: `0 0 ${NODE} ${NODE}` },
+  interchange: { width: 30.02, viewBox: `0 0 30.02 ${NODE}` },
+  stop: { width: NODE, viewBox: `0 0 ${NODE} ${NODE}` },
+}
+
+const NODE_SHAPE: Record<StopMarkerKind, string> = {
+  terminus: 'M1 1 h24 v24 h-24 Z',
+  // A **regular** hexagon — vertices every 60° on a circle — sized so its HEIGHT matches the circle's
+  // diameter, which is what makes the three read as one family. Inset by 1 so the 2 px stroke sits
+  // inside the box rather than being clipped by it.
+  interchange: 'M29.02 13 L22.02 25.13 L8.01 25.13 L1 13 L8.01 0.87 L22.02 0.87 Z',
+  stop: 'M13 1 a12 12 0 1 0 0.01 0 Z',
 }
 
 /** The flip cascade's beat and its cap — `apps/mobile`'s `Math.min(index, 10) * 26`, value for value. */

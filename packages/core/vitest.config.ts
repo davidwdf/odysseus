@@ -28,8 +28,18 @@ export default defineConfig({
       //
       // Left as an explicit list rather than `src/*.ts` plus exclusions, deliberately: a glob would make
       // the three declaration-only modules below into unexplained exclusions, and the reason each is out
-      // is the part worth keeping. The cost is that this list must be edited when a module is added, and
-      // the mitigation is that a module with no rows fails the threshold loudly rather than silently.
+      // is the part worth keeping. The cost is that this list must be edited when a module is added.
+      //
+      // **The mitigation used to be stated here as "a module with no rows fails the threshold loudly
+      // rather than silently", and that was simply wrong** — a module missing from this list is not
+      // measured at all, so it fails nothing and is invisible, which is worse than red. Saying so did
+      // not stop it recurring: `src/route-path.ts` was added in M4 of proposals/06, extended twice, and
+      // never listed, while ADR-155 claimed 100 % coverage for a module actually sitting at 95 %
+      // statements and 87 % branches with a dead branch in it.
+      //
+      // The real mitigation is a gate. `check-spec-coverage.mjs` now fails when a module carrying an
+      // `@spec` tag is absent from this list, because a rule worth pinning to a corpus is a rule worth
+      // measuring. Declaration-only modules carry no tags and are correctly ignored by it.
       include: [
         'src/eta.ts',
         'src/favourites.ts',
@@ -37,9 +47,12 @@ export default defineConfig({
         'src/geo-snap.ts',
         'src/ids.ts',
         'src/live.ts',
+        'src/location-mark.ts',
         'src/mercator.ts',
         'src/policy.ts',
         'src/route-detail.ts',
+        'src/route-markers.ts',
+        'src/route-path.ts',
         'src/route-position.ts',
         'src/search.ts',
         'src/settings.ts',

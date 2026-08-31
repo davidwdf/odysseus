@@ -1,36 +1,43 @@
 import {
   applyLiveEtasToRouteDetail,
+  displayName,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
   type RouteFactKey,
   type RouteStopRowView,
   routeDetailView,
   routeFactSheet,
+  routeMarkers,
   routeStopBoard,
   type ServiceDayType,
 } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat, Star } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
 import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { JourneyLines } from '../components/JourneyLines'
 import { RailBusToken } from '../components/RailBusToken'
-import { RouteChip } from '../components/RouteChip'
 import { RouteFactSheet } from '../components/RouteFactSheet'
+import { RouteMap } from '../components/RouteMap'
 import { RouteStopRow } from '../components/RouteStopRow'
 import { RouteStopSheet } from '../components/RouteStopSheet'
+import { DraggableSheet } from '../components/sheet/DraggableSheet'
+import { DEFAULT_DETENT, ROUTE_DETENTS, resolveDetent } from '../components/sheet/detents'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveRoute } from '../hooks/useLiveRoute'
 import { useOnline } from '../hooks/useOnline'
 import { useRailFlip } from '../hooks/useRailFlip'
+import { useRiderPosition } from '../hooks/useRiderPosition'
+import { useRoutePath } from '../hooks/useRoutePath'
 import { usePreferences } from '../lib/preferences'
+import { useStableValue } from '../lib/useStableValue'
 import { useLocale } from '../providers/LocaleProvider'
 import { BackButton } from '../shell/BackButton'
-import { CollapsingHeader } from '../shell/CollapsingHeader'
+import { RouteContextCard } from './route/RouteContextCard'
 
 /**
  * Route detail, rendered by React DOM from the identical kernel function the React Native screen uses
@@ -114,6 +121,52 @@ export function RouteDetail() {
     // flashes the skeleton (ADR-046).
     placeholderData: keepPreviousData,
   })
+
+  // The line, on its own clock — a day-cached body has no business sharing an entry with a
+  // 30-second one, and the stop list is useful long before the geography arrives (ADR-152).
+  const routePath = useRoutePath(id)
+  /**
+   * The stops as the map needs them — where each one is, and what it is called — in travel order.
+   *
+   * Taken from the **static** payload rather than the live-merged one: a stop's position and name are
+   * not readings, and deriving them from `detail` would rebuild every marker each time an arrival
+   * ticked. The name is **`displayName`'s** — the kernel function `routeDetailView` builds every row's
+   * name with — rather than a second spelling of it, which is the mistake ADR-093 decision 11 records
+   * this screen making once already. It is also what `routeMarkers` reads its `BBI` token out of, and
+   * `titleCaseName` keeps that in capitals; nothing else states that coupling, so `route-markers.test.ts`
+   * pins it.
+   */
+  const stopPoints = useStableValue(
+    useMemo(
+      () =>
+        (query.data?.stops ?? []).map((s) => ({
+          location: s.stop.location,
+          name: displayName(s.stop.name[locale]).label,
+        })),
+      [query.data?.stops, locale],
+    ),
+  )
+
+  /**
+   * What each stop **is** — terminus, interchange, or ordinary — computed once here and handed to both
+   * the map and the list.
+   *
+   * One call rather than two, and that is the point rather than a saving: a rider who sees a hexagon on
+   * the map and scrolls down to find a circle in the list is looking at two claims about one stop. The
+   * rule itself is corpus-pinned in `packages/core` (ADR-068), so what this guarantees is that the two
+   * *renderings* on this screen read the same answer.
+   */
+  const markers = useMemo(() => routeMarkers(stopPoints), [stopPoints])
+
+  /**
+   * The rider's own position, for the map's mark (M5).
+   *
+   * **Deliberately not `useLocation`.** That one is the shared controller and snaps every coordinate
+   * to a 25 m cell before it leaves the device, which is right for anything sent upstream and wrong
+   * for drawing where someone is standing: a snapped dot teleports between grid cells while the map
+   * scrolls smoothly under it. This one never leaves the device — see the hook's own note.
+   */
+  const rider = useRiderPosition()
 
   /**
    * The whole screen's content, in one call. Nothing below this line decides anything.
@@ -224,6 +277,77 @@ export function RouteDetail() {
     if (el === null) rows.current.delete(index)
     else rows.current.set(index, el)
   }, [])
+  /**
+   * The stop the rider is looking at on the map — set by tapping a marker, and the camera follows it
+   * (`RouteMap`). `undefined` until they ask: a screen that opened with a stop pre-selected would be
+   * answering a question nobody put.
+   *
+   * ⚠️ **Row taps do not set this yet.** §8d makes a row tap the primary way to focus a stop and moves
+   * the action sheet onto a per-row `⋯`, but that is a *declared* interaction in
+   * `route-detail.spec.json` (`stopName` → "a sheet offering to save this route…"), so it moves with
+   * the spec and both drivers rather than ahead of them. Until then a marker is the only way in, which
+   * is a smaller surface than §8d describes and not a different one.
+   */
+  const [focusedIndex, setFocusedIndex] = useState<number | undefined>(undefined)
+  /**
+   * Whether the context card has stepped aside into its pill (round 4).
+   *
+   * Collapsed by **anything that means the rider has started reading** — dragging the sheet off its
+   * opening detent, touching the map, or scrolling the stop list.
+   *
+   * Scrolling was excluded at first, because round 4 tried it and the card flickered: a list flick is
+   * the most common gesture on this screen, and collapsing on *movement* means collapsing dozens of
+   * times a minute. What makes it work is the owner's own rule — the card comes back when the list is
+   * **all the way at the top**, not when the scrolling stops. That is a place rather than a moment, a
+   * rider can return to it deliberately, and it cannot oscillate: the only way back to zero is to ask
+   * for it.
+   */
+  const [chromeCollapsed, setChromeCollapsed] = useState(false)
+  /**
+   * True while a scroll this screen *caused* is still settling.
+   *
+   * The header re-opens when the stop list is back at the top, which is a deliberate place a rider
+   * returns to — but `scrollIntoView` reaches the same place for a completely different reason, and a
+   * rider tapping stop 1 to see it on the map got the card thrown back over the map instead. The flag
+   * is the difference between "the list is at the top" and "the rider put it there".
+   */
+  const programmaticScroll = useRef(false)
+  /**
+   * How much of the map the sheet is covering, as a fraction — the camera's `padding`.
+   *
+   * Kept here rather than read from the DOM because it is the sheet's own declared detent, and a
+   * measurement would be a second answer to a question that already has one (ADR-110's lesson, one
+   * screen along).
+   */
+  const [sheetFraction, setSheetFraction] = useState(
+    () => resolveDetent(ROUTE_DETENTS, DEFAULT_DETENT).fraction,
+  )
+  const focusStop = useCallback((index: number) => {
+    setFocusedIndex(index)
+    // The scroll below is OURS, and the header must not read it as the rider returning to the top.
+    // Tapping the first stop lands the list at zero as a side effect, and without this the card
+    // sprang open at the exact moment the rider was asking to look at the map instead.
+    programmaticScroll.current = true
+    // `nearest`, not `start`. The map sits **above** the list in one scrolling page, so scrolling a row
+    // to the top would push the map — the thing the rider just tapped — off the screen to show them the
+    // row it was already about. `nearest` does nothing when the row is visible and moves the minimum
+    // when it is not. (The mockup had no such tension: it split the screen into a map pane and a list
+    // pane that scrolled independently. This layout is a single column, and that is the trade.)
+    rows.current.get(index)?.scrollIntoView({ block: 'nearest' })
+  }, [])
+
+  /**
+   * A row tap. §8d: it **focuses the stop on the map and does nothing else** — the actions moved to the
+   * `⋯` beside it. It keeps the `RouteStopRowView` argument even though only the index is used, because
+   * the sheet still takes the row and the two handlers must not disagree about what a row is.
+   */
+  const onRowPress = useCallback(
+    (_row: RouteStopRowView, index: number) => {
+      focusStop(index)
+    },
+    [focusStop],
+  )
+
   const list = useRef<HTMLDivElement | null>(null)
   const stopCount = view?.stops.length ?? 0
 
@@ -261,8 +385,17 @@ export function RouteDetail() {
     // position (ADR-030). It is carried explicitly now rather than left implicit in a map's index, because a
     // row renders only its own and `useRailFlip` matches a moved token to its old place by it.
     const token = (
-      // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is the point — see above and ADR-030
-      <RailBusToken key={ordinal} ordinal={ordinal} bus={bus} vehicle={view.vehicle} />
+      <RailBusToken
+        // biome-ignore lint/suspicious/noArrayIndexKey: ordinal identity is the point — see above and ADR-030
+        key={ordinal}
+        ordinal={ordinal}
+        bus={bus}
+        // Only a bus standing AT a node wears that node's shape. One on the segment between two stops
+        // is at no stop, and giving it the shape of one it has not reached would be a claim the data
+        // does not support — the same reason it sits at the midpoint rather than a fraction along.
+        shape={bus.kind === 'node' ? (markers[bus.index]?.kind ?? 'stop') : 'stop'}
+        vehicle={view.vehicle}
+      />
     )
     const carried = busesByRow.get(owner)
     if (carried === undefined) busesByRow.set(owner, [token])
@@ -335,28 +468,69 @@ export function RouteDetail() {
   // Which fact sheet is open, if any (ADR-044). Held here rather than per pill so only one can be.
   const [factSheet, setFactSheet] = useState<RouteFactKey | null>(null)
 
+  /**
+   * The static-facts strip, hoisted out of the tree because it now lives **inside the context card**
+   * (`proposals/06 §8`, round 4) — and a card that built its own facts would be a second place that
+   * knows what a fact pill is. The card is handed the finished nodes and decides only whether there
+   * is room for them.
+   */
+  const factsStrip =
+    view !== undefined && view.facts.length > 0 ? (
+      <div className="flex flex-wrap justify-center gap-2 px-4 pt-3 pb-1">
+        {view.facts.map((fact) => (
+          <button
+            key={fact.key}
+            type="button"
+            onClick={() => setFactSheet(fact.key)}
+            className="flex items-center gap-1.5 rounded-full border-0 bg-surface px-3 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus active:opacity-60"
+          >
+            <FactGlyph fact={fact.key} />
+            <span className="text-caption font-medium text-muted tabular-nums">{fact.value}</span>
+            {fact.note ? (
+              <>
+                {/* Its own node, and the order is what the projection pins: React emits an expression
+              and an adjacent literal as separate text nodes (ADR-092), which is what the RN strip
+              already produces. */}
+                <span className="text-caption text-subtle">·</span>
+                <span className="text-caption text-subtle tabular-nums">{fact.note}</span>
+              </>
+            ) : null}
+          </button>
+        ))}
+      </div>
+    ) : null
+
   return (
-    <main className="min-h-dvh bg-bg pb-10">
+    /**
+     * **The map is the screen**, and everything else floats over it or sits in the sheet — round 3/4
+     * of the mockups (`docs/proposals/06 §8`).
+     *
+     * `fixed inset-0` rather than a tall scrolling page: the map is a layer, not a block in flow, and
+     * the only thing that scrolls is the list inside the sheet. That is what lets the sheet be dragged
+     * to three heights without the document's own scroll fighting it, and it is why the sticky-map
+     * workaround this replaces is gone — there is no page scroll left to be sticky against.
+     */
+    <main className="fixed inset-0 overflow-hidden bg-bg">
       {/* The chrome, in flow and first — see the note above. The back control does not wait for the payload,
           deliberately, so a rider can leave a screen that is still loading. */}
       <BackButton />
-      {/* The collapsing header (ADR-033, ADR-100) — the same component Place detail uses, so the two
-          screens feel like one family. The badge is the `RouteChip`: centred and 1.45× at rest, travelling
-          to the left of a glass bar as the rider scrolls. `header.label` is the whole journey on one line,
-          which is what the RN header shows at its expanded size and what this used to put only in the tab
-          title. */}
+      {/* Round 4's context card, in place of the collapsing header (`proposals/06 §8`, ADR-156).
+          `CollapsingHeader` is still Place detail's and is untouched — the two screens stop being one
+          family here on purpose, because only this one has a map underneath to get out of the way of. */}
       {view ? (
-        <CollapsingHeader
-          expandedHeight={168}
-          labelExpandedTop={96}
-          labelExpandedSize={20}
-          labelCollapsedSize={15}
-          badge={<RouteChip operator={view.header.operator} routeNo={view.header.routeNo} />}
-          label={
-            /* The from/to card, as on native: origin small and muted above, destination larger below —
-               two nodes, which is what `route-detail.spec.json` declares and what a single composed
-               `header.label` would have collapsed into one. `JourneyLines` also owns the flip's
-               lyrics-style swap, which is why the nonce goes in here rather than to the header. */
+        <RouteContextCard
+          header={view.header}
+          facts={factsStrip}
+          collapsed={chromeCollapsed}
+          expandLabel={t(locale, 'routeShowDetails')}
+          collapseLabel={t(locale, 'routeHideDetails')}
+          onCollapse={() => setChromeCollapsed(true)}
+          onExpand={() => setChromeCollapsed(false)}
+          journey={
+            /* Origin small and muted above, destination larger below — two nodes, which is what
+               `route-detail.spec.json` declares and what one composed label would have collapsed into
+               one. `JourneyLines` also owns the flip's lyrics-style swap, which is why the nonce goes
+               here rather than to the card. */
             <JourneyLines
               origin={view.header.origin}
               destination={view.header.destination}
@@ -364,11 +538,10 @@ export function RouteDetail() {
               nonce={swapNonce}
             />
           }
-          collapsedLabel={<span className="truncate">{view.header.collapsedLabel}</span>}
-          trailing={
-            /* A link rather than a button: the reverse direction has its own URL, so a rider can share or
-               bookmark it and Back returns to this direction. Absent when there is nothing to flip to —
-               `reverseId`'s presence *is* the answer (ADR-093 decision 6). */
+          swap={
+            /* A link rather than a button: the reverse direction has its own URL, so a rider can share
+               or bookmark it and Back returns to this direction. Absent when there is nothing to flip
+               to — `reverseId`'s presence *is* the answer (ADR-093 decision 6). */
             view.header.reverseId !== undefined ? (
               <Link
                 to={`/route/${encodeURIComponent(view.header.reverseId)}`}
@@ -385,37 +558,6 @@ export function RouteDetail() {
 
       {view ? (
         <>
-          {/* The static-facts strip (ADR-036, the Static tier). Each pill opens its detail sheet (ADR-044) —
-              a `<button>` since WP6-6c, where it was an inert `<span>`. The spec declares that interaction
-              `optional`, which is what made the inert version honest rather than hidden: the walker requires
-              the *text* to be identical whether or not the affordance exists (ADR-069's overflow rule). */}
-          {view.facts.length > 0 ? (
-            <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
-              {view.facts.map((fact) => (
-                <button
-                  key={fact.key}
-                  type="button"
-                  onClick={() => setFactSheet(fact.key)}
-                  className="flex items-center gap-1.5 rounded-full border-0 bg-surface px-3 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus active:opacity-60"
-                >
-                  <FactGlyph fact={fact.key} />
-                  <span className="text-caption font-medium text-muted tabular-nums">
-                    {fact.value}
-                  </span>
-                  {fact.note ? (
-                    <>
-                      {/* Its own node, and the order is what the projection pins: React emits an expression
-                          and an adjacent literal as separate text nodes (ADR-092), which is what the RN strip
-                          already produces. */}
-                      <span className="text-caption text-subtle">·</span>
-                      <span className="text-caption text-subtle tabular-nums">{fact.note}</span>
-                    </>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
           {/* **Live times are not the whole truth on this route, said once** (ADR-114).
               `liveArrivals` distinguishes three things `eta: null` on every row could not: the round
               answered and nothing is due, the round did not answer, and this operator publishes no
@@ -437,35 +579,91 @@ export function RouteDetail() {
               nothing they can do, the other may be their network. ADR-133. */}
           <FeedNotice notice={notice} />
 
-          {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read
+          {/*
+            **The map is the base layer**, full bleed under everything else (round 3/4). Not a strip
+            above a list any more: `RouteMap` fills the shell and the sheet sits over it.
+
+            `padding` is what makes the camera honest about that. The sheet covers the bottom of the
+            map, so a `fitBounds` that framed the whole viewport would centre the route *behind* the
+            sheet — a rider looking at the visible half would see the top of their route and nothing
+            else. Every camera move is inset by the sheet's own height, so "centred" means centred in
+            the part they can actually see.
+          */}
+          <RouteMap
+            path={routePath.data}
+            pending={routePath.isPending}
+            stops={stopPoints}
+            focusedIndex={focusedIndex}
+            boardingIndex={view.hereIndex >= 0 ? view.hereIndex : undefined}
+            onSelectStop={focusStop}
+            rider={rider}
+            visibleInset={{ bottom: sheetFraction, top: CHROME_INSET_FRACTION }}
+            onInteract={() => setChromeCollapsed(true)}
+            controlLabels={{
+              recentre: t(locale, 'mapShowWholeRoute'),
+              locate: t(locale, 'mapShowMyLocation'),
+            }}
+            className="absolute inset-0"
+          />
+
+          {/*
+            **The stop list, in a draggable sheet** — three detents, opening at `half` (round 2's
+            shapes, the owner's default). The sheet owns the only scrolling on this screen now, which
+            is what lets it be dragged without the document's own scroll fighting the gesture.
+
+            The freshness notice and the live-times line ride *inside* it rather than over the map:
+            both are sentences about the readings, and the readings are here.
+          */}
+          <DraggableSheet
+            label={t(locale, 'routeStopsSheet')}
+            initial={DEFAULT_DETENT}
+            onContentScroll={(top) => {
+              if (programmaticScroll.current) {
+                // One event only: `scrollIntoView` is a single jump here, not a smooth animation.
+                programmaticScroll.current = false
+                return
+              }
+              setChromeCollapsed(top > 0)
+            }}
+            onDetentChange={(d) => {
+              setSheetFraction(d.fraction)
+              // Dragging off the opening detent is the rider saying they have started reading.
+              if (d.name !== DEFAULT_DETENT) setChromeCollapsed(true)
+            }}
+          >
+            {/* The rail. `relative` is what makes it the coordinate space every token's `offsetTop` is read
               against — the only thing left on this element now the overlay is gone. */}
-          <div ref={list} className="relative mt-2">
-            {view.stops.map((row, index) => (
-              <RouteStopRow
-                key={`${row.seq}-${row.stopId}`}
-                row={row}
-                index={index}
-                animateIn={swapNonce > 0}
-                // Reserve the arrivals line while the round is still out. `round === null` is
-                // `useLiveRoute` saying "no round has landed", which is exactly the window in which every
-                // row is about to gain a line at once — see the skeleton's note in `RouteStopRow`.
-                arrivalsPending={wantsLive && round === null}
-                tokens={busesByRow.get(index)}
-                onPress={setSheetRow}
-                registerRow={registerRow}
-              />
-            ))}
-            {/* Where a departed bus is drawn out (ADR-111). Rendered **empty and never filled by React**,
+            <div ref={list} className="relative mt-2">
+              {view.stops.map((row, index) => (
+                <RouteStopRow
+                  key={`${row.seq}-${row.stopId}`}
+                  row={row}
+                  index={index}
+                  animateIn={swapNonce > 0}
+                  // Reserve the arrivals line while the round is still out. `round === null` is
+                  // `useLiveRoute` saying "no round has landed", which is exactly the window in which every
+                  // row is about to gain a line at once — see the skeleton's note in `RouteStopRow`.
+                  arrivalsPending={wantsLive && round === null}
+                  tokens={busesByRow.get(index)}
+                  kind={markers[index]?.kind ?? 'stop'}
+                  selected={index === focusedIndex}
+                  onPress={onRowPress}
+                  onMenu={setSheetRow}
+                  registerRow={registerRow}
+                />
+              ))}
+              {/* Where a departed bus is drawn out (ADR-111). Rendered **empty and never filled by React**,
                 which is the whole point: `useRailFlip` appends a stripped clone of the token here for the
                 220 ms of its exit, and React does not reconcile the children of an element it renders with
                 none. `aria-hidden` because a bus that has left must not be announced — the clone loses its
                 `role` and `aria-label` too, so the conformance walker cannot see it either. */}
-            <div
-              ref={ghosts}
-              aria-hidden
-              className="pointer-events-none absolute inset-0 overflow-hidden"
-            />
-          </div>
+              <div
+                ref={ghosts}
+                aria-hidden
+                className="pointer-events-none absolute inset-0 overflow-hidden"
+              />
+            </div>
+          </DraggableSheet>
 
           {/* The sheet a pill opens — one call, the same one the RN screen makes, handed the **view** rather
               than the payload so its fare timeline cannot name a stop differently from the schematic. */}
@@ -564,6 +762,21 @@ function FactGlyph({ fact }: { fact: RouteFactKey }) {
  * days a pattern runs and *what goes between them*; the catalogue owns the words. The RN screen passes the
  * identical four.
  */
+/**
+ * How much of the map's height the floating chrome covers, as a fraction — the back lens and the
+ * context card at its expanded size.
+ *
+ * A constant rather than a measurement, and that is the same call ADR-110 made about the rail: the
+ * card's height is a layout decision this file already owns, so measuring it would be asking the DOM
+ * for an answer we wrote. It only has to be close — it insets a camera, not a hit target.
+ *
+ * 0.14 is the expanded card against a phone viewport. The first attempt used 0.22, and combined with
+ * the sheet's 0.55 that left barely a quarter of the height to frame a route in, so `fitBounds`
+ * zoomed out until the whole route was a thumbnail. Padding is subtracted from the space available,
+ * and over-stating it is not a safe direction to err in.
+ */
+const CHROME_INSET_FRACTION = 0.14
+
 const DAY_LABEL: Record<
   ServiceDayType | 'other',
   'dayWeekday' | 'daySaturday' | 'daySunday' | 'dayDaily' | 'dayOther'

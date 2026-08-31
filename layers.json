@@ -114,7 +114,7 @@
         "fired. That is a gate passing because it is looking at nothing, which this repo has now hit",
         "five times; the cheapest moment to close it is before the first file exists."
       ],
-      "dirs": ["apps/mobile", "apps/web"],
+      "dirs": ["apps/web"],
       "use": ["contract", "kernel", "ports", "tokens", "client", "uiSpec"],
       "npm": "any",
       "bannedSyntax": [

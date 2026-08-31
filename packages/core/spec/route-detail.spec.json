@@ -9522,7 +9522,7 @@
         },
         {
           "name": "the-overview-states-the-stop-count-the-journey-and-the-distance",
-          "why": "Three whole-route figures, each present only where the dataset supports it, and each flagged for whether it is an **estimate** — because one of them is a straight-line sum through the stops (there are no polylines upstream) and one is upstream’s own timing. A renderer that treated them alike would either over- or under-claim. `estimate` is a flag rather than a `~` in the string because the caveat under it is a whole sentence the catalogue owns.",
+          "why": "Three whole-route figures, each present only where the dataset supports it, and each flagged for whether it is an **estimate** — because one of them is a straight-line sum through the stops (a surveyed line exists since ADR-151 and is deliberately not read here — it arrives on a second request, so a static fact would end up waiting on a network round) and one is upstream’s own timing. A renderer that treated them alike would either over- or under-claim. `estimate` is a flag rather than a `~` in the string because the caveat under it is a whole sentence the catalogue owns.",
           "args": {
             "kind": "stops",
             "detail": {
@@ -10576,6 +10576,142 @@
             "operator": "ZZZ9"
           },
           "expect": "bus"
+        }
+      ]
+    },
+    "stopFares": {
+      "doc": "What it costs to board ONE stop — the adult fare plus the child and elderly estimates — for the fare block in that stop's action sheet. Undefined where the stop has no boarding fare at all, which is the ordinary case on a terminus and on every GMB stop (ADR-047), and an EMPTY concession list where the fare exists but cannot be parsed into estimates.",
+      "cases": [
+        {
+          "name": "an-ordinary-fare-prices-all-three",
+          "why": "The everyday case. The adult figure is printed as-is; both concessions carry the `~` that marks them estimates (ADR-008), because HK open data has no fares-by-passenger-type and these are computed from policy rather than read from the feed.",
+          "args": {
+            "fare": "6.7",
+            "routeNo": "1"
+          },
+          "expect": {
+            "adult": "$6.7",
+            "concessions": [
+              {
+                "class": "child",
+                "fare": "~$3.4"
+              },
+              {
+                "class": "elderly",
+                "fare": "~$2.0"
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-long-haul-fare-shows-the-schemes-percentage-arm",
+          "why": "$18.9 is above the $2 Scheme's $10 threshold, so the elderly figure is 20% of it rather than the flat $2 — the rule that changed on 3 April 2026. Pinned here as well as on `eta#estimateElderlyFare` because this is the shape a rider actually sees, and a screen that showed $2.0 on an airport route would be wrong by $1.80.",
+          "args": {
+            "fare": "18.9",
+            "routeNo": "1"
+          },
+          "expect": {
+            "adult": "$18.9",
+            "concessions": [
+              {
+                "class": "child",
+                "fare": "~$9.5"
+              },
+              {
+                "class": "elderly",
+                "fare": "~$3.8"
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-free-section-is-free-for-everyone",
+          "why": "A bus-bus interchange leg costs $0 on routes like 49X. The Scheme CAPS what a concessionary rider pays rather than inventing a charge, so nobody is quoted $2.0 for a free ride — the defect `estimateElderlyFare` was fixed for, reachable from here.",
+          "args": {
+            "fare": "0",
+            "routeNo": "1"
+          },
+          "expect": {
+            "adult": "$0",
+            "concessions": [
+              {
+                "class": "child",
+                "fare": "~$0.0"
+              },
+              {
+                "class": "elderly",
+                "fare": "~$0.0"
+              }
+            ]
+          }
+        },
+        {
+          "name": "no-fare-means-no-block",
+          "why": "A terminus has no boarding fare and GMB fares are dropped upstream. Undefined rather than a zero or an empty object, so the sheet omits the whole block instead of rendering a heading over nothing.",
+          "args": {
+            "fare": null,
+            "routeNo": "1"
+          },
+          "expect": null
+        },
+        {
+          "name": "a-blank-cell-is-not-a-fare",
+          "why": "An upstream whitespace-only cell survives `fareStages`' looser test, so it reaches here. Treated as absent, because `Number(' ')` is 0 and a screen that trusted it would print a confident `$` with nothing after it.",
+          "args": {
+            "fare": "   ",
+            "routeNo": "1"
+          },
+          "expect": null
+        },
+        {
+          "name": "an-unparseable-fare-keeps-the-adult-figure-and-drops-the-estimates",
+          "why": "The both-or-neither rule made visible: the wire string is unvalidated (ADR-052 decision 2), and a fare we cannot take a percentage of still has an adult figure worth showing. Two `~$undefined`s would be worse than an absence, so the list is empty and the renderer needs an arm for it.",
+          "args": {
+            "fare": "n/a",
+            "routeNo": "1"
+          },
+          "expect": {
+            "adult": "$n/a",
+            "concessions": []
+          }
+        },
+        {
+          "name": "an-airport-route-drops-the-joyyou-figure",
+          "why": "The A21 is excluded from the $2 Scheme (`eta#joyYouEligible`), so the elderly figure is OMITTED rather than estimated. A concession that does not apply is not a worse estimate of one that does: on this route the difference is $27.70, and the child halving is untouched because it is the operator's concession rather than the Government's.",
+          "args": {
+            "fare": "34.6",
+            "routeNo": "A21"
+          },
+          "expect": {
+            "adult": "$34.6",
+            "concessions": [
+              {
+                "class": "child",
+                "fare": "~$17.3"
+              }
+            ]
+          }
+        },
+        {
+          "name": "an-e-route-to-the-airport-keeps-it",
+          "why": "E22 also serves the airport and IS covered — the exclusion names the letter, not the destination. Pinned beside the A21 case so a future narrowing of the rule to \"airport routes\" fails here rather than in the hands of a rider who was denied a concession.",
+          "args": {
+            "fare": "14.0",
+            "routeNo": "E22"
+          },
+          "expect": {
+            "adult": "$14.0",
+            "concessions": [
+              {
+                "class": "child",
+                "fare": "~$7.0"
+              },
+              {
+                "class": "elderly",
+                "fare": "~$2.8"
+              }
+            ]
+          }
         }
       ]
     }

@@ -2,6 +2,79 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-31 (later) — the $2 Scheme does not reach every route
+
+> **Shipped:** [ADR-160](./08-decision-log.md#adr-160--the-2-scheme-does-not-reach-every-route-and-the-fare-block-earns-its-height).
+> The owner asked whether the airport bus is covered by the $2 Scheme. It is not — the Transport
+> Department excludes *"'A' and 'NA' routes to the airport, racecourse routes, new long-haul services,
+> designated tourist-oriented routes and the routes on a pre-booking and group hire basis"* — and we
+> were quoting a JoyYou holder `~$6.9` on the **A21**, which costs **$34.6**. Wrong by twenty-eight
+> dollars, on the routes where a concession matters most.
+>
+> `eta#joyYouEligible` (8 corpus cases) decides it, `concessionFigures` **omits** the figure rather than
+> estimating one, and the sheet says why. **`E` and `S` routes stay eligible** — the exclusion names the
+> letter, not the destination, and E11/E21/E22 are the cheap airport routes an elderly rider actually
+> takes. Two corpus cases pin that beside the A21, because *wrongly withholding a concession keeps
+> someone off a bus*, which is worse than a surprise at the farebox. **What the rule cannot see is in
+> `docs/07`**, not guessed at: four of the five exclusions are unmarked in every open-data feed.
+>
+> The fare block is two rows now rather than five under a heading: the adult fare rides the times row on
+> the right, the estimates share its column edge as icon-and-number with `sr-only` labels, and a
+> hairline separates information from actions.
+>
+> **The lesson to carry:** adding the "Child (3–11)" label put the strings `3` and `11` into the sheet's
+> text, and a test asserted an arrival time with `toContain('3')` against the whole `textContent` — **the
+> label alone would have satisfied it**, so that test would have gone on passing with every arrival
+> deleted. Scoped to a `data-arrivals` hook now, with a second test asserting the hook still matches.
+> *Ask what a new string does to an old assertion.*
+
+## 🔵 Snapshot 2026-08-31 — the fare finds its home, the $2 Scheme's label catches up, and the map can be panned
+
+> **Shipped:** [ADR-159](./08-decision-log.md#adr-159--the-fare-block-moves-into-the-stops-sheet-the-2-schemes-label-catches-up-with-the-law-and-one-object-literal-was-holding-the-camera-still),
+> which **amends ADR-158's decisions 1–3 away**. The sticky fare-stage header is gone — the owner's
+> verdict was that *sticky text reads as a title*, and a price is not one — and the fare is now a block
+> in the **stop's own action sheet**: adult · child · JoyYou, under *"From here"*, two lines below the
+> stop's name. `route-detail#stopFares` is the kernel export behind it (6 corpus cases). The
+> `fare-stages` module written for ADR-158 is deleted.
+>
+> **Three defects went with it, two of them shipped:**
+> 1. **`visibleInset={{…}}` was an object literal**, so `RouteMap`'s framing effect re-ran on every
+>    render and snapped the camera back within a frame — **the map could not be panned at all.** Both
+>    camera effects now depend on `insetTop`/`insetBottom`, and the framing one is guarded on `moved`.
+> 2. **The $2 Scheme's label said "Elderly 65+"**. The age dropped to **60** on 25 Aug 2024, and the
+>    note still called it a flat $2 after the 3 Apr 2026 change to *"$2 or 80 per cent off"*. The
+>    *arithmetic* was right all along — only the words were stale, which is the worse half.
+> 3. The recentre control's hand-drawn glyph, which the owner read as *"the squiggle in the brackets"*.
+>
+> **Two things to carry forward.** A `fares` kernel module with `joyYouFare` and 9 corpus cases was
+> written, driven green, and **deleted** — `eta#estimateElderlyFare` already existed and handled a case
+> mine got wrong (it caps the concession at the adult fare, so a $0 interchange leg is not priced at $2).
+> *Grep the kernel and the catalogue for the domain word before writing the function.* And custom icons
+> are now `createLucideIcon` in **`apps/web/src/icons/`** — same props, same 24-grid, and they satisfy
+> the `LucideIcon` type four props already use. **Never inline an `<svg>` in a component.**
+
+## 🔵 Snapshot 2026-08-28 — the fare becomes a stage, and the map says what it can do
+
+> ⚠️ **Decisions 1–3 of this snapshot were withdrawn the next day — see the snapshot above.**
+
+> **Shipped:** the four rider-facing items ADR-156 left open on Route detail
+> ([ADR-158](./08-decision-log.md#adr-158--the-fare-becomes-a-stage-header-the-map-gets-two-controls-and-a-tapped-stop-is-told-apart-from-an-arrived-at-one)).
+> The fare is no longer printed on all forty rows: `fare-stages#fareStageStarts` (9 corpus cases) says
+> where a stage *begins*, and a `position: sticky` **"From here $6.7"** header pins itself over its
+> stage — which hands the row's right edge back to the stop's name. The map grew two controls that
+> appear only when they have something to do: *show the whole route* once the rider has panned away,
+> *my location* once there is a fix. And a **tapped** stop (leading bar, `aria-current="true"`) is now
+> told apart from the one the bus **arrived from** (inner dot, `aria-current="location"`) by shape and
+> position rather than colour — with the same inner dot drawn on the map marker, which is what ties the
+> list to the line.
+>
+> **Two things worth carrying forward.** The fare-stage flag rides on the *driven view*, not in
+> `routeDetailView` — it is a rule about that function's output, so the conformance driver calls the
+> kernel over the view exactly as it already does for `feedNotice`. And **a synthetic
+> `pointerdown`/`pointermove` does not make MapLibre fire a drag**: two probes reported the recentre
+> control missing when the code was right and the gesture was not. Use real
+> `Input.dispatchMouseEvent` over CDP for anything gesture-driven.
+
 ## 🔵 Snapshot 2026-08-13 — the freshness notice reaches every screen, and `offline` becomes checkable
 
 > **Shipped:** the debt [ADR-133](./08-decision-log.md#adr-133--a-screen-says-once-that-it-has-stopped-being-fed-and-never-a-fourth-sentence)
@@ -1446,7 +1519,10 @@ than any in its own row.
   (route 1 → fare $6.7, ~45 min, every 10–30 min, 05:35–23:40; Nearby/Stop boarding fares); typecheck 7/7, Biome clean.
 - **Research + proposals docs** (2026-06-10): a deep dive into all HK bus open data, our feature inventory/gaps,
   competitive analysis, and data-display ideas in [`docs/research`](./research/README.md); fast-win + bigger-bet
-  proposals in [`docs/proposals`](./proposals/README.md). Key facts: no live GPS / no GTFS-RT / no route polylines in HK open data.
+  proposals in [`docs/proposals`](./proposals/README.md). Key facts: no live GPS / no GTFS-RT. *(The third
+  claim in that list — "no route polylines" — was **false**, and was corrected on 2026-08-24: the Transport
+  Department has published surveyed bus-route lines on CSDI since 2021, ~97% of route-directions resolve, and
+  they now ship. See [ADR-151](./08-decision-log.md#adr-151--hong-kong-does-publish-bus-route-lines-and-has-since-2021).)*
 - **Search — its own page** ([ADR-037](./08-decision-log.md#adr-037--search-on-device-index-a-smart-route-keypad-and-extensible-filter-chips)):
   edge **`/v1/index`** (`apps/edge/src/search-index.ts`) ships a compact `SearchIndex` (2002 routes collapsed to
   one per operator+number+direction, 8126 stops with 1179 same-kerb places pre-merged, ~2 MB) off the shared
@@ -1468,7 +1544,8 @@ than any in its own row.
   external-link icon, a **Licence** link row to the locale-aware **data.gov.hk terms**, and the app **version**
   (`expo-constants`) — satisfying the launch-blocking attribution requirement. **`app/faq.tsx`** — an
   **accordion** (collapsed by default, no dividers; tap to expand) owning the **freshness/honesty notes** plus a
-  broader rider set: operator coverage, same-kerb merges, offline, no-live-map (no HK GPS/polylines), and what
+  broader rider set: operator coverage, same-kerb merges, offline, no-live-map (no HK GPS — the *polyline* half of
+  that answer is now wrong and the FAQ string needs the same correction as the note above, ADR-151), and what
   "Scheduled"/"Last bus" remarks mean. Trilingual strings in `@nextbus/i18n`. typecheck 7/7, Biome clean.
   *(The **offline** answer — `faqOfflineA` — predates ADR-058 and now **understates** what the app does: the
   shell opens offline and the last-seen arrivals replay, labelled stale. Refresh the three locale strings.)*

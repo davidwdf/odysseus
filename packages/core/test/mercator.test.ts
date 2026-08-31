@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import corpus from '../spec/mercator.spec.json'
 import {
+  boundsOf,
+  centreOf,
   clampZoom,
   fitZoom,
+  focusZoom,
+  type LatLngBounds,
   latToWorldY,
   lngToWorldX,
   metresPerPixel,
+  tileZoomPlan,
   worldScale,
   type ZoomRange,
 } from '../src/mercator'
@@ -31,6 +36,34 @@ interface ApproxValue {
 function expectApprox(actual: number, e: ApproxValue) {
   expect(Math.abs(actual - e.value)).toBeLessThanOrEqual(e.tolerance)
 }
+
+describe('mercator#boundsOf', () => {
+  // Exact equality, and `toEqual` rather than `toStrictEqual` so a port's extra fields would not be
+  // the thing that fails. `undefined` for the empty row: the corpus writes it as JSON `null`, which
+  // `specCases` hands back as `null`, so the assertion normalises rather than the function.
+  for (const c of cases<{ points: LatLng[] }, LatLngBounds | null>('boundsOf')) {
+    it(c.name, () => {
+      expect(boundsOf(c.args.points) ?? null).toEqual(c.expect)
+    })
+  }
+})
+
+describe('mercator#centreOf', () => {
+  for (const c of cases<{ bounds: LatLngBounds }, LatLng>('centreOf')) {
+    it(c.name, () => {
+      expect(centreOf(c.args.bounds)).toEqual(c.expect)
+    })
+  }
+})
+
+describe('mercator#focusZoom', () => {
+  // Exact equality, no tolerance: a zoom here is a camera instruction, not a measurement.
+  for (const c of cases<{ current: number; zooms: ZoomRange }, number>('focusZoom')) {
+    it(c.name, () => {
+      expect(focusZoom(c.args.current, c.args.zooms)).toBe(c.expect)
+    })
+  }
+})
 
 describe('mercator#worldScale', () => {
   for (const c of cases<{ zoom: number }, ApproxValue>('worldScale')) {
@@ -109,4 +142,29 @@ describe('mercator#fitZoom', () => {
       expect(z).toBeLessThanOrEqual(zooms.maxZoom)
     }
   })
+})
+
+describe('tileZoomPlan', () => {
+  interface Args {
+    zoom: number
+    devicePixelRatio: number
+    zooms: ZoomRange
+  }
+  interface Expected {
+    base: number
+    label: number
+    scale: number
+    tolerance: number
+  }
+  for (const c of cases<Args, Expected>('tileZoomPlan')) {
+    it(c.name, () => {
+      const actual = tileZoomPlan(c.args.zoom, c.args.devicePixelRatio, c.args.zooms)
+      // Levels are integers and compare exactly; only `scale` is a float.
+      expect(actual.base).toBe(c.expect.base)
+      expect(actual.label).toBe(c.expect.label)
+      expect(Math.abs(actual.scale - c.expect.scale)).toBeLessThanOrEqual(c.expect.tolerance)
+      // The invariant the two levels exist to preserve: labels are never deeper than the base.
+      expect(actual.label).toBeLessThanOrEqual(actual.base)
+    })
+  }
 })

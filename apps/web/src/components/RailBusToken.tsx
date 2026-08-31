@@ -1,4 +1,4 @@
-import type { RailBus, RouteVehicle } from '@nextbus/core'
+import type { RailBus, RouteVehicle, StopMarkerKind } from '@nextbus/core'
 import { useLayoutEffect, useRef } from 'react'
 import { BusGlyph } from './BusGlyph'
 
@@ -45,10 +45,17 @@ import { BusGlyph } from './BusGlyph'
 export function RailBusToken({
   bus,
   ordinal,
+  shape = 'stop',
   vehicle = 'bus',
 }: {
   bus: RailBus
   ordinal: number
+  /**
+   * The shape of the node this bus is standing at, so the token matches it (see {@link TOKEN_SHAPE}).
+   * Defaults to `stop` — a disc — which is what a bus on a segment gets and what every caller that has
+   * no opinion should leave it as.
+   */
+  shape?: StopMarkerKind
   /**
    * Which vehicle to draw — the kernel's word, never this component's guess. `routeVehicle` decides it from
    * the operator, because selecting on data and reaching into an id are both things a view may not do.
@@ -99,12 +106,24 @@ export function RailBusToken({
         A single ordered coordinate answers both, where the ordinal answers neither.
       */
       data-bus-at={bus.kind === 'node' ? bus.index : bus.from + HALF_STEP}
-      className="pointer-events-none absolute flex items-center justify-center rounded-full bg-accent"
+      {...{ [BUS_SHAPE_ATTR]: shape }}
+      className="bus-shape pointer-events-none absolute flex items-center justify-center bg-accent"
       style={{
+        // **A custom property, not `clip-path` itself**, and that indirection is what makes the morph
+        // possible. `useRailFlip` starts a travelling token at the shape it is leaving by writing an
+        // inline `clip-path`, then clears it — and clearing has to fall back to the *destination*
+        // shape, which it cannot do if the destination is the very declaration being cleared. The
+        // stylesheet reads `clip-path: var(--bus-clip)`, so the inline value is an override and the
+        // variable is the resting truth.
+        //
+        // `clip-path` at all — rather than `border-radius` — because a clip is what one shape can
+        // become another through. Safe here where it would not be on the rail node: the token is a
+        // flat fill with no outline for a clip to cut away.
+        ...({ '--bus-clip': TOKEN_CLIP[shape] } as React.CSSProperties),
         top: bus.kind === 'node' ? AT_NODE : ON_SEGMENT,
-        left: RAIL_WIDTH / 2 - TOKEN / 2,
-        width: TOKEN,
-        height: TOKEN,
+        left: RAIL_WIDTH / 2 - TOKEN_W / 2,
+        width: TOKEN_W,
+        height: TOKEN_H,
         zIndex: TOKEN_Z,
       }}
     >
@@ -123,7 +142,7 @@ export function RailBusToken({
       <span className="bus-bob flex">
         <span className="bus-rock flex">
           <span className="bus-squash flex text-accent-contrast">
-            <BusGlyph vehicle={vehicle} size={TOKEN * 0.66} />
+            <BusGlyph vehicle={vehicle} size={TOKEN_H * 0.66} />
           </span>
         </span>
       </span>
@@ -137,10 +156,59 @@ export function RailBusToken({
  * row that draws the node and the token that rides it need the same centre line.
  */
 export const RAIL_WIDTH = 44
+/**
+ * **The token wears the shape of the node it is standing at** — a square at a terminus, a hexagon at an
+ * interchange, a disc everywhere else — so the map, the rail and the bus all speak one vocabulary.
+ *
+ * Only where the bus is **at a node**. A bus on the segment *between* two stops is at no stop at all,
+ * and giving it the shape of one it has not reached would be the token making a claim the data does not
+ * support — the same reason it sits at a midpoint rather than a fraction of the way along (ADR-030).
+ * Those stay discs, which is also the shape they have always had.
+ *
+ * ## Why all three are 24-point polygons
+ *
+ * So they can **morph into one another**. A browser interpolates `clip-path: polygon()` only between
+ * polygons with the same number of points, so a disc drawn as `border-radius` and a hexagon drawn as
+ * six vertices cannot tween — there is no correspondence between them to animate. Giving every shape
+ * the same 24 vertices, with the extra ones spread evenly along each edge, creates that correspondence:
+ * a square's edge midpoints slide out into a circle's arc, a hexagon's into its own.
+ *
+ * 24 because it divides by 4 and by 6, and because at 26 px a 24-gon is a disc — no eye can find the
+ * flats, and generating them from `cos`/`sin` in a build step would be three constants' worth of
+ * machinery to save nothing.
+ */
+const TOKEN_CLIP: Record<StopMarkerKind, string> = {
+  stop: 'polygon(93.30% 50.00%, 91.83% 62.94%, 87.50% 75.00%, 80.62% 85.36%, 71.65% 93.30%, 61.21% 98.30%, 50.00% 100.00%, 38.79% 98.30%, 28.35% 93.30%, 19.38% 85.36%, 12.50% 75.00%, 8.17% 62.94%, 6.70% 50.00%, 8.17% 37.06%, 12.50% 25.00%, 19.38% 14.64%, 28.35% 6.70%, 38.79% 1.70%, 50.00% 0.00%, 61.21% 1.70%, 71.65% 6.70%, 80.62% 14.64%, 87.50% 25.00%, 91.83% 37.06%)',
+  terminus:
+    'polygon(93.30% 100.00%, 78.87% 100.00%, 64.43% 100.00%, 50.00% 100.00%, 35.57% 100.00%, 21.13% 100.00%, 6.70% 100.00%, 6.70% 83.33%, 6.70% 66.67%, 6.70% 50.00%, 6.70% 33.33%, 6.70% 16.67%, 6.70% 0.00%, 21.13% 0.00%, 35.57% 0.00%, 50.00% 0.00%, 64.43% 0.00%, 78.87% 0.00%, 93.30% 0.00%, 93.30% 16.67%, 93.30% 33.33%, 93.30% 50.00%, 93.30% 66.67%, 93.30% 83.33%)',
+  interchange:
+    'polygon(100.00% 50.00%, 93.75% 62.50%, 87.50% 75.00%, 81.25% 87.50%, 75.00% 100.00%, 62.50% 100.00%, 50.00% 100.00%, 37.50% 100.00%, 25.00% 100.00%, 18.75% 87.50%, 12.50% 75.00%, 6.25% 62.50%, 0.00% 50.00%, 6.25% 37.50%, 12.50% 25.00%, 18.75% 12.50%, 25.00% 0.00%, 37.50% 0.00%, 50.00% 0.00%, 62.50% 0.00%, 75.00% 0.00%, 81.25% 12.50%, 87.50% 25.00%, 93.75% 37.50%)',
+}
+
+/** The attribute a token carries its shape in, so `useRailFlip` can see what it is morphing *from*. */
+export const BUS_SHAPE_ATTR = 'data-bus-shape'
+
+/** The polygons, exported so the travel can start a token at the shape it is leaving. */
+export { TOKEN_CLIP }
+
 export const NODE = 26
 export const NODE_TOP = 12
 export const NODE_CENTRE = NODE_TOP + NODE / 2
-const TOKEN = 24
+/**
+ * The token's box — **the widest node's**, so a bus can cover whichever one it is standing at.
+ *
+ * It was a 24 px square, which was smaller than every node it sits on: the terminus square showed its
+ * own outline around the bus, and the hexagon (30 px wide, because a regular one that is 26 tall must
+ * be) showed its points on both sides. A token that does not cover its node reads as a badge stuck on
+ * top rather than as the stop itself carrying a bus.
+ *
+ * One box for all three shapes, not a box per shape, and that is what keeps the morph possible:
+ * `clip-path` percentages are relative to the element, so a shape changing box mid-travel would be
+ * interpolating in two coordinate systems at once. The narrower shapes inset themselves **inside** this
+ * box instead — the disc and the square span 6.7–93.3% of its width, which is 26 px of 30.02.
+ */
+const TOKEN_W = 30.02
+const TOKEN_H = NODE
 
 /** A segment sits midway between the nodes it spans — see `data-bus-at`. */
 const HALF_STEP = 0.5
@@ -148,12 +216,12 @@ const HALF_STEP = 0.5
 /**
  * The two resting places, as CSS.
  *
- * `NODE_CENTRE` is 25 (`NODE_TOP` 12 + half of a 26 px node) and half a token is 12, so a bus on a node sits
- * 13 px down its own row. The segment case adds half the *from* row, which is what `50%` is — and it is a
+ * `NODE_CENTRE` is 25 (`NODE_TOP` 12 + half of a 26 px node) and half a token is 13, so a bus on a node sits
+ * 12 px down its own row — the token is exactly as tall as the node now, which is what makes it cover it. The segment case adds half the *from* row, which is what `50%` is — and it is a
  * percentage rather than a number precisely so that a row growing an arrivals line moves the bus with it.
  */
-const AT_NODE = `${NODE_CENTRE - TOKEN / 2}px`
-const ON_SEGMENT = `calc(50% + ${NODE_CENTRE - TOKEN / 2}px)`
+const AT_NODE = `${NODE_CENTRE - TOKEN_H / 2}px`
+const ON_SEGMENT = `calc(50% + ${NODE_CENTRE - TOKEN_H / 2}px)`
 
 /**
  * Above the rail and the rows' own backgrounds, and **below the saved-stop star's `z-10`**.

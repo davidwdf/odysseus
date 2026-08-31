@@ -16,7 +16,13 @@ HK bus open data comes in **two families**, both **keyless, JSON/CSV, free**, un
 ### Five facts that shape everything we can build
 - **No GTFS-Realtime exists for Hong Kong.** No TripUpdates / VehiclePositions / ServiceAlerts from TD or any operator. Real-time = the proprietary JSON ETA APIs only. *(verified)*
 - **No live bus GPS position is published** (one narrow exception: MTR Bus `busLocation`, usually `{0,0}`). We can show predicted **times**, not true moving-bus coordinates. To animate buses we must **approximate** from successive-stop ETAs (ADR-030 already does this).
-- **No official route line geometry/polylines anywhere.** GTFS has **no `shapes.txt`**; the TD GeoJSON is **Point-only**. Route maps must be **drawn from ordered stop coordinates** (or snapped to the road network). *(verified by download)*
+- **Official route line geometry DOES exist — on the CSDI portal, not on `data.gov.hk`'s routes-and-fares files.** This
+  entry previously read *"no official route line geometry/polylines anywhere"*; that was **wrong**, and the error was
+  looking at the right department's wrong file. GTFS still has **no `shapes.txt`**, and the routes-and-fares GeoJSON is
+  still **Point-only** — but the Transport Department publishes two *separate* spatial datasets of road-following route
+  lines: **Bus Route** (`td_rcd_1638844988873_41214`, 2,255 `MultiLineString` features, since Dec 2021) and **Green
+  Minibus Route** (`td_rcd_1697082463580_57453`, 1,161 `LineString` features, since Oct 2023). Same DATA.GOV.HK terms.
+  See [`07`](./07-route-geometry-and-maps.md) and [ADR-151](../08-decision-log.md#adr-151--the-route-line-geometry-we-said-hong-kong-did-not-publish-has-existed-since-2021). *(verified by download 2026-08-22)*
 - **Fares ARE available** — GTFS `fare_attributes`/`fare_rules` (~880k OD pairs), the Route-Fare `FARE_*` section-fare tables, and inline in NLB + the hkbus consolidated set. **Adult full fare only** — no child/elderly/concession fares in any open dataset.
 - **No accessibility, seating, capacity, bus-model, or electric/emission data** in TD open data. Tiny exceptions: NLB's per-departure `wheelChair` flag; MTR's rail-focused "barrier-free facilities". The rest is **community/operator-website only** (see [02](./02-data-availability-matrix.md)).
 

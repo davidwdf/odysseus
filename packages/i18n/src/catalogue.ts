@@ -482,17 +482,22 @@ export const CATALOGUE = {
     'zh-Hant': '為何沒有即時巴士地圖？',
     'zh-Hans': '为何没有实时巴士地图？',
   },
-  // The claim is still literally true — HK open data publishes no vehicle positions and no polylines — but
-  // since ADR-093/094 the route schematic draws bus tokens inferred from the per-stop arrival sequence, so
-  // a rider who has just watched one slide down the rail reads this as a refusal the app appears to make a
-  // liar of. The distinction is the honesty point worth making out loud: a stop list is not a map, and an
-  // inference is not a position. Hence one added sentence rather than a softened first half.
+  // **Half of this answer was false and had to be rewritten** (2026-08-26, ADR-151/155). It said HK open data
+  // publishes no "route shapes", which was our own record repeating itself: the Transport Department has
+  // surveyed and published bus-route lines on CSDI since 2021, ~97% of route-directions resolve, and since
+  // M4 we draw them. A rider looking at a route line while being told there is no route line is the worst
+  // kind of dishonesty for an app whose whole pitch is not overclaiming.
+  //
+  // The half that IS still true is the one that matters: there are no live **vehicle positions**. So the
+  // answer now separates the two — the line is surveyed and real, where the bus is on it is inferred from
+  // arrival times and is drawn on the stop list rather than the map. A stop list is not a map, and an
+  // inference is not a position; that distinction is the point of the question.
   faqMapA: {
-    en: "Hong Kong's open data publishes stop-by-stop arrival estimates, not live vehicle positions or route shapes — so we can't honestly show buses moving on a map. What we can do is place a bus on the route's stop list, between the two stops its own arrival times put it between.",
+    en: "The route's own line is real — the Transport Department surveys and publishes it, and that is what you see drawn on the map. What Hong Kong's open data does not publish is live vehicle positions: the feeds give stop-by-stop arrival estimates, so we can't honestly show a bus moving along that line. What we can do is place it on the route's stop list, between the two stops its own arrival times put it between.",
     'zh-Hant':
-      '香港的開放資料只提供逐站到站時間估算，並無即時車輛位置或路線圖形，因此我們無法如實在地圖上顯示巴士位置。我們能做的，是根據各站的到站時間，把巴士標示在路線的車站列表上、它應在的兩站之間。',
+      '路線本身的走線是真實的 — 由運輸署實地測繪並公開發布，地圖上畫的就是它。香港的開放資料沒有提供的，是即時車輛位置：資料只有逐站到站時間估算，因此我們無法如實顯示巴士在走線上移動。我們能做的，是根據各站的到站時間，把巴士標示在路線的車站列表上、它應在的兩站之間。',
     'zh-Hans':
-      '香港的开放数据只提供逐站到站时间估算，并无实时车辆位置或路线图形，因此我们无法如实在地图上显示巴士位置。我们能做的，是根据各站的到站时间，把巴士标示在路线的车站列表上、它应在的两站之间。',
+      '路线本身的走线是真实的 — 由运输署实地测绘并公开发布，地图上画的就是它。香港的开放数据没有提供的，是实时车辆位置：数据只有逐站到站时间估算，因此我们无法如实显示巴士在走线上移动。我们能做的，是根据各站的到站时间，把巴士标示在路线的车站列表上、它应在的两站之间。',
   },
   faqRemarksQ: {
     en: 'What do "Scheduled" and "Last bus" mean?',
@@ -599,6 +604,26 @@ export const CATALOGUE = {
   // The basemap credit (ADR-049). These lived as two ad-hoc `Record<Locale, string>` tables in
   // `apps/mobile/lib/tileSource.ts` — outside this package, so no gate compared them and no
   // translator ever saw them. `localeRecord()` in ./index.ts rebuilds the shape `TileSource` wants.
+  /**
+   * Said once, under the map, when the route has no surveyed line and the drawn line is the stops
+   * joined in order (ADR-152, `docs/proposals/06 §5`). The dashes carry the same meaning visually;
+   * this is the half a rider can read. Deliberately says what it IS rather than what is missing —
+   * "approximate" is a fact about the line, where "no route data" would be a fact about us.
+   */
+  routePathApproximate: {
+    en: 'Approximate path — stops shown in order',
+    'zh-Hant': '約略路線 — 依次顯示各站',
+    'zh-Hans': '约略路线 — 依次显示各站',
+  },
+  /**
+   * The map strip's accessible name on Route detail. A `<figure>` with no name is announced as an
+   * unlabelled group, and its only child is a canvas — so without this the whole map is silent.
+   */
+  routePathLabel: {
+    en: 'Route on a map',
+    'zh-Hant': '路線地圖',
+    'zh-Hans': '路线地图',
+  },
   mapAttribution: {
     en: 'Map from Lands Department',
     'zh-Hant': '地圖由地政總署提供',
@@ -748,7 +773,8 @@ export const CATALOGUE = {
    * walker could not see the tokens, and the honest fix was to give them a name rather than to exempt them.
    *
    * It says *approaching*, not a distance and not a fraction of a segment: the token sits at the midpoint
-   * of a segment because that is the only position the data supports (ADR-030, and no polylines upstream),
+   * of a segment because that is the only position the data supports (ADR-030 — a surveyed line exists
+   * since ADR-151, but knowing the ROAD is not knowing where on it a bus is),
    * so a label claiming "halfway to X" would assert precision the pixel does not have (ADR-008).
    */
   busApproaching: {
@@ -763,6 +789,147 @@ export const CATALOGUE = {
    * stop is one a rider standing there can board, and a bus approaching one is not. It is also the label a
    * token on the *origin* node gets, which is the only token on the rail a rider can act on immediately.
    */
+  /**
+   * The collapsed route header, which is a tap target whose whole content is a route number and a
+   * place name — neither of which says what pressing it does.
+   *
+   * "Show" rather than "expand": what a rider gets back is the route's facts, and naming the thing
+   * is more useful than naming the gesture.
+   */
+  routeShowDetails: {
+    en: 'Show route details',
+    'zh-Hant': '顯示路線詳情',
+    'zh-Hans': '显示路线详情',
+  },
+  /**
+   * **Why there is no JoyYou figure on this route.** Shown only where `eta#joyYouEligible` says no,
+   * which today means an `A`/`NA` airport route.
+   *
+   * Said rather than left as an absence, because a rider who holds the card would otherwise read the
+   * missing line as a bug in the app rather than as a fact about the route — and would board the A21
+   * expecting to pay $2. The Transport Department's exclusion is wider than this sentence (racecourse,
+   * long-haul, tourist-oriented and pre-booked services go too), but the route number is the only part
+   * of it our data can see, so the sentence claims only the part we can stand behind.
+   */
+  fareNoJoyYou: {
+    en: 'The $2 Scheme does not cover airport routes.',
+    'zh-Hant': '$2 計劃不適用於機場路線。',
+    'zh-Hans': '$2 计划不适用于机场路线。',
+  },
+  /**
+   * The heading over the fare block in a stop's action sheet.
+   *
+   * "From here" rather than "Fare": the figures are what it costs to board **at or after this stop**,
+   * which is the question a rider who has just tapped that stop is asking, and a bare "$6.7" could as
+   * easily be read as the fare to *reach* it.
+   *
+   * It briefly led a sticky stage header in the stop list instead (ADR-158). The owner's verdict was
+   * that sticky text reads as a *title* — a section, a date — and a price is not one, which is why the
+   * whole block moved into the sheet where the stop it belongs to is already named.
+   */
+  fareFromHere: {
+    en: 'From here',
+    'zh-Hant': '由此起',
+    'zh-Hans': '由此起',
+  },
+  /**
+   * The map's "show the whole route again" control. Its content is a glyph, so this is its whole name.
+   *
+   * Named for the **result** rather than the gesture — a rider wants the route back, and "reset view"
+   * or "recentre" describe what the app does rather than what they get.
+   */
+  mapShowWholeRoute: {
+    en: 'Show the whole route',
+    'zh-Hant': '顯示整條路線',
+    'zh-Hans': '显示整条路线',
+  },
+  /**
+   * The map's "take me to my position" control.
+   *
+   * Only offered once a fix exists — a control that cannot do its job is worse than an absent one,
+   * because a rider presses it and learns nothing about why.
+   */
+  mapShowMyLocation: {
+    en: 'Show my location',
+    'zh-Hant': '顯示我的位置',
+    'zh-Hans': '显示我的位置',
+  },
+  /** The expanded header card's chevron, whose content is a glyph and nothing else. */
+  routeHideDetails: {
+    en: 'Hide route details',
+    'zh-Hant': '隱藏路線詳情',
+    'zh-Hans': '隐藏路线详情',
+  },
+  /**
+   * The draggable sheet holding the route's stop list. It is a `<region>` and its handle is a control,
+   * so both need a name — an unnamed region is announced as nothing, and an unnamed handle as "button".
+   */
+  routeStopsSheet: {
+    en: 'Stops on this route',
+    'zh-Hant': '本路線的車站',
+    'zh-Hans': '本路线的车站',
+  },
+  /**
+   * The rider's own position on a map, when no direction is known. The mark is a graphic, so this is
+   * the whole of what a screen reader gets.
+   *
+   * Says *where*, not *which way* — the dot makes no direction claim, and a name implying one would
+   * put back in words exactly what `locationMark` refuses to draw (`docs/proposals/06 §6b`).
+   */
+  riderHere: {
+    en: 'Your location',
+    'zh-Hant': '你的位置',
+    'zh-Hans': '你的位置',
+  },
+  /**
+   * The same mark once a heading is known. A separate string rather than a parameterised one: the
+   * degrees themselves are not something a rider can act on — nobody reads "facing 128°" and turns —
+   * so the sentence says only that the direction shown is theirs.
+   */
+  riderHereFacing: {
+    en: 'Your location and the way you are facing',
+    'zh-Hant': '你的位置和面向的方向',
+    'zh-Hans': '你的位置和面向的方向',
+  },
+  /**
+   * The `⋯` beside a stop row, whose whole content is a glyph — so this is its accessible name and the
+   * only thing a screen reader has to go on (ADR-097: every state and name on this side is an `aria-*`
+   * attribute, because `react-native-web@0.21` drops `accessibilityState` silently).
+   *
+   * Names the **stop**, not the control: forty rows each announcing "More options" tells a rider
+   * nothing about which one they are on, and the stop is the thing the actions act upon.
+   */
+  routeStopActions: {
+    en: 'Actions for {stop}',
+    'zh-Hant': '{stop}的操作',
+    'zh-Hans': '{stop}的操作',
+  },
+  /**
+   * A stop's marker on the route map. `{stop}` is the stop's display name.
+   *
+   * The marker is a **graphic with no text**, so this is the whole of what a screen reader gets — and
+   * without it the map is a row of unlabelled buttons, which is how `react-native-web` silently lost
+   * six control states in WP6-7. Says "stop" rather than naming the shape: a rider cannot act on
+   * "hexagon", and the shape's meaning (terminus, interchange) is carried by `routeStopTerminus` and
+   * `routeStopInterchange` where it is true.
+   */
+  routeStopMarker: {
+    en: 'Stop: {stop}',
+    'zh-Hant': '車站：{stop}',
+    'zh-Hans': '车站：{stop}',
+  },
+  /** Appended to a terminus marker's name — the end of the line, which a shape alone cannot say. */
+  routeStopTerminus: {
+    en: 'Terminus',
+    'zh-Hant': '總站',
+    'zh-Hans': '总站',
+  },
+  /** Appended to an interchange marker's name. `BBI` is the operators' own abbreviation. */
+  routeStopInterchange: {
+    en: 'Interchange',
+    'zh-Hant': '轉乘站',
+    'zh-Hans': '转乘站',
+  },
   busAtStop: {
     en: 'Bus at {stop}',
     'zh-Hant': '巴士在{stop}',
@@ -829,16 +996,38 @@ export const CATALOGUE = {
     'zh-Hant': '約為成人車費的一半。',
     'zh-Hans': '约为成人车费的一半。',
   },
+  /**
+   * **60+, not 65+.** This label said "Elderly 65+ / disabled" from the day it was written until
+   * ADR-159, which is wrong and was wrong when shipped: the eligibility age dropped to **60** on
+   * 25 August 2024, when the JoyYou Card replaced the old Elder Octopus for the Scheme. A rider aged 62
+   * reading the shipping app was told a concession they were entitled to was not for them.
+   *
+   * "JoyYou" leads because it names the **card**, which is the thing a rider recognises and the thing
+   * they must actually tap — the Scheme's own name ("Government Public Transport Fare Concession Scheme
+   * for the Elderly and Eligible Persons with Disabilities") is a label some beneficiaries would not
+   * apply to themselves, and none of them would find on a screen this size.
+   */
   fareElderly: {
-    en: 'Elderly 65+ / disabled',
-    'zh-Hant': '長者 65+／殘疾人士',
-    'zh-Hans': '长者 65+／残疾人士',
+    en: 'JoyYou 60+ / disabled',
+    'zh-Hant': '樂悠咭 60+／殘疾人士',
+    'zh-Hans': '乐悠咭 60+／残疾人士',
   },
-  /** How the elderly/PwD $2 Scheme is paid. */
+  /**
+   * How the $2 Scheme is paid, and — since 3 April 2026 — that it is **no longer a flat $2**.
+   *
+   * The rule became *"$2 Flat Rate or 80 Per cent Off"*: $2 where the adult fare is $10 or below, and
+   * 20 per cent of it above that. Spelled out rather than written `20%` because a literal `%` is a
+   * format specifier on both native platforms and `native-strings.mts` rejects one it has not been
+   * taught to escape — the gate caught this on the way in. `eta#estimateElderlyFare` has computed it correctly since the day it changed;
+   * this sentence had not caught up, so a rider on a $46.5 airport route saw a correct `~$9.3` beside a
+   * caption still calling it the "$2 Scheme" and had no way to reconcile the two.
+   */
   fareElderlyNote: {
-    en: '$2 Scheme, via a JoyYou or eligible Octopus (not cash).',
-    'zh-Hant': '$2 計劃，須使用「樂悠咭」或合資格八達通（不適用於現金）。',
-    'zh-Hans': '$2 计划，须使用「乐悠咭」或合资格八达通（不适用于现金）。',
+    en: '$2 up to a $10 fare, then 20 per cent of it. Needs a JoyYou or eligible Octopus — not cash.',
+    'zh-Hant':
+      '車費 $10 或以下劃一收 $2，超過則收兩成。須使用「樂悠咭」或合資格八達通，不適用於現金。',
+    'zh-Hans':
+      '车费 $10 或以下划一收 $2，超过则收两成。须使用「乐悠咭」或合资格八达通，不适用于现金。',
   },
   freqTitle: {
     en: 'Frequency',

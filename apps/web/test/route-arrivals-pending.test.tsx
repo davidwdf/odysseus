@@ -71,6 +71,8 @@ function draw(row: RouteStopRowView, arrivalsPending: boolean): HTMLElement {
         arrivalsPending={arrivalsPending}
         tokens={null}
         onPress={() => {}}
+        onMenu={() => {}}
+        kind="stop"
         registerRow={() => {}}
       />,
     )

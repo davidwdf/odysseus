@@ -9,6 +9,7 @@ import type {
   LatLng,
   NearbyStop,
   RouteDetail,
+  RoutePath,
   SearchIndex,
   StopDetail,
   Subscription,
@@ -146,6 +147,15 @@ export class EdgeClient implements DataSource {
 
   getRoute(routeId: string): Promise<RouteDetail> {
     return this.getJson<RouteDetail>(`/v1/route/${encodeURIComponent(routeId)}`)
+  }
+
+  /**
+   * The route's road-following line (ADR-152). A separate request from `getRoute` because the two
+   * have wildly different lifetimes — this one is cached for a day upstream — and because a route
+   * screen is useful before the geometry arrives.
+   */
+  getRoutePath(routeId: string): Promise<RoutePath> {
+    return this.getJson<RoutePath>(`/v1/route/${encodeURIComponent(routeId)}/path`)
   }
 
   getStop(stopId: string): Promise<StopDetail> {

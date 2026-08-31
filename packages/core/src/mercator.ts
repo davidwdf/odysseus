@@ -38,6 +38,95 @@ export interface ZoomRange {
   maxZoom: number
 }
 
+/** What {@link tileZoomPlan} decides: which levels to fetch, and how big to draw a base tile. */
+export interface TileZoomPlan {
+  /** Level to request BASE tiles from. Overzoomed on a hi-DPI screen. */
+  base: number
+  /** Level to request LABEL tiles from. **Never** overzoomed — see {@link tileZoomPlan}. */
+  label: number
+  /** Multiplier a base tile is drawn at: `2 ** (zoom - base)`. Below 1 on a hi-DPI screen. */
+  scale: number
+}
+
+/** The smallest lat/lng box containing a set of points. Named by compass edge rather than
+ *  min/max because every mapping engine's `fitBounds` is, and a south/north mix-up is silent. */
+export interface LatLngBounds {
+  south: number
+  west: number
+  north: number
+  east: number
+}
+
+/**
+ * The box a set of points fits in — the framing a route line asks its map for.
+ *
+ * Lives here rather than in the renderer that wanted it because a bounding box is a *number the
+ * renderer would otherwise compute*, and two renderers computing it separately is how they drift
+ * (ADR-068). It is also not as obvious as it looks: it is deliberately **not** antimeridian-aware.
+ * The honest span of a set of points crossing 180° is the short way round, and this returns the long
+ * way; Hong Kong is at 114° E and no bus route we serve comes within 60° of the seam, so the
+ * correct-here answer is the simple one, stated rather than assumed.
+ *
+ * `undefined` for no points: an empty set has no box, and returning a degenerate one at 0,0 would
+ * frame a map on the Gulf of Guinea.
+ *
+ * @spec mercator#boundsOf
+ */
+export function boundsOf(points: readonly LatLng[]): LatLngBounds | undefined {
+  const first = points[0]
+  if (!first) return undefined
+  let { lat: south, lng: west } = first
+  let north = south
+  let east = west
+  for (const p of points) {
+    if (p.lat < south) south = p.lat
+    if (p.lat > north) north = p.lat
+    if (p.lng < west) west = p.lng
+    if (p.lng > east) east = p.lng
+  }
+  return { south, west, north, east }
+}
+
+/**
+ * The middle of a box, as a point — the camera an engine opens on before it is told to fit.
+ *
+ * The midpoint in **degrees**, not the Mercator midpoint: an engine's `center` is a lat/lng, and at
+ * Hong Kong's latitude over a route's span the two differ by metres. The distinction matters enough
+ * to name because {@link latToWorldY} exists two functions away and using it here would be wrong.
+ *
+ * @spec mercator#centreOf
+ */
+export function centreOf(bounds: LatLngBounds): LatLng {
+  return { lat: (bounds.south + bounds.north) / 2, lng: (bounds.west + bounds.east) / 2 }
+}
+
+/**
+ * The zoom a **focused** stop is shown at: close enough to read which side of the road it is on.
+ *
+ * That is the question the kerb offset exists to answer (`route-markers.ts`), and it is unreadable at
+ * the zoom a whole route is framed at — so focusing a stop has to move the camera in as well as across.
+ * 16 is the level at which a Lands Department tile draws individual buildings and both kerbs of a road.
+ */
+export const FOCUS_STOP_ZOOM = 16
+
+/**
+ * How far to zoom when a rider focuses a stop, given where they already are.
+ *
+ * **A floor, not a target**, and that is the whole rule: `Math.max` means a rider who has zoomed in
+ * further keeps their zoom and only the centre moves. Pulling them back out to a fixed level would undo
+ * a deliberate action of theirs to satisfy a default of ours, and it is the mistake that makes a "find
+ * my stop" button feel like it is fighting you.
+ *
+ * Clamped, because a floor that exceeds what the source serves is a hole rather than a closer map — the
+ * same reason {@link clampZoom} exists at all, and the reason this composes with it rather than being a
+ * bare `Math.max` at a call site.
+ *
+ * @spec mercator#focusZoom
+ */
+export function focusZoom(current: number, zooms: ZoomRange): number {
+  return clampZoom(Math.max(current, FOCUS_STOP_ZOOM), zooms)
+}
+
 /** Width of the whole world in pixels at `zoom` — the `scale` every projection below multiplies by.
  *
  * @spec mercator#worldScale
@@ -83,6 +172,39 @@ export function metresPerPixel(lat: number, zoom: number): number {
  */
 export function clampZoom(zoom: number, zooms: ZoomRange): number {
   return Math.min(zooms.maxZoom, Math.max(zooms.minZoom, zoom))
+}
+
+/**
+ * How a raster basemap should be requested at a given zoom on a given screen — the base level, the
+ * label level, and the scale a base tile is drawn at.
+ *
+ * **Why the two levels differ, and why this is a rule rather than a renderer's business.** A raster
+ * source that serves only 256 px tiles (LandsD does; there is no `@2x`) is upscaled on a DPR-2 screen
+ * and looks soft. Requesting the tile one zoom deeper and drawing it at half size restores true 2×
+ * density. But the *labels* must NOT be overzoomed: LandsD bakes label size into the raster, so a
+ * label tile from one level deeper arrives with a denser, half-size label set — sharper text that is
+ * harder to read, which is a worse trade than the softness it cures. The base carries no text, so it
+ * loses nothing. Splitting them is only possible because the labels are a separate service, which is
+ * the same property ADR-049 relies on for per-locale labels.
+ *
+ * A native renderer with a real map engine expresses this differently (MapLibre's `tileSize`), but it
+ * has to make the same call, which is why the numbers live here rather than in a component.
+ *
+ * `devicePixelRatio` is clamped to 2: no raster source we use has a level worth fetching beyond that,
+ * and a 3× phone would otherwise ask for two extra levels and 16× the tiles for no visible gain.
+ *
+ * @spec mercator#tileZoomPlan
+ */
+export function tileZoomPlan(
+  zoom: number,
+  devicePixelRatio: number,
+  zooms: ZoomRange,
+): TileZoomPlan {
+  const dpr = Math.max(1, Math.min(2, devicePixelRatio))
+  const overzoom = Math.round(Math.log2(dpr))
+  const nominal = Math.round(zoom)
+  const base = clampZoom(nominal + overzoom, zooms)
+  return { base, label: clampZoom(nominal, zooms), scale: 2 ** (zoom - base) }
 }
 
 /** Framing zoom before layout has measured a width. Nothing is drawn in that pass — the tile loop

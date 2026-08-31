@@ -442,34 +442,6 @@ function preset() {
 }
 
 // ---------------------------------------------------------------------------
-// apps/mobile/global.css — the web defaults for the CSS variables
-// ---------------------------------------------------------------------------
-
-function globalCss() {
-  const L = ['/*']
-  L.push(...banner(' '), '')
-  L.push(
-    '  The web defaults for the semantic tokens — the single Ink theme (ADR-029): ink-on-paper',
-  )
-  L.push('  light, paper-on-ink dark. Runtime theme switching, and native, inject the same values')
-  L.push("  via NativeWind's `vars()` from @nextbus/ui `themes`, applied at the app root in")
-  L.push('  app/_layout.tsx. Wired into the bundle as the NativeWind input by metro.config.js.')
-  L.push('*/')
-  L.push('@tailwind base;')
-  L.push('@tailwind components;')
-  L.push('@tailwind utilities;')
-  L.push('')
-  L.push(':root {')
-  for (const s of semantic) L.push(`  ${s.cssVar}: ${triplet(s.light)};`)
-  L.push('}')
-  L.push('')
-  L.push('.dark {')
-  for (const s of semantic) L.push(`  ${s.cssVar}: ${triplet(s.dark)};`)
-  L.push('}')
-  return `${L.join('\n')}\n`
-}
-
-// ---------------------------------------------------------------------------
 // apps/web/src/tokens.css — the same variables for the second renderer (WP4-1)
 // ---------------------------------------------------------------------------
 
@@ -792,7 +764,6 @@ export function generate() {
   return [
     { file: 'packages/ui/src/tokens.generated.ts', text: tsModule() },
     { file: 'packages/ui/preset.js', text: preset() },
-    { file: 'apps/mobile/global.css', text: globalCss() },
     { file: 'apps/web/src/tokens.css', text: webTokensCss() },
     { file: 'packages/ui/generated/tokens.json', text: resolvedJson() },
     { file: 'packages/ui/generated/NextBusTokens.swift', text: swift() },

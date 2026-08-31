@@ -1,5 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
-import type { Eta, EtaReport, NearbyStop, StopDetail } from '@nextbus/core'
+import type { EtaReport, NearbyStop, StopDetail } from '@nextbus/core'
 import { applyLiveEtasToStopDetail, memberStopIds } from '@nextbus/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetEtaCache } from '../src/eta-cache'

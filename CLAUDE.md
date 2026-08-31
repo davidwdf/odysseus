@@ -5,8 +5,11 @@ arrival-times app. Its job is to make sure every agent works the same way and we
 same page. **Read this, then skim [`docs/README.md`](./docs/README.md).**
 
 ## What this is
-A pnpm + Turborepo monorepo. One Expo codebase ships a PWA now and iOS/Android later; a Cloudflare
-Worker is the edge data layer. HK bus open-data APIs (keyless) are normalized into one model.
+A pnpm + Turborepo monorepo. **`apps/web` is the app** — a Vite + plain-React PWA; a Cloudflare Worker
+is the edge data layer. HK bus open-data APIs (keyless) are normalized into one model. The Expo app was
+deleted once `apps/web` was complete (ADR-157); **native is still the plan** and still prepared for —
+`packages/ports` is the porting checklist and `packages/contract/native/` emits Swift and Kotlin
+conformance suites from the same corpora.
 
 The **plan is the source of truth** and lives in [`docs/`](./docs/README.md):
 - New here? Read `docs/01` (vision) → `docs/03` (architecture) → `docs/08` (decision log) → `docs/10` (run it).
@@ -15,11 +18,11 @@ The **plan is the source of truth** and lives in [`docs/`](./docs/README.md):
 ## Run it (always the same commands, from the repo root)
 ```bash
 pnpm install            # first time
-pnpm dev                # EVERYTHING: edge worker + Expo, concurrently (the IDE run command)
+pnpm dev                # EVERYTHING: edge worker + web app, concurrently (the IDE run command)
 pnpm dev:edge           # just the Cloudflare Worker  → http://localhost:8787
-pnpm dev:mobile         # just Expo (press w = web/PWA, i = iOS, a = Android)
-pnpm dev:web            # Expo straight to web/PWA
-pnpm dev:dom            # apps/web — the Vite + React DOM renderer (WP4-1)  → http://localhost:8082
+pnpm dev:web            # just the app → http://localhost:8082
+pnpm dev:dom            # the same thing. Kept as an alias because the docs and ADRs cite it, and a
+                        # name in a written record should keep working (ADR-157)
 pnpm typecheck          # tsc --noEmit across all packages — MUST pass before commit
 pnpm test               # vitest in every package that has tests (apps/edge runs inside workerd with
                         # simulated KV/R2) — and then the whole `pnpm boundaries` chain
@@ -43,17 +46,15 @@ pnpm check:adr-index:write   # regenerate docs/08's ADR index — the FIFTH emit
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path
-pnpm --filter @nextbus/mobile build:web   # expo export + Workbox service worker → apps/mobile/dist
-pnpm --filter @nextbus/web build:web      # vite build  + the SAME service-worker policy → apps/web/dist
-                        # …one declaration of it, in scripts/pwa/ (ADR-082). Serve the two apps on
-                        # DIFFERENT ports — a service worker's scope is the origin, so the first
-                        # navigation after switching apps on one port comes from the other app's cache
+pnpm --filter @nextbus/web build:web      # vite build + the Workbox service worker → apps/web/dist
+                        # …the policy is one declaration, in scripts/pwa/ (ADR-082). It served two apps
+                        # until ADR-157 and is still shaped that way, which is the right shape for the
+                        # native port to inherit
 ```
 Full guide incl. deploy: [`docs/10`](./docs/10-scaffold-and-running.md).
 
 ## Repo map
 ```
-apps/mobile          Expo app (iOS/Android/Web-PWA)
 apps/web             Vite + plain React DOM — the renderer that REPLACES the Expo PWA (ADR-075).
                      Since WP6-0 it is a whole shell: react-router over a declared destination set
                      (`src/shell/destinations.ts`), a persisted query cache, a locale override, an
@@ -112,11 +113,13 @@ scripts/pwa          the Workbox caching policy + the assertions over the emitte
 3. **ETAs are approximations — never fake precision** (ADR-008). No client-side per-second
    countdown. Update the value only when fresh data arrives; use tabular figures; show
    "Arriving/Due" under a minute; indicate staleness. Use the helpers in `@nextbus/core/eta`.
-4. **Styling = semantic tokens only** — NativeWind in `apps/mobile`, plain Tailwind 3.4 in
-   `apps/web`; **both consume the same generated `@nextbus/ui/preset`**, so a token exists once. Use `bg-bg`, `text-text`, `text-muted`,
-   `text-accent`, `bg-positive`, etc. — never raw hex in components. Themes (incl. liveries) are
-   value-swaps in `@nextbus/ui` (`docs/09`, ADR-015). **Radix/shadcn are web-only — do NOT use
-   them.** For RN primitives use **react-native-reusables** (copy-in, NativeWind-based).
+4. **Styling = semantic tokens only** — plain Tailwind 3.4 in `apps/web`, consuming the generated
+   `@nextbus/ui/preset`, so a token exists once. Use `bg-bg`, `text-text`, `text-muted`, `text-accent`,
+   `bg-positive`, etc. — never raw hex in components; `check-no-raw-colours` enforces it. Themes (incl.
+   liveries) are value-swaps in `@nextbus/ui` (`docs/09`, ADR-015). The preset is still shaped for
+   NativeWind as well as Tailwind — that was for `apps/mobile` and is now for the native port
+   (ADR-157). **Radix/shadcn are web-only and we do NOT use them**: a component that cannot cross to
+   native is a component the port has to re-solve.
 5. **Bilingual is core.** UI strings live in `@nextbus/i18n` (en / zh-Hant / zh-Hans). All bus
    data names are `I18nText` from the canonical model. Never hard-code English labels. Screens read
    the active locale via **`useLocale()`** (device-detected through `expo-localization` +
@@ -167,6 +170,25 @@ scripts/pwa          the Workbox caching policy + the assertions over the emitte
   coalescer, the shard read path and the Durable Object's caps are exercised for real, not mocked.
 - **App:** `pnpm dev:web` and open `http://localhost:8081`.
 - **Types/bundle:** `pnpm typecheck`; `pnpm --filter @nextbus/edge exec wrangler deploy --dry-run`.
+
+## `apps/mobile` is gone (ADR-157) — what that does and does not mean
+
+The Expo app was deleted on 2026-08-27, once `apps/web` was complete and the route work had landed
+there alone. Four things follow, and the last is the one that catches people:
+
+- **`apps/web` is the app.** `pnpm dev:web` runs it; `dev:dom` is the same command, kept because the
+  docs and the decision log cite it.
+- **Native is still the plan.** `packages/ports` is the porting checklist and
+  `packages/contract/native/` emits Swift and Kotlin conformance suites from the same corpora. Nothing
+  about the seams changed.
+- **The gates lost their RN paths but not their rules.** Each restates the standing one in place: *a
+  path absent from a policed list is the `from` of no rule at all.* A second renderer must add itself
+  to `POLICED` in `check-no-derivation.mjs`, `check-no-raw-colours.mjs` and
+  `check-view-transport-free.mjs` **in the same commit as its first screen**.
+- **The historical prose stays, and is still true.** Comments and ADRs that say "this trap was found in
+  the RN token" or "`apps/mobile` did X" are the record of why the code looks as it does. Do not tidy
+  them into the present tense; ADR-127's rule about permanent addresses applies to the reasoning around
+  a decision as much as to its number.
 
 ## Current status
 **The living status/handoff doc is [`docs/11`](./docs/11-status.md) — read it to resume.** Summary:

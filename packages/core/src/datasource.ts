@@ -8,6 +8,7 @@ import type {
   LatLng,
   NearbyStop,
   RouteDetail,
+  RoutePath,
   StopDetail,
   WatchTarget,
 } from './types'
@@ -88,6 +89,17 @@ export interface DataSource {
   getNearby(at: LatLng, radiusM: number): Promise<NearbyStop[]>
   /** A route and its ordered stop list (static), with live ETAs where available. */
   getRoute(routeId: string): Promise<RouteDetail>
+  /**
+   * The road-following line for one route direction (ADR-152).
+   *
+   * **Separate from `getRoute` on purpose.** The geometry changes on the order of a fortnight where
+   * the arrivals change every round, so joining them would tie a day-cacheable body to a 30-second
+   * one — and a route screen is useful long before the line arrives. A caller shows the stop list
+   * first and the line when it lands.
+   *
+   * `available: false` is an ordinary answer for ~7% of route-directions, not an error.
+   */
+  getRoutePath(routeId: string): Promise<RoutePath>
   /** A stop and every route serving it, each with its next arrival. */
   getStop(stopId: string): Promise<StopDetail>
   /**
