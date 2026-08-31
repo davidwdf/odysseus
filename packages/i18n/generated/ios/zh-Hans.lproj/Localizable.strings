@@ -119,6 +119,7 @@
 /* {stop} → %1$@ */
 "busApproaching" = "巴士即将到达%1$@";
 "routeShowDetails" = "显示路线详情";
+"fareNoJoyYou" = "$2 计划不适用于机场路线。";
 "fareFromHere" = "由此起";
 "mapShowWholeRoute" = "显示整条路线";
 "mapShowMyLocation" = "显示我的位置";

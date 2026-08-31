@@ -119,6 +119,7 @@
 /* {stop} → %1$@ */
 "busApproaching" = "Bus approaching %1$@";
 "routeShowDetails" = "Show route details";
+"fareNoJoyYou" = "The $2 Scheme does not cover airport routes.";
 "fareFromHere" = "From here";
 "mapShowWholeRoute" = "Show the whole route";
 "mapShowMyLocation" = "Show my location";

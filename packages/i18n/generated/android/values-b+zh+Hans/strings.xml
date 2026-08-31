@@ -123,6 +123,7 @@
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">巴士即将到达%1$s</string>
 	<string name="routeShowDetails">显示路线详情</string>
+	<string name="fareNoJoyYou">$2 计划不适用于机场路线。</string>
 	<string name="fareFromHere">由此起</string>
 	<string name="mapShowWholeRoute">显示整条路线</string>
 	<string name="mapShowMyLocation">显示我的位置</string>

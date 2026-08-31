@@ -125,6 +125,7 @@
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">Bus approaching %1$s</string>
 	<string name="routeShowDetails">Show route details</string>
+	<string name="fareNoJoyYou">The $2 Scheme does not cover airport routes.</string>
 	<string name="fareFromHere">From here</string>
 	<string name="mapShowWholeRoute">Show the whole route</string>
 	<string name="mapShowMyLocation">Show my location</string>

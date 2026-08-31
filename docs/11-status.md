@@ -2,6 +2,32 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-31 (later) — the $2 Scheme does not reach every route
+
+> **Shipped:** [ADR-160](./08-decision-log.md#adr-160--the-2-scheme-does-not-reach-every-route-and-the-fare-block-earns-its-height).
+> The owner asked whether the airport bus is covered by the $2 Scheme. It is not — the Transport
+> Department excludes *"'A' and 'NA' routes to the airport, racecourse routes, new long-haul services,
+> designated tourist-oriented routes and the routes on a pre-booking and group hire basis"* — and we
+> were quoting a JoyYou holder `~$6.9` on the **A21**, which costs **$34.6**. Wrong by twenty-eight
+> dollars, on the routes where a concession matters most.
+>
+> `eta#joyYouEligible` (8 corpus cases) decides it, `concessionFigures` **omits** the figure rather than
+> estimating one, and the sheet says why. **`E` and `S` routes stay eligible** — the exclusion names the
+> letter, not the destination, and E11/E21/E22 are the cheap airport routes an elderly rider actually
+> takes. Two corpus cases pin that beside the A21, because *wrongly withholding a concession keeps
+> someone off a bus*, which is worse than a surprise at the farebox. **What the rule cannot see is in
+> `docs/07`**, not guessed at: four of the five exclusions are unmarked in every open-data feed.
+>
+> The fare block is two rows now rather than five under a heading: the adult fare rides the times row on
+> the right, the estimates share its column edge as icon-and-number with `sr-only` labels, and a
+> hairline separates information from actions.
+>
+> **The lesson to carry:** adding the "Child (3–11)" label put the strings `3` and `11` into the sheet's
+> text, and a test asserted an arrival time with `toContain('3')` against the whole `textContent` — **the
+> label alone would have satisfied it**, so that test would have gone on passing with every arrival
+> deleted. Scoped to a `data-arrivals` hook now, with a second test asserting the hook still matches.
+> *Ask what a new string does to an old assertion.*
+
 ## 🔵 Snapshot 2026-08-31 — the fare finds its home, the $2 Scheme's label catches up, and the map can be panned
 
 > **Shipped:** [ADR-159](./08-decision-log.md#adr-159--the-fare-block-moves-into-the-stops-sheet-the-2-schemes-label-catches-up-with-the-law-and-one-object-literal-was-holding-the-camera-still),

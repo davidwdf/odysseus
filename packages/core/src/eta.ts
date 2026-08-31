@@ -690,6 +690,40 @@ export function estimateChildFare(adultFare: string): string | undefined {
   return (Math.round((n / 2) * 10) / 10).toFixed(1)
 }
 
+/**
+ * Whether the **$2 Scheme applies to this route at all**, by its route number.
+ *
+ * It does not apply to every franchised bus route, which is the thing most people assume. The Transport
+ * Department's own wording excludes *"'A' and 'NA' routes to the airport, racecourse routes, new
+ * long-haul services, designated tourist-oriented routes and the routes on a pre-booking and group hire
+ * basis"*. So a JoyYou holder boarding the A21 pays the full $34.6, and an app that quoted them `~$6.9`
+ * would be wrong by twenty-eight dollars — on precisely the routes where the concession would matter
+ * most, because they are the dear ones.
+ *
+ * ## What this can and cannot see, stated plainly
+ *
+ * **Only the `A`/`NA` prefix is decidable from data we hold.** A route number is the whole of our
+ * evidence; "racecourse", "new long-haul", "tourist-oriented" and "pre-booking" are properties of a
+ * *service* that no HK open-data feed marks, and there is no numbering convention that identifies them
+ * (a racecourse special is an ordinary-looking number). So this returns `true` for those and the app is
+ * still wrong about them — a narrower error than before, not an eliminated one, and `docs/07` carries
+ * it. Guessing at them from number shapes would trade a rare miss for a common false negative, which is
+ * the worse trade: telling a rider a concession does *not* apply when it does keeps them off a bus.
+ *
+ * **`E`, `S` and `NR` routes are eligible and must stay so.** `E` routes (E11, E21, E22) also serve the
+ * airport and are *not* excluded — the exclusion names `A` and `NA` specifically, and the `E` routes are
+ * the cheap ones an elderly rider actually takes. `S` routes run within the airport estate. Matching on
+ * "goes to the airport" rather than on the letter would break both.
+ *
+ * @spec eta#joyYouEligible
+ */
+export function joyYouEligible(routeNo: string | undefined | null): boolean {
+  if (routeNo === undefined || routeNo === null) return true
+  // Anchored, case-insensitive, and the digit is required: `A` then a number is an airport route, where
+  // a bare `A` or an `AP` is not a shape HK franchised routes use and should not be caught by accident.
+  return !/^n?a\d/i.test(routeNo.trim())
+}
+
 /** Approximate elderly-65+/PwD fare under the Government $2 Scheme (from 3 Apr 2026: $2 for
  *  fares up to $10, otherwise 20% of the fare — i.e. `max($2, 20%)`), **capped at the adult fare**.
  *  Requires an eligible/JoyYou Octopus, not cash. Estimate.

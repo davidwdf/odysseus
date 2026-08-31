@@ -1,6 +1,12 @@
-import { type Locale, type RouteStopArrival, type RouteStopRowView, stopFares } from '@nextbus/core'
+import {
+  joyYouEligible,
+  type Locale,
+  type RouteStopArrival,
+  type RouteStopRowView,
+  stopFares,
+} from '@nextbus/core'
 import { t } from '@nextbus/i18n'
-import { Baby, MapPin, Star, User } from 'lucide-react'
+import { Baby, MapPin, Star } from 'lucide-react'
 import { JoyYouCard } from '../icons'
 import { usePreferences } from '../lib/preferences'
 import { BottomSheet, SheetAction } from './BottomSheet'
@@ -75,6 +81,12 @@ export function RouteStopSheet({
   // `row.saved` is the kernel's answer for this route at this pole — `routeDetailView` computes it from the
   // same `savedRouteKeys` the screen already passes, so the sheet and the node's star cannot disagree.
   const saved = row.saved
+  /**
+   * This stop's fares — the kernel's answer (`route-detail#stopFares`), which decides whether there is
+   * a fare at all, what the adult figure reads as, and which concessions apply **to this route**: an
+   * airport route is excluded from the $2 Scheme, so the JoyYou estimate is omitted rather than wrong.
+   */
+  const fares = stopFares(row.fare, routeNo)
 
   return (
     <BottomSheet
@@ -123,20 +135,66 @@ export function RouteStopSheet({
               route chip — on a 20 px line; a readout with no padding of its own sat at 8 px and broke the
               one vertical edge the sheet has. Same token as the rows above and below it, so it cannot drift
               from them. */}
-          <div className="flex min-h-9 items-baseline gap-3 px-3 pb-1">
-            {loading ? (
-              <span className="h-5 w-24 animate-pulse rounded-sm bg-surface-2" />
-            ) : incomplete ? (
-              <span className="text-label text-muted">{t(locale, 'etasUnavailable')}</span>
-            ) : arrivals.length > 0 ? (
-              arrivals.map((arrival, slot) => (
-                <ArrivalSlot key={arrival.iso} arrival={arrival} first={slot === 0} />
-              ))
-            ) : (
-              <span className="text-label text-muted">{t(locale, 'noService')}</span>
-            )}
+          {/* **The times and the adult fare share one row**, because they are the two figures a rider
+              came for and neither needs a heading beside the other: times read left, the price reads
+              right, and `$` is the only thing on the line that could be a price. The fare block used to
+              be five stacked rows under a "From here" heading — a third of the sheet's height for one
+              number and two estimates. */}
+          <div className="flex min-h-9 items-baseline gap-3 px-3">
+            {/* `data-arrivals` is a **test hook with a job**: the sheet's own text now contains the
+                digits "3" and "11" (from the "Child (3-11)" concession label), so a suite asserting an
+                arrival time against `textContent` would pass with every arrival removed. The attribute
+                is what lets that assertion name the element it means. */}
+            <span data-arrivals className="flex min-w-0 flex-1 items-baseline gap-3">
+              {loading ? (
+                <span className="h-5 w-24 animate-pulse rounded-sm bg-surface-2" />
+              ) : incomplete ? (
+                <span className="text-label text-muted">{t(locale, 'etasUnavailable')}</span>
+              ) : arrivals.length > 0 ? (
+                arrivals.map((arrival, slot) => (
+                  <ArrivalSlot key={arrival.iso} arrival={arrival} first={slot === 0} />
+                ))
+              ) : (
+                <span className="text-label text-muted">{t(locale, 'noService')}</span>
+              )}
+            </span>
+            {fares ? (
+              <span className="shrink-0 text-body font-semibold text-text tabular-nums">
+                {fares.adult}
+              </span>
+            ) : null}
           </div>
-          <FareBlock row={row} locale={locale} />
+          {/* The estimates, right-aligned under the figure they are estimates *of*, so the column edge
+              is what associates them rather than a repeated label. Icon-and-number only: at this size
+              "Child (3–11)" and "JoyYou 60+ / disabled" are four times the width of what they qualify,
+              and the words are still there for a screen reader. */}
+          {fares && fares.concessions.length > 0 ? (
+            <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 px-3 pt-1">
+              {fares.concessions.map((figure) => {
+                const Glyph = figure.class === 'child' ? Baby : JoyYouCard
+                const label = t(locale, figure.class === 'child' ? 'fareChild' : 'fareElderly')
+                return (
+                  <span key={figure.class} className="flex items-center gap-1.5 text-muted">
+                    <Glyph size={15} aria-hidden className="shrink-0" />
+                    {/* Not `aria-label` on the wrapper: an `aria-label` on a span with no role is
+                        unreliable, and one with `role="img"` would REPLACE the figure it is naming. */}
+                    <span className="sr-only">{label}</span>
+                    <span className="text-caption tabular-nums">{figure.fare}</span>
+                  </span>
+                )
+              })}
+            </div>
+          ) : null}
+          {/* Only where the Scheme does not reach — an `A`/`NA` airport route — so it costs nothing on
+              the routes where it would be noise. An absent line would read as a bug in the app rather
+              than a fact about the route, and the rider would board the A21 expecting to pay $2. */}
+          {fares && !joyYouEligible(routeNo) ? (
+            <p className="m-0 px-3 pt-1 text-caption text-subtle">{t(locale, 'fareNoJoyYou')}</p>
+          ) : null}
+          {/* **Information above, things you can do below.** The sheet had four kinds of content in one
+              undifferentiated stack; the hairline is the cheapest thing that says which half is which,
+              and it is the same `border-border` rule `RouteFactSheet` puts above its legend. */}
+          <hr className="mx-3 mt-3 mb-1 border-0 border-border border-t" />
           <SheetAction
             icon={Star}
             filled={saved}
@@ -157,77 +215,15 @@ export function RouteStopSheet({
 const TITLE_ID = 'route-stop-sheet-title'
 
 /**
- * **What it costs to board this stop** — the adult fare and the two concession estimates.
+ * ## Where the fare lives, and why it moved twice
  *
- * ## Why it lives here and not in the list
+ * It began as a figure on the right of every stop row, which printed the same `$6.7` forty times while
+ * competing with the stop's name for the one edge the ⋯ button also wants. ADR-158 made it a sticky
+ * fare-*stage* header in the list; the owner's verdict was that **sticky text reads as a title** — a
+ * section, a date, something you scroll within — and a price is not one, so the association with the
+ * stops beneath it never formed. ADR-159 brought it here, where the sheet already names the stop.
  *
- * It was a per-row figure on the right of every stop, which printed the same `$6.7` forty times and took
- * the edge the stop's name and the ⋯ button both want. ADR-158 replaced that with a sticky *stage*
- * header — the price said once per fare stage, pinned while its stage was on screen. The owner's verdict
- * on it is the reason for this file: **sticky text reads as a title** — a section, a date, something a
- * rider scrolls *within* — and a price is not one, so the association between the header and the stops
- * under it never formed.
- *
- * The sheet is where the association is free. The rider has just tapped one stop, the sheet already
- * names it two lines above, and *"From here"* has an unambiguous referent for the first time.
- *
- * ## What is and is not a figure
- *
- * `stopFares` is the kernel's answer (`route-detail#stopFares`) and it decides all three of: whether
- * there is a fare at all, what the adult figure reads as, and which concessions could be priced. This
- * component picks a label and an icon per line and nothing else — the `~` on a concession comes from the
- * kernel, because *this is an estimate* is a claim about the number rather than a decoration on it
- * (ADR-008).
- *
- * **Absent renders as nothing**, not as a heading over a dash: a terminus carries no boarding fare and
- * every GMB stop has had its non-sectional fares dropped upstream (ADR-047), so this is the ordinary
- * case rather than a failure, and it is `null` here.
+ * Its first shape here was five rows under a *"From here"* heading, which was a third of the sheet's
+ * height for one number and two estimates. It is now two rows and no heading (ADR-160): the adult fare
+ * rides the times row on the right, and the estimates sit under it sharing that column edge.
  */
-function FareBlock({ row, locale }: { row: RouteStopRowView; locale: Locale }) {
-  const fares = stopFares(row.fare)
-  if (!fares) return null
-  return (
-    <div className="flex flex-col gap-1.5 px-3 pt-1 pb-2">
-      <span className="text-caption text-subtle">{t(locale, 'fareFromHere')}</span>
-      <FareLine icon={User} label={t(locale, 'fareAdult')} amount={fares.adult} />
-      {fares.concessions.map((figure) => (
-        <FareLine
-          key={figure.class}
-          icon={figure.class === 'child' ? Baby : JoyYouCard}
-          label={t(locale, figure.class === 'child' ? 'fareChild' : 'fareElderly')}
-          amount={figure.fare}
-        />
-      ))}
-    </div>
-  )
-}
-
-/**
- * One fare line: a glyph, who it is for, and the figure.
- *
- * The adult line is `text-text` and the concessions are `text-muted`, which is the one thing separating
- * the figure that came from the data from the two computed from policy — the same demotion the fact
- * sheet applies to the same three numbers, so a rider meets one hierarchy in both places.
- */
-function FareLine({
-  icon: Glyph,
-  label,
-  amount,
-}: {
-  icon: typeof User
-  label: string
-  amount: string
-}) {
-  const adult = Glyph === User
-  return (
-    <div className="flex items-center gap-2.5">
-      <Glyph size={16} aria-hidden className={`shrink-0 ${adult ? 'text-muted' : 'text-subtle'}`} />
-      <span className={`min-w-0 flex-1 text-label ${adult ? 'text-text' : 'text-muted'}`}>
-        {label}
-      </span>
-      <span className={`text-label tabular-nums ${adult ? 'font-medium text-text' : 'text-muted'}`}>
-        {amount}
-      </span>
-    </div>
-  )
-}

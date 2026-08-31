@@ -802,6 +802,21 @@ export const CATALOGUE = {
     'zh-Hans': '显示路线详情',
   },
   /**
+   * **Why there is no JoyYou figure on this route.** Shown only where `eta#joyYouEligible` says no,
+   * which today means an `A`/`NA` airport route.
+   *
+   * Said rather than left as an absence, because a rider who holds the card would otherwise read the
+   * missing line as a bug in the app rather than as a fact about the route — and would board the A21
+   * expecting to pay $2. The Transport Department's exclusion is wider than this sentence (racecourse,
+   * long-haul, tourist-oriented and pre-booked services go too), but the route number is the only part
+   * of it our data can see, so the sentence claims only the part we can stand behind.
+   */
+  fareNoJoyYou: {
+    en: 'The $2 Scheme does not cover airport routes.',
+    'zh-Hant': '$2 計劃不適用於機場路線。',
+    'zh-Hans': '$2 计划不适用于机场路线。',
+  },
+  /**
    * The heading over the fare block in a stop's action sheet.
    *
    * "From here" rather than "Fare": the figures are what it costs to board **at or after this stop**,

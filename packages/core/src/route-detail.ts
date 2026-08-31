@@ -14,6 +14,7 @@ import {
   formatJourney,
   formatServiceHours,
   isStale,
+  joyYouEligible,
   newestBoard,
 } from './eta'
 import { formatDistance, routeDistanceM } from './geo'
@@ -1004,11 +1005,12 @@ function fareSheet(
         // The name from the row itself, so the timeline and the schematic cannot name one stop two ways.
         boardingStop: row.name.label,
         covers: labels.stopCount(stage.toSeq - stage.fromSeq + 1),
-        concessions: concessionFigures(stage.fare),
+        concessions: concessionFigures(stage.fare, view.header.routeNo),
       },
     ]
   })
-  const stages = sectional.length > 0 ? sectional : wholeRouteStage(rows, service, labels)
+  const stages =
+    sectional.length > 0 ? sectional : wholeRouteStage(rows, service, labels, view.header.routeNo)
   // The legend explains exactly the classes that appear, which is what makes it honest: a class with no
   // figure anywhere on screen has nothing to explain. Read off the **finished** timeline, fallback included,
   // so the legend cannot explain a class the sheet does not show or omit one it does.
@@ -1062,6 +1064,7 @@ function wholeRouteStage(
   rows: RouteStopRowView[],
   service: RouteServiceInfo | undefined,
   labels: RouteFactLabels,
+  routeNo: string | undefined,
 ): FareStageRow[] {
   const fullFare = service?.fareFull
   // The **same truthiness test the pill uses** (`routeFacts`), so a `fareFull` of `''` yields neither a pill
@@ -1073,7 +1076,7 @@ function wholeRouteStage(
     fare: formatFare(fullFare),
     boardingStop: row.name.label,
     covers: labels.stopCount(rows.length),
-    concessions: concessionFigures(fullFare),
+    concessions: concessionFigures(fullFare, routeNo),
   }))
 }
 
@@ -1103,17 +1106,18 @@ const CONCESSION_CLASSES: readonly ConcessionClass[] = ['child', 'elderly']
  */
 export function stopFares(
   fare: string | undefined | null,
+  routeNo?: string | undefined,
 ): { adult: string; concessions: ConcessionFigure[] } | undefined {
   // `null` as well as `undefined`, because that is what the wire carries: the dataset's sectional array
   // is `Array<string | null>`, so a stop with no fare arrives as an explicit null rather than a hole.
   if (fare === undefined || fare === null || fare.trim() === '') return undefined
-  return { adult: formatFare(fare), concessions: concessionFigures(fare) }
+  return { adult: formatFare(fare), concessions: concessionFigures(fare, routeNo) }
 }
 
 /**
  * The two estimates for one adult fare, or an empty list where the fare cannot be priced.
  */
-function concessionFigures(adultFare: string): ConcessionFigure[] {
+function concessionFigures(adultFare: string, routeNo: string | undefined): ConcessionFigure[] {
   // `fareStages` admits this fare on a **looser** test than the estimators apply, so the earlier
   // both-always-resolve claim was wrong. `fareStages` keeps any `f` where `Number(f)` is not NaN — which
   // lets a whitespace-only cell (`Number(' ')` is 0) or an `Infinity`-valued string survive as a stage —
@@ -1126,10 +1130,13 @@ function concessionFigures(adultFare: string): ConcessionFigure[] {
   const child = estimateChildFare(adultFare)
   const elderly = estimateElderlyFare(adultFare)
   if (child === undefined || elderly === undefined) return []
-  return [
-    { class: 'child', fare: `~${formatFare(child)}` },
-    { class: 'elderly', fare: `~${formatFare(elderly)}` },
-  ]
+  // **The $2 Scheme does not reach every route** (`joyYouEligible`): an `A`/`NA` airport route is
+  // excluded, so the figure is *omitted* rather than printed. A concession that does not apply is not a
+  // worse estimate of one that does — it is a different claim, and on the A21 the gap between them is
+  // twenty-eight dollars. The child halving is unaffected; it is the operator's, not the Government's.
+  const figures: ConcessionFigure[] = [{ class: 'child', fare: `~${formatFare(child)}` }]
+  if (joyYouEligible(routeNo)) figures.push({ class: 'elderly', fare: `~${formatFare(elderly)}` })
+  return figures
 }
 
 function freqSheet(

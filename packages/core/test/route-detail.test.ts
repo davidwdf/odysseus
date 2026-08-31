@@ -353,12 +353,13 @@ describe('route-detail#routeDetailView', () => {
 describe('route-detail#stopFares', () => {
   interface FareArgs {
     fare?: string | null
+    routeNo?: string
   }
   type Fares = ReturnType<typeof stopFares>
 
   for (const c of specCases<FareArgs, Fares>(corpus, 'stopFares')) {
     it(c.name, () => {
-      expect(stopFares(c.args.fare)).toEqual(c.expect ?? undefined)
+      expect(stopFares(c.args.fare, c.args.routeNo)).toEqual(c.expect ?? undefined)
     })
   }
 
@@ -368,7 +369,7 @@ describe('route-detail#stopFares', () => {
     // than the adult one is not a rounding artefact, it is the rule inverted. It shipped once, as $2.0
     // against a $0 interchange leg.
     for (const c of specCases<FareArgs, Fares>(corpus, 'stopFares')) {
-      const out = stopFares(c.args.fare)
+      const out = stopFares(c.args.fare, c.args.routeNo)
       if (!out) continue
       const adult = Number(out.adult.replace('$', ''))
       if (!Number.isFinite(adult)) continue

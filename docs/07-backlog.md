@@ -92,6 +92,17 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
+- [ ] 🟠 **Four of the $2 Scheme's five exclusions are invisible to us.** `eta#joyYouEligible`
+      ([ADR-160](./08-decision-log.md#adr-160--the-2-scheme-does-not-reach-every-route-and-the-fare-block-earns-its-height))
+      excludes `A`/`NA` airport routes from the JoyYou estimate, which is the only part of the Transport
+      Department's exclusion a route number can decide. The Department also excludes **racecourse
+      routes, new long-haul services, designated tourist-oriented routes and pre-booking/group-hire
+      services** — none of which any HK open-data feed marks, and none of which has a numbering
+      convention (a racecourse special is an ordinary-looking number). So on those we still quote a
+      concession a rider will not receive. Deliberately not guessed at: ADR-160 decision 2 argues that
+      wrongly *withholding* a concession is the worse error, because it keeps someone off a bus. A real
+      fix needs a curated route list — the Department publishes the exclusions as prose, not as data —
+      which is a maintenance commitment worth taking only once someone will keep it current.
 - [ ] 🟠 **The Place screen never says "live times unavailable"** — `PlaceDetailView.incomplete` has existed
       since [ADR-077](./08-decision-log.md) and this screen has never read it, so a rider who taps a Nearby
       card marked *"Live times unavailable"* lands on a screen that has quietly dropped the warning, where an
