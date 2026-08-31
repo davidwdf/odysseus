@@ -1081,6 +1081,36 @@ function wholeRouteStage(
 const CONCESSION_CLASSES: readonly ConcessionClass[] = ['child', 'elderly']
 
 /**
+ * **What it costs to board one stop — the adult fare and the two concession estimates.**
+ *
+ * The fare block in a stop's action sheet. `routeFactSheet`'s `fare` sheet answers the same question for
+ * the *whole route*, stage by stage; this answers it for the one stop a rider has just tapped, which is
+ * the question they asked by tapping it.
+ *
+ * **`undefined` means there is no fare to show at all**, and it is the ordinary case rather than an
+ * error: a terminus carries no boarding fare (you cannot board the last stop), and GMB fares are dropped
+ * upstream as non-sectional (ADR-047), so most GMB stops land here. A renderer's arm for it is to say
+ * nothing about fares — never to print an empty row or a `$—`.
+ *
+ * `concessions` is `concessionFigures`' answer and inherits its both-or-neither rule: a fare the
+ * estimators cannot parse yields the adult figure with an **empty** concession list, not two
+ * `~$undefined`s. So a caller has three shapes to render, not one.
+ *
+ * The fare is printed here, `$` and all — as `fareLabel` is on the row — because nothing downstream
+ * compares it.
+ *
+ * @spec route-detail#stopFares
+ */
+export function stopFares(
+  fare: string | undefined | null,
+): { adult: string; concessions: ConcessionFigure[] } | undefined {
+  // `null` as well as `undefined`, because that is what the wire carries: the dataset's sectional array
+  // is `Array<string | null>`, so a stop with no fare arrives as an explicit null rather than a hole.
+  if (fare === undefined || fare === null || fare.trim() === '') return undefined
+  return { adult: formatFare(fare), concessions: concessionFigures(fare) }
+}
+
+/**
  * The two estimates for one adult fare, or an empty list where the fare cannot be priced.
  */
 function concessionFigures(adultFare: string): ConcessionFigure[] {

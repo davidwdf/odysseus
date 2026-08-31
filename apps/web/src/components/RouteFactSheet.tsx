@@ -1,6 +1,7 @@
 import type { ConcessionClass, Locale, RouteFactSheetView, RouteStatKind } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
-import { Accessibility, Baby, Clock, type LucideIcon, MapPin, Ruler } from 'lucide-react'
+import { Baby, Clock, type LucideIcon, MapPin, Ruler } from 'lucide-react'
+import { JoyYouCard } from '../icons'
 import { BottomSheet } from './BottomSheet'
 
 /**
@@ -79,9 +80,15 @@ const STAT_GLYPH: Record<RouteStatKind, LucideIcon> = {
   journey: Clock,
   distance: Ruler,
 }
+/**
+ * `elderly` is drawn as the **card**, not as lucide's `Accessibility`, which is what it used to be.
+ * That glyph is a wheelchair, and it names the smaller half of who the Scheme is for — most
+ * beneficiaries are 60+ rather than disabled, so it told them the figure beside it was not theirs.
+ * See `icons/index.ts`.
+ */
 const CONCESSION_GLYPH: Record<ConcessionClass, LucideIcon> = {
   child: Baby,
-  elderly: Accessibility,
+  elderly: JoyYouCard,
 }
 const STAT_LABEL = {
   stops: 'stopsOnRoute',

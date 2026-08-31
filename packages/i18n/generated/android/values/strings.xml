@@ -152,8 +152,8 @@
 	<string name="fareAdult">Adult</string>
 	<string name="fareChild">Child (3–11)</string>
 	<string name="fareChildNote">Roughly half the adult fare.</string>
-	<string name="fareElderly">Elderly 65+ / disabled</string>
-	<string name="fareElderlyNote">$2 Scheme, via a JoyYou or eligible Octopus (not cash).</string>
+	<string name="fareElderly">JoyYou 60+ / disabled</string>
+	<string name="fareElderlyNote">$2 up to a $10 fare, then 20 per cent of it. Needs a JoyYou or eligible Octopus — not cash.</string>
 	<string name="freqTitle">Frequency</string>
 	<string name="freqNote">How often buses run — scheduled frequencies, not live.</string>
 	<string name="hoursTitle">Service hours</string>

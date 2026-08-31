@@ -2,7 +2,34 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-08-31 — the fare finds its home, the $2 Scheme's label catches up, and the map can be panned
+
+> **Shipped:** [ADR-159](./08-decision-log.md#adr-159--the-fare-block-moves-into-the-stops-sheet-the-2-schemes-label-catches-up-with-the-law-and-one-object-literal-was-holding-the-camera-still),
+> which **amends ADR-158's decisions 1–3 away**. The sticky fare-stage header is gone — the owner's
+> verdict was that *sticky text reads as a title*, and a price is not one — and the fare is now a block
+> in the **stop's own action sheet**: adult · child · JoyYou, under *"From here"*, two lines below the
+> stop's name. `route-detail#stopFares` is the kernel export behind it (6 corpus cases). The
+> `fare-stages` module written for ADR-158 is deleted.
+>
+> **Three defects went with it, two of them shipped:**
+> 1. **`visibleInset={{…}}` was an object literal**, so `RouteMap`'s framing effect re-ran on every
+>    render and snapped the camera back within a frame — **the map could not be panned at all.** Both
+>    camera effects now depend on `insetTop`/`insetBottom`, and the framing one is guarded on `moved`.
+> 2. **The $2 Scheme's label said "Elderly 65+"**. The age dropped to **60** on 25 Aug 2024, and the
+>    note still called it a flat $2 after the 3 Apr 2026 change to *"$2 or 80 per cent off"*. The
+>    *arithmetic* was right all along — only the words were stale, which is the worse half.
+> 3. The recentre control's hand-drawn glyph, which the owner read as *"the squiggle in the brackets"*.
+>
+> **Two things to carry forward.** A `fares` kernel module with `joyYouFare` and 9 corpus cases was
+> written, driven green, and **deleted** — `eta#estimateElderlyFare` already existed and handled a case
+> mine got wrong (it caps the concession at the adult fare, so a $0 interchange leg is not priced at $2).
+> *Grep the kernel and the catalogue for the domain word before writing the function.* And custom icons
+> are now `createLucideIcon` in **`apps/web/src/icons/`** — same props, same 24-grid, and they satisfy
+> the `LucideIcon` type four props already use. **Never inline an `<svg>` in a component.**
+
 ## 🔵 Snapshot 2026-08-28 — the fare becomes a stage, and the map says what it can do
+
+> ⚠️ **Decisions 1–3 of this snapshot were withdrawn the next day — see the snapshot above.**
 
 > **Shipped:** the four rider-facing items ADR-156 left open on Route detail
 > ([ADR-158](./08-decision-log.md#adr-158--the-fare-becomes-a-stage-header-the-map-gets-two-controls-and-a-tapped-stop-is-told-apart-from-an-arrived-at-one)).

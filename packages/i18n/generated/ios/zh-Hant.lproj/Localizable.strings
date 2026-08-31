@@ -146,8 +146,8 @@
 "fareAdult" = "成人";
 "fareChild" = "小童（3–11 歲）";
 "fareChildNote" = "約為成人車費的一半。";
-"fareElderly" = "長者 65+／殘疾人士";
-"fareElderlyNote" = "$2 計劃，須使用「樂悠咭」或合資格八達通（不適用於現金）。";
+"fareElderly" = "樂悠咭 60+／殘疾人士";
+"fareElderlyNote" = "車費 $10 或以下劃一收 $2，超過則收兩成。須使用「樂悠咭」或合資格八達通，不適用於現金。";
 "freqTitle" = "班次";
 "freqNote" = "巴士班次頻率 — 為時間表資料，並非即時。";
 "hoursTitle" = "服務時間";

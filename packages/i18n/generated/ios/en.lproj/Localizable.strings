@@ -146,8 +146,8 @@
 "fareAdult" = "Adult";
 "fareChild" = "Child (3–11)";
 "fareChildNote" = "Roughly half the adult fare.";
-"fareElderly" = "Elderly 65+ / disabled";
-"fareElderlyNote" = "$2 Scheme, via a JoyYou or eligible Octopus (not cash).";
+"fareElderly" = "JoyYou 60+ / disabled";
+"fareElderlyNote" = "$2 up to a $10 fare, then 20 per cent of it. Needs a JoyYou or eligible Octopus — not cash.";
 "freqTitle" = "Frequency";
 "freqNote" = "How often buses run — scheduled frequencies, not live.";
 "hoursTitle" = "Service hours";

@@ -42,7 +42,6 @@ export default defineConfig({
       // measuring. Declaration-only modules carry no tags and are correctly ignored by it.
       include: [
         'src/eta.ts',
-        'src/fare-stages.ts',
         'src/favourites.ts',
         'src/geo.ts',
         'src/geo-snap.ts',

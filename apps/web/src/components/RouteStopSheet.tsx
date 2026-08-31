@@ -1,6 +1,7 @@
-import type { Locale, RouteStopArrival, RouteStopRowView } from '@nextbus/core'
+import { type Locale, type RouteStopArrival, type RouteStopRowView, stopFares } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
-import { MapPin, Star } from 'lucide-react'
+import { Baby, MapPin, Star, User } from 'lucide-react'
+import { JoyYouCard } from '../icons'
 import { usePreferences } from '../lib/preferences'
 import { BottomSheet, SheetAction } from './BottomSheet'
 import { ArrivalSlot } from './RouteStopRow'
@@ -135,6 +136,7 @@ export function RouteStopSheet({
               <span className="text-label text-muted">{t(locale, 'noService')}</span>
             )}
           </div>
+          <FareBlock row={row} locale={locale} />
           <SheetAction
             icon={Star}
             filled={saved}
@@ -153,3 +155,79 @@ export function RouteStopSheet({
 
 /** The heading's id, wired to the dialog's `aria-labelledby`. Static because only one sheet is ever open. */
 const TITLE_ID = 'route-stop-sheet-title'
+
+/**
+ * **What it costs to board this stop** — the adult fare and the two concession estimates.
+ *
+ * ## Why it lives here and not in the list
+ *
+ * It was a per-row figure on the right of every stop, which printed the same `$6.7` forty times and took
+ * the edge the stop's name and the ⋯ button both want. ADR-158 replaced that with a sticky *stage*
+ * header — the price said once per fare stage, pinned while its stage was on screen. The owner's verdict
+ * on it is the reason for this file: **sticky text reads as a title** — a section, a date, something a
+ * rider scrolls *within* — and a price is not one, so the association between the header and the stops
+ * under it never formed.
+ *
+ * The sheet is where the association is free. The rider has just tapped one stop, the sheet already
+ * names it two lines above, and *"From here"* has an unambiguous referent for the first time.
+ *
+ * ## What is and is not a figure
+ *
+ * `stopFares` is the kernel's answer (`route-detail#stopFares`) and it decides all three of: whether
+ * there is a fare at all, what the adult figure reads as, and which concessions could be priced. This
+ * component picks a label and an icon per line and nothing else — the `~` on a concession comes from the
+ * kernel, because *this is an estimate* is a claim about the number rather than a decoration on it
+ * (ADR-008).
+ *
+ * **Absent renders as nothing**, not as a heading over a dash: a terminus carries no boarding fare and
+ * every GMB stop has had its non-sectional fares dropped upstream (ADR-047), so this is the ordinary
+ * case rather than a failure, and it is `null` here.
+ */
+function FareBlock({ row, locale }: { row: RouteStopRowView; locale: Locale }) {
+  const fares = stopFares(row.fare)
+  if (!fares) return null
+  return (
+    <div className="flex flex-col gap-1.5 px-3 pt-1 pb-2">
+      <span className="text-caption text-subtle">{t(locale, 'fareFromHere')}</span>
+      <FareLine icon={User} label={t(locale, 'fareAdult')} amount={fares.adult} />
+      {fares.concessions.map((figure) => (
+        <FareLine
+          key={figure.class}
+          icon={figure.class === 'child' ? Baby : JoyYouCard}
+          label={t(locale, figure.class === 'child' ? 'fareChild' : 'fareElderly')}
+          amount={figure.fare}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * One fare line: a glyph, who it is for, and the figure.
+ *
+ * The adult line is `text-text` and the concessions are `text-muted`, which is the one thing separating
+ * the figure that came from the data from the two computed from policy — the same demotion the fact
+ * sheet applies to the same three numbers, so a rider meets one hierarchy in both places.
+ */
+function FareLine({
+  icon: Glyph,
+  label,
+  amount,
+}: {
+  icon: typeof User
+  label: string
+  amount: string
+}) {
+  const adult = Glyph === User
+  return (
+    <div className="flex items-center gap-2.5">
+      <Glyph size={16} aria-hidden className={`shrink-0 ${adult ? 'text-muted' : 'text-subtle'}`} />
+      <span className={`min-w-0 flex-1 text-label ${adult ? 'text-text' : 'text-muted'}`}>
+        {label}
+      </span>
+      <span className={`text-label tabular-nums ${adult ? 'font-medium text-text' : 'text-muted'}`}>
+        {amount}
+      </span>
+    </div>
+  )
+}

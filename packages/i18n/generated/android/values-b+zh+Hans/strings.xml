@@ -150,8 +150,8 @@
 	<string name="fareAdult">成人</string>
 	<string name="fareChild">小童（3–11 岁）</string>
 	<string name="fareChildNote">约为成人车费的一半。</string>
-	<string name="fareElderly">长者 65+／残疾人士</string>
-	<string name="fareElderlyNote">$2 计划，须使用「乐悠咭」或合资格八达通（不适用于现金）。</string>
+	<string name="fareElderly">乐悠咭 60+／残疾人士</string>
+	<string name="fareElderlyNote">车费 $10 或以下划一收 $2，超过则收两成。须使用「乐悠咭」或合资格八达通，不适用于现金。</string>
 	<string name="freqTitle">班次</string>
 	<string name="freqNote">巴士班次频率 — 为时间表数据，并非实时。</string>
 	<string name="hoursTitle">服务时间</string>

@@ -802,11 +802,15 @@ export const CATALOGUE = {
     'zh-Hans': '显示路线详情',
   },
   /**
-   * Precedes the fare on a sticky stage header in the route's stop list.
+   * The heading over the fare block in a stop's action sheet.
    *
-   * "From here" rather than "Fare": the figure is what it costs to board **at or after this point**,
-   * which is the question a rider scrolling the list is asking, and a bare "$6.7" over a list of stops
-   * could as easily be read as the fare to reach them.
+   * "From here" rather than "Fare": the figures are what it costs to board **at or after this stop**,
+   * which is the question a rider who has just tapped that stop is asking, and a bare "$6.7" could as
+   * easily be read as the fare to *reach* it.
+   *
+   * It briefly led a sticky stage header in the stop list instead (ADR-158). The owner's verdict was
+   * that sticky text reads as a *title* — a section, a date — and a price is not one, which is why the
+   * whole block moved into the sheet where the stop it belongs to is already named.
    */
   fareFromHere: {
     en: 'From here',
@@ -977,16 +981,38 @@ export const CATALOGUE = {
     'zh-Hant': '約為成人車費的一半。',
     'zh-Hans': '约为成人车费的一半。',
   },
+  /**
+   * **60+, not 65+.** This label said "Elderly 65+ / disabled" from the day it was written until
+   * ADR-159, which is wrong and was wrong when shipped: the eligibility age dropped to **60** on
+   * 25 August 2024, when the JoyYou Card replaced the old Elder Octopus for the Scheme. A rider aged 62
+   * reading the shipping app was told a concession they were entitled to was not for them.
+   *
+   * "JoyYou" leads because it names the **card**, which is the thing a rider recognises and the thing
+   * they must actually tap — the Scheme's own name ("Government Public Transport Fare Concession Scheme
+   * for the Elderly and Eligible Persons with Disabilities") is a label some beneficiaries would not
+   * apply to themselves, and none of them would find on a screen this size.
+   */
   fareElderly: {
-    en: 'Elderly 65+ / disabled',
-    'zh-Hant': '長者 65+／殘疾人士',
-    'zh-Hans': '长者 65+／残疾人士',
+    en: 'JoyYou 60+ / disabled',
+    'zh-Hant': '樂悠咭 60+／殘疾人士',
+    'zh-Hans': '乐悠咭 60+／残疾人士',
   },
-  /** How the elderly/PwD $2 Scheme is paid. */
+  /**
+   * How the $2 Scheme is paid, and — since 3 April 2026 — that it is **no longer a flat $2**.
+   *
+   * The rule became *"$2 Flat Rate or 80 Per cent Off"*: $2 where the adult fare is $10 or below, and
+   * 20 per cent of it above that. Spelled out rather than written `20%` because a literal `%` is a
+   * format specifier on both native platforms and `native-strings.mts` rejects one it has not been
+   * taught to escape — the gate caught this on the way in. `eta#estimateElderlyFare` has computed it correctly since the day it changed;
+   * this sentence had not caught up, so a rider on a $46.5 airport route saw a correct `~$9.3` beside a
+   * caption still calling it the "$2 Scheme" and had no way to reconcile the two.
+   */
   fareElderlyNote: {
-    en: '$2 Scheme, via a JoyYou or eligible Octopus (not cash).',
-    'zh-Hant': '$2 計劃，須使用「樂悠咭」或合資格八達通（不適用於現金）。',
-    'zh-Hans': '$2 计划，须使用「乐悠咭」或合资格八达通（不适用于现金）。',
+    en: '$2 up to a $10 fare, then 20 per cent of it. Needs a JoyYou or eligible Octopus — not cash.',
+    'zh-Hant':
+      '車費 $10 或以下劃一收 $2，超過則收兩成。須使用「樂悠咭」或合資格八達通，不適用於現金。',
+    'zh-Hans':
+      '车费 $10 或以下划一收 $2，超过则收两成。须使用「乐悠咭」或合资格八达通，不适用于现金。',
   },
   freqTitle: {
     en: 'Frequency',

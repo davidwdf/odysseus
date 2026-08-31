@@ -265,8 +265,8 @@ export function RouteStopRow({
             </span>
             {/* The fare is **not** here any more. It said the same figure on nearly every row — the
                 same $6.7 forty times — while competing with the stop's name for the one edge the `⋯`
-                also wants. It is a sticky stage header now (`FareStage`), printed once per stage and
-                pinned to the top of the list while that stage is what you are looking at. */}
+                also wants. It was briefly a sticky stage header (ADR-158) and is now the fare block in
+                this stop's own action sheet (ADR-159), where "From here" has a stop to refer to. */}
           </span>
           {row.arrivals.length > 0 ? (
             <span className="mt-1 flex flex-wrap items-baseline gap-x-3">

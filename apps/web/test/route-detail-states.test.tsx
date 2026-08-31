@@ -18,7 +18,6 @@
 import routeDetailSpec from '@nextbus/contract/ui/route-detail.spec.json'
 import {
   CLIENT_POLICY_DEFAULTS,
-  fareStageStarts,
   feedNotice,
   formatFavoriteRouteKey,
   type Locale,
@@ -413,15 +412,7 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
       ? ''
       : `?stop=${encodeURIComponent(c.args.arrivedFromStop)}`
   const view = viewFor({ ...c, args: { ...c.args, detail } }, at)
-  /**
-   * Which stops begin a fare stage — the same kernel call the screen makes, over the same view.
-   *
-   * On the driven view rather than in the view model, exactly as `FEED_NOTICE` is and for the same
-   * reason: it is a rule *about* `routeDetailView`'s output rather than a field of it, and a driver
-   * that made it up would have to print a header the screen does not print.
-   */
-  const stageStarts = fareStageStarts(view.stops.map((row) => row.fareLabel))
-  const stops = view.stops.map((row, i) => ({ ...row, fareStageStart: stageStarts[i] === true }))
+
   /**
    * The presentation the screen will have computed — the same kernel call over the same two inputs,
    * exactly as `noticeFor` does for the freshness line, and for the same reason: neither is a field of
@@ -441,7 +432,6 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     view: {
       ...view,
       notice: noticeFor(view, at, { online: state !== 'offline' }),
-      stops,
       ...(presentation === undefined ? {} : { path: presentation }),
     },
     tree: await mountSettled(`/route/${encodeURIComponent(detail.route.id)}${anchor}`, {

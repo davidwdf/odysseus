@@ -259,21 +259,53 @@ export function RouteMap({
   // are corpus-pinned in `@nextbus/core` and this only translates the result into MapLibre's
   // vocabulary. The `.map` is the coordinate-order swap and nothing else: the line is GeoJSON
   // `[lng, lat]`, the kernel's points are `{ lat, lng }`.
+  /**
+   * The inset as two **numbers**. Every camera effect depends on these rather than on `visibleInset`,
+   * because the prop is an object literal built fresh on each render of the screen and a dependency on
+   * it re-runs the effect every time anything at all changes. See the framing effect below for what
+   * that cost.
+   */
+  const insetTop = visibleInset?.top ?? 0
+  const insetBottom = visibleInset?.bottom ?? 0
+
   const bounds = useMemo(
     () => (drawn ? boundsOf(drawn.map((c) => ({ lat: c[1], lng: c[0] }))) : undefined),
     [drawn],
   )
 
-  // Frame the whole route, once per line. `fitBounds` rather than a centre and a zoom because the
-  // right zoom is a property of the route: KMB 1 is 8 km and 6C is 40, and a fixed zoom shows the
-  // second one as a fragment. `animate: false` — this is the opening view, not a movement.
+  /**
+   * Frame the whole route. `fitBounds` rather than a centre and a zoom because the right zoom is a
+   * property of the route: KMB 1 is 8 km and 6C is 40, and a fixed zoom shows the second as a fragment.
+   * `animate: false` — this is the opening view, not a movement.
+   *
+   * ## Two bugs live in this effect's dependency list, and the second hid the first
+   *
+   * **`visibleInset` is a fresh object on every render of the screen** — `RouteDetail` passes
+   * `visibleInset={{ bottom: sheetFraction, top: CHROME_INSET_FRACTION }}` as a literal. Depending on
+   * the object rather than its two numbers re-ran this effect on *every* render: every ETA tick, every
+   * selection, every frame of a sheet drag. So the camera was snapped back to the whole route
+   * continuously, and **the map could not be panned at all** — a drag moved it and the next render put
+   * it back, inside one frame, which is why it read as an unresponsive map rather than a moving one.
+   *
+   * That made the recentre control look broken in a way it was not. It appeared correctly (the drag
+   * *is* rider-driven, so `moved` became true) and then did nothing visible when pressed, because the
+   * camera it was asked to restore had never left. The owner reported exactly that: *"I click it but
+   * nothing seems to happen other than it disappearing."* Two probes measured the button and found it
+   * present, which is the trap ADR-131 collects — the check was looking at the wrong thing.
+   *
+   * **`moved` is the second half of the fix, and it is not just a guard.** Depending on the numbers
+   * stops the churn, but the inset legitimately changes when the rider drags the sheet, and re-framing
+   * then would still discard a pan they had made. Once they have moved the camera it is theirs until
+   * they hand it back — which is precisely what pressing recentre does, by setting `moved` false and
+   * letting this effect run again.
+   */
   useEffect(() => {
-    if (!map || !bounds) return
+    if (!map || !bounds || moved) return
     map.fitBounds([bounds.west, bounds.south, bounds.east, bounds.north], {
-      padding: cameraPadding(map, visibleInset),
+      padding: cameraPadding(map, { top: insetTop, bottom: insetBottom }),
       animate: false,
     })
-  }, [map, bounds, visibleInset])
+  }, [map, bounds, insetTop, insetBottom, moved])
 
   // Draw (or redraw) the line. Adding the source once and setting its data afterwards — rather than
   // removing and re-adding layers — is what keeps a redraw from flickering the whole overlay.
@@ -547,14 +579,14 @@ export function RouteMap({
     const stop = stops[focusedIndex]
     if (!stop) return
     map.flyTo({
-      padding: cameraPadding(map, visibleInset),
+      padding: cameraPadding(map, { top: insetTop, bottom: insetBottom }),
       center: [stop.location.lng, stop.location.lat],
       // The source's own range, not a compiled-in ceiling: LandsD answers 404 above z20 and the
       // map would render as a hole rather than a coarser map (ADR-049).
       zoom: focusZoom(map.getZoom(), mapProvider),
       essential: true,
     })
-  }, [map, focusedIndex, stops, visibleInset])
+  }, [map, focusedIndex, stops, insetTop, insetBottom])
 
   // Nothing to show and nothing coming: no map. A basemap with no line on it is not a route screen's
   // job, and reserving space for a line that will never arrive is worse than the absence.
@@ -573,14 +605,14 @@ export function RouteMap({
         <div className={`${FILL} animate-pulse bg-surface-2`} aria-hidden="true" />
       )}
       <MapControls
-        bottom={(visibleInset?.bottom ?? 0) * (map?.getContainer().clientHeight ?? 0)}
+        bottom={insetBottom * (map?.getContainer().clientHeight ?? 0)}
         recentreLabel={controlLabels.recentre}
         locateLabel={controlLabels.locate}
         onRecentre={
           map && bounds && moved
             ? () => {
                 map.fitBounds([bounds.west, bounds.south, bounds.east, bounds.north], {
-                  padding: cameraPadding(map, visibleInset),
+                  padding: cameraPadding(map, { top: insetTop, bottom: insetBottom }),
                 })
                 setMoved(false)
               }
@@ -592,7 +624,7 @@ export function RouteMap({
                 map.flyTo({
                   center: [riderFix.lng, riderFix.lat],
                   zoom: focusZoom(map.getZoom(), mapProvider),
-                  padding: cameraPadding(map, visibleInset),
+                  padding: cameraPadding(map, { top: insetTop, bottom: insetBottom }),
                   essential: true,
                 })
                 setMoved(true)
