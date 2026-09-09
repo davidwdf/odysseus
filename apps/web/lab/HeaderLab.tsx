@@ -38,6 +38,18 @@ export function HeaderLab() {
   /** The island's badge at the chip's two sizes — Messages' avatar is prominent, and a route number may
    *  want to be too. The one thing about this treatment that is purely taste, so it is a switch. */
   const [bigBadge, setBigBadge] = useState(false)
+  /**
+   * Where the badge laps the pill: **above** it (Messages' own stack) or over its **top-left corner**.
+   *
+   * This switch exists because of a measurement rather than a taste. The owner's reservation about the
+   * island is vertical space, and the first idea — lap the badge *deeper* into the pill — recovers
+   * nothing at all: the pill's text has to clear the badge's lower edge, so its top padding gives back
+   * exactly what the negative margin takes. Measured, both were 68 px against today's pill at 46.
+   *
+   * A corner lap is the version that actually costs less, because the badge overlaps a part of the pill
+   * where there is no text to clear: 48 px, and the overlap gesture survives.
+   */
+  const [cornerLap, setCornerLap] = useState(false)
 
   const header: RouteDetailView['header'] = {
     operator: 'KMB',
@@ -61,6 +73,7 @@ export function HeaderLab() {
         <Toggle on={circular} onChange={setCircular} label="circular route" />
         <Toggle on={long} onChange={setLong} label="long names" />
         <Toggle on={bigBadge} onChange={setBigBadge} label="island: big badge" />
+        <Toggle on={cornerLap} onChange={setCornerLap} label="island: corner lap" />
         <p className="m-0 text-caption text-subtle">
           Press <em>collapsed</em> repeatedly — the box's height is animated now, not cut.
         </p>
@@ -100,6 +113,7 @@ export function HeaderLab() {
             collapsed={collapsed}
             collapsedAs="island"
             islandBadge={bigBadge ? 'lg' : 'md'}
+            islandLap={cornerLap ? 'corner' : 'above'}
           />
         </Frame>
       </div>
@@ -113,7 +127,9 @@ const STREET_LINES = [42, 84, 126, 168, 210, 252, 294, 336, 378]
 /** A phone-width slab of "map" for the glass to sit on — the card is transparent, so a flat page lies. */
 function Frame({ caption, children }: { caption: string; children: React.ReactNode }) {
   return (
-    <div className="w-[390px]">
+    /* `data-frame` is a handle for the CDP screenshot script, which clips to one frame to look closely at
+       a 9 px square — the whole point of a lab is being able to point at a part of it. */
+    <div data-frame={caption.slice(0, 1)} className="w-[390px]">
       <p className="m-0 mb-2 text-caption text-subtle">{caption}</p>
       {/* `transform` rather than `position: relative` alone: variant A is the **real** card, which is
           `position: fixed`, and only a transformed ancestor makes a fixed child stay inside this box. */}
@@ -219,12 +235,14 @@ function ProposedHeader({
   collapsed,
   collapsedAs,
   islandBadge = 'md',
+  islandLap = 'above',
 }: {
   header: RouteDetailView['header']
   collapsed: boolean
   /** Which collapsed treatment to compare: today's left-anchored pill, or the Messages island. */
   collapsedAs: 'pill' | 'island'
   islandBadge?: 'md' | 'lg'
+  islandLap?: 'above' | 'corner'
 }) {
   const card = useRef<HTMLDivElement | null>(null)
   const badge = useRef<HTMLSpanElement | null>(null)
@@ -233,7 +251,7 @@ function ProposedHeader({
   useHeightFlip(card, collapsed ? 'collapsed' : 'card')
 
   if (collapsed && collapsedAs === 'island')
-    return <Island header={header} badge={badge} size={islandBadge} />
+    return <Island header={header} badge={badge} size={islandBadge} lap={islandLap} />
 
   return (
     <div
@@ -280,10 +298,10 @@ function ProposedHeader({
               </span>
             </div>
             <div className="flex w-full items-center gap-2">
-              <div className="flex min-w-0 flex-1 gap-2.5">
+              <div className="flex min-w-0 flex-1 gap-1.5">
                 {header.circular ? (
-                  <span className="flex w-3 shrink-0 items-center justify-center">
-                    <RotateCw size={14} aria-hidden className="text-route" />
+                  <span className="flex w-[20px] shrink-0 items-center justify-center">
+                    <RotateCw size={15} aria-hidden className="text-route" />
                   </span>
                 ) : (
                   <Gutter />
@@ -313,24 +331,79 @@ function ProposedHeader({
 }
 
 /**
- * The rail, one column wide: a hollow node at the origin, the route line, an arrowhead at the
- * destination. Hollow above and solid below for the schematic's own reason — a stop you have left and a
- * stop you are heading for are drawn differently there too.
+ * **The direction, as the rail draws it: a terminus square, the line, and an elbow that points at the
+ * destination.**
+ *
+ * Three deliberate borrowings from `RouteStopRow`, so this is the schematic's vocabulary rather than a
+ * family resemblance to it (the owner's ask):
+ *
+ *  · **A square, because a square is a terminus.** `NODE_SHAPE.terminus` is `M1 1 h24 v24 h-24 Z` and the
+ *    map's marker is the same shape from the same call — a rider who learns "square = end of the line" on
+ *    the map and in the list should not meet a dot for it in the header. Filled `surface`, stroked
+ *    `route`, exactly as the node is: **inverted against the line rather than matched to it**, because a
+ *    node in the line's own colour disappears into it.
+ *  · **The line is `route-soft`,** the rail's own colour since ADR-163 — a solid quieter colour, never an
+ *    opacity.
+ *  · **The stroke is lighter than the rail's 4 px,** at 3. The rail's weight is set by a 26 px node; this
+ *    node is 9 px, and 4 px here is a blot for the same reason ADR-163 gives for not ringing the node at 4.
+ *
+ * **The elbow is the new part, and it is what the owner asked for.** An arrowhead pointing *down* at the
+ * bottom of a gutter points at the line's end; an arrowhead that turns and points *right* points at the
+ * destination's name, which is the thing it is making a claim about. The head is `route` rather than
+ * `route-soft` for that reason too — the shaft is the route, the head is the claim.
  */
 function Gutter() {
   return (
-    <span aria-hidden className="relative flex w-3 shrink-0 flex-col items-center">
-      <span className="mt-[7px] h-2 w-2 shrink-0 rounded-full border-2 border-route-soft bg-bg" />
-      <span className="w-1 flex-1 bg-route-soft" />
-      <span className="-mt-px flex shrink-0 flex-col items-center">
-        <span className="h-2 w-1 bg-route" />
-        <svg width="11" height="7" viewBox="0 0 11 7" aria-hidden="true">
-          <path d="M0.5 0 L5.5 6 L10.5 0 Z" className="fill-route" />
-        </svg>
-      </span>
-    </span>
+    <svg
+      width={GUTTER_W}
+      height={GUTTER_H}
+      viewBox={`0 0 ${GUTTER_W} ${GUTTER_H}`}
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      {/* Down from under the square, then right at the destination's own line. One path, so the corner
+          is a join rather than two rectangles that have to agree about where they meet. */}
+      <path
+        d={`M${SQ_CX} ${SQ_CY + 5} V${DEST_CY} H${HEAD_X - 4}`}
+        className="stroke-route-soft"
+        strokeWidth={3}
+        strokeLinecap="butt"
+        fill="none"
+      />
+      {/* One tone with the shaft. A darker head read as a second object at this size — the elbow is one
+          mark, and `route-soft` is a colour rather than a weakening of `route` (ADR-163). */}
+      <path
+        d={`M${HEAD_X - 5} ${DEST_CY - 5} L${HEAD_X + 1.5} ${DEST_CY} L${HEAD_X - 5} ${DEST_CY + 5} Z`}
+        className="fill-route-soft"
+      />
+      {/* The terminus, drawn last so the line ends behind it. */}
+      <rect
+        x={SQ_CX - 4.25}
+        y={SQ_CY - 4.25}
+        width={8.5}
+        height={8.5}
+        className="fill-surface stroke-route"
+        strokeWidth={1.5}
+      />
+    </svg>
   )
 }
+
+/**
+ * The gutter's geometry, in CSS pixels, against `JourneyLines`' own line boxes: the origin is
+ * `text-label` at 14/20 so its centre is 10, and the destination is 20/25 two pixels below it, so its
+ * centre is 20 + 2 + 12.5. Written as the same arithmetic rather than as two magic numbers.
+ */
+const ORIGIN_LINE_H = 20
+const DEST_LINE_H = 25
+const LINE_GAP = 2
+const SQ_CX = 6
+const SQ_CY = ORIGIN_LINE_H / 2
+const DEST_CY = ORIGIN_LINE_H + LINE_GAP + DEST_LINE_H / 2
+/** Where the arrowhead's point lands — the arm is long enough to read as a turn rather than as a corner. */
+const HEAD_X = 18
+const GUTTER_W = 20
+const GUTTER_H = ORIGIN_LINE_H + LINE_GAP + DEST_LINE_H
 
 /**
  * **The Messages island — the COLLAPSED state.**
@@ -352,11 +425,40 @@ function Island({
   header,
   badge,
   size,
+  lap,
 }: {
   header: RouteDetailView['header']
   badge: React.RefObject<HTMLSpanElement | null>
   size: 'md' | 'lg'
+  /** Above the pill (Messages) or over its top-left corner (cheaper vertically — see the toggle). */
+  lap: 'above' | 'corner'
 }) {
+  const overlap = 12
+  if (lap === 'corner') {
+    return (
+      <div className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center">
+        <div className="glass-pane pointer-events-auto relative flex max-w-[calc(100%-72px)] items-center gap-1.5 rounded-pill border border-border py-2 pr-4 pl-7">
+          {/* Over the corner, not over the text: the badge's own left half hangs outside the pill, which
+              is what keeps the gesture while costing only its top half in height. */}
+          <span className="-top-3.5 -left-2 absolute z-10">
+            <RouteChip
+              operator={header.operator}
+              routeNo={header.routeNo}
+              size={size}
+              chipRef={badge}
+            />
+          </span>
+          {header.circular ? (
+            <RotateCw size={13} aria-hidden className="shrink-0 text-subtle" />
+          ) : (
+            <ArrowRight size={13} aria-hidden className="shrink-0 text-subtle" />
+          )}
+          <span className="truncate font-semibold text-body text-text">{header.destination}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex flex-col items-center">
       <span className="relative z-10">
@@ -367,9 +469,13 @@ function Island({
           chipRef={badge}
         />
       </span>
-      {/* The overlap is one number: the badge laps 12 px over the pill's top edge, and the pill's own
-          `pt` puts its text clear of it. */}
-      <div className="glass-pane pointer-events-auto -mt-3 flex max-w-[calc(100%-96px)] items-center gap-1.5 rounded-pill border border-border px-4 pt-3.5 pb-2">
+      {/* The overlap is one number, and the pill's top padding is derived from it rather than guessed:
+          the text has to clear the badge's lower edge whichever lap is in force. */}
+      <div
+        data-island
+        className="glass-pane pointer-events-auto flex max-w-[calc(100%-96px)] items-center gap-1.5 rounded-pill border border-border px-4 pb-2"
+        style={{ marginTop: -overlap, paddingTop: overlap + 6 }}
+      >
         {header.circular ? (
           <RotateCw size={13} aria-hidden className="shrink-0 text-subtle" />
         ) : (

@@ -11274,6 +11274,27 @@ pre-existing and unaddressed; it earned its keep here.
   the rider's stylesheet is unchanged. `test/dev-pages.test.mjs` polices imports and build inputs, and a
   stylesheet is neither — this is the same rule one layer down, in the one file that can state it.
 
+- **What the lab has answered since, on the owner's two tweaks.** The gutter's start marker is a
+  **square**, because a square is a terminus everywhere else in this app: `NODE_SHAPE.terminus` is the
+  shape the map's marker and the schematic's node are drawn from, so a dot here would have been a fourth
+  vocabulary for a fact the rider has already learnt twice. It is filled `surface` and stroked `route`
+  exactly as the node is — *inverted against the line rather than matched to it* — and the line is
+  `route-soft` at 3 px rather than the rail's 4, because the rail's weight is set by a 26 px node and this
+  one is 9. And the arrow **turns**: an arrowhead at the bottom of a gutter points at the line's end,
+  where an elbow that turns right points at the destination's *name*, which is what the mark is making a
+  claim about. Both tones are `route-soft`; a darker head read as a second object at this size.
+
+- **The island's vertical cost, measured — and the idea that did not work.** Today's collapsed pill is
+  **46 px**. The Messages island is **68 px** with the badge above the pill, which is the owner's own
+  reservation about it, and the obvious remedy is wrong: lapping the badge *deeper* recovers **nothing**,
+  because the pill's text has to clear the badge's lower edge, so the top padding gives back exactly what
+  the negative margin takes — both measured at 68. What does cost less is a **corner** lap, the badge over
+  the pill's top-left where there is no text to clear: **55 px**, with the overlap gesture intact. The
+  numbers are in the lab behind a toggle rather than in this prose alone, because the choice is the
+  owner's and it is a trade: 22 px of *map* — nothing else competes for that band, since the sheet owns
+  the bottom of this screen — against a treatment that is centred, clears the back lens by construction,
+  and fits a destination the 46 px pill truncates.
+
 - **What a headless browser could and could not see.** The animation exists and its keyframes are the
   measured heights, but *does it still read as a cut* is a question only a real tab can answer — and two
   environmental traps sat in the way of even the structural check. A page driven over CDP reports
