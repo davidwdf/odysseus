@@ -331,6 +331,13 @@ component is a step every other component then has to reason about.
     shadow's *lift* → surface lightness, shadow's *edge/silhouette* → the hairline `border`. Drop either and
     it looks wrong. "Shadows read poorly on dark" is a *consequence* of this budget swap, not a style choice.
   - **Glass is a separate channel, not an `ELEVATION` level** — see §"Glass legibility" below and ADR-035.
+- **Scroll edges (sheets):** a sheet's scrolling body **fades where its content passes under its top
+  edge**, and only once there is something above to fade — at the top the fade is 0 px and the first row is
+  drawn whole ([ADR-165](./08-decision-log.md#adr-165--a-sheets-scroll-edge-fades-and-the-fade-is-a-mask-rather-than-a-colour)).
+  It is a 14 px `mask-image` on the scroller (`.sheet-scroll` + `components/sheet/SheetScroll.tsx`), **not**
+  a gradient in the panel's colour: the app's two scrolling sheets sit on `bg-bg` and `bg-surface` and both
+  invert with the theme, so a colour would be two declarations that can disagree, while a mask fades the
+  content to whatever is behind it. This is the elevation-adjacent case where the answer is *not* a shadow.
 - **Floating chrome:** the tab bar is a `position:absolute` rounded **pill** (`radius` 24) with side +
   bottom margins lifted clear of the safe-area inset; content **scrolls underneath** it (§1). Geometry is
   centralized in `apps/mobile/lib/tabBarLayout.ts` (`useTabBarLayout()` → `bottom` offset + `contentInset`
