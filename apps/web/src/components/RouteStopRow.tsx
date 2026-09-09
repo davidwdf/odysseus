@@ -291,10 +291,19 @@ export function RouteStopRow({
               // marker in the line's own colour disappears into it. The rail says it the same way, so a
               // rider who saw a hexagon on the map finds the same hexagon, the same colour, in the list.
               className="absolute inset-0 h-full w-full fill-surface stroke-route"
-              // 2 **rendered** pixels, to match the rail line it sits on — so the width is expressed in
-              // viewBox units and the box is drawn 1:1, which is why every `viewBox` below is the glyph's
-              // real size rather than a tidy 24.
-              strokeWidth={2}
+              // **1.5 rendered pixels, and deliberately lighter than the 4 px line it sits on.** This was
+              // 2 "to match the rail line", back when that line was also 2 — and the justification
+              // inverted the day ADR-163 doubled the line: matching now would mean a 4 px ring, which is
+              // a blot at this size. A node is a *shape* and the line is a *stroke*, so they were never
+              // the same measurement; the node is read by its outline and its number, not by its weight.
+              //
+              // It also fixes something that looked like a different problem. The sequence number is
+              // 12 px regular, and against a 2 px ring it read as under-set — the ring out-weighing the
+              // figure it contains. Thinning the ring resolves that without touching type at all, which
+              // is worth remembering: *"the text looks thin"* is often a statement about what is next to
+              // it. Expressed in viewBox units on a box drawn 1:1, which is why every `viewBox` below is
+              // the glyph's real size rather than a tidy 24.
+              strokeWidth={1.5}
             >
               <path d={NODE_SHAPE[kind]} />
             </svg>

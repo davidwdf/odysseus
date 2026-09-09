@@ -56,17 +56,27 @@ module.exports = {
         10: '2.5rem',
         12: '3rem',
       },
-      // The named type scale → `text-display`, `text-h1`, … as [size, lineHeight]. The
-      // <Text> primitive is the canonical consumer; these keep the scale available to
-      // any className-driven markup too.
+      // The named type scale → `text-display`, `text-h1`, … as [size, lineHeight, weight].
+      //
+      // **The weight is in here, and it was not always.** This emitted `[size, lineHeight]`
+      // only, because the scale was written for a React Native `<Text>` primitive that read
+      // `TYPE[name].weight` and set the Inter cut itself — so the Tailwind side never needed
+      // it. Deleting `apps/mobile` (ADR-157) left className-driven markup as the ONLY
+      // consumer, and it silently lost the weight: `tokens.json` said `label` was medium
+      // while 25 uses of `text-label` rendered at 400, and `h2` said semibold while four
+      // uses wrote `font-bold`. Declared in one place and applied in thirty.
+      //
+      // A component may still override with a `font-*` utility, and that still wins: Tailwind
+      // emits `fontWeight` after `fontSize`, so the later rule takes it at equal specificity.
+      // What changes is that it now has to be written on purpose.
       fontSize: {
-        display: ['40px', '44px'],
-        h1: ['28px', '34px'],
-        h2: ['22px', '28px'],
-        h3: ['18px', '24px'],
-        body: ['16px', '24px'],
-        label: ['14px', '20px'],
-        caption: ['12px', '16px'],
+        display: ['40px', { lineHeight: '44px', fontWeight: '700' }],
+        h1: ['28px', { lineHeight: '34px', fontWeight: '700' }],
+        h2: ['22px', { lineHeight: '28px', fontWeight: '600' }],
+        h3: ['18px', { lineHeight: '24px', fontWeight: '500' }],
+        body: ['16px', { lineHeight: '24px', fontWeight: '400' }],
+        label: ['14px', { lineHeight: '20px', fontWeight: '500' }],
+        caption: ['12px', { lineHeight: '16px', fontWeight: '400' }],
       },
       // Every Inter cut plus the shared fallback tail. On web that gives a real stack
       // incl. CJK; on native fontFamily is single-valued and the OS handles CJK glyph

@@ -304,7 +304,7 @@ export const TYPE_SCALE = {
   /** Section headers. */
   h2: { fontSize: 22, lineHeight: 28, weight: 'semibold' },
   /** Card titles and route numbers. */
-  h3: { fontSize: 18, lineHeight: 24, weight: 'semibold' },
+  h3: { fontSize: 18, lineHeight: 24, weight: 'medium' },
   /** The default, and the minimum size on mobile. */
   body: { fontSize: 16, lineHeight: 24, weight: 'regular' },
   /** Secondary labels. */

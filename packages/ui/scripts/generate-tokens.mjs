@@ -205,6 +205,21 @@ const typeScale = names('type').map((name) => ({
   weight: at(`type.${name}.weight`),
 }))
 
+/**
+ * The numeric CSS weight for a cut name — `semibold` → `600`.
+ *
+ * Read **out of the cut's own family name** (`Inter_600SemiBold`) rather than declared a second time,
+ * because a `font.weight` group listing the same numbers is exactly the second declaration that drifts
+ * from the first. Throws rather than guessing: a cut whose name carries no weight is a token that
+ * cannot be emitted for the web, and a silent `400` would be a lie the whole scale rests on.
+ */
+const cutWeight = (name) => {
+  const family = at(`font.cut.${name}`)
+  const m = /(\d{3})/.exec(family)
+  if (!m) throw new Error(`${SOURCE}: font.cut.${name} ("${family}") carries no numeric weight`)
+  return m[1]
+}
+
 const cuts = flat('font.cut')
 const fallback = at('font.fallback')
 /** A cut plus the shared fallback tail. The tail is declared once in tokens.json and composed
@@ -420,12 +435,40 @@ function preset() {
   L.push('      spacing: {')
   for (const s of flat('spacing')) L.push(`        ${key(s.name)}: '${s.value / 16}rem',`)
   L.push('      },')
-  L.push('      // The named type scale → `text-display`, `text-h1`, … as [size, lineHeight]. The')
-  L.push('      // <Text> primitive is the canonical consumer; these keep the scale available to')
-  L.push('      // any className-driven markup too.')
+  L.push(
+    '      // The named type scale → `text-display`, `text-h1`, … as [size, lineHeight, weight].',
+  )
+  L.push('      //')
+  L.push(
+    '      // **The weight is in here, and it was not always.** This emitted `[size, lineHeight]`',
+  )
+  L.push(
+    '      // only, because the scale was written for a React Native `<Text>` primitive that read',
+  )
+  L.push(
+    '      // `TYPE[name].weight` and set the Inter cut itself — so the Tailwind side never needed',
+  )
+  L.push('      // it. Deleting `apps/mobile` (ADR-157) left className-driven markup as the ONLY')
+  L.push(
+    '      // consumer, and it silently lost the weight: `tokens.json` said `label` was medium',
+  )
+  L.push(
+    '      // while 25 uses of `text-label` rendered at 400, and `h2` said semibold while four',
+  )
+  L.push('      // uses wrote `font-bold`. Declared in one place and applied in thirty.')
+  L.push('      //')
+  L.push(
+    '      // A component may still override with a `font-*` utility, and that still wins: Tailwind',
+  )
+  L.push(
+    '      // emits `fontWeight` after `fontSize`, so the later rule takes it at equal specificity.',
+  )
+  L.push('      // What changes is that it now has to be written on purpose.')
   L.push('      fontSize: {')
   for (const t of typeScale)
-    L.push(`        ${key(t.name)}: ['${t.fontSize}px', '${t.lineHeight}px'],`)
+    L.push(
+      `        ${key(t.name)}: ['${t.fontSize}px', { lineHeight: '${t.lineHeight}px', fontWeight: '${cutWeight(t.weight)}' }],`,
+    )
   L.push('      },')
   L.push('      // Every Inter cut plus the shared fallback tail. On web that gives a real stack')
   L.push('      // incl. CJK; on native fontFamily is single-valued and the OS handles CJK glyph')

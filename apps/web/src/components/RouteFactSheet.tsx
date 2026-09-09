@@ -43,7 +43,7 @@ export function RouteFactSheet({
       titleId={TITLE_ID}
       onClose={onClose}
       header={
-        <h2 id={TITLE_ID} className="m-0 pb-2 text-h3 font-semibold text-text">
+        <h2 id={TITLE_ID} className="m-0 pb-2 text-h3 text-text">
           {t(locale, TITLE[sheet.kind])}
         </h2>
       }

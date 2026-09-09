@@ -45,7 +45,7 @@ export function Settings() {
   return (
     <main className="min-h-dvh bg-bg">
       <header className="px-4 pb-3 pt-2">
-        <h1 className="m-0 text-h1 font-bold text-text">{t(locale, 'tabSettings')}</h1>
+        <h1 className="m-0 text-h1 text-text">{t(locale, 'tabSettings')}</h1>
       </header>
 
       <Section title={t(locale, 'settingsLanguage')}>

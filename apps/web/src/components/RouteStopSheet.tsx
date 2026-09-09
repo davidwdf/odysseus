@@ -99,7 +99,7 @@ export function RouteStopSheet({
               spelling of `displayName` eleven lines away (WP6-6a). */}
           <div className="flex items-center gap-2">
             <MapPin size={18} aria-hidden className="shrink-0 text-text" />
-            <h2 id={TITLE_ID} className="m-0 min-w-0 flex-1 text-h3 font-semibold text-text">
+            <h2 id={TITLE_ID} className="m-0 min-w-0 flex-1 text-h3 text-text">
               {row.name.label}
             </h2>
           </div>

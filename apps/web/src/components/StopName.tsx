@@ -18,7 +18,7 @@ export function StopName({
   emphasis?: boolean
 }) {
   return (
-    <h3 className={`m-0 text-h3 font-semibold ${emphasis ? 'text-accent' : 'text-text'}`}>
+    <h3 className={`m-0 text-h3 ${emphasis ? 'text-accent' : 'text-text'}`}>
       {name.label}
       {name.code ? (
         <span className="align-middle text-caption text-subtle">

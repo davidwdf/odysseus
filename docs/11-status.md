@@ -2,6 +2,30 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-09-09 (latest) — the type scale's weights finally reach the web
+
+> **Shipped:** [ADR-164](./08-decision-log.md#adr-164--the-type-scales-weights-reach-the-web-and-h3-stops-shouting).
+> Asked whether the app's fonts were too heavy, the honest first answer was *we cannot tell from one
+> place, because they are not governed from one place.* `tokens.json` has declared a `weight` per type
+> step since the design system existed, and it reached the TS module, Swift and Kotlin — but **not
+> `preset.js`**, which emitted `[size, lineHeight]`. Not a bug when written: the canonical consumer was
+> the RN `<Text>` primitive, which set the Inter cut itself. **ADR-157 deleted that consumer** and
+> nothing replaced it. Measured drift: `label` declared medium against **25 uses rendering at 400**,
+> `h2` declared semibold against four writing `font-bold`.
+>
+> `text-h3` now carries its weight, read out of the cut's own name (`Inter_600SemiBold` → `600`) so the
+> number is not declared twice. Overrides still win at any class order — **measured in a browser**, not
+> assumed, because two unvariant utilities of equal specificity are decided by emission order and this
+> repo has been bitten by that before. Eleven hand-applied weights that merely restated their token are
+> gone; the nine that differ are kept and are now deliberate.
+>
+> **`h3` is medium, not semibold.** It sets every stop name in a 25-row list, and at 600 the weight had
+> stopped being a signal and become texture — the arrival times were competing with the labels above
+> them instead of out-ranking them. And the rail node's ring thins to 1.5, whose old justification
+> (*"to match the rail line"*) expired the day ADR-163 doubled that line. That also fixed the sequence
+> number looking thin: it is 12 px regular inside what was a 2 px ring. **"This text looks thin" is
+> often a statement about what is next to it.**
+
 ## 🔵 Snapshot 2026-09-09 (later) — a quieter colour is a colour, not an opacity
 
 > **Shipped:** [ADR-163](./08-decision-log.md#adr-163--a-quieter-colour-is-a-colour-not-an-opacity-and-the-rails-chevrons-become-the-maps).

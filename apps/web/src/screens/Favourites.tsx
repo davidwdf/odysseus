@@ -103,14 +103,12 @@ export function Favourites() {
   return (
     <main className="min-h-dvh bg-bg">
       <header className="px-4 pb-3 pt-2">
-        <h1 className="m-0 text-h1 font-bold text-text">{t(locale, 'tabFavorites')}</h1>
+        <h1 className="m-0 text-h1 text-text">{t(locale, 'tabFavorites')}</h1>
       </header>
 
       {poleIds.length === 0 ? (
         <div className="flex min-h-[60dvh] flex-col items-center justify-center px-6">
-          <h2 className="m-0 text-center text-h3 font-semibold text-text">
-            {t(locale, 'favoritesEmpty')}
-          </h2>
+          <h2 className="m-0 text-center text-h3 text-text">{t(locale, 'favoritesEmpty')}</h2>
           <p className="m-0 mt-2 text-center text-body text-muted">
             {t(locale, 'favoritesEmptyHelp')}
           </p>

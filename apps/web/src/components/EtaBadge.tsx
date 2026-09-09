@@ -37,10 +37,7 @@ export function EtaBadge({ label, urgency }: { label: EtaLabelParts; urgency: Et
     <span className="flex shrink-0 items-baseline">
       {label.kind === 'mins' ? (
         <>
-          <SlideNumber
-            value={String(label.value)}
-            className={`text-h2 font-semibold tabular-nums ${tone}`}
-          />
+          <SlideNumber value={String(label.value)} className={`text-h2 tabular-nums ${tone}`} />
           <span className="ml-0.5 text-caption text-muted">{label.unit}</span>
         </>
       ) : label.kind === 'headway' ? (
@@ -49,7 +46,7 @@ export function EtaBadge({ label, urgency }: { label: EtaLabelParts; urgency: Et
         // seen. See the RN twin for the longer note.
         <span className="max-w-[120px] text-right text-caption text-subtle">{label.text}</span>
       ) : (
-        <span className={`text-h2 font-semibold tabular-nums ${tone}`}>
+        <span className={`text-h2 tabular-nums ${tone}`}>
           {label.kind === 'due' ? label.label : '—'}
         </span>
       )}

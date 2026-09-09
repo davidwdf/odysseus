@@ -225,17 +225,34 @@ WCAG-AA before shipping.
 ```
 
 ### Type scale (mobile-first, 16px base)
-| Token | Size / line-height | Use |
-|---|---|---|
-| `display` | 40 / 44 | the hero ETA number |
-| `h1` | 28 / 34 | screen titles |
-| `h2` | 22 / 28 | section headers |
-| `h3` | 18 / 24 | card titles / route no. |
-| `body` | 16 / 24 | default (min on mobile) |
-| `label` | 14 / 20 | secondary labels |
-| `caption` | 12 / 16 | timestamps only — never essential info |
+| Token | Size / line-height | Weight | Use |
+|---|---|---|---|
+| `display` | 40 / 44 | 700 bold | the hero ETA number |
+| `h1` | 28 / 34 | 700 bold | screen titles |
+| `h2` | 22 / 28 | 600 semibold | section headers |
+| `h3` | 18 / 24 | **500 medium** | card titles / stop names / route no. |
+| `body` | 16 / 24 | 400 regular | default (min on mobile) |
+| `label` | 14 / 20 | 500 medium | secondary labels |
+| `caption` | 12 / 16 | 400 regular | timestamps only — never essential info |
 
-Weights: Inter 400 / 500 / 600 / 700. 600 for emphasis, 700 for hero numerals. Body line-height 1.5.
+Weights: Inter 400 / 500 / 600 / 700. Body line-height 1.5.
+
+> **The weight is part of the token, and `text-h3` applies it.** It did not always: the scale was written
+> for a React Native `<Text>` primitive that read `TYPE[name].weight` and set the Inter cut itself, so the
+> Tailwind preset emitted `[size, lineHeight]` only. Deleting `apps/mobile` (ADR-157) left className-driven
+> markup as the sole consumer and it silently lost the weight — `label` was declared medium while 25 uses
+> rendered at 400, and `h2` semibold while four wrote `font-bold`. **Declared once, applied thirty times.**
+> Wired in ADR-164; `preset.js` now emits `['18px', { lineHeight, fontWeight }]`.
+>
+> A `font-*` utility still overrides, and still wins at any class order — Tailwind emits `fontWeight`
+> after `fontSize`, which was **measured in a browser rather than assumed**, because two unvariant
+> utilities of equal specificity are decided by emission order and this repo has been bitten by that
+> before. What changed is that an override now has to be written on purpose: the nine that remain differ
+> from their token deliberately, and eleven that merely restated it are gone.
+>
+> **`h3` is 500, not 600.** It sets every stop name in a 25-row list, and at 600 the weight stopped being
+> a signal and became texture — the arrival times, which are the answer a rider came for, were competing
+> with the labels above them rather than out-ranking them. Judged by rendering both, not argued.
 
 ---
 

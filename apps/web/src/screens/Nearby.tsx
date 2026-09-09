@@ -96,7 +96,7 @@ export function Nearby() {
   return (
     <main className="min-h-dvh bg-bg">
       <header className="px-4 pb-3 pt-2">
-        <h1 className="m-0 text-h1 font-bold text-text">{t(locale, 'nearbyTitle')}</h1>
+        <h1 className="m-0 text-h1 text-text">{t(locale, 'nearbyTitle')}</h1>
         <p className="m-0 mt-1 text-label text-muted">
           {/* Say so when the list is anchored on a remembered fix rather than a live one — offline, or
               while the first reading is still coming in. ADR-008's honesty rule applies to the
@@ -107,16 +107,14 @@ export function Nearby() {
 
       {loc.status === 'undetermined' ? (
         <Centred>
-          <h2 className="m-0 text-center text-h2 font-semibold text-text">
-            {t(locale, 'nearbyPrimeTitle')}
-          </h2>
+          <h2 className="m-0 text-center text-h2 text-text">{t(locale, 'nearbyPrimeTitle')}</h2>
           <p className="mb-5 mt-2 text-center text-body text-muted">
             {t(locale, 'nearbyPrimeBody')}
           </p>
           <button
             type="button"
             onClick={request}
-            className="inline-flex items-center gap-2 rounded-pill border-0 bg-accent px-5 py-3 text-label font-medium text-accent-contrast focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+            className="inline-flex items-center gap-2 rounded-pill border-0 bg-accent px-5 py-3 text-label text-accent-contrast focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
           >
             <LocateFixed aria-hidden width={18} height={18} />
             {t(locale, 'enableLocation')}
