@@ -1,45 +1,40 @@
-import { LocateFixed, type LucideIcon, Maximize } from 'lucide-react'
+import { LocateFixed, type LucideIcon } from 'lucide-react'
 
 /**
- * **The two controls a route map actually needs**, floating over its bottom-right corner.
+ * **The one control a route map actually needs**, floating over its bottom-right corner.
  *
- * Deliberately two, and deliberately not zoom. A rider on a phone pinches; a pair of `+`/`−` buttons
- * is desktop furniture that costs two more targets in the one corner where the sheet's own handle is
- * already competing for the thumb. What a touch map cannot do by gesture is *go back to where it
- * started* and *find me* — so those are the two here.
+ * Deliberately not zoom: a rider on a phone pinches, and a pair of `+`/`−` buttons is desktop
+ * furniture costing two more targets in the corner where the sheet's own handle already competes for
+ * the thumb. What a touch map cannot do by gesture is **find me**, so that is what is here.
  *
- * Each appears only when it can act. `onRecentre` is absent until the rider has moved the camera, and
- * `onLocate` until a fix exists: a control that cannot do its job is worse than an absent one, because
- * pressing it teaches nothing about why nothing happened.
+ * ## There were two, and *show the whole route* was cut
+ *
+ * It re-framed the line after the rider had panned away. Built in ADR-158, dropped in ADR-162 on the
+ * owner's *"I'm not sure how useful it is?"* — and the doubt was right twice over. A rider who pans a
+ * map is looking at something, so a button offering to undo that answers a question few of them
+ * asked; it earned its place mostly by being the obvious second thing to put in a corner with room.
+ * And it stopped making sense once the screen began **opening focused on a stop**, because then there
+ * is no framed overview to go *back* to.
+ *
+ * `onLocate` appears only when a fix exists: a control that cannot do its job is worse than an absent
+ * one, because pressing it teaches nothing about why nothing happened.
  */
 export function MapControls({
-  onRecentre,
-  recentreLabel,
   onLocate,
   locateLabel,
   bottom,
 }: {
-  onRecentre?: (() => void) | undefined
-  recentreLabel: string
   onLocate?: (() => void) | undefined
   locateLabel: string
   /** Clearance for whatever is covering the map's bottom edge — the sheet. In CSS pixels. */
   bottom: number
 }) {
-  if (!onRecentre && !onLocate) return null
+  if (!onLocate) return null
   return (
     <div
       className="pointer-events-none absolute right-3 z-10 flex flex-col gap-2"
       style={{ bottom: bottom + 12, transition: 'bottom 500ms cubic-bezier(0.22, 1, 0.36, 1)' }}
     >
-      {/* `Maximize` — four corner brackets, the universal "fit to view". It was a hand-drawn glyph:
-          the same brackets with a curved line inside them meaning "the route", which the owner read as
-          *"the button with the squiggle in the brackets"* and could not act on. The lesson is in
-          `icons/index.ts`: a glyph drawn outside the icon set is a glyph nothing keeps to the set's
-          shapes, and two marks in a 20 px square is one more than it holds. */}
-      {onRecentre ? (
-        <ControlButton label={recentreLabel} icon={Maximize} onPress={onRecentre} />
-      ) : null}
       {/* `LocateFixed` — the crosshair-with-a-dot a rider has met in every map app they have used, and
           the same glyph Nearby already uses for the same act. */}
       {onLocate ? (

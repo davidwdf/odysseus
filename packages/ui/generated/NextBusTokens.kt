@@ -35,6 +35,26 @@ object NextBusTokens {
         val surface2: Color = Color(0xFFF1F5F9)
         /** Hairline divider and the silhouette a dark-mode surface uses instead of a shadow. */
         val border: Color = Color(0xFFE2E8F0)
+        /**
+         * The route line — **the same colour the map draws it in**, so the stop list's rail
+         * and the line on the map read as one object rather than two views that happen to
+         * agree. Aliased to `color.map.route`/`routeInverted` rather than given a value of its
+         * own: those exist because MapLibre needs both halves of the pair as literals, and a
+         * second declaration here is exactly how the rail and the line would drift apart.
+         * Semantic because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
+         */
+        val route: Color = Color(0xFF2C3343)
+        /**
+         * The route line **quietened for the rail** — connective tissue, where `route` is the
+         * line itself. A SOLID value, and that is the decision rather than a detail: the rail
+         * was drawn as `route` at 45 % opacity, which looks right in isolation and betrays
+         * itself wherever two of its shapes overlap — a line under a node's stroke, a chevron
+         * over a line — because each overlap composites twice and reads as a darker seam.
+         * Alpha cannot express *"this quieter colour"*; it expresses *"less of this colour,
+         * wherever it happens to land"*. Chosen to match what that blend rendered as over the
+         * sheet's own background, so the appearance is unchanged and only the seams go.
+         */
+        val routeSoft: Color = Color(0xFF9EA5B4)
         /** Body text. ≥ 4.5:1 against `bg` in both modes. */
         val text: Color = Color(0xFF111827)
         /**
@@ -74,6 +94,26 @@ object NextBusTokens {
         val surface2: Color = Color(0xFF202636)
         /** Hairline divider and the silhouette a dark-mode surface uses instead of a shadow. */
         val border: Color = Color(0xFF2C3343)
+        /**
+         * The route line — **the same colour the map draws it in**, so the stop list's rail
+         * and the line on the map read as one object rather than two views that happen to
+         * agree. Aliased to `color.map.route`/`routeInverted` rather than given a value of its
+         * own: those exist because MapLibre needs both halves of the pair as literals, and a
+         * second declaration here is exactly how the rail and the line would drift apart.
+         * Semantic because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
+         */
+        val route: Color = Color(0xFFE2E8F0)
+        /**
+         * The route line **quietened for the rail** — connective tissue, where `route` is the
+         * line itself. A SOLID value, and that is the decision rather than a detail: the rail
+         * was drawn as `route` at 45 % opacity, which looks right in isolation and betrays
+         * itself wherever two of its shapes overlap — a line under a node's stroke, a chevron
+         * over a line — because each overlap composites twice and reads as a darker seam.
+         * Alpha cannot express *"this quieter colour"*; it expresses *"less of this colour,
+         * wherever it happens to land"*. Chosen to match what that blend rendered as over the
+         * sheet's own background, so the appearance is unchanged and only the seams go.
+         */
+        val routeSoft: Color = Color(0xFF6B7280)
         /** Body text. ≥ 4.5:1 against `bg` in both modes. */
         val text: Color = Color(0xFFF4F6FA)
         /**

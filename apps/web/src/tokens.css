@@ -13,6 +13,8 @@
   --surface: 248 250 252;
   --surface-2: 241 245 249;
   --border: 226 232 240;
+  --route: 44 51 67;
+  --route-soft: 158 165 180;
   --text: 17 24 39;
   --text-muted: 71 85 105;
   --text-subtle: 100 116 139;
@@ -29,6 +31,8 @@
   --surface: 22 27 41;
   --surface-2: 32 38 54;
   --border: 44 51 67;
+  --route: 226 232 240;
+  --route-soft: 107 114 128;
   --text: 244 246 250;
   --text-muted: 158 165 180;
   --text-subtle: 107 114 128;

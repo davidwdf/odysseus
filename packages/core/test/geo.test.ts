@@ -9,6 +9,7 @@ import {
   formatWalkRange,
   haversineMeters,
   initialBearingDeg,
+  nearestIndex,
   routeDistanceM,
   walkMinutes,
 } from '../src/geo'
@@ -54,6 +55,32 @@ describe('geo#routeDistanceM', () => {
       expectApprox(routeDistanceM(c.args.points), c.expect)
     })
   }
+})
+
+describe('geo#nearestIndex', () => {
+  interface Args {
+    points: LatLng[]
+    to: LatLng
+    maxMeters?: number
+  }
+  for (const c of cases<Args, number>('nearestIndex')) {
+    it(c.name, () => {
+      expect(nearestIndex(c.args.points, c.args.to, c.args.maxMeters)).toBe(c.expect)
+    })
+  }
+
+  it('never answers with a point further away than one it rejected', () => {
+    // A property over the group rather than a value: the failure this guards is a `<=` where the tie
+    // rule needs `<`, which would return the LAST of equal distances and silently disagree with the
+    // ports. Re-derived here from the distances rather than read off the corpus.
+    for (const c of cases<Args, number>('nearestIndex')) {
+      const i = nearestIndex(c.args.points, c.args.to, c.args.maxMeters)
+      if (i < 0) continue
+      const chosen = haversineMeters(c.args.points[i] as LatLng, c.args.to)
+      for (const p of c.args.points)
+        expect(chosen).toBeLessThanOrEqual(haversineMeters(p, c.args.to))
+    }
+  })
 })
 
 describe('geo#walkMinutes', () => {

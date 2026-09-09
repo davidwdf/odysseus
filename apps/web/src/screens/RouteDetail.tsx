@@ -1,6 +1,8 @@
 import {
   applyLiveEtasToRouteDetail,
   displayName,
+  type LatLng,
+  nearestIndex,
   type RouteDetail as RouteDetailPayload,
   type RouteDetailView,
   type RouteFactKey,
@@ -15,7 +17,7 @@ import { t } from '@nextbus/i18n'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ClockFading, CreditCard, type LucideIcon, MapPin, Repeat, Star } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { DirectionSwapIcon } from '../components/DirectionSwapIcon'
 import { FeedNotice, feedNotice } from '../components/FeedNotice'
@@ -69,6 +71,7 @@ import { RouteContextCard } from './route/RouteContextCard'
 export function RouteDetail() {
   const { id } = useParams<{ id: string }>()
   const [search] = useSearchParams()
+  const location = useLocation()
   // The stop the rider arrived from (place → route), if any — its row is emphasised and scrolled to.
   const arrivedFromStop = search.get('stop') ?? undefined
   const locale = useLocale()
@@ -142,6 +145,11 @@ export function RouteDetail() {
         (query.data?.stops ?? []).map((s) => ({
           location: s.stop.location,
           name: displayName(s.stop.name[locale]).label,
+          // **The wire's number, not the array index.** `routeDetailView` reads `s.seq` for the rail's
+          // node for the same reason: a payload whose sequence does not start at 1 would have the map
+          // and the list printing different numbers for one stop, which is precisely the confusion the
+          // focused marker's numeral exists to remove (ADR-162).
+          seq: s.seq,
         })),
       [query.data?.stops, locale],
     ),
@@ -278,15 +286,18 @@ export function RouteDetail() {
     else rows.current.set(index, el)
   }, [])
   /**
-   * The stop the rider is looking at on the map — set by tapping a marker, and the camera follows it
-   * (`RouteMap`). `undefined` until they ask: a screen that opened with a stop pre-selected would be
-   * answering a question nobody put.
+   * **The stop this screen is about** — the camera is on it, its row is tinted, and its marker is grown
+   * with its number in it.
    *
-   * ⚠️ **Row taps do not set this yet.** §8d makes a row tap the primary way to focus a stop and moves
-   * the action sheet onto a per-row `⋯`, but that is a *declared* interaction in
-   * `route-detail.spec.json` (`stopName` → "a sheet offering to save this route…"), so it moves with
-   * the spec and both drivers rather than ahead of them. Until then a marker is the only way in, which
-   * is a smaller surface than §8d describes and not a different one.
+   * `undefined` until it is seeded, and the seed is the point: it used to open `undefined` on the
+   * reasoning that *"a screen that opened with a stop pre-selected would be answering a question nobody
+   * put"*. That was wrong whenever the rider arrived **from a stop**, because then they had put exactly
+   * that question — and the screen answered it in a second, competing vocabulary (`row.here`: a tinted
+   * row and a dot in its node) which could be lit at the same time as this one. ADR-162 merges them:
+   * seeded by where you came from, owned by whatever you tap.
+   *
+   * `seedFocus` below resolves the seed. It is state rather than a derivation because a tap must be
+   * able to move it off the seed and stay moved.
    */
   const [focusedIndex, setFocusedIndex] = useState<number | undefined>(undefined)
   /**
@@ -404,16 +415,63 @@ export function RouteDetail() {
 
   // The reveal's one beat: bring the boarding row up, once, as soon as it exists. `scrollIntoView` rather than
   // a computed offset, so the browser honours `scroll-behavior` and the rider's reduced-motion setting.
-  const scrolled = useRef(false)
-  const hereIndex = view?.hereIndex ?? -1
+  /**
+   * The route this screen has already opened on, so the reveal fires **once per direction** rather
+   * than once per mount.
+   *
+   * A boolean here was a real bug, and an invisible one until the flip started carrying focus: a
+   * direction swap changes `:id` **without unmounting this component** — react-router re-renders it
+   * with new params — so `scrolled.current` stayed `true` from the outbound leg and the inbound one
+   * silently skipped both its scroll and its focus. Keyed on the id, it resets itself, and there is no
+   * ordering question about when a reset effect runs relative to this one.
+   */
+  const scrolled = useRef<string | undefined>(undefined)
+  /**
+   * **Where this screen opens** — the row it scrolls to and the stop it focuses.
+   *
+   * Two ways in, in order. `view.hereIndex` is the kernel's answer for the stop named by `?stop=`,
+   * which is how arriving from a place or a search result lands you on your own kerb.
+   *
+   * When that finds nothing, `near` does — the coordinates of the stop the rider was looking at,
+   * handed over by the direction-swap link in router **state**. The reverse direction's kerbs are
+   * different ids, so an id cannot survive a flip; where the rider was standing can. `geo#nearestIndex`
+   * caps the match at 500 m and answers -1 beyond it, so flipping a route whose two directions do not
+   * share ground lands with nothing focused rather than somewhere invented.
+   *
+   * Router state rather than a query parameter, deliberately: this is a hand-off between two views and
+   * not a fact about the URL, so a shared or reloaded link opens unfocused — which is exactly the
+   * behaviour a cold arrival should have.
+   */
+  const near = (location.state as { near?: LatLng } | null)?.near
+  const seedFocus = useMemo(() => {
+    // **Only once the payload on screen is this route's.** `keepPreviousData` deliberately holds the
+    // previous direction's stops while a flip loads (ADR-046), so for a few frames `id` is the new
+    // direction and `stopPoints` is the old one. Seeding then measures "where was I standing" against
+    // the stops the rider was *already* looking at, finds the stop they came from, and marks the reveal
+    // done — so the flip landed back on the same seq it started from and looked, convincingly, like the
+    // carry had worked.
+    if (view === undefined || query.data?.route.id !== id) return -1
+    if (view.hereIndex >= 0) return view.hereIndex
+    return near
+      ? nearestIndex(
+          stopPoints.map((p) => p.location),
+          near,
+        )
+      : -1
+  }, [view, near, stopPoints, query.data?.route.id, id])
+  const hereIndex = seedFocus
   // biome-ignore lint/correctness/useExhaustiveDependencies: as above — `stopCount` is when the row exists to scroll to
   useEffect(() => {
-    if (scrolled.current || hereIndex < 0) return
+    if (scrolled.current === id || hereIndex < 0) return
     const row = rows.current.get(hereIndex)
     if (row === undefined) return
-    scrolled.current = true
+    scrolled.current = id
+    // The same beat seeds the focus. Together rather than in two effects because they are one event —
+    // *this is where you are* — and splitting them is how the list and the map end up disagreeing on
+    // the first frame.
+    setFocusedIndex(hereIndex)
     row.scrollIntoView({ block: 'start' })
-  }, [hereIndex, stopCount])
+  }, [hereIndex, stopCount, id])
 
   const openStop = (row: RouteStopRowView) =>
     navigate(`/stop/${encodeURIComponent(row.stopId)}?pole=${encodeURIComponent(row.stopId)}`)
@@ -545,6 +603,19 @@ export function RouteDetail() {
             view.header.reverseId !== undefined ? (
               <Link
                 to={`/route/${encodeURIComponent(view.header.reverseId)}`}
+                // **Where the rider was standing, handed to the other direction.** The reverse route's
+                // kerbs are different ids, so `?stop=` cannot survive a flip and `hereIndex` comes back
+                // -1 — which is why flipping used to drop you at the top of a 40-stop list with nothing
+                // focused. Coordinates do survive: `geo#nearestIndex` finds the stop across the road.
+                //
+                // Router state, not a query parameter. It is a hand-off between two views rather than a
+                // fact about the URL, so a shared or reloaded link opens unfocused — the right behaviour
+                // for a cold arrival, and it keeps a shareable URL free of a position.
+                state={
+                  focusedIndex !== undefined && stopPoints[focusedIndex]
+                    ? { near: stopPoints[focusedIndex]?.location }
+                    : undefined
+                }
                 onClick={armFlip}
                 aria-label={t(locale, 'reverseDirection')}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-text no-underline active:opacity-70"
@@ -594,15 +665,11 @@ export function RouteDetail() {
             pending={routePath.isPending}
             stops={stopPoints}
             focusedIndex={focusedIndex}
-            boardingIndex={view.hereIndex >= 0 ? view.hereIndex : undefined}
             onSelectStop={focusStop}
             rider={rider}
             visibleInset={{ bottom: sheetFraction, top: CHROME_INSET_FRACTION }}
             onInteract={() => setChromeCollapsed(true)}
-            controlLabels={{
-              recentre: t(locale, 'mapShowWholeRoute'),
-              locate: t(locale, 'mapShowMyLocation'),
-            }}
+            controlLabels={{ locate: t(locale, 'mapShowMyLocation') }}
             className="absolute inset-0"
           />
 

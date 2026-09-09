@@ -641,7 +641,31 @@
   transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .route-marker-host-selected .route-marker-scale {
-  transform: scale(1.45);
+  /* 2.1, up from 1.45, because the focused marker now has to hold a **numeral** (ADR-162). At 1.45 a
+     12 px stop is 17 px with a 4.6 px ring around it — about 8 px of clear middle, which two digits
+     cannot occupy legibly. At 2.1 it is 25 px with roughly 20 px of middle. */
+  transform: scale(2.1);
+}
+/* The ring thins as the marker grows, which is not decoration: `stroke-width` is in viewBox units, so
+   a 3.2 stroke scaled 2.1× renders at 6.7 px and eats the room the number needs. Thinning to 2.2
+   holds the *rendered* weight roughly where it was on an unselected marker while giving the numeral
+   its middle back. */
+.route-marker-host-selected .route-marker {
+  stroke-width: 2.2;
+}
+/* **The focused marker's sequence number** — the same figure the rail prints in that stop's node, so
+   the two views are matched by their content rather than by a shared decoration.
+
+   Drawn on every marker and revealed by opacity rather than written in on selection. Rebuilding the
+   marker's `innerHTML` when it is tapped would work, but a replaced element has no prior style, so it
+   would arrive at full size with no transition — the same trap `useRailFlip` documents, and the reason
+   the scale above lives on a wrapper. Twenty-five hidden `<text>` nodes cost nothing. */
+.route-marker-seq {
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.route-marker-host-selected .route-marker-seq {
+  opacity: 1;
 }
 /* At 160 ms this is a state change with a shape rather than an animation — but a rider who has asked
    for less motion gets the state and not the shape, which is the same call `row-rise` documents. */
@@ -657,6 +681,13 @@
    marker is 1.45× the size with a heavier stroke, which is the same signal without a second visual
    language on the map. It would also have needed a raw `rgb()`, which `check-no-raw-colours` caught —
    two reasons pointing the same way. */
+
+/* Reduced motion applies to the numeral too — it appears, it does not fade. */
+@media (prefers-reduced-motion: reduce) {
+  .route-marker-seq {
+    transition: none;
+  }
+}
 
 /* The bus token's outline, as a shape that can become another one (`RailBusToken`).
 

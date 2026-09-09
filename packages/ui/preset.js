@@ -18,6 +18,8 @@ module.exports = {
         surface: 'rgb(var(--surface) / <alpha-value>)',
         'surface-2': 'rgb(var(--surface-2) / <alpha-value>)',
         border: 'rgb(var(--border) / <alpha-value>)',
+        route: 'rgb(var(--route) / <alpha-value>)',
+        'route-soft': 'rgb(var(--route-soft) / <alpha-value>)',
         text: 'rgb(var(--text) / <alpha-value>)',
         muted: 'rgb(var(--text-muted) / <alpha-value>)',
         subtle: 'rgb(var(--text-subtle) / <alpha-value>)',

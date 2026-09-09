@@ -121,7 +121,6 @@
 "routeShowDetails" = "顯示路線詳情";
 "fareNoJoyYou" = "$2 計劃不適用於機場路線。";
 "fareFromHere" = "由此起";
-"mapShowWholeRoute" = "顯示整條路線";
 "mapShowMyLocation" = "顯示我的位置";
 "routeHideDetails" = "隱藏路線詳情";
 "routeStopsSheet" = "本路線的車站";

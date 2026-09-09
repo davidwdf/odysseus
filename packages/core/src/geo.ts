@@ -31,9 +31,16 @@ export function haversineMeters(a: LatLng, b: LatLng): number {
 
 /** Total straight-line length of a path through ordered points — the sum of great-circle hops
  *  between consecutive points. Used as an APPROXIMATE bus-route distance from its stop
- *  coordinates: HK open data carries no route polylines, so this under-counts the real road
- *  distance (a bus follows curving roads, not straight hops) and is only ever shown as an
- *  explicit estimate (ADR-008 / ADR-044). Returns 0 for fewer than two points.
+ *  coordinates, which under-counts the real road distance (a bus follows curving roads, not
+ *  straight hops) and is only ever shown as an explicit estimate (ADR-008 / ADR-044). Returns 0
+ *  for fewer than two points.
+ *
+ *  This used to say *"HK open data carries no route polylines"*, which was **wrong** and is the same
+ *  falsehood ADR-151 found in four docs: the Transport Department has published surveyed route lines
+ *  since 2021, and `resolveRoutePath` draws them. The estimate stays as it is because the facts strip
+ *  must answer for every route including the ~3 % with no surveyed line, and a distance that changed
+ *  its basis per route would be two different numbers under one label. Measuring the surveyed line
+ *  where we have one is a real improvement, and is filed in `docs/07`.
  *
  * @spec geo#routeDistanceM
  */
@@ -46,6 +53,55 @@ export function routeDistanceM(points: LatLng[]): number {
   }
   return total
 }
+
+/**
+ * The index of the point nearest `to`, or **-1** when the list is empty or nothing is within
+ * `maxMeters`.
+ *
+ * Pure geometry over `LatLng`s rather than over stops, because it has two callers with nothing else
+ * in common: carrying the rider's place in the list **across a direction flip** — the reverse
+ * direction's kerbs are different ids, so the only thing that survives is *where you were standing* —
+ * and, later, marking the stop nearest the rider's own position. A rule that knew what a stop was
+ * would have to be told twice.
+ *
+ * ## The cap is the whole of the rule
+ *
+ * Without `maxMeters` this always answers, and the answer is worthless when the two directions do not
+ * serve the same ground: flip a route that loops out one way and back another and the "nearest" stop
+ * can be kilometres off — a confident focus on somewhere the rider has never been. Beyond the cap the
+ * honest answer is **-1**, which callers render as *no focus at all*.
+ *
+ * The default is 500 m, a judgement about Hong Kong rather than a round number: an opposite kerb is
+ * typically within 40 m, a divided carriageway or a flyover puts its pair 100-200 m away, and a
+ * one-way system through Central or Mong Kok can legitimately separate the two directions by three or
+ * four hundred metres. Past that they are not the same place any more.
+ *
+ * **Ties go to the lower index** — the earlier stop in the sequence. Arbitrary but fixed, so three
+ * ports cannot disagree, and the case is real rather than theoretical: a route that passes one kerb
+ * twice has two stops on the same coordinate.
+ *
+ * @spec geo#nearestIndex
+ */
+export function nearestIndex(
+  points: readonly LatLng[],
+  to: LatLng,
+  maxMeters = NEAR_LIMIT_M,
+): number {
+  let best = -1
+  let bestM = Number.POSITIVE_INFINITY
+  points.forEach((p, i) => {
+    const m = haversineMeters(p, to)
+    // Strictly less-than, so the FIRST of equal distances wins and the tie rule above holds.
+    if (m < bestM && m <= maxMeters) {
+      best = i
+      bestM = m
+    }
+  })
+  return best
+}
+
+/** How far apart two points may be and still count as the same place. Metres — see `nearestIndex`. */
+const NEAR_LIMIT_M = 500
 
 /** Average pedestrian pace, metres per minute (~4.8 km/h). */
 const WALK_M_PER_MIN = 80

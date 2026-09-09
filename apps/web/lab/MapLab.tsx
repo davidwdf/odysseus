@@ -124,7 +124,7 @@ const ROUTES = [
 function RouteLines() {
   const [i, setI] = useState(0)
   const [path, setPath] = useState<RoutePath | undefined>(undefined)
-  const [stops, setStops] = useState<readonly MarkerStop[]>([])
+  const [stops, setStops] = useState<readonly (MarkerStop & { seq: number })[]>([])
   const [pending, setPending] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const route = ROUTES[i] ?? ROUTES[0]
@@ -143,6 +143,8 @@ function RouteLines() {
           detail.stops.map((row) => ({
             location: row.stop.location,
             name: displayName(row.stop.name.en).label,
+            // The wire's number, which the focused marker prints (ADR-162).
+            seq: row.seq,
           })),
         )
         setPending(false)
@@ -184,7 +186,7 @@ function RouteLines() {
           path={path}
           pending={pending}
           stops={stops}
-          controlLabels={{ recentre: 'Show the whole route', locate: 'Show my location' }}
+          controlLabels={{ locate: 'Show my location' }}
           className="relative h-[420px] w-full overflow-hidden rounded-lg"
         />
       )}

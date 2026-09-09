@@ -114,7 +114,6 @@ export function RouteMap({
   pending,
   stops,
   focusedIndex,
-  boardingIndex,
   onSelectStop,
   rider,
   visibleInset,
@@ -127,11 +126,14 @@ export function RouteMap({
   /** True while the answer is in flight. Not the same as an answer of “no line”. */
   pending: boolean
   /** The route's stops in travel order — the sketch's raw material, and the map's framing. */
-  stops: readonly MarkerStop[]
+  /**
+   * The stops, with the **wire's** sequence number alongside what `routeMarkers` needs. Widened here
+   * rather than on the kernel's `MarkerStop`, because `routeMarkers` has no use for a `seq` and a
+   * kernel type should not carry a field only a renderer reads.
+   */
+  stops: readonly (MarkerStop & { seq: number })[]
   /** The stop the rider has focused, by index. The camera goes there; the marker grows. */
   focusedIndex?: number | undefined
-  /** The stop they arrived from, by index — marked inside rather than by growing. */
-  boardingIndex?: number | undefined
   /** A marker was tapped. The screen decides what that means — here it is only reported. */
   onSelectStop?: ((index: number) => void) | undefined
   /** The rider's own position, if they have granted it. `undefined` means no mark is drawn. */
@@ -148,7 +150,7 @@ export function RouteMap({
   /** The rider touched the map. The screen uses it to collapse its chrome; the map itself does not care. */
   onInteract?: (() => void) | undefined
   /** Names for the two floating controls — this component owns *when* they appear, not what they say. */
-  controlLabels: { recentre: string; locate: string }
+  controlLabels: { locate: string }
   className?: string
 }) {
   const locale = useLocale()
@@ -164,6 +166,11 @@ export function RouteMap({
    * already looking at, and a button that does nothing is a button that teaches them not to press it.
    */
   const [moved, setMoved] = useState(false)
+  /** `focusedIndex` for effects that must *test* it without re-running when it changes. */
+  const focusRef = useRef(focusedIndex)
+  focusRef.current = focusedIndex
+  /** False until the camera has been placed once — see the focus effect. */
+  const flown = useRef(false)
   /** The placed marker elements, so selection can be moved between them without replacing any. */
   const markerElements = useRef<HTMLElement[]>([])
   // The focused stop as a REF as well as a value: the placement effect has to apply the current
@@ -300,7 +307,11 @@ export function RouteMap({
    * letting this effect run again.
    */
   useEffect(() => {
-    if (!map || !bounds || moved) return
+    // **`focusedIndex` is a guard, not a dependency to react to.** A screen opened from a stop starts
+    // focused on it (ADR-162), and without this the camera would fit the whole route and then fly to
+    // the stop — two moves for one arrival, the second undoing the first. Read through a ref so a
+    // *later* tap does not re-run the framing.
+    if (!map || !bounds || moved || focusRef.current !== undefined) return
     map.fitBounds([bounds.west, bounds.south, bounds.east, bounds.north], {
       padding: cameraPadding(map, { top: insetTop, bottom: insetBottom }),
       animate: false,
@@ -418,6 +429,17 @@ export function RouteMap({
       })
     }
     return () => {
+      // **The map may already be gone, and on a direction flip it is.** React unmounts children before
+      // running a parent's effect cleanups, and the map instance belongs to `MapView` *inside* this
+      // component — so `map.remove()` has already run by the time this executes, and `hasImage` reaches
+      // through a `style` that is now `undefined`. It threw
+      // `Cannot read properties of undefined (reading 'getImage')` straight into react-router's error
+      // boundary, which is what a flip did on every route with a line (ADR-162).
+      //
+      // `_removed` is underscore-prefixed but it is declared on `Map` in MapLibre's published `.d.ts`,
+      // and it is the only honest predicate: `getStyle()`, `loaded()` and `hasImage()` all reach for
+      // the same missing object to answer.
+      if (map._removed) return
       if (map.getLayer(CHEVRON_LAYER)) map.removeLayer(CHEVRON_LAYER)
       if (map.hasImage(CHEVRON_IMAGE)) map.removeImage(CHEVRON_IMAGE)
     }
@@ -444,13 +466,14 @@ export function RouteMap({
     if (!map || presentation?.kind === undefined || presentation.kind === 'none') return
     const dark = mode === 'dark'
     const placed = markers.map((marker) => {
-      const stop = stops[marker.index] as MarkerStop
+      const stop = stops[marker.index] as MarkerStop & { seq: number }
       const { element, offset } = routeMarkerElement({
         kind: marker.kind,
         bearing: marker.bearing,
         name: stop.name,
         locale,
         dark,
+        seq: stop.seq,
         selected: marker.index === focusedIndex,
         onSelect: () => onSelectStop?.(marker.index),
       })
@@ -471,7 +494,7 @@ export function RouteMap({
       for (const m of placed) m.remove()
       markerElements.current = []
     }
-  }, [map, markers, stops, locale, mode, boardingIndex, onSelectStop, presentation?.kind])
+  }, [map, markers, stops, locale, mode, onSelectStop, presentation?.kind])
 
   /**
    * Move the selection between markers that are already on the map, so CSS can ease the scale.
@@ -578,14 +601,22 @@ export function RouteMap({
     if (!map || focusedIndex === undefined) return
     const stop = stops[focusedIndex]
     if (!stop) return
-    map.flyTo({
+    const camera = {
       padding: cameraPadding(map, { top: insetTop, bottom: insetBottom }),
-      center: [stop.location.lng, stop.location.lat],
+      center: [stop.location.lng, stop.location.lat] as [number, number],
       // The source's own range, not a compiled-in ceiling: LandsD answers 404 above z20 and the
       // map would render as a hole rather than a coarser map (ADR-049).
       zoom: focusZoom(map.getZoom(), mapProvider),
       essential: true,
-    })
+    }
+    // **The first frame is a placement, not a movement.** A rider who opened this screen from a stop
+    // has not "asked to go" anywhere — they are already there — so an arc from the default Hong Kong
+    // camera would be a two-second swoop over the harbour to arrive where the screen should have
+    // opened. Every *subsequent* focus is a `flyTo`, because then they did ask, and the arc is what
+    // connects where they were looking to where they are now.
+    if (flown.current) map.flyTo(camera)
+    else map.jumpTo(camera)
+    flown.current = true
   }, [map, focusedIndex, stops, insetTop, insetBottom])
 
   // Nothing to show and nothing coming: no map. A basemap with no line on it is not a route screen's
@@ -606,18 +637,7 @@ export function RouteMap({
       )}
       <MapControls
         bottom={insetBottom * (map?.getContainer().clientHeight ?? 0)}
-        recentreLabel={controlLabels.recentre}
         locateLabel={controlLabels.locate}
-        onRecentre={
-          map && bounds && moved
-            ? () => {
-                map.fitBounds([bounds.west, bounds.south, bounds.east, bounds.north], {
-                  padding: cameraPadding(map, { top: insetTop, bottom: insetBottom }),
-                })
-                setMoved(false)
-              }
-            : undefined
-        }
         onLocate={
           map && riderFix
             ? () => {

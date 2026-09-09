@@ -20,6 +20,47 @@ import { StopName } from './StopName'
  * otherwise forbid: the RN row is a single `Pressable`, so a DOM row with a nested control for the fare or
  * the star would be a tap target inside a tap target (ADR-024).
  */
+/** The rail's line, in CSS pixels — thicker than the 2 px it began at, to sit nearer the map's 5 px. */
+const RAIL_LINE = 4
+
+/**
+ * The double chevron's box, in CSS pixels.
+ *
+ * Proportioned from the map's — `routeChevronImage` uses a 2.6 reach and a 1.9 stroke on a 5 px line.
+ * The arms overhang the rail by about a pixel each side, which is what makes the notch read as a cut
+ * *through* the line rather than a dent in its middle.
+ *
+ * ## The gap between the pair is a ratio, not a number
+ *
+ * Scaling the map's glyph down to a 10 px box but keeping the stroke at 2.0 — which it needs to be, to
+ * cut a 4 px line — quietly closed the pair up: the stroke ate the gap. The map's two chevrons sit
+ * **5.0 apart with a 1.9 stroke**, so the *visible* whitespace between them is 3.1, or **1.63x the
+ * stroke**. The rail's were 3.8 apart with a 2.0 stroke: 0.9x. That is the whole of why they read as
+ * `>>` where the map reads `> >`, and it is what the owner saw.
+ *
+ * Matched on the ratio rather than the number: 1.63 x 2.0 is 3.26 of whitespace, so the apexes are
+ * 5.3 apart. Change the stroke and this has to move with it.
+ */
+const CHEVRON_W = 10
+const CHEVRON_H = 11
+
+/**
+ * The glyph, as a mask: a **double** chevron pointing down.
+ *
+ * A mask rather than an inline `<svg>` so the *shape* is data and the *colour* is a Tailwind class —
+ * which matters more here than it did before, because the colour is now the row's own background and
+ * has to change with `selected`. A fill baked into the SVG could not follow it.
+ *
+ * A CSS mask reads the **alpha** channel, so the paint is never seen — only where it is opaque.
+ * `currentColor` for exactly that reason: an SVG loaded as an image has no inherited colour, so it
+ * resolves to the initial black, and any other opaque value would mask identically. Not a colour
+ * literal, because it is not choosing a colour — which is what keeps `check-no-raw-colours` at zero
+ * allowlist entries rather than carrying a permanent exception for a value with no visual effect.
+ */
+const CHEVRON_MASK = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${CHEVRON_W}" height="${CHEVRON_H}" viewBox="0 0 ${CHEVRON_W} ${CHEVRON_H}"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 1.2 5 4 7.8 1.2"/><path d="M2.2 6.5 5 9.3 7.8 6.5"/></g></svg>`,
+)}")`
+
 export function RouteStopRow({
   row,
   index,
@@ -39,20 +80,21 @@ export function RouteStopRow({
    */
   kind: StopMarkerKind
   /**
-   * The stop the rider has **tapped** — the one the map is looking at.
+   * **The stop this screen is currently about** — the one the map is looking at.
    *
-   * Deliberately a different kind of thing from `row.here`, which is the stop they *arrived from*, and
-   * the two are signalled differently on purpose:
+   * Seeded by the stop the rider arrived from and then owned by whatever they tap (ADR-162). It used
+   * to be one of *two* highlights: `selected` drew a bar on the row's leading edge, while `row.here`
+   * — the arrived-from stop — tinted the row and put a dot in its node. Both could be lit at once,
+   * competing, and the owner's verdict on the bar was that it read as chrome rather than as an answer.
    *
-   * | | | |
-   * |---|---|---|
-   * | `here` | a fact about their journey, and permanent | a mark **inside** the node — a filled centre — plus the accent fill it already had |
-   * | `selected` | a transient state they change by tapping | a bar on the row's **leading edge**, and the node grows |
+   * They are one thing now, because the screen is only ever *about* one stop at a time. The
+   * arrived-from stop was always an **initial condition** rather than a permanent fact — its other job,
+   * scrolling the list to it on arrival, is a question about the list and stays on `hereIndex`.
    *
-   * One is a property of the *stop*, the other of the *row*, and putting them on different parts of
-   * the same object is what keeps them legible together — a rider can be looking at the stop they
-   * boarded at, and both marks have to survive that. Neither is carried by colour alone (ADR-008's
-   * rule, applied to state rather than to time): the dot and the bar are shapes.
+   * The mark is the row's own tint plus the emphasis on its name; the node is untouched, so the
+   * sequence number never disappears. The *map* is where focus is stated loudly: that marker grows and
+   * prints this same number. Not colour alone in either place (ADR-008's rule applied to state rather
+   * than to time) — a tint plus a size plus a numeral.
    */
   selected?: boolean
   row: RouteStopRowView
@@ -93,7 +135,7 @@ export function RouteStopRow({
   /** Reports this row's element so the reveal can scroll to it — geometry, not a decision. */
   registerRow: (index: number, el: HTMLElement | null) => void
 }) {
-  const { here, first, last } = row
+  const { first, last } = row
   const locale = useLocale()
   // **Read once, at mount** — `useState`'s initial value is ignored on every later render, which is exactly
   // what the RN row gets from `useSharedValue(animateIn ? 0 : 1)` plus an effect with empty deps.
@@ -122,30 +164,15 @@ export function RouteStopRow({
       placed from `onLayout` values, and a transform does not move those.
     */
     <div className="relative">
-      {/*
-        The selected row's leading bar. Absolutely positioned so it costs the row no layout — the bus
-        tokens are placed against this row's own box with constant CSS expressions (ADR-110), and a
-        row that changed height on selection would move every bus on the schematic.
-      */}
-      {selected ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 bottom-0 left-0 w-[3px] rounded-r-sm bg-accent"
-        />
-      ) : null}
       <button
         type="button"
         ref={(el) => registerRow(index, el)}
         onClick={() => onPress(row, index)}
-        // Two different `aria-current` tokens, which is the one place ARIA already draws the
-        // distinction this row needs: `location` is "where you are in an environment" — the stop they
-        // boarded at — and `true` is "the one being looked at". Attributes rather than text, so a
-        // screen reader gets both facts and the conformance projection is unchanged.
-        {...(selected
-          ? { 'aria-current': 'true' as const }
-          : here
-            ? { 'aria-current': 'location' as const }
-            : {})}
+        // **One token, because there is now one concept.** This carried `true` for the tapped stop and
+        // `location` for the arrived-from one, which was ARIA faithfully reporting two highlights that
+        // competed on screen. ADR-162 merges them: focus is *seeded* by the stop you arrived from and
+        // then owned by whatever you tap, so `true` — "the current item of a set" — is the whole of it.
+        {...(selected ? { 'aria-current': 'true' as const } : {})}
         // The cascade's per-row beat, capped so a 60-stop route does not drag for two seconds — the delay
         // `apps/mobile` applies with `withDelay(Math.min(index, 10) * 26, …)`, value for value.
         style={
@@ -169,21 +196,70 @@ export function RouteStopRow({
         // so the tap target still spans the full width — the control is a sibling, and reserving room
         // for it must not carve a hole in the thing it sits beside.
         className={`relative flex min-h-16 w-full scroll-mt-28 gap-0 border-0 py-0 pr-11 pl-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
-          here ? 'bg-surface-2' : 'bg-transparent'
+          selected ? 'bg-surface-2' : 'bg-transparent'
         } ${rise ? 'row-rise' : ''}`}
       >
         {/* The rail gutter: a continuous line behind a top-aligned node. */}
         <span className="relative shrink-0" style={{ width: RAIL_WIDTH }}>
           {!first ? (
             <span
-              className="absolute bg-border"
-              style={{ top: 0, height: NODE_CENTRE, width: 2, left: RAIL_WIDTH / 2 - 1 }}
+              className="absolute bg-route-soft"
+              style={{
+                top: 0,
+                height: NODE_CENTRE,
+                width: RAIL_LINE,
+                left: RAIL_WIDTH / 2 - RAIL_LINE / 2,
+              }}
             />
           ) : null}
           {!last ? (
             <span
-              className="absolute bg-border"
-              style={{ top: NODE_CENTRE, bottom: 0, width: 2, left: RAIL_WIDTH / 2 - 1 }}
+              className="absolute bg-route-soft"
+              style={{
+                top: NODE_CENTRE,
+                bottom: 0,
+                width: RAIL_LINE,
+                left: RAIL_WIDTH / 2 - RAIL_LINE / 2,
+              }}
+            />
+          ) : null}
+          {/*
+            **The map's double chevron, once per gap, cut *out* of the rail.**
+
+            Three things changed together, and each answered the one before it:
+
+            **It is the double chevron now** — the same glyph `routeChevronImage` paints along the line,
+            rather than a family resemblance to it. A single arm was right when these repeated every
+            20 px and the pair merged into one thick mark; at one per gap both halves have room to read.
+
+            **One per gap, centred between two nodes.** `calc(50% + NODE_CENTRE)` with a `-50%` translate
+            is the midpoint exactly, and needs no measurement: the distance between adjacent nodes *is*
+            this row's height, so half of it below this node is halfway to the next. It holds at any row
+            height — the shortest row is 64 px against a 25 px `NODE_CENTRE`, so the mark never escapes
+            into the row below. It is also where the bus token rides, which is the intended reading: a
+            bus between stops covers the chevron it is passing.
+
+            **Painted in the row's own background**, so the line reads as *cut away* rather than marked
+            on top — which is what the map does with its casing colour, and what round 5 settled as *"a
+            notch in the line, not a symbol on it"*. On the map the casing is a constant; here it is the
+            row's, so a focused row's `bg-surface-2` has to follow, or the notch fills with the wrong
+            colour on precisely the row the rider is looking at.
+          */}
+          {!last ? (
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute ${selected ? 'bg-surface-2' : 'bg-bg'}`}
+              style={{
+                top: `calc(50% + ${NODE_CENTRE}px)`,
+                transform: 'translateY(-50%)',
+                left: RAIL_WIDTH / 2 - CHEVRON_W / 2,
+                width: CHEVRON_W,
+                height: CHEVRON_H,
+                maskImage: CHEVRON_MASK,
+                WebkitMaskImage: CHEVRON_MASK,
+                maskSize: `${CHEVRON_W}px ${CHEVRON_H}px`,
+                WebkitMaskSize: `${CHEVRON_W}px ${CHEVRON_H}px`,
+              }}
             />
           ) : null}
           {/*
@@ -210,9 +286,11 @@ export function RouteStopRow({
             <svg
               viewBox={NODE_BOX[kind].viewBox}
               aria-hidden="true"
-              className={`absolute inset-0 h-full w-full ${
-                here ? 'fill-accent stroke-accent' : 'fill-surface stroke-border'
-              }`}
+              // **The map's marker, in CSS.** `routeMarkerElement` fills with the CASING colour and
+              // strokes with the line's — inverted against the line rather than matched to it, because a
+              // marker in the line's own colour disappears into it. The rail says it the same way, so a
+              // rider who saw a hexagon on the map finds the same hexagon, the same colour, in the list.
+              className="absolute inset-0 h-full w-full fill-surface stroke-route"
               // 2 **rendered** pixels, to match the rail line it sits on — so the width is expressed in
               // viewBox units and the box is drawn 1:1, which is why every `viewBox` below is the glyph's
               // real size rather than a tidy 24.
@@ -220,19 +298,14 @@ export function RouteStopRow({
             >
               <path d={NODE_SHAPE[kind]} />
             </svg>
-            <span className={`relative ${here ? 'text-accent-contrast' : 'text-subtle'}`}>
-              {row.seq}
-            </span>
-            {/* The boarding stop's own mark: a hole in the middle of the node. A shape rather than a
-                second colour, so it survives a colour-blind rider and a monochrome screenshot alike —
-                and it reads as *this stop is special* rather than *this row is selected*, which is the
-                distinction the two states need. */}
-            {here ? (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full border-2 border-accent bg-surface"
-              />
-            ) : null}
+            {/* **The number always shows.** It is the stop's identity, and the list is the only place
+                that carries one — so the moment a rider is trying to match a row to a marker is the
+                worst possible moment to take it away. The focused *marker* grows and prints this same
+                number instead (ADR-162); nothing is removed from the rail to say so.
+
+                Route-coloured rather than `text-subtle`, so the figure belongs to the ring around it
+                rather than looking like a different system left inside it. */}
+            <span className="relative text-route">{row.seq}</span>
           </span>
           {row.saved ? (
             // Drawn on the node's corner, and — as on the RN rail — the node itself is unchanged, so a saved
@@ -261,7 +334,7 @@ export function RouteStopRow({
         <span className="min-w-0 flex-1 pt-3 pr-4 pb-4">
           <span className="flex items-start justify-between gap-2">
             <span className="min-w-0 flex-1">
-              <StopName name={row.name} emphasis={here} />
+              <StopName name={row.name} emphasis={selected} />
             </span>
             {/* The fare is **not** here any more. It said the same figure on nearly every row — the
                 same $6.7 forty times — while competing with the stop's name for the one edge the `⋯`
