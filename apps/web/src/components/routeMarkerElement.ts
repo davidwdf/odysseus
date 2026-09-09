@@ -28,6 +28,12 @@ const KERB_OFFSET_PX = 7
  * The three still differ enough to tell apart, because they differ in **shape** and only incidentally
  * in size — which is the accessibility argument as well as the aesthetic one.
  */
+/**
+ * The focused marker's numeral, in viewBox units — which are rendered pixels at rest, and 2.1x that
+ * once `.route-marker-host-selected` scales it. So ~12 px on screen, which holds two digits.
+ */
+const SEQ_FONT = 5.6
+
 const SHAPE: Record<StopMarkerKind, { size: number; path: string }> = {
   // A square, for an end of the line. Slightly larger than the circle: a square of equal side reads
   // smaller than a disc, so matching them numerically would make the termini look like the quiet ones.
@@ -54,7 +60,15 @@ export interface RouteMarkerOptions {
    * way. Deliberately not the treatment `selected` gets: selection grows the whole mark, arrival puts
    * something *inside* it, and a rider looking at the stop they boarded at needs both at once.
    */
-  boarding?: boolean
+  /**
+   * The stop's **wire** sequence number — the figure the rail prints in this stop's node.
+   *
+   * Drawn inside the marker and shown only while it is focused (ADR-162). It replaces a `boarding`
+   * flag that marked the arrived-from stop with an inner dot: that flag was declared here, typed on
+   * `RouteMap`, and listed in its placement effect's dependencies — and **never passed**, so the dot
+   * ADR-158 claimed tied the two views together had never once been drawn on a map.
+   */
+  seq: number
   name: string
   locale: Locale
   selected: boolean
@@ -103,7 +117,7 @@ export function routeMarkerElement(opts: RouteMarkerOptions): {
   // the marker element to position it, so a `transform: scale()` on the host is overwritten on the
   // next camera frame — measured: the host's computed transform is the engine's translate matrix and
   // nothing else. An inner element the engine does not touch is the only place a scale can survive.
-  element.innerHTML = `<span class="route-marker-scale">${svg(shape, opts.dark, opts.boarding === true)}</span>`
+  element.innerHTML = `<span class="route-marker-scale">${svg(shape, opts.dark, opts.seq)}</span>`
   element.addEventListener('click', (e) => {
     // The map is listening for clicks too; a marker tap must not also be read as a tap on the map.
     e.stopPropagation()
@@ -178,7 +192,7 @@ export function setMarkerSelected(element: HTMLElement, selected: boolean): void
  * deliberately so: it sits on a 2 px rail in a list, where the job is to be a tidy bead on a line. The
  * map marker sits on a 5 px road over a dense basemap, where the job is to be legible at a glance.
  */
-function svg(shape: { size: number; path: string }, dark: boolean, boarding: boolean): string {
+function svg(shape: { size: number; path: string }, dark: boolean, seq: number): string {
   // One size, always. Selection scales the whole host in CSS — see `setMarkerSelected`.
   const px = shape.size
   // **Inverted against the line, not matched to it.** A marker filled with the line's own colour
@@ -187,9 +201,11 @@ function svg(shape: { size: number; path: string }, dark: boolean, boarding: boo
   // legible at every zoom. Still one pair, so dark mode is still one swap.
   const fill = dark ? MAP_COLOR.routeCasingInverted : MAP_COLOR.routeCasing
   const stroke = dark ? MAP_COLOR.routeInverted : MAP_COLOR.route
-  return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker" fill="${fill}" stroke="${stroke}" stroke-width="3.2"><path d="${shape.path}" />${
-    boarding
-      ? `<circle cx="${shape.size / 2}" cy="${shape.size / 2}" r="${shape.size * 0.13}" fill="${stroke}" stroke="none" />`
-      : ''
-  }</svg>`
+  // The numeral is in the LINE's colour on the casing fill — which is the rail's node exactly. A
+  // focused marker does not resemble the row it belongs to; it is the same glyph.
+  //
+  // `SEQ_FONT` is in viewBox units, and each shape is drawn 1:1 (`width` = `viewBox`), so one constant
+  // renders at one size across all three shapes rather than shrinking on a circle and swelling on a
+  // hexagon. No `font-family`: the SVG is in the DOM, so it inherits the app's.
+  return `<svg width="${px}" height="${px}" viewBox="0 0 ${shape.size} ${shape.size}" aria-hidden="true" class="route-marker" fill="${fill}" stroke="${stroke}" stroke-width="3.2"><path d="${shape.path}" /><text class="route-marker-seq" x="${shape.size / 2}" y="${shape.size / 2}" text-anchor="middle" dominant-baseline="central" font-size="${SEQ_FONT}" font-weight="600" fill="${stroke}" stroke="none">${seq}</text></svg>`
 }

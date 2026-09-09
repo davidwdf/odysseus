@@ -92,6 +92,13 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
+- [ ] 🟢 **The stop nearest the rider is not marked anywhere.** The third of the three ideas ADR-162
+      weighed and the only one it did not build: the rider's fix reaches `RouteMap` for the dart, and
+      nothing computes which *stop* is closest. The primitive already exists — `geo#nearestIndex`, built
+      for the direction flip and deliberately generic — so this is wiring plus a glyph. It wants a mark
+      of its own rather than the focus dot, and in the rider's own blue, because it is a claim about
+      **them** rather than about the list: `rider` is already the token the dart uses. Not urgent, but
+      it is the question a rider standing on a street actually asks.
 - [ ] 🟠 **Four of the $2 Scheme's five exclusions are invisible to us.** `eta#joyYouEligible`
       ([ADR-160](./08-decision-log.md#adr-160--the-2-scheme-does-not-reach-every-route-and-the-fare-block-earns-its-height))
       excludes `A`/`NA` airport routes from the JoyYou estimate, which is the only part of the Transport

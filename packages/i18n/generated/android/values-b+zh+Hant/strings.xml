@@ -125,7 +125,6 @@
 	<string name="routeShowDetails">顯示路線詳情</string>
 	<string name="fareNoJoyYou">$2 計劃不適用於機場路線。</string>
 	<string name="fareFromHere">由此起</string>
-	<string name="mapShowWholeRoute">顯示整條路線</string>
 	<string name="mapShowMyLocation">顯示我的位置</string>
 	<string name="routeHideDetails">隱藏路線詳情</string>
 	<string name="routeStopsSheet">本路線的車站</string>

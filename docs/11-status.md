@@ -2,6 +2,32 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-09-09 — one focus, and a direction flip that had been crashing
+
+> **Shipped:** [ADR-161](./08-decision-log.md#adr-161--the-rail-is-the-route-line-and-the-chevrons-come-with-it)
+> and [ADR-162](./08-decision-log.md#adr-162--one-focus-seeded-by-where-you-came-from-and-a-direction-flip-that-had-been-crashing).
+> The stop list's rail is drawn in the **route line's own colour** (a `route` semantic token aliased to
+> the map's pair, so there is still one declaration) with the map's direction chevrons threaded down it,
+> and the node is the map's marker in CSS. Then ADR-162 dims it — hue ties the two views, strength is
+> context — and merges the two highlights that could both be lit at once into **one focus**, seeded by
+> the stop you arrived from and owned by whatever you tap. The focused **map marker grows to 2.1× and
+> prints its sequence number**: a dot says *"this one"*, a number says *"which one"*, and only the number
+> answers once the list is scrolled away.
+>
+> **⚠️ A direction flip was crashing the screen on `main`, and had been since the map shipped.** The
+> chevron layer's cleanup ran after `map.remove()` — React unmounts children before a parent's cleanups,
+> and the map belongs to `MapView` *inside* `RouteMap` — so `hasImage` reached through a dead `style` and
+> threw into react-router's error boundary. Verified as pre-existing by reproducing it on the merge
+> commit before claiming it. Guarded on MapLibre's `_removed`.
+>
+> **The lesson, in its most expensive form.** Testing the new "flip carries your place" behaviour gave a
+> flip that landed on **the same stop it started from** — which looked like success and was three faults
+> in series: the crash above, a `scrolled` ref that never reset because a flip does not unmount the
+> component, and `keepPreviousData` legitimately holding the old direction's stops so the seed measured
+> against the list the rider was already looking at. What settled it was **an independent calculation** —
+> the nearest inbound stop to those coordinates, computed outside the app: *index 20, 123 m, Hong Keung
+> Court*. The app said seq 5. Without a number to disagree with, all three would have shipped.
+
 ## 🔵 Snapshot 2026-08-31 (later) — the $2 Scheme does not reach every route
 
 > **Shipped:** [ADR-160](./08-decision-log.md#adr-160--the-2-scheme-does-not-reach-every-route-and-the-fare-block-earns-its-height).

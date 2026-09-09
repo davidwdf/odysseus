@@ -833,17 +833,6 @@ export const CATALOGUE = {
     'zh-Hans': '由此起',
   },
   /**
-   * The map's "show the whole route again" control. Its content is a glyph, so this is its whole name.
-   *
-   * Named for the **result** rather than the gesture — a rider wants the route back, and "reset view"
-   * or "recentre" describe what the app does rather than what they get.
-   */
-  mapShowWholeRoute: {
-    en: 'Show the whole route',
-    'zh-Hant': '顯示整條路線',
-    'zh-Hans': '显示整条路线',
-  },
-  /**
    * The map's "take me to my position" control.
    *
    * Only offered once a fix exists — a control that cannot do its job is worse than an absent one,

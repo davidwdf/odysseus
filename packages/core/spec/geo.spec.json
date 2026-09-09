@@ -860,6 +860,126 @@
           }
         }
       ]
+    },
+    "nearestIndex": {
+      "doc": "The index of the nearest point, or -1 when the list is empty or nothing is within maxMeters (default 500 m). Pure geometry, so it serves both the direction flip — where the reverse direction's kerbs are different ids and only the rider's POSITION survives — and, later, the stop nearest the rider. Ties go to the LOWER index.",
+      "cases": [
+        {
+          "name": "the-opposite-kerb-is-the-nearest-point",
+          "why": "The everyday flip: a rider looking at the outbound kerb of Nathan Road flips direction, and the inbound kerb ~35 m across the road is the stop they mean. This is the case the rule exists for.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.312,
+                "lng": 114.175
+              },
+              {
+                "lat": 22.3053,
+                "lng": 114.1721
+              },
+              {
+                "lat": 22.305,
+                "lng": 114.172
+              }
+            ],
+            "to": {
+              "lat": 22.305,
+              "lng": 114.172
+            }
+          },
+          "expect": 2
+        },
+        {
+          "name": "ties-go-to-the-lower-index",
+          "why": "A route that passes one kerb twice — a loop — has two stops on the same coordinate, so this is reachable rather than theoretical. Fixed rather than arbitrary at runtime, because three ports must not disagree about which one they focus.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.305,
+                "lng": 114.172
+              },
+              {
+                "lat": 22.305,
+                "lng": 114.172
+              }
+            ],
+            "to": {
+              "lat": 22.305,
+              "lng": 114.172
+            }
+          },
+          "expect": 0
+        },
+        {
+          "name": "nothing-within-the-cap-is-no-answer",
+          "why": "The whole point of the cap. A route that loops out one way and back another has no equivalent stop, and without this the rule would confidently focus somewhere the rider has never been. -1 renders as no focus at all, which is the honest state.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.312,
+                "lng": 114.175
+              }
+            ],
+            "to": {
+              "lat": 22.305,
+              "lng": 114.172
+            },
+            "maxMeters": 500
+          },
+          "expect": -1
+        },
+        {
+          "name": "an-empty-list-has-no-nearest",
+          "why": "A route whose payload has not arrived, or a direction with no stops. -1 rather than 0, so a caller cannot index into nothing.",
+          "args": {
+            "points": [],
+            "to": {
+              "lat": 22.305,
+              "lng": 114.172
+            }
+          },
+          "expect": -1
+        },
+        {
+          "name": "the-cap-can-be-widened-by-the-caller",
+          "why": "The 500 m default is a judgement about Hong Kong kerbs, not a law. Pinned so the parameter is known to WORK — a default-only implementation would pass every other case here.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.312,
+                "lng": 114.175
+              }
+            ],
+            "to": {
+              "lat": 22.305,
+              "lng": 114.172
+            },
+            "maxMeters": 2000
+          },
+          "expect": 0
+        },
+        {
+          "name": "a-point-exactly-on-a-stop-finds-it",
+          "why": "Zero distance is inside the cap. Guards a strict `<` on the cap comparison, which would reject the exact match the flip most often produces when both directions share one pole.",
+          "args": {
+            "points": [
+              {
+                "lat": 22.305,
+                "lng": 114.172
+              },
+              {
+                "lat": 22.3053,
+                "lng": 114.1721
+              }
+            ],
+            "to": {
+              "lat": 22.305,
+              "lng": 114.172
+            }
+          },
+          "expect": 0
+        }
+      ]
     }
   }
 }
