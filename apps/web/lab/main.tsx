@@ -4,6 +4,7 @@ import '../src/tokens.css'
 import { applyMode, currentMode } from '../src/lib/appearance'
 import { Gallery } from './Gallery'
 import { GlyphLab } from './GlyphLab'
+import { HeaderLab } from './HeaderLab'
 import { MapLab } from './MapLab'
 import { RailLab } from './RailLab'
 
@@ -22,6 +23,7 @@ const LABS = {
   '#glyphs': { title: 'Bus glyphs', render: () => <GlyphLab /> },
   '#gallery': { title: 'Design system', render: () => <Gallery /> },
   '#map': { title: 'Interactive map', render: () => <MapLab /> },
+  '#header': { title: 'Route header', render: () => <HeaderLab /> },
 } as const
 
 type LabKey = keyof typeof LABS

@@ -1,7 +1,8 @@
 import type { RouteDetailView } from '@nextbus/core'
+import { ArrowRight } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
 import { RouteChip } from '../../components/RouteChip'
-import { useFlip } from '../../hooks/useFlip'
+import { useFlip, useHeightFlip } from '../../hooks/useFlip'
 import { BACK_LENS_INSET, BACK_LENS_SIZE } from '../../shell/BackButton'
 import { CONTENT_INSET_TOP } from '../../shell/layout'
 
@@ -68,8 +69,13 @@ export function RouteContextCard({
   collapseLabel: string
 }) {
   const badge = useRef<HTMLSpanElement | null>(null)
+  const card = useRef<HTMLDivElement | null>(null)
   // The badge travels between the two layouts rather than being re-drawn in each. See `useFlip`.
   useFlip(badge, collapsed ? 'pill' : 'card')
+  // …and the card's own height travels with it, over the same 500 ms. Without this the box cut from
+  // ~135 px to ~44 px in one frame while the edge and the badge were still moving, which is the thing
+  // the owner read as jarring — see `useHeightFlip`.
+  useHeightFlip(card, collapsed ? 'pill' : 'card')
 
   // Clear of the lens when collapsed, running underneath it when expanded. One number, two states.
   const left = collapsed ? BACK_LENS_INSET * 2 + BACK_LENS_SIZE : BACK_LENS_INSET
@@ -97,6 +103,7 @@ export function RouteContextCard({
         keeps the previous rect rather than the previous element.
       */}
       <div
+        ref={card}
         className={`glass-pane pointer-events-auto relative flex w-full flex-col overflow-hidden rounded-pill border border-border ${
           collapsed ? 'gap-0 px-3 py-2' : 'gap-2 px-3 pt-3 pb-1'
         }`}
@@ -104,6 +111,15 @@ export function RouteContextCard({
         {collapsed ? (
           <div className="flex w-full items-center gap-2">
             <RouteChip operator={header.operator} routeNo={header.routeNo} chipRef={badge} />
+            {/* **An arrow, from the number to where it is going** — the owner's suggestion, and it earns
+                its 14 px: a badge beside a place name states two facts and no relation between them, and
+                the one relation a rider wants on a pill is *this bus goes there*. The expanded card says
+                it with two lines and a gutter; the pill has one line, so it says it with a glyph. Not
+                shown on a circular service — an arrow to a destination you are also leaving from is the
+                one case where it would be a claim rather than a shorthand. */}
+            {header.circular ? null : (
+              <ArrowRight size={14} aria-hidden className="shrink-0 text-subtle" />
+            )}
             <span className="min-w-0 flex-1 truncate font-semibold text-body text-text">
               {header.destination}
             </span>

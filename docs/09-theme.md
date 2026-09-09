@@ -390,6 +390,13 @@ component is a step every other component then has to reason about.
   collapse to an instant cut under reduced motion. **Two-step reveal:** a page appears *first*, then runs entrance
   work (e.g. the route page's auto-scroll to the originating stop) as a deliberate second beat via
   `usePageRevealReady()`.
+- **A box whose two states have different children is a FLIP, not a transition**
+  ([ADR-167](./08-decision-log.md#adr-167--the-context-cards-collapse-animates-its-height-and-the-route-headers-open-questions-get-a-lab)):
+  the route context card's collapse moves its left edge with a CSS transition and its badge with
+  `useFlip`, and its **height** with `useHeightFlip` — measured on both sides of the change, because both
+  states are `height: auto` and `auto`→`auto` is a cut. The general rule: a cut is least visible on its own
+  and most visible beside a transition, so a state change either animates every property that moves or
+  none of them. `apps/web/src/hooks/useFlip.ts` holds both hooks and the one duration.
 - **ETA update:** per-digit **number-flip** (or crossfade) + a one-shot **freshness pulse** dot when
   new data lands. **No per-second decrement** ([ADR-008](./08-decision-log.md)). Reduced-motion → plain
   text swap with a brief highlight.

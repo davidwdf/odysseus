@@ -72,6 +72,55 @@ export function useFlip(ref: RefObject<HTMLElement | null>, key: string | number
 }
 
 /**
+ * **Animate an element's HEIGHT from what it just was to what it now is**, whenever `key` changes.
+ *
+ * The companion to `useFlip`, and the reason it is a second hook rather than an option on the first: a
+ * FLIP animates a `transform`, and a transform on a card *scales its text*. What the route context card
+ * needs is the opposite — the box changes size while the type inside it stays the size it is, and the
+ * content that no longer fits is clipped by the card's own `overflow-hidden`. That is a height animation,
+ * and height is the one property a FLIP deliberately does not touch.
+ *
+ * ## What it fixes, and why a CSS transition could not
+ *
+ * The card's collapse moved three things over 500 ms — its left edge, the badge's place and the badge's
+ * size — and **cut** the fourth: the two states render different children, so the card's height went from
+ * ~135 px to ~44 px in one frame while everything else was still travelling. The owner's word for it was
+ * jarring, and the mixture is what made it so: a cut is least visible on its own and most visible beside a
+ * transition. `transition: height` cannot do it because there is no height to transition *to* — both
+ * states are `auto`, decided by whichever children are mounted, and an `auto`→`auto` transition is a cut
+ * by definition. So the height is measured on both sides of the change, exactly as `useFlip` measures a
+ * rect, and animated between the two numbers.
+ *
+ * `key` rather than a `ResizeObserver` for `useFlip`'s reason, which matters more here: this card grows by
+ * a line whenever a fact arrives or a long destination wraps, and animating those would be the card
+ * twitching at data rather than at a rider.
+ */
+export function useHeightFlip(ref: RefObject<HTMLElement | null>, key: string | number): void {
+  const before = useRef<number | null>(null)
+  const shownFor = useRef<string | number | null>(null)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const now = el.getBoundingClientRect().height
+    const was = before.current
+    before.current = now
+
+    if (shownFor.current === key) return
+    const first = shownFor.current === null
+    shownFor.current = key
+    if (first || was === null || prefersReducedMotion()) return
+    // A sub-pixel change is a reflow, not a transition — `useFlip`'s guard, in one dimension.
+    if (Math.abs(was - now) < 1) return
+
+    el.animate?.([{ height: `${was}px` }, { height: `${now}px` }], {
+      duration: FLIP_MS,
+      easing: FLIP_EASING,
+    })
+  })
+}
+
+/**
  * Matches the card's own `left` transition, because they are one movement seen in two properties —
  * and 500 rather than 240 because the owner watched it and wanted longer. A collapse moves three
  * things at once (the card's edge, the badge's place, its size), and at 240 they arrived together
