@@ -300,7 +300,7 @@ export const TYPE_SCALE = {
   /** The hero ETA numeral. */
   display: { fontSize: 40, lineHeight: 44, weight: 'bold' },
   /** Screen titles. */
-  h1: { fontSize: 28, lineHeight: 34, weight: 'bold' },
+  h1: { fontSize: 28, lineHeight: 34, weight: 'semibold' },
   /** Section headers. */
   h2: { fontSize: 22, lineHeight: 28, weight: 'semibold' },
   /** Card titles and route numbers. */

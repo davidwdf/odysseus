@@ -273,7 +273,7 @@ public enum NextBusTokens {
         /// The hero ETA numeral.
         public static let display = Style(size: 40, lineHeight: 44, cut: "bold")
         /// Screen titles.
-        public static let h1 = Style(size: 28, lineHeight: 34, cut: "bold")
+        public static let h1 = Style(size: 28, lineHeight: 34, cut: "semibold")
         /// Section headers.
         public static let h2 = Style(size: 22, lineHeight: 28, cut: "semibold")
         /// Card titles and route numbers.

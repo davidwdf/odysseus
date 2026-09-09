@@ -71,7 +71,7 @@ module.exports = {
       // What changes is that it now has to be written on purpose.
       fontSize: {
         display: ['40px', { lineHeight: '44px', fontWeight: '700' }],
-        h1: ['28px', { lineHeight: '34px', fontWeight: '700' }],
+        h1: ['28px', { lineHeight: '34px', fontWeight: '600' }],
         h2: ['22px', { lineHeight: '28px', fontWeight: '600' }],
         h3: ['18px', { lineHeight: '24px', fontWeight: '400' }],
         body: ['16px', { lineHeight: '24px', fontWeight: '400' }],

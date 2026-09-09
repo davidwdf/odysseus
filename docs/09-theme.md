@@ -235,8 +235,8 @@ WCAG-AA before shipping.
 ### Type scale (mobile-first, 16px base)
 | Token | Size / line-height | Weight | Use |
 |---|---|---|---|
-| `display` | 40 / 44 | 700 bold | the hero ETA number |
-| `h1` | 28 / 34 | 700 bold | screen titles |
+| `display` | 40 / 44 | 700 bold | *(declared, unused on web — see below)* |
+| `h1` | 28 / 34 | 600 semibold | screen titles |
 | `h2` | 22 / 28 | 600 semibold | section headers |
 | `h3` | 18 / 24 | **400 regular** | card titles / stop names / route no. |
 | `body` | 16 / 24 | 400 regular | default (min on mobile) |
@@ -267,9 +267,11 @@ Two consequences worth stating:
 - **`h3` is regular.** It sets every stop name in a 25-row list. At 600 and even at 500 the weight had
   stopped being a signal and become texture, and the arrival times — the answer a rider came for — were
   competing with the labels above them rather than out-ranking them (ADR-164).
-- **`display` and `h1` are still 700**, which is *above* this rule and is the one place the scale is not
-  yet internally consistent. They are hero numerals and screen titles, seen one at a time rather than
-  forty at a time, so the cost is low — but it is an open question rather than a settled exception.
+- **`h1` is 600**, so the scale is internally consistent with the rule from `h1` down.
+- **`display` is 700 and is used nowhere on the web.** Its stated job — the hero ETA number — is done by
+  `text-h2` in `EtaBadge`. It still emits to Swift, Kotlin and the TS module, so it is kept as a
+  declaration for the native port rather than deleted, but nothing renders it today and its weight is
+  therefore not evidence about anything. If the port does not want it either, it should go.
 
 **Do not add scale steps to solve a weight problem.** If 18 px feels too large for a role, the answer is
 `body`, not an `h4`: seven steps across eight screens is already generous, and a step added for one

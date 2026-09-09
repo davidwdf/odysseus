@@ -593,6 +593,58 @@
   }
 }
 
+/*
+  A scrolling sheet body fades where its content passes under the top edge — see
+  `components/sheet/SheetScroll.tsx` for when it applies, which is the only other half of this.
+
+  ## A mask, not a gradient in the sheet's colour
+
+  The app's two scrolling sheets sit on different backgrounds (`bg-bg` for the route detail's draggable
+  sheet, `bg-surface` for the fact sheet's panel), and both invert with the theme. A gradient overlay would
+  have to be told which colour it is standing on, once per host, and a fourth theme or a new sheet is then a
+  place it can be told wrong. A mask fades the content to whatever is already behind it, so there is nothing
+  to keep in sync and no colour literal to police.
+
+  ## The length is the state
+
+  `--sheet-fade` is registered, which is what makes it a *transitionable* length rather than a text
+  substitution — an unregistered custom property jumps. At rest it is 0 px: `black 0` means the mask is
+  fully opaque from the first pixel, so a sheet at the top of its content is drawn exactly as it would be
+  with no mask at all. This is deliberate — the fade is a claim that there is something above, and a fade
+  under a sheet's handle when there is nothing above it is that claim made falsely.
+
+  **14 px, and the number came down from 24.** 24 px is a little under half a stop row, and at that height
+  the fade stops reading as an edge and starts reading as a soft focus on the row's text — the owner's word
+  for it was that the shadow was too large. A tight band is also what a current sheet does: iOS's own scroll
+  edge effect is a few points of blur at the boundary, not a gradient you could measure by eye. The fade
+  should be the thing you notice you cannot read *through*, not a thing you notice.
+
+  `-webkit-mask-image` is for Safari below 15.4 — the unprefixed property landed there in March 2022, and HK
+  riders keep phones a long time. Both are listed because a browser that honours neither simply gets no
+  fade, which is the same picture as being at the top.
+*/
+@property --sheet-fade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.sheet-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black var(--sheet-fade, 0px));
+  mask-image: linear-gradient(to bottom, transparent 0, black var(--sheet-fade, 0px));
+  transition: --sheet-fade 160ms linear;
+}
+.sheet-scroll[data-scrolled="true"] {
+  --sheet-fade: 14px;
+}
+
+/* The fade itself stays — it is information, not decoration. Only its arrival stops being animated. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet-scroll {
+    transition: none;
+  }
+}
+
 /* Turn the light basemap into a dark one: invert the luminance, then hue-rotate 180° so water and parks
    land back near their real colour; lift the brightness so the inverted street names read as white rather
    than as grey. Applied to the tile layer only — the dots and the licence credit above it stay true-colour.

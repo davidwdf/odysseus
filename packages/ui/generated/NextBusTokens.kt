@@ -341,7 +341,7 @@ object NextBusTokens {
         /** The hero ETA numeral. */
         val display = Style(40.sp, 44.sp, "bold")
         /** Screen titles. */
-        val h1 = Style(28.sp, 34.sp, "bold")
+        val h1 = Style(28.sp, 34.sp, "semibold")
         /** Section headers. */
         val h2 = Style(22.sp, 28.sp, "semibold")
         /** Card titles and route numbers. */

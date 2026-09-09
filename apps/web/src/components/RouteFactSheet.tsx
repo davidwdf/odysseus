@@ -3,6 +3,7 @@ import { t } from '@nextbus/i18n'
 import { Baby, Clock, type LucideIcon, MapPin, Ruler } from 'lucide-react'
 import { JoyYouCard } from '../icons'
 import { BottomSheet } from './BottomSheet'
+import { SheetScroll } from './sheet/SheetScroll'
 
 /**
  * The detail behind a static-fact pill (ADR-044) — the DOM twin of
@@ -48,7 +49,7 @@ export function RouteFactSheet({
         </h2>
       }
     >
-      <div className="max-h-[62vh] overflow-y-auto px-3 pt-1 pb-4">
+      <SheetScroll className="max-h-[62vh] overflow-y-auto px-3 pt-1 pb-4">
         {sheet.kind === 'fare' ? (
           <FareBody sheet={sheet} locale={locale} />
         ) : sheet.kind === 'freq' ? (
@@ -58,7 +59,7 @@ export function RouteFactSheet({
         ) : (
           <OverviewBody sheet={sheet} locale={locale} />
         )}
-      </div>
+      </SheetScroll>
     </BottomSheet>
   )
 }

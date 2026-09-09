@@ -9,6 +9,7 @@ import {
   settleDetent,
   stepDetent,
 } from './detents'
+import { SheetScroll } from './SheetScroll'
 
 /**
  * **A sheet that rests at named heights and can be dragged between them** — the round-2 mockup's grab
@@ -170,12 +171,15 @@ export function DraggableSheet({
       >
         <span aria-hidden="true" className="block h-1 w-9 rounded-pill bg-border" />
       </button>
-      <div
+      {/* The body fades where its content passes under the handle, and only once it has something above
+          it to fade — `SheetScroll` is the scroll container, and the two are one component so that this
+          sheet and the modal one cannot disagree about it. */}
+      <SheetScroll
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-        onScroll={(e) => onContentScroll?.(e.currentTarget.scrollTop)}
+        onScroll={onContentScroll}
       >
         {children}
-      </div>
+      </SheetScroll>
     </section>
   )
 }
