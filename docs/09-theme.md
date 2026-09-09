@@ -200,13 +200,21 @@ WCAG-AA before shipping.
 
 ## 3. Typography
 
-> **How it's wired:** Inter is loaded as discrete weight cuts (`Inter_400Regular` … `Inter_700Bold`)
-> via `@expo-google-fonts/inter` + `expo-font` in `apps/mobile/app/_layout.tsx`, with the splash held
-> until they load. The **`<Text variant weight tabular>`** primitive (`apps/mobile/components/Text.tsx`)
-> is the only thing that sets a size/family — it maps a type role + weight to the right cut through
-> `TYPE_SCALE` / `FONT_FAMILY`, generated from tokens.json's `type` and `font.cut` groups (§1.1). On native `fontFamily` is single-valued,
-> so CJK renders in the **platform face** (PingFang HK / system Noto) — v1 bundles **no** CJK webfont by
-> decision ([ADR-019](./08-decision-log.md#adr-019--cjk-use-the-platform-font-do-not-bundle-noto-v1)).
+> **How it's wired:** Inter is loaded as discrete weight cuts (`Inter_400Regular` … `Inter_700Bold`).
+> On the web a type role is applied as a **`text-*` class from the generated preset**, which since
+> ADR-164 carries `fontSize`, `lineHeight` **and** `fontWeight` — so `text-h3` is the whole style and a
+> `font-*` utility beside it is an override written on purpose.
+>
+> *This paragraph used to describe a `<Text variant weight tabular>` primitive in
+> `apps/mobile/components/Text.tsx` as "the only thing that sets a size/family". That was true until
+> ADR-157 deleted it, and the sentence stayed present-tense for two weeks — which is exactly how the
+> weights went un-applied on the web without anyone noticing.* When the native port arrives it should
+> reintroduce that primitive and read `TYPE` / `FONT_FAMILY` from `@nextbus/ui`, because on native
+> `fontFamily` is single-valued and the *cut* carries the weight; `fontWeight` there would synthesise.
+>
+> On native, CJK renders in the **platform face** (PingFang HK / system Noto) — v1 bundles **no** CJK
+> webfont by decision
+> ([ADR-019](./08-decision-log.md#adr-019--cjk-use-the-platform-font-do-not-bundle-noto-v1)).
 
 ### Fonts (bilingual is core)
 - **Latin UI → Inter** (variable). Clean, functional, superb small-size legibility.
@@ -230,12 +238,42 @@ WCAG-AA before shipping.
 | `display` | 40 / 44 | 700 bold | the hero ETA number |
 | `h1` | 28 / 34 | 700 bold | screen titles |
 | `h2` | 22 / 28 | 600 semibold | section headers |
-| `h3` | 18 / 24 | **500 medium** | card titles / stop names / route no. |
+| `h3` | 18 / 24 | **400 regular** | card titles / stop names / route no. |
 | `body` | 16 / 24 | 400 regular | default (min on mobile) |
 | `label` | 14 / 20 | 500 medium | secondary labels |
 | `caption` | 12 / 16 | 400 regular | timestamps only — never essential info |
 
-Weights: Inter 400 / 500 / 600 / 700. Body line-height 1.5.
+Body line-height 1.5.
+
+### The weight rule: **size carries hierarchy, weight compensates for size**
+
+Weight and size pull in *opposite* directions, and this is the rule the scale is built on:
+
+> **The larger the type, the less weight it needs.** Size already carries presence, so a heavy weight
+> at a large size reads as shouting rather than as emphasis. Small type is the reverse — it needs weight
+> to stay solid, especially when it is enclosed or set against a rule.
+
+That is why `label` (14) is **medium** while `body` (16) is **regular**: the smaller step is the heavier
+one, deliberately. It is the same principle Material 3 applies by setting Display, Headline and Title
+all at 400 and reserving 500 for Labels, and the same reason Inter ships optical guidance for display
+sizes.
+
+**Hierarchy comes from size, not from weight.** The scale's steps (40 / 28 / 22 / 18 / 16 / 14 / 12) are
+far apart enough to do that work alone. Reach for weight only where size cannot: a numeral inside a
+ring, a first arrival against three later ones.
+
+Two consequences worth stating:
+
+- **`h3` is regular.** It sets every stop name in a 25-row list. At 600 and even at 500 the weight had
+  stopped being a signal and become texture, and the arrival times — the answer a rider came for — were
+  competing with the labels above them rather than out-ranking them (ADR-164).
+- **`display` and `h1` are still 700**, which is *above* this rule and is the one place the scale is not
+  yet internally consistent. They are hero numerals and screen titles, seen one at a time rather than
+  forty at a time, so the cost is low — but it is an open question rather than a settled exception.
+
+**Do not add scale steps to solve a weight problem.** If 18 px feels too large for a role, the answer is
+`body`, not an `h4`: seven steps across eight screens is already generous, and a step added for one
+component is a step every other component then has to reason about.
 
 > **The weight is part of the token, and `text-h3` applies it.** It did not always: the scale was written
 > for a React Native `<Text>` primitive that read `TYPE[name].weight` and set the Inter cut itself, so the

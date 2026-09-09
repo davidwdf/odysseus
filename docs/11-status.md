@@ -19,9 +19,13 @@
 > repo has been bitten by that before. Eleven hand-applied weights that merely restated their token are
 > gone; the nine that differ are kept and are now deliberate.
 >
-> **`h3` is medium, not semibold.** It sets every stop name in a 25-row list, and at 600 the weight had
+> **The scale now has a stated rule: *size carries hierarchy, weight compensates for size*.** The larger
+> the type, the less weight it needs — which is why `label` (14) is medium while `body` (16) is regular,
+> the smaller step being the heavier one on purpose. `h3` was rendered at 600, 500 and 400 and looked at
+> each time; **400 won**. It sets every stop name in a 25-row list, and above regular the weight had
 > stopped being a signal and become texture — the arrival times were competing with the labels above
-> them instead of out-ranking them. And the rail node's ring thins to 1.5, whose old justification
+> them instead of out-ranking them. `display` and `h1` are still 700, which is **above** the rule and is
+> recorded as an open question rather than dressed up as an exception. And the rail node's ring thins to 1.5, whose old justification
 > (*"to match the rail line"*) expired the day ADR-163 doubled that line. That also fixed the sequence
 > number looking thin: it is 12 px regular inside what was a 2 px ring. **"This text looks thin" is
 > often a statement about what is next to it.**

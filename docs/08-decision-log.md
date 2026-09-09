@@ -11098,11 +11098,28 @@ pre-existing and unaddressed; it earned its keep here.
   (no visual change); the **nine that differ are kept**, because they are now deliberate rather than
   accidental.
 
-- **Decision 4 — `h3` goes from semibold to medium.** It sets every stop name in a 25-row list. At 600
-  the weight had stopped being a signal and become texture, and the *arrival times* — the answer a rider
-  actually came for — were competing with the labels above them instead of out-ranking them. Judged by
-  rendering both and looking, not by argument. Not lighter than medium: this is an outdoors,
-  at-a-glance, one-handed app, and weight is what survives sunlight and motion.
+- **Decision 4 — the scale gets a stated rule, and `h3` goes to regular.** The rule is
+  **size carries hierarchy, weight compensates for size**: the larger the type, the *less* weight it
+  needs, because size already carries presence and a heavy weight at a large size reads as shouting.
+  Small type is the reverse — it needs weight to stay solid, especially when enclosed. That is why
+  `label` (14) is medium while `body` (16) is regular: the smaller step is the heavier one, on purpose.
+  It is the principle Material 3 applies by setting Display, Headline and Title all at 400 and reserving
+  500 for Labels.
+
+  `h3` was rendered at 600, then 500, then 400 and looked at each time. **400 won.** It sets every stop
+  name in a 25-row list, and above regular the weight had stopped being a signal and become texture:
+  the arrival times — the answer a rider came for — were competing with the labels above them rather
+  than out-ranking them. The name is still the largest and darkest thing in its row, so size and colour
+  carry it, which is the rule working.
+
+  **`display` and `h1` remain 700, which is above the rule**, and that is recorded as an open question
+  rather than dressed up as an exception. They are hero numerals and screen titles seen one at a time
+  rather than forty at a time, so the cost is low — but the scale is not yet internally consistent and
+  `docs/09 §3` says so.
+
+  **No `h4`.** Adding a step to solve a weight problem is scale inflation: seven steps across eight
+  screens is already generous, and a step added for one component is a step every other component then
+  has to reason about. If a role is too large for `h3`, the answer is `body`.
 
 - **Decision 5 — the rail node's ring thins to 1.5, and its justification had already expired.** The
   comment read *"2 rendered pixels, to match the rail line it sits on"* — true when the line was also 2,
@@ -11110,6 +11127,11 @@ pre-existing and unaddressed; it earned its keep here.
   *shape* and the line is a *stroke*; they were never the same measurement.
 
   It also resolves a complaint that looked unrelated. The sequence number *"felt a bit thin"* — and it
-  is 12 px regular inside what was a 2 px ring, so the ring out-weighed the figure it contained.
-  Thinning the ring fixed it with no change to type at all. **Worth generalising: "this text looks
-  thin" is often a statement about what is next to it.**
+  is 12 px inside what was a 2 px ring, so the ring out-weighed the figure it contained. Thinning the
+  ring fixed most of it with no change to type at all. **Worth generalising: "this text looks thin" is
+  often a statement about what is next to it.**
+
+  The numeral then takes `font-medium` against `caption`'s 400 — the first override written under
+  decision 4's rule and a good example of it: 12 px is small enough to need the weight, and this
+  numeral is *enclosed*, which asks more of it than free-standing text. The stop **code** beside it
+  stays at 400, because colour already de-emphasises it and nothing encloses it.

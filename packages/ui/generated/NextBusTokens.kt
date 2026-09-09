@@ -345,7 +345,7 @@ object NextBusTokens {
         /** Section headers. */
         val h2 = Style(22.sp, 28.sp, "semibold")
         /** Card titles and route numbers. */
-        val h3 = Style(18.sp, 24.sp, "medium")
+        val h3 = Style(18.sp, 24.sp, "regular")
         /** The default, and the minimum size on mobile. */
         val body = Style(16.sp, 24.sp, "regular")
         /** Secondary labels. */

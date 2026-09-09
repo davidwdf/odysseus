@@ -277,7 +277,7 @@ public enum NextBusTokens {
         /// Section headers.
         public static let h2 = Style(size: 22, lineHeight: 28, cut: "semibold")
         /// Card titles and route numbers.
-        public static let h3 = Style(size: 18, lineHeight: 24, cut: "medium")
+        public static let h3 = Style(size: 18, lineHeight: 24, cut: "regular")
         /// The default, and the minimum size on mobile.
         public static let body = Style(size: 16, lineHeight: 24, cut: "regular")
         /// Secondary labels.

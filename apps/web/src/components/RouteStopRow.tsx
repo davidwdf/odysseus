@@ -314,7 +314,12 @@ export function RouteStopRow({
 
                 Route-coloured rather than `text-subtle`, so the figure belongs to the ring around it
                 rather than looking like a different system left inside it. */}
-            <span className="relative text-route">{row.seq}</span>
+            {/* **`font-medium` on purpose, against `caption`'s 400.** A deliberate override rather than
+                a leftover — the kind ADR-164 says has to be written knowingly. Small text needs weight to
+                hold where large text does not, and this is 12 px sitting inside a ring: at 400 the ring
+                out-weighed the figure it contained. The stop *code* beside it stays at 400, because it is
+                de-emphasised by colour and does not have to survive being enclosed. */}
+            <span className="relative font-medium text-route">{row.seq}</span>
           </span>
           {row.saved ? (
             // Drawn on the node's corner, and — as on the RN rail — the node itself is unchanged, so a saved
