@@ -2,6 +2,25 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-09-09 (later) — a quieter colour is a colour, not an opacity
+
+> **Shipped:** [ADR-163](./08-decision-log.md#adr-163--a-quieter-colour-is-a-colour-not-an-opacity-and-the-rails-chevrons-become-the-maps).
+> The rail was drawn as `route` at 45 % opacity, and the owner spotted what that does: **the overlapping
+> parts of different shapes stand out.** Alpha does not say *"this quieter colour"*, it says *"less of
+> this colour, wherever it lands* — so a line under a node's stroke and a chevron over a line each
+> composite twice and read as a darker seam. `route-soft` is a **solid** token whose values are what
+> that blend rendered as (`grey-400`/`grey-500`, already in the palette, within three units of the
+> computed blend). Appearance unchanged; the seams gone. **The rule generalises and is in `docs/09 §1`:
+> an opacity is fine on one shape and wrong across a set of overlapping ones.**
+>
+> The rail's line is **4 px** now (from 2), and that is what made the double chevron work — *a
+> see-through notch can only show as much of its glyph as the line is wide*, so on a thin line a double
+> chevron is two nicks. Built at 3 px, compared at 4 px, and 4 px won on the comparison. The chevron is
+> the map's own double glyph again, **one per gap**, placed at `calc(50% + NODE_CENTRE)` — the exact
+> midpoint between adjacent nodes, no measurement, because the distance between two nodes *is* the row's
+> height. It is cut out of the line in the **row's own background**, so a focused row's `bg-surface-2`
+> follows; that is why the glyph stays a CSS mask rather than an inline `<svg>`.
+
 ## 🔵 Snapshot 2026-09-09 — one focus, and a direction flip that had been crashing
 
 > **Shipped:** [ADR-161](./08-decision-log.md#adr-161--the-rail-is-the-route-line-and-the-chevrons-come-with-it)

@@ -136,6 +136,7 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
 | `surface-2` | `#F1F5F9` (slate-100) | `#202636` (ink-800) |
 | `border` | `#E2E8F0` (slate-200) | `#2C3343` (ink-700) |
 | `route` | `#2C3343` (ink-700) | `#E2E8F0` (slate-200) |
+| `route-soft` | `#9EA5B4` (grey-400) | `#6B7280` (grey-500) |
 | `text` | `#111827` (ink) | `#F4F6FA` (paper) |
 | `text-muted` | `#475569` (slate-600) | `#9EA5B4` |
 | `text-subtle` | `#64748B` (slate-500) | `#6B7280` |
@@ -148,6 +149,15 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
 >
 > Note it is `border` inverted: the rail used to be `border`, which is why it read as furniture rather
 > than as the route.
+>
+> **`route-soft` is the line quietened, and it is solid on purpose.** The rail was first drawn as
+> `route` at 45 % opacity, which is right in isolation and wrong wherever two of its shapes meet: a
+> line under a node's stroke, a chevron over a line, each overlap compositing twice and reading as a
+> darker seam. **Alpha cannot say *"this quieter colour"* — it says *"less of this colour, wherever
+> it lands"***, and those are different claims the moment anything overlaps. The values are what that
+> blend rendered as over the sheet's own background, so the appearance is unchanged and only the
+> seams go (ADR-163). Reach for it whenever a token is wanted at reduced strength across more than
+> one overlapping shape.
 
 ### Accent — monochrome (ink ↔ paper; NOT a colour — distinct from operator reds/yellows & status)
 | Semantic | Light | Dark |

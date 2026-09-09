@@ -44,6 +44,17 @@ object NextBusTokens {
          * Semantic because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
          */
         val route: Color = Color(0xFF2C3343)
+        /**
+         * The route line **quietened for the rail** — connective tissue, where `route` is the
+         * line itself. A SOLID value, and that is the decision rather than a detail: the rail
+         * was drawn as `route` at 45 % opacity, which looks right in isolation and betrays
+         * itself wherever two of its shapes overlap — a line under a node's stroke, a chevron
+         * over a line — because each overlap composites twice and reads as a darker seam.
+         * Alpha cannot express *"this quieter colour"*; it expresses *"less of this colour,
+         * wherever it happens to land"*. Chosen to match what that blend rendered as over the
+         * sheet's own background, so the appearance is unchanged and only the seams go.
+         */
+        val routeSoft: Color = Color(0xFF9EA5B4)
         /** Body text. ≥ 4.5:1 against `bg` in both modes. */
         val text: Color = Color(0xFF111827)
         /**
@@ -92,6 +103,17 @@ object NextBusTokens {
          * Semantic because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
          */
         val route: Color = Color(0xFFE2E8F0)
+        /**
+         * The route line **quietened for the rail** — connective tissue, where `route` is the
+         * line itself. A SOLID value, and that is the decision rather than a detail: the rail
+         * was drawn as `route` at 45 % opacity, which looks right in isolation and betrays
+         * itself wherever two of its shapes overlap — a line under a node's stroke, a chevron
+         * over a line — because each overlap composites twice and reads as a darker seam.
+         * Alpha cannot express *"this quieter colour"*; it expresses *"less of this colour,
+         * wherever it happens to land"*. Chosen to match what that blend rendered as over the
+         * sheet's own background, so the appearance is unchanged and only the seams go.
+         */
+        val routeSoft: Color = Color(0xFF6B7280)
         /** Body text. ≥ 4.5:1 against `bg` in both modes. */
         val text: Color = Color(0xFFF4F6FA)
         /**

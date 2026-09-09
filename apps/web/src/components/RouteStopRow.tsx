@@ -20,33 +20,34 @@ import { StopName } from './StopName'
  * otherwise forbid: the RN row is a single `Pressable`, so a DOM row with a nested control for the fare or
  * the star would be a tap target inside a tap target (ADR-024).
  */
-/**
- * The rail's direction chevrons — the same glyph `routeChevronImage` paints along the map's line, at
- * the rail's scale. Its 2.6 reach and 1.9 stroke are sized for a 5 px line; these are for a 2 px one.
- */
-const CHEVRON_W = 12
-/** Pitch down the rail. Wide enough that a short segment gets one or two, not a dotted texture. */
-const CHEVRON_SPACING = 20
-/** Clear of the node above and the next node below, so none is ever drawn half-under a stop. */
-const CHEVRON_INSET = 4
-/**
- * Quieter than the line it sits on. The chevrons are a *texture* saying which way is forward, and at
- * full strength they compete with the nodes for the eye — the same judgement round 5 made on the map,
- * where the answer was a casing-coloured notch rather than a mark in the line's own colour.
- */
-const CHEVRON_OPACITY = 0.55
+/** The rail's line, in CSS pixels — thicker than the 2 px it began at, to sit nearer the map's 5 px. */
+const RAIL_LINE = 4
 
 /**
- * One tile of the chevron mask: a double chevron pointing **down**, as a data URI.
+ * The double chevron's box, in CSS pixels.
  *
- * A CSS mask reads the **alpha** channel, so the paint in here is never seen — only where it is opaque.
- * `currentColor` rather than a hex for exactly that reason: an SVG loaded as an image has no inherited
- * colour, so it resolves to the initial black, and any other opaque value would mask identically. It is
- * not a colour literal because it is not choosing a colour; `check-no-raw-colours` would otherwise have
- * to carry a permanent exception for a value that has no visual effect.
+ * Proportioned from the map's — `routeChevronImage` uses a 2.6 reach and a 1.9 stroke on a 5 px line —
+ * down to a 3 px one. The arms overhang the rail by about a pixel each side, which is what makes the
+ * notch read as a cut *through* the line rather than a dent in its middle.
+ */
+const CHEVRON_W = 10
+const CHEVRON_H = 9
+
+/**
+ * The glyph, as a mask: a **double** chevron pointing down.
+ *
+ * A mask rather than an inline `<svg>` so the *shape* is data and the *colour* is a Tailwind class —
+ * which matters more here than it did before, because the colour is now the row's own background and
+ * has to change with `selected`. A fill baked into the SVG could not follow it.
+ *
+ * A CSS mask reads the **alpha** channel, so the paint is never seen — only where it is opaque.
+ * `currentColor` for exactly that reason: an SVG loaded as an image has no inherited colour, so it
+ * resolves to the initial black, and any other opaque value would mask identically. Not a colour
+ * literal, because it is not choosing a colour — which is what keeps `check-no-raw-colours` at zero
+ * allowlist entries rather than carrying a permanent exception for a value with no visual effect.
  */
 const CHEVRON_MASK = `url("data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${CHEVRON_W}" height="${CHEVRON_SPACING}" viewBox="0 0 ${CHEVRON_W} ${CHEVRON_SPACING}"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8 6 10.6 8.6 8"/></g></svg>`,
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${CHEVRON_W}" height="${CHEVRON_H}" viewBox="0 0 ${CHEVRON_W} ${CHEVRON_H}"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 1.2 5 4 7.8 1.2"/><path d="M2.2 5 5 7.8 7.8 5"/></g></svg>`,
 )}")`
 
 export function RouteStopRow({
@@ -191,57 +192,62 @@ export function RouteStopRow({
         <span className="relative shrink-0" style={{ width: RAIL_WIDTH }}>
           {!first ? (
             <span
-              className="absolute bg-route/45"
-              style={{ top: 0, height: NODE_CENTRE, width: 2, left: RAIL_WIDTH / 2 - 1 }}
+              className="absolute bg-route-soft"
+              style={{
+                top: 0,
+                height: NODE_CENTRE,
+                width: RAIL_LINE,
+                left: RAIL_WIDTH / 2 - RAIL_LINE / 2,
+              }}
             />
           ) : null}
           {!last ? (
             <span
-              className="absolute bg-route/45"
-              style={{ top: NODE_CENTRE, bottom: 0, width: 2, left: RAIL_WIDTH / 2 - 1 }}
+              className="absolute bg-route-soft"
+              style={{
+                top: NODE_CENTRE,
+                bottom: 0,
+                width: RAIL_LINE,
+                left: RAIL_WIDTH / 2 - RAIL_LINE / 2,
+              }}
             />
           ) : null}
           {/*
-            **The map's direction chevrons, threaded down the rail.** The same double chevron
-            `routeChevronImage` paints along the line, turned to point down the list — which is the
-            direction of travel here for the same reason it is there: `orientToStops` (ADR-152) makes the
-            geometry's vertex order the direction a rider moves, and the list is that order.
+            **The map's double chevron, once per gap, cut *out* of the rail.**
 
-            ## Two things it does differently from the map, both forced
+            Three things changed together, and each answered the one before it:
 
-            On the map the chevron is drawn in the **casing** colour so it reads as a notch cut out of a
-            5 px line. The rail's line is 2 px with no casing — it sits on the sheet, not on cartography
-            — so a notch has nothing to be cut out of. These are drawn in the line's own colour instead,
-            as marks threaded onto it, which is the transit-diagram idiom.
+            **It is the double chevron now** — the same glyph `routeChevronImage` paints along the line,
+            rather than a family resemblance to it. A single arm was right when these repeated every
+            20 px and the pair merged into one thick mark; at one per gap both halves have room to read.
 
-            And it is a **mask** rather than an SVG. The shape is a data URI and the colour comes from
-            `bg-route`, so the glyph is geometry and the token is still the one declaration of the
-            colour — an inline `<svg>` would need the hex baked into it, which `check-no-raw-colours`
-            forbids and dark mode would ignore. It also avoids a `<pattern>` id, which would collide
-            across forty rows in one document.
+            **One per gap, centred between two nodes.** `calc(50% + NODE_CENTRE)` with a `-50%` translate
+            is the midpoint exactly, and needs no measurement: the distance between adjacent nodes *is*
+            this row's height, so half of it below this node is halfway to the next. It holds at any row
+            height — the shortest row is 64 px against a 25 px `NODE_CENTRE`, so the mark never escapes
+            into the row below. It is also where the bus token rides, which is the intended reading: a
+            bus between stops covers the chevron it is passing.
 
-            Starts below the node rather than at `NODE_CENTRE`, so no chevron is ever half-under a stop.
-            The bus token renders after this and paints over it, which is the intended reading: the bus
-            covers the chevrons it has passed.
+            **Painted in the row's own background**, so the line reads as *cut away* rather than marked
+            on top — which is what the map does with its casing colour, and what round 5 settled as *"a
+            notch in the line, not a symbol on it"*. On the map the casing is a constant; here it is the
+            row's, so a focused row's `bg-surface-2` has to follow, or the notch fills with the wrong
+            colour on precisely the row the rider is looking at.
           */}
           {!last ? (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute bg-route/45"
+              className={`pointer-events-none absolute ${selected ? 'bg-surface-2' : 'bg-bg'}`}
               style={{
-                top: NODE_TOP + NODE + CHEVRON_INSET,
-                bottom: CHEVRON_INSET,
+                top: `calc(50% + ${NODE_CENTRE}px)`,
+                transform: 'translateY(-50%)',
                 left: RAIL_WIDTH / 2 - CHEVRON_W / 2,
                 width: CHEVRON_W,
-                opacity: CHEVRON_OPACITY,
+                height: CHEVRON_H,
                 maskImage: CHEVRON_MASK,
                 WebkitMaskImage: CHEVRON_MASK,
-                maskRepeat: 'repeat-y',
-                WebkitMaskRepeat: 'repeat-y',
-                maskSize: `${CHEVRON_W}px ${CHEVRON_SPACING}px`,
-                WebkitMaskSize: `${CHEVRON_W}px ${CHEVRON_SPACING}px`,
-                maskPosition: 'top center',
-                WebkitMaskPosition: 'top center',
+                maskSize: `${CHEVRON_W}px ${CHEVRON_H}px`,
+                WebkitMaskSize: `${CHEVRON_W}px ${CHEVRON_H}px`,
               }}
             />
           ) : null}
@@ -273,7 +279,7 @@ export function RouteStopRow({
               // strokes with the line's — inverted against the line rather than matched to it, because a
               // marker in the line's own colour disappears into it. The rail says it the same way, so a
               // rider who saw a hexagon on the map finds the same hexagon, the same colour, in the list.
-              className="absolute inset-0 h-full w-full fill-surface stroke-route/70"
+              className="absolute inset-0 h-full w-full fill-surface stroke-route"
               // 2 **rendered** pixels, to match the rail line it sits on — so the width is expressed in
               // viewBox units and the box is drawn 1:1, which is why every `viewBox` below is the glyph's
               // real size rather than a tidy 24.

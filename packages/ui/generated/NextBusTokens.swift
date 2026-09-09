@@ -37,6 +37,15 @@ public enum NextBusTokens {
         /// declaration here is exactly how the rail and the line would drift apart. Semantic
         /// because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
         public static let route = Color(red: 44 / 255, green: 51 / 255, blue: 67 / 255)
+        /// The route line **quietened for the rail** — connective tissue, where `route` is the line
+        /// itself. A SOLID value, and that is the decision rather than a detail: the rail was drawn
+        /// as `route` at 45 % opacity, which looks right in isolation and betrays itself wherever
+        /// two of its shapes overlap — a line under a node's stroke, a chevron over a line —
+        /// because each overlap composites twice and reads as a darker seam. Alpha cannot express
+        /// *"this quieter colour"*; it expresses *"less of this colour, wherever it happens to
+        /// land"*. Chosen to match what that blend rendered as over the sheet's own background, so
+        /// the appearance is unchanged and only the seams go.
+        public static let routeSoft = Color(red: 158 / 255, green: 165 / 255, blue: 180 / 255)
         /// Body text. ≥ 4.5:1 against `bg` in both modes.
         public static let text = Color(red: 17 / 255, green: 24 / 255, blue: 39 / 255)
         /// Secondary text. Also the tab bar's inactive tint — `text-subtle` was too low-contrast to
@@ -77,6 +86,15 @@ public enum NextBusTokens {
         /// declaration here is exactly how the rail and the line would drift apart. Semantic
         /// because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
         public static let route = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
+        /// The route line **quietened for the rail** — connective tissue, where `route` is the line
+        /// itself. A SOLID value, and that is the decision rather than a detail: the rail was drawn
+        /// as `route` at 45 % opacity, which looks right in isolation and betrays itself wherever
+        /// two of its shapes overlap — a line under a node's stroke, a chevron over a line —
+        /// because each overlap composites twice and reads as a darker seam. Alpha cannot express
+        /// *"this quieter colour"*; it expresses *"less of this colour, wherever it happens to
+        /// land"*. Chosen to match what that blend rendered as over the sheet's own background, so
+        /// the appearance is unchanged and only the seams go.
+        public static let routeSoft = Color(red: 107 / 255, green: 114 / 255, blue: 128 / 255)
         /// Body text. ≥ 4.5:1 against `bg` in both modes.
         public static let text = Color(red: 244 / 255, green: 246 / 255, blue: 250 / 255)
         /// Secondary text. Also the tab bar's inactive tint — `text-subtle` was too low-contrast to
