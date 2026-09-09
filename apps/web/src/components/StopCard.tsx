@@ -19,7 +19,15 @@ import { StopName } from './StopName'
 /** One route's row: chip, "→ destination", and the next-ETA badge. */
 function RouteRow({ row, onPress }: { row: StopCardRow; onPress?: (routeId: string) => void }) {
   const content = (
-    <div className="flex flex-1 items-center gap-2.5">
+    // **`min-w-0` on BOTH flex levels, and the outer one is the whole bug.** `truncate` cannot shrink a
+    // flex item whose `min-width` is `auto` — the default — so this row grew to its content width and
+    // the card grew with it: a 420 px viewport rendering a 566 px row, with the destination clipped and
+    // the ETA pushed clean off the right edge. The inner `min-w-0` was already here and could do nothing,
+    // because it was measured against a parent that had already inflated.
+    //
+    // `PlaceRow` and `Search` both have it on both levels; this file had it on one. Three spellings of one
+    // layout, and the one that was wrong is the one used by *two* screens — Nearby and Favourites.
+    <div className="flex min-w-0 flex-1 items-center gap-2.5">
       <RouteChip operator={row.operator} routeNo={row.routeNo} />
       <div className="min-w-0 flex-1">
         {row.headline ? (

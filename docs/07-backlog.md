@@ -92,6 +92,14 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
+- [ ] 🟠 **Nothing catches horizontal overflow, and it shipped on two screens.** `StopCard`'s route row
+      was missing `min-w-0` on its outer flex level, so `truncate` could not shrink it: a 420 px viewport
+      rendered a 566 px row, clipping the destination and pushing the ETA off the right edge on **Nearby
+      and Favourites** ([ADR-166](./08-decision-log.md#adr-166--truncate-cannot-shrink-a-flex-item-and-nothing-was-checking)).
+      Fixed, and every screen re-measured — but *nothing prevents the next one*. jsdom has no layout, so
+      the conformance suites cannot see it; the check that found it is one line
+      (`document.documentElement.scrollWidth > clientWidth`) and needs the CDP harness, which is not in
+      CI. Worth doing as part of any wider "run the real browser in CI" row rather than on its own.
 - [ ] 🟢 **The stop nearest the rider is not marked anywhere.** The third of the three ideas ADR-162
       weighed and the only one it did not build: the rider's fix reaches `RouteMap` for the dart, and
       nothing computes which *stop* is closest. The primitive already exists — `geo#nearestIndex`, built
