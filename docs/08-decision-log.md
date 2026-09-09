@@ -11040,10 +11040,18 @@ pre-existing and unaddressed; it earned its keep here.
   is two nicks; at 4 px both halves resolve. Built at 3 px, compared side by side at 4 px, and 4 px won
   on that comparison rather than on argument.
 
-- **Decision 3 — the double chevron comes back, once per gap, cut *out* of the line.** ADR-161 used a
-  single arm repeating every 20 px, because at that pitch the pair merged into one thick mark. One
-  glyph per gap has room for both halves, so the rail now draws the *same* mark as the map rather than a
-  family resemblance to it. It is placed by `calc(50% + NODE_CENTRE)` with a `-50%` translate, which is
+- **Decision 3 — the double chevron comes back, once per gap, cut *out* of the line — and the gap
+  between its halves is a **ratio**, not a number.** ADR-161 used a single arm repeating every 20 px,
+  because at that pitch the pair merged into one thick mark. One glyph per gap has room for both halves,
+  so the rail now draws the *same* mark as the map rather than a family resemblance to it.
+
+  The first attempt still read as `>>` where the map reads `> >`, and the owner spotted it before the
+  arithmetic did: scaling the map's glyph into a 10 px box while keeping the stroke at 2.0 — which it
+  must be, to cut a 4 px line — **let the stroke eat the gap**. The map's chevrons sit 5.0 apart with a
+  1.9 stroke, so the visible whitespace is 3.1, or **1.63× the stroke**; the rail's were 3.8 apart with
+  a 2.0 stroke, **0.9×**. Matched on the ratio rather than the number, the apexes are 5.3 apart and the
+  whitespace is 1.65×. **A glyph copied between two scales must carry its proportions, not its
+  measurements** — and the stroke is the unit those proportions are in, so changing it moves the gap. It is placed by `calc(50% + NODE_CENTRE)` with a `-50%` translate, which is
   the exact midpoint between adjacent nodes and needs no measurement: the distance between two nodes
   **is** the row's height. That is also where the bus token rides, so a bus between stops covers the
   chevron it is passing — which is the intended reading rather than a collision.
