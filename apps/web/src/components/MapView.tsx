@@ -92,6 +92,11 @@ const LIGHT_RASTER = {
  * drawn *over* the map keeps its true colour and needs its own light/dark pair. That is a trap rather
  * than a detail: a near-black route line is excellent on the light map and invisible on the dark one
  * (`docs/proposals/06 §8c`).
+ *
+ * The inversion is set **twice on purpose**: once in the style the map is built from, so the very first
+ * tile is already dark, and once as an effect over the live layers, so a rider who flips theme with the
+ * map open is followed. `load` cannot serve the first job — MapLibre fires it after the initial tiles
+ * are drawn, which is precisely the flash of white it was meant to prevent.
  */
 export function MapView({
   centre,
@@ -118,10 +123,10 @@ export function MapView({
   const locale = useLocale()
   const mode = useAppearance()
 
-  // The map is created ONCE. `centre`, `zoom` and `onReady` are read here as INITIAL values only;
-  // everything that changes afterwards is applied to the live instance by the effect below. Listing
-  // them would re-create the map on every camera change, dropping the tile cache, the caller's layers
-  // and the rider's current view — which is the opposite of what an interactive map is for.
+  // The map is created ONCE. `centre`, `zoom`, `mode` and `onReady` are read here as INITIAL values
+  // only; everything that changes afterwards is applied to the live instance by the effects below.
+  // Listing them would re-create the map on every camera change, dropping the tile cache, the caller's
+  // layers and the rider's current view — which is the opposite of what an interactive map is for.
   // biome-ignore lint/correctness/useExhaustiveDependencies: creation-time inputs, applied live below
   useEffect(() => {
     const host = hostRef.current
@@ -131,6 +136,13 @@ export function MapView({
     // vocabulary. `tileSize` is MapLibre's only lever for it.
     const plan = tileZoomPlan(zoom, window.devicePixelRatio || 1, provider)
     const baseTileSize = plan.base > plan.label ? provider.tileSize / 2 : provider.tileSize
+
+    // **The first frame carries the mode.** The effect below is what keeps a live map in step with a
+    // rider who flips theme, but it cannot be what *starts* one dark: MapLibre fires `load` only once
+    // the initial tiles have been fetched and drawn, so a filter applied there arrives a second after
+    // the rider has already seen a white map. The style is the only place that can be right on frame
+    // one. Guarded on `invertForDark` exactly as the effect is, so the two agree by construction.
+    const initialPaint = provider.invertForDark && mode === 'dark' ? DARK_RASTER : LIGHT_RASTER
 
     const map = new MapLibreMap({
       container: host,
@@ -166,14 +178,14 @@ export function MapView({
             : {}),
         },
         layers: [
-          { id: 'base', type: 'raster', source: 'base', paint: { ...LIGHT_RASTER } },
+          { id: 'base', type: 'raster', source: 'base', paint: { ...initialPaint } },
           ...(provider.label
             ? [
                 {
                   id: 'labels',
                   type: 'raster' as const,
                   source: 'labels',
-                  paint: { ...LIGHT_RASTER },
+                  paint: { ...initialPaint },
                 },
               ]
             : []),
@@ -198,7 +210,8 @@ export function MapView({
 
   // Appearance goes to the live map's raster layers, not to the canvas — see `DARK_RASTER`. Guarded
   // on the source's own `invertForDark`, because a vector basemap with a real dark style would want
-  // this off entirely (ADR-041).
+  // this off entirely (ADR-041). This handles CHANGES only; the mode a map opens in is baked into the
+  // style above, because `load` is too late to be the first frame.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !provider.invertForDark) return
