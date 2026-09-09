@@ -135,9 +135,19 @@ A monochrome **"ink & paper"** system: the accent is the *ink* on light and inve
 | `surface` | `#F8FAFC` (slate-50) | `#161B29` (ink-900) |
 | `surface-2` | `#F1F5F9` (slate-100) | `#202636` (ink-800) |
 | `border` | `#E2E8F0` (slate-200) | `#2C3343` (ink-700) |
+| `route` | `#2C3343` (ink-700) | `#E2E8F0` (slate-200) |
 | `text` | `#111827` (ink) | `#F4F6FA` (paper) |
 | `text-muted` | `#475569` (slate-600) | `#9EA5B4` |
 | `text-subtle` | `#64748B` (slate-500) | `#6B7280` |
+
+> **`route` is an alias, not a new colour.** It points at `color.map.route`/`routeInverted` — the pair
+> the map already declares because MapLibre needs both halves as literals. It exists so the stop list's
+> **rail** can be drawn in the line's own colour without reaching for `MAP_COLOR`, which a Tailwind
+> class cannot do. The rail and the map line are then the same object seen twice rather than two
+> things that happen to agree (ADR-161), and there is still exactly one declaration of the value.
+>
+> Note it is `border` inverted: the rail used to be `border`, which is why it read as furniture rather
+> than as the route.
 
 ### Accent — monochrome (ink ↔ paper; NOT a colour — distinct from operator reds/yellows & status)
 | Semantic | Light | Dark |

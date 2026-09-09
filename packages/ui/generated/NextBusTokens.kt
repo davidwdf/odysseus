@@ -35,6 +35,15 @@ object NextBusTokens {
         val surface2: Color = Color(0xFFF1F5F9)
         /** Hairline divider and the silhouette a dark-mode surface uses instead of a shadow. */
         val border: Color = Color(0xFFE2E8F0)
+        /**
+         * The route line — **the same colour the map draws it in**, so the stop list's rail
+         * and the line on the map read as one object rather than two views that happen to
+         * agree. Aliased to `color.map.route`/`routeInverted` rather than given a value of its
+         * own: those exist because MapLibre needs both halves of the pair as literals, and a
+         * second declaration here is exactly how the rail and the line would drift apart.
+         * Semantic because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
+         */
+        val route: Color = Color(0xFF2C3343)
         /** Body text. ≥ 4.5:1 against `bg` in both modes. */
         val text: Color = Color(0xFF111827)
         /**
@@ -74,6 +83,15 @@ object NextBusTokens {
         val surface2: Color = Color(0xFF202636)
         /** Hairline divider and the silhouette a dark-mode surface uses instead of a shadow. */
         val border: Color = Color(0xFF2C3343)
+        /**
+         * The route line — **the same colour the map draws it in**, so the stop list's rail
+         * and the line on the map read as one object rather than two views that happen to
+         * agree. Aliased to `color.map.route`/`routeInverted` rather than given a value of its
+         * own: those exist because MapLibre needs both halves of the pair as literals, and a
+         * second declaration here is exactly how the rail and the line would drift apart.
+         * Semantic because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
+         */
+        val route: Color = Color(0xFFE2E8F0)
         /** Body text. ≥ 4.5:1 against `bg` in both modes. */
         val text: Color = Color(0xFFF4F6FA)
         /**

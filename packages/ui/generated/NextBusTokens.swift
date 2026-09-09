@@ -30,6 +30,13 @@ public enum NextBusTokens {
         public static let surface2 = Color(red: 241 / 255, green: 245 / 255, blue: 249 / 255)
         /// Hairline divider and the silhouette a dark-mode surface uses instead of a shadow.
         public static let border = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
+        /// The route line — **the same colour the map draws it in**, so the stop list's rail and
+        /// the line on the map read as one object rather than two views that happen to agree.
+        /// Aliased to `color.map.route`/`routeInverted` rather than given a value of its own: those
+        /// exist because MapLibre needs both halves of the pair as literals, and a second
+        /// declaration here is exactly how the rail and the line would drift apart. Semantic
+        /// because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
+        public static let route = Color(red: 44 / 255, green: 51 / 255, blue: 67 / 255)
         /// Body text. ≥ 4.5:1 against `bg` in both modes.
         public static let text = Color(red: 17 / 255, green: 24 / 255, blue: 39 / 255)
         /// Secondary text. Also the tab bar's inactive tint — `text-subtle` was too low-contrast to
@@ -63,6 +70,13 @@ public enum NextBusTokens {
         public static let surface2 = Color(red: 32 / 255, green: 38 / 255, blue: 54 / 255)
         /// Hairline divider and the silhouette a dark-mode surface uses instead of a shadow.
         public static let border = Color(red: 44 / 255, green: 51 / 255, blue: 67 / 255)
+        /// The route line — **the same colour the map draws it in**, so the stop list's rail and
+        /// the line on the map read as one object rather than two views that happen to agree.
+        /// Aliased to `color.map.route`/`routeInverted` rather than given a value of its own: those
+        /// exist because MapLibre needs both halves of the pair as literals, and a second
+        /// declaration here is exactly how the rail and the line would drift apart. Semantic
+        /// because a DOM rail is styled by Tailwind and cannot reach `MAP_COLOR`.
+        public static let route = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255)
         /// Body text. ≥ 4.5:1 against `bg` in both modes.
         public static let text = Color(red: 244 / 255, green: 246 / 255, blue: 250 / 255)
         /// Secondary text. Also the tab bar's inactive tint — `text-subtle` was too low-contrast to

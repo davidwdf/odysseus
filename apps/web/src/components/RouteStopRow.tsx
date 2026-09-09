@@ -20,6 +20,35 @@ import { StopName } from './StopName'
  * otherwise forbid: the RN row is a single `Pressable`, so a DOM row with a nested control for the fare or
  * the star would be a tap target inside a tap target (ADR-024).
  */
+/**
+ * The rail's direction chevrons — the same glyph `routeChevronImage` paints along the map's line, at
+ * the rail's scale. Its 2.6 reach and 1.9 stroke are sized for a 5 px line; these are for a 2 px one.
+ */
+const CHEVRON_W = 12
+/** Pitch down the rail. Wide enough that a short segment gets one or two, not a dotted texture. */
+const CHEVRON_SPACING = 20
+/** Clear of the node above and the next node below, so none is ever drawn half-under a stop. */
+const CHEVRON_INSET = 4
+/**
+ * Quieter than the line it sits on. The chevrons are a *texture* saying which way is forward, and at
+ * full strength they compete with the nodes for the eye — the same judgement round 5 made on the map,
+ * where the answer was a casing-coloured notch rather than a mark in the line's own colour.
+ */
+const CHEVRON_OPACITY = 0.55
+
+/**
+ * One tile of the chevron mask: a double chevron pointing **down**, as a data URI.
+ *
+ * A CSS mask reads the **alpha** channel, so the paint in here is never seen — only where it is opaque.
+ * `currentColor` rather than a hex for exactly that reason: an SVG loaded as an image has no inherited
+ * colour, so it resolves to the initial black, and any other opaque value would mask identically. It is
+ * not a colour literal because it is not choosing a colour; `check-no-raw-colours` would otherwise have
+ * to carry a permanent exception for a value that has no visual effect.
+ */
+const CHEVRON_MASK = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${CHEVRON_W}" height="${CHEVRON_SPACING}" viewBox="0 0 ${CHEVRON_W} ${CHEVRON_SPACING}"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8 6 10.6 8.6 8"/></g></svg>`,
+)}")`
+
 export function RouteStopRow({
   row,
   index,
@@ -176,14 +205,58 @@ export function RouteStopRow({
         <span className="relative shrink-0" style={{ width: RAIL_WIDTH }}>
           {!first ? (
             <span
-              className="absolute bg-border"
+              className="absolute bg-route"
               style={{ top: 0, height: NODE_CENTRE, width: 2, left: RAIL_WIDTH / 2 - 1 }}
             />
           ) : null}
           {!last ? (
             <span
-              className="absolute bg-border"
+              className="absolute bg-route"
               style={{ top: NODE_CENTRE, bottom: 0, width: 2, left: RAIL_WIDTH / 2 - 1 }}
+            />
+          ) : null}
+          {/*
+            **The map's direction chevrons, threaded down the rail.** The same double chevron
+            `routeChevronImage` paints along the line, turned to point down the list — which is the
+            direction of travel here for the same reason it is there: `orientToStops` (ADR-152) makes the
+            geometry's vertex order the direction a rider moves, and the list is that order.
+
+            ## Two things it does differently from the map, both forced
+
+            On the map the chevron is drawn in the **casing** colour so it reads as a notch cut out of a
+            5 px line. The rail's line is 2 px with no casing — it sits on the sheet, not on cartography
+            — so a notch has nothing to be cut out of. These are drawn in the line's own colour instead,
+            as marks threaded onto it, which is the transit-diagram idiom.
+
+            And it is a **mask** rather than an SVG. The shape is a data URI and the colour comes from
+            `bg-route`, so the glyph is geometry and the token is still the one declaration of the
+            colour — an inline `<svg>` would need the hex baked into it, which `check-no-raw-colours`
+            forbids and dark mode would ignore. It also avoids a `<pattern>` id, which would collide
+            across forty rows in one document.
+
+            Starts below the node rather than at `NODE_CENTRE`, so no chevron is ever half-under a stop.
+            The bus token renders after this and paints over it, which is the intended reading: the bus
+            covers the chevrons it has passed.
+          */}
+          {!last ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute bg-route"
+              style={{
+                top: NODE_TOP + NODE + CHEVRON_INSET,
+                bottom: CHEVRON_INSET,
+                left: RAIL_WIDTH / 2 - CHEVRON_W / 2,
+                width: CHEVRON_W,
+                opacity: CHEVRON_OPACITY,
+                maskImage: CHEVRON_MASK,
+                WebkitMaskImage: CHEVRON_MASK,
+                maskRepeat: 'repeat-y',
+                WebkitMaskRepeat: 'repeat-y',
+                maskSize: `${CHEVRON_W}px ${CHEVRON_SPACING}px`,
+                WebkitMaskSize: `${CHEVRON_W}px ${CHEVRON_SPACING}px`,
+                maskPosition: 'top center',
+                WebkitMaskPosition: 'top center',
+              }}
             />
           ) : null}
           {/*
@@ -210,9 +283,11 @@ export function RouteStopRow({
             <svg
               viewBox={NODE_BOX[kind].viewBox}
               aria-hidden="true"
-              className={`absolute inset-0 h-full w-full ${
-                here ? 'fill-accent stroke-accent' : 'fill-surface stroke-border'
-              }`}
+              // **The map's marker, in CSS.** `routeMarkerElement` fills with the CASING colour and
+              // strokes with the line's — inverted against the line rather than matched to it, because a
+              // marker in the line's own colour disappears into it. The rail says it the same way, so a
+              // rider who saw a hexagon on the map finds the same hexagon, the same colour, in the list.
+              className="absolute inset-0 h-full w-full fill-surface stroke-route"
               // 2 **rendered** pixels, to match the rail line it sits on — so the width is expressed in
               // viewBox units and the box is drawn 1:1, which is why every `viewBox` below is the glyph's
               // real size rather than a tidy 24.
@@ -220,17 +295,21 @@ export function RouteStopRow({
             >
               <path d={NODE_SHAPE[kind]} />
             </svg>
-            <span className={`relative ${here ? 'text-accent-contrast' : 'text-subtle'}`}>
-              {row.seq}
-            </span>
-            {/* The boarding stop's own mark: a hole in the middle of the node. A shape rather than a
-                second colour, so it survives a colour-blind rider and a monochrome screenshot alike —
-                and it reads as *this stop is special* rather than *this row is selected*, which is the
-                distinction the two states need. */}
+            {/* Hidden on the boarding stop, whose node carries the filled centre instead: a number and
+                a dot in one 26 px node are two marks competing, and the dot is the one that means
+                something. Still announced — `StopName` carries the row's accessible name. */}
+            <span className={`relative ${here ? 'invisible' : 'text-subtle'}`}>{row.seq}</span>
+            {/* The boarding stop's own mark: a filled centre, which is **the same mark the map's marker
+                carries** (ADR-158) rather than a second colour — so it survives a colour-blind rider and
+                a monochrome screenshot alike, and it reads as *this stop is special* rather than *this
+                row is selected*, which is the distinction the two states need.
+
+                It was an accent-filled node with a hole punched in its corner: the rail saying it one
+                way while the map said it another, which sharing a colour made impossible to miss. */}
             {here ? (
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full border-2 border-accent bg-surface"
+                className="pointer-events-none absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-route"
               />
             ) : null}
           </span>
