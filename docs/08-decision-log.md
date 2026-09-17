@@ -11295,6 +11295,29 @@ pre-existing and unaddressed; it earned its keep here.
   the bottom of this screen — against a treatment that is centred, clears the back lens by construction,
   and fits a destination the 46 px pill truncates.
 
+- **Round 2, and what the owner settled from it.** Three shapes are now decided and built in the lab:
+  **(a)** open, the glass **encloses the back control and the badge** rather than sliding under a separate
+  floating lens — two panes overlapping was the reason the badge was centred in the first place, and one
+  pane removes the problem instead of arranging the layout around it (the screen's own `<BackButton />`
+  must then not draw while the card is open, or there are two); **(b)** collapsed, the badge is **bigger**
+  — `lg`, because it is the only identity left at that size; **(c)** the island is **compact** — `px-3
+  py-1` and the name at `text-label` semibold rather than `text-body`, which measures **64 px** against
+  round 1's 68 and today's 46. The remaining 18 px is the bigger badge and is not recoverable while it
+  stays bigger, which is the trade as stated rather than a defect.
+  · Still open, and now six-wide in the lab over one pair of names: **0** today's centred block, **1**
+  round 1's gutter elbow, **A** the origin on its own line with the elbow turning under it, **B** the
+  schematic in miniature — a terminus square at each end of a rail with one double chevron on it — **C**
+  that rail laid horizontally so each name gets the full width, and **D** no glyph at all, the destination
+  leading with a *"from …"* line under it. Two findings worth keeping whichever wins: **B costs 10 px of
+  extra leading**, because three marks cannot share a two-line span at natural spacing; and **C fails the
+  long-name case** — two HK terminus names cannot share one line, which is the very complaint that opened
+  this thread.
+  · **The swap glyph gets a square-noded twin.** lucide's `git-compare-arrows` is two *circles* joined by
+  arrows, and if the terminus square goes into the header it is the last circle on the screen claiming to
+  be a terminus. The twin keeps lucide's own arms untouched and redraws only the two nodes, with round
+  joins rather than the rail's mitre — every other arm in that glyph is round-joined, and a mitred square
+  among them reads as a different icon rather than the same one.
+
 - **What a headless browser could and could not see.** The animation exists and its keyframes are the
   measured heights, but *does it still read as a cut* is a question only a real tab can answer — and two
   environmental traps sat in the way of even the structural check. A page driven over CDP reports
