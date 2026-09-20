@@ -124,6 +124,20 @@
 	<string name="addFavorite">Add to favourites</string>
 	<string name="removeFavorite">Remove from favourites</string>
 	<string name="viewStop">View stop</string>
+	<string name="watchStop">Watch this stop</string>
+	<string name="stopWatching">Stop watching</string>
+	<string name="watchOffline">Offline — showing the last times</string>
+	<string name="watchScheduled">Timetabled, not live</string>
+	<plurals name="watchLeaveIn">
+		<item quantity="one">Leave in %1$d min</item>
+		<item quantity="other">Leave in %1$d min</item>
+	</plurals>
+	<string name="watchLeaveNow">Leave now</string>
+	<plurals name="watchWalk">
+		<item quantity="one">%1$d min walk</item>
+		<item quantity="other">%1$d min walk</item>
+	</plurals>
+	<string name="viewRoute">View route</string>
 	<string name="reverseDirection">Reverse direction</string>
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">Bus approaching %1$s</string>

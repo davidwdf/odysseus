@@ -122,6 +122,18 @@
 	<string name="addFavorite">加入收藏</string>
 	<string name="removeFavorite">移除收藏</string>
 	<string name="viewStop">查看車站</string>
+	<string name="watchStop">追蹤此站</string>
+	<string name="stopWatching">停止追蹤</string>
+	<string name="watchOffline">離線 — 顯示最後取得的時間</string>
+	<string name="watchScheduled">原定班次，非實時</string>
+	<plurals name="watchLeaveIn">
+		<item quantity="other">%1$d 分鐘後出發</item>
+	</plurals>
+	<string name="watchLeaveNow">立即出發</string>
+	<plurals name="watchWalk">
+		<item quantity="other">步行 %1$d 分鐘</item>
+	</plurals>
+	<string name="viewRoute">查看路線</string>
 	<string name="reverseDirection">反方向</string>
 	<!-- {stop} → %1$s -->
 	<string name="busApproaching">巴士即將到達%1$s</string>

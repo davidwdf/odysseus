@@ -782,6 +782,84 @@ export const CATALOGUE = {
     'zh-Hant': '查看車站',
     'zh-Hans': '查看车站',
   },
+  /**
+   * **Watching a stop** (`proposals/07`) — the sheet action that starts it, and everything the floating
+   * pill and its card say afterwards.
+   *
+   * Two of the pill's four sentences are **not** here on purpose: a board that refused us says
+   * `etasUnavailable` and a board with nothing due says `noService`, which are the same words the stop
+   * card and the route sheet already use for the same two facts. A watch that invented its own wording
+   * for them would be the app disagreeing with itself about what happened — and the rider would have no
+   * way to know the two screens meant the same thing.
+   */
+  watchStop: {
+    en: 'Watch this stop',
+    'zh-Hant': '追蹤此站',
+    'zh-Hans': '追踪此站',
+  },
+  /** The card's own control, and the only way a watch ends before its 90 minutes are up. */
+  stopWatching: {
+    en: 'Stop watching',
+    'zh-Hant': '停止追蹤',
+    'zh-Hans': '停止追踪',
+  },
+  /**
+   * The pill's line when the rider's network is gone — shorter than `feedOffline`, which is the card's.
+   *
+   * Two wordings for one fact, which usually earns a rejection in this repo, and the exception is
+   * argued: they are read in different places and only ever one at a time. The pill has one line of
+   * about 35 characters between a badge and a figure (`proposals/07` §4c measured it), so
+   * *"You're offline — showing the last times we had"* would truncate to *"You're offline — showing…"*
+   * and lose the half that matters. The card, which has the width, keeps the full sentence.
+   */
+  watchOffline: {
+    en: 'Offline — showing the last times',
+    'zh-Hant': '離線 — 顯示最後取得的時間',
+    'zh-Hans': '离线 — 显示最后取得的时间',
+  },
+  /**
+   * The honesty cue: this figure is the published timetable, not a bus anyone has seen (ADR-008).
+   *
+   * Said in the pill's own words rather than echoing the operator's remark, because the remark is an
+   * operator string in one locale of unpredictable length and the pill has room for a phrase, not a
+   * sentence. The remark itself is still drawn in full on the card.
+   */
+  watchScheduled: {
+    en: 'Timetabled, not live',
+    'zh-Hant': '原定班次，非實時',
+    'zh-Hans': '原定班次，非实时',
+  },
+  /**
+   * The line a watch exists for: your walk against the next bus (`proposals/00`'s P13).
+   *
+   * `{n}` is whole minutes and is never negative — the kernel omits the line entirely for a bus the
+   * rider cannot catch rather than printing a zero that would read as reassurance (`watchView`'s
+   * `leave`). Zero itself has its own string below, because "Leave in 0 min" is not a sentence anyone
+   * says.
+   */
+  watchLeaveIn: {
+    en: '{n, plural, one{Leave in # min} other{Leave in # min}}',
+    'zh-Hant': '{n, plural, other{# 分鐘後出發}}',
+    'zh-Hans': '{n, plural, other{# 分钟后出发}}',
+  },
+  /** The walk exactly fills the wait. */
+  watchLeaveNow: {
+    en: 'Leave now',
+    'zh-Hant': '立即出發',
+    'zh-Hans': '立即出发',
+  },
+  /** The card's walk estimate, beside the leave line. `{n}` is `walkMinutes`' straight-line estimate. */
+  watchWalk: {
+    en: '{n, plural, one{# min walk} other{# min walk}}',
+    'zh-Hant': '{n, plural, other{步行 # 分鐘}}',
+    'zh-Hans': '{n, plural, other{步行 # 分钟}}',
+  },
+  /** The card's shortcut back to the whole route. `viewStop` above is its sibling for the pole. */
+  viewRoute: {
+    en: 'View route',
+    'zh-Hant': '查看路線',
+    'zh-Hans': '查看路线',
+  },
   /** Route header: accessible label for the reverse-direction toggle / FAB (ADR-046). */
   reverseDirection: {
     en: 'Reverse direction',

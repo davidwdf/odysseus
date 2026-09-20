@@ -59,6 +59,7 @@ export default defineConfig({
         'src/stop-card.ts',
         'src/stop-detail.ts',
         'src/stop-name.ts',
+        'src/watch.ts',
       ],
       // A **branch** threshold is the load-bearing one. Line coverage is easy to satisfy with a
       // handful of happy-path cases; the bugs in rules like these live in the branch nobody thought

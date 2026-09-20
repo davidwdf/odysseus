@@ -1,0 +1,227 @@
+{
+  "component": "WatchPill",
+  "version": 1,
+  "doc": "The collapsed watch — one route at one pole, following the rider across every screen.",
+  "viewModel": {
+    "module": "watch",
+    "type": "WatchView",
+    "corpus": "watch.spec.json",
+    "group": "watchView"
+  },
+  "slots": [
+    {
+      "name": "routeNo",
+      "invariant": "The printed number the rider saw when they started watching, captured with the watch — not looked up. A pill draws on the first frame of any screen, with no fetch and possibly with no network.",
+      "text": {
+        "field": "routeNo"
+      }
+    },
+    {
+      "name": "stopName",
+      "invariant": "Title-cased and split by `displayName`, so the pill spells a pole exactly as the card, the row and the sheet do (ADR-034). **The one string on this component that must never be truncated** — it is what the rider is watching, and §4c bought its width by deleting the chevron.",
+      "text": {
+        "field": "stop.label"
+      }
+    },
+    {
+      "name": "stopCode",
+      "when": "stop.code",
+      "why": "A pole whose upstream name carries no printed flag code — a GMB pole rarely has one at all.",
+      "text": {
+        "field": "stop.code"
+      }
+    },
+    {
+      "name": "subLine",
+      "invariant": "Exactly one of the five, always — `destination` is a case rather than the absence of one, so neither renderer implements a \"no note, show the destination instead\" fallback of its own. The precedence is the kernel's: offline, then the board's refusal, then nothing-due, then the timetable cue, then the destination. `subLine.tone` names a meaning (`warn` / `muted`) and never a colour, so each renderer maps it with its own tokens (ADR-053).",
+      "oneOf": "subLine.kind",
+      "cases": {
+        "destination": [
+          {
+            "name": "destinationArrow",
+            "text": {
+              "literal": "→",
+              "why": "The renderer supplies the glyph and the kernel supplies only the destination, exactly as `StopRow` does — a direction marker rather than a word, so it is not in the catalogue and needs no translation."
+            }
+          },
+          {
+            "name": "destination",
+            "text": {
+              "field": "destination"
+            }
+          }
+        ],
+        "offline": [
+          {
+            "name": "subOffline",
+            "text": {
+              "message": "watchOffline"
+            }
+          }
+        ],
+        "unavailable": [
+          {
+            "name": "subUnavailable",
+            "text": {
+              "message": "etasUnavailable"
+            }
+          }
+        ],
+        "noService": [
+          {
+            "name": "subNoService",
+            "text": {
+              "message": "noService"
+            }
+          }
+        ],
+        "scheduled": [
+          {
+            "name": "subScheduled",
+            "text": {
+              "message": "watchScheduled"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "figure",
+      "invariant": "Tabular figures, and **no client-side countdown**: the value changes only when a frame lands (ADR-008). The pill is the most tempting place in the app to animate a number down, and the one where it would be least honest — it is on screen continuously, so a stale figure ticking would be a lie told for minutes rather than seconds.",
+      "oneOf": "readout.kind",
+      "cases": {
+        "pending": [],
+        "reading": [
+          {
+            "name": "lead",
+            "invariant": "Three of these five are unreachable through this component and are declared anyway. `upcoming` filters departed readings out before a lead exists, `etaLabelParts` cannot return `headway`, and `none` needs a row with no reading at all — but a `oneOf` value with no case is a hard failure in this format, so enumerating them is what makes growing `EtaLabelParts` go red here instead of silently dropping the pill's only figure.",
+            "oneOf": "readout.lead.label.kind",
+            "cases": {
+              "mins": [
+                {
+                  "name": "leadValue",
+                  "text": {
+                    "field": "readout.lead.label.value"
+                  }
+                },
+                {
+                  "name": "leadUnit",
+                  "text": {
+                    "field": "readout.lead.label.unit"
+                  }
+                }
+              ],
+              "due": [
+                {
+                  "name": "leadDue",
+                  "text": {
+                    "field": "readout.lead.label.label"
+                  }
+                }
+              ],
+              "departed": [],
+              "headway": [
+                {
+                  "name": "leadHeadway",
+                  "text": {
+                    "field": "readout.lead.label.text"
+                  }
+                }
+              ],
+              "none": []
+            }
+          }
+        ],
+        "unavailable": [
+          {
+            "name": "figureAbsentUnavailable",
+            "text": {
+              "literal": "—",
+              "why": "The board refused us, so there is no figure. The dash is the same one `StopRow` draws for a reading it cannot make, and the *reason* is on the sub-line, where a sentence fits."
+            }
+          }
+        ],
+        "noService": [
+          {
+            "name": "figureAbsentNoService",
+            "text": {
+              "literal": "—",
+              "why": "Nothing is due. A different fact from the dash above it and drawn identically, because the pill has one figure slot and only one of them can be true at a time — the sub-line is what distinguishes them."
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "states": {
+    "loading": {
+      "must": "A skeleton in the shape of the pill — the badge, a name block and a figure block.",
+      "mustNot": "A dash where the figure will be, an empty pill, or a spinner. A board on its way must never read as a board that answered.",
+      "why": "ADR-088: `loading` is the first arm for exactly this reason, and the mistake it names — a paused fetch matching no arm — shipped on two screens before a spec asked the question.",
+      "enforcement": {
+        "shows": []
+      }
+    },
+    "empty": {
+      "must": "The stop, the route and an explicit \"no service\" on the sub-line, with a dash for the figure.",
+      "mustNot": "A blank second line, and never the destination — which would make a route with no buses look identical to one with buses the pill has not drawn yet.",
+      "enforcement": {
+        "by": "subNoService"
+      }
+    },
+    "failed": {
+      "must": "An explicit \"could not reach\" cue on the sub-line, distinguishable from having no service.",
+      "mustNot": "Reading as \"no buses due\", and never the sentence in the figure slot.",
+      "why": "ADR-073/077: `coalesce` resolved a refused board to an empty list, so an outage rendered identically to a quiet stop. The pill inherits both the distinction and the words the rest of the app uses for it.",
+      "enforcement": {
+        "by": "subUnavailable"
+      }
+    },
+    "stale": {
+      "must": "The last readings, with the age said once — on the card, which is where `feedNotice` lives.",
+      "mustNot": "A per-figure cue of any kind, and never a value presented as fresh.",
+      "why": "ADR-123/133/150: a fade and then a muted `~` were both built and withdrawn, because staleness is a property of the board and a per-figure cue draws one fact once per reading. A pill *is* one board, so its one sentence is the card's.",
+      "enforcement": {
+        "unenforced": "Nothing on the collapsed pill says it, deliberately. The claim is checked one level up, on `WatchCard`, whose `feedNotice` slot is the sentence — the same division `stop-row.spec.json` makes with the screens that draw it."
+      }
+    },
+    "offline": {
+      "must": "The last known readings, with the sub-line saying the network is gone.",
+      "mustNot": "A blank pill, and never a fresh-looking value.",
+      "why": "ADR-058: offline is a service worker plus a persisted query cache, so what is replayed is a labelled old reading rather than no reading. The sub-line outranks every other sentence here, because a rider who does not know they are offline cannot interpret anything else the pill says.",
+      "enforcement": {
+        "by": "subOffline"
+      }
+    },
+    "redundant": {
+      "must": "Nothing, or a reduced form — the screen underneath is already drawing this exact board.",
+      "mustNot": "A second full copy of a board the rider can already see, covering the one they are reading.",
+      "why": "`proposals/07` §5.5. The *comparison* is the kernel's (`WatchView.redundant`) because comparing ids in a view is the derivation `check-no-derivation` bans; what to do about it — hide, or shrink to badge and figure — is layout, and therefore each renderer's.",
+      "enforcement": {
+        "by": "routeNo"
+      }
+    }
+  },
+  "interactions": [
+    {
+      "target": "stopName",
+      "goes": "watch-card",
+      "note": "The **whole pill** is the target, not a disclosure control: §4c deleted the chevron because its 19 px were the difference between the stop name fitting and not, and a control whose entire surface is tappable does not need an arrow to say so. The slot named here is the pill's accessible name, which is what the interaction is anchored to."
+    }
+  ],
+  "a11y": {
+    "role": "button, and a polite live region for the figure",
+    "name": {
+      "fromSlot": "stopName"
+    },
+    "reducedMotion": "No rise-and-expand; the card appears in place. The pill itself never animates its figure — see the `figure` invariant."
+  },
+  "idiom": [
+    "material and elevation — glass over content on both renderers today, but a value-swap either could change",
+    "shape: the corner radius, and whether the pill shares the bottom row with the search lens or sits alone",
+    "motion: the rise above the lens and the widening into the card, and whether they are one gesture",
+    "how the lead figure is emphasised — size, weight, and which token `urgency` maps to",
+    "the dismiss gesture, if any — a swipe is idiom, the 90-minute expiry is not",
+    "whether `redundant` hides the pill or reduces it to a badge and a figure"
+  ]
+}

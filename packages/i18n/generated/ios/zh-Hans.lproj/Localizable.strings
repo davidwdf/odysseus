@@ -118,6 +118,14 @@
 "addFavorite" = "加入收藏";
 "removeFavorite" = "移除收藏";
 "viewStop" = "查看车站";
+"watchStop" = "追踪此站";
+"stopWatching" = "停止追踪";
+"watchOffline" = "离线 — 显示最后取得的时间";
+"watchScheduled" = "原定班次，非实时";
+/* watchLeaveIn: plural — see Localizable.stringsdict */
+"watchLeaveNow" = "立即出发";
+/* watchWalk: plural — see Localizable.stringsdict */
+"viewRoute" = "查看路线";
 "reverseDirection" = "反方向";
 /* {stop} → %1$@ */
 "busApproaching" = "巴士即将到达%1$@";

@@ -118,6 +118,14 @@
 "addFavorite" = "Add to favourites";
 "removeFavorite" = "Remove from favourites";
 "viewStop" = "View stop";
+"watchStop" = "Watch this stop";
+"stopWatching" = "Stop watching";
+"watchOffline" = "Offline — showing the last times";
+"watchScheduled" = "Timetabled, not live";
+/* watchLeaveIn: plural — see Localizable.stringsdict */
+"watchLeaveNow" = "Leave now";
+/* watchWalk: plural — see Localizable.stringsdict */
+"viewRoute" = "View route";
 "reverseDirection" = "Reverse direction";
 /* {stop} → %1$@ */
 "busApproaching" = "Bus approaching %1$@";

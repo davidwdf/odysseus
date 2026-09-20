@@ -114,6 +114,7 @@ enum Corpus {
         "stop-card",
         "stop-detail",
         "stop-name",
+        "watch",
     ]
     // END GENERATED: corpus-modules
 

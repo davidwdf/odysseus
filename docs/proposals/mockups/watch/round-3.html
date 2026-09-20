@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="./favicon.svg">
+<title>Watch — round 3: the pill shares the row, and what the second line should say</title>
+<!-- PROTOTYPE ONLY. Raw hex rather than tokens, invented ETAs, no data layer. See ./README.md -->
+<style>
+ :root{--bg:#fbfbfa;--surface:#fff;--text:#1a1a19;--muted:#7a7975;--subtle:#a3a29d;--line:#e6e5e1;
+       --accent:#c8102e;--positive:#0a7d4a;--warn:#a8620a;--route:#3f6fb5;
+       --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.08);--ease:cubic-bezier(.32,.72,0,1)}
+ *{box-sizing:border-box}
+ body{margin:0;background:#f0efec;color:var(--text);
+      font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+ header.page{max-width:1500px;margin:0 auto;padding:26px 20px 4px}
+ header.page h1{font-size:21px;margin:0 0 6px}
+ header.page p{margin:0 0 10px;color:var(--muted);max-width:94ch}
+ header.page code{background:#e7e6e2;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ header.page a{color:var(--text)}
+ .controls{max-width:1500px;margin:0 auto;padding:6px 20px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls b{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:2px}
+ .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;
+       font-size:12.5px;cursor:pointer}
+ .chip[aria-pressed="true"]{background:var(--text);color:#fff;border-color:var(--text)}
+ h2.sec{max-width:1500px;margin:16px auto 0;padding:0 20px;font-size:16px}
+ p.sec{max-width:1500px;margin:4px auto 0;padding:0 20px 8px;color:var(--muted)}
+ .row{max-width:1500px;margin:0 auto;padding:10px 20px 30px;display:flex;flex-wrap:wrap;gap:20px;align-items:start}
+ .cell{width:390px}
+ .cell h3{font-size:14px;margin:0 0 2px}
+ .cell p{margin:0 0 10px;color:var(--muted);font-size:12.5px;min-height:58px}
+ .note{max-width:1500px;margin:0 auto 44px;padding:0 20px;color:var(--muted);font-size:12.5px}
+
+ /* 390 px — an iPhone 15's CSS width, so the truncation here is the truncation you get */
+ .phone{width:390px;height:700px;background:var(--bg);border-radius:36px;border:1px solid var(--line);
+        box-shadow:var(--shadow);overflow:hidden;position:relative}
+ .screen{position:absolute;inset:0;overflow:hidden}
+ .appHead{padding:26px 16px 6px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+ .appSub{padding:0 16px 10px;color:var(--muted);font-size:12px}
+ .list{padding:0 12px;display:flex;flex-direction:column;gap:9px}
+ .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:11px 12px}
+ .card .nm{font-size:13.5px;font-weight:650;margin-bottom:2px}
+ .card .mt{font-size:11.5px;color:var(--muted)}
+ .rt{display:flex;align-items:center;gap:8px;margin-top:8px}
+ .badge{background:var(--accent);color:#fff;font-weight:700;border-radius:7px;padding:2px 7px;font-size:12px;flex:none}
+ .badge.ctb{background:#f0b323;color:#231f20}
+ .rt .dest{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .rt .min{font-variant-numeric:tabular-nums;font-weight:650;font-size:13px}
+ .rt .min.soon{color:var(--positive)}
+ .glass{background:rgba(255,255,255,.78);-webkit-backdrop-filter:blur(16px) saturate(1.8);
+        backdrop-filter:blur(16px) saturate(1.8);
+        box-shadow:inset 0 0 0 .5px rgba(255,255,255,.65),0 3px 16px rgba(0,0,0,.14)}
+
+ /* ── the bottom dock: [nav?] [pill] [lens], one row, 12 px gaps ─────────── */
+ .dock{position:absolute;left:12px;right:12px;bottom:12px;height:58px;display:flex;gap:12px;z-index:20}
+ .lens,.nav{width:58px;height:58px;border-radius:29px;display:grid;place-items:center;flex:none}
+ .nav{position:relative}
+ .nav .dotrow{position:absolute;bottom:9px;display:flex;gap:3px}
+ .nav .dotrow i{width:3px;height:3px;border-radius:2px;background:var(--subtle)}
+ .spacer{flex:1;min-width:0}
+
+ /* the pill occupies the spacer while closed; on open it rises above the row and takes the full width */
+ .watch{position:absolute;bottom:12px;z-index:25;cursor:pointer;border-radius:26px;overflow:hidden;
+        transition:left .38s var(--ease),right .38s var(--ease),bottom .38s var(--ease),
+                   border-radius .38s var(--ease)}
+ .watch.open{left:12px !important;right:12px !important;bottom:82px;border-radius:26px}
+ .wRow{display:flex;align-items:center;gap:9px;padding:0 12px;height:58px}
+ .wBadge{background:var(--accent);color:#fff;font-weight:700;border-radius:9px;min-width:32px;height:29px;
+         display:grid;place-items:center;font-size:14px;padding:0 6px;flex:none}
+ .wText{flex:1;min-width:0}
+ .wStop{display:block;font-size:13.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .wSub{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .wSub.warn{color:var(--warn);font-weight:600}
+ .wFig{display:flex;align-items:baseline;gap:3px;flex:none;font-variant-numeric:tabular-nums;padding-left:2px}
+ .wFig .v{font-size:23px;font-weight:700;letter-spacing:-.02em}
+ .wFig .u{font-size:11.5px;color:var(--muted)}
+ .wFig.soon .v{color:var(--positive)}
+ .wFig.word .v{font-size:15px}
+ .wChev{flex:none;color:var(--subtle);margin-left:1px}
+
+ /* ── the card (C2, agreed) ─────────────────────────────────────────────── */
+ .body{overflow:hidden;max-height:0;opacity:0;transition:max-height .34s var(--ease),opacity .2s;
+       background:var(--surface)}
+ .watch.open .body{max-height:460px;opacity:1}
+ .quiet{display:flex;align-items:baseline;gap:10px;padding:6px 16px 0;font-variant-numeric:tabular-nums}
+ .quiet .v{font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1}
+ .quiet .v.soon{color:var(--positive)}
+ .quiet .v.word{font-size:19px}
+ .quiet .u{font-size:13px;color:var(--muted)}
+ .quiet .then{margin-left:auto;font-size:12.5px;color:var(--muted);text-align:right;line-height:1.35}
+ .quiet .bad{font-size:14px;font-weight:600;color:var(--warn)}
+ .whereLine{padding:7px 16px 0;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px}
+ .whereLine svg{width:13px;height:13px;flex:none;opacity:.8}
+ .notice{padding:8px 16px 0;font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+ .notice svg{width:13px;height:13px;flex:none}
+ .named{padding:13px 16px 2px;position:relative}
+ .named .ln{position:absolute;left:22px;top:20px;bottom:14px;width:2px;background:var(--route);opacity:.5}
+ .named .st{display:flex;align-items:center;gap:13px;height:26px;position:relative;padding-left:2px}
+ .named .nd{width:13px;height:13px;border-radius:7px;background:var(--surface);border:2px solid var(--route);
+            margin-left:2px;flex:none;z-index:1}
+ .named .st.here .nd{background:var(--text);border-color:var(--text)}
+ .named .lbl{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .named .st.here .lbl{color:var(--text);font-weight:600}
+ .named .bus{position:absolute;left:14px;width:17px;height:17px;border-radius:9px;background:var(--accent);
+             display:grid;place-items:center;color:#fff;z-index:2;box-shadow:0 1px 5px rgba(200,16,46,.4)}
+ .named .bus svg{width:11px;height:11px}
+ .actsText{display:flex;gap:16px;padding:13px 16px 15px;border-top:1px solid var(--line);margin-top:12px}
+ .actsText button{border:0;background:none;font:inherit;font-size:12.5px;cursor:pointer;color:var(--text);
+                  display:flex;align-items:center;gap:6px;padding:0}
+ .actsText button svg{width:14px;height:14px;color:var(--muted)}
+ .actsText .sp{flex:1}
+ .actsText .muted{color:var(--muted)}
+ .ruler{margin-top:8px;font-size:11.5px;color:var(--subtle);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Round 3 — the pill shares the row, and what the second line should say</h1>
+  <p>
+    Three answers to round 2's feedback. <b>The lens shares the row</b> and the pill <b>rises above it</b> to
+    open at full width — the owner's fix, and it is better than stacking. <b>“2 stops away” is dropped</b>:
+    HK stop spacing runs from 1 to 10 minutes, so a stop count is not a time and reads as one. And the
+    <b>podcasts-style dock</b> (§2) is measured rather than guessed, because it is the layout that decides how
+    much the pill can say. Phones are <b>390 px</b>, an iPhone 15's CSS width, so the truncation here is the
+    truncation you would get.
+  </p>
+</header>
+
+<div class="controls" id="controls">
+  <b>Board says</b>
+  <button class="chip" data-mode="normal">3 min</button>
+  <button class="chip" data-mode="due">Due</button>
+  <button class="chip" data-mode="scheduled">Scheduled only</button>
+  <button class="chip" data-mode="stale">Stale feed</button>
+  <button class="chip" data-mode="none">Nothing due</button>
+  <button class="chip" data-mode="failed">Board failed</button>
+  <span style="flex:1"></span>
+  <button class="chip" id="expandAll" aria-pressed="false">Expand all</button>
+</div>
+
+<h2 class="sec">1 — Sharing the row, and opening over it</h2>
+<p class="sec">The pill sits in the row beside the lens; tapping it slides it up to <code>bottom: 82</code>
+  and out to the full width, so the card is never squeezed by a button. Tap to see the move.</p>
+<div class="row" id="share"></div>
+
+<h2 class="sec">2 — The podcasts dock: [tabs] · [pill] · [lens]</h2>
+<p class="sec">What actually fits between two 58 px circles at 390 px: <b>226 px</b> of pill. Three readings
+  of that width — and the finding is that <b>the stop name does not fit in any of them</b>.</p>
+<div class="row" id="dock"></div>
+
+<h2 class="sec">3 — What the second line should say, since it isn't “2 stops away”</h2>
+<p class="sec">Same pill, four candidates for one line. All are constant-cost; none is a distance dressed up
+  as a time.</p>
+<div class="row" id="subs"></div>
+
+<p class="note">
+  Deliberately wrong here: raw hex rather than <code>@nextbus/ui</code> tokens, English-only strings, and
+  figures that never change. The widths, the arms and their order are the parts meant to be judged.
+</p>
+
+<script>
+const W = { route:'1', dest:'Chuk Yuen Estate', stop:'Nathan Road / Jordan Road', code:'HK58',
+            stand:'Stand B · towards Mong Kok', walkMin:4 }
+const MODES = {
+  normal:   { slots:[{v:'3',u:'min'},{v:'11',u:'min'},{v:'24',u:'min',tag:'Scheduled'}] },
+  due:      { slots:[{v:'Due',u:''},{v:'7',u:'min'},{v:'18',u:'min'}] },
+  scheduled:{ slots:[{v:'12',u:'min'},{v:'32',u:'min'}], remark:'Scheduled — not a live reading' },
+  stale:    { slots:[{v:'3',u:'min'},{v:'11',u:'min'},{v:'24',u:'min'}], notice:'Times last updated 4 minutes ago' },
+  none:     { slots:[], word:'No service', notice:'No more buses on this route today' },
+  failed:   { slots:[], word:'Live times unavailable', bad:true, notice:'This stop’s board did not answer. Trying again.' },
+}
+let mode = 'normal', openAll = false
+const has = () => MODES[mode].slots.length > 0
+
+const I = {
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="m18 15-6-6-6 6"/></svg>',
+  bus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M6 17v2M18 17v2M5 5h14a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1Z"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  walk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="m9 21 2-6 2 2v5M11 9l-2 3 3 1 2 4"/><path d="m15 9 3 2"/></svg>',
+  sign:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect x="5" y="6" width="14" height="6" rx="1.5"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><path d="M10.6 6.2A9.6 9.6 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.1 3.7M6.3 8.3C3.8 9.9 2 12 2 12s3.5 6 10 6c1.3 0 2.5-.2 3.5-.6"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  route:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H14a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h5.5"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1Z"/></svg>',
+}
+
+function screenHtml(){
+  const r = (no,dest,min,cls='') =>
+    `<div class="rt"><span class="badge ${cls}">${no}</span><span class="dest">${dest}</span>
+     <span class="min ${min==='Due'||parseInt(min)<4?'soon':''}">${min}</span></div>`
+  return `<div class="appHead">Nearby</div>
+  <div class="appSub">4 stops within 300 m · updated just now</div>
+  <div class="list">
+    <div class="card"><div class="nm">Jordan Station</div><div class="mt">60 m · 1 min walk</div>
+      ${r('N241','Tuen Mun Ferry Pier','12')}${r('287X','Sha Tin','5')}</div>
+    <div class="card"><div class="nm">Nathan Road / Jordan Road</div><div class="mt">90 m · 2 min walk</div>
+      ${r('1','Chuk Yuen Estate','3')}${r('6','Star Ferry','9','ctb')}</div>
+    <div class="card"><div class="nm">Kwong Wah Hospital</div><div class="mt">240 m · 3 min walk</div>
+      ${r('12','Hung Hom Station','16')}</div>
+    <div class="card"><div class="nm">Jordan Road / Wui Cheung Road</div><div class="mt">310 m · 4 min walk</div>
+      ${r('8','Whampoa','7')}</div>
+  </div>`
+}
+
+/* The figure slot holds a figure or a muted dash — never a sentence (round 2's finding). */
+function figure(){
+  const m = MODES[mode]
+  if (m.word) return `<span class="wFig word"><span class="v" style="color:var(--subtle)">—</span></span>`
+  const l = m.slots[0], soon = l.v==='Due'||parseInt(l.v)<4
+  return `<span class="wFig ${soon?'soon':''} ${l.u?'':'word'}">
+    <span class="v">${l.v}</span>${l.u?`<span class="u">${l.u}</span>`:''}</span>`
+}
+/* The candidates for line two. */
+const SUB = {
+  dest:  () => `→ ${W.dest}`,
+  stand: () => W.stand,
+  both:  () => `${W.stand} · → ${W.dest}`,
+  code:  () => `${W.code} · → ${W.dest}`,
+  none:  () => '',
+}
+function subLine(kind){
+  const m = MODES[mode]
+  if (m.word) return `<span class="wSub ${m.bad?'warn':''}">${m.word}</span>`
+  if (m.remark) return `<span class="wSub warn">${m.remark}</span>`
+  const text = SUB[kind]()
+  return text ? `<span class="wSub">${text}</span>` : ''
+}
+function head(o){
+  if (o.minimal)
+    return `<div class="wRow" style="justify-content:center;gap:11px">
+      <span class="wBadge">${W.route}</span>${figure()}</div>`
+  return `<div class="wRow">
+    <span class="wBadge">${W.route}</span>
+    <span class="wText"><span class="wStop">${W.stop}</span>${subLine(o.sub)}</span>
+    ${figure()}${o.chev===false?'':`<span class="wChev">${I.chev}</span>`}</div>`
+}
+
+function cardBody(){
+  const m = MODES[mode]
+  const lead = m.slots[0]
+  const readout = !m.slots.length
+    ? `<div class="quiet"><span class="${m.bad?'bad':'v word'}">${m.word}</span></div>`
+    : `<div class="quiet">
+        <span class="v ${lead.v==='Due'||parseInt(lead.v)<4?'soon':''} ${lead.u?'':'word'}">${lead.v}</span>
+        ${lead.u?`<span class="u">${lead.u}</span>`:''}
+        ${m.slots.length>1?`<span class="then">then ${m.slots.slice(1).map(s=>s.v+(s.u?' '+s.u:'')).join(' · ')}
+          ${m.slots.some(s=>s.tag)||m.remark?'<br><span style="opacity:.85">timetabled, not live</span>':''}</span>`:''}
+       </div>`
+  const stops = ['Jordan Rd / Canton Rd','Gascoigne Rd','Nathan Rd / Jordan Rd']
+  const rail = has() ? `<div class="named"><div class="ln"></div>
+    ${stops.map((s,i)=>`<div class="st ${i===stops.length-1?'here':''}">
+      ${i===0?`<span class="bus" style="top:4px">${I.bus}</span><span class="nd" style="visibility:hidden"></span>`
+             :'<span class="nd"></span>'}
+      <span class="lbl">${s}${i===stops.length-1?' · you':''}</span></div>`).join('')}</div>` : ''
+  return `<div class="body">${readout}
+    <div class="whereLine">${I.sign}<span>${W.stand}</span></div>
+    ${has()?`<div class="whereLine">${I.walk}<span>${W.walkMin} min walk — leave in 1 min</span></div>`:''}
+    ${m.notice?`<div class="notice">${I.clock}<span>${m.notice}</span></div>`:''}
+    ${rail}
+    <div class="actsText"><button>${I.route}Route</button><button>${I.pin}Stop</button>
+      <span class="sp"></span><button class="muted">${I.eyeOff}Stop watching</button></div></div>`
+}
+
+/* dock: which circles are in the row, and therefore how wide the pill is */
+function phone(o){
+  const left = o.nav ? `<div class="nav glass">${I.home}<span class="dotrow"><i></i><i></i></span></div>` : ''
+  const lensLeft = 12 + (o.nav?58+12:0)
+  const pillRight = 12 + 58 + 12          // the lens's own width and gap
+  const pillWidth = 390 - lensLeft - pillRight
+  return `<div class="phone"><div class="screen">${screenHtml()}</div>
+    <div class="dock">${left}<div class="spacer"></div>
+      <div class="lens glass">${I.search}</div></div>
+    <div class="watch glass ${o.open||openAll?'open':''}"
+         style="left:${lensLeft}px;right:${pillRight}px" tabindex="0" role="button">
+      ${head(o)}${cardBody()}</div>
+  </div>
+  <div class="ruler">pill width while closed: <b>${pillWidth} px</b></div>`
+}
+
+const SHARE = [
+  { t:'S1 — shares the row (A1) ★', o:{sub:'dest'},
+    b:'The owner’s layout: pill and lens on one row, the pill opening upward and outward. Measured: 296 px closed — and “Nathan Road / Jordan Road” <b>does not quite fit</b> beside the figure. One control too many; see S2.' },
+  { t:'S2 — no chevron', o:{sub:'dest', chev:false},
+    b:'The chevron is decoration — the whole pill is the target. Dropping it buys 19 px, and that is exactly the difference: the same stop name now fits whole. <b>This is the one to ship.</b>' },
+  { t:'S3 — open, risen above the lens', o:{sub:'dest', open:true},
+    b:'What the tap does: up by 70 px, out to the full width, card revealed. The lens stays put and is never covered — no button is squeezed and nothing is hidden behind the card.' },
+]
+const DOCK = [
+  { t:'D1 — podcasts dock, full readout', o:{sub:'dest', nav:true},
+    b:'Tabs collapsed left, lens right, pill between: 226 px. Measured: the stop name truncates to “Nathan Ro…” — and this is a <b>short</b> HK stop name.' },
+  { t:'D2 — one line, everything to the name', o:{sub:'none', nav:true, chev:false},
+    b:'The destination moves into the card so the name gets the whole width. It still truncates. At 226 px the name is not recoverable by rearranging — that is the finding.' },
+  { t:'D3 — what not to do', o:{sub:'both', nav:true},
+    b:'Stand, direction and destination in 226 px. Every line truncates, so the rider reads three half-facts instead of one whole one.' },
+  { t:'D4 — badge and figure only ★', o:{sub:'none', nav:true, chev:false, minimal:true},
+    b:'If the dock exists, this is the honest pill: the livery badge, the time, no truncated anything. It is round 1’s capsule — which is where the podcasts layout leads, and the reason the pill should be <b>one component at two densities</b>, chosen by the width it is given.' },
+]
+const SUBS = [
+  { t:'L1 — destination (A1) ★', o:{sub:'dest'},
+    b:'What you are waiting for. Static, never wrong, and the thing that distinguishes two directions of the same route number at the same kerb.' },
+  { t:'L2 — stand & direction', o:{sub:'stand'},
+    b:'ADR-080’s answer to “which of these two poles a metre apart”. Most useful while you are walking there, useless once you have arrived — and it is already the card’s first line.' },
+  { t:'L3 — stop code + destination', o:{sub:'code'},
+    b:'The pole’s own flag code, for matching the physical sign. Precise and unreadable unless you already know the scheme.' },
+  { t:'L4 — nothing', o:{sub:'none'},
+    b:'One line. The lightest object here, and the one that says least about which stop it is — fine when the stop name is unambiguous, which is not the HK case.' },
+]
+
+function render(){
+  const cell = (x) => `<div class="cell"><h3>${x.t}</h3><p>${x.b}</p>${phone(x.o)}</div>`
+  document.getElementById('share').innerHTML = SHARE.map(cell).join('')
+  document.getElementById('dock').innerHTML  = DOCK.map(cell).join('')
+  document.getElementById('subs').innerHTML  = SUBS.map(cell).join('')
+  document.querySelectorAll('.chip[data-mode]').forEach(c=>
+    c.setAttribute('aria-pressed', String(c.dataset.mode===mode)))
+}
+document.addEventListener('click', e=>{
+  const chip = e.target.closest('.chip[data-mode]')
+  if (chip){ mode = chip.dataset.mode; render(); return }
+  if (e.target.closest('#expandAll')){
+    openAll = !openAll
+    document.getElementById('expandAll').setAttribute('aria-pressed', String(openAll))
+    render(); return }
+  const w = e.target.closest('.watch')
+  if (w && !e.target.closest('button')) w.classList.toggle('open')
+})
+render()
+</script>
+</body>
+</html>

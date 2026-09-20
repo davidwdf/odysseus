@@ -193,6 +193,37 @@ Place/Stop detail with `hideWhenEmpty`, and the only way to *add* one is the rou
       here), which also gives the Favourites card an honest "see the rest of what I saved here" destination.
       Decide the wording too — from Favourites, "+X more routes" arguably means "+X more *saved* routes".
 
+## Watch a stop — the rows the kernel and the specs left (2026-09-20)
+
+**Designed and specified, not built.** [`proposals/07`](./proposals/07-watch-a-stop.md) has the three design
+rounds and the clickable mockups; `packages/core/src/watch.ts`, `packages/core/spec/watch.spec.json` and
+`packages/contract/ui/watch-{pill,card}.spec.json` are landed and gated. The shape is the owner's: the pill
+shares the bottom row with the search lens, **no chevron**, and rises above the lens to open into the card.
+
+- [ ] **`WatchPill` and `WatchCard` in `apps/web`**, driven by the two published specs, plus the conformance
+      driver that puts each declared state on screen. **Both specs were written before either component**, so
+      unlike every spec before them these are a target rather than a description — the first implementation
+      has to satisfy them, and the day one cannot is the day a `knownDefect` gets an owner.
+- [ ] **The store field, modelled by both stores in the same change.** `partialize` writes its output as the
+      **whole** blob, so a field one store does not model is not preserved but *erased* (WP6-4, ADR-125). One
+      watch, persisted, expiring 90 minutes after the **rider** last touched it — never after the last round,
+      which would mean it never expires at all.
+- [ ] **The `Watch this stop` action on `RouteStopSheet`**, beside the star and *View stop*. Today that sheet
+      is the app's only favourite-creating affordance; it becomes the only watch-creating one too.
+- [ ] **The subscription and its lifetime.** `watch([{ stopId, routeIds: [routeId] }])` from the shell, one
+      target, unsubscribed on expiry. On the poll emulator that is one `/v1/etas?ids=…` round per cadence for
+      as long as the watch lives, which is the cost argument for **one** watch rather than five.
+- [ ] **The layout constant.** `shell/layout.ts` grows the pill's height and the bottom inset is derived from
+      it, never re-guessed per screen. The pill **floats above** Route detail's map sheet (owner, 2026-09-20)
+      while modal action sheets cover it — z-order, not visibility, and the sheet's scroll container owes the
+      pill's height in padding so its last row stays reachable.
+- [ ] **What a screen reader hears.** A figure that changes every 45–60 s must not announce every round.
+      Proposal in `proposals/07` §5.6: silent by default, announcing only on a threshold crossing (becomes
+      *Due*, becomes unavailable), full readout on focus. Undecided, and it is a decision rather than a detail.
+- [ ] **Notifications** — *"tell me when it's 5 minutes away"* is the obvious next ask and a different
+      feature: a `Notifier` port, permission, and a server-side subscription to work when the app is closed.
+      Nothing in the shape above blocks it.
+
 ## Platform & engagement
 - [ ] **Push notifications:** "your bus is N stops / N minutes away" (needs native — Phase 3).
 - [ ] **Background location** geofenced alerts.

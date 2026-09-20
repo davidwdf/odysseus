@@ -10714,6 +10714,155 @@
           }
         }
       ]
+    },
+    "routeStopEta": {
+      "doc": "Which reading in a report belongs to this route at this pole — `routeStopBoard`'s decision 3, extracted when `watchView` needed the reading itself rather than its formatted times. The rule is unchanged: an exact `stopId` match, else the route's only reading, and NEVER a guess between two kerbs (ADR-042 promotes a pole id to a place, so one report can answer twice for one route).",
+      "cases": [
+        {
+          "name": "the-reading-for-this-pole-exactly",
+          "why": "The plain case: a report answering about the pole we asked about.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "KMB:HK58-S-1250-0",
+            "routeId": "KMB:1:outbound:1"
+          },
+          "expect": {
+            "routeId": "KMB:1:outbound:1",
+            "stopId": "KMB:HK58-S-1250-0",
+            "operator": "KMB",
+            "arrivals": [
+              "2026-09-20T09:03:00+08:00",
+              "2026-09-20T09:11:00+08:00",
+              "2026-09-20T09:24:00+08:00"
+            ],
+            "dataTimestamp": "2026-09-20T09:00:00+08:00",
+            "observedAt": "2026-09-20T09:00:00+08:00"
+          }
+        },
+        {
+          "name": "a-single-reading-is-unambiguously-the-answer",
+          "why": "The server resolved our pole id to a place and answered under a member id (ADR-042). One reading for the route means it is the one we asked for.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-N-1251-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "KMB:HK58-S-1250-0",
+            "routeId": "KMB:1:outbound:1"
+          },
+          "expect": {
+            "routeId": "KMB:1:outbound:1",
+            "stopId": "KMB:HK58-N-1251-0",
+            "operator": "KMB",
+            "arrivals": [
+              "2026-09-20T09:03:00+08:00",
+              "2026-09-20T09:11:00+08:00",
+              "2026-09-20T09:24:00+08:00"
+            ],
+            "dataTimestamp": "2026-09-20T09:00:00+08:00",
+            "observedAt": "2026-09-20T09:00:00+08:00"
+          }
+        },
+        {
+          "name": "never-a-guess-between-two-kerbs",
+          "why": "Two readings for one route at two poles, neither of them ours: on a schematic those are different rows, so the answer is nothing rather than the first one.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-N-1251-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                },
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK59-S-1260-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "KMB:HK58-S-1250-0",
+            "routeId": "KMB:1:outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "another-route-at-our-pole-is-not-ours",
+          "why": "The route half of the filter, which a caller that matched on `stopId` alone would lose — and it would put route 6’s bus on route 1’s board.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:6:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "poleId": "KMB:HK58-S-1250-0",
+            "routeId": "KMB:1:outbound:1"
+          },
+          "expect": null
+        },
+        {
+          "name": "no-report-at-all",
+          "why": "Before the first frame. `undefined` in, absent out — never an empty object a caller might read fields off.",
+          "args": {
+            "report": null,
+            "poleId": "KMB:HK58-S-1250-0",
+            "routeId": "KMB:1:outbound:1"
+          },
+          "expect": null
+        }
+      ]
     }
   }
 }
