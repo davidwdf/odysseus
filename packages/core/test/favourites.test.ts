@@ -7,9 +7,11 @@ import {
   mergePreferences,
   mergeSavedKeys,
   migrateFavouriteKeys,
+  savedRows,
 } from '../src/favourites'
 import { formatFavoriteRouteKey, parseFavoriteRouteKey } from '../src/ids'
-import type { StopCardOptions, StopCardView } from '../src/stop-card'
+import type { StopCardOptions, StopCardRow, StopCardView } from '../src/stop-card'
+import type { StopDetailRoute } from '../src/stop-detail'
 import type { Locale, StopDetail } from '../src/types'
 import { specCases } from './corpus'
 
@@ -115,6 +117,37 @@ describe('favourites#favouritePoleIds', () => {
         }),
       )
       for (const id of got) expect(named.has(id), `${c.name}: invented ${id}`).toBe(true)
+    }
+  })
+})
+
+describe('favourites#savedRows', () => {
+  type Args = { routes: StopDetailRoute[]; saved: string[]; locale: Locale; now: string }
+  for (const c of cases<Args, StopCardRow[]>('savedRows')) {
+    it(c.name, () => {
+      const { routes, saved, locale, now } = c.args
+      expect(savedRows(routes, saved, { locale, now: Date.parse(now) })).toEqual(c.expect)
+    })
+  }
+
+  // The property the two callers depend on and no single row states: the rule never invents a route and
+  // never returns one the rider did not save. `favouritesView` relies on it for the card's contents and
+  // `homeView` relies on it twice — once for a saved card's rows, and once (with a saved set that does not
+  // mention the place) to prove a discovery card has none.
+  it('returns a subset of what it was given, and only saved keys', () => {
+    for (const c of cases<Args, StopCardRow[]>('savedRows')) {
+      const { routes, saved, locale, now } = c.args
+      const got = savedRows(routes, saved, { locale, now: Date.parse(now) })
+      const savedKeys = new Set(saved)
+      expect(got.length, `${c.name}: invented a row`).toBeLessThanOrEqual(routes.length)
+      for (const row of got) {
+        const source = routes.filter((r) => r.route.id === row.routeId)
+        expect(source.length, `${c.name}: ${row.routeId} is not at this place`).toBeGreaterThan(0)
+        expect(
+          source.some((r) => savedKeys.has(`${r.stopId}|${r.route.id}`)),
+          `${c.name}: ${row.routeId} was not saved at any pole here`,
+        ).toBe(true)
+      }
     }
   })
 })

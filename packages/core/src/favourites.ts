@@ -405,10 +405,6 @@ export function favouritesView(input: FavouritesInput, opts: StopCardOptions): S
     // `order` is built from the keys of `byPlace`, so the entry exists; the `as` records that rather
     // than a `?? throw` arm no payload can reach — the shape the 100 % branch threshold refuses.
     const detail = byPlace.get(placeId) as StopDetail
-    const saved = detail.routes.filter((route) =>
-      savedKeys.has(formatFavoriteRouteKey(route.stopId, route.route.id)),
-    )
-
     // **Two rows for one line saved at two kerbs, and no label naming them** (WP6-4b, closing WP5-12's
     // residual from the favourites side). The collapse this used to inherit from `soonestPerLine` is right
     // for a card *summarising a place* and wrong for a list the rider curated: starring a line at both
@@ -421,14 +417,7 @@ export function favouritesView(input: FavouritesInput, opts: StopCardOptions): S
     // own example). A label repeated on both rows claims a distinction it does not make, so there is none.
     // What a rider gets is both buses instead of one, and Place detail — which has room for ADR-080's
     // compass side, pole name and "check the sign" ladder — is one tap away.
-    const rows = saved
-      .map((route) => favouriteRow(route, opts.locale, opts.now, policy))
-      // **Soonest first, and the ones with no reading last.** A rider opens this screen to find the next
-      // bus, so a live arrival outranks a timetable and a timetable outranks a dash — and within the
-      // readings, the sooner one. It is the card's own order because Favourites is the one surface whose
-      // rows do not arrive pre-sorted from anywhere: the wire orders a *place's* rows, not a rider's list.
-      .sort((a, b) => readoutRank(a) - readoutRank(b) || compareDue(a.due, b.due))
-      .map(({ due: _due, ...row }) => row)
+    const rows = savedRows(detail.routes, savedKeys, opts)
 
     const shown = rows.slice(0, policy.maxRows)
     return {
@@ -448,6 +437,49 @@ export function favouritesView(input: FavouritesInput, opts: StopCardOptions): S
       incomplete: (detail.failed ?? []).length > 0,
     }
   })
+}
+
+/**
+ * **The rider's saved routes at one place, as rows, soonest first** — the rule two screens need and
+ * neither should own.
+ *
+ * It answers three questions together, because separating them is what let them disagree: *which* of a
+ * place's routes the rider saved, *what each row reads*, and *in what order*. Favourites has always done
+ * all three; `homeView` needs the identical answer for the saved half of its board, and a second
+ * implementation would agree until the day one of them was retuned.
+ *
+ * ## The intersection is at the POLE, and that is the load-bearing part
+ *
+ * `detail.routes` is every line at every kerb of the place, each carrying the `stopId` of the pole it
+ * departs from. A favourite is `formatFavoriteRouteKey(poleId, routeId)` (ADR-032/042), so intersecting at
+ * the pole is what keeps opposite-kerb directions of one route number distinct — starring the 68K towards
+ * town does not star the 68K away from it, and a rider who saved both gets two rows rather than one.
+ *
+ * ## The order, and why it is not the wire's
+ *
+ * **Soonest first, and the ones with no reading last.** A rider opens a list of their own routes to find
+ * the next bus, so a live arrival outranks a published timetable and a timetable outranks a dash — and
+ * within the readings, the sooner one. It has to be decided here because this is the one list that arrives
+ * pre-sorted from nowhere: the wire orders a *place's* rows, not a rider's selection of them.
+ *
+ * **No cap.** The caller decides whether to truncate — Favourites does, at the served `maxRows`, together
+ * with its honest "+N more"; Home does not, because a rider's own choices at one place are few and capping
+ * them is the silent filter its whole board is arranged to avoid.
+ *
+ * @spec favourites#savedRows
+ */
+export function savedRows(
+  routes: readonly StopDetailRoute[],
+  saved: ReadonlySet<string> | readonly string[],
+  opts: StopCardOptions,
+): StopCardRow[] {
+  const keys = saved instanceof Set ? saved : new Set(saved)
+  const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
+  return routes
+    .filter((route) => keys.has(formatFavoriteRouteKey(route.stopId, route.route.id)))
+    .map((route) => favouriteRow(route, opts.locale, opts.now, policy))
+    .sort((a, b) => readoutRank(a) - readoutRank(b) || compareDue(a.due, b.due))
+    .map(({ due: _due, ...row }) => row)
 }
 
 /** A row, plus the arrival it sorts on — stripped before it leaves `favouritesView`. */

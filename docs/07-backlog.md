@@ -92,6 +92,23 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
+- [ ] 🟠 **`/v1/nearby` sends a place's `routeCount` but not its route list** — found by
+      [ADR-177](./08-decision-log.md#adr-177--homeview-the-merge-is-a-ranking-rule-and-catch-it-is-a-band-rather-than-a-number)
+      while building Home's chip strip. A card's strip is *every route at this place, as a badge with no
+      reading*, and a **saved** card can draw it in full because `StopDetail.routes` is the complete list. A
+      **discovery** card cannot: `/v1/nearby` publishes the readings plus a count, so its chips are the lines
+      that happen to have a bus due and `chipsMore` is everything else.
+      What a rider sees: the `+N` badge on a nearby card cannot expand in place the way a saved one's can —
+      it has to open the place. That is a visible inconsistency between two halves of one board, and it is
+      the only thing standing between them being the same card in behaviour as well as in shape.
+      **The edge already has the data**: `routeCount` is counted from the static index per place, so the fix
+      is to send the lines it counted (`operator | routeNo | bound`) rather than only their number. It is a
+      wire change — `CONTRACT_VERSION`, the Zod schema, the emitted OpenAPI, and the shard the worker reads —
+      and it wants weighing against payload size: a 26-route interchange is ~26 short tuples, and
+      `/v1/nearby` returns several places.
+      🟢 **`homeView` needs no change when it lands.** The rule is already *"chips are the lines we know of;
+      `chipsMore` is the honest remainder"*, which is true of both inputs — a better answer just makes the
+      remainder zero.
 - [ ] 🟠 **Nothing catches horizontal overflow, and it shipped on two screens.** `StopCard`'s route row
       was missing `min-w-0` on its outer flex level, so `truncate` could not shrink it: a 420 px viewport
       rendered a 566 px row, clipping the destination and pushing the ETA off the right edge on **Nearby

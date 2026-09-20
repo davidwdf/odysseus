@@ -44,6 +44,7 @@ export default defineConfig({
         'src/eta.ts',
         'src/favourites.ts',
         'src/geo.ts',
+        'src/home.ts',
         'src/geo-snap.ts',
         'src/ids.ts',
         'src/live.ts',

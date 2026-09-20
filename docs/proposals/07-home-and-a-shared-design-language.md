@@ -873,8 +873,9 @@ Scoped to the owner's answer: **rungs 1–3**. H-10 stays listed and stays out o
 | H-3 | Chrome parity on Nearby + Favourites: floating header, glass, motion | 1 | S/M | shippable alone |
 | H-4a | ~~Skeletons shaped like their content~~ | 1 | S | ✅ **done 2026-09-20** — `StopCardSkeleton` on Nearby + Favourites, its box held against `StopCard`'s by test, a `pending` panel in the gallery, and `docs/09` §11 carries the rule. Found and fixed a rule in the gallery's own gate (`wordless`) |
 | H-4b | Map-matching marker glyph on the card; the row menu (`RouteStopSheet`) | 1 | S | §7d. Deferred behind Q4's board decision — the discovery row's shape changes what the glyph sits next to |
-| H-5 | `homeView` + corpus + `home.spec.json`; `/` becomes Home, `/favorites` redirects | 2 | M | the merge; one ADR. Three sections, saved never collapsed (§0 Q2) |
-| H-6 | "Catch it" / "when to leave" — the walk-vs-ETA band rule, its ADR and its corpus | 2 | M | §5a incl. Q2's twin; the headline feature |
+| H-5a | ~~`homeView` + corpus~~ | 2 | M | ✅ **done 2026-09-20** — ADR-177. Three exclusive sections, one card shape, 18 corpus rows at 100 % branch coverage. `savedRows` extracted so Favourites and Home cannot disagree. 🟠 Found a wire gap: `/v1/nearby` sends `routeCount` but no route list, so a discovery card's strip is its readings plus an honest remainder (`docs/07`) |
+| H-5b | `home.spec.json` (the UI spec), `/` becomes Home, `/favorites` redirects, the tab bar retires | 2 | M | needs its own ADR for the ADR-100 amendment |
+| ~~H-6~~ | ~~The walk-vs-ETA band rule, its ADR and its corpus~~ | 2 | M | ✅ **done 2026-09-20** — ADR-177 decision 4. Three bands, no derived number; a bus that cannot be made has no band and does not enter the section. 🟡 The *far*-case wording (§5a's "leave in about 3 min") is still open and is deliberately not in the kernel |
 | H-7a | `RouteMap` → `Map` (polyline optional); Home renders it as a child, lazily | 3 | M | proves the chrome on a second screen |
 | H-7b | Lift the map to a shell layer; `MapIntent` + its corpus; camera keyed by history entry | 3 | L | §7e. **Prototype the View Transitions interaction first** |
 | H-8 | Shared-element transition: list `RouteChip` → context card badge | 3 | S | the data router's whole reason for existing |
