@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home — Q4: what goes in the floating card</title>
+<!-- PROTOTYPE ONLY. Tiles direct from LandsD (the app goes through our Worker, ADR-049);
+     raw hex rather than tokens; the board is hand-written, not from `homeView`. See ./README.md -->
+<style>
+ :root{
+   --bg:#fff;--surface:#f8fafc;--surface-2:#f1f5f9;--border:#e2e8f0;
+   --text:#111827;--muted:#475569;--subtle:#64748b;--accent:#111827;--accent-on:#fff;
+   --positive:#16a34a;--warning:#d97706;--danger:#dc2626;
+   --glass:rgba(255,255,255,.72);--rim:inset 0 .5px 0 rgba(255,255,255,.72),inset 0 -.5px 0 rgba(15,23,42,.06);
+   --cast:0 1px 3px rgba(15,23,42,.10),0 8px 24px rgba(15,23,42,.12);
+   --page:#e9edf2;--chrome:#cdd5de;
+   --ease:cubic-bezier(.32,.72,0,1);--dur:.42s;
+ }
+ .dark{
+   --bg:#0d111c;--surface:#161b29;--surface-2:#202636;--border:#2c3343;
+   --text:#f4f6fa;--muted:#9ea5b4;--subtle:#6b7280;--accent:#e2e8f0;--accent-on:#0d111c;
+   --positive:#22c55e;--warning:#f59e0b;--danger:#ef4444;
+   --glass:rgba(22,27,41,.72);--rim:inset 0 .5px 0 rgba(255,255,255,.10),inset 0 -.5px 0 rgba(0,0,0,.30);
+   --cast:none;
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--page);color:#111827;
+      font:14px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ header.page{max-width:1500px;margin:0 auto;padding:26px 22px 4px}
+ header.page h1{font-size:21px;margin:0 0 7px;letter-spacing:-.01em}
+ header.page p{margin:0 0 12px;color:#475569;max-width:96ch;line-height:1.55}
+ header.page code{background:#dde3ea;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ .controls{max-width:1500px;margin:0 auto;padding:6px 22px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls .sep{width:1px;height:24px;background:#c8d1db;margin:0 4px}
+ .controls label{font-size:12px;color:#475569;margin-right:2px}
+ button.ctl{font:inherit;font-size:12.5px;border:1px solid #c3ccd6;background:#f6f8fa;color:#1f2937;
+            border-radius:999px;padding:7px 13px;cursor:pointer}
+ button.ctl:hover{background:#fff}
+ button.ctl.on{background:#111827;border-color:#111827;color:#fff;font-weight:600}
+
+ .grid{max-width:1500px;margin:0 auto;padding:0 22px 70px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+ .col{width:398px;flex:none}
+ .col h2{font-size:15px;margin:0 0 3px}
+ .col .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+           color:#fff;background:#111827;border-radius:5px;padding:2px 7px;margin-bottom:7px}
+ .col .tag.lean{background:#0a7d4a}
+ .col p.note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:#475569;min-height:76px}
+
+ /* ── the phone ─────────────────────────────────────────────────────────── */
+ .phone{width:390px;height:786px;border-radius:40px;overflow:hidden;position:relative;
+        background:var(--chrome);box-shadow:var(--cast);border:1px solid #bcc6d1;
+        font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif;
+        color:var(--text)}
+ .screen{position:absolute;inset:0;background:var(--bg);overflow:hidden}
+ .map{position:absolute;inset:0;background:#dde5ec;overflow:hidden}
+ .dark .map{background:#141a26}
+ .map .tiles{position:absolute;inset:0}
+ .dark .map .tiles{filter:invert(1) hue-rotate(180deg) brightness(.94) contrast(1.06)}
+ .map img{position:absolute;width:256px;height:256px;user-select:none;-webkit-user-drag:none}
+ .pins{position:absolute;inset:0;pointer-events:none}
+ .pin{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--bg);
+      border:2.5px solid var(--text);transform:translate(-50%,-50%)}
+ .pin.saved{background:var(--warning);border-color:var(--bg);width:15px;height:15px}
+ .rider{position:absolute;width:17px;height:17px;border-radius:50%;background:#2563eb;
+        border:3px solid #fff;transform:translate(-50%,-50%);box-shadow:0 0 0 7px rgba(37,99,235,.20)}
+
+ /* floating chrome */
+ .glass{background:var(--glass);-webkit-backdrop-filter:blur(13px) saturate(1.8);
+        backdrop-filter:blur(13px) saturate(1.8);box-shadow:var(--rim),0 3px 14px rgba(15,23,42,.13)}
+ .dark .glass{box-shadow:var(--rim)}
+ .lens{position:absolute;top:12px;right:12px;width:48px;height:48px;border-radius:50%;z-index:40;
+       display:grid;place-items:center;border:0;cursor:pointer;padding:0;color:var(--text)}
+ .lens svg{width:21px;height:21px}
+
+ /* THE CARD — the thing Q4 is about */
+ .ctx{position:absolute;top:12px;left:12px;z-index:30;border-radius:22px;overflow:hidden;cursor:pointer;
+      border:1px solid var(--border);
+      transition:width var(--dur) var(--ease),border-radius var(--dur) var(--ease)}
+ .ctx{width:calc(390px - 24px - 48px - 8px)}            /* clear of the settings lens */
+ .ctx.collapsed{width:auto;max-width:calc(390px - 24px - 48px - 8px);border-radius:999px}
+ .ctxRow{display:flex;align-items:center;gap:10px;height:62px;padding:0 14px;
+         transition:height var(--dur) var(--ease),padding var(--dur) var(--ease)}
+ .ctx.collapsed .ctxRow{height:44px;padding:0 6px 0 14px}
+ .ctxIcon{width:30px;height:30px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;
+          flex:none;transition:width var(--dur) var(--ease),height var(--dur) var(--ease)}
+ .ctx.collapsed .ctxIcon{width:24px;height:24px}
+ .ctxIcon svg{width:16px;height:16px;color:var(--muted)}
+ .ctxMain{min-width:0;flex:1}
+ .ctxTitle{font-size:17px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+           transition:font-size var(--dur) var(--ease)}
+ .ctx.collapsed .ctxTitle{font-size:14.5px}
+ .ctxSub{font-size:12px;color:var(--muted);line-height:1.35;margin-top:1px;white-space:nowrap;overflow:hidden;
+         text-overflow:ellipsis;max-height:18px;opacity:1;
+         transition:max-height var(--dur) var(--ease),opacity .2s}
+ .ctx.collapsed .ctxSub{max-height:0;opacity:0}
+ .ctxSub.stale{color:var(--warning)}
+ .recentre{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--surface);
+           display:grid;place-items:center;flex:none;cursor:pointer;padding:0;color:var(--text);
+           transition:width var(--dur) var(--ease),height var(--dur) var(--ease)}
+ .ctx.collapsed .recentre{width:32px;height:32px}
+ .recentre svg{width:16px;height:16px}
+
+ /* variant b — the section index */
+ .secIdx{display:flex;gap:6px;padding:0 12px 12px;flex-wrap:wrap;max-height:60px;opacity:1;overflow:hidden;
+         transition:max-height var(--dur) var(--ease),opacity .2s,padding var(--dur) var(--ease)}
+ .ctx.collapsed .secIdx{max-height:0;opacity:0;padding-bottom:0}
+ .secChip{font-size:12px;border:1px solid var(--border);background:var(--surface);border-radius:999px;
+          padding:5px 11px;cursor:pointer;white-space:nowrap;color:var(--text);font-family:inherit}
+ .secChip.here{background:var(--accent);color:var(--accent-on);border-color:var(--accent);font-weight:600}
+ .secChip b{font-variant-numeric:tabular-nums;opacity:.65;font-weight:600;margin-left:3px}
+
+ /* ── the sheet ─────────────────────────────────────────────────────────── */
+ .sheet{position:absolute;left:0;right:0;bottom:0;z-index:20;background:var(--bg);
+        border-radius:20px 20px 0 0;box-shadow:0 -2px 22px rgba(15,23,42,.16);
+        display:flex;flex-direction:column;transition:height var(--dur) var(--ease)}
+ .dark .sheet{box-shadow:0 -1px 0 var(--border),0 -2px 22px rgba(0,0,0,.5)}
+ .grab{height:22px;display:grid;place-items:center;flex:none;cursor:grab;padding-top:7px}
+ .grab i{width:38px;height:4px;border-radius:2px;background:var(--border);display:block}
+ .scroll{overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;padding-bottom:88px;scroll-behavior:smooth}
+ .scroll::-webkit-scrollbar{width:0}
+
+ .secHead{position:sticky;top:0;background:var(--bg);z-index:2;padding:11px 16px 5px;
+          font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--subtle)}
+ .secHead .sub{text-transform:none;letter-spacing:0;font-weight:400;color:var(--subtle);font-size:11.5px}
+ .card{padding:12px 16px 13px;border-top:1px solid var(--border)}
+ .card:first-of-type{border-top:0}
+ .cardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+ .cardName{font-size:16px;font-weight:600;line-height:1.25;min-width:0}
+ .cardCap{font-size:12px;color:var(--subtle);margin-top:2px;display:flex;align-items:center;gap:5px}
+ .cardCap svg{width:12px;height:12px;flex:none}
+ .chev{color:var(--subtle);flex:none;margin-top:2px}
+ .chev svg{width:18px;height:18px}
+ .rows{margin-top:7px}
+ .row{display:flex;align-items:center;gap:10px;padding:5px 0;min-width:0}
+ .chip{font-size:14px;font-weight:700;border-radius:10px;min-width:44px;padding:3px 8px;text-align:center;flex:none}
+ .dest{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .dest s{color:var(--subtle);text-decoration:none}
+ .eta{font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;flex:none;text-align:right;min-width:62px}
+ .eta.due{color:var(--positive)}
+ .eta em{font-style:normal;font-size:11.5px;font-weight:500;color:var(--subtle);margin-left:2px}
+ .leave{font-size:11.5px;color:var(--warning);font-weight:600;margin-left:6px;white-space:nowrap}
+
+ /* tab bar */
+ .tabs{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:45;height:54px;
+       border-radius:24px;display:flex;align-items:center;padding:0 6px;gap:2px}
+ .tab{width:74px;height:46px;border:0;background:transparent;display:grid;place-items:center;gap:1px;
+      cursor:pointer;border-radius:18px;color:var(--muted);font-family:inherit}
+ .tab.on{color:var(--text)}
+ .tab svg{width:20px;height:20px}
+ .tab span{font-size:10px;font-weight:600}
+ .searchLens{position:absolute;right:12px;bottom:12px;z-index:45;width:54px;height:54px;border-radius:50%;
+             display:grid;place-items:center;border:0;cursor:pointer;color:var(--text)}
+ .searchLens svg{width:21px;height:21px}
+
+ .cap{margin:10px 0 0;font-size:12px;color:#475569;line-height:1.5}
+ .cap b{color:#111827}
+ footer.page{max-width:1500px;margin:0 auto;padding:0 22px 70px;color:#475569;font-size:13px;line-height:1.6}
+ footer.page h3{color:#111827;font-size:14px;margin:20px 0 6px}
+ footer.page ul{margin:0;padding-left:18px} footer.page li{margin-bottom:5px}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Home — Q4: what goes in the floating card?</h1>
+  <p>Route detail has a floating card top-left that collapses into a pill when you scroll the sheet. Home gets the
+     same slot — the question is only <b>what is written in it</b>. Three candidates, same board, same map, same
+     collapse. <b>Scroll the list inside any phone</b> (or drag its grab handle) to collapse the card; tap a pill to
+     open it again. Everything else on these three screens is identical on purpose.</p>
+  <p style="font-size:12.5px"><b>One difference from Route detail worth noticing:</b> Home is a tab root, so there is no
+     back lens for the card to tuck behind. <code>Settings</code> is the floating lens, and it sits <b>top-right</b> —
+     so Home's card collapses by shrinking from the right rather than stepping sideways. Simpler motion than the route
+     card's, and it needs no <code>left</code> transition at all.</p>
+</header>
+
+<div class="controls">
+  <label>Appearance</label>
+  <button class="ctl on" id="bLight">Light</button><button class="ctl" id="bDark">Dark</button>
+  <span class="sep"></span>
+  <label>Position</label>
+  <button class="ctl on" id="bLive">Live fix</button><button class="ctl" id="bStale">Last known, 6 min ago</button>
+  <span class="sep"></span>
+  <label>Locality name</label>
+  <button class="ctl on" id="bShort">Yau Ma Tei</button><button class="ctl" id="bLong">Tsim Sha Tsui East</button>
+  <span class="sep"></span>
+  <button class="ctl" id="bCollapse">Collapse all</button>
+  <button class="ctl" id="bExpand">Expand all</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer class="page">
+  <h3>What to look for</h3>
+  <ul>
+    <li><b>Which pill do you want to look at while scrolling?</b> That is the whole question — the expanded state is
+      only on screen for the first second.</li>
+    <li><b>Try "Last known, 6 min ago".</b> That is (a)'s strongest argument: today it is a grey subtitle under the
+      Nearby title that nobody reads, and on a ranked Home it is the sentence that explains why the order looks odd.
+      Watch where it goes in (b) — nowhere. It would need to live in the sheet.</li>
+    <li><b>Try "Tsim Sha Tsui East".</b> Route detail's round-4 finding was that HK names barely collapse; a locality
+      is shorter than a destination, so (a) actually makes a real pill where the route card struggles to.</li>
+    <li><b>Scroll (b) slowly past a section boundary.</b> The pill changing under your thumb is either a helpful
+      signal or a twitch — that is not decidable on paper.</li>
+    <li><b>(c) is the lean.</b> It is also one more moving part, and the cost shows up when you scroll back to the
+      top: the card has to swap contents <em>and</em> grow.</li>
+  </ul>
+  <h3>Not being asked here</h3>
+  <ul>
+    <li>The board's content, ranking and section names — that is §5 of the proposal and is settled enough to draw.</li>
+    <li>The sheet's detents, the map or the tab bar. All three are Route detail's, unchanged.</li>
+    <li>Whether the ETA figures are right. They are hand-written here; the real ones come from <code>homeView</code>.</li>
+  </ul>
+</footer>
+
+<script>
+/* ── the board, hand-written (the real one is `homeView`'s) ───────────────── */
+const KMB='#D7282F',CTB='#F6C700',GMB='#00845C',LWB='#E8A33D';
+const SECTIONS=[
+ {id:'catch',name:'Catch it',sub:'saved, and you can still make it',cards:[
+   {name:'Nathan Road / Pak Hoi Street',cap:'Southbound  ·  90m · 2 min walk',saved:true,rows:[
+     {op:'KMB',no:'1',dest:'Chuk Yuen Estate',eta:'6 min'},
+     {op:'KMB',no:'6',dest:'Star Ferry',eta:'8 min'}]},
+ ]},
+ {id:'saved',name:'Saved',sub:'your list, soonest first',cards:[
+   {name:'Nathan Road / Jordan Road',cap:'Northbound  ·  450m · 6 min walk',saved:true,rows:[
+     {op:'KMB',no:'73X',dest:'Fu Tai Estate',eta:'11 min',leave:'leave soon'},
+     {op:'CTB',no:'970',dest:'So Uk Estate',eta:'14 min'}]},
+   {name:'Kwun Tong Road / Ngau Tau Kok',cap:'8.2 km away',saved:true,rows:[
+     {op:'KMB',no:'42C',dest:'Lam Tin Station',eta:'4 min'}]},
+   {name:'Man Ming Lane',cap:'Westbound  ·  240m · 3 min walk',saved:true,rows:[
+     {op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',eta:'Due',due:true}]},
+ ]},
+ {id:'around',name:'Around you',sub:'6 stops within 500 m',cards:[
+   {name:'Pak Hoi Street',cap:'Eastbound  ·  60m · 1 min walk',rows:[
+     {op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',eta:'3 min'},
+     {op:'KMB',no:'13X',dest:'Kwun Tong Ferry',eta:'12 min'},
+     {op:'GMB',no:'74S',dest:'Prince Edward',eta:'16 min'}]},
+   {name:'Jordan Road / Woosung Street',cap:'Westbound  ·  180m · 2 min walk',rows:[
+     {op:'CTB',no:'N121',dest:'Choi Wan',eta:'—',none:true},
+     {op:'LWB',no:'E21A',dest:'Tung Chung',eta:'21 min'}]},
+   {name:'Temple Street',cap:'Southbound  ·  310m · 4 min walk',rows:[
+     {op:'KMB',no:'238X',dest:'Tsuen Wan West',eta:'9 min'}]},
+ ]},
+];
+const ACCENT={KMB:KMB,CTB:CTB,GMB:GMB,LWB:LWB},ON={KMB:'#fff',CTB:'#0F172A',GMB:'#fff',LWB:'#fff'};
+
+const I={
+ settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+ locate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>',
+ pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+ list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+ chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+ arrow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>',
+ star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+ home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>',
+ map:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>',
+ search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+};
+
+/* ── the three variants ───────────────────────────────────────────────────── */
+const VARIANTS=[
+ {key:'a',tag:'Option A',lean:false,title:'Where you are',
+  note:'The card names the place the ranking is anchored on, says how fresh that is, and gives you a way to re-anchor it. Collapsed: locality + recentre. This is the one that gives `lastKnownLocation` — today a grey subtitle nobody reads — somewhere legible.'},
+ {key:'b',tag:'Option B',lean:false,title:'Where you are in the list',
+  note:'The card is a section index: tap to jump, and the pill tells you which section you are reading. It is the only thing on screen that changes as you use it. Cost: nowhere for the position or its staleness to live.'},
+ {key:'c',tag:'Option C — my lean',lean:true,title:'Both, split by state',
+  note:'Expanded = where you are (you have just landed and have not started reading). Collapsed = which section (you are scrolling, and that is when the caption matters). One more moving part, and the card must swap contents as well as grow.'},
+];
+
+let LONG=false,STALE=false;
+const state={};   /* per-variant: collapsed, section */
+
+function localityName(){return LONG?'Tsim Sha Tsui East':'Yau Ma Tei'}
+function subLine(){return STALE?'Last known position, 6 min ago':'Updated just now'}
+
+function cardInner(v){
+  const loc=localityName(), collapsedIsSection=(v.key==='b'||v.key==='c');
+  const sec=SECTIONS.find(s=>s.id===state[v.key].section)||SECTIONS[0];
+  const showSectionAsTitle = collapsedIsSection && state[v.key].collapsed;
+  const title = showSectionAsTitle ? sec.name : (v.key==='b'? sec.name : loc);
+  const icon  = showSectionAsTitle||v.key==='b' ? I.list : I.pin;
+  const sub   = v.key==='b' ? sec.sub : subLine();
+  const staleCls = (v.key!=='b'&&STALE)?' stale':'';
+  const recentre = v.key==='b' ? '' :
+    `<button class="recentre" title="Recentre on me" onclick="event.stopPropagation()">${I.locate}</button>`;
+  const index = v.key==='b' ? `<div class="secIdx">${SECTIONS.map(s=>
+      `<button class="secChip${s.id===sec.id?' here':''}" data-jump="${s.id}">${s.name}<b>${s.cards.length}</b></button>`
+    ).join('')}</div>` : '';
+  return `<div class="ctxRow">
+      <div class="ctxIcon">${icon}</div>
+      <div class="ctxMain">
+        <div class="ctxTitle">${title}</div>
+        <div class="ctxSub${staleCls}">${sub}</div>
+      </div>${recentre}
+    </div>${index}`;
+}
+
+function boardHtml(){
+  return SECTIONS.map(s=>`
+    <div class="secHead" data-sec="${s.id}">${s.name} <span class="sub">— ${s.sub}</span></div>
+    ${s.cards.map(c=>`
+      <div class="card">
+        <div class="cardHead">
+          <div style="min-width:0">
+            <div class="cardName">${c.name}</div>
+            <div class="cardCap">${c.saved?'<span style="color:#d97706">'+I.star+'</span>':I.pin}<span>${c.cap}</span></div>
+          </div>
+          <div class="chev">${I.chev}</div>
+        </div>
+        <div class="rows">${c.rows.map(r=>`
+          <div class="row">
+            <span class="chip" style="background:${ACCENT[r.op]};color:${ON[r.op]}">${r.no}</span>
+            <span class="dest"><s>→ </s>${r.dest}</span>
+            <span class="eta${r.due?' due':''}">${r.eta}${r.none?'':''}</span>
+            ${r.leave?`<span class="leave">${r.leave}</span>`:''}
+          </div>`).join('')}
+        </div>
+      </div>`).join('')}
+  `).join('');
+}
+
+function phoneHtml(v){
+  return `<div class="phone" id="ph-${v.key}">
+    <div class="screen">
+      <div class="map"><div class="tiles" id="tiles-${v.key}"></div>
+        <div class="pins">
+          <div class="pin saved" style="left:47%;top:31%"></div>
+          <div class="pin saved" style="left:62%;top:44%"></div>
+          <div class="pin" style="left:38%;top:26%"></div>
+          <div class="pin" style="left:55%;top:20%"></div>
+          <div class="pin" style="left:30%;top:40%"></div>
+          <div class="rider" style="left:46%;top:36%"></div>
+        </div>
+      </div>
+      <button class="lens glass" title="Settings">${I.settings}</button>
+      <div class="ctx glass" id="ctx-${v.key}">${cardInner(v)}</div>
+      <div class="sheet" id="sheet-${v.key}" style="height:55%">
+        <div class="grab" data-grab="${v.key}"><i></i></div>
+        <div class="scroll" id="scroll-${v.key}">${boardHtml()}</div>
+      </div>
+      <nav class="tabs glass">
+        <button class="tab on">${I.home}<span>Home</span></button>
+        <button class="tab">${I.map}<span>Map</span></button>
+        <button class="tab">${I.star}<span>Saved</span></button>
+      </nav>
+      <button class="searchLens glass" title="Search">${I.search}</button>
+    </div>
+  </div>`;
+}
+
+/* ── build ────────────────────────────────────────────────────────────────── */
+VARIANTS.forEach(v=>{state[v.key]={collapsed:false,section:'catch'}});
+const grid=document.getElementById('grid');
+grid.innerHTML=VARIANTS.map(v=>`<div class="col">
+   <span class="tag${v.lean?' lean':''}">${v.tag}</span>
+   <h2>${v.title}</h2>
+   <p class="note">${v.note}</p>
+   ${phoneHtml(v)}
+   <p class="cap" id="cap-${v.key}"></p>
+ </div>`).join('');
+
+
+/* LandsD tiles — a static grid centred on Yau Ma Tei. Falls back to flat colour if offline. */
+function tiles(el){
+  const z=16,lat=22.3080,lng=114.1700;
+  const n=Math.pow(2,z);
+  const wx=(lng+180)/360*n, wy=(1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*n;
+  const W=390,H=786, cx=W/2, cy=H*0.34;
+  const x0=Math.floor(wx-cx/256)-1, y0=Math.floor(wy-cy/256)-1;
+  let h='';
+  for(let x=x0;x<x0+4;x++)for(let y=y0;y<y0+5;y++){
+    const L=cx+(x-wx)*256, T=cy+(y-wy)*256;
+    h+=`<img src="https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/${z}/${x}/${y}.png" style="left:${L}px;top:${T}px" alt="" onerror="this.style.display='none'">`;
+    h+=`<img src="https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/${z}/${x}/${y}.png" style="left:${L}px;top:${T}px" alt="" onerror="this.style.display='none'">`;
+  }
+  el.innerHTML=h;
+}
+
+function redrawCard(v){
+  const el=document.getElementById('ctx-'+v.key);
+  el.innerHTML=cardInner(v);
+  el.classList.toggle('collapsed',state[v.key].collapsed);
+  el.querySelectorAll('[data-jump]').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const t=document.querySelector(`#scroll-${v.key} [data-sec="${b.dataset.jump}"]`);
+    if(t) t.scrollIntoView({block:'start'});
+  });
+  const cap=document.getElementById('cap-'+v.key);
+  cap.innerHTML = state[v.key].collapsed
+    ? `<b>Collapsed.</b> ${v.key==='a'?'Locality + recentre.':v.key==='b'?'The section you are reading.':'The section you are reading — contents swapped.'}`
+    : `<b>Expanded.</b> ${v.key==='a'?'Locality, freshness, recentre.':v.key==='b'?'A section index — tap to jump.':'Locality, freshness, recentre.'}`;
+}
+
+VARIANTS.forEach(v=>{
+  tiles(document.getElementById('tiles-'+v.key));
+  const sc=document.getElementById('scroll-'+v.key);
+  const ctx=document.getElementById('ctx-'+v.key);
+  ctx.onclick=()=>{ if(state[v.key].collapsed){state[v.key].collapsed=false;redrawCard(v);} };
+
+  sc.addEventListener('scroll',()=>{
+    /* The shipping rule: any scroll off the top collapses the chrome; back at the top re-expands it
+       (proposals/06 §8's "scroll back to the top and the header returns"). */
+    const c = sc.scrollTop>0;
+    /* which section's heading is at the top of the viewport */
+    let here='catch';
+    sc.querySelectorAll('[data-sec]').forEach(h=>{ if(h.offsetTop-sc.scrollTop<=12) here=h.dataset.sec; });
+    if(c!==state[v.key].collapsed || here!==state[v.key].section){
+      state[v.key].collapsed=c; state[v.key].section=here; redrawCard(v);
+    }
+  },{passive:true});
+
+  /* drag the grab handle between the three detents */
+  const sheet=document.getElementById('sheet-'+v.key);
+  let dragging=false,y0=0,h0=0;
+  const grab=sheet.querySelector('.grab');
+  grab.addEventListener('pointerdown',e=>{dragging=true;y0=e.clientY;h0=sheet.offsetHeight;grab.setPointerCapture(e.pointerId);sheet.style.transition='none'});
+  grab.addEventListener('pointermove',e=>{ if(!dragging)return;
+    const f=Math.max(.18,Math.min(.92,(h0-(e.clientY-y0))/786)); sheet.style.height=(f*100)+'%';});
+  grab.addEventListener('pointerup',()=>{ if(!dragging)return; dragging=false;
+    sheet.style.transition='';
+    const f=sheet.offsetHeight/786, d=[.22,.55,.88].reduce((a,b)=>Math.abs(b-f)<Math.abs(a-f)?b:a);
+    sheet.style.height=(d*100)+'%';
+    if(d!==.55){state[v.key].collapsed=true;redrawCard(v);} });
+
+  redrawCard(v);
+});
+
+/* ── controls ─────────────────────────────────────────────────────────────── */
+function pair(onId,offId,set){
+  const on=document.getElementById(onId),off=document.getElementById(offId);
+  on.onclick=()=>{on.classList.add('on');off.classList.remove('on');set(false)};
+  off.onclick=()=>{off.classList.add('on');on.classList.remove('on');set(true)};
+}
+pair('bLight','bDark',d=>{document.querySelectorAll('.phone').forEach(p=>p.classList.toggle('dark',d))});
+pair('bLive','bStale',s=>{STALE=s;VARIANTS.forEach(redrawCard)});
+pair('bShort','bLong',l=>{LONG=l;VARIANTS.forEach(redrawCard)});
+document.getElementById('bCollapse').onclick=()=>VARIANTS.forEach(v=>{state[v.key].collapsed=true;redrawCard(v)});
+document.getElementById('bExpand').onclick=()=>VARIANTS.forEach(v=>{state[v.key].collapsed=false;redrawCard(v);document.getElementById('scroll-'+v.key).scrollTop=0});
+</script>
+</body>
+</html>

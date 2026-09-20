@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home — Q5: is a time axis honest?</title>
+<!-- PROTOTYPE ONLY. Raw hex rather than tokens; the bus glyph is a simplification of `RailBusToken`
+     (ADR-132); the departures are hand-written. See ./README.md -->
+<style>
+ :root{
+   --bg:#fff;--surface:#f8fafc;--surface-2:#f1f5f9;--border:#e2e8f0;
+   --text:#111827;--muted:#475569;--subtle:#64748b;--accent:#111827;--accent-on:#fff;
+   --positive:#16a34a;--warning:#d97706;
+   --route:#2c3343;--route-soft:#9ea5b4;
+   --page:#e9edf2;--chrome:#cdd5de;--ease:cubic-bezier(.32,.72,0,1);
+ }
+ .dark{
+   --bg:#0d111c;--surface:#161b29;--surface-2:#202636;--border:#2c3343;
+   --text:#f4f6fa;--muted:#9ea5b4;--subtle:#6b7280;--accent:#e2e8f0;--accent-on:#0d111c;
+   --positive:#22c55e;--warning:#f59e0b;--route:#e2e8f0;--route-soft:#6b7280;
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--page);color:#111827;
+      font:14px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ header.page{max-width:1300px;margin:0 auto;padding:26px 22px 4px}
+ header.page h1{font-size:21px;margin:0 0 7px;letter-spacing:-.01em}
+ header.page p{margin:0 0 12px;color:#475569;max-width:96ch;line-height:1.55}
+ header.page code{background:#dde3ea;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ .controls{max-width:1300px;margin:0 auto;padding:6px 22px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls .sep{width:1px;height:24px;background:#c8d1db;margin:0 4px}
+ .controls label{font-size:12px;color:#475569;margin-right:2px}
+ button.ctl{font:inherit;font-size:12.5px;border:1px solid #c3ccd6;background:#f6f8fa;color:#1f2937;
+            border-radius:999px;padding:7px 13px;cursor:pointer}
+ button.ctl:hover{background:#fff}
+ button.ctl.on{background:#111827;border-color:#111827;color:#fff;font-weight:600}
+
+ .verdict{max-width:1300px;margin:0 auto 14px;padding:11px 22px;font-size:13px;line-height:1.5}
+ .verdict span{display:inline-block;background:#fff;border:1px solid #c8d1db;border-radius:8px;
+               padding:8px 13px;color:#1f2937}
+ .verdict b{font-variant-numeric:tabular-nums}
+ .verdict .bad{color:#b91c1c;font-weight:700}
+ .verdict .ok{color:#0a7d4a;font-weight:700}
+
+ .grid{max-width:1300px;margin:0 auto;padding:0 22px 70px;display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+ .col{width:398px;flex:none}
+ .col .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+           color:#fff;background:#111827;border-radius:5px;padding:2px 7px;margin-bottom:7px}
+ .col .tag.ship{background:#475569}
+ .col h2{font-size:15px;margin:0 0 3px}
+ .col p.note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:#475569;min-height:58px}
+
+ .phone{width:390px;height:720px;border-radius:40px;overflow:hidden;position:relative;
+        background:var(--bg);box-shadow:0 1px 3px rgba(15,23,42,.10),0 8px 24px rgba(15,23,42,.12);
+        border:1px solid #bcc6d1;color:var(--text);
+        font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ .sheetTop{padding:14px 16px 8px;border-bottom:1px solid var(--border)}
+ .sheetTop h3{margin:0;font-size:17px;font-weight:600}
+ .sheetTop p{margin:2px 0 0;font-size:12px;color:var(--subtle)}
+ .body{position:absolute;top:66px;bottom:0;left:0;right:0;overflow-y:auto}
+ .body::-webkit-scrollbar{width:0}
+
+ /* ── list (what ships today) ─────────────────────────────────────────────── */
+ .row{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);min-width:0}
+ .chip{font-size:14px;font-weight:700;border-radius:10px;min-width:44px;padding:3px 8px;text-align:center;flex:none}
+ .dest{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .dest s{color:var(--subtle);text-decoration:none}
+ .eta{font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;flex:none;text-align:right;min-width:58px}
+ .eta.due{color:var(--positive)}
+
+ /* ── the axis ─────────────────────────────────────────────────────────────── */
+ .axisWrap{position:relative;padding:18px 16px 40px 0}
+ .axisLine{position:absolute;left:54px;top:0;bottom:0;width:2px;background:var(--border)}
+ .tick{position:absolute;left:0;width:100%;display:flex;align-items:center;gap:0;pointer-events:none}
+ .tick i{position:absolute;left:54px;right:16px;height:1px;background:var(--border);opacity:.7}
+ .tick b{position:absolute;left:0;width:36px;text-align:right;font-size:11px;font-weight:600;
+         color:var(--subtle);font-variant-numeric:tabular-nums;transform:translateY(-50%)}
+ .tick.now b{color:var(--positive)}
+ .tick.now i{background:var(--positive);opacity:.45;height:1.5px}
+
+ .dep{position:absolute;left:44px;right:12px;display:flex;align-items:center;gap:9px;
+      transform:translateY(-50%);transition:top .3s var(--ease)}
+ .band{position:absolute;left:47px;width:16px;border-radius:8px;background:var(--route-soft);
+       opacity:.22;transform:translateY(-50%);pointer-events:none}
+ .tok{width:22px;height:24px;flex:none;display:grid;place-items:center;position:relative;z-index:2}
+ .tok svg{width:22px;height:22px}
+ .depBody{display:flex;align-items:center;gap:8px;min-width:0;flex:1;
+          background:var(--bg);border-radius:9px;padding:2px 4px 2px 2px;z-index:2}
+ .depBody .chip{font-size:12.5px;min-width:36px;padding:2px 6px;border-radius:8px}
+ .depBody .d{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+ .depBody .m{font-size:12px;font-variant-numeric:tabular-nums;color:var(--subtle);flex:none;font-weight:600}
+ .nudged .depBody{box-shadow:0 0 0 1px var(--warning)}
+
+ .cap{margin:10px 0 0;font-size:12px;color:#475569;line-height:1.5}
+ .cap b{color:#111827}
+ footer.page{max-width:1300px;margin:0 auto;padding:0 22px 80px;color:#475569;font-size:13px;line-height:1.6}
+ footer.page h3{color:#111827;font-size:14px;margin:20px 0 6px}
+ footer.page ul{margin:0;padding-left:18px} footer.page li{margin-bottom:6px}
+ footer.page b{color:#111827}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Home — Q5: is a time axis honest, and do you want one?</h1>
+  <p>Same six-to-twenty departures, two renderings. <b>Left is what the app ships today</b> — one row per route, the
+     arrival as a figure on the right. <b>Right is the time axis</b> — a ruler down the side, each departure drawn as a
+     bus token at its position, the way the route rail draws a bus at its stop.</p>
+  <p><b>The question is ADR-008.</b> We never fake precision, and a position on a ruler is a continuous claim built
+     from a value we insist is approximate. It could go either way — a token sitting <em>between</em> the 10 and the 15
+     arguably says "about then" better than <code>11 min</code> does. Change the stop and the window below; Hong Kong
+     frequency is the thing most likely to kill this.</p>
+</header>
+
+<div class="controls">
+  <label>Stop</label>
+  <button class="ctl on" data-stop="0">Man Ming Lane (quiet)</button>
+  <button class="ctl" data-stop="1">Nathan Rd / Jordan Rd (busy)</button>
+  <button class="ctl" data-stop="2">Mong Kok interchange (brutal)</button>
+  <span class="sep"></span>
+  <label>Window</label>
+  <button class="ctl" data-win="10">10 min</button>
+  <button class="ctl on" data-win="15">15 min</button>
+  <button class="ctl" data-win="30">30 min</button>
+  <span class="sep"></span>
+  <label>Honesty treatment</label>
+  <button class="ctl on" data-band="0">Point</button>
+  <button class="ctl" data-band="1">± 2 min band</button>
+  <span class="sep"></span>
+  <button class="ctl" id="bDark">Dark</button>
+</div>
+
+<div class="verdict" id="verdict"></div>
+
+<div class="grid">
+  <div class="col">
+    <span class="tag ship">Ships today</span>
+    <h2>The list</h2>
+    <p class="note">One row per departure, the figure on the right, tabular numerals. Nothing here is new — this is
+      <code>StopCard</code>'s row, which every screen in the app already uses.</p>
+    <div class="phone" id="phList">
+      <div class="sheetTop"><h3 id="listName"></h3><p id="listSub"></p></div>
+      <div class="body" id="listBody"></div>
+    </div>
+    <p class="cap" id="capList"></p>
+  </div>
+
+  <div class="col">
+    <span class="tag">Rung 4 — the proposal</span>
+    <h2>The time axis</h2>
+    <p class="note">A ruler marked <em>now · 5 · 10 · 15</em>, each departure a bus token at its position. Bunching is
+      visible as a clump; a gap in service is an actual gap. Reuses <code>RailBusToken</code> and the rail's
+      enter/exit motion.</p>
+    <div class="phone" id="phAxis">
+      <div class="sheetTop"><h3 id="axisName"></h3><p id="axisSub"></p></div>
+      <div class="body"><div class="axisWrap" id="axisBody"></div></div>
+    </div>
+    <p class="cap" id="capAxis"></p>
+  </div>
+
+  <div class="col" style="width:380px">
+    <span class="tag" style="background:#a8620a">Read this after playing</span>
+    <h2>What the axis is actually trading</h2>
+    <p class="note" style="min-height:0"></p>
+    <div style="background:#fff;border:1px solid #c8d1db;border-radius:14px;padding:16px 18px;font-size:13px;line-height:1.6;color:#334155">
+      <p style="margin:0 0 10px"><b>What it buys.</b> Bunching and gaps become <em>shapes</em> rather than arithmetic
+        you do in your head. Three buses at 11, 12 and 13 minutes is a fact the list states three times and the axis
+        states once. And a token between two marks reads as "about then", which is what an ETA actually is.</p>
+      <p style="margin:0 0 10px"><b>What it costs — the honest list.</b></p>
+      <ul style="margin:0 0 10px;padding-left:17px">
+        <li><b>Density.</b> Try the interchange at 10 minutes. The tokens collide, the nudge kicks in (outlined in
+          amber), and every nudged token is now drawn <em>at a time it does not depart</em>. That is the axis lying,
+          and it is caused by the very crowding it was supposed to illustrate.</li>
+        <li><b>Vertical budget.</b> The list fits ~9 departures in a phone's worth of sheet. The axis fits the window
+          you give it and no more — 30 minutes of Mong Kok does not fit in any sheet.</li>
+        <li><b>Scanning.</b> "When is my 73X" is a lookup. A list sorted by route answers it; an axis sorted by time
+          makes you search.</li>
+        <li><b>It cannot show "—".</b> A route with no reading has no position. The list says <em>—</em> in a column;
+          the axis has to put it somewhere or drop it, and dropping it is the silent filter ADR-008 forbids.</li>
+      </ul>
+      <p style="margin:0"><b>The ± band toggle</b> is the obvious answer to the precision worry: draw the uncertainty
+        rather than a point. It works, and it costs the density you had left.</p>
+    </div>
+  </div>
+</div>
+
+<footer class="page">
+  <h3>The verdict this is asking you for</h3>
+  <ul>
+    <li><b>Yes — build it for quiet stops only</b>, and fall back to the list above some density. (Honest, but two
+      renderings of one board is two things to keep in sync, and the rider does not control which they get.)</li>
+    <li><b>Yes — build it as the window, not the board</b>: a short axis <em>above</em> the list showing the next
+      10 minutes, with the full list underneath. The axis becomes a summary rather than a replacement.</li>
+    <li><b>No — drop it.</b> The list is honest, dense, scannable, and already shipping.</li>
+  </ul>
+  <p style="margin-top:14px"><b>My read after building it:</b> the second option is the only one that survives Mong Kok.
+    A 10-minute axis is a <em>headline</em> — "here is the shape of the next ten minutes" — and a list is a
+    <em>reference</em>. They answer different questions, and the mockup's density problem only bites when you ask the
+    axis to be the reference. But this is exactly the call worth making with your own eyes rather than from my
+    paragraph.</p>
+</footer>
+
+<script>
+const ACCENT={KMB:'#D7282F',CTB:'#F6C700',GMB:'#00845C',LWB:'#E8A33D'},
+      ON={KMB:'#fff',CTB:'#0F172A',GMB:'#fff',LWB:'#fff'};
+
+/* Three real-shaped boards. `m` is minutes from now; `null` = published frequency only, no reading. */
+const STOPS=[
+ {name:'Man Ming Lane',sub:'Westbound  ·  240m · 3 min walk  ·  saved',deps:[
+   {op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:0},
+   {op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:7},
+   {op:'KMB',no:'238X',dest:'Tsuen Wan West',m:19},
+   {op:'CTB',no:'N121',dest:'Choi Wan',m:null},
+ ]},
+ {name:'Nathan Road / Jordan Road',sub:'Northbound  ·  450m · 6 min walk  ·  saved',deps:[
+   {op:'KMB',no:'6',dest:'Star Ferry',m:2},
+   {op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:4},
+   {op:'CTB',no:'970',dest:'So Uk Estate',m:5},
+   {op:'KMB',no:'73X',dest:'Fu Tai Estate',m:11},
+   {op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:12},
+   {op:'LWB',no:'E21A',dest:'Tung Chung',m:13},
+   {op:'KMB',no:'6',dest:'Star Ferry',m:18},
+   {op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:23},
+   {op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:26},
+ ]},
+ {name:'Mong Kok Road / Nathan Road',sub:'Southbound  ·  1.1 km  ·  interchange',deps:[
+   {op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:1},
+   {op:'KMB',no:'2',dest:'So Uk Estate',m:1},
+   {op:'KMB',no:'6',dest:'Star Ferry',m:2},
+   {op:'CTB',no:'970X',dest:'Tin Wan',m:3},
+   {op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:3},
+   {op:'GMB',no:'74S',dest:'Prince Edward',m:4},
+   {op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:5},
+   {op:'KMB',no:'73X',dest:'Fu Tai Estate',m:5},
+   {op:'LWB',no:'E21A',dest:'Tung Chung',m:6},
+   {op:'KMB',no:'238X',dest:'Tsuen Wan West',m:7},
+   {op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:8},
+   {op:'CTB',no:'971',dest:'Shek Pai Wan',m:9},
+   {op:'KMB',no:'2',dest:'So Uk Estate',m:9},
+   {op:'KMB',no:'6',dest:'Star Ferry',m:11},
+   {op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:12},
+   {op:'GMB',no:'74S',dest:'Prince Edward',m:13},
+   {op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:14},
+   {op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:16},
+   {op:'KMB',no:'2',dest:'So Uk Estate',m:18},
+   {op:'CTB',no:'970',dest:'So Uk Estate',m:21},
+   {op:'KMB',no:'6',dest:'Star Ferry',m:24},
+   {op:'KMB',no:'73X',dest:'Fu Tai Estate',m:28},
+ ]},
+];
+
+/* A simplification of RailBusToken (ADR-132): the decker has two bands, the minibus one pane. */
+function busGlyph(op){
+  const c='var(--route)';
+  if(op==='GMB') return `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+     <rect x="5" y="4.5" width="14" height="15" rx="2"/><rect x="9.5" y="2.6" width="5" height="2" rx="1" fill="${c}"/>
+     <rect x="7" y="7.2" width="10" height="4.4" rx="1"/><circle cx="8.6" cy="20.4" r="1.5" fill="${c}"/><circle cx="15.4" cy="20.4" r="1.5" fill="${c}"/></svg>`;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+     <rect x="5" y="3" width="14" height="17" rx="2"/>
+     <rect x="7" y="5.6" width="10" height="3.6" rx="1"/><rect x="7" y="12.4" width="10" height="3.6" rx="1"/>
+     <circle cx="8.6" cy="20.8" r="1.5" fill="${c}"/><circle cx="15.4" cy="20.8" r="1.5" fill="${c}"/></svg>`;
+}
+function label(m){return m===null?'—':m===0?'Due':m+' min'}
+
+let stop=0,win=15,band=0;
+
+function render(){
+  const S=STOPS[stop];
+  document.getElementById('listName').textContent=S.name;
+  document.getElementById('axisName').textContent=S.name;
+  document.getElementById('listSub').textContent=S.sub;
+  document.getElementById('axisSub').textContent=S.sub+'  ·  next '+win+' min';
+
+  /* ── the list: every departure, no window ── */
+  document.getElementById('listBody').innerHTML=S.deps.map(d=>`
+    <div class="row">
+      <span class="chip" style="background:${ACCENT[d.op]};color:${ON[d.op]}">${d.no}</span>
+      <span class="dest"><s>→ </s>${d.dest}</span>
+      <span class="eta${d.m===0?' due':''}">${label(d.m)}</span>
+    </div>`).join('');
+
+  /* ── the axis: only what fits in the window ── */
+  const H=600, PAD=26, inWin=S.deps.filter(d=>d.m!==null&&d.m<=win);
+  const dropped=S.deps.length-inWin.length;
+  const y=m=>PAD+(m/win)*(H-PAD*2);
+
+  const ticks=[];
+  const step=win<=10?2:win<=15?5:10;
+  for(let m=0;m<=win;m+=step){
+    ticks.push(`<div class="tick${m===0?' now':''}" style="top:${y(m)}px"><b>${m===0?'now':m}</b><i></i></div>`);
+  }
+
+  /* collision nudge — the honest ugly bit */
+  const MIN=30; let nudged=0;
+  const placed=inWin.map(d=>({...d,y:y(d.m),moved:false}));
+  for(let i=1;i<placed.length;i++){
+    if(placed[i].y-placed[i-1].y<MIN){ placed[i].y=placed[i-1].y+MIN; placed[i].moved=true; nudged++; }
+  }
+
+  const bandPx=(2/win)*(H-PAD*2);
+  document.getElementById('axisBody').style.height=H+'px';
+  document.getElementById('axisBody').innerHTML=
+    `<div class="axisLine"></div>`+ticks.join('')+
+    placed.map(d=>`
+      ${band?`<div class="band" style="top:${d.y}px;height:${bandPx}px;margin-top:${-bandPx/2}px"></div>`:''}
+      <div class="dep${d.moved?' nudged':''}" style="top:${d.y}px">
+        <div class="tok">${busGlyph(d.op)}</div>
+        <div class="depBody">
+          <span class="chip" style="background:${ACCENT[d.op]};color:${ON[d.op]}">${d.no}</span>
+          <span class="d">${d.dest}</span>
+          <span class="m">${label(d.m)}</span>
+        </div>
+      </div>`).join('');
+
+  document.getElementById('capList').innerHTML=
+    `<b>${S.deps.length}</b> departures, all of them, in ${Math.ceil(S.deps.length*38/654*100)/100>1?'more than':'under'} one screen.`;
+  document.getElementById('capAxis').innerHTML=
+    `<b>${inWin.length}</b> drawn · <b>${dropped}</b> outside the window · <b>${nudged}</b> nudged off their true position`;
+
+  const v=document.getElementById('verdict');
+  const verdict = nudged===0
+    ? `<span class="ok">Nothing nudged.</span> Every token is at the minute it actually departs — the axis is telling the truth here.`
+    : `<span class="bad">${nudged} of ${inWin.length} tokens are drawn at a time the bus does not depart.</span> The nudge (amber outline) is what keeps them from overlapping — and it is the axis lying to stay legible.`;
+  v.innerHTML=`<span>${verdict}${dropped?`  And <b>${dropped}</b> departure${dropped>1?'s are':' is'} not shown at all — outside the ${win}-minute window.`:''}</span>`;
+}
+
+document.querySelectorAll('[data-stop]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-stop]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  stop=+b.dataset.stop;render()});
+document.querySelectorAll('[data-win]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-win]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  win=+b.dataset.win;render()});
+document.querySelectorAll('[data-band]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-band]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  band=+b.dataset.band;render()});
+document.getElementById('bDark').onclick=function(){
+  this.classList.toggle('on');
+  document.querySelectorAll('.phone').forEach(p=>p.classList.toggle('dark',this.classList.contains('on')));
+};
+render();
+</script>
+</body>
+</html>

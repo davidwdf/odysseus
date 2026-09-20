@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home — Q5 round 2: an elastic axis that moves when the data does</title>
+<!-- PROTOTYPE ONLY. Raw hex rather than tokens; the bus glyph simplifies `RailBusToken` (ADR-132);
+     the rounds are hand-written. See ./README.md -->
+<style>
+ :root{
+   --bg:#fff;--surface:#f8fafc;--surface-2:#f1f5f9;--border:#e2e8f0;
+   --text:#111827;--muted:#475569;--subtle:#64748b;--accent:#111827;--accent-on:#fff;
+   --positive:#16a34a;--warning:#d97706;--route:#2c3343;--route-soft:#9ea5b4;
+   --page:#e9edf2;--ease:cubic-bezier(.32,.72,0,1);
+ }
+ .dark{
+   --bg:#0d111c;--surface:#161b29;--surface-2:#202636;--border:#2c3343;
+   --text:#f4f6fa;--muted:#9ea5b4;--subtle:#6b7280;--accent:#e2e8f0;--accent-on:#0d111c;
+   --positive:#22c55e;--warning:#f59e0b;--route:#e2e8f0;--route-soft:#6b7280;
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--page);color:#111827;
+      font:14px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ header.page{max-width:1420px;margin:0 auto;padding:26px 22px 4px}
+ header.page h1{font-size:21px;margin:0 0 7px;letter-spacing:-.01em}
+ header.page p{margin:0 0 11px;color:#475569;max-width:102ch;line-height:1.55}
+ header.page code{background:#dde3ea;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ blockquote.said{margin:0 0 14px;padding:10px 16px;border-left:3px solid #94a3b8;background:#fff;
+                 border-radius:0 10px 10px 0;max-width:102ch;color:#334155;font-size:13.5px;line-height:1.6}
+ .controls{max-width:1420px;margin:0 auto;padding:6px 22px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls .sep{width:1px;height:24px;background:#c8d1db;margin:0 4px}
+ .controls label{font-size:12px;color:#475569;margin-right:2px}
+ button.ctl{font:inherit;font-size:12.5px;border:1px solid #c3ccd6;background:#f6f8fa;color:#1f2937;
+            border-radius:999px;padding:7px 13px;cursor:pointer}
+ button.ctl:hover{background:#fff} button.ctl.on{background:#111827;border-color:#111827;color:#fff;font-weight:600}
+ button.ctl.go{background:#0a7d4a;border-color:#0a7d4a;color:#fff;font-weight:600}
+
+ .verdict{max-width:1420px;margin:0 auto 14px;padding:0 22px;font-size:13px;line-height:1.5}
+ .verdict span{display:inline-block;background:#fff;border:1px solid #c8d1db;border-radius:8px;padding:8px 13px;color:#1f2937}
+ .verdict b{font-variant-numeric:tabular-nums} .verdict .bad{color:#b91c1c;font-weight:700} .verdict .ok{color:#0a7d4a;font-weight:700}
+
+ .grid{max-width:1420px;margin:0 auto;padding:0 22px 70px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+ .col{width:404px;flex:none}
+ .col .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+           color:#fff;background:#111827;border-radius:5px;padding:2px 7px;margin-bottom:7px}
+ .col .tag.dead{background:#b91c1c} .col .tag.lean{background:#0a7d4a}
+ .col h2{font-size:15px;margin:0 0 3px}
+ .col p.note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:#475569;min-height:76px}
+
+ .phone{width:390px;height:748px;border-radius:40px;overflow:hidden;position:relative;background:var(--bg);
+        box-shadow:0 1px 3px rgba(15,23,42,.10),0 8px 24px rgba(15,23,42,.12);border:1px solid #bcc6d1;color:var(--text);
+        font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ .sheetTop{padding:14px 16px 8px;border-bottom:1px solid var(--border)}
+ .sheetTop h3{margin:0;font-size:17px;font-weight:600}
+ .sheetTop p{margin:2px 0 0;font-size:12px;color:var(--subtle)}
+ .body{position:absolute;top:66px;bottom:0;left:0;right:0;overflow-y:auto}
+ .body::-webkit-scrollbar{width:0}
+
+ .axisWrap{position:relative;padding:16px 16px 30px 0}
+ .axisLine{position:absolute;left:54px;top:0;bottom:0;width:2px;background:var(--border)}
+ .tick{position:absolute;left:0;width:100%;transition:top .6s var(--ease)}
+ .tick i{position:absolute;left:54px;right:16px;height:1px;background:var(--border);opacity:.6}
+ .tick b{position:absolute;left:0;width:36px;text-align:right;font-size:11px;font-weight:600;color:var(--subtle);
+         font-variant-numeric:tabular-nums;transform:translateY(-50%)}
+ .tick.now b{color:var(--positive)} .tick.now i{background:var(--positive);opacity:.5;height:1.5px}
+ /* an elastic stretch is drawn, not silent — the ruler says where it gave */
+ .tick.stretch i{background:repeating-linear-gradient(90deg,var(--border) 0 4px,transparent 4px 8px);opacity:.85}
+
+ .dep{position:absolute;left:44px;right:12px;display:flex;align-items:center;gap:9px;transform:translateY(-50%);
+      transition:top .6s var(--ease),opacity .35s}
+ .tok{width:22px;height:24px;flex:none;display:grid;place-items:center;position:relative;z-index:2}
+ .tok svg{width:22px;height:22px}
+ .depBody{display:flex;align-items:center;gap:8px;min-width:0;flex:1;background:var(--bg);border-radius:9px;
+          padding:2px 4px 2px 2px;z-index:2}
+ .depBody .chip{font-size:12.5px;font-weight:700;min-width:36px;padding:2px 6px;border-radius:8px;text-align:center;flex:none}
+ .depBody .d{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+ .depBody .m{font-size:12px;font-variant-numeric:tabular-nums;color:var(--subtle);flex:none;font-weight:600}
+ .dep.nudged .depBody{box-shadow:0 0 0 1px var(--warning)}
+ .dep.moved .depBody{box-shadow:0 0 0 2px var(--positive)}
+ .dep.gone{opacity:0;transform:translateY(-50%) translateX(-14px)}
+
+ /* hybrid: a short axis above a full list */
+ .hybridAxis{position:relative;padding:14px 16px 10px 0;border-bottom:1px solid var(--border);background:var(--surface)}
+ .dark .hybridAxis{background:var(--surface)}
+ .hybridCap{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--subtle);
+            padding:0 0 8px 54px}
+ .row{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);min-width:0}
+ .row .chip{font-size:14px;font-weight:700;border-radius:10px;min-width:44px;padding:3px 8px;text-align:center;flex:none}
+ .dest{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .dest s{color:var(--subtle);text-decoration:none}
+ .eta{font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;flex:none;text-align:right;min-width:58px;
+      transition:color .4s}
+ .eta.due{color:var(--positive)} .eta.bumped{color:var(--warning)}
+ .listCap{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--subtle);padding:10px 16px 4px}
+
+ .cap{margin:10px 0 0;font-size:12px;color:#475569;line-height:1.5} .cap b{color:#111827}
+ footer.page{max-width:1420px;margin:0 auto;padding:0 22px 80px;color:#475569;font-size:13px;line-height:1.65}
+ footer.page h3{color:#111827;font-size:14px;margin:22px 0 7px}
+ footer.page ul{margin:0;padding-left:18px} footer.page li{margin-bottom:7px} footer.page b{color:#111827}
+ footer.page .box{background:#fff;border:1px solid #c8d1db;border-radius:14px;padding:16px 18px;max-width:105ch}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Home — Q5 round 2: an elastic axis, and what happens when the data moves</h1>
+  <blockquote class="said">
+    “This is actually pretty cool. How would we handle shifting positions (bus arrivals are estimates and the order
+    could change)? I agree it does make it a little harder to track specific bus routes. The timeline can be flexible
+    right? — e.g. we adjust the spacing between minutes if there's a lot of buses crowding. I also like the clean mixed
+    integration of minibus stops with the main stops. The ±2 min band is no good really — bus info is an estimate and
+    on a busy route the overlap only creates confusion.”
+  </blockquote>
+  <p><b>Three answers, built.</b> The ± band is <b>gone</b> — you are right, and it was the wrong shape of honesty:
+     it drew our uncertainty as a smear rather than saying anything. The <b>elastic axis</b> is the middle phone, and
+     it works better than I expected. <b>Shifting positions</b> is the <em>“Next round”</em> button — press it and a
+     fresh round lands: times change, two buses swap order, one departs.</p>
+  <p><b>The rule that makes shifting safe, and it is one we already have.</b> ADR-008 forbids a client-side
+     per-second countdown — the app updates a figure <em>only when fresh data arrives</em>. So the axis never slides
+     under a fixed “now”; it is a <b>snapshot</b> that re-lays out when a round lands, exactly as the list's numerals
+     re-render. The axis inherits the honesty rule the list already lives under and adds no new exposure. What it adds
+     is that a change is now <em>visible</em> — a numeral going 11 → 8 is easy to miss, a bus moving is not.</p>
+</header>
+
+<div class="controls">
+  <label>Stop</label>
+  <button class="ctl on" data-stop="0">Man Ming Lane (quiet)</button>
+  <button class="ctl" data-stop="1">Nathan Rd / Jordan Rd (busy)</button>
+  <button class="ctl" data-stop="2">Mong Kok interchange (brutal)</button>
+  <span class="sep"></span>
+  <label>Window</label>
+  <button class="ctl" data-win="10">10 min</button>
+  <button class="ctl on" data-win="15">15 min</button>
+  <button class="ctl" data-win="30">30 min</button>
+  <span class="sep"></span>
+  <button class="ctl go" id="bRound">▶ Next round — the data moves</button>
+  <button class="ctl" id="bReset">Reset</button>
+  <span class="sep"></span>
+  <button class="ctl" id="bDark">Dark</button>
+</div>
+
+<div class="verdict" id="verdict"></div>
+
+<div class="grid">
+  <div class="col">
+    <span class="tag dead">Round 1 — rejected</span>
+    <h2>Uniform axis</h2>
+    <p class="note">Position is a linear function of minutes. Honest at a quiet stop, and it collapses on a busy one:
+      tokens collide, the nudge (amber) fires, and every nudged token is drawn at a time its bus does not depart.</p>
+    <div class="phone" id="phA"><div class="sheetTop"><h3 id="nA"></h3><p id="sA"></p></div>
+      <div class="body"><div class="axisWrap" id="bA"></div></div></div>
+    <p class="cap" id="cA"></p>
+  </div>
+
+  <div class="col">
+    <span class="tag">Your suggestion</span>
+    <h2>Elastic axis</h2>
+    <p class="note">Crowded stretches of the timeline are given more room and empty ones are compressed —
+      <b>and the ruler stretches with them</b>. That last part is what keeps it honest: position still equals time
+      <em>as read against the ticks</em>, because the ticks moved too. A stretched interval draws its rule dashed,
+      so the axis says where it gave.</p>
+    <div class="phone" id="phB"><div class="sheetTop"><h3 id="nB"></h3><p id="sB"></p></div>
+      <div class="body"><div class="axisWrap" id="bB"></div></div></div>
+    <p class="cap" id="cB"></p>
+  </div>
+
+  <div class="col">
+    <span class="tag lean">My lean</span>
+    <h2>Hybrid — axis as headline, list as reference</h2>
+    <p class="note">A short elastic axis of the next few minutes sits above the full list. The axis answers
+      <em>“what is the shape of the next ten minutes”</em>; the list answers <em>“when is my 73X”</em>. Neither is
+      asked to do the other's job, which is where both previous rounds broke.</p>
+    <div class="phone" id="phC"><div class="sheetTop"><h3 id="nC"></h3><p id="sC"></p></div>
+      <div class="body"><div class="hybridAxis"><div class="hybridCap" id="hcap"></div>
+        <div class="axisWrap" id="bC" style="padding-bottom:6px"></div></div>
+        <div id="lC"></div></div></div>
+    <p class="cap" id="cC"></p>
+  </div>
+</div>
+
+<footer class="page">
+  <h3>Your four points, answered</h3>
+  <div class="box">
+    <p style="margin:0 0 11px"><b>1. Shifting positions.</b> The axis re-lays out only when a round lands — never
+      between rounds, because a token creeping toward “now” <em>is</em> the per-second countdown ADR-008 bans, just
+      drawn instead of typed. When a round does land, every token animates to its new place over one motion
+      (600 ms, the sheet's own easing), a bus that has departed slides off the top and fades — that is
+      <code>useRailFlip</code>'s existing exit, reused — and a bus that has <b>changed order</b> is outlined in green
+      for that one transition. Press <em>Next round</em> and watch rows 2 and 3 swap.
+      <br>⚠️ <b>The thing to judge:</b> whether reordering reads as the board being alive or as the board being
+      unreliable. The list has the same reorder and hides it — which is either kinder or less honest, and that is a
+      taste question I cannot settle for you.</p>
+    <p style="margin:0 0 11px"><b>2. Harder to track a specific route.</b> Real, and the hybrid is the answer rather
+      than a fix: the list underneath is sorted by time but <em>scannable by chip</em>, so “where is my 73X” stays a
+      lookup. An axis alone will always be worse at this, because its sort key is the thing you are not searching by.</p>
+    <p style="margin:0 0 11px"><b>3. A flexible timeline.</b> Built, and it is the best idea in this round. The rule:
+      find the gaps between consecutive departures, give every interval a minimum height so a clump can breathe, and
+      <b>move the ruler's ticks by the same mapping</b>. Draw a stretched interval's rule dashed. The nudge count goes
+      to zero at every density in the mockup — the axis stops lying because it no longer has to.
+      <br>The honest cost: <b>the axis is no longer uniformly readable</b>. Two tokens a centimetre apart are three
+      minutes apart in one stretch and one minute apart in another, so the <em>shape</em> of bunching — the thing the
+      axis existed to show — is flattened by the very mechanism that makes it fit. Compare the busy stop on the middle
+      phone against the left one and you can see the trade directly.</p>
+    <p style="margin:0"><b>4. The ± band.</b> Removed. Your reasoning is better than my defence of it: drawing
+      uncertainty as an overlapping smear on a busy board adds confusion without adding information, and the app's
+      existing answer to “this is an estimate” is the word <em>approximately</em> in the copy and a board-level
+      freshness line — not a per-figure cue. That is ADR-123's conclusion, twice-decided; the band was me proposing
+      it a third time in a new costume.</p>
+  </div>
+
+  <h3>What this round is asking</h3>
+  <ul>
+    <li><b>Uniform, elastic, or hybrid?</b> My lean is hybrid-with-an-elastic-axis, which is the third phone.</li>
+    <li><b>Press “Next round” three or four times on the busy stop.</b> Does the movement read as alive or as jittery?
+      That single judgement decides whether any of this ships.</li>
+    <li><b>In the hybrid, is the seam right?</b> The axis is on a tinted panel to say “this is a summary, not the
+      list”. It could equally be plain, or collapsible.</li>
+  </ul>
+  <p><b>Still rung 4, still out of the 1–3 slice.</b> Nothing here blocks Home; this is exploration you asked to keep
+    going, and it stays behind the merge.</p>
+</footer>
+
+<script>
+const ACC={KMB:'#D7282F',CTB:'#F6C700',GMB:'#00845C',LWB:'#E8A33D'},
+      ON={KMB:'#fff',CTB:'#0F172A',GMB:'#fff',LWB:'#fff'};
+
+/* Each stop is a list of ROUNDS — successive states of the same board, the way a live feed delivers it.
+   Round 0 is the landing state; pressing "Next round" advances. Order changes are deliberate. */
+const STOPS=[
+ {name:'Man Ming Lane',sub:'Westbound  ·  240m · 3 min walk  ·  saved',rounds:[
+  [{id:'g2',op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:0},
+   {id:'k9',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:7},
+   {id:'k238',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:19}],
+  [{id:'k9',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:4},
+   {id:'k238',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:16},
+   {id:'g2b',op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:22}],
+  [{id:'k9',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:1},
+   {id:'k238',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:15},
+   {id:'g2b',op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:19}],
+ ]},
+ {name:'Nathan Road / Jordan Road',sub:'Northbound  ·  450m · 6 min walk  ·  saved',rounds:[
+  [{id:'k6',op:'KMB',no:'6',dest:'Star Ferry',m:2},
+   {id:'k1',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:4},
+   {id:'c970',op:'CTB',no:'970',dest:'So Uk Estate',m:5},
+   {id:'k73',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:11},
+   {id:'k9',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:12},
+   {id:'e21',op:'LWB',no:'E21A',dest:'Tung Chung',m:13},
+   {id:'k6b',op:'KMB',no:'6',dest:'Star Ferry',m:18},
+   {id:'k13',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:23}],
+  /* the 1 loses two minutes to traffic and the 970 overtakes it; the 6 departs */
+  [{id:'c970',op:'CTB',no:'970',dest:'So Uk Estate',m:3},
+   {id:'k1',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:5},
+   {id:'k9',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:9},
+   {id:'k73',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:10},
+   {id:'e21',op:'LWB',no:'E21A',dest:'Tung Chung',m:12},
+   {id:'k6b',op:'KMB',no:'6',dest:'Star Ferry',m:15},
+   {id:'k13',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:21}],
+  [{id:'k1',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:1},
+   {id:'k9',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:6},
+   {id:'k73',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:7},
+   {id:'e21',op:'LWB',no:'E21A',dest:'Tung Chung',m:11},
+   {id:'k6b',op:'KMB',no:'6',dest:'Star Ferry',m:12},
+   {id:'k13',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:18},
+   {id:'k238',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:26}],
+ ]},
+ {name:'Mong Kok Road / Nathan Road',sub:'Southbound  ·  1.1 km  ·  interchange',rounds:[
+  [{id:'a',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:1},{id:'b',op:'KMB',no:'2',dest:'So Uk Estate',m:1},
+   {id:'c',op:'KMB',no:'6',dest:'Star Ferry',m:2},{id:'d',op:'CTB',no:'970X',dest:'Tin Wan',m:3},
+   {id:'e',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:3},{id:'f',op:'GMB',no:'74S',dest:'Prince Edward',m:4},
+   {id:'g',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:5},{id:'h',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:5},
+   {id:'i',op:'LWB',no:'E21A',dest:'Tung Chung',m:6},{id:'j',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:7},
+   {id:'k',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:8},{id:'l',op:'CTB',no:'971',dest:'Shek Pai Wan',m:9},
+   {id:'m',op:'KMB',no:'2',dest:'So Uk Estate',m:9},{id:'n',op:'KMB',no:'6',dest:'Star Ferry',m:11},
+   {id:'o',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:12},{id:'p',op:'GMB',no:'74S',dest:'Prince Edward',m:13},
+   {id:'q',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:14},{id:'r',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:16}],
+  [{id:'c',op:'KMB',no:'6',dest:'Star Ferry',m:1},{id:'e',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:1},
+   {id:'d',op:'CTB',no:'970X',dest:'Tin Wan',m:2},{id:'f',op:'GMB',no:'74S',dest:'Prince Edward',m:2},
+   {id:'h',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:3},{id:'g',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:4},
+   {id:'i',op:'LWB',no:'E21A',dest:'Tung Chung',m:5},{id:'j',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:6},
+   {id:'k',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:6},{id:'m',op:'KMB',no:'2',dest:'So Uk Estate',m:7},
+   {id:'l',op:'CTB',no:'971',dest:'Shek Pai Wan',m:8},{id:'n',op:'KMB',no:'6',dest:'Star Ferry',m:10},
+   {id:'o',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:11},{id:'p',op:'GMB',no:'74S',dest:'Prince Edward',m:12},
+   {id:'q',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:13},{id:'r',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:15}],
+  [{id:'f',op:'GMB',no:'74S',dest:'Prince Edward',m:0},{id:'h',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:1},
+   {id:'g',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:2},{id:'i',op:'LWB',no:'E21A',dest:'Tung Chung',m:3},
+   {id:'k',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:4},{id:'j',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:4},
+   {id:'m',op:'KMB',no:'2',dest:'So Uk Estate',m:5},{id:'l',op:'CTB',no:'971',dest:'Shek Pai Wan',m:6},
+   {id:'n',op:'KMB',no:'6',dest:'Star Ferry',m:8},{id:'o',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:9},
+   {id:'p',op:'GMB',no:'74S',dest:'Prince Edward',m:10},{id:'q',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:11},
+   {id:'r',op:'KMB',no:'13X',dest:'Kwun Tong Ferry',m:13},{id:'s',op:'KMB',no:'2',dest:'So Uk Estate',m:17}],
+ ]},
+];
+
+function busGlyph(op){
+  const c='var(--route)';
+  if(op==='GMB') return `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="15" rx="2"/><rect x="9.5" y="2.6" width="5" height="2" rx="1" fill="${c}"/><rect x="7" y="7.2" width="10" height="4.4" rx="1"/><circle cx="8.6" cy="20.4" r="1.5" fill="${c}"/><circle cx="15.4" cy="20.4" r="1.5" fill="${c}"/></svg>`;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="17" rx="2"/><rect x="7" y="5.6" width="10" height="3.6" rx="1"/><rect x="7" y="12.4" width="10" height="3.6" rx="1"/><circle cx="8.6" cy="20.8" r="1.5" fill="${c}"/><circle cx="15.4" cy="20.8" r="1.5" fill="${c}"/></svg>`;
+}
+const label=m=>m===0?'Due':m+' min';
+
+let stop=0,win=15,round=0,prev=null;
+const H=574,PAD=24,MIN_GAP=30;
+
+/** Uniform: y is linear in minutes. */
+function uniformMap(w){ return m=>PAD+(m/w)*(H-PAD*2) }
+
+/**
+ * Elastic: every interval between consecutive departures gets at least MIN_GAP, the rest of the height is
+ * shared proportionally, and the SAME mapping is applied to the ruler's ticks — which is the whole trick.
+ * A stretched interval is reported so its rule can be drawn dashed.
+ */
+function elasticMap(deps,w){
+  const stops=[0,...deps.map(d=>d.m),w];
+  const uniq=[...new Set(stops)].sort((a,b)=>a-b);
+  const gaps=[];
+  for(let i=1;i<uniq.length;i++){
+    const span=uniq[i]-uniq[i-1];
+    const need=deps.filter(d=>d.m===uniq[i]).length?MIN_GAP:0;
+    gaps.push({from:uniq[i-1],to:uniq[i],span,need});
+  }
+  const total=H-PAD*2;
+  const fixed=gaps.reduce((a,g)=>a+g.need,0);
+  const free=Math.max(0,total-fixed);
+  const spanTotal=gaps.reduce((a,g)=>a+g.span,0)||1;
+  let y=PAD; const marks=[{m:uniq[0],y}];
+  const stretched=[];
+  for(const g of gaps){
+    const h=g.need+free*(g.span/spanTotal);
+    if(g.need>0 && g.span>0 && h/g.span > (total/w)*1.35) stretched.push([g.from,g.to]);
+    y+=h; marks.push({m:g.to,y});
+  }
+  return {
+    at(m){
+      for(let i=1;i<marks.length;i++){
+        if(m<=marks[i].m){
+          const a=marks[i-1],b=marks[i];
+          return b.m===a.m?b.y:a.y+(m-a.m)/(b.m-a.m)*(b.y-a.y);
+        }
+      }
+      return marks[marks.length-1].y;
+    },
+    stretched,
+  };
+}
+
+function ticks(w,at,stretched){
+  const step=w<=10?2:w<=15?5:10; const out=[];
+  for(let m=0;m<=w;m+=step){
+    const isStretch=(stretched||[]).some(([a,b])=>m>a&&m<=b);
+    out.push(`<div class="tick${m===0?' now':''}${isStretch?' stretch':''}" style="top:${at(m)}px"><b>${m===0?'now':m}</b><i></i></div>`);
+  }
+  return out.join('');
+}
+
+function depsHtml(deps,at,{nudge}={}){
+  let nudged=0;
+  const placed=deps.map(d=>({...d,y:at(d.m),moved:false}));
+  if(nudge) for(let i=1;i<placed.length;i++)
+    if(placed[i].y-placed[i-1].y<MIN_GAP){ placed[i].y=placed[i-1].y+MIN_GAP; placed[i].moved=true; nudged++; }
+  /* **Relative order over the buses present in BOTH rounds** — not the raw index. A bus ahead of you
+     departing shifts every index below it by one, and calling that "reordered" lit up the whole board on
+     the first build. Overtaking is what the cue means, so overtaking is what it must compute. */
+  const rank=ranks(deps,prev);
+  const html=placed.map(d=>{
+    const reordered = rank.moved.has(d.id);
+    return `<div class="dep${d.moved?' nudged':''}${reordered?' moved':''}" style="top:${d.y}px">
+      <div class="tok">${busGlyph(d.op)}</div>
+      <div class="depBody"><span class="chip" style="background:${ACC[d.op]};color:${ON[d.op]}">${d.no}</span>
+      <span class="d">${d.dest}</span><span class="m">${label(d.m)}</span></div></div>`;
+  }).join('');
+  return {html,nudged};
+}
+
+/**
+ * Which buses actually changed places since the previous round.
+ *
+ * Both rounds are reduced to the ids they have in common and ranked within that; a bus whose rank differs
+ * has been overtaken or has overtaken. Anything else — a departure ahead of you, a new arrival at the tail
+ * — shifts indices without changing who is in front of whom, and marking those is what made the first
+ * build outline sixteen of sixteen rows.
+ */
+function ranks(now,before){
+  const moved=new Set();
+  if(!before) return {moved};
+  const ids=new Set(before.map(d=>d.id));
+  const a=now.filter(d=>ids.has(d.id));
+  const b=before.filter(d=>now.some(n=>n.id===d.id));
+  const ra=new Map(a.map((d,i)=>[d.id,i])), rb=new Map(b.map((d,i)=>[d.id,i]));
+  for(const [id,i] of ra) if(rb.get(id)!==i) moved.add(id);
+  return {moved};
+}
+
+function render(){
+  const S=STOPS[stop], deps=S.rounds[round%S.rounds.length];
+  for(const k of ['A','B','C']){
+    document.getElementById('n'+k).textContent=S.name;
+    document.getElementById('s'+k).textContent=S.sub+(k==='C'?'  ·  next '+Math.min(win,10)+' min, then everything':'  ·  next '+win+' min');
+  }
+  const inWin=deps.filter(d=>d.m<=win);
+
+  /* A — uniform, with the nudge */
+  const uA=uniformMap(win);
+  const A=depsHtml(inWin,uA,{nudge:true});
+  const eA=document.getElementById('bA'); eA.style.height=H+'px';
+  eA.innerHTML=`<div class="axisLine"></div>`+ticks(win,uA)+A.html;
+
+  /* B — elastic, ruler included */
+  const E=elasticMap(inWin,win);
+  const B=depsHtml(inWin,m=>E.at(m));
+  const eB=document.getElementById('bB'); eB.style.height=H+'px';
+  eB.innerHTML=`<div class="axisLine"></div>`+ticks(win,m=>E.at(m),E.stretched)+B.html;
+
+  /* C — hybrid: a short elastic axis, then the whole list */
+  const hw=Math.min(win,10), head=deps.filter(d=>d.m<=hw);
+  const HH=Math.min(210,Math.max(120,head.length*34+40));
+  const EH=(()=>{const save=H; return null})();
+  const eh=elasticMapH(head,hw,HH);
+  const C=depsHtmlH(head,eh.at);
+  const eC=document.getElementById('bC'); eC.style.height=HH+'px';
+  eC.innerHTML=`<div class="axisLine"></div>`+ticksH(hw,eh.at,eh.stretched)+C;
+  document.getElementById('hcap').textContent=`The next ${hw} minutes — ${head.length} departure${head.length===1?'':'s'}`;
+  document.getElementById('lC').innerHTML=
+    `<div class="listCap">Everything, soonest first</div>`+
+    deps.map(d=>{
+      const was=prev?.find(p=>p.id===d.id);
+      const bumped=was&&was.m<d.m;
+      return `<div class="row"><span class="chip" style="background:${ACC[d.op]};color:${ON[d.op]}">${d.no}</span>
+      <span class="dest"><s>→ </s>${d.dest}</span>
+      <span class="eta${d.m===0?' due':''}${bumped?' bumped':''}">${label(d.m)}</span></div>`;
+    }).join('');
+
+  document.getElementById('cA').innerHTML=`<b>${inWin.length}</b> drawn · <b>${A.nudged}</b> nudged off their true position`;
+  document.getElementById('cB').innerHTML=`<b>${inWin.length}</b> drawn · <b>0</b> nudged — the ruler gave instead`;
+  document.getElementById('cC').innerHTML=`<b>${head.length}</b> on the axis · <b>${deps.length}</b> in the list below`;
+
+  const v=document.getElementById('verdict');
+  v.innerHTML=`<span>Round <b>${(round%S.rounds.length)+1}</b> of ${S.rounds.length}. `+
+    (A.nudged? `Uniform: <span class="bad">${A.nudged} token${A.nudged>1?'s':''} drawn at a time the bus does not depart.</span> `
+             : `Uniform: <span class="ok">nothing nudged</span> at this density. `)+
+    `Elastic: <span class="ok">0 nudged</span> at every density — it spends readability instead of truth. `+
+    (prev?`Green outline = this bus changed its place in the order since the last round.`:`Press <b>Next round</b> to move the data.`)+
+    `</span>`;
+}
+
+/* the hybrid's axis uses its own height, so the same two functions parameterised */
+function elasticMapH(deps,w,h){
+  const uniq=[...new Set([0,...deps.map(d=>d.m),w])].sort((a,b)=>a-b);
+  const gaps=[]; for(let i=1;i<uniq.length;i++)
+    gaps.push({from:uniq[i-1],to:uniq[i],span:uniq[i]-uniq[i-1],need:deps.filter(d=>d.m===uniq[i]).length?26:0});
+  const total=h-36,fixed=gaps.reduce((a,g)=>a+g.need,0),free=Math.max(0,total-fixed),
+        spanTotal=gaps.reduce((a,g)=>a+g.span,0)||1;
+  let y=18; const marks=[{m:uniq[0],y}],stretched=[];
+  for(const g of gaps){ const hh=g.need+free*(g.span/spanTotal);
+    if(g.need>0&&g.span>0&&hh/g.span>(total/w)*1.35) stretched.push([g.from,g.to]);
+    y+=hh; marks.push({m:g.to,y}); }
+  return {at(m){for(let i=1;i<marks.length;i++){if(m<=marks[i].m){const a=marks[i-1],b=marks[i];
+    return b.m===a.m?b.y:a.y+(m-a.m)/(b.m-a.m)*(b.y-a.y);}} return marks[marks.length-1].y},stretched};
+}
+function ticksH(w,at,stretched){
+  const step=w<=10?2:5; let o='';
+  for(let m=0;m<=w;m+=step){
+    const s=(stretched||[]).some(([a,b])=>m>a&&m<=b);
+    o+=`<div class="tick${m===0?' now':''}${s?' stretch':''}" style="top:${at(m)}px"><b>${m===0?'now':m}</b><i></i></div>`;
+  }
+  return o;
+}
+function depsHtmlH(deps,at){
+  const rank=ranks(deps,prev);
+  return deps.map(d=>{
+    const re=rank.moved.has(d.id);
+    return `<div class="dep${re?' moved':''}" style="top:${at(d.m)}px"><div class="tok">${busGlyph(d.op)}</div>
+      <div class="depBody"><span class="chip" style="background:${ACC[d.op]};color:${ON[d.op]}">${d.no}</span>
+      <span class="d">${d.dest}</span><span class="m">${label(d.m)}</span></div></div>`;
+  }).join('');
+}
+
+document.querySelectorAll('[data-stop]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-stop]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  stop=+b.dataset.stop;round=0;prev=null;render()});
+document.querySelectorAll('[data-win]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-win]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  win=+b.dataset.win;render()});
+document.getElementById('bRound').onclick=()=>{
+  const S=STOPS[stop]; prev=S.rounds[round%S.rounds.length]; round++; render();};
+document.getElementById('bReset').onclick=()=>{round=0;prev=null;render()};
+document.getElementById('bDark').onclick=function(){
+  this.classList.toggle('on');
+  document.querySelectorAll('.phone').forEach(p=>p.classList.toggle('dark',this.classList.contains('on')));};
+render();
+</script>
+</body>
+</html>

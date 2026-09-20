@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home — Q4 round 2: what is this screen for?</title>
+<!-- PROTOTYPE ONLY. Tiles direct from LandsD (the app goes through our Worker, ADR-049);
+     raw hex rather than tokens; the board is hand-written, not from `homeView`. See ./README.md -->
+<style>
+ :root{
+   --bg:#fff;--surface:#f8fafc;--surface-2:#f1f5f9;--border:#e2e8f0;
+   --text:#111827;--muted:#475569;--subtle:#64748b;--accent:#111827;--accent-on:#fff;
+   --positive:#16a34a;--warning:#d97706;
+   --glass:rgba(255,255,255,.72);--rim:inset 0 .5px 0 rgba(255,255,255,.72),inset 0 -.5px 0 rgba(15,23,42,.06);
+   --page:#e9edf2;--chrome:#cdd5de;--ease:cubic-bezier(.32,.72,0,1);--dur:.42s;
+ }
+ .dark{
+   --bg:#0d111c;--surface:#161b29;--surface-2:#202636;--border:#2c3343;
+   --text:#f4f6fa;--muted:#9ea5b4;--subtle:#6b7280;--accent:#e2e8f0;--accent-on:#0d111c;
+   --positive:#22c55e;--warning:#f59e0b;
+   --glass:rgba(22,27,41,.72);--rim:inset 0 .5px 0 rgba(255,255,255,.10),inset 0 -.5px 0 rgba(0,0,0,.30);
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--page);color:#111827;
+      font:14px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ header.page{max-width:1500px;margin:0 auto;padding:26px 22px 4px}
+ header.page h1{font-size:21px;margin:0 0 7px;letter-spacing:-.01em}
+ header.page p{margin:0 0 11px;color:#475569;max-width:100ch;line-height:1.55}
+ header.page code{background:#dde3ea;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ blockquote.said{margin:0 0 14px;padding:10px 16px;border-left:3px solid #94a3b8;background:#fff;
+                 border-radius:0 10px 10px 0;max-width:100ch;color:#334155;font-size:13.5px;line-height:1.6}
+ .controls{max-width:1500px;margin:0 auto;padding:6px 22px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls .sep{width:1px;height:24px;background:#c8d1db;margin:0 4px}
+ .controls label{font-size:12px;color:#475569;margin-right:2px}
+ button.ctl{font:inherit;font-size:12.5px;border:1px solid #c3ccd6;background:#f6f8fa;color:#1f2937;
+            border-radius:999px;padding:7px 13px;cursor:pointer}
+ button.ctl:hover{background:#fff} button.ctl.on{background:#111827;border-color:#111827;color:#fff;font-weight:600}
+
+ .grid{max-width:1500px;margin:0 auto;padding:0 22px 70px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+ .col{width:398px;flex:none}
+ .col h2{font-size:15px;margin:0 0 3px}
+ .col .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+           color:#fff;background:#111827;border-radius:5px;padding:2px 7px;margin-bottom:7px}
+ .col .tag.yours{background:#1d4ed8} .col .tag.lean{background:#0a7d4a}
+ .col p.note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:#475569;min-height:96px}
+ .ask{margin:10px 0 0;font-size:12px;color:#475569;line-height:1.55;background:#fff;border:1px solid #c8d1db;
+      border-radius:10px;padding:10px 12px}
+ .ask b{color:#111827}
+
+ /* ── phone ──────────────────────────────────────────────────────────────── */
+ .phone{width:390px;height:790px;border-radius:40px;overflow:hidden;position:relative;background:var(--chrome);
+        box-shadow:0 1px 3px rgba(15,23,42,.10),0 8px 24px rgba(15,23,42,.12);border:1px solid #bcc6d1;
+        font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif;color:var(--text)}
+ .screen{position:absolute;inset:0;background:var(--bg);overflow:hidden}
+ .map{position:absolute;inset:0;background:#dde5ec;overflow:hidden}
+ .dark .map{background:#141a26}
+ .map .tiles{position:absolute;inset:0}
+ .dark .map .tiles{filter:invert(1) hue-rotate(180deg) brightness(.94) contrast(1.06)}
+ .map img{position:absolute;width:256px;height:256px;user-select:none;-webkit-user-drag:none}
+ .pins{position:absolute;inset:0;pointer-events:none}
+ .pin{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--bg);border:2.5px solid var(--text);
+      transform:translate(-50%,-50%)}
+ .pin.saved{background:var(--warning);border-color:var(--bg);width:15px;height:15px}
+ .pin.here{width:19px;height:19px;background:var(--text);border-color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+ .rider{position:absolute;width:17px;height:17px;border-radius:50%;background:#2563eb;border:3px solid #fff;
+        transform:translate(-50%,-50%);box-shadow:0 0 0 7px rgba(37,99,235,.20)}
+
+ .glass{background:var(--glass);-webkit-backdrop-filter:blur(13px) saturate(1.8);
+        backdrop-filter:blur(13px) saturate(1.8);box-shadow:var(--rim),0 3px 14px rgba(15,23,42,.13)}
+ .dark .glass{box-shadow:var(--rim)}
+ .lens{position:absolute;top:12px;right:12px;width:48px;height:48px;border-radius:50%;z-index:40;display:grid;
+       place-items:center;border:0;cursor:pointer;padding:0;color:var(--text)}
+ .lens svg{width:21px;height:21px}
+
+ /* the card — held constant across all three, and it is NOT what this round is asking about */
+ .ctx{position:absolute;top:12px;left:12px;z-index:30;border-radius:22px;border:1px solid var(--border);
+      width:calc(390px - 24px - 48px - 8px);overflow:hidden}
+ .ctxRow{display:flex;align-items:center;gap:10px;height:62px;padding:0 14px}
+ .ctxIcon{width:30px;height:30px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;flex:none}
+ .ctxIcon svg{width:16px;height:16px;color:var(--muted)}
+ .ctxTitle{font-size:17px;font-weight:600;line-height:1.2}
+ .ctxSub{font-size:12px;color:var(--muted);margin-top:1px}
+ .recentre{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--surface);
+           display:grid;place-items:center;flex:none;cursor:pointer;padding:0;color:var(--text);margin-left:auto}
+ .recentre svg{width:16px;height:16px}
+
+ /* sheet */
+ .sheet{position:absolute;left:0;right:0;bottom:0;z-index:20;background:var(--bg);border-radius:20px 20px 0 0;
+        box-shadow:0 -2px 22px rgba(15,23,42,.16);display:flex;flex-direction:column;height:55%}
+ .dark .sheet{box-shadow:0 -1px 0 var(--border),0 -2px 22px rgba(0,0,0,.5)}
+ .grab{height:22px;display:grid;place-items:center;flex:none;padding-top:7px}
+ .grab i{width:38px;height:4px;border-radius:2px;background:var(--border);display:block}
+ .scroll{overflow-y:auto;flex:1;padding-bottom:92px}
+ .scroll::-webkit-scrollbar{width:0}
+
+ .secHead{position:sticky;top:0;background:var(--bg);z-index:2;padding:11px 16px 5px;font-size:12px;font-weight:700;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--subtle)}
+ .secHead .sub{text-transform:none;letter-spacing:0;font-weight:400;font-size:11.5px}
+
+ .card{padding:12px 16px 13px;border-top:1px solid var(--border)}
+ .card.tap{cursor:pointer}
+ .card.tap:hover{background:var(--surface)}
+ .cardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+ .cardName{font-size:16px;font-weight:600;line-height:1.25;min-width:0}
+ .cardCap{font-size:12px;color:var(--subtle);margin-top:2px;display:flex;align-items:center;gap:5px}
+ .cardCap svg{width:12px;height:12px;flex:none}
+ .chev{color:var(--subtle);flex:none;margin-top:2px} .chev svg{width:18px;height:18px}
+ .rows{margin-top:7px}
+ .row{display:flex;align-items:center;gap:10px;padding:5px 0;min-width:0}
+ .chip{font-size:14px;font-weight:700;border-radius:10px;min-width:44px;padding:3px 8px;text-align:center;flex:none}
+ .dest{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .dest s{color:var(--subtle);text-decoration:none}
+ .eta{font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;flex:none;text-align:right;min-width:62px}
+ .eta.due{color:var(--positive)}
+ .more{font-size:13px;color:var(--accent);padding:5px 0;display:flex;align-items:center;gap:3px}
+ .dark .more{color:#93b4ff}
+ /* the index strip — chips with no times */
+ .strip{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+ .sChip{font-size:12px;font-weight:700;border-radius:7px;padding:2px 7px;min-width:34px;text-align:center}
+ .sMore{font-size:12px;color:var(--subtle);align-self:center;padding:2px 4px;font-weight:600}
+ .count{font-size:12px;color:var(--subtle);margin-top:6px}
+
+ .tabs{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:45;height:54px;border-radius:24px;
+       display:flex;align-items:center;padding:0 6px;gap:2px}
+ .tab{width:74px;height:46px;border:0;background:transparent;display:grid;place-items:center;gap:1px;cursor:pointer;
+      border-radius:18px;color:var(--muted);font-family:inherit}
+ .tab.on{color:var(--text)} .tab svg{width:20px;height:20px} .tab span{font-size:10px;font-weight:600}
+ .searchLens{position:absolute;right:12px;bottom:12px;z-index:45;width:54px;height:54px;border-radius:50%;
+             display:grid;place-items:center;border:0;cursor:pointer;color:var(--text)}
+ .searchLens svg{width:21px;height:21px}
+
+ footer.page{max-width:1500px;margin:0 auto;padding:0 22px 80px;color:#475569;font-size:13px;line-height:1.65}
+ footer.page h3{color:#111827;font-size:14px;margin:22px 0 7px}
+ footer.page ul{margin:0;padding-left:18px} footer.page li{margin-bottom:7px} footer.page b{color:#111827}
+ footer.page .box{background:#fff;border:1px solid #c8d1db;border-radius:14px;padding:16px 18px;max-width:105ch}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Home — round 2: what is this screen <em>for</em>?</h1>
+  <blockquote class="said">
+    “I much prefer the new tabbar shown in these designs (having it centered is nice and will work better on larger
+    screens). To be honest, I struggle with this design, because I'm not 100% clear on what I'm supposed to be doing
+    on this screen. I guess that can be where lists really shine — browsable. Hmm… what if we only showed nearby stops
+    and not buses specifically? That seems like it could hurt the usability a bit, but be a little easier — find the
+    “stop/place” nearest you.”
+  </blockquote>
+  <p><b>That is the more useful question, and round 1 was asking the wrong one.</b> Which words go in the floating card
+     cannot be answered while the board underneath is unclear — so the card is held <b>constant</b> across all three
+     phones below (it says where you are), and what changes is <b>the board</b>. The card question comes back once this
+     one is settled.</p>
+  <p><b>The diagnosis, stated plainly:</b> round 1's Home asked a rider to do triage. Three sections, each stop showing
+     two or three of its routes with times, plus a map, plus a cap of <code>+N more</code> hiding the rest. Route detail
+     is clear because it answers <em>one</em> question — <em>where is this bus and when does it get to my stop</em>.
+     Round 1's Home answered three at once and ranked them.</p>
+</header>
+
+<div class="controls">
+  <label>Appearance</label>
+  <button class="ctl on" id="bLight">Light</button><button class="ctl" id="bDark">Dark</button>
+  <span class="sep"></span>
+  <label>Saved list</label>
+  <button class="ctl on" id="bSaved">3 saved places</button><button class="ctl" id="bNone">Nothing saved yet</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer class="page">
+  <h3>Why C is the lean, in one paragraph</h3>
+  <div class="box">
+    <p style="margin:0 0 10px">Your two occasions from Q2 want different things, and the screen has been trying to serve
+      both with one row shape. <b>“Which of my routes is next”</b> and <b>“when do I leave the office”</b> are
+      <em>checking</em> — you already know the route, so a time is the whole answer and we can be specific because
+      <em>you told us which ones matter</em>. <b>“What's around me”</b> is <em>browsing</em> — we do not know which of
+      a stop's 26 routes you want, so picking three and hiding 23 behind <code>+23 more</code> is a guess dressed as an
+      answer.</p>
+    <p style="margin:0 0 10px"><b>So: saved content gets times; discovery content gets stops.</b> One job per section,
+      and each section's row shape says which job it is doing. That is what makes the screen legible — not a better
+      ranking, and not a better card.</p>
+    <p style="margin:0"><b>It also deletes a standing problem.</b> <code>+N more routes</code> — which
+      <code>docs/07</code> has an open question about, because from Favourites it dumps you into an unfiltered list of
+      20 — stops existing in the discovery section, because nothing is capped when nothing claims to be a shortlist.</p>
+  </div>
+
+  <h3>What each option costs, honestly</h3>
+  <ul>
+    <li><b>A (round 1)</b> — most information, least clarity. Every section looks the same, so nothing tells you which
+      rows are yours and which are the algorithm's. It is the one you struggled with, and the sameness is why.</li>
+    <li><b>B (yours: stops only)</b> — the cleanest thing on this page, and the map finally means something: one row,
+      one pin. But <b>Home stops answering the question that makes this app worth opening.</b> "Is my bus coming" now
+      takes a tap, and the "before leaving the office" case takes a tap into a screen about a place you are not at.</li>
+    <li><b>C (the split)</b> — clear at a glance which half is yours. Cost: <b>two row shapes on one screen</b>, which
+      is the thing to judge with your eyes. If it reads as two unrelated lists stapled together, C fails and B is the
+      honest fallback.</li>
+  </ul>
+
+  <h3>What this round is asking</h3>
+  <ul>
+    <li><b>A, B or C</b> — and if C, does the seam between the two halves read as deliberate or as a glitch?</li>
+    <li><b>In B and C's "Around you", is the chip strip right?</b> It is there so you can spot your route number without
+      us claiming a time for it. The alternative is the bare stop name and a count ("26 routes"), which is cleaner still
+      and makes you tap to find out if it is even the right stop.</li>
+    <li><b>Try "Nothing saved yet".</b> That is a cold install, and it is the state that decides whether the split is a
+      structure or a special case — in C, a new rider sees B.</li>
+  </ul>
+  <p><b>Settled from your note and not being re-asked:</b> the tab bar is <b>centred</b>, with the search lens floating
+    separately at the bottom right. That is what all three phones draw.</p>
+</footer>
+
+<script>
+const ACC={KMB:'#D7282F',CTB:'#F6C700',GMB:'#00845C',LWB:'#E8A33D'},
+      ON={KMB:'#fff',CTB:'#0F172A',GMB:'#fff',LWB:'#fff'};
+
+const I={
+ settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+ locate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>',
+ pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+ chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+ star:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><polygon points="12 2.6 14.9 8.5 21.4 9.4 16.7 14 17.8 20.4 12 17.4 6.2 20.4 7.3 14 2.6 9.4 9.1 8.5"/></svg>',
+ home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>',
+ map:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>',
+ starOut:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+ search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+};
+
+/* Saved places — checking. Nearby places — browsing. Same corpus, two jobs. */
+const SAVED=[
+ {name:'Nathan Road / Pak Hoi Street',cap:'Southbound  ·  90m · 2 min walk',rows:[
+   {op:'KMB',no:'1',dest:'Chuk Yuen Estate',eta:'6 min'},
+   {op:'KMB',no:'6',dest:'Star Ferry',eta:'8 min'}]},
+ {name:'Nathan Road / Jordan Road',cap:'Northbound  ·  450m · 6 min walk',rows:[
+   {op:'KMB',no:'73X',dest:'Fu Tai Estate',eta:'11 min'},
+   {op:'CTB',no:'970',dest:'So Uk Estate',eta:'14 min'}]},
+ {name:'Kwun Tong Road / Ngau Tau Kok',cap:'8.2 km away',rows:[
+   {op:'KMB',no:'42C',dest:'Lam Tin Station',eta:'4 min'}]},
+];
+const NEARBY=[
+ {name:'Pak Hoi Street',cap:'Eastbound  ·  60m · 1 min walk',
+  chips:[['KMB','9'],['KMB','13X'],['GMB','74S'],['KMB','238X'],['CTB','N121']],extra:0,
+  rows:[{op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',eta:'3 min'},
+        {op:'KMB',no:'13X',dest:'Kwun Tong Ferry',eta:'12 min'},
+        {op:'GMB',no:'74S',dest:'Prince Edward',eta:'16 min'}],more:2},
+ {name:'Man Ming Lane',cap:'Westbound  ·  240m · 3 min walk',
+  chips:[['GMB','2'],['GMB','74S']],extra:0,
+  rows:[{op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',eta:'Due',due:true}],more:1},
+ {name:'Jordan Road / Woosung Street',cap:'Westbound  ·  180m · 2 min walk',
+  chips:[['CTB','N121'],['LWB','E21A'],['KMB','8'],['KMB','26'],['KMB','215X'],['CTB','107']],extra:14,
+  rows:[{op:'LWB',no:'E21A',dest:'Tung Chung',eta:'21 min'},
+        {op:'CTB',no:'N121',dest:'Choi Wan',eta:'—'}],more:18},
+ {name:'Temple Street',cap:'Southbound  ·  310m · 4 min walk',
+  chips:[['KMB','238X'],['KMB','6']],extra:0,
+  rows:[{op:'KMB',no:'238X',dest:'Tsuen Wan West',eta:'9 min'}],more:1},
+];
+
+let HAS_SAVED=true;
+
+const VARIANTS=[
+ {key:'a',tag:'Option A',cls:'',title:'Round 1 — everything carries times',
+  note:'Three sections, all the same shape: every stop shows two or three of its routes with an arrival, and the rest hide behind “+N more”. Most information on screen, and the one you said you struggled with. Nothing distinguishes a row you chose from a row we picked for you.'},
+ {key:'b',tag:'Option B — yours',cls:'yours',title:'Stops only, no buses',
+  note:'Every row is a place: name, which way it faces, how far. No arrivals anywhere. The cleanest board here, and the map finally earns its keep — one row, one pin. The cost is that Home no longer answers “is my bus coming”; that becomes a tap.'},
+ {key:'c',tag:'Option C — my lean',cls:'lean',title:'Saved gets times · nearby gets stops',
+  note:'The split. Your routes at your places carry arrivals, because you told us which ones matter. Everything else is a browsable index of places, with a strip of route numbers so you can spot yours — and no claimed times, because we would be guessing which three of 26 you wanted.'},
+];
+
+function rowsHtml(rows,more){
+  return `<div class="rows">${rows.map(r=>`
+    <div class="row">
+      <span class="chip" style="background:${ACC[r.op]};color:${ON[r.op]}">${r.no}</span>
+      <span class="dest"><s>→ </s>${r.dest}</span>
+      <span class="eta${r.due?' due':''}">${r.eta}</span>
+    </div>`).join('')}
+    ${more?`<div class="more">${more} more route${more>1?'s':''} ${I.chev}</div>`:''}</div>`;
+}
+function stripHtml(chips,extra){
+  return `<div class="strip">${chips.map(([op,no])=>
+    `<span class="sChip" style="background:${ACC[op]};color:${ON[op]}">${no}</span>`).join('')}
+    ${extra?`<span class="sMore">+${extra}</span>`:''}</div>`;
+}
+function cardHtml(c,{saved,times,strip}){
+  return `<div class="card tap">
+    <div class="cardHead">
+      <div style="min-width:0">
+        <div class="cardName">${c.name}</div>
+        <div class="cardCap">${saved?`<span style="color:var(--warning)">${I.star}</span>`:I.pin}<span>${c.cap}</span></div>
+      </div>
+      <div class="chev">${I.chev}</div>
+    </div>
+    ${times?rowsHtml(c.rows,c.more||0):''}
+    ${strip?stripHtml(c.chips,c.extra):''}
+  </div>`;
+}
+
+function board(v){
+  const savedOn = HAS_SAVED;
+  let h='';
+  if(v.key==='a'){
+    if(savedOn){
+      h+=`<div class="secHead">Catch it <span class="sub">— saved, and you can still make it</span></div>`;
+      h+=cardHtml(SAVED[0],{saved:true,times:true});
+      h+=`<div class="secHead">Saved <span class="sub">— your list, soonest first</span></div>`;
+      h+=SAVED.slice(1).map(c=>cardHtml(c,{saved:true,times:true})).join('');
+    }
+    h+=`<div class="secHead">Around you <span class="sub">— 6 stops within 500 m</span></div>`;
+    h+=NEARBY.map(c=>cardHtml(c,{saved:false,times:true})).join('');
+  }
+  if(v.key==='b'){
+    if(savedOn){
+      h+=`<div class="secHead">Saved <span class="sub">— your places</span></div>`;
+      h+=SAVED.map(c=>cardHtml(c,{saved:true})).join('');
+    }
+    h+=`<div class="secHead">Around you <span class="sub">— 6 stops within 500 m</span></div>`;
+    h+=NEARBY.map(c=>cardHtml(c,{saved:false})).join('');
+  }
+  if(v.key==='c'){
+    if(savedOn){
+      h+=`<div class="secHead">Catch it <span class="sub">— saved, and you can still make it</span></div>`;
+      h+=cardHtml(SAVED[0],{saved:true,times:true});
+      h+=`<div class="secHead">Saved <span class="sub">— your list, soonest first</span></div>`;
+      h+=SAVED.slice(1).map(c=>cardHtml(c,{saved:true,times:true})).join('');
+    }
+    h+=`<div class="secHead">Around you <span class="sub">— tap a place to see its times</span></div>`;
+    h+=NEARBY.map(c=>cardHtml(c,{saved:false,strip:true})).join('');
+  }
+  return h;
+}
+
+function phone(v){
+  return `<div class="phone" id="ph-${v.key}"><div class="screen">
+    <div class="map"><div class="tiles" id="t-${v.key}"></div><div class="pins">
+      <div class="pin saved" style="left:47%;top:31%"></div>
+      <div class="pin saved" style="left:62%;top:44%"></div>
+      <div class="pin here" style="left:38%;top:26%"></div>
+      <div class="pin" style="left:55%;top:20%"></div>
+      <div class="pin" style="left:30%;top:40%"></div>
+      <div class="rider" style="left:46%;top:36%"></div></div></div>
+    <button class="lens glass">${I.settings}</button>
+    <div class="ctx glass"><div class="ctxRow">
+      <div class="ctxIcon">${I.pin}</div>
+      <div style="min-width:0"><div class="ctxTitle">Yau Ma Tei</div><div class="ctxSub">Updated just now</div></div>
+      <button class="recentre">${I.locate}</button>
+    </div></div>
+    <div class="sheet"><div class="grab"><i></i></div><div class="scroll" id="s-${v.key}">${board(v)}</div></div>
+    <nav class="tabs glass">
+      <button class="tab on">${I.home}<span>Home</span></button>
+      <button class="tab">${I.map}<span>Map</span></button>
+      <button class="tab">${I.starOut}<span>Saved</span></button>
+    </nav>
+    <button class="searchLens glass">${I.search}</button>
+  </div></div>`;
+}
+
+const ASK={
+ a:'<b>What it shows:</b> every stop with 2–3 of its routes and a time, capped by “+N more”. <b>Watch:</b> nothing on screen tells you which rows you chose.',
+ b:'<b>What it shows:</b> places only. <b>Watch:</b> how much calmer the map + list read together — and what it now costs you to find out when your bus is.',
+ c:'<b>What it shows:</b> two row shapes, one per job. <b>Watch:</b> the seam between “Saved” and “Around you”. Does it read as deliberate, or as a glitch?',
+};
+
+const grid=document.getElementById('grid');
+function build(){
+  grid.innerHTML=VARIANTS.map(v=>`<div class="col">
+    <span class="tag ${v.cls}">${v.tag}</span><h2>${v.title}</h2>
+    <p class="note">${v.note}</p>${phone(v)}<p class="ask">${ASK[v.key]}</p></div>`).join('');
+  VARIANTS.forEach(v=>tiles(document.getElementById('t-'+v.key)));
+  if(document.getElementById('bDark').classList.contains('on'))
+    document.querySelectorAll('.phone').forEach(p=>p.classList.add('dark'));
+}
+function tiles(el){
+  const z=16,lat=22.3080,lng=114.1700,n=2**z;
+  const wx=(lng+180)/360*n,
+        wy=(1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*n;
+  const cx=195,cy=268,x0=Math.floor(wx-cx/256)-1,y0=Math.floor(wy-cy/256)-1;
+  let h='';
+  for(let x=x0;x<x0+4;x++)for(let y=y0;y<y0+4;y++){
+    const L=cx+(x-wx)*256,T=cy+(y-wy)*256;
+    for(const u of [`basemap/WGS84/${z}/${x}/${y}`,`label/hk/en/WGS84/${z}/${x}/${y}`])
+      h+=`<img src="https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/${u}.png" style="left:${L}px;top:${T}px" alt="" onerror="this.style.display='none'">`;
+  }
+  el.innerHTML=h;
+}
+function pair(a,b,set){
+  const A=document.getElementById(a),B=document.getElementById(b);
+  A.onclick=()=>{A.classList.add('on');B.classList.remove('on');set(false)};
+  B.onclick=()=>{B.classList.add('on');A.classList.remove('on');set(true)};
+}
+pair('bLight','bDark',d=>document.querySelectorAll('.phone').forEach(p=>p.classList.toggle('dark',d)));
+pair('bSaved','bNone',n=>{HAS_SAVED=!n;build()});
+build();
+</script>
+</body>
+</html>

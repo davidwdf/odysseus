@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Place detail — Q5 round 3: timeline + saved + grouped by kerb</title>
+<!-- PROTOTYPE ONLY. Raw hex rather than tokens; the bus glyph simplifies `RailBusToken` (ADR-132);
+     the board is hand-written, not from `placeDetailView`. See ./README.md -->
+<style>
+ :root{
+   --bg:#fff;--surface:#f8fafc;--surface-2:#f1f5f9;--border:#e2e8f0;
+   --text:#111827;--muted:#475569;--subtle:#64748b;--accent:#111827;--accent-on:#fff;
+   --positive:#16a34a;--warning:#d97706;--route:#2c3343;--route-soft:#9ea5b4;
+   --page:#e9edf2;--ease:cubic-bezier(.32,.72,0,1);
+ }
+ .dark{
+   --bg:#0d111c;--surface:#161b29;--surface-2:#202636;--border:#2c3343;
+   --text:#f4f6fa;--muted:#9ea5b4;--subtle:#6b7280;--accent:#e2e8f0;--accent-on:#0d111c;
+   --positive:#22c55e;--warning:#f59e0b;--route:#e2e8f0;--route-soft:#6b7280;
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--page);color:#111827;
+      font:14px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ header.page{max-width:1300px;margin:0 auto;padding:26px 22px 4px}
+ header.page h1{font-size:21px;margin:0 0 7px;letter-spacing:-.01em}
+ header.page p{margin:0 0 11px;color:#475569;max-width:100ch;line-height:1.55}
+ header.page code{background:#dde3ea;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ blockquote.said{margin:0 0 14px;padding:10px 16px;border-left:3px solid #94a3b8;background:#fff;
+                 border-radius:0 10px 10px 0;max-width:100ch;color:#334155;font-size:13.5px;line-height:1.6}
+ .controls{max-width:1300px;margin:0 auto;padding:6px 22px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls .sep{width:1px;height:24px;background:#c8d1db;margin:0 4px}
+ .controls label{font-size:12px;color:#475569;margin-right:2px}
+ button.ctl{font:inherit;font-size:12.5px;border:1px solid #c3ccd6;background:#f6f8fa;color:#1f2937;
+            border-radius:999px;padding:7px 13px;cursor:pointer}
+ button.ctl:hover{background:#fff} button.ctl.on{background:#111827;border-color:#111827;color:#fff;font-weight:600}
+ button.ctl.go{background:#0a7d4a;border-color:#0a7d4a;color:#fff;font-weight:600}
+
+ .grid{max-width:1300px;margin:0 auto;padding:0 22px 70px;display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+ .col{width:400px;flex:none}
+ .col h2{font-size:15px;margin:0 0 3px}
+ .col .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+           color:#fff;background:#111827;border-radius:5px;padding:2px 7px;margin-bottom:7px}
+ .col .tag.ship{background:#475569} .col .tag.yours{background:#1d4ed8}
+ .col p.note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:#475569;min-height:86px}
+ .ask{margin:10px 0 0;font-size:12px;color:#475569;line-height:1.55;background:#fff;border:1px solid #c8d1db;
+      border-radius:10px;padding:10px 12px} .ask b{color:#111827}
+
+ .phone{width:390px;height:812px;border-radius:40px;overflow:hidden;position:relative;background:var(--bg);
+        box-shadow:0 1px 3px rgba(15,23,42,.10),0 8px 24px rgba(15,23,42,.12);border:1px solid #bcc6d1;
+        color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ .scroll{position:absolute;inset:0;overflow-y:auto} .scroll::-webkit-scrollbar{width:0}
+ .hdr{padding:56px 16px 10px}
+ .hdr h3{margin:0;font-size:22px;font-weight:600;line-height:1.2}
+ .hdr p{margin:4px 0 0;font-size:12.5px;color:var(--subtle)}
+ .backLens{position:absolute;left:12px;top:12px;width:48px;height:48px;border-radius:50%;z-index:30;display:grid;
+           place-items:center;background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(13px) saturate(1.8);
+           backdrop-filter:blur(13px) saturate(1.8);box-shadow:inset 0 .5px 0 rgba(255,255,255,.72),0 3px 14px rgba(15,23,42,.13);
+           border:1px solid var(--border);color:var(--text)}
+ .dark .backLens{background:rgba(22,27,41,.72)}
+ .backLens svg{width:20px;height:20px}
+ /* A STAND-IN for the shell's shared map (proposals/07 §7e), not a panel this screen owns. Drawn inset
+    here only so the mockup has something under the chrome; in the app the map is one layer for the whole
+    app and this screen declares a `MapIntent` against it. */
+ .mini{margin:0 16px 4px;height:112px;border-radius:14px;border:1px dashed var(--border);background:#dde5ec;
+       position:relative;overflow:hidden}
+ .dark .mini{background:#141a26}
+ .mini .mdot{position:absolute;width:11px;height:11px;border-radius:50%;background:var(--text);
+             border:2px solid var(--bg);transform:translate(-50%,-50%)}
+ .mini .mlbl{position:absolute;font-size:9px;font-weight:700;color:var(--text);background:var(--bg);
+             border-radius:4px;padding:1px 4px;transform:translate(-50%,-160%);border:1px solid var(--border)}
+
+ .secHead{padding:14px 16px 5px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+          color:var(--subtle);display:flex;align-items:baseline;gap:7px}
+ .secHead .sub{text-transform:none;letter-spacing:0;font-weight:400;font-size:11.5px}
+ .kerb{padding:13px 16px 4px;display:flex;align-items:center;gap:7px;border-top:1px solid var(--border)}
+ .kerbCode{font-size:11px;font-weight:700;background:var(--surface-2);border:1px solid var(--border);
+           border-radius:6px;padding:2px 6px;color:var(--muted)}
+ .kerbName{font-size:13px;font-weight:600;color:var(--text)}
+
+ .row{display:flex;align-items:center;gap:10px;padding:7px 16px;min-width:0}
+ .row+.row{border-top:1px solid var(--border)}
+ .chipWrap{position:relative;flex:none}
+ .chip{font-size:14px;font-weight:700;border-radius:10px;min-width:44px;padding:3px 8px;text-align:center;display:block}
+ /* The saved flag — the rail's own two-star cut-out (`SavedFlag`), same as Q4. */
+ .pip{position:absolute;top:-6px;right:-6px;width:15px;height:15px;display:grid;place-items:center}
+ .pip svg{position:absolute}
+ .pip .halo{width:15px;height:15px;color:var(--bg)}
+ .pip .mark{width:11px;height:11px;color:var(--accent)}
+ .dest{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .dest s{color:var(--subtle);text-decoration:none}
+ .eta{font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;flex:none;text-align:right;min-width:58px}
+ .eta.due{color:var(--positive)}
+
+ /* the timeline headline */
+ .tl{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+     padding:12px 16px 6px 0;position:relative}
+ .tlCap{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--subtle);
+        padding:0 16px 8px 54px;display:flex;justify-content:space-between}
+ .tlCap em{font-style:normal;font-weight:400;text-transform:none;letter-spacing:0}
+ .axisWrap{position:relative}
+ .axisLine{position:absolute;left:54px;top:0;bottom:0;width:2px;background:var(--border)}
+ .tick{position:absolute;left:0;width:100%;transition:top .6s var(--ease)}
+ .tick i{position:absolute;left:54px;right:16px;height:1px;background:var(--border);opacity:.55}
+ .tick b{position:absolute;left:0;width:36px;text-align:right;font-size:11px;font-weight:600;color:var(--subtle);
+         font-variant-numeric:tabular-nums;transform:translateY(-50%)}
+ .tick.now b{color:var(--positive)} .tick.now i{background:var(--positive);opacity:.5;height:1.5px}
+ .tick.stretch i{background:repeating-linear-gradient(90deg,var(--border) 0 4px,transparent 4px 8px);opacity:.8}
+ .dep{position:absolute;left:44px;right:12px;display:flex;align-items:center;gap:9px;transform:translateY(-50%);
+      transition:top .6s var(--ease)}
+ /* The bus glyph is OUT of the timeline (the owner's call: "it looks fun but it makes it a little too
+    busy"). The node that remains is a plain mark on the line — the token is kept in mind for later. */
+ .tok{width:11px;height:11px;flex:none;border-radius:50%;background:var(--route);
+      box-shadow:0 0 0 2.5px var(--surface);z-index:2}
+ .depBody{display:flex;align-items:center;gap:8px;min-width:0;flex:1;background:var(--surface);border-radius:9px;
+          padding:2px 4px 2px 2px;z-index:2}
+ .depBody .chip{font-size:12.5px;min-width:36px;padding:2px 6px;border-radius:8px}
+ .depBody .d{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+ .depBody .k{font-size:10px;font-weight:700;color:var(--subtle);flex:none;background:var(--bg);
+             border:1px solid var(--border);border-radius:5px;padding:1px 4px}
+ .depBody .m{font-size:12px;font-variant-numeric:tabular-nums;color:var(--subtle);flex:none;font-weight:600}
+ .dep.moved .depBody{box-shadow:0 0 0 2px var(--positive)}
+
+ footer.page{max-width:1300px;margin:0 auto;padding:0 22px 80px;color:#475569;font-size:13px;line-height:1.65}
+ footer.page h3{color:#111827;font-size:14px;margin:22px 0 7px}
+ footer.page ul{margin:0;padding-left:18px} footer.page li{margin-bottom:7px} footer.page b{color:#111827}
+ footer.page .box{background:#fff;border:1px solid #c8d1db;border-radius:14px;padding:16px 18px;max-width:104ch}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Place detail — round 3: timeline, then saved, then grouped by kerb</h1>
+  <blockquote class="said">
+    “I think we could merge the existing place design with the timeline? So the timeline at the top shows the buses
+    arriving soon, while below that is the list of favourites at that stop, and then below that is the structured list
+    where they are grouped by stop ID? Would that be a good balance?”
+  </blockquote>
+  <p><b>Yes — and it is a better home for the timeline than Home was.</b> Two reasons it fits here and did not fit
+     there. First, <b>the density is bounded</b>: one place, not an aggregate, so the interchange case that killed the
+     uniform axis is the worst case rather than the normal one. Second — and this is the argument that makes it
+     <em>earn</em> its space rather than decorate — <b>the timeline is the only view on this screen that ignores kerb
+     boundaries.</b> The grouped list exists precisely to respect them; a rider standing at a merged place who just
+     wants the next bus has, until now, had to read three kerbs and do the merge in their head.</p>
+  <p><b>Press “Next round”</b> to land fresh data: the axis re-lays out, and any bus that actually changed places in
+     the order is outlined. Compare against the shipping screen on the left.</p>
+</header>
+
+<div class="controls">
+  <label>Place</label>
+  <button class="ctl on" data-place="0">Jordan (3 kerbs, busy)</button>
+  <button class="ctl" data-place="1">Man Ming Lane (1 kerb, quiet)</button>
+  <span class="sep"></span>
+  <label>Your saved routes here</label>
+  <button class="ctl on" data-saved="1">Two</button>
+  <button class="ctl" data-saved="0">None</button>
+  <span class="sep"></span>
+  <button class="ctl go" id="bRound">▶ Next round</button>
+  <button class="ctl" id="bReset">Reset</button>
+  <span class="sep"></span>
+  <button class="ctl" id="bDark">Dark</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer class="page">
+  <h3>Is it a good balance? Mostly yes — with one risk worth your eyes</h3>
+  <div class="box">
+    <p style="margin:0 0 10px"><b>Each zone answers a different question, which is the test the previous two rounds
+      failed.</b> The timeline: <em>what is leaving this place soon, from any kerb?</em> The saved block:
+      <em>what about the routes I actually take?</em> The grouped list: <em>which kerb do I stand at, and what
+      else goes from it?</em> None is a restatement of another, and the screen reads top-to-bottom from
+      “glance” to “decide” to “look up”.</p>
+    <p style="margin:0 0 10px">⚠️ <b>The risk: one bus can appear three times.</b> A saved route leaving in four
+      minutes is a token on the axis, a row in your saved block, and a row under its kerb. On the busy place with two
+      saved routes that is six duplicated lines out of about twenty. Three mitigations, in order of how much I
+      believe in them:</p>
+    <ul style="margin:0 0 10px;padding-left:17px">
+      <li><b>Keep the timeline short.</b> Ten minutes, not thirty — so it holds four or five tokens and reads as a
+        headline rather than a second list. That is what the mockup does.</li>
+      <li><b>Put the kerb code on the timeline token</b> (the small grey <code>D1</code> / <code>D2</code> badge). It
+        stops the axis being a duplicate <em>because</em> it carries the one fact the grouped list is organised
+        around — the rider can go straight from the token to the right kerb.</li>
+      <li><b>Do not dim or hide duplicates.</b> Tempting, and it is the silent-filter trap:
+        <a href="../../../08-decision-log.md">ADR-008</a>'s rule is that hiding an honest row because it appears
+        elsewhere costs a rider more than the repetition does.</li>
+    </ul>
+    <p style="margin:0"><b>The quiet-place case is the one that decides whether this is structural.</b> Switch to Man
+      Ming Lane: one kerb, three routes. The grouped list collapses to a flat list (as it already does —
+      <code>PlaceDetailView.grouped</code> is false), the timeline holds three tokens, and the screen is arguably
+      <em>all headline</em>. If that reads as empty ceremony, the timeline wants a floor — “only when this place has
+      more than N departures, or more than one kerb”. That would be a kernel rule, not a view's.</p>
+  </div>
+
+  <h3>What this round is asking</h3>
+  <ul>
+    <li><b>Is the three-zone stack the right balance</b>, or is one zone too many?</li>
+    <li><b>Does the kerb badge on the timeline token earn its place?</b> It is what stops the axis being a duplicate.</li>
+    <li><b>Quiet place: keep the timeline, or gate it behind a floor?</b></li>
+    <li>Still <b>rung 4</b> — none of this is in the 1–3 slice, and Place detail is not on that path at all. It is
+      exploration, and it would want its own row and its own spec states.</li>
+  </ul>
+</footer>
+
+<script>
+const ACC={KMB:'#D7282F',CTB:'#F6C700',GMB:'#00845C',LWB:'#E8A33D'},
+      ON={KMB:'#fff',CTB:'#0F172A',GMB:'#fff',LWB:'#fff'};
+const I={
+ back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>',
+ star:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><polygon points="12 2.6 14.9 8.5 21.4 9.4 16.7 14 17.8 20.4 12 17.4 6.2 20.4 7.3 14 2.6 9.4 9.1 8.5"/></svg>',
+};
+/* **Parked, not deleted.** The owner's note: "let's drop the bus icons from the timeline — it looks fun
+   but it makes it a little too busy. Keep it in the back of our head for where it might fit later."
+   Unused below; kept so the drawing is here when a place is found for it. */
+function busGlyph(op){
+  const c='var(--route)';
+  if(op==='GMB') return `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="15" rx="2"/><rect x="9.5" y="2.6" width="5" height="2" rx="1" fill="${c}"/><rect x="7" y="7.2" width="10" height="4.4" rx="1"/><circle cx="8.6" cy="20.4" r="1.5" fill="${c}"/><circle cx="15.4" cy="20.4" r="1.5" fill="${c}"/></svg>`;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="17" rx="2"/><rect x="7" y="5.6" width="10" height="3.6" rx="1"/><rect x="7" y="12.4" width="10" height="3.6" rx="1"/><circle cx="8.6" cy="20.8" r="1.5" fill="${c}"/><circle cx="15.4" cy="20.8" r="1.5" fill="${c}"/></svg>`;
+}
+const label=m=>m===0?'Due':m+' min';
+
+/* Two places. Each round is the whole place; `k` is the kerb the departure leaves from. */
+const PLACES=[
+ {name:'Jordan Road / Nathan Road',sum:'Interchange · served by KMB, Citybus, GMB · 22 routes · 180m · 2 min walk',
+  kerbs:[{code:'ST510',name:'Nathan Road, southbound'},{code:'ST511',name:'Nathan Road, northbound'},
+         {code:'GM1247',name:'Jordan Road, minibus bay'}],
+  saved:['73X','970'],
+  rounds:[
+   [{id:'a',op:'KMB',no:'6',dest:'Star Ferry',m:1,k:'ST510'},
+    {id:'b',op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:2,k:'GM1247'},
+    {id:'c',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:4,k:'ST511'},
+    {id:'d',op:'CTB',no:'970',dest:'So Uk Estate',m:6,k:'ST511'},
+    {id:'e',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:7,k:'ST510'},
+    {id:'f',op:'LWB',no:'E21A',dest:'Tung Chung',m:9,k:'ST510'},
+    {id:'g',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:12,k:'ST511'},
+    {id:'h',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:14,k:'ST510'},
+    {id:'i',op:'GMB',no:'74S',dest:'Prince Edward',m:16,k:'GM1247'},
+    {id:'j',op:'CTB',no:'N121',dest:'Choi Wan',m:null,k:'ST511'}],
+   [{id:'b',op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:0,k:'GM1247'},
+    {id:'d',op:'CTB',no:'970',dest:'So Uk Estate',m:3,k:'ST511'},
+    {id:'c',op:'KMB',no:'73X',dest:'Fu Tai Estate',m:4,k:'ST511'},
+    {id:'e',op:'KMB',no:'9',dest:'Tsim Sha Tsui Ferry',m:5,k:'ST510'},
+    {id:'f',op:'LWB',no:'E21A',dest:'Tung Chung',m:7,k:'ST510'},
+    {id:'g',op:'KMB',no:'1',dest:'Chuk Yuen Estate',m:9,k:'ST511'},
+    {id:'h',op:'KMB',no:'238X',dest:'Tsuen Wan West',m:11,k:'ST510'},
+    {id:'i',op:'GMB',no:'74S',dest:'Prince Edward',m:13,k:'GM1247'},
+    {id:'k',op:'KMB',no:'6',dest:'Star Ferry',m:15,k:'ST510'},
+    {id:'j',op:'CTB',no:'N121',dest:'Choi Wan',m:null,k:'ST511'}],
+  ]},
+ {name:'Man Ming Lane',sum:'Westbound · served by GMB · 3 routes · 240m · 3 min walk',
+  kerbs:[{code:'',name:''}],
+  saved:['2'],
+  rounds:[
+   [{id:'p',op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:0,k:''},
+    {id:'q',op:'GMB',no:'74S',dest:'Prince Edward',m:6,k:''},
+    {id:'r',op:'GMB',no:'12',dest:'Yau Ma Tei',m:13,k:''}],
+   [{id:'q',op:'GMB',no:'74S',dest:'Prince Edward',m:3,k:''},
+    {id:'r',op:'GMB',no:'12',dest:'Yau Ma Tei',m:10,k:''},
+    {id:'p',op:'GMB',no:'2',dest:'Mong Kok (Fife Street)',m:17,k:''}],
+  ]},
+];
+
+let place=0,round=0,prev=null,withSaved=true;
+const TLW=10;   /* the headline's window, in minutes — short on purpose */
+
+function ranks(now,before){
+  const moved=new Set(); if(!before) return moved;
+  const ids=new Set(before.map(d=>d.id));
+  const a=now.filter(d=>ids.has(d.id)), b=before.filter(d=>now.some(n=>n.id===d.id));
+  const ra=new Map(a.map((d,i)=>[d.id,i])), rb=new Map(b.map((d,i)=>[d.id,i]));
+  for(const [id,i] of ra) if(rb.get(id)!==i) moved.add(id);
+  return moved;
+}
+/** The elastic mapping, with the ruler moving with the content — q5b's, parameterised by height. */
+function elastic(deps,w,h,minGap){
+  const uniq=[...new Set([0,...deps.map(d=>d.m),w])].sort((a,b)=>a-b);
+  const gaps=[]; for(let i=1;i<uniq.length;i++)
+    gaps.push({from:uniq[i-1],to:uniq[i],span:uniq[i]-uniq[i-1],
+               need:deps.filter(d=>d.m===uniq[i]).length?minGap:0});
+  const total=h-34,fixed=gaps.reduce((a,g)=>a+g.need,0),free=Math.max(0,total-fixed),
+        spanTotal=gaps.reduce((a,g)=>a+g.span,0)||1;
+  let y=17; const marks=[{m:uniq[0],y}],stretched=[];
+  for(const g of gaps){ const hh=g.need+free*(g.span/spanTotal);
+    if(g.need>0&&g.span>0&&hh/g.span>(total/w)*1.35) stretched.push([g.from,g.to]);
+    y+=hh; marks.push({m:g.to,y}); }
+  return {at(m){for(let i=1;i<marks.length;i++){if(m<=marks[i].m){const a=marks[i-1],b=marks[i];
+    return b.m===a.m?b.y:a.y+(m-a.m)/(b.m-a.m)*(b.y-a.y);}} return marks[marks.length-1].y},stretched};
+}
+function chipHtml(r,saved){
+  return `<span class="chipWrap"><span class="chip" style="background:${ACC[r.op]};color:${ON[r.op]}">${r.no}</span>${
+    saved?`<span class="pip"><svg class="halo" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2.6 14.9 8.5 21.4 9.4 16.7 14 17.8 20.4 12 17.4 6.2 20.4 7.3 14 2.6 9.4 9.1 8.5"/></svg><svg class="mark" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2.6 14.9 8.5 21.4 9.4 16.7 14 17.8 20.4 12 17.4 6.2 20.4 7.3 14 2.6 9.4 9.1 8.5"/></svg></span>`:''}</span>`;
+}
+function rowHtml(r,saved){
+  return `<div class="row">${chipHtml(r,saved)}<span class="dest"><s>→ </s>${r.dest}</span>
+    <span class="eta${r.m===0?' due':''}">${r.m===null?'—':label(r.m)}</span></div>`;
+}
+function timelineHtml(deps,savedNos,moved,showKerb){
+  const head=deps.filter(d=>d.m!==null&&d.m<=TLW);
+  const H=Math.min(232,Math.max(118,head.length*36+40));
+  const e=elastic(head,TLW,H,28);
+  let ticks=''; for(let m=0;m<=TLW;m+=2){
+    const s=e.stretched.some(([a,b])=>m>a&&m<=b);
+    ticks+=`<div class="tick${m===0?' now':''}${s?' stretch':''}" style="top:${e.at(m)}px"><b>${m===0?'Due':m}</b><i></i></div>`;
+  }
+  const toks=head.map(d=>`<div class="dep${moved.has(d.id)?' moved':''}" style="top:${e.at(d.m)}px">
+     <div class="tok"></div>
+     <div class="depBody">${chipHtml(d,savedNos.includes(d.no))}
+       <span class="d">${d.dest}</span>
+       ${showKerb&&d.k?`<span class="k">${d.k}</span>`:''}
+       <span class="m">${label(d.m)}</span></div></div>`).join('');
+  return `<div class="tl"><div class="tlCap"><span>Leaving soon</span><em>next ${TLW} min · any kerb</em></div>
+    <div class="axisWrap" style="height:${H}px"><div class="axisLine"></div>${ticks}${toks}</div></div>`;
+}
+function groupedHtml(P,deps,savedNos){
+  if(P.kerbs.length===1&&!P.kerbs[0].code)
+    return `<div class="secHead">All departures</div>`+
+      deps.map(d=>rowHtml(d,savedNos.includes(d.no))).join('');
+  return `<div class="secHead">By boarding point <span class="sub">— ${P.kerbs.length} kerbs</span></div>`+
+    P.kerbs.map(k=>`<div class="kerb"><span class="kerbCode">${k.code}</span><span class="kerbName">${k.name}</span></div>`+
+      deps.filter(d=>d.k===k.code).map(d=>rowHtml(d,savedNos.includes(d.no))).join('')).join('');
+}
+function screen(v){
+  const P=PLACES[place], deps=P.rounds[round%P.rounds.length];
+  const savedNos=withSaved?P.saved:[];
+  const moved=ranks(deps,prev);
+  const savedRows=deps.filter(d=>savedNos.includes(d.no));
+  const mini=`<div class="mini">${P.kerbs.filter(k=>k.code).map((k,i)=>
+      `<div class="mdot" style="left:${[34,58,46][i]}%;top:${[42,36,68][i]}%"></div>
+       <div class="mlbl" style="left:${[34,58,46][i]}%;top:${[42,36,68][i]}%">${k.code}</div>`).join('')}
+      ${P.kerbs.filter(k=>k.code).length===0?'<div class="mdot" style="left:50%;top:50%"></div>':''}</div>`;
+  const body = v==='today'
+    ? mini + groupedHtml(P,deps,savedNos)
+    : mini + timelineHtml(deps,savedNos,moved,true)
+      + (savedRows.length?`<div class="secHead">Your routes here <span class="sub">— ${savedRows.length} saved</span></div>`
+         + savedRows.map(d=>rowHtml(d,true)).join(''):'')
+      + groupedHtml(P,deps,savedNos);
+  return `<div class="phone" id="ph-${v}"><button class="backLens">${I.back}</button>
+    <div class="scroll"><div class="hdr"><h3>${P.name}</h3><p>${P.sum}</p></div>${body}
+    <div style="height:40px"></div></div></div>`;
+}
+const VARIANTS=[
+ {key:'today',tag:'Ships today',cls:'ship',title:'Place detail as it is',
+  note:'A sticky mini-map, then every route grouped under its boarding point (ADR-087). Honest and complete — and at a three-kerb interchange it asks a rider who just wants the next bus to read three lists and merge them in their head.',
+  ask:'<b>Watch:</b> how long it takes you to find the soonest departure at the busy place.'},
+ {key:'merged',tag:'Your suggestion',cls:'yours',title:'Timeline · saved · grouped',
+  note:'The same screen with two zones added above the grouped list: a short elastic timeline of everything leaving soon from any kerb, then the routes you starred here. The grouped list is untouched below.',
+  ask:'<b>Watch:</b> the small grey kerb badge on each token — it is what stops the timeline being a duplicate of the list below it.'},
+];
+const grid=document.getElementById('grid');
+function build(){
+  grid.innerHTML=VARIANTS.map(v=>`<div class="col"><span class="tag ${v.cls}">${v.tag}</span>
+    <h2>${v.title}</h2><p class="note">${v.note}</p>${screen(v.key)}<p class="ask">${v.ask}</p></div>`).join('');
+  if(document.getElementById('bDark').classList.contains('on'))
+    document.querySelectorAll('.phone').forEach(p=>p.classList.add('dark'));
+}
+document.querySelectorAll('[data-place]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-place]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  place=+b.dataset.place;round=0;prev=null;build()});
+document.querySelectorAll('[data-saved]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-saved]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  withSaved=b.dataset.saved==='1';build()});
+document.getElementById('bRound').onclick=()=>{
+  const P=PLACES[place]; prev=P.rounds[round%P.rounds.length]; round++; build();};
+document.getElementById('bReset').onclick=()=>{round=0;prev=null;build()};
+document.getElementById('bDark').onclick=function(){
+  this.classList.toggle('on');
+  document.querySelectorAll('.phone').forEach(p=>p.classList.toggle('dark',this.classList.contains('on')));};
+build();
+</script>
+</body>
+</html>

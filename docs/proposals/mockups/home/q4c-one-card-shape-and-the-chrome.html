@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home — Q4 round 3: one card shape, and does the tab bar survive?</title>
+<!-- PROTOTYPE ONLY. Tiles direct from LandsD (the app goes through our Worker, ADR-049);
+     raw hex rather than tokens; the board is hand-written, not from `homeView`. See ./README.md -->
+<style>
+ :root{
+   --bg:#fff;--surface:#f8fafc;--surface-2:#f1f5f9;--border:#e2e8f0;
+   --text:#111827;--muted:#475569;--subtle:#64748b;--accent:#111827;--accent-on:#fff;
+   --positive:#16a34a;--warning:#d97706;
+   --glass:rgba(255,255,255,.72);--rim:inset 0 .5px 0 rgba(255,255,255,.72),inset 0 -.5px 0 rgba(15,23,42,.06);
+   --page:#e9edf2;--chrome:#cdd5de;--ease:cubic-bezier(.32,.72,0,1);--dur:.42s;
+ }
+ .dark{
+   --bg:#0d111c;--surface:#161b29;--surface-2:#202636;--border:#2c3343;
+   --text:#f4f6fa;--muted:#9ea5b4;--subtle:#6b7280;--accent:#e2e8f0;--accent-on:#0d111c;
+   --positive:#22c55e;--warning:#f59e0b;
+   --glass:rgba(22,27,41,.72);--rim:inset 0 .5px 0 rgba(255,255,255,.10),inset 0 -.5px 0 rgba(0,0,0,.30);
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--page);color:#111827;
+      font:14px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif}
+ header.page{max-width:1500px;margin:0 auto;padding:26px 22px 4px}
+ header.page h1{font-size:21px;margin:0 0 7px;letter-spacing:-.01em}
+ header.page p{margin:0 0 11px;color:#475569;max-width:100ch;line-height:1.55}
+ header.page code{background:#dde3ea;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ blockquote.said{margin:0 0 14px;padding:10px 16px;border-left:3px solid #94a3b8;background:#fff;
+                 border-radius:0 10px 10px 0;max-width:100ch;color:#334155;font-size:13.5px;line-height:1.6}
+ .controls{max-width:1500px;margin:0 auto;padding:6px 22px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls .sep{width:1px;height:24px;background:#c8d1db;margin:0 4px}
+ .controls label{font-size:12px;color:#475569;margin-right:2px}
+ button.ctl{font:inherit;font-size:12.5px;border:1px solid #c3ccd6;background:#f6f8fa;color:#1f2937;
+            border-radius:999px;padding:7px 13px;cursor:pointer}
+ button.ctl:hover{background:#fff} button.ctl.on{background:#111827;border-color:#111827;color:#fff;font-weight:600}
+
+ .grid{max-width:1500px;margin:0 auto;padding:0 22px 70px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+ .col{width:400px;flex:none}
+ .col h2{font-size:15px;margin:0 0 3px}
+ .col .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+           color:#fff;background:#111827;border-radius:5px;padding:2px 7px;margin-bottom:7px}
+ .col .tag.yours{background:#1d4ed8}
+ .col p.note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:#475569;min-height:92px}
+ .ask{margin:10px 0 0;font-size:12px;color:#475569;line-height:1.55;background:#fff;border:1px solid #c8d1db;
+      border-radius:10px;padding:10px 12px} .ask b{color:#111827}
+
+ .phone{width:390px;height:800px;border-radius:40px;overflow:hidden;position:relative;background:var(--chrome);
+        box-shadow:0 1px 3px rgba(15,23,42,.10),0 8px 24px rgba(15,23,42,.12);border:1px solid #bcc6d1;
+        font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans HK",sans-serif;color:var(--text)}
+ .screen{position:absolute;inset:0;background:var(--bg);overflow:hidden}
+ .map{position:absolute;inset:0;background:#dde5ec;overflow:hidden}
+ .dark .map{background:#141a26}
+ .map .tiles{position:absolute;inset:0}
+ .dark .map .tiles{filter:invert(1) hue-rotate(180deg) brightness(.94) contrast(1.06)}
+ .map img{position:absolute;width:256px;height:256px;user-select:none;-webkit-user-drag:none}
+ .pins{position:absolute;inset:0;pointer-events:none}
+ .pin{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--bg);border:2.5px solid var(--text);
+      transform:translate(-50%,-50%)}
+ .pin.saved{background:var(--warning);border-color:var(--bg);width:15px;height:15px}
+ .rider{position:absolute;width:17px;height:17px;border-radius:50%;background:#2563eb;border:3px solid #fff;
+        transform:translate(-50%,-50%);box-shadow:0 0 0 7px rgba(37,99,235,.20)}
+
+ .glass{background:var(--glass);-webkit-backdrop-filter:blur(13px) saturate(1.8);
+        backdrop-filter:blur(13px) saturate(1.8);box-shadow:var(--rim),0 3px 14px rgba(15,23,42,.13)}
+ .dark .glass{box-shadow:var(--rim)}
+ .lens{position:absolute;top:12px;right:12px;width:48px;height:48px;border-radius:50%;z-index:40;display:grid;
+       place-items:center;border:0;cursor:pointer;padding:0;color:var(--text)}
+ .lens svg{width:21px;height:21px}
+ .ctx{position:absolute;top:12px;left:12px;z-index:30;border-radius:22px;border:1px solid var(--border);
+      width:calc(390px - 24px - 48px - 8px);overflow:hidden}
+ .ctxRow{display:flex;align-items:center;gap:10px;height:62px;padding:0 14px}
+ .ctxIcon{width:30px;height:30px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;flex:none}
+ .ctxIcon svg{width:16px;height:16px;color:var(--muted)}
+ .ctxTitle{font-size:17px;font-weight:600;line-height:1.2}
+ .ctxSub{font-size:12px;color:var(--muted);margin-top:1px}
+ .recentre{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--surface);
+           display:grid;place-items:center;flex:none;cursor:pointer;padding:0;color:var(--text);margin-left:auto}
+ .recentre svg{width:16px;height:16px}
+
+ .sheet{position:absolute;left:0;right:0;bottom:0;z-index:20;background:var(--bg);border-radius:20px 20px 0 0;
+        box-shadow:0 -2px 22px rgba(15,23,42,.16);display:flex;flex-direction:column;height:56%}
+ .dark .sheet{box-shadow:0 -1px 0 var(--border),0 -2px 22px rgba(0,0,0,.5)}
+ .grab{height:22px;display:grid;place-items:center;flex:none;padding-top:7px}
+ .grab i{width:38px;height:4px;border-radius:2px;background:var(--border);display:block}
+ .scroll{overflow-y:auto;flex:1}
+ .scroll::-webkit-scrollbar{width:0}
+
+ .secHead{position:sticky;top:0;background:var(--bg);z-index:2;padding:11px 16px 5px;font-size:12px;font-weight:700;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--subtle)}
+ .secHead .sub{text-transform:none;letter-spacing:0;font-weight:400;font-size:11.5px}
+ .card{padding:12px 16px 13px;border-top:1px solid var(--border)}
+ .cardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:pointer}
+ .cardName{font-size:16px;font-weight:600;line-height:1.25;min-width:0}
+ .cardCap{font-size:12px;color:var(--subtle);margin-top:2px;display:flex;align-items:center;gap:5px}
+ .cardCap svg{width:12px;height:12px;flex:none}
+ .chev{color:var(--subtle);flex:none;margin-top:2px} .chev svg{width:18px;height:18px}
+
+ .rows{margin-top:7px}
+ .row{display:flex;align-items:center;gap:10px;padding:5px 0;min-width:0}
+ /* the chip, and the saved pip ON it */
+ .chipWrap{position:relative;flex:none}
+ .chip{font-size:14px;font-weight:700;border-radius:10px;min-width:44px;padding:3px 8px;text-align:center;display:block}
+ /* **The saved flag: two stars, not one** — the rail's own treatment (`SavedFlag`), which is what the
+    owner meant by "match the stop implementation". A slightly larger star filled with the item's own
+    background sits behind an accent one, so the mark is cut out of whatever it laps rather than floating
+    on it. 15 : 11, the rail's ratio. */
+ .pip{position:absolute;top:-6px;right:-6px;width:15px;height:15px;display:grid;place-items:center}
+ .pip svg{position:absolute}
+ .pip .halo{width:15px;height:15px;color:var(--bg)}
+ .pip .mark{width:11px;height:11px;color:var(--accent)}
+ .starLeft{position:relative;width:15px;height:15px;flex:none;display:grid;place-items:center}
+ .starLeft svg{position:absolute}
+ .starLeft .halo{width:15px;height:15px;color:var(--bg)}
+ .starLeft .mark{width:11px;height:11px;color:var(--accent)}
+ .dest{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .dest s{color:var(--subtle);text-decoration:none}
+ .eta{font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;flex:none;text-align:right;min-width:62px}
+ .eta.due{color:var(--positive)}
+
+ /* the strip of OTHER routes — no times */
+ .strip{margin-top:9px}
+ .strip{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+ .sChip{font-size:12px;font-weight:700;border-radius:7px;padding:3px 7px;min-width:34px;text-align:center;
+        cursor:pointer;border:0;font-family:inherit}
+ .sMore{font-size:12px;font-weight:700;border-radius:7px;padding:3px 9px;background:var(--surface-2);
+        color:var(--text);border:1px solid var(--border);cursor:pointer;font-family:inherit}
+ .sLess{display:grid;place-items:center;width:28px;height:24px;border-radius:7px;background:var(--surface-2);
+        border:1px solid var(--border);cursor:pointer;padding:0;color:var(--muted)}
+ .sLess svg{width:13px;height:13px}
+
+ .tabs{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:45;height:54px;border-radius:24px;
+       display:flex;align-items:center;padding:0 6px;gap:2px}
+ .tab{width:74px;height:46px;border:0;background:transparent;display:grid;place-items:center;gap:1px;cursor:pointer;
+      border-radius:18px;color:var(--muted);font-family:inherit}
+ .tab.on{color:var(--text)} .tab svg{width:20px;height:20px} .tab span{font-size:10px;font-weight:600}
+ .searchLens{position:absolute;right:12px;bottom:12px;z-index:45;width:54px;height:54px;border-radius:50%;
+             display:grid;place-items:center;border:0;cursor:pointer;color:var(--text)}
+ .searchLens svg{width:22px;height:22px}
+ .searchWide{position:absolute;right:12px;bottom:12px;z-index:45;height:54px;border-radius:27px;display:flex;
+             align-items:center;gap:9px;padding:0 20px 0 17px;border:0;cursor:pointer;color:var(--text);
+             font-family:inherit;font-size:15px;font-weight:600}
+ .searchWide svg{width:20px;height:20px}
+
+ footer.page{max-width:1500px;margin:0 auto;padding:0 22px 80px;color:#475569;font-size:13px;line-height:1.65}
+ footer.page h3{color:#111827;font-size:14px;margin:22px 0 7px}
+ footer.page ul{margin:0;padding-left:18px} footer.page li{margin-bottom:7px} footer.page b{color:#111827}
+ footer.page .box{background:#fff;border:1px solid #c8d1db;border-radius:14px;padding:16px 18px;max-width:106ch}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Home — round 3: one card shape, and does the tab bar survive?</h1>
+  <blockquote class="said">
+    “Yes I love option C. I would suggest putting the star on the route rather than the place (I think we are currently
+    only starring routes and not places?). I would also suggest we show the badges (but without times) for the other
+    buses at the favourited stops. Do you think it's feasible to wrap the badges so they're all visible rather than
+    +14 more? Actually put +14 in a tappable badge to expand them all? (we may want a chevron up button at the end to
+    collapse). In this design do you still envision having a tabbar at the bottom? Or we could make do with just a
+    floating search button?”
+  </blockquote>
+  <p><b>You are right about the star, and it was a real error in round 2.</b> A favourite is
+     <code>formatFavoriteRouteKey(stopId, routeId)</code> — a <em>route at a pole</em>. A place is never starred, so
+     round 2's star on the card heading was claiming something the data model cannot express. It is on the route now.</p>
+  <p><b>Your second suggestion collapses the thing I was worried about.</b> Round 2's open risk was “two row shapes on
+     one screen — does the seam read as deliberate?” Putting the chip strip on <em>saved</em> places too means there is
+     only <b>one card shape</b>: a heading, then any routes you starred here <em>with times</em>, then everything else
+     at this place <em>as chips</em>. A nearby card is simply that card with no starred rows yet. The seam is gone
+     because the two halves are now the same object.</p>
+  <p><b>The expanding strip is built.</b> <code>+14</code> is a tappable badge; expanded, every route wraps and a
+     chevron-up ends the list. <b>Tap any strip to try it.</b></p>
+</header>
+
+<div class="controls">
+  <label>Appearance</label>
+  <button class="ctl on" id="bLight">Light</button><button class="ctl" id="bDark">Dark</button>
+  <span class="sep"></span>
+  <label>Saved marker</label>
+  <button class="ctl on" id="bPip">Pip on the badge</button><button class="ctl" id="bLeft">Star beside it</button>
+  <span class="sep"></span>
+  <label>Strips</label>
+  <button class="ctl" id="bExpand">Expand all</button><button class="ctl" id="bCollapse">Collapse all</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer class="page">
+  <h3>Wrapping the badges — feasible, with one rule to get right</h3>
+  <div class="box">
+    <p style="margin:0 0 10px"><b>Yes, and it is cheap.</b> The chips are a wrapping flex row; expanded, a 26-route
+      interchange is four or five lines of chips, which is less height than five route rows would have been. The
+      <code>+14</code> badge and the chevron-up are both real controls in the strip's flow, so nothing floats and
+      nothing overlaps.</p>
+    <p style="margin:0 0 10px"><b>The rule to get right:</b> <em>how many chips show while collapsed</em> must be the
+      kernel's number, not the view's. <code>check-no-derivation</code> bans a renderer doing arithmetic over rows, and
+      “show the first N and count the rest” is exactly that — it is the same shape as the
+      <code>+N more routes</code> cap <code>stopCardView</code> already owns. So <code>homeView</code> hands over the
+      full ordered chip list <em>and</em> the collapsed count, the view renders
+      <code>expanded ? all : first(collapsed)</code>, and the <code>+N</code> label comes from the catalogue with the
+      kernel's number in it. Expanding is a rider's tap — interaction, not a domain rule — so that part is
+      legitimately the view's.</p>
+    <p style="margin:0"><b>One thing to decide with your eyes:</b> whether the collapsed strip should be one line or
+      two. One line is tidier; two shows most of a normal stop without any tap at all, and only a real interchange
+      keeps a <code>+N</code>. The mockup shows two.</p>
+  </div>
+
+  <h3>The tab bar — your question, and I think the answer is no</h3>
+  <div class="box">
+    <p style="margin:0 0 10px"><b>The bar has run out of destinations.</b> Walk the three candidates from §8 of the
+      proposal against this design: <b>Saved</b> is now a section of Home, so a tab for it is a second door to
+      something already on screen. <b>Map</b> is the sheet's lowest detent — drag down and Home <em>is</em> the map
+      view, which is better than a tab because it keeps your board one gesture away instead of one navigation.
+      <b>Home</b> is the only root left, and a one-tab bar is not a bar.</p>
+    <p style="margin:0 0 10px"><b>So: two floating lenses and no bar.</b> Settings top-right, Search bottom-right,
+      matching the back lens's geometry that already ships. That is phone B, and it is my lean.</p>
+    <p style="margin:0 0 10px">⚠️ <b>Three things it costs, stated plainly.</b> (1) <b>Discoverability</b> — two
+      unlabelled circles replace three labelled tabs, and Search is the app's second-most-used surface. Phone C tries
+      the obvious mitigation: a wide, <em>labelled</em> search pill instead of a lens. (2) <b>A future home for
+      ferries, rail or a full-city map</b> — the backlog's own reason to keep a bar. Adding a bar back later is a
+      bigger change than keeping one. (3) ⚠️ <b>It amends
+      <a href="../../../08-decision-log.md">ADR-100</a></b>: the floating glass tab bar is <em>identity</em>, ported
+      value-for-value at your direction after the parity review. Removing it is your call to make, but it is a call,
+      not a layout tweak — and it wants an ADR that says the bar was retired because its destinations dissolved, not
+      because the chrome was disliked.</p>
+    <p style="margin:0"><b>What I would actually do:</b> ship phone C. The labelled pill costs nothing, answers the
+      discoverability objection, and leaves the bottom edge free for a bar to come back to if ferries ever land.</p>
+  </div>
+
+  <h3>What this round is asking</h3>
+  <ul>
+    <li><b>Pip on the badge, or star beside it?</b> The toggle above switches every row. The pip is what
+      <code>docs/07</code> has wanted for months — “saved reads as a property of <em>that route</em>, and the row's
+      right edge belongs to the ETA alone”. Check it against the CTB yellow and the GMB green, and in dark mode.</li>
+    <li><b>A, B or C</b> for the chrome.</li>
+    <li><b>Collapsed strip: one line or two?</b></li>
+  </ul>
+</footer>
+
+<script>
+const ACC={KMB:'#D7282F',CTB:'#F6C700',GMB:'#00845C',LWB:'#E8A33D'},
+      ON={KMB:'#fff',CTB:'#0F172A',GMB:'#fff',LWB:'#fff'};
+const I={
+ settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+ locate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>',
+ pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+ chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+ up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
+ star:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><polygon points="12 2.6 14.9 8.5 21.4 9.4 16.7 14 17.8 20.4 12 17.4 6.2 20.4 7.3 14 2.6 9.4 9.1 8.5"/></svg>',
+ flag:(cls)=>`<span class="${cls}"><svg class="halo" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><polygon points="12 2.6 14.9 8.5 21.4 9.4 16.7 14 17.8 20.4 12 17.4 6.2 20.4 7.3 14 2.6 9.4 9.1 8.5"/></svg><svg class="mark" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><polygon points="12 2.6 14.9 8.5 21.4 9.4 16.7 14 17.8 20.4 12 17.4 6.2 20.4 7.3 14 2.6 9.4 9.1 8.5"/></svg></span>`,
+ home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>',
+ mapI:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>',
+ starOut:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+ search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+};
+
+/* One card shape. `saved` rows carry times; `others` are chips with none. A nearby place is the same
+   object with an empty `saved`. */
+const BOARD=[
+ {sec:'Catch it', sub:'saved, and you can still make it', cards:[
+  {id:'c1',name:'Nathan Road / Pak Hoi Street',cap:'Southbound  ·  90m · 2 min walk',
+   saved:[{op:'KMB',no:'1',dest:'Chuk Yuen Estate',eta:'6 min'},
+          {op:'KMB',no:'6',dest:'Star Ferry',eta:'8 min'}],
+   others:[['KMB','9'],['KMB','13X'],['GMB','74S'],['KMB','238X'],['CTB','N121'],['KMB','2'],['CTB','107']]},
+ ]},
+ {sec:'Saved', sub:'your list, soonest first', cards:[
+  {id:'c2',name:'Nathan Road / Jordan Road',cap:'Northbound  ·  450m · 6 min walk',
+   saved:[{op:'KMB',no:'73X',dest:'Fu Tai Estate',eta:'11 min'},
+          {op:'CTB',no:'970',dest:'So Uk Estate',eta:'14 min'}],
+   others:[['KMB','8'],['KMB','26'],['KMB','215X'],['CTB','107'],['LWB','E21A'],['KMB','6'],['KMB','9'],
+           ['GMB','2'],['KMB','238X'],['CTB','N121'],['KMB','13X'],['KMB','1'],['CTB','971'],['KMB','42C'],
+           ['GMB','74S'],['KMB','2'],['LWB','E23'],['KMB','268C'],['CTB','970X'],['KMB','118']]},
+  {id:'c3',name:'Kwun Tong Road / Ngau Tau Kok',cap:'8.2 km away',
+   saved:[{op:'KMB',no:'42C',dest:'Lam Tin Station',eta:'4 min'}],
+   others:[['KMB','13X'],['KMB','14'],['GMB','54'],['CTB','608']]},
+ ]},
+ {sec:'Around you', sub:'tap a place to see its times', cards:[
+  {id:'c4',name:'Pak Hoi Street',cap:'Eastbound  ·  60m · 1 min walk',saved:[],
+   others:[['KMB','9'],['KMB','13X'],['GMB','74S'],['KMB','238X'],['CTB','N121']]},
+  {id:'c5',name:'Man Ming Lane',cap:'Westbound  ·  240m · 3 min walk',saved:[],
+   others:[['GMB','2'],['GMB','74S']]},
+  {id:'c6',name:'Jordan Road / Woosung Street',cap:'Westbound  ·  180m · 2 min walk',saved:[],
+   others:[['CTB','N121'],['LWB','E21A'],['KMB','8'],['KMB','26'],['KMB','215X'],['CTB','107'],['KMB','6'],
+           ['KMB','9'],['GMB','2'],['KMB','238X'],['KMB','13X'],['KMB','1'],['CTB','971'],['KMB','42C'],
+           ['GMB','74S'],['KMB','2'],['LWB','E23'],['KMB','268C'],['CTB','970X'],['KMB','118']]},
+ ]},
+];
+/** How many chips show while collapsed — **the kernel's number in the real thing**, a constant here. */
+const COLLAPSED=6;
+
+let PIP=true;
+const open=new Set();     // card ids whose strip is expanded
+
+function savedMark(){
+  return PIP ? '' : I.flag('starLeft');
+}
+function rowHtml(r){
+  const chip=`<span class="chipWrap"><span class="chip" style="background:${ACC[r.op]};color:${ON[r.op]}">${r.no}</span>${
+    PIP?I.flag('pip'):''}</span>`;
+  return `<div class="row">${savedMark()}${chip}
+    <span class="dest"><s>→ </s>${r.dest}</span>
+    <span class="eta${r.eta==='Due'?' due':''}">${r.eta}</span></div>`;
+}
+function stripHtml(c){
+  const all=c.others, expanded=open.has(c.id);
+  const shown=expanded?all:all.slice(0,COLLAPSED);
+  const rest=all.length-shown.length;
+  /* **No label above the strip.** The owner's call and it is right: a row of route badges is not
+     ambiguous enough to need naming, and the label was a heading for something that is already obvious. */
+  return `<div class="strip" data-card="${c.id}">
+    ${shown.map(([op,no])=>`<button class="sChip" style="background:${ACC[op]};color:${ON[op]}">${no}</button>`).join('')}
+    ${rest>0?`<button class="sMore" data-more="${c.id}">+${rest}</button>`:''}
+    ${expanded&&all.length>COLLAPSED?`<button class="sLess" data-less="${c.id}" title="Show fewer">${I.up}</button>`:''}
+   </div>`;
+}
+function cardHtml(c){
+  return `<div class="card">
+    <div class="cardHead">
+      <div style="min-width:0">
+        <div class="cardName">${c.name}</div>
+        <div class="cardCap">${I.pin}<span>${c.cap}</span></div>
+      </div><div class="chev">${I.chev}</div>
+    </div>
+    ${c.saved.length?`<div class="rows">${c.saved.map(rowHtml).join('')}</div>`:''}
+    ${stripHtml(c)}
+  </div>`;
+}
+function boardHtml(){
+  return BOARD.map(s=>`<div class="secHead">${s.sec} <span class="sub">— ${s.sub}</span></div>
+    ${s.cards.map(cardHtml).join('')}`).join('')+`<div style="height:96px"></div>`;
+}
+
+const CHROME={
+ a:`<nav class="tabs glass">
+      <button class="tab on">${I.home}<span>Home</span></button>
+      <button class="tab">${I.mapI}<span>Map</span></button>
+      <button class="tab">${I.starOut}<span>Saved</span></button>
+    </nav><button class="searchLens glass">${I.search}</button>`,
+ b:`<button class="searchLens glass">${I.search}</button>`,
+ c:`<button class="searchLens glass">${I.search}</button>`,
+};
+
+const VARIANTS=[
+ {key:'a',tag:'Option A',cls:'',title:'Keep the tab bar',
+  note:'Home · Map · Saved, centred, with the search lens beside it. The bar is ADR-100 identity and it is what ships today (with different destinations). But Saved is now a section of the screen it would navigate to, and Map is the sheet dragged down — so two of its three tabs are second doors to things already here.'},
+ {key:'b',tag:'Option B — your suggestion',cls:'yours',title:'No bar: two lenses',
+  note:'Settings top-right, Search bottom-right, nothing else. The bottom edge is free and the board is taller by 66 px. The cost is discoverability: two unlabelled circles replace three labelled tabs, and Search is the second-most-used surface in the app.'},
+ {key:'c',tag:'Option C — my lean',cls:'',title:'No bar: a labelled search pill',
+  note:'Option B with the objection answered — the search control is a wide pill carrying the word, so the app’s busiest secondary surface is not a mystery circle. Settings stays a lens because it is rarely used and universally understood. Bottom edge still free for a bar to return to.'},
+];
+
+const grid=document.getElementById('grid');
+function phone(v){
+  return `<div class="phone" id="ph-${v.key}"><div class="screen">
+    <div class="map"><div class="tiles" id="t-${v.key}"></div><div class="pins">
+      <div class="pin saved" style="left:47%;top:31%"></div><div class="pin saved" style="left:62%;top:44%"></div>
+      <div class="pin" style="left:38%;top:26%"></div><div class="pin" style="left:55%;top:20%"></div>
+      <div class="pin" style="left:30%;top:40%"></div><div class="rider" style="left:46%;top:36%"></div></div></div>
+    <button class="lens glass">${I.settings}</button>
+    <div class="ctx glass"><div class="ctxRow"><div class="ctxIcon">${I.pin}</div>
+      <div style="min-width:0"><div class="ctxTitle">Yau Ma Tei</div><div class="ctxSub">Updated just now</div></div>
+      <button class="recentre">${I.locate}</button></div></div>
+    <div class="sheet"><div class="grab"><i></i></div><div class="scroll" id="s-${v.key}">${boardHtml()}</div></div>
+    ${CHROME[v.key]}
+  </div></div>`;
+}
+const ASK={
+ a:'<b>Watch:</b> how much of the board the bar eats, and ask yourself what you would tap “Saved” for.',
+ b:'<b>Watch:</b> whether you can tell what the bottom-right circle does without being told.',
+ c:'<b>Settled.</b> Tapping a place opens the Place view; tapping a route \u2014 starred or in the strip \u2014 opens route info.',
+};
+function build(){
+  grid.innerHTML=VARIANTS.map(v=>`<div class="col"><span class="tag ${v.cls}">${v.tag}</span>
+    <h2>${v.title}</h2><p class="note">${v.note}</p>${phone(v)}<p class="ask">${ASK[v.key]}</p></div>`).join('');
+  VARIANTS.forEach(v=>tiles(document.getElementById('t-'+v.key)));
+  if(document.getElementById('bDark').classList.contains('on'))
+    document.querySelectorAll('.phone').forEach(p=>p.classList.add('dark'));
+  grid.querySelectorAll('[data-more]').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();open.add(b.dataset.more);redraw()});
+  grid.querySelectorAll('[data-less]').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();open.delete(b.dataset.less);redraw()});
+}
+function redraw(){
+  // keep each sheet's scroll position across a re-render, so expanding a strip does not jump the board
+  const at={}; VARIANTS.forEach(v=>{const el=document.getElementById('s-'+v.key); if(el) at[v.key]=el.scrollTop});
+  build();
+  VARIANTS.forEach(v=>{const el=document.getElementById('s-'+v.key); if(el&&at[v.key]!=null) el.scrollTop=at[v.key]});
+}
+function tiles(el){
+  const z=16,lat=22.3080,lng=114.1700,n=2**z;
+  const wx=(lng+180)/360*n,
+        wy=(1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*n;
+  const cx=195,cy=260,x0=Math.floor(wx-cx/256)-1,y0=Math.floor(wy-cy/256)-1;
+  let h='';
+  for(let x=x0;x<x0+4;x++)for(let y=y0;y<y0+4;y++){
+    const L=cx+(x-wx)*256,T=cy+(y-wy)*256;
+    for(const u of [`basemap/WGS84/${z}/${x}/${y}`,`label/hk/en/WGS84/${z}/${x}/${y}`])
+      h+=`<img src="https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/${u}.png" style="left:${L}px;top:${T}px" alt="" onerror="this.style.display='none'">`;
+  }
+  el.innerHTML=h;
+}
+function pair(a,b,set){
+  const A=document.getElementById(a),B=document.getElementById(b);
+  A.onclick=()=>{A.classList.add('on');B.classList.remove('on');set(false)};
+  B.onclick=()=>{B.classList.add('on');A.classList.remove('on');set(true)};
+}
+pair('bLight','bDark',d=>document.querySelectorAll('.phone').forEach(p=>p.classList.toggle('dark',d)));
+pair('bPip','bLeft',l=>{PIP=!l;redraw()});
+document.getElementById('bExpand').onclick=()=>{BOARD.forEach(s=>s.cards.forEach(c=>open.add(c.id)));redraw()};
+document.getElementById('bCollapse').onclick=()=>{open.clear();redraw()};
+build();
+</script>
+</body>
+</html>
