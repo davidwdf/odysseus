@@ -30,10 +30,19 @@
     {
       "name": "destinationSeq",
       "when": "header.destinationSeq",
-      "why": "As `originSeq` — an empty payload has no numbered far end.",
+      "why": "As `originSeq` — an empty payload has no numbered far end, and a loop that knows where it turns has none to number either (see `viaSeq`).",
       "invariant": "The **last stop’s** sequence number, and it is stated even for a loop, where the first and last rows are the same pole: the figure belongs to the *row*, not to the place, and the list prints both. What a circular service changes is not its ends but what happens between them — `apps/web` keeps both numbered nodes and swaps the mark on the line for a loop — which is the same substitution the kernel makes in words when the destination becomes “Circular via …” (ADR-046).",
       "text": {
         "field": "header.destinationSeq"
+      }
+    },
+    {
+      "name": "viaSeq",
+      "when": "header.viaSeq",
+      "why": "Only a circular route has a turning point, and only one whose published label names a stop in its own list can put a figure on it.",
+      "invariant": "Where a loop **turns**, as a sequence number — and it appears *instead of* `destinationSeq`, never beside it. A circular route’s last row is the same pole as its first, so a figure against its far end numbers a place that is not one: KMB 284 is published as “RAVANA GARDEN (CIRCULAR)” and Ravana Garden is its stop **6**, while its stop 12 is the terminus it left. The kernel finds the row by matching the operator’s own label, and answers nothing when no row matches — a header with no figure on its second node is better than one that disagrees with the route’s name.",
+      "text": {
+        "field": "header.viaSeq"
       }
     },
     {

@@ -75,16 +75,23 @@ import { SlideNumber } from './SlideNumber'
 export function JourneyRail({
   fromSeq,
   toSeq,
+  viaSeq,
   circular,
 }: {
   /** The first stop's sequence number, from the kernel's header. */
   fromSeq: number | undefined
+  /** The last stop's — absent on a loop whose turning point the kernel could name. */
   toSeq: number | undefined
+  /** …where that turning point is, which takes the second node's place. */
+  viaSeq: number | undefined
   circular: boolean
 }) {
   // **A per-instance id**, because an SVG `mask` is referenced by a document-wide id and two headers on
   // one page (a lab, a future split view) would otherwise share — and silently agree, until one changed.
   const maskId = useId()
+  // A loop with a named turning point is a different drawing — see `LoopRail`.
+  if (fromSeq !== undefined && viaSeq !== undefined)
+    return <LoopRail fromSeq={fromSeq} viaSeq={viaSeq} />
   // Nothing to number is nothing to draw: an empty payload has no ends, and a rail with no nodes on it
   // would be a line claiming a journey the header cannot name.
   if (fromSeq === undefined || toSeq === undefined) return null
@@ -196,3 +203,121 @@ const MID = JOURNEY_SLOT.height / 2
  * reading as a node. 11 is off the scale on purpose and says so — it is a *mark's* label, not text.
  */
 const SEQ_FONT = 11
+
+/**
+ * **A loop, drawn as what it is: out and back through one turning point** (ADR-180).
+ *
+ * The straight rail says *from here to there*, and on a circular route there is no there — the last row is
+ * the pole the first row left, and the place the route is named after is somewhere in the middle. So the
+ * gutter changes shape rather than changing its glyph: **two rails**, the outward one carrying the double
+ * chevron pointing down and the returning one carrying it pointing up, with the terminus square at the top
+ * and the turning point's circle at the foot.
+ *
+ * Four things follow from that and each was the owner's call:
+ *
+ *  · **Two rails rather than one line with an arrowhead.** An arrow says *direction*; a pair of rails says
+ *    *there and back*, which is the fact.
+ *  · **The chevrons are the app's own**, cut out of the rails exactly as the straight rail and the list cut
+ *    theirs (`railGlyphs.ts`) — one shape, three places, no resemblance to maintain.
+ *  · **The turning point is a circle, not a square.** A square is a terminus, and a loop has one terminus
+ *    visited twice; the place it turns at is an ordinary stop.
+ *  · **Its figure goes inside it**, as the termini carry theirs, because the whole point of this drawing is
+ *    that every number names the thing beside it.
+ *
+ * The turn itself is not drawn. The rails run into the node and out of it, which is how a schematic has
+ * always shown a line passing through a stop — an explicit U would be a shape hiding behind the circle.
+ */
+function LoopRail({ fromSeq, viaSeq }: { fromSeq: number; viaSeq: number }) {
+  const maskId = useId()
+  return (
+    <span
+      className="relative block shrink-0"
+      style={{ width: LOOP_W, height: JOURNEY_SLOT.height }}
+    >
+      <svg
+        width={LOOP_W}
+        height={JOURNEY_SLOT.height}
+        viewBox={`0 0 ${LOOP_W} ${JOURNEY_SLOT.height}`}
+        aria-hidden="true"
+        className="absolute inset-0"
+      >
+        <defs>
+          <mask id={maskId} maskUnits="userSpaceOnUse">
+            <rect x="0" y="0" width={LOOP_W} height={JOURNEY_SLOT.height} fill="white" />
+            <g
+              stroke="black"
+              strokeWidth={RAIL_CHEVRON_STROKE}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              transform={`translate(${OUT_X - RAIL_CHEVRON_W / 2}, ${MID - RAIL_CHEVRON_H / 2})`}
+            >
+              {RAIL_CHEVRON_PATHS.map((d) => (
+                <path key={d} d={d} />
+              ))}
+            </g>
+            {/* The returning rail's pair, turned half a turn about its own centre — the same glyph
+                pointing home. */}
+            <g
+              stroke="black"
+              strokeWidth={RAIL_CHEVRON_STROKE}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              transform={`translate(${BACK_X + RAIL_CHEVRON_W / 2}, ${MID + RAIL_CHEVRON_H / 2}) rotate(180)`}
+            >
+              {RAIL_CHEVRON_PATHS.map((d) => (
+                <path key={d} d={d} />
+              ))}
+            </g>
+          </mask>
+        </defs>
+        <path
+          d={`M${OUT_X} ${TOP_CY} V${BOTTOM_CY} M${BACK_X} ${TOP_CY} V${BOTTOM_CY}`}
+          className="stroke-route-soft"
+          strokeWidth={4}
+          fill="none"
+          mask={`url(#${maskId})`}
+        />
+        <rect
+          x={LOOP_W / 2 - NODE / 2 + 0.75}
+          y={TOP_CY - NODE / 2 + 0.75}
+          width={NODE - 1.5}
+          height={NODE - 1.5}
+          className="fill-surface stroke-route"
+          strokeWidth={1.5}
+        />
+        <circle
+          cx={LOOP_W / 2}
+          cy={BOTTOM_CY}
+          r={NODE / 2 - 0.75}
+          className="fill-surface stroke-route"
+          strokeWidth={1.5}
+        />
+      </svg>
+      <span
+        className="absolute inset-x-0 flex items-center justify-center font-medium text-route tabular-nums"
+        style={{ top: TOP_CY - NODE / 2, height: NODE, fontSize: SEQ_FONT, lineHeight: 1 }}
+      >
+        <SlideNumber value={String(fromSeq)} />
+      </span>
+      <span
+        className="absolute inset-x-0 flex items-center justify-center font-medium text-route tabular-nums"
+        style={{ top: BOTTOM_CY - NODE / 2, height: NODE, fontSize: SEQ_FONT, lineHeight: 1 }}
+      >
+        <SlideNumber value={String(viaSeq)} />
+      </span>
+    </span>
+  )
+}
+
+/**
+ * The loop's own geometry: the two rails sit `RAIL_GAP` either side of the column's centre line, and both
+ * nodes are centred on it — so the stack is symmetrical and each rail runs *behind* a node exactly as the
+ * straight rail runs behind a terminus square. The column is wider than the straight one by the rail
+ * separation, which is the only place a loop's header differs in layout from any other route's.
+ */
+const RAIL_GAP = 6
+const LOOP_W = NODE + RAIL_GAP * 2 - 8
+const OUT_X = LOOP_W / 2 - RAIL_GAP
+const BACK_X = LOOP_W / 2 + RAIL_GAP

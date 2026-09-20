@@ -2968,6 +2968,463 @@
           }
         },
         {
+          "name": "a-loops-turning-point-is-the-row-the-operator-names-it-after",
+          "why": "KMB 284 is published as *“RAVANA GARDEN (CIRCULAR)”* and Ravana Garden is its **stop 6** — the point it turns at, not its far end, which is the terminus it left. The header used to print the last row's figure beside those words, so the number and the words named different places. Here the label matches a row, so that row's `seq` is the header's `viaSeq` **and there is no `destinationSeq` at all**: a loop has one terminus, visited twice, and one turning point. The match is on the normalised name, because one side has been through `titleCaseName` and the other through `displayName`.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "GMB:78:outbound:1234",
+                "operator": "GMB",
+                "routeNo": "78",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "RAVANA GARDEN (CIRCULAR)",
+                  "zh-Hant": "拉華娜花園（循環線）",
+                  "zh-Hans": "拉华娜花园（循环线）"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "5.8"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "5.8"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "RAVANA GARDEN (ST155)",
+                      "zh-Hant": "拉華娜花園",
+                      "zh-Hans": "拉華娜花園"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "5.8"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "header": {
+              "operator": "GMB",
+              "routeNo": "78",
+              "origin": "Tin Shui Wai Station",
+              "destination": "Circular via Ravana Garden",
+              "circular": true,
+              "label": "Circular via Ravana Garden",
+              "collapsedLabel": "Circular via Ravana Garden",
+              "originSeq": 1,
+              "viaSeq": 3
+            },
+            "facts": [
+              {
+                "key": "fare",
+                "value": "$5.8"
+              },
+              {
+                "key": "freq",
+                "value": "every 10 – 25 min"
+              },
+              {
+                "key": "hours",
+                "value": "05:30 – 00:15"
+              },
+              {
+                "key": "stops",
+                "value": "4 stops"
+              }
+            ],
+            "stops": [
+              {
+                "seq": 1,
+                "stopId": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "label": "Tin Shui Wai Station",
+                  "code": "TN511"
+                },
+                "arrivals": [],
+                "fare": "5.8",
+                "fareLabel": "$5.8",
+                "here": false,
+                "first": true,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 2,
+                "stopId": "KMB:18492910339E23AA",
+                "name": {
+                  "label": "Tin Shui Wai Park",
+                  "code": "TN510"
+                },
+                "arrivals": [],
+                "fare": "5.8",
+                "fareLabel": "$5.8",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 3,
+                "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                "name": {
+                  "label": "Ravana Garden",
+                  "code": "ST155"
+                },
+                "arrivals": [],
+                "fare": "5.8",
+                "fareLabel": "$5.8",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 4,
+                "stopId": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "label": "Tin Shui Wai Station",
+                  "code": "TN511"
+                },
+                "arrivals": [],
+                "here": false,
+                "first": false,
+                "last": true,
+                "saved": false
+              }
+            ],
+            "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "minibus",
+            "hereIndex": -1,
+            "distanceM": 3032.5034864866025,
+            "liveArrivals": "answered"
+          }
+        },
+        {
+          "name": "a-loop-whose-label-is-only-the-marker-has-no-turning-point-to-name",
+          "why": "`stripCircular` takes the parenthesised marker off a destination, and a destination that is **nothing but** the marker leaves an empty string — which matches no row and must not be made to match one. The header falls back to the two-terminus form it had before `viaSeq` existed, which is the same fallback a loop whose label names no stop in its own list gets (the case above this one, where “Tin Shui Wai” is a near-miss for “Tin Shui Wai Station” and is deliberately not accepted). An absent turning point is an answer.",
+          "args": {
+            "detail": {
+              "route": {
+                "id": "GMB:78:outbound:1234",
+                "operator": "GMB",
+                "routeNo": "78",
+                "bound": "outbound",
+                "serviceType": "1",
+                "origin": {
+                  "en": "TIN SHUI WAI",
+                  "zh-Hant": "天水圍",
+                  "zh-Hans": "天水圍"
+                },
+                "destination": {
+                  "en": "(CIRCULAR)",
+                  "zh-Hant": "（循環線）",
+                  "zh-Hans": "（循环线）"
+                },
+                "service": {
+                  "fareFull": "13.4",
+                  "journeyMin": 62,
+                  "headway": {
+                    "min": 10,
+                    "max": 25
+                  },
+                  "hours": {
+                    "start": "05:30",
+                    "end": "00:15"
+                  }
+                }
+              },
+              "stops": [
+                {
+                  "seq": 1,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "5.8"
+                },
+                {
+                  "seq": 2,
+                  "stop": {
+                    "id": "KMB:18492910339E23AA",
+                    "name": {
+                      "en": "TIN SHUI WAI PARK (TN510)",
+                      "zh-Hant": "天水圍公園",
+                      "zh-Hans": "天水圍公園"
+                    },
+                    "location": {
+                      "lat": 22.4571,
+                      "lng": 114.0016
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "18492910339E23AA"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "5.8"
+                },
+                {
+                  "seq": 3,
+                  "stop": {
+                    "id": "KMB:5BB4A5D9AAF9D5C1",
+                    "name": {
+                      "en": "KINGSWOOD RICHLY PLAZA",
+                      "zh-Hant": "嘉湖銀座",
+                      "zh-Hans": "嘉湖銀座"
+                    },
+                    "location": {
+                      "lat": 22.4614,
+                      "lng": 113.9989
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "5BB4A5D9AAF9D5C1"
+                      }
+                    ]
+                  },
+                  "eta": null,
+                  "fare": "5.8"
+                },
+                {
+                  "seq": 4,
+                  "stop": {
+                    "id": "KMB:AFB9321F7CD2C2E4",
+                    "name": {
+                      "en": "TIN SHUI WAI STATION (TN511)",
+                      "zh-Hant": "天水圍站",
+                      "zh-Hans": "天水圍站"
+                    },
+                    "location": {
+                      "lat": 22.4483,
+                      "lng": 113.9987
+                    },
+                    "sources": [
+                      {
+                        "operator": "KMB",
+                        "operatorStopId": "AFB9321F7CD2C2E4"
+                      }
+                    ]
+                  },
+                  "eta": null
+                }
+              ]
+            },
+            "locale": "en",
+            "now": "2026-08-05T14:00:00+08:00"
+          },
+          "expect": {
+            "header": {
+              "operator": "GMB",
+              "routeNo": "78",
+              "origin": "Tin Shui Wai Station",
+              "destination": "Circular via ",
+              "circular": true,
+              "label": "Circular via ",
+              "collapsedLabel": "Circular via ",
+              "originSeq": 1,
+              "destinationSeq": 4
+            },
+            "facts": [
+              {
+                "key": "fare",
+                "value": "$5.8"
+              },
+              {
+                "key": "freq",
+                "value": "every 10 – 25 min"
+              },
+              {
+                "key": "hours",
+                "value": "05:30 – 00:15"
+              },
+              {
+                "key": "stops",
+                "value": "4 stops"
+              }
+            ],
+            "stops": [
+              {
+                "seq": 1,
+                "stopId": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "label": "Tin Shui Wai Station",
+                  "code": "TN511"
+                },
+                "arrivals": [],
+                "fare": "5.8",
+                "fareLabel": "$5.8",
+                "here": false,
+                "first": true,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 2,
+                "stopId": "KMB:18492910339E23AA",
+                "name": {
+                  "label": "Tin Shui Wai Park",
+                  "code": "TN510"
+                },
+                "arrivals": [],
+                "fare": "5.8",
+                "fareLabel": "$5.8",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 3,
+                "stopId": "KMB:5BB4A5D9AAF9D5C1",
+                "name": {
+                  "label": "Kingswood Richly Plaza"
+                },
+                "arrivals": [],
+                "fare": "5.8",
+                "fareLabel": "$5.8",
+                "here": false,
+                "first": false,
+                "last": false,
+                "saved": false
+              },
+              {
+                "seq": 4,
+                "stopId": "KMB:AFB9321F7CD2C2E4",
+                "name": {
+                  "label": "Tin Shui Wai Station",
+                  "code": "TN511"
+                },
+                "arrivals": [],
+                "here": false,
+                "first": false,
+                "last": true,
+                "saved": false
+              }
+            ],
+            "buses": [],
+            "lastUpdatedIso": null,
+            "vehicle": "minibus",
+            "hereIndex": -1,
+            "distanceM": 3032.5034864866025,
+            "liveArrivals": "answered"
+          }
+        },
+        {
           "name": "a-bidirectional-route-carries-the-id-its-toggle-navigates-to",
           "why": "The toggle’s existence and the id it flips to are ONE field. The RN screen held them as `canReverse={!!reverse}` beside a separate closure reading `reverse.id`, so a renderer could draw a control with nothing behind it — and the DOM port, which navigates rather than swapping state, needs the id at the point it draws the control.",
           "args": {

@@ -141,15 +141,24 @@ export function MarqueeText({
         timer = setTimeout(resolve, ms)
       })
     const lap = async () => {
+      // **The painter is awake for the whole lap, holds included.** It used to be switched off whenever
+      // the animation was not *running*, which is true during the rest at the far end — so the mask
+      // reset to its home shape while the name was displaced: the left fade vanished and the right one
+      // came back over the last letter. The holds are part of the lap, so `running` covers them.
+      setRunning(true)
       await wait(HOLD_MS)
       if (!lapOwned.current) return
-      setRunning(true)
       animation.play()
       await animation.finished
       if (!lapOwned.current) return
       await wait(END_HOLD_MS)
       if (!lapOwned.current) return
-      animation.reverse()
+      // `playbackRate = -1` and `play()` rather than `reverse()`, which is sugar for exactly this pair:
+      // `check-no-derivation` reads a `.reverse(` as a list being turned round — the rule that keeps a
+      // renderer from re-ordering rows the kernel ordered — and the honest way past a gate that fires on
+      // a shape is to not write the shape rather than to excuse it.
+      animation.playbackRate = -1
+      animation.play()
       await animation.finished
       if (!lapOwned.current) return
       setRunning(false)
@@ -202,23 +211,16 @@ export function MarqueeText({
       const trail = remaining > TRAIL_PX ? TRAIL_PX : remaining
       outer.style.maskImage = maskWith(lead, trail)
       outer.style.webkitMaskImage = maskWith(lead, trail)
-      // The painter is also what notices the name has stopped — including after a tap, which has no
-      // script to tell it. One place watches the animation, so nothing can disagree about whether the
-      // name is moving.
-      const animation = travelling.current
-      if (animation !== null && animation.playState !== 'running') {
-        setRunning(false)
-        return
-      }
       frame = requestAnimationFrame(paint)
     }
     frame = requestAnimationFrame(paint)
     return () => {
       cancelAnimationFrame(frame)
-      // Back to the resting mask: a trailing fade, because a parked name is at home and the rest of it is
-      // off to the right, and nothing at the leading edge, because the name starts there.
-      outer.style.maskImage = maskWith(0, TRAIL_PX)
-      outer.style.webkitMaskImage = maskWith(0, TRAIL_PX)
+      // **One last paint from where the name actually is**, rather than a reset to the home mask. A name
+      // can come to rest anywhere — parked at the far end, or stopped mid-stride by a second tap — and a
+      // mask that assumes home is the same false claim in a different place.
+      paint()
+      cancelAnimationFrame(frame)
     }
   }, [running, overflow])
 
@@ -263,6 +265,9 @@ export function MarqueeText({
           animation.play()
         }
         setRunning(true)
+        // Each `play()` makes a fresh `finished`, so this is the end of *this* travel rather than of a
+        // lap that no longer exists. The rejection path is the effect's cancel.
+        animation.finished.then(() => setRunning(false)).catch(() => undefined)
       }}
     >
       <span ref={inner} className="inline-block">

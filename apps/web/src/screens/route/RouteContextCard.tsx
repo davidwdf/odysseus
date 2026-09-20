@@ -294,6 +294,7 @@ export function RouteContextCard({
                 <JourneyRail
                   fromSeq={header.originSeq}
                   toSeq={header.destinationSeq}
+                  viaSeq={header.viaSeq}
                   circular={header.circular}
                 />
                 <div className="min-w-0 flex-1 text-left">{journey}</div>

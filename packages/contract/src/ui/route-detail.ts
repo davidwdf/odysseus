@@ -246,13 +246,21 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
       name: 'destinationSeq',
       text: { field: 'header.destinationSeq' },
       when: 'header.destinationSeq',
-      why: 'As `originSeq` — an empty payload has no numbered far end.',
+      why: 'As `originSeq` — an empty payload has no numbered far end, and a loop that knows where it turns has none to number either (see `viaSeq`).',
       // Declared **beside** `originSeq` rather than beside the name it belongs to, because the two
       // figures are drawn as one column of marks: `apps/web` puts a rail between them, so document order
       // is 1 · N · origin · destination. Where a figure sits in the tree is idiom, exactly as it is for
       // `routeNo`; that both are stated is not.
       invariant:
         'The **last stop\u2019s** sequence number, and it is stated even for a loop, where the first and last rows are the same pole: the figure belongs to the *row*, not to the place, and the list prints both. What a circular service changes is not its ends but what happens between them — `apps/web` keeps both numbered nodes and swaps the mark on the line for a loop — which is the same substitution the kernel makes in words when the destination becomes \u201cCircular via \u2026\u201d (ADR-046).',
+    },
+    {
+      name: 'viaSeq',
+      text: { field: 'header.viaSeq' },
+      when: 'header.viaSeq',
+      why: 'Only a circular route has a turning point, and only one whose published label names a stop in its own list can put a figure on it.',
+      invariant:
+        'Where a loop **turns**, as a sequence number \u2014 and it appears *instead of* `destinationSeq`, never beside it. A circular route\u2019s last row is the same pole as its first, so a figure against its far end numbers a place that is not one: KMB 284 is published as \u201cRAVANA GARDEN (CIRCULAR)\u201d and Ravana Garden is its stop **6**, while its stop 12 is the terminus it left. The kernel finds the row by matching the operator\u2019s own label, and answers nothing when no row matches \u2014 a header with no figure on its second node is better than one that disagrees with the route\u2019s name.',
     },
     {
       name: 'origin',

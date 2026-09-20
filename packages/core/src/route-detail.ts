@@ -386,7 +386,26 @@ export interface RouteJourneyHeader {
    * which is the same emptiness `origin` and `destination` answer by naming nothing.
    */
   originSeq?: number
+  /**
+   * **Absent on a loop whose turning point we can name** — see `viaSeq`. A circular route's last row is
+   * the same pole as its first, so a figure against its *far end* is a number for a place that is not one.
+   */
   destinationSeq?: number
+  /**
+   * **Where a loop turns**, as a sequence number — the row whose name is the place the operator names the
+   * route after (KMB 284 is *"RAVANA GARDEN (CIRCULAR)"*, and Ravana Garden is its **stop 6**, not its
+   * stop 12).
+   *
+   * This is the fact a circular header was getting wrong: it printed the last row's figure, 12, beside
+   * the words *"Circular via Ravana Garden"*, so the number and the words named different places. A loop
+   * has one terminus, visited twice, and one turning point; the turning point is what a rider wants and
+   * what the schematic can point at.
+   *
+   * Absent when no row's name matches the operator's label — a real outcome, not an error, since the two
+   * come from different upstream fields and need not agree. A renderer with no `viaSeq` falls back to the
+   * two-terminus form, which is what the header did before this existed.
+   */
+  viaSeq?: number
   /**
    * The opposite direction's route id, where the dataset carries one.
    *
@@ -693,6 +712,8 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
   // empty list is `undefined` rather than a lookup at -1.
   const firstRow = rows[0]
   const lastRow = rows.at(-1)
+  // …and, on a loop, the row it turns at — which takes the second node's place (see `viaSeq`).
+  const viaSeq = far.kind === 'circular' ? loopViaSeq(rows, far.via) : undefined
 
   return {
     lastUpdatedIso,
@@ -710,7 +731,11 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
       // The rows' own numerals, taken from the rows rather than counted here — `rows` is already the
       // stop list this view hands over, and its `seq` is the wire's.
       ...(firstRow === undefined ? {} : { originSeq: firstRow.seq }),
-      ...(lastRow === undefined ? {} : { destinationSeq: lastRow.seq }),
+      // **A loop that knows where it turns has no second terminus to number.** The two are mutually
+      // exclusive by construction rather than by a renderer's choice: whichever is present is the figure
+      // the second node carries.
+      ...(lastRow === undefined || viaSeq !== undefined ? {} : { destinationSeq: lastRow.seq }),
+      ...(viaSeq === undefined ? {} : { viaSeq }),
       ...(detail.reverse === undefined ? {} : { reverseId: detail.reverse.id }),
     },
     facts: routeFacts(route.service, stops, locale, labels),
@@ -1310,6 +1335,36 @@ function hoursSheet(
       ? {}
       : { span: formatServiceHours(service.hours) }),
   }
+}
+
+/**
+ * **Which row a loop turns at**, by matching the operator's own label against the stop list.
+ *
+ * Upstream names a circular route after the place it turns at — 284's `destination` is
+ * `"RAVANA GARDEN (CIRCULAR)"` — and that place is an ordinary row in the middle of the sequence. So the
+ * question *"which stop is the via"* has an answer in the data, and the answer is a name match rather
+ * than a guess.
+ *
+ * **Why not geometry.** The obvious alternative is the stop farthest from the origin, which is robust and
+ * needs no matching — and which would have named *Garden Vista* on 284, where the operator says Ravana
+ * Garden. A header that disagrees with the route's own name is worse than a header with no figure on its
+ * second node, so the operator's word stays authoritative and an unmatched label simply yields nothing.
+ *
+ * Normalised on both sides — case, spacing and punctuation — because one side has been through
+ * `titleCaseName` and the other through `displayName`, and *"RAVANA GARDEN"* against *"Ravana Garden"* is
+ * the same place. The **first** match wins: a loop can pass one stop twice, and the outward visit is the
+ * one a rider boarding at the terminus reaches first.
+ */
+function loopViaSeq(rows: readonly RouteStopRowView[], via: string): number | undefined {
+  const wanted = comparableName(via)
+  if (wanted === '') return undefined
+  for (const row of rows) if (comparableName(row.name.label) === wanted) return row.seq
+  return undefined
+}
+
+/** Lower-case, letters and digits only — enough to compare two spellings of one place. */
+function comparableName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
 /**
