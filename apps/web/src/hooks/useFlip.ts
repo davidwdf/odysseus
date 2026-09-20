@@ -81,6 +81,14 @@ export function useFlip(ref: RefObject<HTMLElement | null>, key: string | number
  * content that no longer fits is clipped by the card's own `overflow-hidden`. That is a width/height
  * animation, and neither is a property a FLIP touches.
  *
+ * **`max-width` is animated with `width`, and leaving it out broke the whole thing.** The collapsed island
+ * carries a `max-w-[calc(100% − 136px)]` so it clears the floating back lens, and a `max-width` clamps an
+ * *animated* width exactly as it clamps a laid-out one: the keyframe asked for 366 px, the clamp said 254,
+ * and the box therefore jumped to its final width in one frame and then eased its height down — an empty
+ * narrow rectangle collapsing vertically, which is what the owner saw and described precisely (ADR-172).
+ * Animating the clamp alongside the value is the fix: for the duration of the transition the bound is
+ * whatever the box is, and at the end the class's own bound applies again.
+ *
  * **It began as height alone** and grew a second dimension when the collapsed state became an island
  * (ADR-171): a full-width pane becoming a pill that hugs its text changes both, and animating one of the
  * two is more jarring than animating neither — the box eases down while its sides cut in. The cost is
@@ -123,8 +131,8 @@ export function useBoxFlip(ref: RefObject<HTMLElement | null>, key: string | num
 
     el.animate?.(
       [
-        { width: `${was.width}px`, height: `${was.height}px` },
-        { width: `${now.width}px`, height: `${now.height}px` },
+        { width: `${was.width}px`, maxWidth: `${was.width}px`, height: `${was.height}px` },
+        { width: `${now.width}px`, maxWidth: `${now.width}px`, height: `${now.height}px` },
       ],
       // **Growing decelerates and shrinking accelerates** — `docs/09 §5`'s rule ("ease-out entering,
       // ease-in exiting"), which this hook broke by using one curve for both. With the entrance curve on
