@@ -79,6 +79,16 @@ export type CatchBand = 'comfortable' | 'tight'
 export interface StopCardRow extends EtaReadout {
   /** Set by `homeView` alone — see {@link CatchBand}. Absent on every other screen's rows. */
   catch?: CatchBand
+  /**
+   * The rider saved **this route at this pole** (ADR-032/042), so a renderer may flag its badge.
+   *
+   * Carried rather than inferred, and that is the point of it existing at all: a row's saved-ness is a
+   * fact about the rider's stored list, not about the row, and a renderer that worked it out would be
+   * reaching for the preferences store from inside a presentational component — or worse, comparing a
+   * key it built itself, which is the ad-hoc id parsing `check-no-adhoc-id-parsing` bans. `savedRows`
+   * knows the answer by construction, because it is the function that did the intersecting.
+   */
+  saved?: boolean
   routeId: string
   operator: OperatorId
   /** The number on the chip — the whole id when it cannot be parsed, so an unreadable id still shows

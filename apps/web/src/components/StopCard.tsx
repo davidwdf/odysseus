@@ -5,6 +5,7 @@ import { BearingArrow } from './BearingArrow'
 import { EtaBadge } from './EtaBadge'
 import { RemarkTag } from './RemarkTag'
 import { RouteChip } from './RouteChip'
+import { SavedFlag } from './SavedFlag'
 import { StopName } from './StopName'
 
 // **This component derives nothing**, and neither does its RN twin (`components/StopRow.tsx`). Both
@@ -53,7 +54,20 @@ function RouteRow({
     // `PlaceRow` and `Search` both have it on both levels; this file had it on one. Three spellings of one
     // layout, and the one that was wrong is the one used by *two* screens — Nearby and Favourites.
     <div className="flex min-w-0 flex-1 items-center gap-2.5">
-      <RouteChip operator={row.operator} routeNo={row.routeNo} />
+      {/* **The saved flag sits on the badge**, which is what `docs/07` has wanted since 2026-05 and what
+          the owner asked for directly: "saved" reads as a property of *that route*, and the row's right
+          edge belongs to the ETA alone. The halo is `--bg` because a card sits on the page background;
+          see `SavedFlag` for why that is the caller's choice.
+          `relative` on a wrapper rather than on the chip so `RouteChip` stays a chip — a component that
+          grew a positioning context for one caller's decoration is a component with a second job. */}
+      <span className="relative shrink-0">
+        <RouteChip operator={row.operator} routeNo={row.routeNo} />
+        {row.saved ? (
+          <span className="-top-1.5 -right-1.5 absolute">
+            <SavedFlag halo="bg" />
+          </span>
+        ) : null}
+      </span>
       <div className="min-w-0 flex-1">
         {row.headline ? (
           <div className="truncate text-body text-text">

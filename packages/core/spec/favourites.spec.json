@@ -875,7 +875,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 },
                 {
                   "routeId": "CTB:969:outbound:1",
@@ -888,7 +889,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 }
               ],
               "remaining": 0,
@@ -1078,7 +1080,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 }
               ],
               "remaining": 0,
@@ -1202,7 +1205,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 }
               ],
               "remaining": 0,
@@ -1392,7 +1396,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 }
               ],
               "remaining": 0,
@@ -1700,7 +1705,8 @@
                     "kind": "none"
                   },
                   "urgency": "none",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 }
               ],
               "remaining": 0,
@@ -1886,7 +1892,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 },
                 {
                   "routeId": "KMB:269D:outbound:3",
@@ -1898,7 +1905,8 @@
                     "text": "every 12 min"
                   },
                   "urgency": "none",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 }
               ],
               "remaining": 0,
@@ -2030,7 +2038,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 },
                 {
                   "routeId": "KMB:269B:outbound:1",
@@ -2043,7 +2052,8 @@
                     "unit": "min"
                   },
                   "urgency": "normal",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 },
                 {
                   "routeId": "KMB:E37:outbound:1",
@@ -2054,7 +2064,8 @@
                     "kind": "departed"
                   },
                   "urgency": "none",
-                  "stale": false
+                  "stale": false,
+                  "saved": true
                 }
               ],
               "remaining": 0,
@@ -2164,7 +2175,8 @@
                 "unit": "min"
               },
               "urgency": "normal",
-              "stale": false
+              "stale": false,
+              "saved": true
             }
           ]
         },
@@ -2268,7 +2280,8 @@
                 "unit": "min"
               },
               "urgency": "normal",
-              "stale": false
+              "stale": false,
+              "saved": true
             },
             {
               "routeId": "KMB:269D:outbound:3",
@@ -2280,7 +2293,8 @@
                 "text": "every 12 min"
               },
               "urgency": "none",
-              "stale": false
+              "stale": false,
+              "saved": true
             }
           ]
         },
@@ -2378,7 +2392,8 @@
                 "unit": "min"
               },
               "urgency": "normal",
-              "stale": false
+              "stale": false,
+              "saved": true
             },
             {
               "routeId": "KMB:269B:outbound:1",
@@ -2391,7 +2406,8 @@
                 "unit": "min"
               },
               "urgency": "normal",
-              "stale": false
+              "stale": false,
+              "saved": true
             }
           ]
         },
@@ -2489,7 +2505,8 @@
                 "unit": "min"
               },
               "urgency": "normal",
-              "stale": false
+              "stale": false,
+              "saved": true
             },
             {
               "routeId": "KMB:E37:outbound:1",
@@ -2500,7 +2517,8 @@
                 "kind": "departed"
               },
               "urgency": "none",
-              "stale": false
+              "stale": false,
+              "saved": true
             }
           ]
         },
@@ -2600,7 +2618,8 @@
                 "text": "every 12 min"
               },
               "urgency": "none",
-              "stale": false
+              "stale": false,
+              "saved": true
             }
           ]
         },

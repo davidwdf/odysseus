@@ -193,7 +193,7 @@ Recorded so they're not forgotten — each needs **thinking through / designing*
 (`formatFavoriteRouteKey(stopId, routeId)`); `SaveStar` renders at the **trailing edge** of each route row in
 Place/Stop detail with `hideWhenEmpty`, and the only way to *add* one is the route-schematic action sheet.
 
-- [~] 🔵 **Move the favourite indicator onto the route badge itself** — **directed by the owner 2026-09-20**
+- [x] ✅ **Move the favourite indicator onto the route badge itself** — **done 2026-09-20**
       ([`proposals/07 §0c`](./proposals/07-home-and-a-shared-design-language.md)), and **half-done**. The mark
       itself is settled and extracted: `apps/web/src/components/SavedFlag.tsx`, the **two-star cut-out** the
       rail has drawn on a saved stop's node since WP6-6 — *"a slightly larger star filled with whatever the
@@ -202,10 +202,22 @@ Place/Stop detail with `hideWhenEmpty`, and the only way to *add* one is the rou
       🟢 **This row's own open question is answerable by looking now:** `/lab/#gallery` draws the flag on
       **all four operator liveries in both haloes** (`surface` for a row, `bg` for a chip in a card), so
       "does it survive the liveries and dark mode at chip size" is a panel rather than a guess.
-      🟡 **Still to do:** the `saved` prop on `RouteChip`, which waits for Home to be its first consumer, and
-      the tappability question below — **`PlaceRow`'s trailing `SaveStar` is deliberately untouched**, because
-      it is the only way to un-save from that screen and moving the indicator without replacing the control
-      would leave a rider no exit. That makes this row and the long-press one below **one piece of work**.
+      **Landed on `StopCard`'s row rather than as a `RouteChip` prop**, and that is the better shape: the
+      chip stays a chip. A component that grew a positioning context for one caller's decoration would
+      have a second job, so the wrapper and the flag live where the decision does — in the row.
+      🟢 **What the row is flagged *from* is the kernel's, not the renderer's.** `StopCardRow.saved` is
+      stamped by `savedRows`, which is the function that did the intersecting and therefore knows by
+      construction. A renderer working it out would have reached into the preferences store from a
+      presentational component, or rebuilt a favourite key itself — the ad-hoc id parsing
+      `check-no-adhoc-id-parsing` bans.
+      ⚠️ **No conformance run can see it** — `SavedFlag` is `aria-hidden` with no text node, by design, so
+      a projection would otherwise carry a word on one renderer only (ADR-093's bus-token trap).
+      `home-states.test.tsx` asserts it in the DOM instead, counting two stars per flag, and was watched
+      failing with the flag removed.
+      🟡 **Still open:** the row's own accessible name does not yet say "saved" to a screen reader, and
+      **`PlaceRow`'s trailing `SaveStar` is deliberately untouched** — it is the only way to un-save from
+      that screen, and moving the indicator without replacing the control would leave a rider no exit.
+      That second one makes this row and the long-press one below **one piece of work**.
       · Original wording ↓
 - [ ] **Move the favourite indicator onto the route badge itself** — on the single-line bus row in Stop/Place
       detail ([`app/stop/[id].tsx`](../apps/mobile/app/stop/[id].tsx) `RouteRow` → `RouteChip` +

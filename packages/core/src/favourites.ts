@@ -475,11 +475,16 @@ export function savedRows(
 ): StopCardRow[] {
   const keys = saved instanceof Set ? saved : new Set(saved)
   const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
-  return routes
-    .filter((route) => keys.has(formatFavoriteRouteKey(route.stopId, route.route.id)))
-    .map((route) => favouriteRow(route, opts.locale, opts.now, policy))
-    .sort((a, b) => readoutRank(a) - readoutRank(b) || compareDue(a.due, b.due))
-    .map(({ due: _due, ...row }) => row)
+  return (
+    routes
+      .filter((route) => keys.has(formatFavoriteRouteKey(route.stopId, route.route.id)))
+      .map((route) => favouriteRow(route, opts.locale, opts.now, policy))
+      .sort((a, b) => readoutRank(a) - readoutRank(b) || compareDue(a.due, b.due))
+      // `saved: true` by construction — every row here survived the intersection above. Stamped rather
+      // than left implicit so a renderer can flag the badge without asking the preferences store, which
+      // is a seam a presentational component has no business reaching through.
+      .map(({ due: _due, ...row }) => ({ ...row, saved: true }))
+  )
 }
 
 /** A row, plus the arrival it sorts on — stripped before it leaves `favouritesView`. */

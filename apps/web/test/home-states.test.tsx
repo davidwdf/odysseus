@@ -347,6 +347,28 @@ describe('apps/web conforms to Home’s published spec, state by state', () => {
     })
   }
 
+  /**
+   * The saved flag, which **no conformance run can see** — and that is its contract, not a gap.
+   *
+   * `SavedFlag` is `aria-hidden` with no text node, deliberately: a projection compares text, so a word
+   * there would appear in every row's projection on one renderer only (the trap ADR-093 found in the bus
+   * token). The walker is therefore blind to it, which makes a direct DOM assertion the only thing
+   * standing between "the owner asked for a flag on the badge" and a screen that quietly has none.
+   */
+  it('flags the badge of every saved row, and no other', async () => {
+    const rendered = await fixture('content')
+    if (!rendered) throw new Error('no content fixture')
+    const v = rendered.view as { catch?: { rows: unknown[] }[]; saved?: { rows: unknown[] }[] }
+    const savedRowCount = [...(v.catch ?? []), ...(v.saved ?? [])].reduce(
+      (n, card) => n + card.rows.length,
+      0,
+    )
+    expect(savedRowCount, 'the fixture has no saved rows to flag').toBeGreaterThan(0)
+    // Two stars per flag — the halo and the mark (`SavedFlag`), which is what makes it read as cut out.
+    const flags = container.querySelectorAll('[aria-hidden="true"] svg.lucide-star')
+    expect(flags.length).toBe(savedRowCount * 2)
+  })
+
   // The claim the merge is *for*, restated as the thing a reader cares about: the three states that used
   // to be apologies now carry a board. A structural regression here is a rider losing half the screen.
   it('draws a full board in the three states that used to be apologies', async () => {

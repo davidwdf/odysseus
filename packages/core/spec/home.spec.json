@@ -1204,7 +1204,8 @@
                       "unit": "min"
                     },
                     "urgency": "normal",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:269B:outbound:1",
@@ -1217,7 +1218,8 @@
                       "unit": "min"
                     },
                     "urgency": "normal",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:E37:outbound:1",
@@ -1228,7 +1230,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -2165,7 +2168,8 @@
                       "unit": "min"
                     },
                     "urgency": "normal",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:269B:outbound:1",
@@ -2178,7 +2182,8 @@
                       "unit": "min"
                     },
                     "urgency": "normal",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:E37:outbound:1",
@@ -2189,7 +2194,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -2628,6 +2634,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -2640,7 +2647,8 @@
                       "text": "every 12 min"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -3601,6 +3609,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -3615,6 +3624,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -3626,7 +3636,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -4184,6 +4195,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   }
                 ],
@@ -4340,6 +4352,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "tight"
                   },
                   {
@@ -4354,6 +4367,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -4365,7 +4379,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -4510,7 +4525,8 @@
                       "unit": "min"
                     },
                     "urgency": "normal",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:269B:outbound:1",
@@ -4523,7 +4539,8 @@
                       "unit": "min"
                     },
                     "urgency": "normal",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:E37:outbound:1",
@@ -4534,7 +4551,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -4772,6 +4790,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "tight"
                   },
                   {
@@ -4786,6 +4805,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -4797,7 +4817,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -4825,6 +4846,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -4839,6 +4861,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -4850,7 +4873,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -5088,7 +5112,8 @@
                       "unit": "min"
                     },
                     "urgency": "normal",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:269B:outbound:1",
@@ -5102,6 +5127,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -5113,7 +5139,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -5141,6 +5168,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -5155,6 +5183,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -5166,7 +5195,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -5472,6 +5502,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "tight"
                   },
                   {
@@ -5486,6 +5517,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   },
                   {
@@ -5497,7 +5529,8 @@
                       "kind": "departed"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -5525,7 +5558,8 @@
                       "text": "every 10 – 20 min"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:69M:outbound:1",
@@ -5537,7 +5571,8 @@
                       "text": "every 10 – 20 min"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:269B:outbound:1",
@@ -5549,7 +5584,8 @@
                       "text": "every 10 – 20 min"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -5574,7 +5610,8 @@
                       "kind": "none"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:69M:outbound:1",
@@ -5585,7 +5622,8 @@
                       "kind": "none"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:269B:outbound:1",
@@ -5596,7 +5634,8 @@
                       "kind": "none"
                     },
                     "urgency": "none",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
@@ -6396,6 +6435,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "tight"
                   },
                   {
@@ -6410,6 +6450,7 @@
                     },
                     "urgency": "normal",
                     "stale": false,
+                    "saved": true,
                     "catch": "comfortable"
                   }
                 ],
@@ -6917,7 +6958,8 @@
                       "label": "Due"
                     },
                     "urgency": "due",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:69M:outbound:1",
@@ -6929,7 +6971,8 @@
                       "label": "Due"
                     },
                     "urgency": "due",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   },
                   {
                     "routeId": "KMB:269B:outbound:1",
@@ -6941,7 +6984,8 @@
                       "label": "Due"
                     },
                     "urgency": "due",
-                    "stale": false
+                    "stale": false,
+                    "saved": true
                   }
                 ],
                 "remaining": 0,
