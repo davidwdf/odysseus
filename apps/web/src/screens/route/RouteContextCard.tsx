@@ -136,7 +136,13 @@ export function RouteContextCard({
           style={{ marginTop: collapsed ? -ISLAND_LAP : -(BADGE_TOP + BADGE_H) }}
         >
           {collapsed ? (
-            <div className="flex items-center gap-1.5">
+            // **`w-full min-w-0`, and both halves are load-bearing.** A flex item does not shrink below
+            // its content unless it is told it may, so without these the row laid itself out at its
+            // natural width — 307 px inside a 254 px pill — and the pill clipped 26 px off each end: the
+            // arrow and the chevron, gone, with the destination sitting flush to both edges. It read as a
+            // marquee with no furniture rather than as a row that had overflowed, which is how it
+            // survived a screenshot.
+            <div className="island-in flex w-full min-w-0 items-center gap-1.5">
               {/* **An arrow, from the number to where it is going.** A badge beside a place name states
                   two facts and no relation between them, and the relation is the point of a route. Not
                   on a circular service, where an arrow to a destination you are also leaving from would

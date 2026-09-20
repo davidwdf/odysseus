@@ -322,7 +322,22 @@ export function RouteDetail() {
    * rider tapping stop 1 to see it on the map got the card thrown back over the map instead. The flag
    * is the difference between "the list is at the top" and "the rider put it there".
    */
-  const programmaticScroll = useRef(false)
+  /**
+   * **When the last scroll this screen caused itself was**, as a deadline rather than a flag.
+   *
+   * It was a boolean consumed by one event, on the reasoning that `scrollIntoView` is a single jump. That
+   * holds for a tap on a stop and does not hold for a direction flip, where the list is replaced *and*
+   * scrolled and the sheet's own scroller clamps its offset to the new content — three events, of which
+   * the flag swallowed one. A short window is the honest shape: it says *nothing in the next quarter
+   * second is the rider*, which is what was meant.
+   */
+  const programmaticScroll = useRef(0)
+  // A `useCallback` with no dependencies rather than a plain function: two effects call it, and a fresh
+  // identity each render would make it a dependency that changes every time — which is how an effect that
+  // should run on a flip ends up running on every keystroke.
+  const markProgrammaticScroll = useCallback(() => {
+    programmaticScroll.current = Date.now() + PROGRAMMATIC_SCROLL_MS
+  }, [])
   /**
    * How much of the map the sheet is covering, as a fraction — the camera's `padding`.
    *
@@ -333,19 +348,22 @@ export function RouteDetail() {
   const [sheetFraction, setSheetFraction] = useState(
     () => resolveDetent(ROUTE_DETENTS, DEFAULT_DETENT).fraction,
   )
-  const focusStop = useCallback((index: number) => {
-    setFocusedIndex(index)
-    // The scroll below is OURS, and the header must not read it as the rider returning to the top.
-    // Tapping the first stop lands the list at zero as a side effect, and without this the card
-    // sprang open at the exact moment the rider was asking to look at the map instead.
-    programmaticScroll.current = true
-    // `nearest`, not `start`. The map sits **above** the list in one scrolling page, so scrolling a row
-    // to the top would push the map — the thing the rider just tapped — off the screen to show them the
-    // row it was already about. `nearest` does nothing when the row is visible and moves the minimum
-    // when it is not. (The mockup had no such tension: it split the screen into a map pane and a list
-    // pane that scrolled independently. This layout is a single column, and that is the trade.)
-    rows.current.get(index)?.scrollIntoView({ block: 'nearest' })
-  }, [])
+  const focusStop = useCallback(
+    (index: number) => {
+      setFocusedIndex(index)
+      // The scroll below is OURS, and the header must not read it as the rider returning to the top.
+      // Tapping the first stop lands the list at zero as a side effect, and without this the card
+      // sprang open at the exact moment the rider was asking to look at the map instead.
+      markProgrammaticScroll()
+      // `nearest`, not `start`. The map sits **above** the list in one scrolling page, so scrolling a row
+      // to the top would push the map — the thing the rider just tapped — off the screen to show them the
+      // row it was already about. `nearest` does nothing when the row is visible and moves the minimum
+      // when it is not. (The mockup had no such tension: it split the screen into a map pane and a list
+      // pane that scrolled independently. This layout is a single column, and that is the trade.)
+      rows.current.get(index)?.scrollIntoView({ block: 'nearest' })
+    },
+    [markProgrammaticScroll],
+  )
 
   /**
    * A row tap. §8d: it **focuses the stop on the map and does nothing else** — the actions moved to the
@@ -470,8 +488,13 @@ export function RouteDetail() {
     // *this is where you are* — and splitting them is how the list and the map end up disagreeing on
     // the first frame.
     setFocusedIndex(hereIndex)
+    // **Marked programmatic, which it was not until now** — and the symptom was the owner's: flipping
+    // direction navigated, this effect scrolled the new boarding row into view, and the scroll it caused
+    // read as *the rider has started reading* and collapsed the card. The swap animation then played
+    // inside a header that was already an island, which is to say invisibly.
+    markProgrammaticScroll()
     row.scrollIntoView({ block: 'start' })
-  }, [hereIndex, stopCount, id])
+  }, [hereIndex, stopCount, id, markProgrammaticScroll])
 
   const openStop = (row: RouteStopRowView) =>
     navigate(`/stop/${encodeURIComponent(row.stopId)}?pole=${encodeURIComponent(row.stopId)}`)
@@ -687,11 +710,9 @@ export function RouteDetail() {
             label={t(locale, 'routeStopsSheet')}
             initial={DEFAULT_DETENT}
             onContentScroll={(top) => {
-              if (programmaticScroll.current) {
-                // One event only: `scrollIntoView` is a single jump here, not a smooth animation.
-                programmaticScroll.current = false
-                return
-              }
+              // Inside the window this screen opened for its own scroll, nothing is the rider — see
+              // `programmaticScroll`.
+              if (Date.now() < programmaticScroll.current) return
               setChromeCollapsed(top > 0)
             }}
             onDetentChange={(d) => {
@@ -860,3 +881,10 @@ const DAY_LABEL: Record<
   daily: 'dayDaily',
   other: 'dayOther',
 }
+
+/**
+ * How long a scroll this screen started stays *its own*, in ms. Long enough to cover the burst a
+ * replaced list produces (the row scrolled into view, the scroller clamping to shorter content), short
+ * enough that a rider who flicks the list immediately afterwards is still heard.
+ */
+const PROGRAMMATIC_SCROLL_MS = 250

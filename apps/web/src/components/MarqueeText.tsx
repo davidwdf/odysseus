@@ -12,10 +12,23 @@ import { prefersReducedMotion } from '../lib/motion'
  *
  * ## It measures, and it only animates when the measurement says to
  *
- * `scrollWidth > clientWidth` is the whole condition, read in a layout effect after every content change.
- * A name that fits is a plain truncating span with no animation, no extra element and nothing running —
- * which is most names, and it is why this is safe to use on every header rather than on the long ones
- * somebody remembered to mark.
+ * `scrollWidth > clientWidth` is the whole condition. A name that fits is a plain truncating span with no
+ * animation, no extra element and nothing running — which is most names, and it is why this is safe to use
+ * on every header rather than on the long ones somebody remembered to mark.
+ *
+ * ## **It measures when the box is still**, and the first version did not
+ *
+ * A layout effect on mount is the obvious place and it is the wrong one here, for a reason the owner saw
+ * before I did: *"the expanded card marquees are not animating correctly — they are moving left until the
+ * end of the text is around the midpoint of the card, and some stops that shouldn't need to animate are
+ * animating."* Both symptoms are one cause. The card's own expand **animates its width** (`useBoxFlip`),
+ * and a name measured against a box that is still growing reports an overflow that is too large — so the
+ * travel overshoots, and a name that fits at the final width is judged not to fit at all.
+ *
+ * So the measurement is driven by a `ResizeObserver` and **debounced until the box has been the same size
+ * for `SETTLE_MS`**. That is the rule stated plainly: a marquee must not re-decide while the thing holding
+ * it is still moving. It also fixes the quieter version of the same bug — a first measurement taken before
+ * the webfont has loaded, against a fallback face of a different width.
  *
  * **The distance is the overflow, not a fixed percentage**, and the duration is derived from it at a
  * constant speed, so a name that overflows by 20 px takes a fifth as long as one that overflows by 100.
@@ -54,10 +67,34 @@ export function MarqueeText({
       setOverflow(0)
       return
     }
-    // A pixel of slack: sub-pixel text metrics make `scrollWidth` a hair wider than `clientWidth` on
-    // names that visibly fit, and animating that is a shimmer with a duration.
-    const distance = node.scrollWidth - node.clientWidth
-    setOverflow(distance > SLACK ? distance : 0)
+    let settle: ReturnType<typeof setTimeout> | undefined
+    const measure = () => {
+      // A pixel of slack: sub-pixel text metrics make `scrollWidth` a hair wider than `clientWidth` on
+      // names that visibly fit, and animating that is a shimmer with a duration.
+      const distance = node.scrollWidth - node.clientWidth
+      setOverflow(distance > SLACK ? distance : 0)
+    }
+    const later = () => {
+      if (settle !== undefined) clearTimeout(settle)
+      settle = setTimeout(measure, SETTLE_MS)
+    }
+    later()
+    // The box changes size for three reasons and only one of them is a resize: the card's own morph, a
+    // rotation, and the webfont arriving. One observer covers all three, and the debounce is what keeps
+    // the frames of an animation from each producing an answer.
+    // **Degrades rather than crashes where the API is absent**, which is jsdom — the same guard
+    // `CollapsingHeader` documents for `IntersectionObserver`, and not a test accommodation: an
+    // environment without a `ResizeObserver` should measure once and leave it there, which is exactly
+    // the behaviour this component had before the observer existed. A missing browser API is a reason to
+    // re-measure less often, never a reason to render nothing.
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(later)
+    observer?.observe(node)
+    // …and the font, which changes the *text's* width without changing the box's, so no resize fires.
+    void document.fonts?.ready.then(later)
+    return () => {
+      observer?.disconnect()
+      if (settle !== undefined) clearTimeout(settle)
+    }
   }, [children])
 
   if (overflow === 0) {
@@ -89,6 +126,12 @@ export function MarqueeText({
 
 /** Pixels of overflow below which a name has effectively fitted. */
 const SLACK = 1
+/**
+ * How long the box must hold still before its width is believed, in ms. Comfortably longer than one
+ * animation frame and comfortably shorter than a rider's patience; the card's own morph is 500 ms, and
+ * the observer fires again at the end of it.
+ */
+const SETTLE_MS = 180
 /** How fast the name travels. Slow enough to read while it moves — this is not a ticker. */
 const SPEED_PX_PER_S = 28
 /** How long it rests at each end, in seconds. Two of these are inside every cycle. */

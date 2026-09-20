@@ -364,6 +364,36 @@
 }
 
 /*
+  The collapsed island's one line, arriving **after** the bubble has nearly closed around it (ADR-172).
+
+  The expand and the collapse are each other's opposite by design: expanding, the content is already laid
+  out and the growing box reveals it; collapsing, the box shrinks and the destination should appear *as*
+  it arrives rather than sitting alone in a bubble that is still half a card wide. A delayed fade is the
+  cheap half of that — the honest other half would keep the outgoing content mounted and fade it out, and
+  that is a projection hazard (ADR-097) for a frame nobody can see.
+
+  260 ms of the box's 500, so the line lands while the last of the width is going.
+*/
+@keyframes island-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.island-in {
+  animation: island-in 180ms 260ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .island-in {
+    animation: none;
+  }
+}
+
+/*
   A name that does not fit, travelling (ADR-171) — `MarqueeText` measures the overflow and this says how it
   moves.
 

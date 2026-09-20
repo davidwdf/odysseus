@@ -1,6 +1,12 @@
 import { RotateCw } from 'lucide-react'
+import { useId } from 'react'
 import { JOURNEY_SLOT } from './JourneyLines'
-import { RAIL_CHEVRON_H, RAIL_CHEVRON_W, railChevronMask } from './railGlyphs'
+import {
+  RAIL_CHEVRON_H,
+  RAIL_CHEVRON_PATHS,
+  RAIL_CHEVRON_STROKE,
+  RAIL_CHEVRON_W,
+} from './railGlyphs'
 import { SlideNumber } from './SlideNumber'
 
 /**
@@ -20,9 +26,15 @@ import { SlideNumber } from './SlideNumber'
  *    a node in the line's own colour disappears into it.
  *  · **The stroke is a hairline at 1.5**, where the line is 4. A node is a shape and the line is a stroke
  *    (ADR-163); matching them would put a ring round the numeral and leave it no middle.
- *  · **The chevron is the list's**, not a drawing that resembles it: `railGlyphs.ts` holds the one mask and
- *    both rails wear it (ADR-171). The owner asked for exactly this, and one declaration is the only way to
+ *  · **The chevron is the list's**, not a drawing that resembles it: `railGlyphs.ts` holds the one shape and
+ *    both rails cut it (ADR-171). The owner asked for exactly this, and one declaration is the only way to
  *    promise it — two hand-drawn pairs agree until someone adjusts one.
+ *  · **…and it is cut out of the line, not drawn on it** (ADR-172). The first build painted it in `route`
+ *    because the list paints its notch in the *row's own background* and glass has no background colour to
+ *    borrow. An SVG `<mask>` removes the need for one: the arms are painted black in the mask, so the line
+ *    is not drawn there at all and what shows through the notch is the map behind the card. That is the
+ *    same claim the list makes — *a notch in the line, not a symbol on it* — made honestly on a
+ *    translucent surface, and it is what the owner meant by the mark being transparent rather than white.
  *
  * ## The numerals slide, because the rail does not
  *
@@ -70,6 +82,9 @@ export function JourneyRail({
   toSeq: number | undefined
   circular: boolean
 }) {
+  // **A per-instance id**, because an SVG `mask` is referenced by a document-wide id and two headers on
+  // one page (a lab, a future split view) would otherwise share — and silently agree, until one changed.
+  const maskId = useId()
   // Nothing to number is nothing to draw: an empty payload has no ends, and a rail with no nodes on it
   // would be a line claiming a journey the header cannot name.
   if (fromSeq === undefined || toSeq === undefined) return null
@@ -83,11 +98,35 @@ export function JourneyRail({
         aria-hidden="true"
         className="absolute inset-0"
       >
+        {circular ? null : (
+          <defs>
+            {/* White keeps the line, black removes it: the arms are drawn black over a white field, so
+                the chevron is a hole in the rail rather than a mark on it. `maskUnits` is the default
+                (`objectBoundingBox` is for ratios); everything here is in the same user space as the
+                line it cuts. */}
+            <mask id={maskId} maskUnits="userSpaceOnUse">
+              <rect x="0" y="0" width={NODE} height={JOURNEY_SLOT.height} fill="white" />
+              <g
+                stroke="black"
+                strokeWidth={RAIL_CHEVRON_STROKE}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                transform={`translate(${(NODE - RAIL_CHEVRON_W) / 2}, ${MID - RAIL_CHEVRON_H / 2})`}
+              >
+                {RAIL_CHEVRON_PATHS.map((d) => (
+                  <path key={d} d={d} />
+                ))}
+              </g>
+            </mask>
+          </defs>
+        )}
         <path
           d={`M${NODE / 2} ${TOP_CY} V${BOTTOM_CY}`}
           className="stroke-route-soft"
           strokeWidth={4}
           fill="none"
+          {...(circular ? {} : { mask: `url(#${maskId})` })}
         />
         <rect
           x={0.75}
@@ -106,21 +145,6 @@ export function JourneyRail({
           strokeWidth={1.5}
         />
       </svg>
-      {circular ? null : (
-        // The list's own double chevron, on the line rather than cut out of it: the schematic paints its
-        // notch in the row's background colour, and this line sits on glass, which has none.
-        <span
-          aria-hidden="true"
-          className="-translate-x-1/2 absolute bg-route"
-          style={{
-            left: '50%',
-            top: MID - RAIL_CHEVRON_H / 2,
-            width: RAIL_CHEVRON_W,
-            height: RAIL_CHEVRON_H,
-            ...railChevronMask,
-          }}
-        />
-      )}
       {circular ? (
         // The loop, in the line's own colour, on the line's own background — `bg-bg` rather than a
         // transparent glyph so the 4 px rail does not run through the middle of it.

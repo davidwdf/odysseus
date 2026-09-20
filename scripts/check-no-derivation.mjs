@@ -312,6 +312,19 @@ const ALLOWLIST = [
       'in `packages/core`, both corpus-pinned, and both are called rather than reimplemented.',
   },
   {
+    file: 'apps/web/src/components/railGlyphs.ts',
+    rule: 'string-composition',
+    snippet: '</g></svg>',
+    why:
+      'Assembling an **SVG data-URI** out of the two path strings above it — a drawing, in the same class ' +
+      'as `routeChevronImage`\u2019s canvas and exempted for the same reason: a sprite is not a rule. The ' +
+      'rule this fires for is about a *caption* (`stopCardCaption` composes separators and all, and two ' +
+      'renderers joining their own get a plausible sentence with the wrong rhythm); nothing here reaches a ' +
+      'rider as words. The join exists precisely so the shape is declared once and both rails cut the same ' +
+      'hole — writing the two `<path>`s out twice to avoid it would be the drift this file was extracted ' +
+      'to prevent.',
+  },
+  {
     file: 'apps/web/src/components/MiniMap.tsx',
     rule: 'string-composition',
     snippet: 'pin.ids.join(',

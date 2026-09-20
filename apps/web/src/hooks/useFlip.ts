@@ -126,7 +126,13 @@ export function useBoxFlip(ref: RefObject<HTMLElement | null>, key: string | num
         { width: `${was.width}px`, height: `${was.height}px` },
         { width: `${now.width}px`, height: `${now.height}px` },
       ],
-      { duration: FLIP_MS, easing: FLIP_EASING },
+      // **Growing decelerates and shrinking accelerates** — `docs/09 §5`'s rule ("ease-out entering,
+      // ease-in exiting"), which this hook broke by using one curve for both. With the entrance curve on
+      // an exit the box loses almost all of its size in the first fifth of the duration and then creeps
+      // the rest of the way, which reads as a snap followed by a drag: the owner's *"expand is quite
+      // solid, collapse is quite janky"*, in one number. The exit curve is the entrance curve mirrored,
+      // so the two are literally each other's opposite rather than merely both being easings.
+      { duration: FLIP_MS, easing: now.height >= was.height ? FLIP_EASING : FLIP_EASING_OUT },
     )
   })
 }
@@ -139,3 +145,9 @@ export function useBoxFlip(ref: RefObject<HTMLElement | null>, key: string | num
  */
 const FLIP_MS = 500
 const FLIP_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+/**
+ * The same curve reflected through the diagonal — `(x, y) → (1 − y, 1 − x)` on each control point, which
+ * is what "the opposite of that animation" means when the thing being reversed is an easing rather than a
+ * direction. Slow to leave, quick to finish.
+ */
+const FLIP_EASING_OUT = 'cubic-bezier(0.64, 0, 0.78, 0)'

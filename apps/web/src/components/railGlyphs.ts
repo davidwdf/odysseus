@@ -24,16 +24,34 @@
  * identically. That is why this is not a colour literal, and why `check-no-raw-colours` still has an empty
  * allowlist.
  *
- * It matters more than tidiness in both callers, for opposite reasons. In the list the chevron is painted
- * in the **row's own background** so it reads as a notch cut out of the rail, and the row's background
- * changes when it is selected; in the header it is painted in `route` on a line that sits on glass, where
- * there is no background colour to cut with. One shape, two paints.
+ * It matters more than tidiness in both callers, and they reach the same picture by different means. The
+ * list paints the mark **in the row's own background** so it reads as a notch cut out of the rail — and
+ * that background changes when the row is selected, which is why a fill baked into an SVG could not follow
+ * it. The header's line sits on **glass**, which has no background colour to borrow, so it punches the
+ * shape out of the line with an SVG `<mask>` and lets the map show through (ADR-172). One shape, two
+ * techniques, and the shape is what must not drift.
  */
 export const RAIL_CHEVRON_W = 10
 export const RAIL_CHEVRON_H = 11
 
+/**
+ * The two arms, as path data in the glyph's own 10 × 11 box.
+ *
+ * **Exported as geometry rather than only as a finished mask**, because the two rails cut the same hole
+ * by different means: the list paints the mark through a CSS mask in the row's background colour, and the
+ * header — whose line sits on glass, with no background colour to paint — punches it out of the line with
+ * an SVG `<mask>`, so what shows through is whatever is actually behind the card. One shape, two
+ * techniques, and the shape is the thing that must not drift.
+ */
+export const RAIL_CHEVRON_PATHS = ['M2.2 1.2 5 4 7.8 1.2', 'M2.2 6.5 5 9.3 7.8 6.5'] as const
+
+/** The stroke both techniques draw the arms at — 2, which is what cuts a 4 px rail. */
+export const RAIL_CHEVRON_STROKE = 2
+
 export const RAIL_CHEVRON_MASK = `url("data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${RAIL_CHEVRON_W}" height="${RAIL_CHEVRON_H}" viewBox="0 0 ${RAIL_CHEVRON_W} ${RAIL_CHEVRON_H}"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 1.2 5 4 7.8 1.2"/><path d="M2.2 6.5 5 9.3 7.8 6.5"/></g></svg>`,
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${RAIL_CHEVRON_W}" height="${RAIL_CHEVRON_H}" viewBox="0 0 ${RAIL_CHEVRON_W} ${RAIL_CHEVRON_H}"><g fill="none" stroke="currentColor" stroke-width="${RAIL_CHEVRON_STROKE}" stroke-linecap="round" stroke-linejoin="round">${RAIL_CHEVRON_PATHS.map(
+    (d) => `<path d="${d}"/>`,
+  ).join('')}</g></svg>`,
 )}")`
 
 /** The mask properties a caller needs, prefixed for Safari below 15.4 — one object rather than six lines. */
