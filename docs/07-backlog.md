@@ -705,7 +705,30 @@ written down.
       empty and recents prose, the FAQ answers, and every skeleton or placeholder that stands in for data.
       The gallery is where they should be surfaced — it lists components today and does not review their
       words.
-- [ ] 🟠 **Header rules, written down and testable — and yes, this belongs in the design system.**
+- [x] ✅ **Header rules, written down and testable — and yes, this belongs in the design system.** — **done
+      2026-09-20** ([ADR-169](./08-decision-log.md#adr-169--the-header-taxonomy-written-down-and-the-half-of-it-a-suite-can-see),
+      `docs/09` §10, `apps/web/src/shell/headers.ts`). **Four kinds, not the three the starting taxonomy
+      guessed** — `root` · `pushed` · `collapsing` · `map`, which is what the eight screens already were; the
+      draft had lumped the pushed screens in with the tab roots. Declared as **data**, exhaustive over the
+      destination set, so a ninth screen's chrome is a decision somebody had to write down.
+      🟢 **Writing it down found something:** scroll ownership is **not** a function of header kind. Search is
+      `pushed` and owns an inner scroller, because its field must not scroll away under a typing thumb and
+      ADR-109 restores that offset against the history key — so `SCROLL_OWNER` is its own declaration
+      (`page` · `inner` · `sheet`). A prose taxonomy would have shipped "pushed screens scroll the page" and
+      been wrong about a shipping screen.
+      ⚠️ **The collapse itself is still unenforced and now says so in its own data** — the two moving kinds
+      carry the word `unenforced`, and a test asserts they still do, so teaching a suite to see a collapse
+      turns that into a red build rather than a silent staleness. Verified by mutation, not just by passing.
+      **Superseded framing, kept:** the original row's taxonomy below is what was argued with; it is right
+      about (1) and (3) and wrong to merge the two pushed cases.
+      🟡 **Still open after ADR-169, and deliberately:** whether the collapse is **scrubbed or two-state**.
+      ADR-169 settles *which* header each screen gets and answers "may a header carry actions" (no); it does
+      not settle how the collapse interpolates, because nothing here can watch one. `apps/web` is two-state.
+      🟠 **One correction to the wording below:** the floating back lens is
+      [ADR-039](./08-decision-log.md#adr-039--one-back-button-everywhere-the-floating-glass-backbutton), not
+      ADR-126 (which is the navigation moment). The mis-citation is left in place per ADR-127's rule about
+      historical prose, and is corrected here rather than edited away.
+      · Original wording ↓
       *"I want us to be a bit more thorough with how we go about things."* Today the rules are scattered
       across ADR-033 (the title morphs into a pill beside the back lens), the `CollapsingHeader` component
       and its two thin wrappers, and ADR-126 (the back control is a floating lens fixed to the top). There
@@ -720,7 +743,11 @@ written down.
       ⚠️ **No suite in this repo can see a collapse** (jsdom has no `IntersectionObserver`), so any rule
       agreed here needs its enforcement designed with it or it is prose.
 - [ ] 🟠 **Does the app need a bottom tab bar? — the owner's brainstorm, and the biggest question on this
-      list.** The proposal to play with: a **more useful default home** that shows better data and *"is
+      list.** ▶ **Taken up 2026-09-09 in [`proposals/07`](./proposals/07-home-and-a-shared-design-language.md)**,
+      which resumes this row now that Route detail exists to be copied from, and answers the merge half of it:
+      *five of the seventeen states the two specs declare are an apology the other screen could have answered*.
+      The owner answered three the same day — **merge, rungs 1–3, Home gets a map** — and two remain open
+      (that doc's §11). Nothing is built. The proposal to play with: a **more useful default home** that shows better data and *"is
       smart enough to know what to prioritise"*; **Settings as a floating top-right button**; **Nearby and
       Favourites merged**; a **bottom-right floating search button**, with **search as an overlay** rather
       than a standalone page. The owner's own caveat, and it is the right one: a tab bar probably still

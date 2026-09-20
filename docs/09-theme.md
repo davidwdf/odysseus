@@ -610,3 +610,52 @@ default HTML omits. (Installing over HTTPS + the standalone status bar are pendi
 
 **Deferred (needs the app name):** the **巴士 / 香港巴士 wordmark** + splash lockup — see
 [`docs/07`](./07-backlog.md). The splash currently shows just the bus mark on ink.
+
+## 10. Screen chrome — which header a screen gets ([ADR-169](./08-decision-log.md#adr-169--the-header-taxonomy-written-down-and-the-half-of-it-a-suite-can-see))
+
+The design system had colour, type, spacing, motion and glass, and **no statement of which kind of screen
+gets which header**. Eight screens had four different answers and nothing said whether that was design or
+drift. It is design; this is it. The declaration itself is
+[`apps/web/src/shell/headers.ts`](../apps/web/src/shell/headers.ts) — as data, so the parts a suite can see
+are checked rather than described.
+
+**Two independent questions, not one.** Whether a screen offers a way back, and what its title does:
+
+|             | title sits in flow | title collapses | title floats over a map |
+|-------------|--------------------|-----------------|-------------------------|
+| **no back** | `root`             | —               | —                       |
+| **back**    | `pushed`           | `collapsing`    | `map`                   |
+
+| Kind | Screens | Chrome |
+|---|---|---|
+| `root` | Nearby · Favourites · Settings | An `<h1>` first in flow. **No back control** — a tab is switched to, not pushed, so there is nothing to go back *from*. The title is content, and it scrolls away with the content. |
+| `pushed` | Search · About the data · FAQ | The floating back lens ([ADR-039](./08-decision-log.md#adr-039--one-back-button-everywhere-the-floating-glass-backbutton)) plus a static `<h1>`. The title is short and known; a morph would be motion for its own sake. |
+| `collapsing` | Place detail | The back lens plus `CollapsingHeader` — the title morphs into a pill beside the lens ([ADR-033](./08-decision-log.md)). Earned by a title that is **bus data**: long, bilingual, and worth reclaiming the height of. |
+| `map` | Route detail (and Home, from `proposals/07` rung 3) | A **context card** floating over a full-bleed map ([ADR-156](./08-decision-log.md)). Since [ADR-170](./08-decision-log.md#adr-170--the-route-header-ships-one-enclosing-card-a-numbered-rail-and-an-island-for-the-collapse) the expanded card **encloses** the back control rather than sitting beside it — one `BackButton`, wearing a `flat` prop while it stands on the card's pane — and the collapsed state is a **centred island**, a separate element rather than the same one transitioned. The map is the screen; everything else floats over it. |
+
+**The three empty cells are not gaps to fill.** A collapse exists to keep a back control reachable while the
+title gets out of the way, so a root screen has nothing to collapse *for*. The one cell worth revisiting is
+root × map: `proposals/07`'s Home is a tab root **and** map-backed, and that is a deliberate widening of
+`map` rather than a fifth undeclared answer. ADR-170 sharpens what that widening has to answer: the route
+card's expanded first row **is** the back control's box, and Home has no back control to enclose — so Home
+either gives that row to its own content or encloses the Settings lens on the opposite edge.
+
+**A header carries no actions.** Back is not an action, it is how you leave. Anything else — a save, a
+filter, a share — belongs in the content or in a sheet, where it can be labelled and reached at any scroll
+offset. Route detail's facts strip is *inside* the context card rather than beside its title for this
+reason.
+
+**Scroll ownership is a separate axis, and writing this table down is what proved it.** The first draft made
+it a property of the kind — pushed screens scroll the page, map screens hand the gesture to a sheet — and
+Search disproves it: it is `pushed`, and it is viewport-height with an inner scroller, because the query
+field must not scroll away under a typing thumb and [ADR-109](./08-decision-log.md) restores that inner
+offset against the history key. So `SCROLL_OWNER` is its own declaration: `page` (the document scrolls),
+`inner` (a child scrolls), `sheet` (a child scrolls **and** the rider can drag it between detents).
+
+> ⚠️ **No suite in this repo can watch a header collapse.** jsdom has no `IntersectionObserver`. What
+> `apps/web/test/header-taxonomy.test.tsx` does check: that every destination declares a kind and a scroll
+> owner (and that nothing declares one for a destination that does not exist), that a back control is
+> present exactly where the kind says, and that each screen's root element matches its declared scroll
+> owner. The two **moving** titles carry `unenforced` in their own rule, and a test asserts that they still
+> say so — so the day someone teaches a suite to see a collapse, the wording has to be updated with it.
+
