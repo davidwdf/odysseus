@@ -456,6 +456,14 @@ instant swap; the rendered text stays exposed to screen readers.
 ---
 
 ## 8. Iconography & accessibility
+
+- **The direction-swap glyph is lucide's `git-compare-arrows` with square nodes**
+  ([ADR-167](./08-decision-log.md#adr-167--the-context-cards-collapse-animates-its-height-and-the-route-headers-open-questions-get-a-lab)).
+  A square is this app's terminus — the map marker, the schematic's node and the route header all draw one
+  from the same `routeMarkers` answer — and the nodes that control swaps *are* the two termini, so a pair
+  of circles was the last place an end of the line was round. lucide's arms are untouched; only the nodes
+  change, with round joins rather than the rail node's mitre, because every other arm in that drawing is
+  round-joined.
 - **Lucide** icons (consistent 24px line set; RN + Web). **No emoji as icons.** **Implemented**
   ([ADR-025](./08-decision-log.md#adr-025--iconography-lucide-via-an-icon-primitive-on-the-token-system)):
   `lucide-react-native` (+ SDK-pinned `react-native-svg`) behind one primitive, **`<Icon icon tone>`**

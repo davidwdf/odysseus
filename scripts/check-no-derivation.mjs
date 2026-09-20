@@ -114,7 +114,13 @@ const RULES = [
 /** Shapes that match a rule's regex but are not derivations. Each needs a reason, not a name. */
 const EXEMPT = [
   {
-    re: /\.length\s*[<>]=?\s*0|[<>]=?\s*0\b/,
+    // **`0` and not `0.something`.** This read `[<>]=?\s*0\b` and a word boundary sits between the `0`
+    // and the `.` of `0.01`, so every comparison against a small fraction was exempt as an "emptiness
+    // guard" — `useFlip`'s `Math.abs(scale - 1) < 0.01` passed the gate for that reason alone, and a
+    // literal threshold of `< 0.5` anywhere in a policed file would have too. Found while adding the
+    // sibling guard in `useHeightFlip`, which has no fraction in it and therefore fired: the same
+    // expression, caught or not according to a digit that had nothing to do with the rule.
+    re: /\.length\s*[<>]=?\s*0(?![.\d])|[<>]=?\s*0(?![.\d])\b/,
     why: 'a zero comparison is an emptiness guard ("is there anything to draw"), which is presentation',
   },
   {
@@ -258,6 +264,30 @@ const ALLOWLIST = [
       'of number in this file — what the sheet *offers* is `RouteStopSheet`’s two actions and ' +
       '`routeFactSheet`’s content, neither of which this container reads. The other site the hole was ' +
       'hiding, and it had been invisible since the day the component was written.',
+  },
+  {
+    file: 'apps/web/src/hooks/useFlip.ts',
+    rule: 'arithmetic',
+    snippet: 'Math.abs(',
+    why:
+      'The sub-pixel guard in both FLIP hooks: **a move or a resize smaller than a pixel is a reflow, not ' +
+      'a transition**, and animating it would be a flicker with a duration. Every number in the ' +
+      'expression is a measured `DOMRect` of an element that is already on the screen — a position, a ' +
+      'width, a height — which is the same kind of quantity `BottomSheet`’s scrim fraction is exempted ' +
+      'for. Nothing here reads a stop, an arrival or a fare; the hooks are handed a `key` and told *that ' +
+      'is the change worth showing*, and who decides the key is the caller. It was invisible to this gate ' +
+      'until the zero-guard above was tightened — `Math.abs(scale - 1) < 0.01` was exempt because `0.01` ' +
+      'starts with a zero.',
+  },
+  {
+    file: 'apps/web/src/hooks/useFlip.ts',
+    rule: 'threshold',
+    snippet: 'Math.abs(',
+    why:
+      'The same two lines under the other rule that fires on them. A threshold “belongs to the served ' +
+      '`ClientPolicy` or to a kernel rule” where it is a **domain** number — minutes, metres, rows. One ' +
+      'CSS pixel of travel is neither: it is the resolution of the thing being animated, and a renderer ' +
+      'that animated a half-pixel move would be showing motion that is not there.',
   },
   {
     file: 'apps/web/src/components/RouteKeypad.tsx',

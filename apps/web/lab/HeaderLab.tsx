@@ -86,7 +86,7 @@ export function HeaderLab() {
             swap={header.circular ? undefined : <SwapStub />}
           />
         </Frame>
-        <Frame id="S" caption="S — settled: enclosing card · compact island" lens={false}>
+        <Frame id="S" caption="S — settled: enclosing card · compact island" lens={collapsed}>
           <SettledHeader header={header} collapsed={collapsed} />
         </Frame>
       </div>
@@ -163,11 +163,16 @@ function Frame({
             <div key={top} className="absolute h-px w-full bg-border" style={{ top }} />
           ))}
         </div>
-        {lens ? (
-          <div className="absolute top-3 left-3 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface/70 text-text">
-            <ArrowLeft size={22} aria-hidden />
-          </div>
-        ) : null}
+        {/* The screen's own fixed back control. `lens` is its **material**, not its existence: on its
+            own over the map it is a glass lens; standing on the card's pane it is the same arrow at the
+            same coordinates with the glass taken off. One control either way. */}
+        <div
+          className={`absolute top-3 left-3 z-30 flex h-12 w-12 items-center justify-center rounded-full text-text ${
+            lens ? 'glass-pane border border-border' : ''
+          }`}
+        >
+          <ArrowLeft size={22} aria-hidden />
+        </div>
         {children}
       </div>
     </div>
@@ -245,8 +250,20 @@ function SwapStub({ shape }: { shape?: 'round' | 'square' }) {
  *   separately floating lens, and the badge is centred largely to push the destination clear of it — two
  *   glass objects overlapping, with the layout arranged around the overlap. One surface removes the
  *   problem instead of accommodating it: back at the left, badge centred, collapse at the right, all on
- *   one row of one pane. **The consequence to notice before shipping:** the screen's own `<BackButton />`
- *   must not draw while this is open, or there are two.
+ *   one row of one pane.
+ *
+ *   **There is exactly one back control, and it does not move.** The owner's reservation — *"two back
+ *   buttons sounds like asking for trouble; I'd almost rather keep it fixed in place"* — is the right
+ *   call, and it is answerable without giving up the enclosing card: the control stays the screen's own
+ *   fixed `<BackButton />` at its own coordinates, and what changes while the card is open is its
+ *   **material**. It drops its glass, its border and its shadow, because it is already standing on
+ *   glass; it keeps its position, its size, its behaviour and its label. So nothing is duplicated and
+ *   nothing can get out of step — there is one control, one navigation rule, one accessible name.
+ *
+ *   That imposes a geometry, and this card honours it: the card's first row is **48 px tall with no top
+ *   padding**, so the arrow's centre lands 24 px below the card's top edge — exactly where the fixed
+ *   lens's centre already is, since both start at the same `top`. The card is built around the control
+ *   rather than the control being moved into the card.
  * · **Collapsed, the badge is bigger** — `lg` rather than `md`. It is the only identity left on screen at
  *   that size, and the island's whole argument is that the number is the subject.
  * · **The island is compact**: `px-3 py-1` against the round-1 mockup's `px-4 pt-3.5 pb-2`, and the name
@@ -267,7 +284,10 @@ function SettledHeader({
 
   if (collapsed) {
     return (
-      <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex flex-col items-center">
+      <div
+        data-island
+        className="pointer-events-none absolute inset-x-0 top-3 z-20 flex flex-col items-center"
+      >
         <span className="relative z-10">
           <RouteChip
             operator={header.operator}
@@ -276,9 +296,11 @@ function SettledHeader({
             chipRef={badge}
           />
         </span>
-        {/* The lap is 10 px of a 34 px badge — enough that the two read as one object, shallow enough
-            that the name never has to make room for it. */}
-        <div className="-mt-2.5 glass-pane pointer-events-auto flex max-w-[calc(100%-96px)] items-center gap-1.5 rounded-pill border border-border px-3 pt-3 pb-1">
+        {/* The owner's numbers: a 6 px lap (`-mt-1.5`) and **equal padding top and bottom** (`py-2`).
+            Equal padding is the one that matters — the first draft padded the top to clear the badge and
+            left the bottom tight, so the name sat low in a pill that looked like it had slipped. A lap
+            shallow enough not to need the extra padding is what lets both sides be the same. */}
+        <div className="-mt-1.5 glass-pane pointer-events-auto flex max-w-[calc(100%-96px)] items-center gap-1.5 rounded-pill border border-border px-3 py-2">
           {header.circular ? (
             <RotateCw size={12} aria-hidden className="shrink-0 text-subtle" />
           ) : (
@@ -294,18 +316,13 @@ function SettledHeader({
     <div className="pointer-events-none absolute inset-x-3 top-3 z-20">
       <div
         ref={card}
-        className="glass-pane pointer-events-auto flex w-full flex-col gap-2 overflow-hidden rounded-sheet border border-border px-2 pt-2 pb-1"
+        className="glass-pane pointer-events-auto flex w-full flex-col gap-2 overflow-hidden rounded-sheet border border-border px-2 pt-0 pb-1"
       >
-        {/* One row, three things, one pane: the back control is *inside* the card now rather than a
-            second piece of glass on top of it. */}
-        <div className="flex w-full items-center gap-2">
-          <button
-            type="button"
-            aria-label="Back"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-text"
-          >
-            <ArrowLeft size={22} aria-hidden />
-          </button>
+        {/* One row, 48 px tall and unpadded at the top, so the screen's own fixed back control lands on
+            it exactly. The slot below is a **spacer**, not a second button: the real control is drawn by
+            the frame, at the coordinates it always uses. */}
+        <div className="flex h-12 w-full items-center gap-2">
+          <span aria-hidden className="h-12 w-12 shrink-0" />
           <span className="flex flex-1 justify-center">
             <RouteChip
               operator={header.operator}
@@ -317,7 +334,7 @@ function SettledHeader({
           <button
             type="button"
             aria-label="Hide route details"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-subtle"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-subtle"
           >
             <ChevronUp size={18} aria-hidden />
           </button>
@@ -378,6 +395,11 @@ const JOURNEYS: JourneyVariant[] = [
     note: 'Yours: the schematic in miniature — a square each end, the route line between, one double chevron.',
   },
   {
+    id: 'B2',
+    caption: 'B′ — the rail, at the schematic’s own scale',
+    note: 'B with the route’s proportions: 24 px numbered terminus nodes, a 4 px rail, the same double chevron — and both names at one size, the origin scaled down rather than set smaller.',
+  },
+  {
     id: 'C',
     caption: 'C — the journey as a bar',
     note: 'Mine: the rail laid horizontally, so both names get the card’s full width instead of sharing it.',
@@ -393,7 +415,7 @@ const JOURNEYS: JourneyVariant[] = [
  * Which block the settled card is drawn with, until the owner picks one. `B` — the two-terminus rail —
  * is a placeholder here, not a decision: section 2 is the decision.
  */
-const SETTLED_JOURNEY: JourneyVariant = { id: 'B', caption: '', note: '' }
+const SETTLED_JOURNEY: JourneyVariant = { id: 'B2', caption: '', note: '' }
 
 function JourneyTile({
   variant,
@@ -479,6 +501,36 @@ function JourneyBlock({
         <div className="flex min-w-0 flex-1 flex-col gap-2.5">
           {origin}
           {destination}
+        </div>
+      </div>
+    )
+  }
+
+  // B′ — B at the schematic's own proportions, with the termini carrying their sequence numbers.
+  //
+  // **Both names are the same size and weight here, and the origin is scaled rather than set smaller.**
+  // That is the owner's note and it is about the *flip*, not about this frame: `JourneyLines` animates a
+  // reversal by rising the old destination into the origin slot, and it already carries a `--jl-shrink`
+  // scale to do it. When the two slots are two different `font-size`s, that animation has to reconcile a
+  // scale with a size change, which is what makes it land with a jolt. One size, one weight, and a
+  // resting `scale(0.82)` on the origin means the rise is a pure interpolation of one property.
+  if (variant.id === 'B2') {
+    return (
+      <div className="flex min-w-0 items-start gap-2.5">
+        <SchematicRail circular={header.circular} fromSeq={FROM_SEQ} toSeq={TO_SEQ} />
+        <div className="flex min-w-0 flex-1 flex-col" style={{ gap: NODE_GAP }}>
+          <span
+            className="flex items-center text-h3 font-semibold text-muted"
+            style={{ height: NODE, transform: 'scale(0.82)', transformOrigin: 'left center' }}
+          >
+            <span className="truncate">{header.origin}</span>
+          </span>
+          <span
+            className="flex items-center text-h3 font-semibold text-text"
+            style={{ height: NODE }}
+          >
+            <span className="truncate">{header.destination}</span>
+          </span>
         </div>
       </div>
     )
@@ -641,6 +693,103 @@ function MiniRail({ circular }: { circular: boolean }) {
         strokeWidth={1.5}
       />
     </svg>
+  )
+}
+
+/**
+ * B′'s rail — **the schematic's own three marks, at the schematic's own proportions**: a 24 px terminus
+ * square carrying its sequence number at each end, a 4 px `route-soft` line between them, and one double
+ * chevron at its midpoint.
+ *
+ * Every number here is `RouteStopRow`'s, scaled by nothing: the node's 1.5 px stroke (a hairline on
+ * purpose — *"a node is a shape and the line is a stroke"*, ADR-163), the numeral in `route` on a
+ * `surface` fill, and the chevron's apexes 5.3 apart for a 2 px stroke, which is the ratio that keeps the
+ * pair reading as `> >` rather than `>>`.
+ *
+ * **What the numbers buy.** A rider tapping the header's destination and then scrolling the list meets the
+ * same square with the same figure in it. That is the ADR-162 argument for the focused marker's numeral,
+ * one screen further up.
+ *
+ * The chevron is drawn **on** the line rather than cut out of it: the schematic paints its notch in the
+ * row's own background colour, and this line is on glass, which has none.
+ */
+function SchematicRail({
+  circular,
+  fromSeq,
+  toSeq,
+}: {
+  circular: boolean
+  fromSeq: number
+  toSeq: number
+}) {
+  if (circular) {
+    return (
+      <span
+        className="flex shrink-0 items-center justify-center"
+        style={{ width: NODE, height: RAIL2_H }}
+      >
+        <RotateCw size={18} aria-hidden className="text-route" />
+      </span>
+    )
+  }
+  return (
+    <svg
+      width={NODE}
+      height={RAIL2_H}
+      viewBox={`0 0 ${NODE} ${RAIL2_H}`}
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <path
+        d={`M${NODE / 2} ${NODE / 2} V${RAIL2_H - NODE / 2}`}
+        className="stroke-route-soft"
+        strokeWidth={4}
+        fill="none"
+      />
+      <g
+        className="stroke-route"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      >
+        <path
+          d={`M${NODE / 2 - 2.8} ${RAIL2_H / 2 - 4.2} ${NODE / 2} ${RAIL2_H / 2 - 1.4} ${NODE / 2 + 2.8} ${RAIL2_H / 2 - 4.2}`}
+        />
+        <path
+          d={`M${NODE / 2 - 2.8} ${RAIL2_H / 2 + 1.1} ${NODE / 2} ${RAIL2_H / 2 + 3.9} ${NODE / 2 + 2.8} ${RAIL2_H / 2 + 1.1}`}
+        />
+      </g>
+      <SeqNode y={0} seq={fromSeq} />
+      <SeqNode y={RAIL2_H - NODE} seq={toSeq} />
+    </svg>
+  )
+}
+
+/** One terminus: the square, and the figure the list prints in it. */
+function SeqNode({ y, seq }: { y: number; seq: number }) {
+  return (
+    <>
+      <rect
+        x={0.75}
+        y={y + 0.75}
+        width={NODE - 1.5}
+        height={NODE - 1.5}
+        className="fill-surface stroke-route"
+        strokeWidth={1.5}
+      />
+      <text
+        x={NODE / 2}
+        y={y + NODE / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={500}
+        className="fill-route"
+      >
+        {seq}
+      </text>
+    </>
   )
 }
 
@@ -807,3 +956,17 @@ const RAIL_TOP = ORIGIN_LINE_H / 2
 const RAIL_BOTTOM = ORIGIN_LINE_H + B_LEADING + DEST_LINE_H / 2
 const RAIL_MID = (RAIL_TOP + RAIL_BOTTOM) / 2
 const RAIL_H = ORIGIN_LINE_H + B_LEADING + DEST_LINE_H
+
+/**
+ * B′'s geometry. The node is the schematic's square at header scale, and the gap between the two rows is
+ * what the chevron needs: at 14 the glyph filled the whole gap and the rail vanished behind it, so it is
+ * 18 — enough that a length of line reads above and below the mark, which is what makes it *a line with a
+ * chevron on it* rather than a chevron between two squares.
+ */
+const NODE = 24
+const NODE_GAP = 18
+const RAIL2_H = NODE * 2 + NODE_GAP
+
+/** The lab's route has 34 stops, so its termini are 1 and 34 — the figures the list would print. */
+const FROM_SEQ = 1
+const TO_SEQ = 34

@@ -261,6 +261,28 @@ export function RouteMap({
    */
   const markers = useMemo(() => routeMarkers(stops, drawn), [stops, drawn])
 
+  /**
+   * **Which markers stand at the same place.** On a circular route the first and last stop are one pole —
+   * KMB 284's sequence opens and closes on `6FE6F7EBD604054A` — so `routeMarkers` returns two termini at
+   * one coordinate, deliberately (`route-markers.spec.json`,
+   * *a-circular-route-marks-both-ends-at-one-place*): the rail needs a node for each row, and the pair
+   * being co-located is a fact about the route.
+   *
+   * Two glyphs at one point is a fact the *map* then has to render, and drawing both is what the owner
+   * saw: tapping the first stop scaled it to 2.1× around its unscaled twin — **a square inside a
+   * square** — with the twin's blank face over the numeral that had just faded in. The rule here is the
+   * one a rider would state: *one glyph per place, and when the rider is looking at one of a pair, it is
+   * that one.* So the numeral on screen is always the row that is highlighted in the list, which is the
+   * whole reason ADR-162 put a numeral on the focused marker.
+   *
+   * Grouping by the **anchor** rather than by a stop id, because the anchor is what decides whether two
+   * glyphs overlap: these coordinates are the kernel's projections onto the line, and two poles that
+   * project to the same point would stack just as badly as one pole listed twice.
+   */
+  const placeGroups = useMemo(() => groupByPlace(markers), [markers])
+  const placeGroupsRef = useRef(placeGroups)
+  placeGroupsRef.current = placeGroups
+
   // The line's extent and its middle, from the kernel. Both are *numbers a renderer would otherwise
   // compute*, which is the thing two renderers do differently (ADR-068) — so `boundsOf`/`centreOf`
   // are corpus-pinned in `@nextbus/core` and this only translates the result into MapLibre's
@@ -490,6 +512,7 @@ export function RouteMap({
     for (const [index, el] of markerElements.current.entries()) {
       setMarkerSelected(el, index === focusedRef.current)
     }
+    showOnePerPlace(placeGroupsRef.current, markerElements.current, focusedRef.current)
     return () => {
       for (const m of placed) m.remove()
       markerElements.current = []
@@ -507,6 +530,10 @@ export function RouteMap({
     for (const [index, el] of markerElements.current.entries()) {
       setMarkerSelected(el, index === focusedIndex)
     }
+    // Co-located markers swap which of them is the visible one as the focus moves between them — see
+    // `placeGroups`. Read through a ref for this effect's own reason: it must not re-run when the
+    // markers change, because placement already applies both of these at the end.
+    showOnePerPlace(placeGroupsRef.current, markerElements.current, focusedIndex)
   }, [focusedIndex])
 
   /**
@@ -663,3 +690,49 @@ export function RouteMap({
     </figure>
   )
 }
+
+/**
+ * The markers standing at each place, as lists of marker indices in sequence order.
+ *
+ * Keyed on the anchor rounded to six decimal places — about 10 cm, which is far below the width of a
+ * glyph and far above the floating-point noise two projections of the same coordinate can differ by.
+ * Nothing here decides what a rider *sees*: it answers "which of these would overlap", and
+ * `showOnePerPlace` decides the rest.
+ */
+function groupByPlace(markers: readonly { index: number; at: LatLng }[]): number[][] {
+  const byPlace = new Map<string, number[]>()
+  for (const marker of markers) {
+    const key = `${marker.at.lat.toFixed(PLACE_DP)},${marker.at.lng.toFixed(PLACE_DP)}`
+    const group = byPlace.get(key)
+    if (group === undefined) byPlace.set(key, [marker.index])
+    else group.push(marker.index)
+  }
+  return [...byPlace.values()]
+}
+
+/**
+ * **One glyph per place, and the rider's own is the one that shows.**
+ *
+ * A group with a single member is the ordinary case and this shows it, which is why there is no test for
+ * the group's size: the rule reads the same for one marker as for two.
+ *
+ * `display` rather than `visibility` or an opacity, because a hidden twin must leave the accessibility
+ * tree too — it is the same pole announced twice, and a screen reader offering both would be the audible
+ * version of the square inside a square.
+ */
+function showOnePerPlace(
+  groups: readonly number[][],
+  elements: readonly HTMLElement[],
+  focused: number | undefined,
+): void {
+  for (const group of groups) {
+    const shown = focused !== undefined && group.includes(focused) ? focused : group[0]
+    for (const index of group) {
+      const element = elements[index]
+      if (element !== undefined) element.style.display = index === shown ? '' : 'none'
+    }
+  }
+}
+
+/** Six decimal places of a degree — about 10 cm at this latitude. */
+const PLACE_DP = 6
