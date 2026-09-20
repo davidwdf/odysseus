@@ -19,6 +19,7 @@ import { useAppearance } from '../lib/appearance'
 import { useLocale } from '../providers/LocaleProvider'
 import { MapControls } from './MapControls'
 import { MapView } from './MapView'
+import { cameraPadding } from './mapCamera'
 import { riderMarkElement } from './riderMarkElement'
 import { routeChevronImage } from './routeChevronImage'
 import { routeMarkerElement, setMarkerSelected } from './routeMarkerElement'
@@ -44,29 +45,6 @@ const CHEVRON_IMAGE = 'route-chevron'
  * current along the line rather than a row of arrows.
  */
 const CHEVRON_SPACING = 60
-
-/**
- * The camera's padding, in pixels, from the fractions of the map that something else is covering.
- *
- * A base inset on every side so a route never runs to the very edge, plus whatever the sheet and the
- * floating chrome are hiding. MapLibre applies this to `fitBounds` and `flyTo` alike, which is what
- * makes "centred" mean centred in the part a rider can actually see.
- */
-function cameraPadding(
-  map: MapLibreMap,
-  inset: { top?: number; bottom?: number } | undefined,
-): { top: number; bottom: number; left: number; right: number } {
-  const height = map.getContainer().clientHeight
-  return {
-    top: EDGE_PADDING + (inset?.top ?? 0) * height,
-    bottom: EDGE_PADDING + (inset?.bottom ?? 0) * height,
-    left: EDGE_PADDING,
-    right: EDGE_PADDING,
-  }
-}
-
-/** Breathing room on every side, so a terminus marker is never half off the screen. */
-const EDGE_PADDING = 28
 
 /**
  * **The map fills whatever it is given.** It was a fixed 220 px strip until the shell landed

@@ -31,6 +31,10 @@
 "homeMoreLines" = "+%1$@";
 "homeFewerLines" = "Show fewer routes";
 "homeNothingSavedYet" = "Save a route and it will lead this screen.";
+/* {place} → %1$@ */
+"homeNear" = "Near %1$@";
+"homeHereNow" = "Updated just now";
+"homeRecentre" = "Centre on my location";
 "homeNoPosition" = "Showing your saved stops. Turn on location to see what is around you.";
 "noService" = "No scheduled service";
 /* {s} → %1$@ */

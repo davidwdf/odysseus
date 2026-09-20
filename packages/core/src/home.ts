@@ -3,6 +3,7 @@ import { haversineMeters, walkMinutes } from './geo'
 import { parseRouteId } from './ids'
 import {
   displayName,
+  type StopCardName,
   type StopCardOptions,
   type StopCardRow,
   type StopCardView,
@@ -81,6 +82,15 @@ export interface HomeChip {
 export interface HomeCard extends StopCardView {
   rows: StopCardRow[]
   /**
+   * Where the place is — so the board and the map draw the same set.
+   *
+   * `StopCardView` has never carried it because no screen that renders one needed it; Home does, and
+   * building the pins from the *cards* rather than from the raw payloads is what stops the map and the
+   * list disagreeing about which places exist. The route screen makes the same argument about its
+   * markers: a hexagon on the map and a circle in the list are two claims about one stop.
+   */
+  location: LatLng
+  /**
    * The other routes at this place that the card **draws**, in the wire's order, with no readings —
    * capped at {@link HOME_CHIPS_COLLAPSED}.
    *
@@ -107,6 +117,23 @@ export interface HomeCard extends StopCardView {
 
 /** The three sections, in board order. Each may be empty; all three empty is a screen with no data. */
 export interface HomeSections {
+  /**
+   * **What the board is anchored on** — the name of the nearest place, for the chrome to say where the
+   * rider is.
+   *
+   * A field rather than something a renderer reads off `nearby[0]`, and the difference is the rule: *the
+   * nearest* is an ordering decision, `homeView` is what made it, and a view indexing into a sorted list
+   * to recover it would be selecting a row — which `check-no-derivation` bans and which would quietly
+   * disagree the day the order changed.
+   *
+   * Absent without a position, and absent with a position but nothing around it. Both are honest: a card
+   * that named a place we had not measured to would be claiming a fix we do not have.
+   *
+   * 🟡 **A stop name, not a locality.** *"Near Pak Hoi Street"* is the most this can say today, because
+   * nothing in the app reverse-geocodes. LandsD publishes a gazetteer and the honest upgrade is to use
+   * it — *"Yau Ma Tei"* is what a rider would say — which is filed rather than guessed at here.
+   */
+  anchor?: StopCardName
   /** Saved, and still catchable. Empty without a position — see {@link CatchBand}. */
   catch: HomeCard[]
   /** The rest of the rider's list, at any distance, soonest first. */
@@ -190,6 +217,9 @@ export function homeView(input: HomeInput, opts: StopCardOptions): HomeSections 
   const rest = savedCards.filter((c) => !c.rows.some((r) => r.catch !== undefined))
 
   return {
+    // The nearest place, read off the list this function has just ordered — so the chrome and the board
+    // cannot disagree about which one it is.
+    ...(nearbyCards[0] === undefined ? {} : { anchor: nearbyCards[0].name }),
     catch: [...catchCards].sort(compareBySoonest),
     saved: [...rest].sort(compareBySoonest),
     nearby: nearbyCards,
@@ -213,6 +243,7 @@ function savedCard(
 
   return {
     stopId: detail.stop.id,
+    location: detail.stop.location,
     name: displayName(detail.stop.name[opts.locale]),
     caption: stopCardCaption(distanceM, detail.stop.bearingDeg, opts.locale),
     ...(detail.stop.bearingDeg === undefined ? {} : { bearingDeg: detail.stop.bearingDeg }),
@@ -249,6 +280,7 @@ function nearbyCard(n: BoardPlace, opts: StopCardOptions): HomeCard {
   const all = chipsOf(n.lines ?? n.etas, NOTHING_EXCLUDED)
   return {
     stopId: n.stop.id,
+    location: n.stop.location,
     name: displayName(n.stop.name[opts.locale]),
     caption: stopCardCaption(n.distanceM, n.stop.bearingDeg, opts.locale),
     ...(n.stop.bearingDeg === undefined ? {} : { bearingDeg: n.stop.bearingDeg }),

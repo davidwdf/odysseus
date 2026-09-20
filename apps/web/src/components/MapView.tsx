@@ -144,54 +144,79 @@ export function MapView({
     // one. Guarded on `invertForDark` exactly as the effect is, so the two agree by construction.
     const initialPaint = provider.invertForDark && mode === 'dark' ? DARK_RASTER : LIGHT_RASTER
 
-    const map = new MapLibreMap({
-      container: host,
-      center: [centre.lng, centre.lat],
-      zoom,
-      minZoom: provider.minZoom,
-      maxZoom: provider.maxZoom,
-      interactive,
-      attributionControl: false, // ours is a required, licence-bearing control — see below
-      style: {
-        version: 8,
-        sources: {
-          base: {
-            type: 'raster',
-            tiles: [provider.basemap(0, 0, 0).replace(/\/0\/0\/0\.png$/, '/{z}/{x}/{y}.png')],
-            tileSize: baseTileSize,
-            minzoom: provider.minZoom,
-            maxzoom: provider.maxZoom,
-            attribution: provider.attribution.notice[locale],
+    /**
+     * **A map that cannot start must not take the screen with it.**
+     *
+     * MapLibre throws `GPUInitializationError` when there is no WebGL2 — an old browser, a
+     * hardware-blocklisted GPU, a machine with acceleration switched off, and every jsdom suite in this
+     * repo. The throw happens inside this effect, so React re-throws it and **the whole screen unmounts**:
+     * a rider on such a browser would lose the stop list, the arrival times and the back control, not
+     * merely the basemap. Every one of those still works without a map.
+     *
+     * So the failure is caught and the host stays empty. Nothing downstream needs a guard, because
+     * everything else here and in both map components is already conditional on the instance existing —
+     * `onReady` never fires, so no markers, no camera, no layers are ever asked for.
+     *
+     * Logged at `warn` rather than `error`: it is a capability the browser does not have, not a defect
+     * in the app, and a suite that treats `console.error` as a failure would go red for an environment
+     * doing exactly what it says on the tin.
+     */
+    let map: MapLibreMap
+    try {
+      map = new MapLibreMap({
+        container: host,
+        center: [centre.lng, centre.lat],
+        zoom,
+        minZoom: provider.minZoom,
+        maxZoom: provider.maxZoom,
+        interactive,
+        attributionControl: false, // ours is a required, licence-bearing control — see below
+        style: {
+          version: 8,
+          sources: {
+            base: {
+              type: 'raster',
+              tiles: [provider.basemap(0, 0, 0).replace(/\/0\/0\/0\.png$/, '/{z}/{x}/{y}.png')],
+              tileSize: baseTileSize,
+              minzoom: provider.minZoom,
+              maxzoom: provider.maxZoom,
+              attribution: provider.attribution.notice[locale],
+            },
+            ...(provider.label
+              ? {
+                  labels: {
+                    type: 'raster' as const,
+                    tiles: [
+                      provider
+                        .label(0, 0, 0, locale)
+                        .replace(/\/0\/0\/0\.png$/, '/{z}/{x}/{y}.png'),
+                    ],
+                    tileSize: provider.tileSize,
+                    minzoom: provider.minZoom,
+                    maxzoom: provider.maxZoom,
+                  },
+                }
+              : {}),
           },
-          ...(provider.label
-            ? {
-                labels: {
-                  type: 'raster' as const,
-                  tiles: [
-                    provider.label(0, 0, 0, locale).replace(/\/0\/0\/0\.png$/, '/{z}/{x}/{y}.png'),
-                  ],
-                  tileSize: provider.tileSize,
-                  minzoom: provider.minZoom,
-                  maxzoom: provider.maxZoom,
-                },
-              }
-            : {}),
+          layers: [
+            { id: 'base', type: 'raster', source: 'base', paint: { ...initialPaint } },
+            ...(provider.label
+              ? [
+                  {
+                    id: 'labels',
+                    type: 'raster' as const,
+                    source: 'labels',
+                    paint: { ...initialPaint },
+                  },
+                ]
+              : []),
+          ],
         },
-        layers: [
-          { id: 'base', type: 'raster', source: 'base', paint: { ...initialPaint } },
-          ...(provider.label
-            ? [
-                {
-                  id: 'labels',
-                  type: 'raster' as const,
-                  source: 'labels',
-                  paint: { ...initialPaint },
-                },
-              ]
-            : []),
-        ],
-      },
-    })
+      })
+    } catch (err) {
+      console.warn('[MapView] no map on this device:', (err as Error).message)
+      return
+    }
 
     mapRef.current = map
     // MapLibre reports a bad style, an unreachable tile host and a failed source through ONE `error`
@@ -203,7 +228,16 @@ export function MapView({
     })
     map.on('load', () => onReady?.(map))
     return () => {
-      map.remove()
+      // **Guarded for the same reason the construction is.** A map whose painter never initialised — no
+      // WebGL2 — can still reach this path when the failure arrives after the constructor returned, and
+      // `remove()` then dies reaching for a context that was never made. An unmount that throws takes
+      // the screen down on the way *out*, which is the same defect as the one above wearing a different
+      // hat: a rider who cannot have a map must still be able to leave the screen.
+      try {
+        map.remove()
+      } catch (err) {
+        console.warn('[MapView] could not tear the map down:', (err as Error).message)
+      }
       mapRef.current = null
     }
   }, [provider, interactive, locale])

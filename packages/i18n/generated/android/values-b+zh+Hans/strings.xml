@@ -31,6 +31,10 @@
 	<string name="homeMoreLines">+%1$s</string>
 	<string name="homeFewerLines">显示较少路线</string>
 	<string name="homeNothingSavedYet">收藏路线后，它会显示在此页最前。</string>
+	<!-- {place} → %1$s -->
+	<string name="homeNear">%1$s附近</string>
+	<string name="homeHereNow">刚刚更新</string>
+	<string name="homeRecentre">定位到我的位置</string>
 	<string name="homeNoPosition">显示你收藏的车站。开启定位即可查看附近。</string>
 	<string name="noService">暂无班次</string>
 	<!-- {s} → %1$s -->

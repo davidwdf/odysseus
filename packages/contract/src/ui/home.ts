@@ -87,11 +87,39 @@ export const HOME_SPEC: ComponentSpec = {
   // property of the state, which is the point: a section that is absent is absent because there is
   // nothing in it, never because the screen could not find out.
   slots: [
+    /**
+     * **Where you are** — the floating card, before the board (`proposals/07` Q4, option A).
+     *
+     * A top-level slot rather than one repeated per state, because it is chrome: it is present in every
+     * state that has a position and absent in every state that does not, which is exactly what `when`
+     * is for. It is declared *before* the title because that is the order the DOM has it — the card
+     * floats over the map and the sheet's heading is inside the sheet.
+     */
+    {
+      name: 'hereAnchor',
+      when: 'here.near',
+      why: 'No position, or a position with nothing around it. A card naming a place we had not measured to would be claiming a fix we do not have.',
+      text: { field: 'here.near' },
+      invariant:
+        'Composed by the renderer from the catalogue’s `homeNear` and the kernel’s `anchor` — "Near Pak Hoi Street", never a bare stop name. The preposition is the honesty: nothing in the app reverse-geocodes, so the card names the nearest *stop* and must not read as "you are at this stop".',
+    },
+    {
+      name: 'hereFreshness',
+      when: 'here',
+      why: 'Only with a position — there is nothing to be fresh or stale about otherwise.',
+      oneOf: 'here.freshness',
+      cases: {
+        live: [{ name: 'hereNow', text: { message: 'homeHereNow' } }],
+        remembered: [{ name: 'hereRemembered', text: { message: 'lastKnownLocation' } }],
+      },
+      invariant:
+        'ADR-008’s honesty rule applies to the rider’s POSITION, not only to the arrival times — and on this screen it governs the ranking as well, because "saved outranks near" is measured from it. Said here and nowhere else: the card is the one thing on screen that is about the anchor.',
+    },
     {
       name: 'title',
       text: { message: 'homeTitle' },
       invariant:
-        'Present in every state, including the empty one. A screen that has lost its heading has lost the rider’s place in the app.',
+        'Present in every state, including the empty one. A screen that has lost its heading has lost the rider’s place in the app. Since ADR-183 it is the sheet’s own `sr-only` heading rather than a drawn `<h1>`: the card carries the visible identity, and a map-backed screen’s title taking 40 px off the board to repeat the app’s name is a poor trade.',
     },
   ],
 
@@ -249,12 +277,11 @@ export const HOME_SPEC: ComponentSpec = {
     },
 
     stale: {
-      must: 'The board, under a line saying the position is the last known one.',
+      must: 'The board, with the floating card saying the position is the last known one.',
       mustNot: 'A remembered position presented as a current one.',
       why: 'ADR-008’s honesty rule applies to the rider’s *position*, not only to the arrival times — and on this screen it also governs the ranking, because "saved outranks near" is measured from that position.',
       enforcement: {
         shows: [
-          { name: 'staleNote', text: { message: 'lastKnownLocation' } },
           FEED_NOTICE,
           { name: 'savedHeading', text: { message: 'homeSaved' } },
           cardsOf('saved'),

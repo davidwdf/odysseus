@@ -212,6 +212,25 @@ export const CATALOGUE = {
    * The office case (`proposals/07 §0`): a rider checking a stop they are deliberately not at. The
    * screen is not broken and must not apologise — it simply cannot rank by distance, and says so.
    */
+  /** The card's anchor line — a *stop* name, so the preposition is what keeps it honest. */
+  homeNear: {
+    en: 'Near {place}',
+    'zh-Hant': '{place}附近',
+    'zh-Hans': '{place}附近',
+  },
+  /** The card's freshness line when the fix is current. Deliberately not a timestamp: the position is
+   *  what is fresh, and a clock reading would invite the per-second reading ADR-008 bans. */
+  homeHereNow: {
+    en: 'Updated just now',
+    'zh-Hant': '剛剛更新',
+    'zh-Hans': '刚刚更新',
+  },
+  /** Re-anchors the board and the camera on the rider. Icon-only; this is its accessible name. */
+  homeRecentre: {
+    en: 'Centre on my location',
+    'zh-Hant': '定位到我的位置',
+    'zh-Hans': '定位到我的位置',
+  },
   homeNoPosition: {
     en: 'Showing your saved stops. Turn on location to see what is around you.',
     'zh-Hant': '顯示你收藏的車站。開啟定位即可查看附近。',

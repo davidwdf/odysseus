@@ -31,6 +31,10 @@
 "homeMoreLines" = "+%1$@";
 "homeFewerLines" = "显示较少路线";
 "homeNothingSavedYet" = "收藏路线后，它会显示在此页最前。";
+/* {place} → %1$@ */
+"homeNear" = "%1$@附近";
+"homeHereNow" = "刚刚更新";
+"homeRecentre" = "定位到我的位置";
 "homeNoPosition" = "显示你收藏的车站。开启定位即可查看附近。";
 "noService" = "暂无班次";
 /* {s} → %1$@ */

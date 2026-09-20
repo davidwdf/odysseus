@@ -178,6 +178,15 @@ function setOnline(online: boolean): void {
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
 }
 
+/**
+ * The card, in the three states driven by hand rather than from a corpus row.
+ *
+ * All three have a position — a wait, a failure and an empty radius are things that happen *after* a
+ * fix — so the card draws, with no anchor (nothing has been found around the rider yet) and a live
+ * reading. Stated once so the three cannot drift apart.
+ */
+const HERE_LIVE = { here: { freshness: 'live' as const } }
+
 const READY = (at: { lat: number; lng: number }): LocationState => ({
   status: 'ready',
   lat: at.lat,
@@ -185,7 +194,12 @@ const READY = (at: { lat: number; lng: number }): LocationState => ({
 })
 
 /** The view the screen must end up drawing, built from the same kernel call the screen makes. */
-function expectedView(c: CorpusCase, now: number, online: boolean) {
+function expectedView(
+  c: CorpusCase,
+  now: number,
+  online: boolean,
+  { at, stale }: { at: boolean; stale: boolean },
+) {
   const places = fromCorpus<StopDetail[]>(c.args.places)
   const nearby = fromCorpus<BoardPlace[]>(c.args.nearby)
   const sections = homeView(
@@ -195,6 +209,20 @@ function expectedView(c: CorpusCase, now: number, online: boolean) {
   const a = newestNearbyBoard(nearby)
   const b = newestPlaceBoard(places)
   return {
+    /**
+     * What the floating card draws (ADR-183), which the kernel does not decide on its own: the anchor
+     * is `homeView`'s, the *composition* into "Near X" is the renderer's, and whether the fix is live
+     * or remembered is the location seam's. Supplied here for the same reason `notice` is — the walker
+     * measures what the screen draws, and some of that is joined above the kernel.
+     */
+    ...(!at
+      ? {}
+      : {
+          here: {
+            ...(sections.anchor ? { near: `Near ${sections.anchor.label}` } : {}),
+            freshness: stale ? 'remembered' : 'live',
+          },
+        }),
     // The three sections, separately — the spec declares a heading immediately before *its own* board,
     // which is the shape of the screen. A flattened `cards` made the walker expect one list under two
     // headings and report the first place name where the second heading should be.
@@ -231,7 +259,7 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     usePreferences.setState({ favoriteRoutes: [...c.args.saved] })
     board = () => new Promise<BoardPlace[]>(() => {})
     stop = () => new Promise<StopDetail>(() => {})
-    return { view: {}, tree: mount() }
+    return { view: HERE_LIVE, tree: mount() }
   }
   if (state === 'failed') {
     const c = caseNamed(FIXTURE.content as string)
@@ -239,7 +267,7 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     locationState = READY(c.args.at as { lat: number; lng: number })
     usePreferences.setState({ favoriteRoutes: [] })
     board = () => Promise.reject(new Error(FETCH_FAILURE))
-    return { view: { error: FETCH_FAILURE }, tree: await mountSettled() }
+    return { view: { ...HERE_LIVE, error: FETCH_FAILURE }, tree: await mountSettled() }
   }
   if (state === 'empty') {
     // A fix, nothing saved, and nothing within the radius. No boards at all, so the notice is silent —
@@ -251,6 +279,7 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
     board = () => Promise.resolve([])
     return {
       view: {
+        ...HERE_LIVE,
         cards: [],
         notice: feedNotice({
           lastUpdatedIso: null,
@@ -295,7 +324,10 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
   // id to its place, which is the shape the corpus records.
   stop = () => (places[0] ? Promise.resolve(places[0]) : Promise.reject(new Error('no place')))
 
-  return { view: expectedView(c, now, online), tree: await mountSettled() }
+  return {
+    view: expectedView(c, now, online, { at: c.args.at !== undefined, stale: state === 'stale' }),
+    tree: await mountSettled(),
+  }
 }
 
 beforeEach(() => {

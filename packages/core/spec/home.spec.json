@@ -831,11 +831,18 @@
             }
           },
           "expect": {
+            "anchor": {
+              "label": "Belair Garden, Tai Chung Kiu Road"
+            },
             "catch": [],
             "saved": [],
             "nearby": [
               {
                 "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
                 "name": {
                   "label": "Belair Garden, Tai Chung Kiu Road"
                 },
@@ -917,6 +924,10 @@
               },
               {
                 "stopId": "P:CTB:001968+KMB:179D40F1BB78ACDC+KMB:A67E402790581309+KMB:C0D515CA78A56B65",
+                "location": {
+                  "lat": 22.385022499999998,
+                  "lng": 114.1981075
+                },
                 "name": {
                   "label": "Belair Garden, Tai Chung Kiu Road"
                 },
@@ -998,6 +1009,10 @@
               },
               {
                 "stopId": "GMB:20001557",
+                "location": {
+                  "lat": 22.38507,
+                  "lng": 114.19813
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, opposite Belair Gardens"
                 },
@@ -1037,6 +1052,10 @@
               },
               {
                 "stopId": "GMB:20001553",
+                "location": {
+                  "lat": 22.38497,
+                  "lng": 114.19844
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, outside Belair Gardens"
                 },
@@ -1188,6 +1207,10 @@
             "saved": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -2148,10 +2171,17 @@
             }
           },
           "expect": {
+            "anchor": {
+              "label": "Belair Garden, Tai Chung Kiu Road"
+            },
             "catch": [],
             "saved": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -2208,6 +2238,10 @@
             "nearby": [
               {
                 "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
                 "name": {
                   "label": "Belair Garden, Tai Chung Kiu Road"
                 },
@@ -2289,6 +2323,10 @@
               },
               {
                 "stopId": "P:CTB:001968+KMB:179D40F1BB78ACDC+KMB:A67E402790581309+KMB:C0D515CA78A56B65",
+                "location": {
+                  "lat": 22.385022499999998,
+                  "lng": 114.1981075
+                },
                 "name": {
                   "label": "Belair Garden, Tai Chung Kiu Road"
                 },
@@ -2370,6 +2408,10 @@
               },
               {
                 "stopId": "GMB:20001557",
+                "location": {
+                  "lat": 22.38507,
+                  "lng": 114.19813
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, opposite Belair Gardens"
                 },
@@ -2409,6 +2451,10 @@
               },
               {
                 "stopId": "GMB:20001553",
+                "location": {
+                  "lat": 22.38497,
+                  "lng": 114.19844
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, outside Belair Gardens"
                 },
@@ -2616,6 +2662,10 @@
             "catch": [
               {
                 "stopId": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                "location": {
+                  "lat": 22.454496666666667,
+                  "lng": 114.00296333333334
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -3589,9 +3639,16 @@
             }
           },
           "expect": {
+            "anchor": {
+              "label": "Belair Garden, Tai Chung Kiu Road"
+            },
             "catch": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -3651,6 +3708,10 @@
             "nearby": [
               {
                 "stopId": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                "location": {
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                },
                 "name": {
                   "label": "Belair Garden, Tai Chung Kiu Road"
                 },
@@ -3732,6 +3793,10 @@
               },
               {
                 "stopId": "P:CTB:001968+KMB:179D40F1BB78ACDC+KMB:A67E402790581309+KMB:C0D515CA78A56B65",
+                "location": {
+                  "lat": 22.385022499999998,
+                  "lng": 114.1981075
+                },
                 "name": {
                   "label": "Belair Garden, Tai Chung Kiu Road"
                 },
@@ -3813,6 +3878,10 @@
               },
               {
                 "stopId": "GMB:20001557",
+                "location": {
+                  "lat": 22.38507,
+                  "lng": 114.19813
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, opposite Belair Gardens"
                 },
@@ -3852,6 +3921,10 @@
               },
               {
                 "stopId": "GMB:20001553",
+                "location": {
+                  "lat": 22.38497,
+                  "lng": 114.19844
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, outside Belair Gardens"
                 },
@@ -4023,11 +4096,18 @@
             }
           },
           "expect": {
+            "anchor": {
+              "label": "Tai Chung Kiu Road, outside Belair Gardens"
+            },
             "catch": [],
             "saved": [],
             "nearby": [
               {
                 "stopId": "GMB:20001553",
+                "location": {
+                  "lat": 22.38497,
+                  "lng": 114.19844
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, outside Belair Gardens"
                 },
@@ -4178,6 +4258,10 @@
             "catch": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -4335,6 +4419,10 @@
             "catch": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -4509,6 +4597,10 @@
             "saved": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -4773,6 +4865,10 @@
             "catch": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -4829,6 +4925,10 @@
               },
               {
                 "stopId": "P:KMB:B0B0B0B0B0B0B0B0",
+                "location": {
+                  "lat": 22.4626,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road North"
                 },
@@ -5096,6 +5196,10 @@
             "catch": [
               {
                 "stopId": "P:KMB:B0B0B0B0B0B0B0B0",
+                "location": {
+                  "lat": 22.4626,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road North"
                 },
@@ -5151,6 +5255,10 @@
               },
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -5485,6 +5593,10 @@
             "catch": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -5543,6 +5655,10 @@
             "saved": [
               {
                 "stopId": "P:KMB:CCCCCCCCCCCCCCCC",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road Timetabled"
                 },
@@ -5596,6 +5712,10 @@
               },
               {
                 "stopId": "P:KMB:DDDDDDDDDDDDDDDD",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road Silent"
                 },
@@ -5759,6 +5879,10 @@
             "saved": [
               {
                 "stopId": "P:KMB:775642281FBFE336",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -6417,6 +6541,10 @@
             "catch": [
               {
                 "stopId": "P:CTB:001992+KMB:775642281FBFE336+KMB:AFB9321F7CD2C2E4+KMB:DC5B5F4350685442",
+                "location": {
+                  "lat": 22.454496666666667,
+                  "lng": 114.00296333333334
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road"
                 },
@@ -6613,11 +6741,18 @@
             }
           },
           "expect": {
+            "anchor": {
+              "label": "Tai Chung Kiu Road, outside Belair Gardens"
+            },
             "catch": [],
             "saved": [],
             "nearby": [
               {
                 "stopId": "GMB:20001553",
+                "location": {
+                  "lat": 22.38497,
+                  "lng": 114.19844
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, outside Belair Gardens"
                 },
@@ -6715,6 +6850,10 @@
             "saved": [
               {
                 "stopId": "P:KMB:EEEEEEEEEEEEEEEE",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road Odd"
                 },
@@ -6943,6 +7082,10 @@
             "saved": [
               {
                 "stopId": "P:KMB:FFFFFFFFFFFFFFFF",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road Kerbside"
                 },
@@ -6996,6 +7139,10 @@
               },
               {
                 "stopId": "P:KMB:0000000000000000",
+                "location": {
+                  "lat": 22.4545,
+                  "lng": 114.003
+                },
                 "name": {
                   "label": "Tin Shui Wai Park, Tin Shui Road Ghost"
                 },
@@ -7190,11 +7337,18 @@
             }
           },
           "expect": {
+            "anchor": {
+              "label": "Tai Chung Kiu Road, outside Belair Gardens"
+            },
             "catch": [],
             "saved": [],
             "nearby": [
               {
                 "stopId": "GMB:20001553",
+                "location": {
+                  "lat": 22.38497,
+                  "lng": 114.19844
+                },
                 "name": {
                   "label": "Tai Chung Kiu Road, outside Belair Gardens"
                 },

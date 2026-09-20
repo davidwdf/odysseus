@@ -31,6 +31,10 @@
 "homeMoreLines" = "+%1$@";
 "homeFewerLines" = "顯示較少路線";
 "homeNothingSavedYet" = "收藏路線後，它會顯示在此頁最前。";
+/* {place} → %1$@ */
+"homeNear" = "%1$@附近";
+"homeHereNow" = "剛剛更新";
+"homeRecentre" = "定位到我的位置";
 "homeNoPosition" = "顯示你收藏的車站。開啟定位即可查看附近。";
 "noService" = "暫無班次";
 /* {s} → %1$@ */

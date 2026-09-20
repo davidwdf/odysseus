@@ -9,19 +9,25 @@ import {
 import { type PlainMessageKey, t } from '@nextbus/i18n'
 import { skipToken, useQueries, useQuery } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { LineStrip } from '../components/LineStrip'
+import { PlacesMap } from '../components/PlacesMap'
 import { StopCard } from '../components/StopCard'
 import { StopCardSkeleton } from '../components/StopCardSkeleton'
+import { DraggableSheet } from '../components/sheet/DraggableSheet'
+import { DEFAULT_DETENT, ROUTE_DETENTS, resolveDetent } from '../components/sheet/detents'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveNearby } from '../hooks/useLiveNearby'
 import { useLocation } from '../hooks/useLocation'
 import { useOnline } from '../hooks/useOnline'
+import { useRiderPosition } from '../hooks/useRiderPosition'
 import { usePreferences } from '../lib/preferences'
+import { useStableValue } from '../lib/useStableValue'
 import { useLocale } from '../providers/LocaleProvider'
+import { HereCard } from './home/HereCard'
 
 /** One array, so "no cards yet" has a stable identity — see `useLiveNearby`'s note on the storm. */
 const EMPTY_IDS: readonly string[] = []
@@ -148,6 +154,48 @@ export function Home() {
   const errors = places.flatMap((r) => (r.isError ? [r.error as Error] : []))
   const failure = nothingToShow ? ((board.error as Error | null) ?? errors[0]) : undefined
 
+  /**
+   * The map's pins: every place on the board, drawn once.
+   *
+   * Built from the sections rather than from the raw payloads, so the map and the list cannot disagree
+   * about which places exist or which of them the rider saved — the same argument `routeMarkers` makes
+   * on the route screen, where a hexagon on the map and a circle in the list would be two claims about
+   * one stop. A saved card is one with rows on it, which `homeView` already decided.
+   *
+   * **Wrapped in `useStableValue`**, and that is load-bearing rather than tidy: `homeView` runs in the
+   * render body, so `sections` — and therefore this — is a new array on every tick of the live round.
+   * `PlacesMap` frames the camera on it, and an array that is merely *equal* would re-frame every
+   * thirty seconds and throw away wherever the rider had panned. Exactly the bug `useStableValue` was
+   * written for on Route detail, arriving a second time on a second map.
+   */
+  const mapPlaces = useStableValue(
+    useMemo(
+      () =>
+        [...sections.catch, ...sections.saved, ...sections.nearby].map((card) => ({
+          id: card.stopId,
+          location: card.location,
+          name: card.name.label,
+          saved: card.rows.length > 0,
+        })),
+      [sections],
+    ),
+  )
+
+  /**
+   * The rider's own position for the map's mark — **deliberately not the snapped one**.
+   *
+   * `useLocation` snaps every coordinate to a 25 m cell before it leaves the device, which is right for
+   * anything sent upstream (it is what makes the board's query key cacheable at all) and wrong for
+   * drawing where someone is standing: a snapped dot teleports between grid cells while the map scrolls
+   * smoothly under it. Route detail makes the same split for the same reason.
+   */
+  const rider = useRiderPosition()
+
+  // How much of the map the sheet covers, for the camera. Its own state because the sheet reports it.
+  const [sheetFraction, setSheetFraction] = useState(
+    resolveDetent(ROUTE_DETENTS, DEFAULT_DETENT).fraction,
+  )
+
   const openPlace = (stopId: string) => navigate(`/stop/${encodeURIComponent(stopId)}`)
   const openRoute = (routeId: string, stopId: string) =>
     navigate(`/route/${encodeURIComponent(routeId)}?stop=${encodeURIComponent(stopId)}`)
@@ -191,14 +239,17 @@ export function Home() {
       </section>
     )
 
-  return (
-    <main className="min-h-dvh bg-bg">
-      <header className="px-4 pb-1 pt-2">
-        <h1 className="m-0 text-h1 text-text">{t(locale, 'homeTitle')}</h1>
-      </header>
-
+  /**
+   * Everything the sheet holds: the location arms, the wait, the failure, and the board.
+   *
+   * Lifted out of the JSX as a value because the sheet is now between it and the screen root — nesting
+   * eleven states another level deep would have buried the branch order, and that order is identity
+   * (`home.spec.json` declares it). What changed is where this is drawn, not what it draws.
+   */
+  const body = (
+    <>
       {/* `denied` — we asked and were told no, so the control says "try again". The saved half is
-          unaffected and follows below, which is the difference this board makes. */}
+            unaffected and follows below, which is the difference this board makes. */}
       {loc.status === 'denied' ? (
         <div className="px-4 pb-2 pt-3">
           <p className="m-0 text-body text-text">{t(locale, 'locationDenied')}</p>
@@ -215,7 +266,7 @@ export function Home() {
         <p className="m-0 px-4 pb-2 pt-3 text-body text-danger">{loc.message}</p>
       ) : loc.status === 'undetermined' && poleIds.length === 0 ? (
         /* `cold` — no position and nothing saved. The only genuinely empty state left, and the first
-           thing every new rider sees: what the app wants location for, and the control that asks. */
+             thing every new rider sees: what the app wants location for, and the control that asks. */
         <Centred>
           <h2 className="m-0 text-center text-h2 text-text">{t(locale, 'nearbyPrimeTitle')}</h2>
           <p className="mb-5 mt-2 text-center text-body text-muted">
@@ -225,7 +276,7 @@ export function Home() {
         </Centred>
       ) : loc.status === 'undetermined' ? (
         /* `noPosition` — the office case. Their list is the screen; nothing is wrong, and the one thing
-           worth saying is what turning location on would add. */
+             worth saying is what turning location on would add. */
         <div className="px-4 pb-1 pt-2">
           <p className="m-0 text-label text-muted">{t(locale, 'homeNoPosition')}</p>
           <div className="mt-3">
@@ -251,43 +302,109 @@ export function Home() {
         <p className="m-0 px-4 pt-4 text-body text-danger">{failure.message}</p>
       ) : (
         <div>
-          {/* **The position is remembered, said once.** ADR-008's honesty rule applies to the rider's
-              *position*, not only to the arrival times — and on this screen it governs the ranking too,
-              because "saved outranks near" is measured from that position. Nearby carried this as a
-              subtitle under its title; Home had nowhere for it until `home.spec.json`'s `stale` state
-              asked for it, which is the spec finding an omission rather than describing one. */}
-          {ready?.stale ? (
-            <p className="m-0 px-4 pt-2 text-label text-muted">{t(locale, 'lastKnownLocation')}</p>
-          ) : null}
+          {/* The remembered-position sentence lives in `HereCard` now (ADR-183). It belongs there: it
+              is a fact about the anchor, and the card is the one thing on screen that is about the
+              anchor. Saying it in both places would break ADR-133's rule — one line, one message —
+              with the screen disagreeing with itself about where to look. */}
           <FeedNotice notice={notice} />
           {section('homeCatchIt', sections.catch)}
           {section('homeSaved', sections.saved)}
           {section('homeAround', sections.nearby)}
           {/* `noSaved` — a full board and one line explaining what saving does. Not an empty state:
-              the rider is standing next to six stops. */}
+                the rider is standing next to six stops. */}
           {poleIds.length === 0 && cards.length > 0 ? (
             <p className="m-0 px-4 py-4 text-label text-muted">
               {t(locale, 'homeNothingSavedYet')}
             </p>
           ) : null}
           {/*
-            `empty` — a fix, nothing saved, and nothing within the radius. Rare in Hong Kong, and not a bug.
+              `empty` — a fix, nothing saved, and nothing within the radius. Rare in Hong Kong, and not a bug.
 
-            **Gated on having actually asked**, which is the second thing the spec caught. Without
-            `board.isSuccess` this line rendered in `cold` and `denied` too: a rider who had never granted
-            location, or had refused it, was told there was *no scheduled service* — a claim about Hong
-            Kong made out of our own silence, and the exact conflation ADR-073 spent a wave separating and
-            ADR-124 has now fixed on three screens. "We have not asked" and "we asked and nothing is due"
-            are different facts, and only one of them is this sentence.
-          */}
+              **Gated on having actually asked**, which is the second thing the spec caught. Without
+              `board.isSuccess` this line rendered in `cold` and `denied` too: a rider who had never granted
+              location, or had refused it, was told there was *no scheduled service* — a claim about Hong
+              Kong made out of our own silence, and the exact conflation ADR-073 spent a wave separating and
+              ADR-124 has now fixed on three screens. "We have not asked" and "we asked and nothing is due"
+              are different facts, and only one of them is this sentence.
+            */}
           {cards.length === 0 && ready !== null && board.isSuccess ? (
             <p className="px-4 pt-4 text-body text-muted">{t(locale, 'noService')}</p>
           ) : null}
         </div>
       )}
+    </>
+  )
+
+  return (
+    /**
+     * **The map is the screen**, and the board floats over it — Route detail's shape, applied
+     * (`proposals/07` rung 3, ADR-183).
+     *
+     * `fixed inset-0` rather than a tall scrolling page, for the reason the route screen gives: the map
+     * is a layer, not a block in flow, and the only thing that scrolls is the list inside the sheet.
+     * That is what lets the sheet be dragged to three heights without the document's own scroll
+     * fighting the gesture — and it is why Home's header taxonomy entry moved from `root` to `map`,
+     * which is the one empty cell `docs/09` §10 said was worth revisiting.
+     */
+    <main className="fixed inset-0 overflow-hidden bg-bg">
+      <PlacesMap
+        places={mapPlaces}
+        rider={rider}
+        /* Inset by what is covering the map, so "framed" means framed in the part a rider can see. A
+           literal object is safe here only because `PlacesMap` depends on its two numbers — see the
+           trap written up there, and in `RouteMap` before it. */
+        visibleInset={{ bottom: sheetFraction, top: CARD_INSET_FRACTION }}
+        onSelectPlace={openPlace}
+        controlLabels={{ locate: t(locale, 'mapShowMyLocation') }}
+        className="absolute inset-0"
+      />
+
+      {/* Where you are (Q4 option A). Absent without a fix: a card naming a place we had not measured
+          to would be claiming a position we do not have. */}
+      {ready ? (
+        <HereCard
+          anchor={sections.anchor}
+          nearLabel={
+            sections.anchor ? t(locale, 'homeNear', { place: sections.anchor.label }) : undefined
+          }
+          freshness={t(locale, ready.stale ? 'lastKnownLocation' : 'homeHereNow')}
+          stale={ready.stale === true}
+          recentreLabel={t(locale, 'homeRecentre')}
+          onRecentre={request}
+        />
+      ) : null}
+
+      <DraggableSheet
+        label={t(locale, 'homeTitle')}
+        initial={DEFAULT_DETENT}
+        onDetentChange={(d) => setSheetFraction(d.fraction)}
+      >
+        {/*
+          **No visible heading, and the sheet already carries the accessible one.** `DraggableSheet`
+          renders `label` as an `sr-only` `<h2>` and points its own `aria-labelledby` at it, so a
+          heading here was the same words twice — once for a screen reader and once for the eye. The
+          screen has not lost its title (`home.spec.json` still requires it, and the projection still
+          finds it); what it has lost is a second copy of it taking 40 px off the board.
+
+          It is also what the card is *for*: on a map-backed screen the identity a rider needs is
+          **where they are**, not the app's own name, which is the argument option A won on.
+        */}
+        {body}
+      </DraggableSheet>
     </main>
   )
 }
+
+/**
+ * How much of the map the floating card covers, as a fraction.
+ *
+ * A constant rather than a measurement, which is the call ADR-156 made for the route screen's chrome
+ * and for the same reason: the card's height is a layout decision this file already owns, so measuring
+ * it would be asking the DOM for an answer we wrote. It only has to be close — it insets a camera, not
+ * a hit target. Smaller than Route detail's 0.14 because this card is two lines rather than a badge,
+ * a journey and four pills.
+ */
+const CARD_INSET_FRACTION = 0.09
 
 /** The later of two ISO timestamps, either of which may be absent. Lexical order is chronological. */
 function newer(a: string | null, b: string | null): string | null {

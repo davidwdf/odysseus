@@ -32,15 +32,17 @@ import {
  *
  * |               | title sits in flow | title collapses | title floats over a map |
  * |---------------|--------------------|-----------------|-------------------------|
- * | **no back**   | `root`             | —               | —                       |
+ * | **no back**   | `root`             | —               | `mapRoot`               |
  * | **back**      | `pushed`           | `collapsing`    | `map`                   |
  *
- * The three empty cells are not gaps to be filled. A root screen with a collapsing title is a screen whose
+ * **`mapRoot` is the cell this file said was worth revisiting, filled** (ADR-183). Home is a tab root —
+ * switched to, never pushed, so it owes no way back — *and* map-backed, so its chrome floats and a sheet
+ * owns the scroll. It arrived exactly as this note asked: a deliberate edit to a declared set, not a
+ * fifth undeclared answer, and the suite failed the moment the screen changed shape without it.
+ *
+ * The two remaining empty cells are not gaps. A root screen with a collapsing title is a screen whose
  * chrome moves and offers nothing to move *for* — the collapse exists to keep a back control reachable
- * while the title gets out of the way. A root screen over a map is the one cell worth revisiting, and
- * `proposals/07`'s Home is exactly the proposal to fill it (rung 3): Home is a tab root **and** map-backed,
- * which is why it will need a fifth kind or a widened `map`. Recorded here so that arrives as a deliberate
- * edit to a declared set rather than as a fifth undeclared answer.
+ * while the title gets out of the way.
  *
  * ## What is enforced and what is not — stated, because the honest half is short
  *
@@ -62,7 +64,7 @@ import {
  * independent axes and {@link SCROLL_OWNER} is its own declaration. A taxonomy that had been written as
  * prose would have said "pushed screens scroll the page", and been wrong about a shipping screen.
  */
-export type HeaderKind = 'root' | 'collapsing' | 'pushed' | 'map'
+export type HeaderKind = 'root' | 'collapsing' | 'pushed' | 'map' | 'mapRoot'
 
 /** What a rider must be able to do on a screen of this kind, and what actually checks it. */
 export interface HeaderRule {
@@ -107,7 +109,20 @@ export const HEADER_RULES: Record<HeaderKind, HeaderRule> = {
     actions: false,
     enforcement: 'test/header-taxonomy.test.tsx — a back control, and an <h1> in flow',
   },
-  /** Route detail, and Home from rung 3 (proposals/07). The map is the screen; everything floats. */
+  /**
+   * Home. The map is the screen and everything floats over it — but it is a root, so there is nothing
+   * to go back to and no back lens for the card to tuck behind. That one difference is why it is its own
+   * kind rather than a `map` with a flag: `map`'s expanded card *encloses* the back control (ADR-170),
+   * and a kind whose defining feature is absent is a kind that has been stretched.
+   */
+  mapRoot: {
+    back: false,
+    title: 'floats',
+    actions: false,
+    enforcement:
+      'test/header-taxonomy.test.tsx — no back control, and `fixed inset-0` rather than a scrolling page. The collapse itself is unenforced; this card does not collapse at all (ADR-183).',
+  },
+  /** Route detail. The map is the screen; everything floats. */
   map: {
     back: true,
     title: 'floats',
@@ -125,9 +140,8 @@ export const HEADER_RULES: Record<HeaderKind, HeaderRule> = {
  * declared it becomes eight independent decisions.
  */
 export const HEADER_KIND = {
-  // Home. `root` still, and it stays `root` until it gets a map (`proposals/07` rung 3) — which is the
-  // one empty cell of the table above worth revisiting, and a deliberate edit when it comes.
-  [NEARBY_PATH]: 'root',
+  // Home, map-backed since ADR-183 — the `mapRoot` cell.
+  [NEARBY_PATH]: 'mapRoot',
   // Settings stopped being a tab when the bar retired (ADR-181) and is pushed from a lens now, so it
   // owes the rider a way back. The taxonomy caught this the moment the destination moved: a screen that
   // changes how it is reached changes what it owes, and nothing else in the codebase says so.
@@ -154,7 +168,7 @@ export const HEADER_KIND = {
  * child, and only one of them also lets the rider drag the child itself between detents.
  */
 export const SCROLL_OWNER = {
-  [NEARBY_PATH]: 'page',
+  [NEARBY_PATH]: 'sheet',
   [SETTINGS_PATH]: 'page',
   [SEARCH.path]: 'inner',
   [ABOUT_PATH]: 'page',

@@ -31,6 +31,10 @@
 	<string name="homeMoreLines">+%1$s</string>
 	<string name="homeFewerLines">Show fewer routes</string>
 	<string name="homeNothingSavedYet">Save a route and it will lead this screen.</string>
+	<!-- {place} → %1$s -->
+	<string name="homeNear">Near %1$s</string>
+	<string name="homeHereNow">Updated just now</string>
+	<string name="homeRecentre">Centre on my location</string>
 	<string name="homeNoPosition">Showing your saved stops. Turn on location to see what is around you.</string>
 	<string name="noService">No scheduled service</string>
 	<!-- {s} → %1$s -->
