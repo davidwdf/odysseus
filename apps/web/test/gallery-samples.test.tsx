@@ -11,6 +11,14 @@
 // and that the state names are unique inside a group so two panels cannot claim the same label. It does NOT
 // re-assert the components' text against their specs — `conformStates` and the projection suites already do
 // that against the same corpus, and a second golden here would be a second specification.
+//
+// THREE KINDS OF "SOMETHING", and the third was found by the gate itself. "Drew something" was measured in
+// projected *text*, which is right for every panel that has words — and wrong for a placeholder, whose whole
+// contract is that the conformance walker cannot see it. Adding `StopCardSkeleton` to the gallery failed
+// here, correctly, and the fix is not an exemption: a sample declares `wordless` and the gate then asserts
+// the *stronger* pair — elements on the page, and no text at all. The alternative was to make the wait
+// announce itself to satisfy its own gallery panel, which is precisely the defect it stands in for. It does
+// NOT re-assert the components' text against their specs.
 
 import type { Locale } from '@nextbus/core'
 import { CATALOGUE, t } from '@nextbus/i18n'
@@ -34,6 +42,11 @@ function text(): string[] {
     node = walker.nextNode()
   }
   return out
+}
+
+/** How many elements a panel put on the page — what "drew something" means when there are no words. */
+function elements(): number {
+  return container.querySelectorAll('*').length
 }
 
 function draw(node: React.ReactNode): string[] {
@@ -78,11 +91,22 @@ describe('the gallery’s live samples', () => {
     for (const sample of group.samples) {
       it(`renders ${group.component} · ${sample.state}`, () => {
         const shown = draw(sample.render())
-        // `none` is the one sample whose correct output is nothing — asserted as such rather than skipped,
-        // because "renders nothing" and "failed to render" look identical on the page and a silent notice is
-        // the state the app is in almost all of the time.
-        if (sample.state.startsWith('none')) expect(shown).toEqual([])
-        else expect(shown.length, 'the panel drew nothing at all').toBeGreaterThan(0)
+        // Three categories, and the two that are not the common case are both declared rather than sniffed
+        // — because "drew nothing" and "failed to draw" look identical on the page.
+        if (sample.state.startsWith('none')) {
+          // `none` renders literally nothing: the notice is silent, which is the state the app is in almost
+          // all of the time and is therefore worth a panel of its own.
+          expect(shown).toEqual([])
+        } else if (sample.wordless) {
+          // A placeholder draws boxes and no words. Both halves are asserted: the second is its actual
+          // contract (the conformance walker reads presence, so a labelled placeholder projects into every
+          // state that mounts before its data), and the first is what stops that contract being satisfied
+          // by a panel that rendered nothing at all.
+          expect(elements(), 'the wordless panel drew no elements either').toBeGreaterThan(3)
+          expect(shown, 'a wordless panel must not project text').toEqual([])
+        } else {
+          expect(shown.length, 'the panel drew nothing at all').toBeGreaterThan(0)
+        }
       })
     }
   }

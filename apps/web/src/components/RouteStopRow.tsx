@@ -1,10 +1,10 @@
 import type { EtaUrgency, RouteStopArrival, RouteStopRowView, StopMarkerKind } from '@nextbus/core'
 import { t } from '@nextbus/i18n'
-import { Star } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { useLocale } from '../providers/LocaleProvider'
 import { NODE, NODE_CENTRE, NODE_TOP, RAIL_WIDTH } from './RailBusToken'
 import { RAIL_CHEVRON_H, RAIL_CHEVRON_W, railChevronMask } from './railGlyphs'
+import { SavedFlag } from './SavedFlag'
 import { SlideNumber } from './SlideNumber'
 import { StopName } from './StopName'
 
@@ -291,11 +291,11 @@ export function RouteStopRow({
             // Drawn on the node's corner, and — as on the RN rail — the node itself is unchanged, so a saved
             // stop still scans as an ordinary sequence node with a flag on it (ADR-042).
             //
-            // **Two stars, not one**: a slightly larger `--surface` one behind the accent one, which is what
-            // gives the flag its outline and makes it read as a bordered sticker over the rail rather than a
-            // disc floating on it. The RN overlay does the same with `BADGE = 15`, and draws it *after* the
-            // bus tokens for a stated reason — a passing bus must not hide a rider's favourite. `z-10` is
-            // this renderer's equivalent, since the star lives inside the row rather than in an overlay pass.
+            // **Two stars, not one** — see `SavedFlag`, which this was extracted into when Home needed the
+            // same mark on a route chip. The halo is `--surface` because that is what a row is. The RN
+            // overlay draws its `BADGE = 15` *after* the bus tokens for a stated reason — a passing bus must
+            // not hide a rider's favourite — and `z-10` is this renderer's equivalent, since the star lives
+            // inside the row rather than in an overlay pass.
             <span
               className="pointer-events-none absolute z-10 flex items-center justify-center"
               style={{
@@ -305,8 +305,7 @@ export function RouteStopRow({
                 height: 15,
               }}
             >
-              <Star size={15} className="absolute fill-surface text-surface" aria-hidden />
-              <Star size={11} className="absolute fill-accent text-accent" aria-hidden />
+              <SavedFlag />
             </span>
           ) : null}
         </span>

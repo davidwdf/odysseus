@@ -5,7 +5,10 @@ import stopDetailCorpus from '@nextbus/core/spec/stop-detail.spec.json'
 import type { ReactNode } from 'react'
 import { FeedNotice } from '../src/components/FeedNotice'
 import { PlaceRow } from '../src/components/PlaceRow'
+import { RouteChip } from '../src/components/RouteChip'
+import { SavedFlag } from '../src/components/SavedFlag'
 import { StopCard } from '../src/components/StopCard'
+import { StopCardSkeleton } from '../src/components/StopCardSkeleton'
 
 /**
  * **The gallery's live samples: one component, several states, side by side** (ADR-134's *"still owed"*,
@@ -41,6 +44,20 @@ export interface Sample {
   state: string
   /** How the app gets here, in one line: the inputs, not the styling. */
   how: string
+  /**
+   * This state draws **boxes and no words**, on purpose.
+   *
+   * **A property of the panel, not of the component.** `SavedFlag` is wordless everywhere, and two of its
+   * three panels are not — they draw it on route chips, and a chip carries a route number. Getting that
+   * backwards is what the gate caught the first time each of these was added.
+   *
+   * Declared rather than inferred, because the gallery's gate asserts that a panel drew *something* and
+   * measures that in projected text — which is right for every sample that has words and wrong for a
+   * placeholder, whose whole contract is that the conformance walker cannot see it. Without the flag the
+   * only way to add a wait to this page is to make it announce itself, which is the defect it is standing
+   * in for. With it, the gate asserts the stronger pair: **elements, and no text.**
+   */
+  wordless?: boolean
   render: () => ReactNode
 }
 
@@ -169,6 +186,43 @@ const FEED_NOTICE_STATES: Record<FeedNoticeView['kind'], Sample> = {
   },
 }
 
+/**
+ * The saved flag on a route chip's corner — the shape `proposals/07`'s Home puts it in, previewed here
+ * **before** `RouteChip` grows a `saved` prop, so the owner's open question from `docs/07` ("does it
+ * survive the operator liveries and dark mode at chip size?") can be answered by looking rather than by
+ * shipping it first. The offsets are the ones a `saved` prop would bake in.
+ */
+function ChipWithFlag({
+  operator,
+  routeNo,
+  halo,
+}: {
+  operator: 'KMB' | 'CTB' | 'GMB' | 'LWB'
+  routeNo: string
+  halo: 'surface' | 'bg'
+}) {
+  return (
+    <span className="relative inline-flex">
+      <RouteChip operator={operator} routeNo={routeNo} />
+      <span className="-top-1.5 -right-1.5 absolute">
+        <SavedFlag halo={halo} />
+      </span>
+    </span>
+  )
+}
+
+/** All four liveries in a row, so the flag is judged against the set rather than one at a time. */
+function EveryLivery({ halo }: { halo: 'surface' | 'bg' }) {
+  return (
+    <div className="flex flex-wrap items-center gap-4 py-1">
+      <ChipWithFlag operator="KMB" routeNo="73X" halo={halo} />
+      <ChipWithFlag operator="CTB" routeNo="970" halo={halo} />
+      <ChipWithFlag operator="GMB" routeNo="2" halo={halo} />
+      <ChipWithFlag operator="LWB" routeNo="E21A" halo={halo} />
+    </div>
+  )
+}
+
 export const SAMPLES: readonly SampleGroup[] = [
   {
     component: 'FeedNotice',
@@ -182,6 +236,34 @@ export const SAMPLES: readonly SampleGroup[] = [
     ],
   },
   {
+    component: 'SavedFlag',
+    spec: 'apps/web/src/components/SavedFlag.tsx — a mark, not a component with a spec of its own',
+    note: 'Two stars, not one: a slightly larger star filled with whatever the flag stands on, behind the accent one, so the mark reads as cut out of its background rather than floating on it. `--accent` is ink on light and paper on dark, so there is no single colour it is safely legible over — the halo is what makes it survive a livery, a rail with a bus passing under it, or a dense basemap. Extracted from `RouteStopRow`, where it was written inline; the ratio (15 : 11) is the rail’s own.',
+    samples: [
+      {
+        state: 'on a card — halo bg',
+        how: 'The Home card’s shape (proposals/07): the flag laps a route chip whose card background is `--bg`, so the halo is `--bg`. All four operator liveries at once, which is the open question `docs/07` has carried for months — check the CTB yellow and the GMB green in particular, and switch the gallery to dark.',
+        render: () => <EveryLivery halo="bg" />,
+      },
+      {
+        state: 'on a row — halo surface',
+        how: 'The same flag with the rail’s own halo, `--surface`, which is what a row is. Drawn beside the card variant so the two haloes can be compared directly: pick the wrong one and the outline disappears into whatever is behind it, which is the only way this component can be used incorrectly.',
+        render: () => <EveryLivery halo="surface" />,
+      },
+      {
+        state: 'at rail size, alone',
+        wordless: true,
+        how: 'The mark on its own, both haloes, with nothing under it — the shape `RouteStopRow` puts on a saved stop’s sequence node. There is only one size (15 behind, 11 in front, declared rather than derived), so this is the mark at the size it actually ships at.',
+        render: () => (
+          <div className="flex items-center gap-5 py-1">
+            <SavedFlag halo="surface" />
+            <SavedFlag halo="bg" />
+          </div>
+        ),
+      },
+    ],
+  },
+  {
     component: 'StopRow',
     spec: 'packages/contract/ui/stop-row.spec.json',
     note: 'The compact card Nearby and Favourites are lists of. Every sample is a corpus golden — the same bytes both renderers’ conformance suites replay.',
@@ -192,6 +274,12 @@ export const SAMPLES: readonly SampleGroup[] = [
         render: () => (
           <StopCard view={card('a-card-with-every-board-answering-is-complete')} locale="en" />
         ),
+      },
+      {
+        state: 'pending',
+        wordless: true,
+        how: 'The wait, `StopCardSkeleton` — sized to the boxes the card above will occupy, so nothing moves when it is replaced. Compare the right-hand column against `content`: settling that x-position before a figure exists is the whole job. Wordless and `aria-hidden`, because the conformance walker reads presence and a labelled placeholder would project into every state that mounts before its data.',
+        render: () => <StopCardSkeleton rows={3} />,
       },
       {
         state: 'urgency bands',
