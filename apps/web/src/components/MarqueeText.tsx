@@ -160,7 +160,7 @@ export function MarqueeText({
   useEffect(() => {
     const outer = box.current
     const node = inner.current
-    if (!running || outer === null || node === null) return
+    if (!running || outer === null || node === null || overflow === 0) return
     let frame = 0
     const paint = () => {
       // `m41` is the matrix's x translation. Negative while travelling; a bare sign flip rather than
@@ -169,19 +169,26 @@ export function MarqueeText({
       const shifted = new DOMMatrix(getComputedStyle(node).transform).m41
       const travelled = shifted < 0 ? -shifted : shifted
       const lead = travelled > LEAD_PX ? LEAD_PX : travelled
-      outer.style.maskImage = maskWith(lead)
-      outer.style.webkitMaskImage = maskWith(lead)
+      // …and the same rule at the other end, which the first version missed: at the far end of the travel
+      // the name's last letter is flush with the box and there is nothing beyond it, so a trailing fade
+      // there dims the one word the lap existed to show. Each edge's fade is how much name is hidden past
+      // it, capped — full at home for the trailing edge, zero for the leading one, and the reverse at the
+      // far end.
+      const remaining = overflow - travelled
+      const trail = remaining > TRAIL_PX ? TRAIL_PX : remaining
+      outer.style.maskImage = maskWith(lead, trail)
+      outer.style.webkitMaskImage = maskWith(lead, trail)
       frame = requestAnimationFrame(paint)
     }
     frame = requestAnimationFrame(paint)
     return () => {
       cancelAnimationFrame(frame)
-      // Back to the resting mask: a trailing fade, because there is always more name off to the right of
-      // a box it does not fit in, and nothing at the leading edge, because the name starts there.
-      outer.style.maskImage = maskWith(0)
-      outer.style.webkitMaskImage = maskWith(0)
+      // Back to the resting mask: a trailing fade, because a parked name is at home and the rest of it is
+      // off to the right, and nothing at the leading edge, because the name starts there.
+      outer.style.maskImage = maskWith(0, TRAIL_PX)
+      outer.style.webkitMaskImage = maskWith(0, TRAIL_PX)
     }
-  }, [running])
+  }, [running, overflow])
 
   if (overflow === 0) {
     return (
@@ -210,7 +217,11 @@ export function MarqueeText({
       onPointerDown={() => {
         const animation = travelling.current
         if (animation === null) return
-        animation.currentTime = 0
+        // **Straight to the travel, not to the top of the wait.** A tap is a rider saying *show me the
+        // rest of this now*; restarting at zero made them sit through the 1.4 s rest first, which is the
+        // opposite of what they asked for. The rest still opens an *automatic* lap, where it is doing its
+        // job — letting the beginning of the name be read before it moves.
+        animation.currentTime = HOLD_MS
         setRunning(true)
         animation.play()
       }}
@@ -243,15 +254,19 @@ const END_HOLD_MS = 1600
 /** Ease into the travel and out of it; the plateau either side is what makes that readable. */
 const TRAVEL_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /**
- * The soft edges. The **trailing** one is constant — there is always more name off to the right of a box
- * the name does not fit in — and the **leading** one is a function of how far the name has travelled, so
- * at home it is not there at all.
+ * The soft edges. **Both are functions of how much name is hidden past them**: at home the leading fade is
+ * zero and the trailing fade is full, at the far end it is the other way round, and in between they trade.
+ * A fade is a claim that there is more text behind it, so a fade where there is none — over the first
+ * letter at home, or the last letter at the far end — is the claim made falsely.
  *
  * 8 px rather than the 10 it started at: the fade only has to say *this edge is a window, not the end of
  * the word*, and a wide one at a small size reads as a blur on the letter rather than an edge.
  */
 const TRAIL_PX = 16
 const LEAD_PX = 8
-const maskWith = (lead: number) =>
-  `linear-gradient(to right, transparent 0, black ${lead}px, black calc(100% - ${TRAIL_PX}px), transparent 100%)`
-const REST_FADE: React.CSSProperties = { maskImage: maskWith(0), WebkitMaskImage: maskWith(0) }
+const maskWith = (lead: number, trail: number) =>
+  `linear-gradient(to right, transparent 0, black ${lead}px, black calc(100% - ${trail}px), transparent 100%)`
+const REST_FADE: React.CSSProperties = {
+  maskImage: maskWith(0, TRAIL_PX),
+  WebkitMaskImage: maskWith(0, TRAIL_PX),
+}

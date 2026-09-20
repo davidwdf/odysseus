@@ -425,18 +425,27 @@
   that is a projection hazard (ADR-097) for a frame nobody can see.
 
   260 ms of the box's 500, so the line lands while the last of the width is going.
+
+  **And it rises.** The owner's note: the destination sits near the middle of the open card and the island
+  drops it at the top, so a straight fade puts it somewhere it never was. A short lift from below is the
+  cheap half of the honest answer — the line arrives travelling *upwards*, from the direction the rest of
+  the card is disappearing towards. The expensive half measures where the expanded destination actually
+  was and starts there; it is a text FLIP across two different type sizes, and 14 px of lift buys most of
+  the reading for none of that.
 */
 @keyframes island-in {
   from {
     opacity: 0;
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
 .island-in {
-  animation: island-in 180ms 260ms ease-out both;
+  animation: island-in 220ms 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

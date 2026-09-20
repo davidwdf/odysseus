@@ -3,6 +3,12 @@ import { ArrowLeft, ChevronUp, Clock, MapPin, RotateCw, Ruler } from 'lucide-rea
 import { useRef, useState } from 'react'
 import { JourneyLines } from '../src/components/JourneyLines'
 import { RouteChip } from '../src/components/RouteChip'
+import {
+  RAIL_CHEVRON_H,
+  RAIL_CHEVRON_PATHS,
+  RAIL_CHEVRON_STROKE,
+  RAIL_CHEVRON_W,
+} from '../src/components/railGlyphs'
 import { useBoxFlip, useFlip } from '../src/hooks/useFlip'
 import { RouteContextCard } from '../src/screens/route/RouteContextCard'
 
@@ -1158,34 +1164,99 @@ function LoopNode({ seq, top }: { seq?: number; top: number }) {
 function LoopHairpin() {
   return (
     <div className="flex min-w-0 items-start gap-2">
-      <svg width="24" height="58" viewBox="0 0 24 58" aria-hidden="true" className="shrink-0">
+      <svg
+        width={LOOP_W}
+        height={LOOP_H}
+        viewBox={`0 0 ${LOOP_W} ${LOOP_H}`}
+        aria-hidden="true"
+        className="shrink-0"
+      >
+        {/* **Two rails, out and back**, rather than one line with an arrowhead on it (the owner's note).
+            An arrow says *direction*; a pair of rails says *there and back*, which is what a loop is —
+            and it lets the direction be carried by the same double chevrons the rest of the app uses,
+            pointing down on the way out and up on the way home. The turn at the bottom is a U between
+            the two, so the whole thing is one continuous piece of track. */}
+        {/* Two straight rails between the two nodes. The **turn itself needs no drawing**: the rails
+            run into the via node and out of it, which is how a schematic has always shown a line passing
+            through a stop — an explicit U would only be a shape hiding behind the circle anyway. */}
         <path
-          d="M7 17 V42 A5 5 0 0 0 17 42 V26"
+          d={`M${OUT_X} ${TOP_CY} V${TURN_Y} M${BACK_X} ${TOP_CY} V${TURN_Y}`}
           className="stroke-route-soft"
-          strokeWidth={3}
+          strokeWidth={4}
           fill="none"
+          mask={`url(#${LOOP_MASK})`}
         />
-        <path d="M13 27 L17 21 L21 27 Z" className="fill-route-soft" />
+        <defs>
+          {/* The chevrons are cut *out* of the rails, exactly as they are in the header and the list: a
+              notch, not a mark. Down the outward rail, up the returning one. */}
+          <mask id={LOOP_MASK} maskUnits="userSpaceOnUse">
+            <rect x="0" y="0" width={LOOP_W} height={LOOP_H} fill="white" />
+            <g
+              stroke="black"
+              strokeWidth={RAIL_CHEVRON_STROKE}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              transform={`translate(${OUT_X - RAIL_CHEVRON_W / 2}, ${CHEVRON_CY - RAIL_CHEVRON_H / 2})`}
+            >
+              {RAIL_CHEVRON_PATHS.map((d) => (
+                <path key={d} d={d} />
+              ))}
+            </g>
+            <g
+              stroke="black"
+              strokeWidth={RAIL_CHEVRON_STROKE}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              transform={`translate(${BACK_X + RAIL_CHEVRON_W / 2}, ${CHEVRON_CY + RAIL_CHEVRON_H / 2}) rotate(180)`}
+            >
+              {RAIL_CHEVRON_PATHS.map((d) => (
+                <path key={d} d={d} />
+              ))}
+            </g>
+          </mask>
+        </defs>
+        {/* The terminus, centred over the pair — the rails leave and return to the same pole. */}
         <rect
-          x="0.75"
-          y="0.75"
-          width="16.5"
-          height="16.5"
+          x={LOOP_W / 2 - NODE_R}
+          y={TOP_CY - NODE_R}
+          width={NODE_R * 2}
+          height={NODE_R * 2}
           className="fill-surface stroke-route"
           strokeWidth="1.5"
         />
         <text
-          x="9"
-          y="9.5"
+          x={LOOP_W / 2}
+          y={TOP_CY}
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={11}
           fontWeight={500}
-          className="fill-route"
+          className="fill-route tabular-nums"
         >
           1
         </text>
-        <circle cx="12" cy="47" r="4.5" className="fill-surface stroke-route" strokeWidth="1.5" />
+        {/* The turning point, on the turn, with **its own figure inside it** like the termini — a circle
+            rather than a square because it is an ordinary stop the route happens to turn at. */}
+        <circle
+          cx={LOOP_W / 2}
+          cy={TURN_Y}
+          r={NODE_R}
+          className="fill-surface stroke-route"
+          strokeWidth="1.5"
+        />
+        <text
+          x={LOOP_W / 2}
+          y={TURN_Y}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={11}
+          fontWeight={500}
+          className="fill-route tabular-nums"
+        >
+          {LOOP_VIA_SEQ}
+        </text>
       </svg>
       <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 14 }}>
         <span className="flex items-center" style={{ height: 22 }}>
@@ -1197,11 +1268,29 @@ function LoopHairpin() {
           </span>
         </span>
         <span className="flex items-center" style={{ height: 22 }}>
-          <span className="block truncate text-body font-medium text-text">
-            via {LOOP_VIA} <span className="text-caption text-subtle">· stop {LOOP_VIA_SEQ}</span>
-          </span>
+          <span className="block truncate text-body font-medium text-text">via {LOOP_VIA}</span>
         </span>
       </div>
     </div>
   )
 }
+
+/**
+ * D's geometry.
+ *
+ * The two rails sit **6 px either side of the column's centre line**, and both nodes are centred on that
+ * line — so the stack is symmetrical and the pair reads as one piece of track rather than as a line with
+ * a spur beside it. The nodes are 18 px, wider than the rails are apart, so each rail runs *behind* them
+ * exactly as the straight rail runs behind a terminus square.
+ */
+const NODE_R = 9
+const LOOP_W = 26
+const LOOP_H = 58
+const TOP_CY = 11
+const TURN_Y = 47
+const RAIL_GAP = 6
+const OUT_X = LOOP_W / 2 - RAIL_GAP
+const BACK_X = LOOP_W / 2 + RAIL_GAP
+/** Between the two nodes, where there is rail on both sides to cut. */
+const CHEVRON_CY = (TOP_CY + TURN_Y) / 2
+const LOOP_MASK = 'loop-rails-mask'

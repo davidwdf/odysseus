@@ -144,15 +144,21 @@ export function RouteContextCard({
    * is true for the 500 ms it exists.
    */
   const [leaving, setLeaving] = useState(false)
+  const wasCollapsed = useRef(collapsed)
+  // **Decided during render, not in an effect** — an effect runs *after* paint, so for one frame the pane
+  // held the island row and the expanded content both in flow: a flash of a taller, doubled card before
+  // the collapse began. The owner saw it as the card flickering once. This is React's documented shape
+  // for state that derives from a prop changing, and `RouteDetail` uses it for the same reason a few
+  // lines from here (the flip's nonce, which would otherwise cascade a row for one frame).
+  if (collapsed !== wasCollapsed.current) {
+    wasCollapsed.current = collapsed
+    setLeaving(collapsed)
+  }
   useEffect(() => {
-    if (!collapsed) {
-      setLeaving(false)
-      return
-    }
-    setLeaving(true)
+    if (!leaving) return
     const timer = setTimeout(() => setLeaving(false), MORPH_MS)
     return () => clearTimeout(timer)
-  }, [collapsed])
+  }, [leaving])
 
   return (
     <div
@@ -262,10 +268,17 @@ export function RouteContextCard({
                 />
                 <div className="min-w-0 flex-1 text-left">{journey}</div>
                 {/* The direction swap acts **on** the journey, so it shares its row rather than sitting
-                    beside the route number, where it read as a property of the number. */}
-                <span className="flex shrink-0 justify-end" style={{ width: SWAP_SIZE }}>
-                  {swap}
-                </span>
+                    beside the route number, where it read as a property of the number.
+
+                    **No control, no column.** A circular route has no reverse direction to offer (its
+                    payload carries no `reverse`, so the screen passes nothing), and a 36 px slot held
+                    open for an absent control is 36 px taken from the names — which on a loop are the
+                    longest, because one of them is a sentence. */}
+                {swap ? (
+                  <span className="flex shrink-0 justify-end" style={{ width: SWAP_SIZE }}>
+                    {swap}
+                  </span>
+                ) : null}
               </div>
 
               {/* Left-aligned with the block above it. The strip was centred while the journey was, and
