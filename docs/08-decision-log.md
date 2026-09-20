@@ -12202,9 +12202,15 @@ third band added to the kernel is a failure here rather than a silently ignored 
   replaces and then rides the box up. That is as close to *"collapses around the destination"* as this
   can get without a text FLIP, and it costs nothing.
 
-- **Decision 3 — the two fade across each other.** The content leaves over 260 ms and the line arrives
-  over 300 ms starting at 60, so they overlap rather than hand over; a header showing nothing for even
-  60 ms reads as the flicker ADR-176 was about.
+- **Decision 3 — the shrink goes first, and the cross-fade lands with it.** The owner's last note on this
+  transition: *"have the collapse (background shrink) start first, then have the fade kick in and finish
+  at the same time as the shrink."* So the box has the first **160 ms** to itself, closing over content
+  that is still fully opaque, and the fade takes the remaining **340** — both halves of it, the content
+  leaving and the line arriving, on the same clock so they cross rather than hand over. The two numbers
+  sum to the morph's own 500 by construction and are declared together in the component, because that sum
+  *is* the decision: a fade that outlives its box leaves a card lingering over a pill, and one that
+  finishes early leaves the box closing on nothing. (A header showing nothing for even a moment is the
+  flicker ADR-176 was about, which is why they overlap rather than queue.)
 
 - **What this removes.** `--leave-shift`, the layout effect that measured it, and the whole idea that the
   arriving or departing *text* is the subject of this animation. Four rounds of this transition tried to

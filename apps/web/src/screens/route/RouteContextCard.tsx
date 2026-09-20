@@ -35,6 +35,19 @@ const MORPH_EASE_IN = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const MORPH_EASE_OUT = 'cubic-bezier(0.64, 0, 0.78, 0)'
 
 /**
+ * **When the cross-fade happens inside the morph** — the owner's last note: *"have the collapse start
+ * first, then have the fade kick in and finish at the same time as the shrink."*
+ *
+ * So the box has `FADE_DELAY_MS` to itself, closing over content that is still fully opaque, and the fade
+ * then takes the rest of the morph exactly. The two numbers sum to `MORPH_MS` on purpose and are declared
+ * here together rather than in the stylesheet, because that sum *is* the decision: a fade that outlives
+ * its box leaves a card lingering over a pill, and one that finishes early leaves the box closing on
+ * nothing.
+ */
+const FADE_DELAY_MS = 160
+const FADE_MS = MORPH_MS - FADE_DELAY_MS
+
+/**
  * **The route's identity, floating over the map** — round 4 of the mockups, which was the owner's own
  * counter-proposal and the shape the design settled on (`docs/proposals/06 §8`).
  *
@@ -221,6 +234,8 @@ export function RouteContextCard({
           style={{
             marginTop: collapsed ? -ISLAND_LAP : -(BADGE_TOP + BADGE_H),
             ['--morph-ease' as string]: collapsed ? MORPH_EASE_OUT : MORPH_EASE_IN,
+            ['--fade-delay' as string]: `${FADE_DELAY_MS}ms`,
+            ['--fade-ms' as string]: `${FADE_MS}ms`,
           }}
         >
           {collapsed ? (
