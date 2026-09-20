@@ -2,9 +2,30 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔴 Snapshot 2026-09-20 (later) — the swap button was sending riders to a different route
+
+> **Shipped:** [ADR-175](./08-decision-log.md#adr-175--the-direction-toggle-resolved-a-minibus-by-its-number-and-sent-riders-to-another-region).
+> Reported from the app while reviewing the region tag: *"the swap/reverse direction button … my route
+> was shifting to HK Island from NT."* It was. `routeDocFor` matched the opposite bound on **operator +
+> number + opposite bound**, which is not unique for GMB, then tie-broke with `preferServiceType` — which
+> for GMB is comparing two *route ids*, since ADR-047 folds `route_id` into that slot. It therefore
+> picked the numerically lowest one, deterministically. **335 of 1,154 GMB route-directions flipped to a
+> different route.** Now matched on `gtfsId`, which *is* the route's identity: a minibus's two directions
+> are `route_seq` 1 and 2 of one `route_id`.
+>
+> **163 route-directions correctly lose their toggle**, and that was checked rather than assumed —
+> `data.etagmb.gov.hk/route-stop/<id>/2` is empty for them, so upstream has no return leg either. ADR-046
+> already held the rule: an absent `reverse` *is* the answer to "should there be a toggle". The old code
+> answered it with another route, which is the one answer a rider cannot audit.
+>
+> **The pattern, and it is the thing to carry:** both halves of this wave are *a minibus route number
+> treated as an identity* — Search collapsed two routes into one row's worth of information, the toggle
+> resolved one to the other. **The region tag is what made the second one legible**: the bug had been
+> shipping silently because "1 → 1" looks like a successful flip. `docs/07` carries a sweep for the rest.
+
 ## 🔵 Snapshot 2026-09-20 — which `1` is this? A minibus route gets its region
 
-> **Shipped:** [ADR-171](./08-decision-log.md#adr-171--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table).
+> **Shipped:** [ADR-174](./08-decision-log.md#adr-174--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table).
 > A green minibus `route_code` is only unique **within a region**, so `1` is The Peak ↔ Central on Hong
 > Kong Island *and* Sai Kung ↔ Kowloon Bay in the New Territories. Search drew those as two identical `1`
 > chips — across the live dataset, **114 (number, direction) groups spanning more than one region, 294

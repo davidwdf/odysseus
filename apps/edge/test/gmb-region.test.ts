@@ -1,8 +1,14 @@
-import { fetchConsolidatedIndex, GMB_REGION_BY_ROUTE_ID } from '@nextbus/data-normalize'
+import {
+  fetchConsolidatedIndex,
+  GMB_REGION_BY_ROUTE_ID,
+  routeDocFor,
+} from '@nextbus/data-normalize'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildSearchIndex } from '../src/search-index'
 
-// ADR-171: the join that makes a green-minibus route number mean something.
+// ADR-174 and ADR-175: **a green-minibus route number is not an identity**, and this file holds both
+// faces of that one fact — the tag that tells a rider which `1` they are looking at, and the direction
+// toggle that used to send them to the other one.
 //
 // A GMB `route_code` is only unique inside its region, so `1` names a real route on Hong Kong
 // Island *and* a different real one in the New Territories. The region that tells them apart is not
@@ -27,12 +33,62 @@ afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-/** A consolidated dataset with the two minibus `1`s and a KMB `1`, and nothing else. */
-function datasetWithBothOnes(): unknown {
+/**
+ * A consolidated dataset with the two minibus `1`s and a KMB `1`, and nothing else.
+ *
+ * `bothDirections` adds the return leg of every route. It is a parameter rather than two fixtures
+ * because the two states are the two answers ADR-175 has to give — flip to the right route, or offer
+ * no flip — and a reader should see them side by side.
+ */
+function datasetWithBothOnes(bothDirections: boolean): unknown {
   const stop = (lat: number, lng: number, en: string) => ({
     location: { lat, lng },
     name: { en, zh: en },
   })
+  const leg = (
+    co: string,
+    gtfsId: string | undefined,
+    bound: 'O' | 'I',
+    orig: [string, string],
+    dest: [string, string],
+    stops: string[],
+  ) => ({
+    co: [co],
+    route: '1',
+    serviceType: '1',
+    bound: { [co]: bound },
+    ...(gtfsId === undefined ? {} : { gtfsId }),
+    orig: { en: orig[0], zh: orig[1] },
+    dest: { en: dest[0], zh: dest[1] },
+    stops: { [co]: stops },
+  })
+  const PEAK: [string, string] = ['The Peak', '山頂']
+  const CENTRAL: [string, string] = ['Central', '中環']
+  const SAIKUNG: [string, string] = ['Sai Kung', '西貢']
+  const KLNBAY: [string, string] = ['Kowloon Bay', '九龍灣']
+  const CHUKYUEN: [string, string] = ['Chuk Yuen Estate', '竹園邨']
+  const STARFERRY: [string, string] = ['Star Ferry', '尖沙咀碼頭']
+
+  const routeList: Record<string, unknown> = {
+    'gmb-1-hki-o': leg('gmb', HKI_ROUTE_1, 'O', PEAK, CENTRAL, ['PEAK', 'CENTRAL']),
+    'gmb-1-nt-o': leg('gmb', NT_ROUTE_1, 'O', SAIKUNG, KLNBAY, ['SAIKUNG', 'KLNBAY']),
+    // A KMB route carries a `gtfsId` too (ADR-152 keeps it for every operator) — and it is a TD route
+    // id from the same number space. This one is deliberately a **GMB id the table knows**, so a
+    // lookup that forgot to ask "is this GMB?" would tag a KMB route and the region test would say so.
+    'kmb-1-o': leg('kmb', NT_ROUTE_1, 'O', CHUKYUEN, STARFERRY, ['CHUKYUEN', 'STARFERRY']),
+  }
+  if (bothDirections) {
+    routeList['gmb-1-hki-i'] = leg('gmb', HKI_ROUTE_1, 'I', CENTRAL, PEAK, ['CENTRAL', 'PEAK'])
+    routeList['gmb-1-nt-i'] = leg('gmb', NT_ROUTE_1, 'I', KLNBAY, SAIKUNG, ['KLNBAY', 'SAIKUNG'])
+    // **No `gtfsId` on the return leg**, which is the ~9% of franchised route-directions the TD does
+    // not register (ADR-152). A guard that required a matching id for every operator would delete this
+    // toggle; the third test below is what catches that.
+    routeList['kmb-1-i'] = leg('kmb', undefined, 'I', STARFERRY, CHUKYUEN, [
+      'STARFERRY',
+      'CHUKYUEN',
+    ])
+  }
+
   return {
     stopList: {
       PEAK: stop(22.2708, 114.15, 'The Peak'),
@@ -42,47 +98,13 @@ function datasetWithBothOnes(): unknown {
       CHUKYUEN: stop(22.3418, 114.1907, 'Chuk Yuen Estate'),
       STARFERRY: stop(22.2941, 114.1686, 'Star Ferry'),
     },
-    routeList: {
-      'gmb-1-hki': {
-        co: ['gmb'],
-        route: '1',
-        serviceType: '1',
-        bound: { gmb: 'O' },
-        gtfsId: HKI_ROUTE_1,
-        orig: { en: 'The Peak', zh: '山頂' },
-        dest: { en: 'Central', zh: '中環' },
-        stops: { gmb: ['PEAK', 'CENTRAL'] },
-      },
-      'gmb-1-nt': {
-        co: ['gmb'],
-        route: '1',
-        serviceType: '1',
-        bound: { gmb: 'O' },
-        gtfsId: NT_ROUTE_1,
-        orig: { en: 'Sai Kung', zh: '西貢' },
-        dest: { en: 'Kowloon Bay', zh: '九龍灣' },
-        stops: { gmb: ['SAIKUNG', 'KLNBAY'] },
-      },
-      'kmb-1': {
-        co: ['kmb'],
-        route: '1',
-        serviceType: '1',
-        bound: { kmb: 'O' },
-        // A KMB route carries a `gtfsId` too (ADR-152 keeps it for every operator) — and it is a TD
-        // route id from the same number space. This one is deliberately a **GMB id the table knows**,
-        // so a lookup that forgot to ask "is this GMB?" would tag a KMB route and this test would say so.
-        gtfsId: NT_ROUTE_1,
-        orig: { en: 'Chuk Yuen Estate', zh: '竹園邨' },
-        dest: { en: 'Star Ferry', zh: '尖沙咀碼頭' },
-        stops: { kmb: ['CHUKYUEN', 'STARFERRY'] },
-      },
-    },
+    routeList,
   }
 }
 
-async function indexFromFixture() {
+async function indexFromFixture({ bothDirections = false } = {}) {
   globalThis.fetch = (async () =>
-    new Response(JSON.stringify(datasetWithBothOnes()), {
+    new Response(JSON.stringify(datasetWithBothOnes(bothDirections)), {
       headers: { 'content-type': 'application/json' },
     })) as typeof fetch
   return fetchConsolidatedIndex()
@@ -126,5 +148,43 @@ describe('a green-minibus route carries the region its number is unique within',
     const { routes } = await buildSearchIndex(await indexFromFixture())
     const kmb = JSON.parse(JSON.stringify(routes.find((r) => r.operator === 'KMB')))
     expect('region' in kmb).toBe(false)
+  })
+})
+
+describe('the direction toggle flips to the other end of the SAME route', () => {
+  // ADR-175, and the defect it fixes was reported from the app: *"the swap button moved me from NT to
+  // Hong Kong Island"*. `routeDocFor` matched the opposite bound on operator + number, which is not
+  // unique for GMB, and tie-broke with `preferServiceType` — comparing two route ids, because ADR-047
+  // folds `route_id` into that slot. It therefore returned the numerically lowest: **335 of 1,154 GMB
+  // route-directions flipped to a different route.**
+  //
+  // The fixture is built so the *old* rule is wrong in the way the owner saw it: both `1`s have both
+  // directions, and the NT id (2002337) sorts below the HKI one (2006408), so matching on the number
+  // sent a rider standing on The Peak to Sai Kung.
+
+  it('keeps a minibus rider on their own route, in their own region', async () => {
+    const index = await indexFromFixture({ bothDirections: true })
+    const hkiOut = routeDocFor(index, `GMB:1:outbound:${HKI_ROUTE_1}`)
+    const ntOut = routeDocFor(index, `GMB:1:outbound:${NT_ROUTE_1}`)
+    expect(hkiOut?.reverse?.id).toBe(`GMB:1:inbound:${HKI_ROUTE_1}`)
+    expect(ntOut?.reverse?.id).toBe(`GMB:1:inbound:${NT_ROUTE_1}`)
+    // The half a route id alone would not prove: the rider ends up at the right *place*.
+    expect(hkiOut?.reverse?.origin.en).toBe('Central')
+    expect(ntOut?.reverse?.origin.en).toBe('Kowloon Bay')
+  })
+
+  it('offers no toggle at all when upstream registers only one direction', async () => {
+    // 163 GMB route-directions are like this, and `/route-stop/<id>/2` is empty for them upstream —
+    // so there is genuinely no return leg. ADR-046 already holds the rule: an absent `reverse` **is**
+    // the answer to "should there be a toggle", and the old code answered it with another route.
+    const index = await indexFromFixture({ bothDirections: false })
+    expect(routeDocFor(index, `GMB:1:outbound:${HKI_ROUTE_1}`)?.reverse).toBeUndefined()
+  })
+
+  it('still flips a franchised route, which has a number but often no route id', async () => {
+    // The guard is GMB-only on purpose: ~9% of KMB/CTB route-directions carry no `gtfsId` (ADR-152),
+    // so requiring one would have deleted a working toggle from every racecourse and school variant.
+    const index = await indexFromFixture({ bothDirections: true })
+    expect(routeDocFor(index, 'KMB:1:outbound:1')?.reverse?.id).toBe('KMB:1:inbound:1')
   })
 })

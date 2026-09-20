@@ -1643,7 +1643,7 @@
             "$ref": "#/components/schemas/I18nText"
           },
           "region": {
-            "description": "GMB only, and **optional even there** — the region the public route number is unique within (ADR-171). Two minibus `1`s are two different routes; this is what tells them apart. Absent for KMB/CTB/LWB, whose numbers are already unique, and absent for a GMB route the committed `route_id` → region table has not met yet, because a route the table does not know must be *untagged*, never wrongly tagged.",
+            "description": "GMB only, and **optional even there** — the region the public route number is unique within (ADR-174). Two minibus `1`s are two different routes; this is what tells them apart. Absent for KMB/CTB/LWB, whose numbers are already unique, and absent for a GMB route the committed `route_id` → region table has not met yet, because a route the table does not know must be *untagged*, never wrongly tagged.",
             "$ref": "#/components/schemas/GmbRegion"
           },
           "sortKey": {

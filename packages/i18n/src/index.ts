@@ -198,7 +198,7 @@ const REGION_KEY: Record<GmbRegion, PlainMessageKey> = {
 }
 
 /**
- * The region a green-minibus route number is unique within, in the reader's language (ADR-171).
+ * The region a green-minibus route number is unique within, in the reader's language (ADR-174).
  *
  * Here rather than in a screen for `operatorName`'s reason, one layer smaller: `searchView` takes the
  * word as an injected label (ADR-054), so a table left in `apps/web` would be a table the native port

@@ -32,7 +32,7 @@ const CHIPS: SlotNode = {
 }
 
 /**
- * The tag that says **which `1` this is** (ADR-171).
+ * The tag that says **which `1` this is** (ADR-174).
  *
  * A green-minibus route number is only unique within its region, so the index carries one and the
  * model turns it into a word; on every KMB and Citybus row the field is simply absent, which is what
@@ -48,7 +48,7 @@ const REGION_TAG: SlotNode = {
   name: 'regionTag',
   text: { field: 'region' },
   when: 'region',
-  why: 'Absent for every operator whose numbers are already unique — and absent for a minibus route the region table has not met yet, because an untagged row is honest where a guessed one is not (ADR-171).',
+  why: 'Absent for every operator whose numbers are already unique — and absent for a minibus route the region table has not met yet, because an untagged row is honest where a guessed one is not (ADR-174).',
   invariant:
     'A **word from the catalogue, never the wire code**: the model is handed the label (ADR-054), so neither renderer owns a three-way `HKI`/`KLN`/`NT` table and neither can drift from the other. It also never replaces the journey — the origin and destination stay, because two riders can want the same region and different ends.',
 }
@@ -131,7 +131,7 @@ export const SEARCH_SPEC: ComponentSpec = {
      * A minibus number that names two different routes — the state the tag exists for.
      *
      * `1` is a real green-minibus route on Hong Kong Island *and* a real one in the New Territories,
-     * and until ADR-171 Search drew them as two identical chips whose only difference was the pair of
+     * and until ADR-174 Search drew them as two identical chips whose only difference was the pair of
      * place names beside them. A rider who knows they want "the 1" knows which region they are
      * standing in; they do not necessarily know its termini.
      */
@@ -139,7 +139,7 @@ export const SEARCH_SPEC: ComponentSpec = {
       must: 'Each minibus row tagged with the region its number is unique within, as a word.',
       mustNot:
         'Two rows a rider cannot tell apart — and equally, a tag on a route whose number is already unique, which would be a label that never varies and so says nothing.',
-      why: 'The identity quirk is ADR-047’s (`route_code` is unique per region, `route_id` globally), and it had been carried as a follow-up ever since: the canonical id disambiguates, the *screen* did not. ADR-171 closes it.',
+      why: 'The identity quirk is ADR-047’s (`route_code` is unique per region, `route_id` globally), and it had been carried as a follow-up ever since: the canonical id disambiguates, the *screen* did not. ADR-174 closes it.',
       enforcement: {
         shows: [
           CHIPS,

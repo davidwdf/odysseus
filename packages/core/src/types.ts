@@ -79,7 +79,7 @@ export type OperatorId = z.infer<typeof OperatorIdSchema>
 /** Direction of travel. */
 export type Bound = z.infer<typeof BoundSchema>
 
-/** The region a green-minibus route number is unique within (ADR-171). GMB only; see the schema. */
+/** The region a green-minibus route number is unique within (ADR-174). GMB only; see the schema. */
 export type GmbRegion = z.infer<typeof GmbRegionSchema>
 
 /** A geographic coordinate (WGS84). */

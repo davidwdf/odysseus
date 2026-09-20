@@ -212,7 +212,7 @@ describe('search#searchView', () => {
   })
 
   it('tags a row exactly when the index gave that route a region', () => {
-    // ADR-171's invariant, in the direction that can go wrong both ways: a minibus row that lost its
+    // ADR-174's invariant, in the direction that can go wrong both ways: a minibus row that lost its
     // region is two identical `1`s again, and a KMB row that gained one is a label the kernel invented.
     // Asserted as `iff` over every case rather than only the region one, because the tempting
     // implementation — `operator === 'GMB'` in `routeRow` — passes the region case and fails this.
