@@ -86,7 +86,7 @@ export function figures() {
   const iosPlurals = read(join(i18nRoot, 'ios', 'en.lproj', 'Localizable.stringsdict'))
 
   // The `x-unknown-tolerant` enums, **counted rather than typed**. This sentence was hand-maintained
-  // in three places and said "seven" the day `GmbRegion` made it eight (ADR-174) — a wrong instruction
+  // in three places and said "seven" the day `GmbRegion` made it eight (ADR-175) — a wrong instruction
   // to the one reader who cannot check it, in the one file that tells them what will brick their app.
   // Nothing gated it because it sat *outside* the generated regions, which is the whole argument for
   // moving it inside one: a figure beside generated content either regenerates or rots.

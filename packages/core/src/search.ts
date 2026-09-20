@@ -387,7 +387,7 @@ export interface SearchRouteRow {
   destination: string
   /**
    * "Hong Kong Island" / "Kowloon" / "New Territories" — **present only where the number alone is
-   * ambiguous**, which today means a green minibus (ADR-174).
+   * ambiguous**, which today means a green minibus (ADR-175).
    *
    * Already a word, not a code, for the same reason `chips` carry their label: the *set* is the
    * kernel's decision and the wording is the catalogue's (ADR-054). A renderer that received `NT`
@@ -581,7 +581,7 @@ function routeRow(route: RouteLite, locale: Locale, labels: SearchLabels): Searc
     // handing it two finished strings is what stops two renderers composing the pair differently.
     origin: titleCaseNameOf(route.origin[locale]),
     destination: titleCaseNameOf(route.destination[locale]),
-    // **The tag follows the field, not the operator** (ADR-174). Writing `route.operator === 'GMB'`
+    // **The tag follows the field, not the operator** (ADR-175). Writing `route.operator === 'GMB'`
     // here would be this file deciding which operators have ambiguous numbers — a fact that lives
     // upstream, in whether the index sent a `region` at all. The day a fourth operator needs one,
     // the edge sets it and this line already does the right thing.

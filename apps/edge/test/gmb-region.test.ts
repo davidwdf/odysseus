@@ -6,7 +6,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildSearchIndex } from '../src/search-index'
 
-// ADR-174 and ADR-175: **a green-minibus route number is not an identity**, and this file holds both
+// ADR-175 and ADR-176: **a green-minibus route number is not an identity**, and this file holds both
 // faces of that one fact — the tag that tells a rider which `1` they are looking at, and the direction
 // toggle that used to send them to the other one.
 //
@@ -37,7 +37,7 @@ afterEach(() => {
  * A consolidated dataset with the two minibus `1`s and a KMB `1`, and nothing else.
  *
  * `bothDirections` adds the return leg of every route. It is a parameter rather than two fixtures
- * because the two states are the two answers ADR-175 has to give — flip to the right route, or offer
+ * because the two states are the two answers ADR-176 has to give — flip to the right route, or offer
  * no flip — and a reader should see them side by side.
  */
 function datasetWithBothOnes(bothDirections: boolean): unknown {
@@ -152,7 +152,7 @@ describe('a green-minibus route carries the region its number is unique within',
 })
 
 describe('the direction toggle flips to the other end of the SAME route', () => {
-  // ADR-175, and the defect it fixes was reported from the app: *"the swap button moved me from NT to
+  // ADR-176, and the defect it fixes was reported from the app: *"the swap button moved me from NT to
   // Hong Kong Island"*. `routeDocFor` matched the opposite bound on operator + number, which is not
   // unique for GMB, and tie-broke with `preferServiceType` — comparing two route ids, because ADR-047
   // folds `route_id` into that slot. It therefore returned the numerically lowest: **335 of 1,154 GMB

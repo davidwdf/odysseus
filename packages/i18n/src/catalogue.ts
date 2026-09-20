@@ -126,7 +126,7 @@ export const CATALOGUE = {
     'zh-Hant': '特快',
     'zh-Hans': '特快',
   },
-  // The three regions a green-minibus number is unique within (ADR-174). They tag a **search row**,
+  // The three regions a green-minibus number is unique within (ADR-175). They tag a **search row**,
   // not a filter chip: a rider looking at two minibus `1`s needs to know which is which, not a
   // fourth axis to narrow by — and the axis would be dead for every KMB and Citybus route.
   //

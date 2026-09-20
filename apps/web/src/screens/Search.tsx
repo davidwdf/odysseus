@@ -269,7 +269,7 @@ export function Search() {
                     >
                       <RouteChip operator={route.operator} routeNo={route.routeNo} />
                       {/* **Which `1` is this?** — a green minibus number is only unique within its
-                          region, so two identical chips were two different routes (ADR-174). The
+                          region, so two identical chips were two different routes (ADR-175). The
                           kernel decides whether a row has one and the catalogue supplies the word;
                           this element is the whole of the renderer's share.
 
