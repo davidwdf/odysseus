@@ -92,7 +92,17 @@ the `DataSource` interface and the UI do not change.
       light up once merge + UX are ready (overlaps "Additional operators" above).
 
 ## Realtime & data quality
-- [ ] 🟠 **`/v1/nearby` sends a place's `routeCount` but not its route list** — found by
+- [x] ✅ **`/v1/nearby` sends a place's `routeCount` but not its route list** — **closed 2026-09-20 by
+      [ADR-179](./08-decision-log.md#adr-179--v1board-the-endpoint-v1nearby-is-meant-to-grow-into)**, at the
+      owner's direction: a **new endpoint** (`/v1/board`) rather than a field on the old one, so existing
+      clients keep their payload byte for byte and retiring `/v1/nearby` once Home ships is deleting a
+      route rather than migrating a shape. `homeView` needed no change — the rule was already *"chips are
+      the lines we know of; `chipsMore` is the honest remainder"*, and the corpus now carries the same
+      place both ways: **6 chips and 0 more with `lines`, 5 and 1 without**.
+      🟢 Building it found a real bug in the first draft: de-duplicating on the **route id** keeps KMB's
+      service-type variants, which are one rider line, so `lines.length` would have exceeded `routeCount`.
+      · Original wording ↓
+- [ ] ~~🟠 `/v1/nearby` sends a place's `routeCount` but not its route list~~ — found by
       [ADR-177](./08-decision-log.md#adr-177--homeview-the-merge-is-a-ranking-rule-and-catch-it-is-a-band-rather-than-a-number)
       while building Home's chip strip. A card's strip is *every route at this place, as a badge with no
       reading*, and a **saved** card can draw it in full because `StopDetail.routes` is the complete list. A

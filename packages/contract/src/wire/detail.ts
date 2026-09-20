@@ -3,7 +3,7 @@
 import { z } from 'zod'
 import { EtaFailureSchema } from './errors'
 import { EtaSchema } from './eta'
-import { I18nTextSchema, LatLngSchema } from './primitives'
+import { I18nTextSchema, LatLngSchema, OperatorIdSchema } from './primitives'
 import { RouteRefSchema, RouteSchema, RouteSummarySchema } from './route'
 import { StopSchema } from './stop'
 
@@ -138,6 +138,65 @@ export const NearbyStopSchema = z
       ),
   })
   .meta({ id: 'NearbyStop' })
+
+/**
+ * One rider line at a place, as a badge with no reading — what a chip strip is made of.
+ *
+ * **Deliberately not a `RouteSummary`.** A place's full line-up is the whole point of `/v1/board`, so the
+ * per-line cost is multiplied by every route at every place a request returns: a Nathan Road interchange
+ * is ~26 lines and a request returns six places. `RouteSummary` carries `origin`, `destination` and
+ * `service` — three `I18nText` objects and a service block — which is roughly twenty times this and none
+ * of which a badge shows. A rider who taps a chip is one navigation away from `/v1/route/{id}`, which has
+ * all of it.
+ *
+ * `routeNo` is carried rather than parsed out of `id` because every other line-bearing shape on this wire
+ * carries it (`RouteSummary`, `Eta`), and a client that derived it here would be the one place the id
+ * grammar leaked into a consumer.
+ */
+export const BoardLineSchema = z
+  .object({
+    // `routeId`, not `id`, and the sibling array is why: a `BoardPlace` carries `etas` alongside this,
+    // every one of which names its route `routeId`, and a consumer reads the two together to work out
+    // which lines have a reading. Consistency *inside* one payload beats consistency with how a route
+    // names itself when it is the subject (`RouteSummary.id`).
+    routeId: z.string().describe('Canonical route id, e.g. "KMB:6:outbound:1".'),
+    operator: OperatorIdSchema,
+    routeNo: z.string().describe('Public route number shown on the bus, e.g. "6", "720", "N691".'),
+  })
+  .meta({ id: 'BoardLine' })
+
+/**
+ * A place on the **board** — `GET /v1/board`, the one `/v1/nearby` is meant to grow into.
+ *
+ * **What it adds, and the defect it exists to close.** `/v1/nearby` sends a place's *readings* plus a
+ * `routeCount`, so a client can say "six of twenty-six · +20 more" honestly but cannot say **which**
+ * twenty. That was fine while a card showed a shortlist of arrivals; it is not fine for Home's chip
+ * strip (`proposals/07`), where the card's second half is *every route that stops here, as a badge with
+ * no time on it* — precisely so nothing has to be chosen on the rider's behalf. With only a count, one
+ * half of Home's board can expand its strip and the other cannot, which is a difference a rider sees.
+ *
+ * **It costs the edge nothing.** `nearby()` already reads the whole `PlaceDoc` for every place it
+ * returns — it needs `members` and `routes` to fetch arrivals at all — and then projects one integer out
+ * of the route list it is holding. This endpoint projects the list.
+ *
+ * **`lines` is optional, and that is what makes the migration boring.** A `NearbyStop` is a valid
+ * `BoardPlace` with the field absent, so `homeView` in @nextbus/core takes one type either way: chips
+ * come from `lines` when it is there and from the readings when it is not, with `routeCount` making up
+ * the honest remainder in both cases. Pointing the client at `/v1/board` changes which of those two arms
+ * runs and nothing else, and retiring `/v1/nearby` is deleting a route rather than migrating a shape.
+ *
+ * `routeCount` is kept even though `lines.length` equals it when `lines` is present. Two reasons: the
+ * remainder rule above needs it in the absent case, and a client should never have to decide *whether*
+ * to trust a length as a total — the total has one name on this wire.
+ */
+export const BoardPlaceSchema = NearbyStopSchema.extend({
+  lines: z
+    .array(BoardLineSchema)
+    .optional()
+    .describe(
+      'EVERY distinct rider line serving this place — operator + route number + direction — de-duplicated across its boarding poles and ordered as the dataset holds them, so `lines.length` equals `routeCount`. Absent from `/v1/nearby`, which sends only the count; always present from `/v1/board`. A consumer that has it can draw the place\u2019s whole line-up with no reading attached to any of it; one that does not falls back to the lines among `etas` plus an honest remainder.',
+    ),
+}).meta({ id: 'BoardPlace' })
 
 /**
  * The road-following line for one route direction — `GET /v1/route/{id}/path` (ADR-152/153).

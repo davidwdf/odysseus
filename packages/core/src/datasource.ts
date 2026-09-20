@@ -1,5 +1,6 @@
 import type { SearchIndex } from './search'
 import type {
+  BoardPlace,
   ClientPolicy,
   Eta,
   EtaBatch,
@@ -87,6 +88,17 @@ export interface WatchOptions {
 export interface DataSource {
   /** Stops near a point, soonest arrivals first. v1 finds candidates on-device. */
   getNearby(at: LatLng, radiusM: number): Promise<NearbyStop[]>
+  /**
+   * The same places as {@link getNearby}, each carrying its **complete line-up** as well as its
+   * readings (ADR-179) — what Home's board is drawn from.
+   *
+   * **A second method rather than a flag, for the same reason it is a second endpoint**: the payloads
+   * genuinely differ, the old one has callers that must not pay for the new one, and retiring it once
+   * Home ships is deleting a method rather than unpicking a parameter. A `BoardPlace` is a
+   * `NearbyStop` with one optional field, so anything written against the narrower shape already
+   * accepts the wider one.
+   */
+  getBoard(at: LatLng, radiusM: number): Promise<BoardPlace[]>
   /** A route and its ordered stop list (static), with live ETAs where available. */
   getRoute(routeId: string): Promise<RouteDetail>
   /**

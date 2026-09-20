@@ -6910,6 +6910,217 @@
             ],
             "nearby": []
           }
+        },
+        {
+          "name": "a-board-place-draws-its-whole-line-up-and-hides-nothing",
+          "why": "What `/v1/board` buys (ADR-179). With `lines` the strip is every route at the place and `chipsMore` falls out at zero, so the '+N' badge can expand in place. The same place from `/v1/nearby` — the case above it — draws only the lines that happen to have a bus due and carries the rest as a remainder. One rule, two inputs; this row is the evidence that moving the client to the new endpoint needs no kernel change.",
+          "args": {
+            "saved": [],
+            "places": [],
+            "nearby": [
+              {
+                "stop": {
+                  "id": "GMB:20001553",
+                  "name": {
+                    "en": "Tai Chung Kiu Road, outside Belair Gardens",
+                    "zh-Hant": "大涌橋路, 富豪花園外",
+                    "zh-Hans": "大涌橋路, 富豪花園外"
+                  },
+                  "location": {
+                    "lat": 22.38497,
+                    "lng": 114.19844
+                  },
+                  "sources": [
+                    {
+                      "operator": "GMB",
+                      "operatorStopId": "20001553"
+                    }
+                  ]
+                },
+                "distanceM": 44,
+                "etas": [
+                  {
+                    "routeId": "GMB:804:outbound:2010275",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:51:52.634+08:00",
+                      "2026-07-29T12:01:33.746+08:00",
+                      "2026-07-29T12:07:29.708+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Hin Keng",
+                      "zh-Hant": "顯徑",
+                      "zh-Hans": "顯徑"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:65A:outbound:2009082",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:51:53.269+08:00",
+                      "2026-07-29T11:56:49.501+08:00",
+                      "2026-07-29T12:02:11.973+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Sha Tin Central",
+                      "zh-Hant": "沙田市中心",
+                      "zh-Hans": "沙田市中心"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:67A:outbound:2009119",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:53:02.788+08:00",
+                      "2026-07-29T11:59:16.455+08:00",
+                      "2026-07-29T12:11:16.455+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Sha Tin Station",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:803:inbound:2010269",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T11:54:05.256+08:00",
+                      "2026-07-29T11:55:46.470+08:00",
+                      "2026-07-29T11:56:27.044+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "destination": {
+                      "en": "Hin Keng",
+                      "zh-Hant": "顯徑",
+                      "zh-Hans": "顯徑"
+                    }
+                  },
+                  {
+                    "routeId": "GMB:67K:outbound:2009118",
+                    "stopId": "20001553",
+                    "operator": "GMB",
+                    "arrivals": [
+                      "2026-07-29T12:11:47.157+08:00",
+                      "2026-07-29T12:26:47.157+08:00",
+                      "2026-07-29T12:41:47.157+08:00"
+                    ],
+                    "dataTimestamp": "2026-07-29T11:50:26.807+08:00",
+                    "observedAt": "2026-07-29T03:50:29.479Z",
+                    "remark": {
+                      "en": "Scheduled",
+                      "zh-Hant": "未開出",
+                      "zh-Hans": "未开出"
+                    },
+                    "remarkKind": "scheduled",
+                    "destination": {
+                      "en": "Sha Tin  Station",
+                      "zh-Hant": "沙田站",
+                      "zh-Hans": "沙田站"
+                    }
+                  }
+                ],
+                "routeCount": 6,
+                "lines": [
+                  {
+                    "routeId": "GMB:804:outbound:2010275",
+                    "operator": "GMB",
+                    "routeNo": "804"
+                  },
+                  {
+                    "routeId": "GMB:65A:outbound:2009082",
+                    "operator": "GMB",
+                    "routeNo": "65A"
+                  },
+                  {
+                    "routeId": "GMB:67A:outbound:2009119",
+                    "operator": "GMB",
+                    "routeNo": "67A"
+                  },
+                  {
+                    "routeId": "GMB:803:inbound:2010269",
+                    "operator": "GMB",
+                    "routeNo": "803"
+                  },
+                  {
+                    "routeId": "GMB:67K:outbound:2009118",
+                    "operator": "GMB",
+                    "routeNo": "67K"
+                  },
+                  {
+                    "routeId": "KMB:Q5:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "Q5"
+                  }
+                ]
+              }
+            ],
+            "locale": "en",
+            "now": "2026-07-29T11:50:30+08:00",
+            "at": {
+              "lat": 22.38497,
+              "lng": 114.19844
+            }
+          },
+          "expect": {
+            "catch": [],
+            "saved": [],
+            "nearby": [
+              {
+                "stopId": "GMB:20001553",
+                "name": {
+                  "label": "Tai Chung Kiu Road, outside Belair Gardens"
+                },
+                "caption": "40m · 1 min walk",
+                "saved": [],
+                "chips": [
+                  {
+                    "routeId": "GMB:804:outbound:2010275",
+                    "operator": "GMB",
+                    "routeNo": "804"
+                  },
+                  {
+                    "routeId": "GMB:65A:outbound:2009082",
+                    "operator": "GMB",
+                    "routeNo": "65A"
+                  },
+                  {
+                    "routeId": "GMB:67A:outbound:2009119",
+                    "operator": "GMB",
+                    "routeNo": "67A"
+                  },
+                  {
+                    "routeId": "GMB:803:inbound:2010269",
+                    "operator": "GMB",
+                    "routeNo": "803"
+                  },
+                  {
+                    "routeId": "GMB:67K:outbound:2009118",
+                    "operator": "GMB",
+                    "routeNo": "67K"
+                  },
+                  {
+                    "routeId": "KMB:Q5:outbound:1",
+                    "operator": "KMB",
+                    "routeNo": "Q5"
+                  }
+                ],
+                "chipsMore": 0,
+                "incomplete": false
+              }
+            ]
+          }
         }
       ]
     }

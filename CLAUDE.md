@@ -65,7 +65,9 @@ apps/web             Vite + plain React DOM — the renderer that REPLACES the E
                      its published spec. There is no `Placeholder` any more: `screenFor` is an
                      exhaustive switch, so a destination with no screen is a typecheck failure. It
                      derives nothing, and a gate enforces that (ADR-068/069)
-apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby, /v1/etas/:id and /v1/etas?ids=… — the
+apps/edge            Cloudflare Worker (ETA proxy, /v1/nearby and /v1/board — the same places, the second
+                     also carrying each one's COMPLETE line-up, and the one the first is meant to grow into
+                     (ADR-179) — /v1/etas/:id and /v1/etas?ids=… — the
                      batch one round of a live subscription is fetched in, ADR-079 — /v1/tiles,
                      /v1/health; reads precomputed dataset shards from KV/R2 — ADR-055; and /v1/live,
                      the ETA socket served by the sharded, hibernating `EtaHub` DO — ADR-056)
@@ -159,7 +161,8 @@ scripts/pwa          the Workbox caching policy + the assertions over the emitte
 
 ## How to verify a change
 - **Edge:** `pnpm dev:edge`, then `curl "http://localhost:8787/v1/eta/kmb/<stopId>/<route>/1"` or
-  `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"`. `curl .../v1/health` tells you
+  `curl "http://localhost:8787/v1/nearby?lat=22.3193&lng=114.1694"` (or `/v1/board`, which adds each
+  place's `lines`). `curl .../v1/health` tells you
   which dataset tier you're on — **`"dataset":"kv"` with `datasetBuildsThisIsolate: 0`** is the
   production invariant (ADR-055); `"inline"` means it's building the 8.3 MB dataset per isolate.
 - **The live socket:** `pnpm dev:edge`, then open `/v1/live?targets=<percent-encoded canonical id>` with a

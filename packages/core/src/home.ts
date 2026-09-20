@@ -8,7 +8,7 @@ import {
   type StopCardRow,
   stopCardCaption,
 } from './stop-card'
-import type { LatLng, NearbyStop, OperatorId, StopDetail } from './types'
+import type { BoardPlace, LatLng, OperatorId, StopDetail } from './types'
 
 /**
  * **Home's board** — the merge of Nearby and Favourites into one screen
@@ -102,11 +102,12 @@ export interface HomeCard {
   /**
    * Routes at this place beyond `chips` — the honest remainder, never a silent filter.
    *
-   * ⚠️ **Non-zero on a discovery card today, and that is a wire gap rather than a design choice.**
-   * `/v1/nearby` publishes a place's *readings* and a `routeCount`, but **not its route list** — the edge
-   * counts the lines from the static index and sends the total. So a nearby card's chips are the lines
-   * among its readings and this is everything else, which a tap on the place resolves. A saved card has
-   * `StopDetail.routes` and so has the complete strip. See `docs/07`.
+   * **Zero on every card served by `/v1/board`** (ADR-179), which sends each place's complete line-up —
+   * so the strip is whole and the "+N" badge has nothing to hide. It is non-zero only against
+   * `/v1/nearby`, which publishes a place's readings and a `routeCount` but not its route list: there
+   * the chips are the lines among the readings and this is everything else. Both are honest; one is
+   * complete. The field stays because the rule has to hold for either input, and because a total should
+   * have one name on this wire rather than sometimes being a length.
    */
   chipsMore: number
   /** True when a boarding point of this place would not answer (ADR-077). */
@@ -128,8 +129,14 @@ export interface HomeInput {
   saved: readonly string[]
   /** The resolved places for those poles. One that has not resolved is simply absent. */
   places: readonly StopDetail[]
-  /** `/v1/nearby`'s answer, in whatever order it arrived. */
-  nearby: readonly NearbyStop[]
+  /**
+   * The places around the rider, in whatever order they arrived.
+   *
+   * `/v1/board`'s answer (ADR-179), whose places carry their complete line-up — but typed so
+   * `/v1/nearby`'s do too, because a `NearbyStop` **is** a `BoardPlace` with `lines` absent. That is
+   * what makes the endpoint swap boring: it changes which arm of `nearbyCard` runs and nothing else.
+   */
+  nearby: readonly BoardPlace[]
   /**
    * Where the rider is, when we know.
    *
@@ -232,10 +239,18 @@ function savedCard(
   }
 }
 
-/** A place the rider is near and has saved nothing at: no rows, and the strip the wire can support. */
-function nearbyCard(n: NearbyStop, opts: StopCardOptions): HomeCard {
-  // The lines among the readings, one badge per line however many kerbs it boards at.
-  const chips = chipsOf(n.etas, NOTHING_EXCLUDED)
+/**
+ * A place the rider is near and has saved nothing at: no rows, and the best strip the wire supports.
+ *
+ * **Two arms, and which one runs is the endpoint's answer rather than a decision here.** `/v1/board`
+ * sends `lines` — every route at the place — so the strip is complete and `chipsMore` falls out at
+ * zero. `/v1/nearby` sends only a count, so the strip is the lines among the readings and `chipsMore`
+ * is the honest remainder. The rule is one sentence either way — *chips are the lines we know of;
+ * `chipsMore` is everything else* — which is why moving Home onto the new endpoint needed no change
+ * to it, and why a client still on the old one degrades rather than breaks.
+ */
+function nearbyCard(n: BoardPlace, opts: StopCardOptions): HomeCard {
+  const chips = chipsOf(n.lines ?? n.etas, NOTHING_EXCLUDED)
   return {
     stopId: n.stop.id,
     name: displayName(n.stop.name[opts.locale]),

@@ -1,4 +1,5 @@
 import type {
+  BoardPlace,
   ClientPolicy,
   DataSource,
   Eta,
@@ -85,6 +86,11 @@ export const INDEX_DEADLINE_MS = 60_000
  * supervised so it degrades to the poll emulator in `./live/poll.ts` on a network that cannot carry it
  * (WP6-8b). Swapping transports swaps the engine and nothing else (ADR-004).
  */
+/** The coordinates-and-radius query both nearby endpoints ask with — one spelling, two callers. */
+function nearQuery(at: LatLng, radiusM: number): string {
+  return `?lat=${at.lat}&lng=${at.lng}&radius=${radiusM}`
+}
+
 export class EdgeClient implements DataSource {
   private readonly endpoints: Endpoints
   private readonly base: string
@@ -141,8 +147,18 @@ export class EdgeClient implements DataSource {
   }
 
   getNearby(at: LatLng, radiusM: number): Promise<NearbyStop[]> {
-    const q = `?lat=${at.lat}&lng=${at.lng}&radius=${radiusM}`
-    return this.getJson<NearbyStop[]>(`/v1/nearby${q}`)
+    return this.getJson<NearbyStop[]>(`/v1/nearby${nearQuery(at, radiusM)}`)
+  }
+
+  /**
+   * The board: the same places, plus every line that stops at each (ADR-179).
+   *
+   * One extra round trip is *not* what this costs — it replaces the `/v1/nearby` call rather than
+   * joining it. The edge answers both from the same place documents it already reads; the difference
+   * is bytes.
+   */
+  getBoard(at: LatLng, radiusM: number): Promise<BoardPlace[]> {
+    return this.getJson<BoardPlace[]>(`/v1/board${nearQuery(at, radiusM)}`)
   }
 
   getRoute(routeId: string): Promise<RouteDetail> {

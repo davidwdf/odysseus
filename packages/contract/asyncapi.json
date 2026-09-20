@@ -3,7 +3,7 @@
   "x-json-schema-dialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
     "title": "NextBus HK — live ETA stream",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "The frames on `/v1/live`: one socket per client, a `snapshot` then `delta`s, pushed on a\nserver-controlled cadence. Companion to `openapi.json`, which describes the JSON endpoints.\n\nBoth documents are emitted from the same Zod declarations, through one registry pass, with one set\nof `#/components/schemas/` pointers — so they cannot disagree about what an `Eta` *is*. They are\n**not** byte-identical, and the two differences are deliberate losses of information that\nAsyncAPI's own rules force (see `foldRefSiblings` in `src/asyncapi.ts`): this document drops the\n`$id` every schema carries there, and it rewrites `$ref`-with-`description` into\n`allOf: [{$ref}, {description}]` at four sites — `Eta.destination`, `Eta.remark`,\n`Eta.remarkKind` and `RouteDetail.reverse` — because AsyncAPI's Reference Object ignores sibling\nkeywords, and `Eta.remarkKind`'s note (absent, never `\"info\"`) is the one field note in this\ncontract most expensive to lose. A generator therefore produces slightly different shapes for\nthose four from the two documents; everything else matches.\n\n**Read this before planning to generate anything from this document.** It is a specification\nartefact with a validator, and only aspirationally a codegen input:\n\n- **There is no AsyncAPI→Swift generator in existence.** Modelina — the reference generator —\n  emits 12 languages and Swift is not among them, and a sweep of `asyncapi.com/tools` finds no\n  tool mentioning Swift, Objective-C or iOS in any category. An iOS client hand-writes these\n  frame types.\n- **Kotlin generation exists and cannot serialise.** Modelina's Kotlin output lists JSON, XML\n  and binary serialization as \"currently not supported\", so `generate models kotlin` yields\n  annotation-free data classes and the decode layer is hand-written anyway — which puts the\n  unknown-enum tolerance obligation (`x-unknown-tolerant`) on hand-written code on Android too.\n- **`asyncapi diff` is not an `oasdiff` equivalent.** Its standards table has no\n  `/components/schemas/*` pointer, so adding *or removing* a payload field classifies as\n  `unclassified`, not `breaking`. A gate built on it would go green on a removed field — a gate\n  looking at nothing. Breaking-change discipline for these shapes is ADR-052 §5 plus review.\n- **The schemas are generated as JSON Schema 2020-12** and this document declares draft-07,\n  because that is what AsyncAPI 3.0's Schema Object is a superset of. The\n  `x-json-schema-dialect` extension above records what the bytes are, and\n  `packages/contract/scripts/check-asyncapi-current.mjs` fails on any keyword outside the\n  intersection of the two vocabularies, so the declaration stays true as the schemas grow.\n- **This document has never been validated against the AsyncAPI meta-schema.** Doing that needs\n  a dependency this repo has not taken (`@asyncapi/parser`, or `@asyncapi/specs` + ajv). The\n  gate transcribes the field lists and constraints that matter from the spec instead, and says\n  so. Treat \"AsyncAPI 3.0\" here as a careful reading, not a validator's verdict.\n\nConventions inherited from `openapi.json` and restated because a reader may only ever see this\nfile:\n\n- **Objects are open.** Additional properties are permitted by design; do not configure a\n  generator to reject unknown keys, or one added optional field stops every deployed client\n  decoding.\n- **Enums marked `x-unknown-tolerant` will gain members** without a major version bump.\n  Generate a fallback case; do not throw on an unrecognised value.\n- **A frame is identified by its `type` const, which is required on every frame.** That is what\n  makes the channel's \"valid against one and only one message\" rule hold given open objects.\n- **`Eta.dataTimestamp` carries a `+08:00` offset; a frame's own `at` and `Eta.observedAt` are\n  `Z`-suffixed UTC**, because our layer stamps those two and the operators stamp the other.\n  Parse them as instants. Judge staleness from `dataTimestamp` — never from `observedAt`, which\n  would make a replayed offline reading look fresh (ADR-008, ADR-058).\n- **ETAs are approximations.** No per-second countdown; repaint when a frame arrives."
   },
   "defaultContentType": "application/json",
@@ -950,6 +950,70 @@
           "routeCount"
         ]
       },
+      "BoardLine": {
+        "type": "object",
+        "properties": {
+          "routeId": {
+            "type": "string",
+            "description": "Canonical route id, e.g. \"KMB:6:outbound:1\"."
+          },
+          "operator": {
+            "$ref": "#/components/schemas/OperatorId"
+          },
+          "routeNo": {
+            "type": "string",
+            "description": "Public route number shown on the bus, e.g. \"6\", \"720\", \"N691\"."
+          }
+        },
+        "required": [
+          "routeId",
+          "operator",
+          "routeNo"
+        ]
+      },
+      "BoardPlace": {
+        "type": "object",
+        "properties": {
+          "stop": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "distanceM": {
+            "type": "number",
+            "description": "Straight-line distance from the query point, metres. Round it for display — ADR-008."
+          },
+          "etas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Eta"
+            },
+            "description": "Soonest arrivals first, one per route+direction **at each boarding pole** — so a line boarding at two poles of this place appears twice, distinguished by `stopId` (WP5-9). A compact card with no per-pole heading should collapse them to one row per route+direction before capping and counting; `stopCardView` in @nextbus/core is that rule. May be fewer readings than routeCount: routes with no live reading right now are not listed."
+          },
+          "routeCount": {
+            "type": "number",
+            "description": "True number of distinct rider LINES — operator + route number + direction — serving the place, from the static index (no live call), counted once however many poles a line boards at. Lets a compact card say \"soonest few of N · +N more\" honestly, never a silent filter. Subtract rows counted in the same unit: subtracting per-pole readings from it understates what is hidden."
+          },
+          "failed": {
+            "description": "Boarding points of THIS place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). Without it `etas: []` means two different things — this stop has no buses, or nobody would tell us — and a card renders identically for both. `stopCardView` in @nextbus/core turns it into the one thing a compact card can honestly say, since a card has no per-kerb heading to attach it to. A reading missing for a pole named here has NOT departed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
+          },
+          "lines": {
+            "description": "EVERY distinct rider line serving this place — operator + route number + direction — de-duplicated across its boarding poles and ordered as the dataset holds them, so `lines.length` equals `routeCount`. Absent from `/v1/nearby`, which sends only the count; always present from `/v1/board`. A consumer that has it can draw the place’s whole line-up with no reading attached to any of it; one that does not falls back to the lines among `etas` plus an honest remainder.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BoardLine"
+            }
+          }
+        },
+        "required": [
+          "stop",
+          "distanceM",
+          "etas",
+          "routeCount"
+        ]
+      },
       "RoutePath": {
         "type": "object",
         "properties": {
@@ -1184,6 +1248,12 @@
         "type": "array",
         "items": {
           "$ref": "#/components/schemas/NearbyStop"
+        }
+      },
+      "BoardList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/BoardPlace"
         }
       },
       "EtaReport": {

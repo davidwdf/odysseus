@@ -27,7 +27,7 @@ import { ERROR_CODES, WIRE_ENDPOINTS } from './wire/responses'
  * rather than later. §5's `oasdiff` gate still does not exist (recorded in ADR-052 and again here);
  * what stands in for it is this constant, the ADR, and `wire-conformance.test.ts`.
  */
-export const CONTRACT_VERSION = '2.0.0'
+export const CONTRACT_VERSION = '2.1.0'
 
 /**
  * The documented failure statuses, derived from `ERROR_CODES` so the OpenAPI document cannot list

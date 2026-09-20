@@ -6,7 +6,7 @@ import type { Env } from './env'
 import { badRequest, errorResponse, fail as failWith, notFound } from './errors'
 import { ETA_TTL_SEC } from './eta-cache'
 import { LIVE_PATH, liveUpgrade } from './live'
-import { nearby } from './nearby'
+import { board, nearby } from './nearby'
 import { ROUTE_PATH_TTL_SEC, routePath } from './route-path'
 import {
   LIST_CTB_BUDGET,
@@ -313,7 +313,18 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   }
 
   // GET /v1/nearby?lat=&lng=[&radius=]  → NearbyStop[]
-  if (parts[0] === 'v1' && parts[1] === 'nearby') {
+  // GET /v1/board?lat=&lng=[&radius=]   → BoardPlace[]  (the same places, plus each one's full line-up)
+  //
+  // **One block, two paths, and that is the point rather than a saving.** Everything below the handler
+  // call — the `Number(null)` trap, the radius clamp that bounds how many KV cells a query reads, the
+  // edge-cache key, the error context — is the same question answered the same way, and the two routes
+  // differ only in how much of the place document they project. Two blocks would be two copies of a
+  // clamp whose absence is a remote amplification from one query parameter, and the copies would agree
+  // until one of them was tuned. `/v1/board` is meant to replace `/v1/nearby` once Home lands
+  // (`proposals/07`), so the pair is temporary by design and sharing the parsing is what makes the
+  // removal a deletion.
+  if (parts[0] === 'v1' && (parts[1] === 'nearby' || parts[1] === 'board')) {
+    const wantsLines = parts[1] === 'board'
     // `Number(null)` is **0**, not NaN, and `searchParams.get` returns null for an absent key —
     // so reading these straight through `Number()` turned "no coordinates supplied" into "the
     // coordinates are 0, 0" and served an empty list with a 200. A client with a broken location
@@ -330,7 +341,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     // amplification from one query parameter. 2 km is far beyond any walkable stop.
     const radius = Number.isFinite(radiusRaw) ? Math.min(2000, Math.max(50, radiusRaw)) : 500
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return fail('bad_request', 'usage: /v1/nearby?lat=<deg>&lng=<deg>[&radius=<m>]')
+      return fail('bad_request', `usage: /v1/${parts[1]}?lat=<deg>&lng=<deg>[&radius=<m>]`)
     }
 
     const cache = caches.default
@@ -339,12 +350,15 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if (hit) return hit
 
     try {
-      const stops = await nearby(await getDataset(env), lat, lng, radius)
+      const dataset = await getDataset(env)
+      const stops = wantsLines
+        ? await board(dataset, lat, lng, radius)
+        : await nearby(dataset, lat, lng, radius)
       const res = json(stops, ETA_TTL_SEC)
       ctx.waitUntil(cache.put(cacheKey, res.clone()))
       return res
     } catch (err) {
-      return errorResponse(err, CORS, { context: 'nearby error' })
+      return errorResponse(err, CORS, { context: `${parts[1]} error` })
     }
   }
 

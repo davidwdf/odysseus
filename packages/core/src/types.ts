@@ -20,6 +20,8 @@
 // this file, that check will fail, and it is right.
 
 import type {
+  BoardLineSchema,
+  BoardPlaceSchema,
   BoundSchema,
   ClientFrameSchema,
   ClientPolicySchema,
@@ -170,6 +172,10 @@ export type StopDetail = z.infer<typeof StopDetailSchema>
 
 /** A nearby stop (or merged place) with distance + its soonest arrivals. */
 export type NearbyStop = z.infer<typeof NearbyStopSchema>
+/** A place on the board — a `NearbyStop` plus, from `/v1/board`, its complete line-up. */
+export type BoardPlace = z.infer<typeof BoardPlaceSchema>
+/** One rider line at a place, as a badge with no reading. */
+export type BoardLine = z.infer<typeof BoardLineSchema>
 
 /** Why a request failed, in the vocabulary every failure is classified into (ADR-064). Treat it as
  *  open — the server may mint a member this build has never heard of, which is what `retryable`

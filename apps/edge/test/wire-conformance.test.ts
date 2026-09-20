@@ -166,6 +166,10 @@ async function resolvePaths(): Promise<Map<string, string>> {
   return new Map([
     ['getHealth', '/v1/health'],
     ['getNearby', nearbyPath],
+    // A radius of its own, for the reason stated above: `caches.default` is not reset between files,
+    // and `/v1/board` differs from `/v1/nearby` in its response rather than its query, so sharing a
+    // radius would be two endpoints competing for one cache entry.
+    ['getBoard', `/v1/board?lat=${ORIGIN.lat}&lng=${ORIGIN.lng}&radius=493`],
     ['getStop', `/v1/stop/${encodeURIComponent(placeId)}`],
     ['getRoute', `/v1/route/${encodeURIComponent(routeId)}`],
     ['getRoutePath', `/v1/route/${encodeURIComponent(routeId)}/path`],
@@ -361,6 +365,14 @@ const ERROR_CASES: ErrorCase[] = [
     code: 'bad_request',
     endpoint: 'getStopEtasBatch',
     path: `/v1/etas?${Array.from({ length: ETAS_BATCH_MAX_IDS + 1 }, (_, i) => `ids=KMB%3AOVER${i}`).join('&')}`,
+  },
+  {
+    // `/v1/board` shares `/v1/nearby`'s parsing block, so this asserts the *sharing* as much as the
+    // classification: a future split into two blocks would have to keep both passing.
+    name: 'the board with no coordinates at all',
+    code: 'bad_request',
+    endpoint: 'getBoard',
+    path: '/v1/board?radius=492',
   },
   {
     name: 'nearby with no coordinates at all',

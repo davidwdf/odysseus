@@ -8,7 +8,13 @@
 // cannot drift from what the Worker returns without a red test.
 
 import { z } from 'zod'
-import { NearbyStopSchema, RouteDetailSchema, RoutePathSchema, StopDetailSchema } from './detail'
+import {
+  BoardPlaceSchema,
+  NearbyStopSchema,
+  RouteDetailSchema,
+  RoutePathSchema,
+  StopDetailSchema,
+} from './detail'
 // The failure taxonomy moved to `./errors` in ADR-077 — see that file's header for the cycle that
 // forced it (`detail.ts` needs `EtaFailure`, and this module imports `detail.ts`). Re-exported below
 // so every existing importer of `ERROR_CODES` / `WireErrorSchema` / `ErrorResponseSchema` /
@@ -48,6 +54,7 @@ export const RootResponseSchema = z
 
 export const EtaListSchema = z.array(EtaSchema).meta({ id: 'EtaList' })
 export const NearbyListSchema = z.array(NearbyStopSchema).meta({ id: 'NearbyList' })
+export const BoardListSchema = z.array(BoardPlaceSchema).meta({ id: 'BoardList' })
 
 /**
  * What `/v1/etas/:id` answers: the readings we have, and the boarding points we could not ask about.
@@ -187,6 +194,37 @@ export const WIRE_ENDPOINTS = [
     summary: 'Dataset tier and in-isolate build count for this isolate.',
     response: HealthResponseSchema,
     params: [],
+  },
+  {
+    operationId: 'getBoard',
+    path: '/v1/board',
+    summary:
+      'Places near a coordinate with their soonest arrivals AND their complete line-up — the endpoint /v1/nearby is meant to grow into.',
+    response: BoardListSchema,
+    params: [
+      {
+        name: 'lat',
+        in: 'query',
+        required: true,
+        type: 'number',
+        description: 'Latitude, WGS84 degrees.',
+      },
+      {
+        name: 'lng',
+        in: 'query',
+        required: true,
+        type: 'number',
+        description: 'Longitude, WGS84 degrees.',
+      },
+      {
+        name: 'radius',
+        in: 'query',
+        required: false,
+        type: 'number',
+        description:
+          'Search radius in metres. Defaults to 500 and is clamped to 50–2000, exactly as /v1/nearby clamps it and for the same reason: the radius decides how many KV cells are read, quadratically.',
+      },
+    ],
   },
   {
     operationId: 'getNearby',

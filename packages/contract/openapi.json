@@ -3,7 +3,7 @@
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
     "title": "NextBus HK — wire API",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Hong Kong bus arrival times, normalized across KMB/LWB, Citybus and Green Minibus.\n\nConventions that are easy to get wrong, and are stated per-field in the schemas:\n\n- **Timestamps** are ISO-8601 with a `+08:00` offset.\n- **`\"HH:mm\"` may exceed 24** — `\"25:35\"` means 01:35 the next day.\n- **Fares are decimal strings.** Compare numerically, display verbatim, never parse to a float.\n- **Objects are open.** Additional properties are permitted by design, so a client generated\n  from an older revision of this document keeps decoding after a field is added. Do not\n  configure your generator to reject unknown keys.\n- **A route is served at two service fidelities, and they are two schemas.** `/v1/route/{id}`\n  returns `Route` (`service`: `RouteServiceInfo`, with `patterns`); stop responses return\n  `RouteSummary` (`service`: `RouteServiceSummary`, which has no `patterns` property at all).\n  Decode each against its own type and the absence of a frequency table is never ambiguous.\n- **Enums marked `x-unknown-tolerant`** will gain members without a major version bump.\n  Generate a fallback case (`case unknown(String)`); do not throw on an unrecognized value.\n- **ETAs are approximations.** Do not run a per-second countdown; refresh the value only when\n  a new reading arrives, and judge staleness from `dataTimestamp` — the operator's clock.\n  `observedAt` is when *we* fetched it, which tells a replayed reading from a fresh one but must\n  not be used as the age: a cache replay would then look live. It is also the one timestamp here\n  that is `Z`-suffixed UTC rather than `+08:00`, because our layer stamps it.\n- **`RouteLite.sortKey` is the order to display, not a hint.** Sort by it verbatim and every\n  platform agrees; the ordering it encodes is `localeCompare(numeric: true)`, which has no\n  faithful Swift or Kotlin equivalent, so the server computes it rather than asking three\n  languages to reinvent it (ADR-063). It is optional only so an older client still decodes.\n- **`Eta.remarkKind` is absent when there is no remark** — not `\"info\"`. Treat the missing key\n  as \"nothing to classify\"; a default of `info` invents an honesty cue the operator did not give.\n- **`GET /v1/policy` is advice, not a dependency.** It serves counts, cadences and the ADR-008\n  honesty thresholds, `max-age=300`, and **every field is optional**. Compile in your own\n  defaults, overlay whatever the document supplies, and never block first paint on the fetch:\n  a client that cannot reach it must still be a working client.\n- **Every failure returns `ErrorResponse`.** Branch on `code`, and let `retryable` decide\n  whether a background client (Widget, complication) retries or prunes the request. The\n  status code always agrees with `code`. `error` duplicates `message` and is deprecated.\n- **This document does not specify domain rules.** Shapes are generated and therefore agree by\n  construction; rules — deduping arrivals, when a bus is \"due\", bearing labels, fare estimates —\n  are hand-ported per platform and are pinned by a language-neutral fixture corpus instead\n  (ADR-060). Generating models from this file is half a port. Read\n  `packages/contract/README.md` for the other half."
   },
   "paths": {
@@ -19,6 +19,103 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`code: \"bad_request\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`code: \"not_found\"` — permanently wrong; a background client should prune the request, not retry it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`code: \"internal\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`code: \"upstream_unavailable\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`code: \"upstream_timeout\"` — the identical request may succeed later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/board": {
+      "get": {
+        "operationId": "getBoard",
+        "summary": "Places near a coordinate with their soonest arrivals AND their complete line-up — the endpoint /v1/nearby is meant to grow into.",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "description": "Latitude, WGS84 degrees.",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "required": true,
+            "description": "Longitude, WGS84 degrees.",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "radius",
+            "in": "query",
+            "required": false,
+            "description": "Search radius in metres. Defaults to 500 and is clamped to 50–2000, exactly as /v1/nearby clamps it and for the same reason: the radius decides how many KV cells are read, quadratically.",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Places near a coordinate with their soonest arrivals AND their complete line-up — the endpoint /v1/nearby is meant to grow into.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BoardList"
                 }
               }
             }
@@ -1521,6 +1618,72 @@
           "routeCount"
         ]
       },
+      "BoardLine": {
+        "$id": "#/components/schemas/BoardLine",
+        "type": "object",
+        "properties": {
+          "routeId": {
+            "type": "string",
+            "description": "Canonical route id, e.g. \"KMB:6:outbound:1\"."
+          },
+          "operator": {
+            "$ref": "#/components/schemas/OperatorId"
+          },
+          "routeNo": {
+            "type": "string",
+            "description": "Public route number shown on the bus, e.g. \"6\", \"720\", \"N691\"."
+          }
+        },
+        "required": [
+          "routeId",
+          "operator",
+          "routeNo"
+        ]
+      },
+      "BoardPlace": {
+        "$id": "#/components/schemas/BoardPlace",
+        "type": "object",
+        "properties": {
+          "stop": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "distanceM": {
+            "type": "number",
+            "description": "Straight-line distance from the query point, metres. Round it for display — ADR-008."
+          },
+          "etas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Eta"
+            },
+            "description": "Soonest arrivals first, one per route+direction **at each boarding pole** — so a line boarding at two poles of this place appears twice, distinguished by `stopId` (WP5-9). A compact card with no per-pole heading should collapse them to one row per route+direction before capping and counting; `stopCardView` in @nextbus/core is that rule. May be fewer readings than routeCount: routes with no live reading right now are not listed."
+          },
+          "routeCount": {
+            "type": "number",
+            "description": "True number of distinct rider LINES — operator + route number + direction — serving the place, from the static index (no live call), counted once however many poles a line boards at. Lets a compact card say \"soonest few of N · +N more\" honestly, never a silent filter. Subtract rows counted in the same unit: subtracting per-pole readings from it understates what is hidden."
+          },
+          "failed": {
+            "description": "Boarding points of THIS place whose upstream board did not answer, ordered by `stopId`; **absent when every board answered** (ADR-077). Without it `etas: []` means two different things — this stop has no buses, or nobody would tell us — and a card renders identically for both. `stopCardView` in @nextbus/core turns it into the one thing a compact card can honestly say, since a card has no per-kerb heading to attach it to. A reading missing for a pole named here has NOT departed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtaFailure"
+            }
+          },
+          "lines": {
+            "description": "EVERY distinct rider line serving this place — operator + route number + direction — de-duplicated across its boarding poles and ordered as the dataset holds them, so `lines.length` equals `routeCount`. Absent from `/v1/nearby`, which sends only the count; always present from `/v1/board`. A consumer that has it can draw the place’s whole line-up with no reading attached to any of it; one that does not falls back to the lines among `etas` plus an honest remainder.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BoardLine"
+            }
+          }
+        },
+        "required": [
+          "stop",
+          "distanceM",
+          "etas",
+          "routeCount"
+        ]
+      },
       "RoutePath": {
         "$id": "#/components/schemas/RoutePath",
         "type": "object",
@@ -1765,6 +1928,13 @@
         "type": "array",
         "items": {
           "$ref": "#/components/schemas/NearbyStop"
+        }
+      },
+      "BoardList": {
+        "$id": "#/components/schemas/BoardList",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/BoardPlace"
         }
       },
       "EtaReport": {

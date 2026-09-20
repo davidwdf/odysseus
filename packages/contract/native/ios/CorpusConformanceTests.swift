@@ -100,6 +100,7 @@ enum Corpus {
         "favourites",
         "geo-snap",
         "geo",
+        "home",
         "ids",
         "live",
         "location-mark",
