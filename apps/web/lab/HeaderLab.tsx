@@ -111,6 +111,29 @@ export function HeaderLab() {
           </div>
         ))}
       </div>
+
+      <h2 className="m-0 mt-8 mb-2 text-h3 font-semibold text-text">4 · A loop's header</h2>
+      <p className="m-0 mb-3 max-w-[820px] text-caption text-subtle">
+        KMB <strong>284</strong>, with its real sequence: stop 1 and stop 12 are the same pole
+        (Shatin Central Bus Terminus) and <strong>Ravana Garden is stop 6</strong> — the turning
+        point, not the far end. Today's header numbers the second line <code>12</code> and names it
+        “Circular via Ravana Garden”, which puts a figure against a place it does not belong to.
+        Five ways out.
+      </p>
+      <div className="flex flex-wrap gap-4">
+        {LOOPS.map((loop) => (
+          <div key={loop.id} data-loop={loop.id} className="w-[390px]">
+            <p className="m-0 mb-2 text-caption text-subtle">{loop.caption}</p>
+            <div className="rounded-xl border border-border bg-gradient-to-br from-surface-2 via-surface to-surface-2 p-3">
+              <div className="glass-pane flex items-center gap-2 rounded-sheet border border-border px-3 py-2.5">
+                <div className="min-w-0 flex-1">{loop.render()}</div>
+                <SwapStub />
+              </div>
+            </div>
+            <p className="m-0 mt-2 h-20 text-caption text-subtle">{loop.note}</p>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -965,3 +988,220 @@ const RAIL2_H = NODE * 2 + NODE_GAP
 /** The lab's route has 34 stops, so its termini are 1 and 34 — the figures the list would print. */
 const FROM_SEQ = 1
 const TO_SEQ = 34
+
+// ── 4 · a loop's header ────────────────────────────────────────────────────────────────────────
+
+/**
+ * **Five sketches of a circular route's header**, over KMB 284's real sequence.
+ *
+ * The problem is arithmetic rather than taste. 284 runs 1 → 12 and both ends are the **same pole**
+ * (Shatin Central Bus Terminus); the place the operator names the route after — Ravana Garden — is
+ * **stop 6**, the point it turns at. Today's header prints the figure `12` beside the words *"Circular via
+ * Ravana Garden"*, so the one number on that line belongs to a different place from the one the words
+ * name. The numbered rail is what exposed it: the old centred header had no figures to be wrong with.
+ *
+ * What each sketch is really choosing between: **name the far end honestly** (A), **name the turning
+ * point** (B, C, D), or **draw the turn** (D). None of them lists three stops, which the owner ruled out.
+ */
+const LOOP_ORIGIN = 'Shatin Central Bus Terminus'
+const LOOP_VIA = 'Ravana Garden'
+const LOOP_VIA_SEQ = 6
+const LOOP_LAST_SEQ = 12
+
+const LOOPS = [
+  {
+    id: '0',
+    caption: '0 — today',
+    note: 'The figure 12 sits against “Circular via Ravana Garden”, and stop 12 is Shatin Central. Two claims on one line, one of them false.',
+    render: () => (
+      <LoopBlock
+        top={{ seq: 1, name: LOOP_ORIGIN }}
+        bottom={{ seq: LOOP_LAST_SEQ, name: `Circular via ${LOOP_VIA}` }}
+        mark="chevron"
+      />
+    ),
+  },
+  {
+    id: 'A',
+    caption: 'A — both ends named, loop on the line',
+    note: 'Plain and true: the route starts and ends at the same pole, and the mark between says it comes back. Costs a repeated name, and the via becomes a caption rather than a place on the rail.',
+    render: () => (
+      <LoopBlock
+        top={{ seq: 1, name: LOOP_ORIGIN }}
+        bottom={{ seq: LOOP_LAST_SEQ, name: LOOP_ORIGIN }}
+        mark="loop"
+        caption={`via ${LOOP_VIA}`}
+      />
+    ),
+  },
+  {
+    id: 'B',
+    caption: 'B — the via keeps its own number',
+    note: 'Every figure names the place beside it, and the rider is told the turning point — which is the fact a loop actually has. The loop glyph on the line says it returns; the foot line says where to.',
+    render: () => (
+      <LoopBlock
+        top={{ seq: 1, name: LOOP_ORIGIN }}
+        bottom={{ seq: LOOP_VIA_SEQ, name: `via ${LOOP_VIA}` }}
+        mark="loop"
+        foot="returns to Shatin Central"
+      />
+    ),
+  },
+  {
+    id: 'C',
+    caption: 'C — one node, the loop is the second mark',
+    note: 'The most compact, and nothing can be wrong because nothing is numbered twice. The cost is that the turning point loses its place in the sequence.',
+    render: () => (
+      <LoopBlock
+        top={{ seq: 1, name: LOOP_ORIGIN }}
+        bottom={{ name: `via ${LOOP_VIA}` }}
+        mark="loop"
+      />
+    ),
+  },
+  {
+    id: 'D',
+    caption: 'D — the rail turns back on itself',
+    note: 'The gutter says “loop” by its shape: down from the terminus, round the turning point, and back up beside itself. The route’s turn is drawn as the line’s turn — and the second node is a circle, because a loop has one terminus, visited twice.',
+    render: () => <LoopHairpin />,
+  },
+]
+
+/** The two-line body the first four sketches differ inside. */
+function LoopBlock({
+  top,
+  bottom,
+  mark,
+  caption,
+  foot,
+}: {
+  top: { seq?: number; name: string }
+  bottom: { seq?: number; name: string }
+  mark: 'chevron' | 'loop'
+  caption?: string
+  foot?: string
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-start gap-2">
+        <span className="relative block w-[18px] shrink-0" style={{ height: 58 }}>
+          <span className="absolute left-[7px] w-1 bg-route-soft" style={{ top: 11, bottom: 11 }} />
+          <LoopNode seq={top.seq} top={0} />
+          {mark === 'loop' ? (
+            <span className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 flex h-4 w-4 items-center justify-center rounded-full bg-bg text-route">
+              <RotateCw size={13} aria-hidden />
+            </span>
+          ) : (
+            <span className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 flex flex-col text-route">
+              <ChevronUp size={10} aria-hidden className="rotate-180" />
+              <ChevronUp size={10} aria-hidden className="-mt-1 rotate-180" />
+            </span>
+          )}
+          <LoopNode seq={bottom.seq} top={40} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 14 }}>
+          <span className="flex items-center" style={{ height: 22 }}>
+            <span
+              className="block truncate text-body font-medium text-muted"
+              style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}
+            >
+              {top.name}
+            </span>
+          </span>
+          <span className="flex items-center" style={{ height: 22 }}>
+            <span className="block truncate text-body font-medium text-text">{bottom.name}</span>
+          </span>
+        </div>
+      </div>
+      {caption ? <p className="m-0 mt-0.5 pl-[26px] text-caption text-muted">{caption}</p> : null}
+      {foot ? <p className="m-0 mt-0.5 pl-[26px] text-caption text-subtle">{foot}</p> : null}
+    </div>
+  )
+}
+
+/** A terminus square with its figure — or nothing, where a sketch declines to number that end. */
+function LoopNode({ seq, top }: { seq?: number; top: number }) {
+  if (seq === undefined) return null
+  return (
+    <span className="absolute left-0 block" style={{ top }}>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+        <rect
+          x="0.75"
+          y="0.75"
+          width="16.5"
+          height="16.5"
+          className="fill-surface stroke-route"
+          strokeWidth="1.5"
+        />
+      </svg>
+      <span
+        className="absolute inset-0 flex items-center justify-center font-medium text-route tabular-nums"
+        style={{ fontSize: 11, lineHeight: 1 }}
+      >
+        {seq}
+      </span>
+    </span>
+  )
+}
+
+/**
+ * D — the rail turns back on itself.
+ *
+ * A loop is an *out and back* through one turning point, and this draws exactly that: the line leaves the
+ * terminus, runs down, turns at the via node and comes back up beside itself, with an arrowhead saying
+ * which way round it runs. The route's turning point is drawn as the line's turning point, which is the
+ * one thing a glyph on a straight rail cannot say.
+ *
+ * It is also the only sketch where the second node is **not** a terminus square, and that is the honest
+ * reading: a loop has one terminus, visited twice.
+ */
+function LoopHairpin() {
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      <svg width="24" height="58" viewBox="0 0 24 58" aria-hidden="true" className="shrink-0">
+        <path
+          d="M7 17 V42 A5 5 0 0 0 17 42 V26"
+          className="stroke-route-soft"
+          strokeWidth={3}
+          fill="none"
+        />
+        <path d="M13 27 L17 21 L21 27 Z" className="fill-route-soft" />
+        <rect
+          x="0.75"
+          y="0.75"
+          width="16.5"
+          height="16.5"
+          className="fill-surface stroke-route"
+          strokeWidth="1.5"
+        />
+        <text
+          x="9"
+          y="9.5"
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={11}
+          fontWeight={500}
+          className="fill-route"
+        >
+          1
+        </text>
+        <circle cx="12" cy="47" r="4.5" className="fill-surface stroke-route" strokeWidth="1.5" />
+      </svg>
+      <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 14 }}>
+        <span className="flex items-center" style={{ height: 22 }}>
+          <span
+            className="block truncate text-body font-medium text-muted"
+            style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}
+          >
+            {LOOP_ORIGIN}
+          </span>
+        </span>
+        <span className="flex items-center" style={{ height: 22 }}>
+          <span className="block truncate text-body font-medium text-text">
+            via {LOOP_VIA} <span className="text-caption text-subtle">· stop {LOOP_VIA_SEQ}</span>
+          </span>
+        </span>
+      </div>
+    </div>
+  )
+}

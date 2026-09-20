@@ -364,6 +364,35 @@
 }
 
 /*
+  The expanded card's content, on its way out (ADR-174).
+
+  It stays mounted for the length of the morph and is taken out of flow, so the box closing over it is
+  what removes it from view — *the other info being hidden as it collapses*, which is what the owner asked
+  for twice and what a swap-then-resize could never produce. The fade is deliberately **faster than the
+  box** and front-loaded: the content should be gone as an object well before the box has finished
+  becoming a pill, or the last frames read as a pill with a card's ghost inside it.
+*/
+.card-leaving {
+  animation: card-leaving 220ms ease-in both;
+}
+
+@keyframes card-leaving {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-leaving {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/*
   The collapsed island's one line, arriving **after** the bubble has nearly closed around it (ADR-172).
 
   The expand and the collapse are each other's opposite by design: expanding, the content is already laid

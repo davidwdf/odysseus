@@ -61,6 +61,8 @@ export function MarqueeText({
   const inner = useRef<HTMLSpanElement | null>(null)
   const travelling = useRef<Animation | null>(null)
   const [overflow, setOverflow] = useState(0)
+  /** True only while a lap is actually running — the mask reads it. See `EDGE_FADE`. */
+  const [running, setRunning] = useState(false)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the effect measures the DOM the text was just written into, so `children` is the trigger rather than a value it reads — re-measure whenever the name changes
   useLayoutEffect(() => {
@@ -99,27 +101,44 @@ export function MarqueeText({
     }
   }, [children])
 
-  // The travel itself, remade whenever the distance changes — the only thing it depends on, because the
-  // speed and the pause are constants and the offsets are arithmetic over them.
+  /**
+   * **One lap, then it waits.**
+   *
+   * The first build looped for ever, which is a ticker's behaviour and not a name's: a rider reads the
+   * destination once and then wants it to hold still. So the animation runs out and back **twice through
+   * its keyframes** (`iterations: 2` with `alternate`) and stops at home, where it stays until the rider
+   * touches it. The plateaus at both ends of the forward pass become, under `alternate`, a rest at the
+   * far end and a rest at home — so the name pauses where it is fully read, comes back, and parks.
+   *
+   * `play()` from a finished animation restarts it, which is what the touch handler below does.
+   */
   useEffect(() => {
     const node = inner.current
     if (node === null || overflow === 0) return
     const travelMs = (overflow / SPEED_PX_PER_S) * 1000
-    const duration = HOLD_MS + travelMs
+    const duration = HOLD_MS + travelMs + END_HOLD_MS
     const animation = node.animate?.(
       [
         { transform: 'translateX(0)', offset: 0 },
         // The plateau's *end* carries the easing, so the travel eases in and out rather than the whole
         // cycle — a cycle-wide easing spends most of the pause decelerating from nothing.
         { transform: 'translateX(0)', offset: HOLD_MS / duration, easing: TRAVEL_EASING },
+        { transform: `translateX(${-overflow}px)`, offset: (HOLD_MS + travelMs) / duration },
         { transform: `translateX(${-overflow}px)`, offset: 1 },
       ],
-      { duration, iterations: Number.POSITIVE_INFINITY, direction: 'alternate' },
+      { duration, iterations: 2, direction: 'alternate' },
     )
     travelling.current = animation ?? null
+    if (animation === undefined) return
+    setRunning(true)
+    // `finished` rather than `onfinish`: the promise rejects when the animation is cancelled, which is
+    // exactly the cleanup path below, and an unhandled rejection there would be noise in a console that
+    // should stay quiet.
+    animation.finished.then(() => setRunning(false)).catch(() => undefined)
     return () => {
-      animation?.cancel()
+      animation.cancel()
       travelling.current = null
+      setRunning(false)
     }
   }, [overflow])
 
@@ -139,14 +158,19 @@ export function MarqueeText({
       // fault; a fade reads as *there is more of this*. It is here rather than on every name because a
       // name that fits has no edge to soften — fading the last letter of a name that ends inside its box
       // would be a lie about it.
-      style={EDGE_FADE}
+      // The mask is only on while the name is moving — see `EDGE_FADE`.
+      style={running ? EDGE_FADE : REST_FADE}
       // **A touch brings the travel forward**, which is the owner's ask: a rider who wants the rest of a
       // name should not have to wait out the pause. `pointerdown` rather than `onClick`, deliberately —
       // this is not a control and must not become one. There is nothing here to operate: the animation
       // runs by itself, a tap only skips the wait, and a screen reader already has the whole name. A
       // `<button>` here would announce a place name as an operable thing that does nothing audible.
       onPointerDown={() => {
-        if (travelling.current !== null) travelling.current.currentTime = 0
+        const animation = travelling.current
+        if (animation === null) return
+        animation.currentTime = 0
+        setRunning(true)
+        animation.play()
       }}
     >
       <span ref={inner} className="inline-block">
@@ -164,25 +188,33 @@ const SLACK = 1
  * the observer fires again at the end of it.
  */
 const SETTLE_MS = 180
-/** How fast the name travels, in px per second. Slow enough to read while it moves; not a ticker. */
-const SPEED_PX_PER_S = 60
-/** How long it rests before setting off, in ms — a constant, which is the whole point. */
+/**
+ * How fast the name travels, in px per second — **30, down from 60**, which the owner read as *way* too
+ * fast. It is the one number here that is pure taste, and the reason it is a speed rather than a duration
+ * is so that taste applies equally to a name that overhangs by 20 px and one that overhangs by 200.
+ */
+const SPEED_PX_PER_S = 30
+/** How long it rests at home before setting off, in ms — a constant, which is the whole point. */
 const HOLD_MS = 1400
+/** …and how long it holds at the far end, where the rider is reading the part that was hidden. */
+const END_HOLD_MS = 1600
 /** Ease into the travel and out of it; the plateau either side is what makes that readable. */
 const TRAVEL_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /**
- * The soft edges, as a mask on the clipping box — **asymmetric, and that is the point**.
+ * The soft edges — **and the leading one exists only while the name is moving**.
  *
- * The trailing edge is where the name is always cut, so it gets the full fade. The leading edge is only
- * cut while the text is travelling: at home the name starts exactly there, and a 14 px fade over its
- * first letter reads as a rendering fault rather than as *there is more*. 6 px is enough to soften the
- * edge mid-travel and little enough to leave a resting capital legible.
+ * The owner's worry, and he was right to have it: *"the mask is covering up the text when it's not
+ * scrolling"*. At home the name begins exactly at the left edge, so a fade there dims its first letter to
+ * hide nothing at all. The trailing edge is different — there is always more name off to the right of a
+ * box the name does not fit in — so that fade is on whether it is moving or not.
  *
- * The honest version of this grows the leading fade *with* the travel, and it is deliberately not built:
- * it needs a registered custom property animated through WAAPI, whose support across the browsers a
- * rider here actually uses is not something this feature is worth betting on.
+ * Two masks, then, switched on the animation's own state: a trailing fade at rest, both edges in motion.
+ * `running` comes from the animation rather than from a timer, so the two cannot disagree about whether
+ * the name is travelling.
  */
-const LEAD_PX = 6
 const TRAIL_PX = 16
+const LEAD_PX = 10
+const REST_MASK = `linear-gradient(to right, black 0, black calc(100% - ${TRAIL_PX}px), transparent 100%)`
 const EDGE_MASK = `linear-gradient(to right, transparent 0, black ${LEAD_PX}px, black calc(100% - ${TRAIL_PX}px), transparent 100%)`
+const REST_FADE: React.CSSProperties = { maskImage: REST_MASK, WebkitMaskImage: REST_MASK }
 const EDGE_FADE: React.CSSProperties = { maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }

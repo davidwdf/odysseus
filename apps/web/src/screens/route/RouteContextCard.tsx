@@ -1,6 +1,6 @@
 import type { RouteDetailView } from '@nextbus/core'
 import { ArrowRight } from 'lucide-react'
-import { type ReactNode, useRef } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { JourneyRail } from '../../components/JourneyRail'
 import { MarqueeText } from '../../components/MarqueeText'
 import { RouteChip } from '../../components/RouteChip'
@@ -14,6 +14,16 @@ const SWAP_SIZE = 36
 /** The `lg` route chip's rendered height, and how far it laps the island's top edge (the owner's 6 px). */
 const BADGE_H = 34
 const ISLAND_LAP = 6
+
+/**
+ * How long the box takes to change shape — `useFlip`'s own duration, restated here because this component
+ * has to hold the outgoing content for exactly as long as the animation it cannot see.
+ *
+ * Two numbers that must agree, in two files. The alternative is exporting the hook's constant, which is
+ * the right move the moment a third thing needs it; today it would export a private timing as API for one
+ * caller. The comment is the seam: change one and the outgoing content is cut off early or lingers.
+ */
+const MORPH_MS = 500
 
 /**
  * **The route's identity, floating over the map** — round 4 of the mockups, which was the owner's own
@@ -104,6 +114,37 @@ export function RouteContextCard({
    */
   useBoxFlip(card, collapsed ? 'island' : `card:${header.destination}`)
 
+  /**
+   * **The card's content is still there while the box closes over it** (ADR-174).
+   *
+   * Two rounds of this animation were wrong in the same way and the owner named it both times: *"expands
+   * to reveal the other info and then hides the other info as it collapses"* is a description of content
+   * being **clipped**, and what the card actually did was swap its children in one frame and then resize
+   * an empty box. Easing curves and clamps were real bugs on top of that, but they were not the thing.
+   *
+   * So a collapse now has a *leaving* phase. For `MORPH_MS` the expanded content stays mounted, **taken
+   * out of flow** — which is the whole trick, because that lets the island row decide the pane's new
+   * height while the old content sits behind it at its old position, fading, and the shrinking box cuts
+   * it off from the bottom. `useBoxFlip` measures exactly the same two boxes it did before; what changed
+   * is what is inside the second one.
+   *
+   * It is the shape `JourneyLines` and `SlideNumber` already use — an outgoing copy, a timer, and a
+   * resting state that is clean. Clean matters here for two reasons beyond tidiness: a projection reads
+   * text by presence (ADR-097), and a collapsed card that still held its expanded content would announce
+   * the whole journey to a screen reader. While it is leaving it is `aria-hidden` and `inert`, so neither
+   * is true for the 500 ms it exists.
+   */
+  const [leaving, setLeaving] = useState(false)
+  useEffect(() => {
+    if (!collapsed) {
+      setLeaving(false)
+      return
+    }
+    setLeaving(true)
+    const timer = setTimeout(() => setLeaving(false), MORPH_MS)
+    return () => clearTimeout(timer)
+  }, [collapsed])
+
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-20 flex justify-center"
@@ -158,21 +199,35 @@ export function RouteContextCard({
                   it. */}
               <Chevron direction="down" />
             </div>
-          ) : (
-            <>
+          ) : null}
+
+          {/* **The expanded content**, which outlives the collapse by `MORPH_MS`. Out of flow while it
+              leaves, so the island row below decides the pane's height and this is simply cut off by the
+              closing box — and `inert` while it does, so nothing here is focusable or announced. */}
+          {collapsed && !leaving ? null : (
+            <div
+              className={`flex w-full flex-col gap-2 ${
+                leaving ? 'card-leaving pointer-events-none absolute inset-x-0 top-0 px-2' : ''
+              }`}
+              aria-hidden={leaving ? 'true' : undefined}
+              // `inert` as a boolean: React 19 types it, and an inert subtree is unfocusable and
+              // untargetable — which is what "this is on its way out" should mean to a keyboard and to a
+              // screen reader, not merely invisible.
+              inert={leaving}
+            >
               {/*
                 **One row, 48 px tall and unpadded at the top** — the box the screen's fixed
                 `<BackButton />` occupies, so the arrow lands exactly where it always does and the card's
-                glass runs *under* it. Both slots are spacers: the back control is drawn by the screen
-                and the badge by the container above. There is one back button on this screen, it never
-                moves, and what changes while the card is open is its material (`BackButton`'s `flat`).
+                glass runs *under* it. Both slots are spacers: the back control is drawn by the screen and
+                the badge by the container above. There is one back button on this screen, it never moves,
+                and what changes while the card is open is its material (`BackButton`'s `flat`).
               */}
               <div className="flex h-12 w-full items-center gap-2">
                 <span aria-hidden="true" className="shrink-0" style={{ width: BACK_LENS_SIZE }} />
                 <span className="flex-1" />
-                {/* The collapse control, balancing the back lens across the badge. Right-aligned
-                    because that is where its counterpart sits on the island, so the one glyph a rider
-                    learns is always in the same corner. */}
+                {/* The collapse control, balancing the back lens across the badge. Right-aligned because
+                    that is where its counterpart sits on the island, so the one glyph a rider learns is
+                    always in the same corner. */}
                 <span className="flex shrink-0 justify-end" style={{ width: BACK_LENS_SIZE }}>
                   <ChevronButton direction="up" label={collapseLabel} onPress={onCollapse} />
                 </span>
@@ -198,7 +253,7 @@ export function RouteContextCard({
               {/* Left-aligned with the block above it. The strip was centred while the journey was, and
                   two axes in one card is what made the first left-aligned draft look broken. */}
               {facts ? <div className="flex w-full justify-start px-1">{facts}</div> : null}
-            </>
+            </div>
           )}
         </div>
 
