@@ -2,6 +2,32 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔵 Snapshot 2026-09-20 — which `1` is this? A minibus route gets its region
+
+> **Shipped:** [ADR-171](./08-decision-log.md#adr-171--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table).
+> A green minibus `route_code` is only unique **within a region**, so `1` is The Peak ↔ Central on Hong
+> Kong Island *and* Sai Kung ↔ Kowloon Bay in the New Territories. Search drew those as two identical `1`
+> chips — across the live dataset, **114 (number, direction) groups spanning more than one region, 294
+> result rows.** ADR-047 solved the machine's half of this in 2026 by folding `route_id` into the
+> canonical id; the rider's half had been a `docs/07` follow-up ever since.
+>
+> The region now rides the whole vertical: a committed `route_id` → `HKI`/`KLN`/`NT` table →
+> `IndexRouteMeta` → `RouteLite` → a word on `SearchRouteRow` → a tag in `search.spec.json`, with a new
+> `minibusRegions` state that an injected defect confirmed bites.
+>
+> **Three things worth carrying forward.** (1) **Some upstream facts belong in the repo, not in a
+> fetch.** Learning the region costs 572 requests — more than a Worker's 50 subrequests, and more
+> failure surface than the daily build should take on for a fact that changes a few times a year. So
+> `pnpm gmb:regions:emit` crawls it deliberately and the result is committed, which is also what makes
+> `pnpm dev:edge`'s inline tier and production tag *the same routes*. It is **not** drift-gated, and the
+> asymmetry with the five emit-and-gate artefacts is the honest one: their source is this repo, its
+> source is a government API. (2) **A tag follows the field, not the operator** — `routeRow` asks whether
+> the index sent a `region`, never whether the operator is GMB, and the corpus asserts that as an *iff*
+> over every case, because the tempting implementation passes the new case and fails the old ones.
+> (3) **Region is deliberately not in the search index's collapse key**, tempting as it is: within one
+> region a number's variants run to different termini, and keying on region would show a rider *fewer*
+> routes to make a tag unnecessary.
+
 ## 🔵 Snapshot 2026-09-09 (later) — a quieter colour is a colour, not an opacity
 
 > **Shipped:** [ADR-163](./08-decision-log.md#adr-163--a-quieter-colour-is-a-colour-not-an-opacity-and-the-rails-chevrons-become-the-maps).

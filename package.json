@@ -23,6 +23,7 @@
     "clean": "git clean -xdf node_modules dist .turbo .expo .wrangler",
     "dataset:build": "pnpm --filter @nextbus/edge dataset:build",
     "dataset:publish": "pnpm --filter @nextbus/edge dataset:publish",
+    "gmb:regions:emit": "node scripts/emit-gmb-regions.mjs",
     "study:gmb-names": "pnpm --filter @nextbus/edge exec node --import tsx scripts/studies/gmb-name-matching.mts",
     "check:no-adhoc-id-parsing": "node scripts/check-no-adhoc-id-parsing.mjs",
     "check:no-derivation": "node scripts/check-no-derivation.mjs",

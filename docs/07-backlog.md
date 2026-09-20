@@ -9,8 +9,10 @@ the `DataSource` interface and the UI do not change.
 - [ ] **New Lantao Bus (NLB)** — `data.gov.hk` realtime dataset.
 - [ ] **MTR Bus / Feeder Bus** — `data.gov.hk` realtime schedule dataset.
 - [x] **Green Minibus (GMB)** — **shipped in v1** (ADR-047): `data.etagmb.gov.hk` live stop board + consolidated-dataset
-  static geometry/fares/frequency. Follow-ups: friendlier "Minibus" label, a region/area tag in search (numbers repeat
-  across regions), GMB route-level live ETAs (static-only today), GMB stop-merge edge cases.
+  static geometry/fares/frequency. The **region tag is done** ([ADR-171](./08-decision-log.md#adr-171--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table)):
+  a committed `route_id` → `HKI`/`KLN`/`NT` table (`pnpm gmb:regions:emit`) rides through `RouteLite` to a word on the
+  Search row, which is what tells the 294 result rows whose number repeats across regions apart. Remaining follow-ups:
+  friendlier "Minibus" label, GMB route-level live ETAs (static-only today), GMB stop-merge edge cases.
 - [ ] **Light Rail (LRT) & MTR heavy rail** — different domain (rail), but the canonical model can host it.
 - [ ] **Ferries** (Star Ferry / franchised ferries) — if scope expands beyond buses.
 

@@ -187,6 +187,9 @@ describe('search#searchView', () => {
     operator: (o: string) => ({ KMB: 'KMB', LWB: 'LWB', CTB: 'Citybus', GMB: 'Minibus' })[o] ?? o,
     category: (c: RouteCategory) =>
       ({ night: 'Night', airport: 'Airport', express: 'Express' })[c] ?? c,
+    // The catalogue's own words, so the fixture and `@nextbus/i18n` agree here — unlike the operator
+    // row above, whose "Minibus"/"GMB" divergence is a recorded content question (`docs/07`).
+    region: (r: string) => ({ HKI: 'HK Island', KLN: 'Kowloon', NT: 'NT' })[r] ?? r,
   }
   const run = (a: Args) =>
     searchView(
@@ -206,6 +209,29 @@ describe('search#searchView', () => {
     // The anti-vacuous control: a group that resolved to nothing would make the loop assert nothing.
     expect(rows.length).toBeGreaterThanOrEqual(10)
     for (const c of rows) expect(run(c.args), c.name).toEqual(c.expect)
+  })
+
+  it('tags a row exactly when the index gave that route a region', () => {
+    // ADR-171's invariant, in the direction that can go wrong both ways: a minibus row that lost its
+    // region is two identical `1`s again, and a KMB row that gained one is a label the kernel invented.
+    // Asserted as `iff` over every case rather than only the region one, because the tempting
+    // implementation — `operator === 'GMB'` in `routeRow` — passes the region case and fails this.
+    let tagged = 0
+    for (const c of cases<Args, SearchView>('searchView')) {
+      const got = run(c.args)
+      if (got.list.kind !== 'routes') continue
+      const byId = new Map(c.args.index.routes.map((r) => [r.id, r]))
+      for (const row of got.list.routes) {
+        const source = byId.get(row.id)
+        expect(row.region === undefined, `${c.name}: ${row.id}`).toBe(source?.region === undefined)
+        if (row.region !== undefined) {
+          // And it is the catalogue's word, not the wire's code — the whole of ADR-054 here.
+          expect(row.region, `${c.name}: ${row.id}`).toBe(LABELS.region(source?.region as string))
+          tagged += 1
+        }
+      }
+    }
+    expect(tagged, 'no corpus case produced a tagged row').toBeGreaterThan(0)
   })
 
   it('offers a chip for every operator in the index, and none for any other', () => {
@@ -364,7 +390,7 @@ describe('search#toggleSearchChip', () => {
         recentRouteIds: [],
         recentStopIds: [],
       },
-      { locale: 'en', labels: { operator: (o) => o, category: (c) => c } },
+      { locale: 'en', labels: { operator: (o) => o, category: (c) => c, region: (r) => r } },
     )
     expect(view.chips.length).toBeGreaterThan(0)
     for (const chip of view.chips) {

@@ -43,6 +43,10 @@ pnpm check:adr-index:write   # regenerate docs/08's ADR index — the FIFTH emit
                         # (ADR-127). `pnpm boundaries` also fails on a Status outside the three-word
                         # vocabulary, a one-sided supersede/amend claim, or an `ADR-NNN` citation or
                         # `#adr-` anchor anywhere in the repo that resolves to nothing
+pnpm gmb:regions:emit   # crawl the GMB `route_id` → region table (572 requests, ~20 s) into
+                        # packages/data-normalize/src/gmb-regions.generated.ts — COMMITTED, and read by
+                        # every tier, so dev and production tag the same routes (ADR-171). Deliberately
+                        # NOT drift-gated: its source is a government API, not this repo
 pnpm dataset:build      # fetch + normalize + cluster the static dataset → apps/edge/.dataset/<hash>/
 pnpm dataset:publish    # …then write the shards to KV/R2 and flip `build:current` (ADR-055)
 pnpm dataset:publish --local          # …into the Miniflare state `wrangler dev` uses — exercises the KV path

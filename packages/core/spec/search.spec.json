@@ -1676,7 +1676,7 @@
       ]
     },
     "searchView": {
-      "doc": "The whole Search screen, composed once (WP6-5). The rules above decide *what matches*; this decides what a renderer draws — which chips exist at all (the operators are the INDEX's answer, so a fifth operator lights up the day its adapter lands, ADR-037), which chips a mode offers, which of them are on, which route numbers the keypad keeps live under the active filter and which letters its letter row shows, what a saved recent resolves to now that the index has been rebuilt, and whether the list is showing a search, a history, or nothing. It lived in `apps/mobile/app/search.tsx` until now, reachable only by rendering a React tree. Words are INJECTED (`labels`), never imported: core owns the rule, the catalogue owns the word (ADR-054). The index below is a trimmed real one — five routes and two stops from the live build of 2026-08-05, chosen for their shapes (two operators, a night route, an airport route, two stop names with printed codes) — because a fixture nobody would invent is the point of a corpus.",
+      "doc": "The whole Search screen, composed once (WP6-5). The rules above decide *what matches*; this decides what a renderer draws — which chips exist at all (the operators are the INDEX's answer, so a fifth operator lights up the day its adapter lands, ADR-037), which chips a mode offers, which of them are on, which route numbers the keypad keeps live under the active filter and which letters its letter row shows, what a saved recent resolves to now that the index has been rebuilt, and whether the list is showing a search, a history, or nothing. It lived in `apps/mobile/app/search.tsx` until now, reachable only by rendering a React tree. Words are INJECTED (`labels`), never imported: core owns the rule, the catalogue owns the word (ADR-054). The index below is a trimmed real one — five routes and two stops from the live build of 2026-08-05, chosen for their shapes (two operators, a night route, an airport route, two stop names with printed codes) — because a fixture nobody would invent is the point of a corpus. One case carries its **own** index instead — `two-minibus-1s-are-told-apart-by-region`, whose whole subject is two routes that share a number, which the five-route index has no instance of.",
       "cases": [
         {
           "name": "no-query-and-no-history-is-the-empty-screen",
@@ -4418,6 +4418,195 @@
               "stops": []
             },
             "source": "none"
+          }
+        },
+        {
+          "name": "two-minibus-1s-are-told-apart-by-region",
+          "why": "**The tag ADR-047 left as a follow-up, and the case it exists for.** `1` is a real green-minibus route on Hong Kong Island and a *different* real one in the New Territories — GMB `route_code` is only unique within a region — so Search drew two identical `1` chips whose only difference was the pair of place names beside them. Both minibus rows now carry a region; the KMB `1` in the same result list carries none, because its number is already unique and a label that never varies says nothing. The word is the caller's (`labels.region`), never the wire's `HKI`/`NT` code, so neither renderer owns a three-way table (ADR-054). Real data: route ids 2006408 and 2002337 from the live build, with their own termini.",
+          "args": {
+            "index": {
+              "version": "regions01",
+              "routes": [
+                {
+                  "id": "KMB:1:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "1",
+                  "bound": "outbound",
+                  "origin": {
+                    "en": "CHUK YUEN ESTATE",
+                    "zh-Hant": "竹園邨",
+                    "zh-Hans": "竹園邨"
+                  },
+                  "destination": {
+                    "en": "STAR FERRY",
+                    "zh-Hant": "尖沙咀碼頭",
+                    "zh-Hans": "尖沙咀碼頭"
+                  },
+                  "sortKey": "0001"
+                },
+                {
+                  "id": "GMB:1:outbound:2006408",
+                  "operator": "GMB",
+                  "routeNo": "1",
+                  "bound": "outbound",
+                  "origin": {
+                    "en": "The Peak (Public Transport Terminus)",
+                    "zh-Hant": "山頂(公共交通總站)",
+                    "zh-Hans": "山頂(公共交通總站)"
+                  },
+                  "destination": {
+                    "en": "Central (Hong Kong Station Public Transport Interchange)",
+                    "zh-Hant": "中環(香港站公共運輸交匯處)",
+                    "zh-Hans": "中環(香港站公共運輸交匯處)"
+                  },
+                  "region": "HKI",
+                  "sortKey": "0001"
+                },
+                {
+                  "id": "GMB:1:outbound:2002337",
+                  "operator": "GMB",
+                  "routeNo": "1",
+                  "bound": "outbound",
+                  "origin": {
+                    "en": "Sai Kung",
+                    "zh-Hant": "西貢",
+                    "zh-Hans": "西貢"
+                  },
+                  "destination": {
+                    "en": "Kowloon Bay (Telford Gardens)",
+                    "zh-Hant": "九龍灣(德福花園)",
+                    "zh-Hans": "九龍灣(德福花園)"
+                  },
+                  "region": "NT",
+                  "sortKey": "0001"
+                }
+              ],
+              "stops": [
+                {
+                  "id": "P:CTB:001965+KMB:4039C75BB85BF238+KMB:548DAB3A4F71EB68+KMB:66BF94751BD28BAD+KMB:A401ECF82924D465",
+                  "name": {
+                    "en": "Belair Garden, Tai Chung Kiu Road",
+                    "zh-Hant": "富豪花園, 大涌橋路",
+                    "zh-Hans": "富豪花園, 大涌橋路"
+                  },
+                  "lat": 22.38469,
+                  "lng": 114.198138
+                }
+              ]
+            },
+            "mode": "routes",
+            "query": "1",
+            "filter": {
+              "operators": [],
+              "categories": []
+            },
+            "recentRouteIds": [],
+            "recentStopIds": [],
+            "locale": "en"
+          },
+          "expect": {
+            "chips": [
+              {
+                "key": "operator:GMB",
+                "label": "Minibus",
+                "active": false
+              },
+              {
+                "key": "operator:KMB",
+                "label": "KMB",
+                "active": false
+              },
+              {
+                "key": "category:night",
+                "label": "Night",
+                "active": false
+              },
+              {
+                "key": "category:airport",
+                "label": "Airport",
+                "active": false
+              },
+              {
+                "key": "category:express",
+                "label": "Express",
+                "active": false
+              }
+            ],
+            "keypad": {
+              "digits": [
+                {
+                  "char": "1",
+                  "enabled": false
+                },
+                {
+                  "char": "2",
+                  "enabled": false
+                },
+                {
+                  "char": "3",
+                  "enabled": false
+                },
+                {
+                  "char": "4",
+                  "enabled": false
+                },
+                {
+                  "char": "5",
+                  "enabled": false
+                },
+                {
+                  "char": "6",
+                  "enabled": false
+                },
+                {
+                  "char": "7",
+                  "enabled": false
+                },
+                {
+                  "char": "8",
+                  "enabled": false
+                },
+                {
+                  "char": "9",
+                  "enabled": false
+                },
+                {
+                  "char": "0",
+                  "enabled": false
+                }
+              ],
+              "letters": [],
+              "backspace": true
+            },
+            "list": {
+              "kind": "routes",
+              "routes": [
+                {
+                  "id": "GMB:1:outbound:2006408",
+                  "operator": "GMB",
+                  "routeNo": "1",
+                  "origin": "The Peak (Public Transport Terminus)",
+                  "destination": "Central (Hong Kong Station Public Transport Interchange)",
+                  "region": "HK Island"
+                },
+                {
+                  "id": "GMB:1:outbound:2002337",
+                  "operator": "GMB",
+                  "routeNo": "1",
+                  "origin": "Sai Kung",
+                  "destination": "Kowloon Bay (Telford Gardens)",
+                  "region": "NT"
+                },
+                {
+                  "id": "KMB:1:outbound:1",
+                  "operator": "KMB",
+                  "routeNo": "1",
+                  "origin": "Chuk Yuen Estate",
+                  "destination": "Star Ferry"
+                }
+              ]
+            },
+            "source": "results"
           }
         }
       ]

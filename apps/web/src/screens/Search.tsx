@@ -1,5 +1,5 @@
 import { type RouteCategory, type RouteFilter, searchView, toggleSearchChip } from '@nextbus/core'
-import { operatorName, type PlainMessageKey, t } from '@nextbus/i18n'
+import { operatorName, type PlainMessageKey, regionName, t } from '@nextbus/i18n'
 import { ChevronRight, MapPin, Route, Search as SearchIcon, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { FilterChips } from '../components/FilterChips'
@@ -118,6 +118,7 @@ export function Search() {
           labels: {
             operator: (op) => operatorName(op, locale),
             category: (c) => t(locale, CATEGORY_LABELS[c]),
+            region: (r) => regionName(r, locale),
           },
         },
       )
@@ -267,6 +268,26 @@ export function Search() {
                       className="flex w-full items-center gap-3 border-0 bg-transparent px-4 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus active:opacity-60"
                     >
                       <RouteChip operator={route.operator} routeNo={route.routeNo} />
+                      {/* **Which `1` is this?** — a green minibus number is only unique within its
+                          region, so two identical chips were two different routes (ADR-171). The
+                          kernel decides whether a row has one and the catalogue supplies the word;
+                          this element is the whole of the renderer's share.
+
+                          **Beside the number rather than at the end of the row**, because the region
+                          *qualifies the number* — it is part of what the route is called, not a
+                          trailing attribute — and because two `1`s are then compared down one column
+                          instead of two. `shrink-0` with the journey `flex-1 truncate` beside it, so a
+                          long name loses its tail before the tag loses anything; a tag cut to
+                          "New Terr…" has lost the only thing it was there to say.
+
+                          `text-muted` rather than `text-subtle`: it is prose a rider reads to choose
+                          with, and `--text-subtle` is 3.90:1 on `--bg` in dark mode — under AA.
+                          `test/search-contrast.test.ts` holds that rule for this screen. */}
+                      {route.region ? (
+                        <span className="shrink-0 rounded-sm bg-surface-2 px-1.5 py-0.5 text-label text-muted">
+                          {route.region}
+                        </span>
+                      ) : null}
                       {/* Both ends arrive title-cased on the row; the arrow is this renderer's glyph — the
                           same split `StopRow` makes for its destination. */}
                       <span className="min-w-0 flex-1 truncate text-body text-text">

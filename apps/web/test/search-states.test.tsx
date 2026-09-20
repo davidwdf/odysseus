@@ -52,6 +52,7 @@ const FIXTURE: Record<string, string> = {
   noMatches: 'a-stop-query-that-matches-nothing',
   filteredToNothing: 'a-category-filter-narrows-the-keypad-and-the-list-together',
   empty: 'no-query-and-no-history-is-the-empty-screen',
+  minibusRegions: 'two-minibus-1s-are-told-apart-by-region',
 }
 
 function caseNamed(name: string): CorpusCase {
@@ -212,6 +213,14 @@ const categoryLabel = (category: string) =>
     airport: t(LOCALE, 'filterAirport'),
     express: t(LOCALE, 'filterExpress'),
   })[category] ?? category
+// Read from the catalogue rather than restated, because the screen reads it from the catalogue too:
+// a hard-coded "New Territories" here would still pass the day the wording changed on one side only.
+const regionLabel = (region: string) =>
+  ({
+    HKI: t(LOCALE, 'regionHki'),
+    KLN: t(LOCALE, 'regionKln'),
+    NT: t(LOCALE, 'regionNt'),
+  })[region] ?? region
 
 const FETCH_FAILURE = 'index: 502 upstream'
 
@@ -251,6 +260,7 @@ async function fixture(state: string): Promise<{ view: unknown; tree: RenderedTr
         labels: {
           operator: (op) => operatorLabel(op),
           category: (cat) => categoryLabel(cat),
+          region: (region) => regionLabel(region),
         },
       },
     ) satisfies SearchView,
@@ -314,7 +324,10 @@ describe('apps/web conforms to Search’s published spec, state by state', () =>
         recentRouteIds: [],
         recentStopIds: [],
       },
-      { locale: 'en', labels: { operator: operatorLabel, category: categoryLabel } },
+      {
+        locale: 'en',
+        labels: { operator: operatorLabel, category: categoryLabel, region: regionLabel },
+      },
     )
     expect(view.keypad.digits).toHaveLength(10)
     expect(

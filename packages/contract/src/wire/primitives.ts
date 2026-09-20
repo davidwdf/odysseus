@@ -63,6 +63,24 @@ export const BoundSchema = z
   .enum(['inbound', 'outbound'])
   .meta({ id: 'Bound', 'x-unknown-tolerant': true })
 
+/**
+ * The region a green-minibus route number is unique within — Hong Kong Island, Kowloon, the New
+ * Territories. The Transport Department's own three-way split, in its own codes.
+ *
+ * **This is an identity field, not a geography one.** A GMB `route_code` is only unique inside its
+ * region, so `1` names two entirely different minibus routes in `HKI` and `NT` and a rider looking
+ * at a list of results has, until now, had nothing but the origin and destination to tell them
+ * apart (ADR-047 left this open; ADR-171 closes it). It says nothing about where a route *goes* —
+ * an `NT` route may run into Kowloon — and no other operator carries it, because no other
+ * operator's numbers repeat.
+ *
+ * `x-unknown-tolerant` for the same reason `OperatorId` is: three codes is the TD's current answer
+ * to a question it could answer differently, and a fourth must not brick an installed phone.
+ */
+export const GmbRegionSchema = z
+  .enum(['HKI', 'KLN', 'NT'])
+  .meta({ id: 'GmbRegion', 'x-unknown-tolerant': true })
+
 /** A geographic coordinate (WGS84). */
 export const LatLngSchema = z
   .object({

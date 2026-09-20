@@ -36,6 +36,11 @@ not have to scrape anything.**
   `route_code` is **only unique within a region** (`HKI`/`KLN`/`NT`). We take the `route_id` straight from the
   consolidated dataset's `gtfsId`, fold it into the canonical id (`GMB:{no}:{bound}:{gtfsId}`), and never do the
   two-step code→id resolution live. `route_seq` 1 → outbound, 2 → inbound.
+- **The region is a committed table, not a fetch** (ADR-171). Nothing upstream dumps `route_id` → region in bulk —
+  it costs **572 requests** (`/route`, then `/route/{region}/{code}` per pair) — so `pnpm gmb:regions:emit` crawls it
+  deliberately into `packages/data-normalize/src/gmb-regions.generated.ts` (781 ids, 16 kB), which every tier then
+  reads: the daily build, the Worker's inline fallback and the tests all agree because they read the same bytes.
+  Re-run it when a new minibus route shows up untagged; a route the table has not met is untagged, never mis-tagged.
 - **Live + scheduled mixed:** the ETA feed marks timetable (not tracked) arrivals with `remarks:"Scheduled"/未開出`; we
   pass the remark through and `classifyRemark` tags it so the UI styles it honestly (ADR-008). Whole route-stops can be
   `enabled:false` (we skip them).

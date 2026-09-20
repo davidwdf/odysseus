@@ -1,4 +1,4 @@
-import type { I18nText, Locale, OperatorId } from '@nextbus/core'
+import type { GmbRegion, I18nText, Locale, OperatorId } from '@nextbus/core'
 import { CATALOGUE, type MessageKey, SUPPORTED_LOCALES } from './catalogue'
 import { formatMessage, type MessageArgs } from './icu'
 
@@ -189,6 +189,29 @@ const OPERATOR_KEY: Record<OperatorId, PlainMessageKey> = {
 export function operatorName(operator: OperatorId, locale: Locale): LocalizedString {
   const key = OPERATOR_KEY[operator]
   return key ? t(locale, key) : (operator as LocalizedString)
+}
+
+const REGION_KEY: Record<GmbRegion, PlainMessageKey> = {
+  HKI: 'regionHki',
+  KLN: 'regionKln',
+  NT: 'regionNt',
+}
+
+/**
+ * The region a green-minibus route number is unique within, in the reader's language (ADR-171).
+ *
+ * Here rather than in a screen for `operatorName`'s reason, one layer smaller: `searchView` takes the
+ * word as an injected label (ADR-054), so a table left in `apps/web` would be a table the native port
+ * has to write again — and the whole point of the tag is that both renderers say the same thing about
+ * the same route.
+ *
+ * Falls back to the raw code, as `operatorName` does and for the same reason: `GmbRegion` is marked
+ * `x-unknown-tolerant`, so a fourth region can reach a screen before its name does, and `NT` beats a
+ * blank tag on a row whose whole job is to disambiguate.
+ */
+export function regionName(region: GmbRegion, locale: Locale): LocalizedString {
+  const key = REGION_KEY[region]
+  return key ? t(locale, key) : (region as LocalizedString)
 }
 
 /**

@@ -21,6 +21,9 @@
 "filterNight" = "通宵";
 "filterAirport" = "機場";
 "filterExpress" = "特快";
+"regionHki" = "港島";
+"regionKln" = "九龍";
+"regionNt" = "新界";
 "nearbyTitle" = "附近的車站";
 "noService" = "暫無班次";
 /* {s} → %1$@ */

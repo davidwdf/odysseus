@@ -21,6 +21,9 @@
 	<string name="filterNight">Night</string>
 	<string name="filterAirport">Airport</string>
 	<string name="filterExpress">Express</string>
+	<string name="regionHki">HK Island</string>
+	<string name="regionKln">Kowloon</string>
+	<string name="regionNt">NT</string>
 	<string name="nearbyTitle">Stops near you</string>
 	<string name="noService">No scheduled service</string>
 	<!-- {s} → %1$s -->

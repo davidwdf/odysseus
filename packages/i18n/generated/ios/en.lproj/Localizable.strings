@@ -21,6 +21,9 @@
 "filterNight" = "Night";
 "filterAirport" = "Airport";
 "filterExpress" = "Express";
+"regionHki" = "HK Island";
+"regionKln" = "Kowloon";
+"regionNt" = "NT";
 "nearbyTitle" = "Stops near you";
 "noService" = "No scheduled service";
 /* {s} → %1$@ */

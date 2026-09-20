@@ -13,7 +13,7 @@ import type { z } from 'zod'
 // `displayName` should be sent to the module that declares it.
 import { displayName as displayNameOf } from './stop-card'
 import { titleCaseName as titleCaseNameOf } from './stop-name'
-import type { Locale, OperatorId } from './types'
+import type { GmbRegion, Locale, OperatorId } from './types'
 
 // `@spec <module>#<export>` below means: that export's behaviour is pinned by the language-neutral
 // JSON corpus at `../spec/<module>.spec.json`, group `<export>`. These are **domain rules** — the
@@ -385,6 +385,19 @@ export interface SearchRouteRow {
   /** "Tin Shui Wai Town Centre", title-cased — the renderer supplies the arrow between them. */
   origin: string
   destination: string
+  /**
+   * "Hong Kong Island" / "Kowloon" / "New Territories" — **present only where the number alone is
+   * ambiguous**, which today means a green minibus (ADR-171).
+   *
+   * Already a word, not a code, for the same reason `chips` carry their label: the *set* is the
+   * kernel's decision and the wording is the catalogue's (ADR-054). A renderer that received `NT`
+   * would have to own a three-way table, and the second renderer would own a second copy of it.
+   *
+   * Absent — rather than an empty string — for every KMB/CTB row and for a minibus route the
+   * region table has not met. A row that cannot say which `1` it is says nothing, and that is the
+   * honest answer: the origin and destination beside it are still doing the work they did before.
+   */
+  region?: string
 }
 
 /** One stop in the result list, with its printed code split off (ADR-034). */
@@ -416,6 +429,8 @@ export interface SearchViewInput {
 export interface SearchLabels {
   operator: (operator: OperatorId) => string
   category: (category: RouteCategory) => string
+  /** The rider-facing name of a GMB region — see `SearchRouteRow.region`. */
+  region: (region: GmbRegion) => string
 }
 
 export interface SearchViewOptions {
@@ -519,7 +534,7 @@ export function searchView(input: SearchViewInput, opts: SearchViewOptions): Sea
               // than a record — keeping the id and rendering a blank row is the failure this avoids, and
               // silently dropping it is right because the rider's next search will simply not offer it.
               resolve(input.recentRouteIds, index.routes)
-          ).map((route) => routeRow(route, locale)),
+          ).map((route) => routeRow(route, locale, labels)),
         }
       : {
           kind: 'stops',
@@ -556,7 +571,7 @@ function resolve<T extends { id: string }>(ids: readonly string[], records: read
   })
 }
 
-function routeRow(route: RouteLite, locale: Locale): SearchRouteRow {
+function routeRow(route: RouteLite, locale: Locale, labels: SearchLabels): SearchRouteRow {
   return {
     id: route.id,
     operator: route.operator,
@@ -566,6 +581,11 @@ function routeRow(route: RouteLite, locale: Locale): SearchRouteRow {
     // handing it two finished strings is what stops two renderers composing the pair differently.
     origin: titleCaseNameOf(route.origin[locale]),
     destination: titleCaseNameOf(route.destination[locale]),
+    // **The tag follows the field, not the operator** (ADR-171). Writing `route.operator === 'GMB'`
+    // here would be this file deciding which operators have ambiguous numbers — a fact that lives
+    // upstream, in whether the index sent a `region` at all. The day a fourth operator needs one,
+    // the edge sets it and this line already does the right thing.
+    ...(route.region === undefined ? {} : { region: labels.region(route.region) }),
   }
 }
 
