@@ -11120,11 +11120,18 @@ pre-existing and unaddressed; it earned its keep here.
   implementation passes the region case and fails that.
 
 - **Decision 4 — the word is injected; the wire code never reaches a screen.** `searchView` takes
-  `labels.region` alongside `labels.operator` and `labels.category` (ADR-054), so `HK Island` /
-  `Kowloon` / `New Territories` live once, in `@nextbus/i18n`, in all three locales — and neither
-  renderer owns a three-way `HKI`/`KLN`/`NT` table to drift from the other's. `GmbRegion` itself is
-  declared in `packages/contract` and marked `x-unknown-tolerant`, so a fourth region cannot brick a
-  shipped native client.
+  `labels.region` alongside `labels.operator` and `labels.category` (ADR-054), so the words live once,
+  in `@nextbus/i18n`, in all three locales — and neither renderer owns a three-way `HKI`/`KLN`/`NT`
+  table to drift from the other's. `GmbRegion` itself is declared in `packages/contract` and marked
+  `x-unknown-tolerant`, so a fourth region cannot brick a shipped native client.
+
+  **The shipped words are `HK Island` / `Kowloon` / `NT` (`港島` / `九龍` / `新界`), and the short
+  English forms were measured rather than chosen.** A 15-character *New Territories* pushed the
+  destination off a 390 px row entirely — a bad trade, because the tag exists to help a rider tell two
+  `1`s apart and the journey beside it was the other thing doing that job. The postal short forms are
+  both shorter and idiomatic. **A porter should read the strings from `catalogue.ts`, never from this
+  ADR**: the catalogue carries the measurement as its own comment, and a number in a decision record is
+  exactly the thing that goes stale while the code moves on.
 
 - **Decision 5 — the spec gained a state, not just a node.** `regionTag` is declared on **every** list
   that draws route rows — search results *and* recents — because a renderer that tagged one and not the

@@ -61,8 +61,10 @@ server change that was designed to be safe:
 
 1. **Do not reject unknown properties.** Objects on this wire are open by design (§3). A generator
    configured to fail on an unrecognized key turns every additive server change into a crash.
-2. **Generate unknown-tolerant enums.** Seven enums are marked `x-unknown-tolerant`; see §3, and write
-   the decode test in §6 before you trust your generator's output.
+<!-- BEGIN GENERATED: tolerant-enums -->
+2. **Generate unknown-tolerant enums.** `openapi.json` marks **8** enums `x-unknown-tolerant`: `Bound`, `DatasetOrigin`, `ErrorCode`, `GmbRegion`, `Locale`, `OperatorId`, `RemarkKind`, `ServiceDayType`.
+   See §3, and write the decode test in §6 before you trust your generator's output.
+<!-- END GENERATED: tolerant-enums -->
 
 Regenerate rather than hand-edit, and commit the generated models so a reviewer can see a wire change
 arrive. Pin the commit of this repo you generated from; when you bump it, the model diff *is* the

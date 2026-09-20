@@ -85,9 +85,21 @@ export function figures() {
   const iosStrings = read(join(i18nRoot, 'ios', 'en.lproj', 'Localizable.strings'))
   const iosPlurals = read(join(i18nRoot, 'ios', 'en.lproj', 'Localizable.stringsdict'))
 
+  // The `x-unknown-tolerant` enums, **counted rather than typed**. This sentence was hand-maintained
+  // in three places and said "seven" the day `GmbRegion` made it eight (ADR-174) — a wrong instruction
+  // to the one reader who cannot check it, in the one file that tells them what will brick their app.
+  // Nothing gated it because it sat *outside* the generated regions, which is the whole argument for
+  // moving it inside one: a figure beside generated content either regenerates or rots.
+  const tolerant = Object.entries(doc.components.schemas)
+    .filter(([, schema]) => schema['x-unknown-tolerant'])
+    .map(([name]) => name)
+    .sort()
+
   return {
     paths: Object.keys(doc.paths).length,
     schemas: Object.keys(doc.components.schemas).length,
+    tolerantEnums: tolerant.length,
+    tolerantEnumList: tolerant.join('`, `'),
     contractVersion: doc.info.version,
     // The bullet list of `info.description`, which is canonical for wire conventions. Everything
     // before the first bullet is the document's own title matter and belongs to the document.
@@ -261,6 +273,13 @@ function splice(text, name, body, comment) {
   return `${text.slice(0, start + open.length)}\n${body}\n${text.slice(closeLineStart)}`
 }
 
+/**
+ * The sentence that tells a native reader how many enums will grow under them, in each file's own
+ * comment syntax. One source, three renderings — the shape the rest of this generator already has.
+ */
+const tolerantEnumsBlock = (f, lead) =>
+  `${lead}\`openapi.json\` marks **${f.tolerantEnums}** enums \`x-unknown-tolerant\`: \`${f.tolerantEnumList}\`.`
+
 /** The files this generator owns, each with its regions filled from a fresh count. */
 export function render() {
   const f = figures()
@@ -269,16 +288,24 @@ export function render() {
   readme = splice(readme, 'artefacts', artefactsBlock(f), 'html')
   readme = splice(readme, 'conventions', conventionsBlock(f), 'html')
   readme = splice(readme, 'corpus', corpusBlock(f), 'html')
+  readme = splice(
+    readme,
+    'tolerant-enums',
+    `2. **Generate unknown-tolerant enums.** ${tolerantEnumsBlock(f, '')}\n   See §3, and write the decode test in §6 before you trust your generator's output.`,
+    'html',
+  )
+
+  let swift = read(SWIFT_TEMPLATE)
+  swift = splice(swift, 'corpus-modules', swiftModulesBlock(f), 'slash')
+  swift = splice(swift, 'tolerant-enums', tolerantEnumsBlock(f, '    /// '), 'slash')
+
+  let kotlin = read(KOTLIN_TEMPLATE)
+  kotlin = splice(kotlin, 'corpus-modules', kotlinModulesBlock(f), 'slash')
+  kotlin = splice(kotlin, 'tolerant-enums', tolerantEnumsBlock(f, '     * '), 'slash')
 
   return [
     { file: README, text: readme },
-    {
-      file: SWIFT_TEMPLATE,
-      text: splice(read(SWIFT_TEMPLATE), 'corpus-modules', swiftModulesBlock(f), 'slash'),
-    },
-    {
-      file: KOTLIN_TEMPLATE,
-      text: splice(read(KOTLIN_TEMPLATE), 'corpus-modules', kotlinModulesBlock(f), 'slash'),
-    },
+    { file: SWIFT_TEMPLATE, text: swift },
+    { file: KOTLIN_TEMPLATE, text: kotlin },
   ]
 }
