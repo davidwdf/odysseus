@@ -35,17 +35,10 @@ const MORPH_EASE_IN = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const MORPH_EASE_OUT = 'cubic-bezier(0.64, 0, 0.78, 0)'
 
 /**
- * **When the cross-fade happens inside the morph** — the owner's last note: *"have the collapse start
- * first, then have the fade kick in and finish at the same time as the shrink."*
- *
- * So the box has `FADE_DELAY_MS` to itself, closing over content that is still fully opaque, and the fade
- * then takes the rest of the morph exactly. The two numbers sum to `MORPH_MS` on purpose and are declared
- * here together rather than in the stylesheet, because that sum *is* the decision: a fade that outlives
- * its box leaves a card lingering over a pill, and one that finishes early leaves the box closing on
- * nothing.
+ * There is no cross-fade any more, and the two constants that timed one are gone with it (ADR-184). The
+ * collapse is the expand reversed: the box moves, the content is revealed or hidden by the box, and the
+ * only swap is the single frame at the end where the card's top row becomes the pill's line.
  */
-const FADE_DELAY_MS = 160
-const FADE_MS = MORPH_MS - FADE_DELAY_MS
 
 /**
  * **The route's identity, floating over the map** — round 4 of the mockups, which was the owner's own
@@ -174,27 +167,33 @@ export function RouteContextCard({
   }, [leaving])
 
   /**
-   * **The collapse, as the owner described it after watching it three times.**
+   * **The collapse is the expand, played backwards** (ADR-184).
    *
-   * His reading of the previous build was exact, and every line of it was something this component was
-   * doing on purpose: *"card content slides up (not sure why?!) · pill text appears up top instantly ·
-   * card background then collapses in size, sliding down."* The slide was ADR-178's hand-off, carrying
-   * the outgoing destination 85 px onto the island's line; the pill text was at the top because the
-   * island row is the pane's only in-flow child; and the box appeared to slide *down* because its top
-   * edge moves down 37 px while its height loses 174 — with everything inside anchored to that top edge,
-   * the descent is what the eye follows.
+   * The expand has been right for a while and the owner has said so twice: the card's content is already
+   * laid out, the box grows, and the growing box *reveals* it. Nothing fades, nothing moves but the box.
+   * Read that backwards and you get the collapse anybody would draw: the content stays exactly where it
+   * is, the box shrinks, and the shrinking box *hides* it — which is what was asked for from the start
+   * (*"expands to reveal the other info and then hides the other info as it collapses"*).
    *
-   * What he asked for instead is simpler and better, and it needs no measurement at all:
+   * **Five attempts failed to get there, and none of them failed because of this idea.** They failed on a
+   * `max-width` that clamped the animated width so only the height moved (ADR-173), on an exit curve
+   * borrowed from the entrance (ADR-172), on a state set in an effect so the first frame was the old
+   * layout (ADR-176), and twice on trying to animate the *text* — a lift, then a measured hand-off — when
+   * the box was the thing that moves (ADR-178, ADR-182). The cross-fade those rounds ended on was a way
+   * of covering for the parts that were still wrong. With them fixed, the cover is not needed: the mirror
+   * works, and it is one fewer thing to time.
    *
-   *  · **the card's content stays exactly where it is** and fades out;
-   *  · **the pill's line is centred in the pane** — so as the box shrinks it sits in the middle of
-   *    whatever the box currently is, and the box closes *around* it;
-   *  · the two cross-fade, so the header is never showing nothing.
+   * So the shape here is the minimum that makes a reversal possible. For the length of the morph the
+   * expanded content **stays mounted and out of flow**, top-anchored, unfaded — so the island row below
+   * it decides the pane's new height while the box closes over the card exactly as it opened over it.
+   * The island's line is **not shown until the morph ends**: in the expand the pill's line is gone from
+   * the first frame and the card's top row is there instead, so in the reverse the card's top row is
+   * there until the last frame and the pill's line replaces it. One swap, at the end, while the box is
+   * moving fastest under the exit curve.
    *
-   * The whole of it is `justify-center` on the pane while it is collapsing plus two fades. The box's
-   * centre travels from 118 to 68 on a 390 px phone and the line rides that — one movement, belonging to
-   * the box, rather than a second one belonging to the text. ADR-178's `--leave-shift` and the layout
-   * effect that measured it are gone.
+   * It stays `aria-hidden` and `inert` while it leaves, for the reason it always did: a collapsed card
+   * must not announce a journey it is no longer showing, and a projection reads text by presence
+   * (ADR-097).
    */
   return (
     <div
@@ -222,7 +221,7 @@ export function RouteContextCard({
           ref={card}
           className={`card-morph glass-pane relative flex flex-col overflow-hidden border border-border ${
             collapsed
-              ? 'max-w-full items-center justify-center gap-0 rounded-pill px-3 py-2'
+              ? 'max-w-full items-center gap-0 rounded-pill px-3 py-2'
               : 'w-full gap-2 rounded-sheet px-2 pt-0 pb-2'
           }`}
           // **The top edge travels with the box.** The pane starts *above* the badge when the card is
@@ -234,8 +233,6 @@ export function RouteContextCard({
           style={{
             marginTop: collapsed ? -ISLAND_LAP : -(BADGE_TOP + BADGE_H),
             ['--morph-ease' as string]: collapsed ? MORPH_EASE_OUT : MORPH_EASE_IN,
-            ['--fade-delay' as string]: `${FADE_DELAY_MS}ms`,
-            ['--fade-ms' as string]: `${FADE_MS}ms`,
           }}
         >
           {collapsed ? (
@@ -245,7 +242,13 @@ export function RouteContextCard({
             // arrow and the chevron, gone, with the destination sitting flush to both edges. It read as a
             // marquee with no furniture rather than as a row that had overflowed, which is how it
             // survived a screenshot.
-            <div className="island-fade flex w-full min-w-0 items-center gap-1.5">
+            // **Present but unseen while the card is still leaving.** It has to be in flow from the
+            // first frame, because it is what gives the pane the height the box is animating *to*; it
+            // must not be visible, because the thing on screen during the collapse is the card. The swap
+            // is the one frame where `leaving` ends — the mirror of the expand's first frame.
+            <div
+              className={`flex w-full min-w-0 items-center gap-1.5 ${leaving ? 'opacity-0' : ''}`}
+            >
               {/* **An arrow, from the number to where it is going.** A badge beside a place name states
                   two facts and no relation between them, and the relation is the point of a route. Not
                   on a circular service, where an arrow to a destination you are also leaving from would
@@ -269,7 +272,7 @@ export function RouteContextCard({
           {collapsed && !leaving ? null : (
             <div
               className={`flex w-full flex-col gap-2 ${
-                leaving ? 'card-leaving pointer-events-none absolute inset-x-0 top-0 px-2' : ''
+                leaving ? 'pointer-events-none absolute inset-x-0 top-0 px-2' : ''
               }`}
               aria-hidden={leaving ? 'true' : undefined}
               // `inert` as a boolean: React 19 types it, and an inert subtree is unfocusable and

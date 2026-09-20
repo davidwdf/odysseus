@@ -387,71 +387,55 @@
 }
 
 /*
-  The expanded card's content, on its way out (ADR-174).
+  The card's leaving content and the island's arriving line used to carry a cross-fade here. Both are gone
+  (ADR-184): the collapse is the **expand played backwards**, so the content is hidden by the closing box
+  exactly as it is revealed by the opening one, and the only change of content is the single frame at the
+  end where the card's top row becomes the pill's line. The five rounds that needed a fade needed it to
+  cover for a clamped width, a borrowed easing, a state set an effect too late, and two attempts to
+  animate the text; with those fixed the mirror stands on its own.
 
-  It stays mounted for the length of the morph and is taken out of flow, so the box closing over it is
-  what removes it from view — *the other info being hidden as it collapses*, which is what the owner asked
-  for twice and what a swap-then-resize could never produce.
-
-  **The shrink goes first and the fades land with it** (ADR-182). The box starts closing immediately and
-  the content is still solid for `--fade-delay`; the cross-fade then runs for `--fade-ms` and both halves
-  of it finish on the same frame the box reaches the pill. The two numbers add up to the morph's own 500
-  and are declared together in `RouteContextCard`, because a fade that ends after its box has arrived is
-  a card that lingers and one that ends early is a box closing on nothing.
-
-  **It does not move** (ADR-182). It used to rise by the measured distance to the island's line, on the
-  theory that the eye should follow the name into the pill; the owner watched it and asked the obvious
-  question — *"card content slides up, not sure why?! can't it just stay in place"* — and he is right. The
-  thing that moves is the **box**, and the island's line rides the box's centre; the content that is
-  leaving simply stays where it is and stops being there.
+  What is left of the transition is two rules: the box, animated in JS because both of its states are
+  content-sized (`useBoxFlip`), and the pane's own offset, below, which CSS can interpolate because it is
+  two numbers this component knows.
 */
-.card-leaving {
-  animation: card-leaving var(--fade-ms) var(--fade-delay) ease-out both;
-}
 
-@keyframes card-leaving {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
+/*
+  The context card's pane, whose **top edge moves between the two states** (ADR-175).
 
-/* The island's line, arriving in the middle of whatever the box currently is — on the same clock as the
-   content it replaces, so the two cross rather than hand over. */
-.island-fade {
-  animation: island-fade var(--fade-ms) var(--fade-delay) ease-out both;
-}
+  Open, the pane starts above the badge, because its first row is the back control's box; collapsed, it
+  starts below the badge, lapped by 6 px. That is a 35 px difference in the margin, and it used to be
+  applied in the frame the state changed — the box dropped to the pill's position and *then* animated its
+  size, which reads as a jump followed by an animation.
 
-@keyframes island-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  Only the margin is here. The width and the height are measured and animated by `useBoxFlip`, because
+  both states are content-sized and there is nothing for CSS to interpolate between; the margin is two
+  numbers this component already knows, so it is a transition and needs no measurement. The easing comes
+  in as a custom property so the same rule serves both directions.
+*/
+.card-morph {
+  transition: margin-top 500ms var(--morph-ease, ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .island-fade {
-    animation: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .card-leaving {
-    animation: none;
-    opacity: 0;
+  .card-morph {
+    transition: none;
   }
 }
 
 /*
-  The collapsed island's line used to animate in — first a fade (ADR-172), then a fade and a lift
-  (ADR-176). Both were answers to the wrong question: the line was arriving somewhere it had never been,
-  because the destination in the open card is 50 px lower. ADR-178 turns it around — the island's line is
-  simply *there*, and the card on its way out carries its own destination up onto it. Nothing here now;
-  the motion is `.card-leaving` above.
+  The card's leaving content and the island's arriving line used to carry a cross-fade here, and both are
+  gone (ADR-184).
+
+  The collapse is the **expand played backwards** now: the content is hidden by the closing box exactly as
+  it is revealed by the opening one, and the only change of content is the single frame at the end where
+  the card's top row becomes the pill's line. The five rounds that needed a fade needed it to cover for a
+  clamped width (ADR-173), an easing borrowed from the entrance (ADR-172), a state set an effect too late
+  (ADR-176) and two attempts to animate the *text* (ADR-178, ADR-182). With those fixed the mirror stands
+  on its own, and it is one fewer thing to time.
+
+  What is left of the transition is two declarations: the **box**, animated in JS because both of its
+  states are content-sized (`useBoxFlip`), and the pane's own **offset**, above, which CSS can interpolate
+  because it is two numbers this component already knows.
 */
 
 /*
