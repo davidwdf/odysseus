@@ -391,20 +391,35 @@
 
   It stays mounted for the length of the morph and is taken out of flow, so the box closing over it is
   what removes it from view — *the other info being hidden as it collapses*, which is what the owner asked
-  for twice and what a swap-then-resize could never produce. The fade is deliberately **faster than the
-  box** and front-loaded: the content should be gone as an object well before the box has finished
-  becoming a pill, or the last frames read as a pill with a card's ghost inside it.
+  for twice and what a swap-then-resize could never produce.
+
+  **And it rises by exactly the distance between the two destinations** (`--leave-shift`, measured by the
+  card), so the name the rider was reading travels up and lands on the island's line rather than being
+  replaced by a copy of itself 50 px away. The island's line does not move at all — that was the mistake
+  in the two rounds before this one, and the owner's word for the second was *bouncing*.
+
+  **The curve is the entrance one, and the opacity is held back** — which is the opposite of the first
+  attempt and the reason it did not read. With an exit curve the content sat still for half the duration
+  and then rushed, while the fade ran on its own schedule: by the time the name moved it was already
+  faint, so the hand-off was invisible and all a rider saw was a card dissolving. Here the travel is
+  nearly done by 55 % while the name is still at 85 % opacity — it *visibly* goes to the island's line —
+  and the fade finishes in the last third, under the closing box.
 */
 .card-leaving {
-  animation: card-leaving 220ms ease-in both;
+  animation: card-leaving 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes card-leaving {
   from {
     opacity: 1;
+    transform: translateY(0);
+  }
+  55% {
+    opacity: 0.85;
   }
   to {
     opacity: 0;
+    transform: translateY(var(--leave-shift, 0px));
   }
 }
 
@@ -416,43 +431,12 @@
 }
 
 /*
-  The collapsed island's one line, arriving **after** the bubble has nearly closed around it (ADR-172).
-
-  The expand and the collapse are each other's opposite by design: expanding, the content is already laid
-  out and the growing box reveals it; collapsing, the box shrinks and the destination should appear *as*
-  it arrives rather than sitting alone in a bubble that is still half a card wide. A delayed fade is the
-  cheap half of that — the honest other half would keep the outgoing content mounted and fade it out, and
-  that is a projection hazard (ADR-097) for a frame nobody can see.
-
-  260 ms of the box's 500, so the line lands while the last of the width is going.
-
-  **And it rises.** The owner's note: the destination sits near the middle of the open card and the island
-  drops it at the top, so a straight fade puts it somewhere it never was. A short lift from below is the
-  cheap half of the honest answer — the line arrives travelling *upwards*, from the direction the rest of
-  the card is disappearing towards. The expensive half measures where the expanded destination actually
-  was and starts there; it is a text FLIP across two different type sizes, and 14 px of lift buys most of
-  the reading for none of that.
+  The collapsed island's line used to animate in — first a fade (ADR-172), then a fade and a lift
+  (ADR-176). Both were answers to the wrong question: the line was arriving somewhere it had never been,
+  because the destination in the open card is 50 px lower. ADR-178 turns it around — the island's line is
+  simply *there*, and the card on its way out carries its own destination up onto it. Nothing here now;
+  the motion is `.card-leaving` above.
 */
-@keyframes island-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.island-in {
-  animation: island-in 220ms 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .island-in {
-    animation: none;
-  }
-}
 
 /*
   The marquee's keyframes lived here and are gone (ADR-173). A CSS rule's offsets are literals, and this

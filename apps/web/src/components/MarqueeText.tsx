@@ -60,6 +60,8 @@ export function MarqueeText({
   const box = useRef<HTMLSpanElement | null>(null)
   const inner = useRef<HTMLSpanElement | null>(null)
   const travelling = useRef<Animation | null>(null)
+  /** True until the rider touches the name: the automatic lap only steers while nobody else is. */
+  const lapOwned = useRef(true)
   const [overflow, setOverflow] = useState(0)
   /** True while a lap is in flight — which is not the same as the name being displaced. See below. */
   const [running, setRunning] = useState(false)
@@ -102,40 +104,62 @@ export function MarqueeText({
   }, [children])
 
   /**
-   * **One lap, then it waits.**
+   * **One travel, driven twice: out, and back.**
    *
-   * The first build looped for ever, which is a ticker's behaviour and not a name's: a rider reads the
-   * destination once and then wants it to hold still. So the animation runs out and back **twice through
-   * its keyframes** (`iterations: 2` with `alternate`) and stops at home, where it stays until the rider
-   * touches it. The plateaus at both ends of the forward pass become, under `alternate`, a rest at the
-   * far end and a rest at home — so the name pauses where it is fully read, comes back, and parks.
+   * The animation is now *just the travel* — home to the far end — rather than a lap with the rests
+   * written into its keyframes. Two reasons, and the second is the owner's:
    *
-   * `play()` from a finished animation restarts it, which is what the touch handler below does.
+   *  1. The rests are **timers around** a play, which is what they are: a pause is not a keyframe, it is
+   *     the animation not running.
+   *  2. **A tap can reverse it.** With the rests inside the keyframes and `alternate` doing the return,
+   *     `playbackRate = -1` mid-lap replays the *timeline* backwards — which, because the second
+   *     iteration is itself reversed, sends the name back to the far end rather than home. With one
+   *     travel and an explicit `reverse()`, the playback rate means what it says: flip it and the name
+   *     turns round from wherever it has got to, which is exactly what was asked for.
+   *
+   * The automatic lap is a small script — rest, out, rest, back, park — and it **abandons itself the
+   * moment the rider touches the name**. A rider steering beats a schedule, and two things driving one
+   * animation is how a tap ends up being undone half a second later.
    */
   useEffect(() => {
     const node = inner.current
     if (node === null || overflow === 0) return
-    const travelMs = (overflow / SPEED_PX_PER_S) * 1000
-    const duration = HOLD_MS + travelMs + END_HOLD_MS
+    const duration = (overflow / SPEED_PX_PER_S) * 1000
     const animation = node.animate?.(
-      [
-        { transform: 'translateX(0)', offset: 0 },
-        // The plateau's *end* carries the easing, so the travel eases in and out rather than the whole
-        // cycle — a cycle-wide easing spends most of the pause decelerating from nothing.
-        { transform: 'translateX(0)', offset: HOLD_MS / duration, easing: TRAVEL_EASING },
-        { transform: `translateX(${-overflow}px)`, offset: (HOLD_MS + travelMs) / duration },
-        { transform: `translateX(${-overflow}px)`, offset: 1 },
-      ],
-      { duration, iterations: 2, direction: 'alternate' },
+      [{ transform: 'translateX(0)' }, { transform: `translateX(${-overflow}px)` }],
+      { duration, easing: TRAVEL_EASING, fill: 'both' },
     )
-    travelling.current = animation ?? null
     if (animation === undefined) return
-    setRunning(true)
-    // `finished` rather than `onfinish`: the promise rejects when the animation is cancelled, which is
-    // exactly the cleanup path below, and an unhandled rejection there would be noise in a console that
-    // should stay quiet.
-    animation.finished.then(() => setRunning(false)).catch(() => undefined)
+    animation.pause()
+    animation.currentTime = 0
+    travelling.current = animation
+    lapOwned.current = true
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms)
+      })
+    const lap = async () => {
+      await wait(HOLD_MS)
+      if (!lapOwned.current) return
+      setRunning(true)
+      animation.play()
+      await animation.finished
+      if (!lapOwned.current) return
+      await wait(END_HOLD_MS)
+      if (!lapOwned.current) return
+      animation.reverse()
+      await animation.finished
+      if (!lapOwned.current) return
+      setRunning(false)
+    }
+    // `finished` rejects when the animation is cancelled — which is the cleanup below, and an unhandled
+    // rejection there would be noise in a console that should stay quiet.
+    lap().catch(() => undefined)
+
     return () => {
+      if (timer !== undefined) clearTimeout(timer)
       animation.cancel()
       travelling.current = null
       setRunning(false)
@@ -178,6 +202,14 @@ export function MarqueeText({
       const trail = remaining > TRAIL_PX ? TRAIL_PX : remaining
       outer.style.maskImage = maskWith(lead, trail)
       outer.style.webkitMaskImage = maskWith(lead, trail)
+      // The painter is also what notices the name has stopped — including after a tap, which has no
+      // script to tell it. One place watches the animation, so nothing can disagree about whether the
+      // name is moving.
+      const animation = travelling.current
+      if (animation !== null && animation.playState !== 'running') {
+        setRunning(false)
+        return
+      }
       frame = requestAnimationFrame(paint)
     }
     frame = requestAnimationFrame(paint)
@@ -217,13 +249,20 @@ export function MarqueeText({
       onPointerDown={() => {
         const animation = travelling.current
         if (animation === null) return
-        // **Straight to the travel, not to the top of the wait.** A tap is a rider saying *show me the
-        // rest of this now*; restarting at zero made them sit through the 1.4 s rest first, which is the
-        // opposite of what they asked for. The rest still opens an *automatic* lap, where it is doing its
-        // job — letting the beginning of the name be read before it moves.
-        animation.currentTime = HOLD_MS
+        // **A tap turns the name round from where it is.** Running: flip the playback rate and it
+        // reverses mid-stride. Parked at the far end: come home. Parked at home: set off. There is no
+        // case where a tap restarts a wait, which is what it used to do — a rider who taps has read the
+        // beginning already and is asking for the rest, or has read the rest and wants the beginning.
+        lapOwned.current = false
+        if (animation.playState === 'running') {
+          animation.playbackRate = -animation.playbackRate
+        } else {
+          const duration = Number(animation.effect?.getTiming().duration ?? 0)
+          const at = Number(animation.currentTime ?? 0)
+          animation.playbackRate = at >= duration ? -1 : 1
+          animation.play()
+        }
         setRunning(true)
-        animation.play()
       }}
     >
       <span ref={inner} className="inline-block">

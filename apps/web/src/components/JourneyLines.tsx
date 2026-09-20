@@ -93,8 +93,12 @@ export function JourneyLines({
             <MarqueeText>{shown.origin}</MarqueeText>
           </span>
         </span>
+        {/* `data-journey-destination` is a handle, not a hook: `RouteContextCard` measures this line on a
+            collapse so the card can carry it to where the island's line will be (ADR-178). A data
+            attribute rather than a ref through three components, and rather than a class, because it is
+            an address rather than a style. */}
         <span className="flex items-center" style={{ height: SLOT }}>
-          <span className={`block w-full ${NAME_TYPE} text-text`}>
+          <span data-journey-destination className={`block w-full ${NAME_TYPE} text-text`}>
             <MarqueeText>{shown.destination}</MarqueeText>
           </span>
         </span>

@@ -1,6 +1,6 @@
 import type { RouteDetailView } from '@nextbus/core'
 import { ArrowRight } from 'lucide-react'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { JourneyRail } from '../../components/JourneyRail'
 import { MarqueeText } from '../../components/MarqueeText'
 import { RouteChip } from '../../components/RouteChip'
@@ -160,6 +160,35 @@ export function RouteContextCard({
     return () => clearTimeout(timer)
   }, [leaving])
 
+  /**
+   * **How far the outgoing destination has to travel to become the island's** (ADR-178).
+   *
+   * The open card puts the destination on the journey block's second line and the island puts it on the
+   * pill's only line — measured on a 390 px phone, 50 px apart. Two rounds tried to make the *island's*
+   * line arrive from somewhere: first a fade (it appeared where it had never been), then a 14 px lift
+   * (the owner read it as a bounce, and he was right — it was the wrong distance travelled late).
+   *
+   * The honest choreography is the other way round: **the island's line never moves**, and the card
+   * leaving the screen carries its own destination up onto it while it fades and the box closes. One
+   * thing moves, it moves exactly the distance between the two lines, and the eye follows the name it
+   * was already reading into the pill.
+   *
+   * Measured rather than derived. The arithmetic *is* available — a row height, two slots, two gaps, a
+   * padding — but it is six constants from three files agreeing, and the first one to change silently
+   * turns a hand-off into a jump. A layout effect runs after the collapse's commit and before its paint,
+   * with both lines in the tree, so the measurement is of the two boxes actually on screen.
+   */
+  const [leaveShift, setLeaveShift] = useState(0)
+  useLayoutEffect(() => {
+    if (!leaving) return
+    const pane = card.current
+    if (pane === null) return
+    const from = pane.querySelector('[data-journey-destination]')?.getBoundingClientRect()
+    const to = pane.querySelector('[data-island-line]')?.getBoundingClientRect()
+    if (from === undefined || to === undefined) return
+    setLeaveShift(to.top + to.height / 2 - (from.top + from.height / 2))
+  }, [leaving])
+
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-20 flex justify-center"
@@ -207,7 +236,7 @@ export function RouteContextCard({
             // arrow and the chevron, gone, with the destination sitting flush to both edges. It read as a
             // marquee with no furniture rather than as a row that had overflowed, which is how it
             // survived a screenshot.
-            <div className="island-in flex w-full min-w-0 items-center gap-1.5">
+            <div className="flex w-full min-w-0 items-center gap-1.5">
               {/* **An arrow, from the number to where it is going.** A badge beside a place name states
                   two facts and no relation between them, and the relation is the point of a route. Not
                   on a circular service, where an arrow to a destination you are also leaving from would
@@ -215,7 +244,7 @@ export function RouteContextCard({
               {header.circular ? null : (
                 <ArrowRight size={14} aria-hidden className="shrink-0 text-subtle" />
               )}
-              <span className="min-w-0 text-label font-semibold text-text">
+              <span data-island-line className="min-w-0 text-label font-semibold text-text">
                 <MarqueeText>{header.destination}</MarqueeText>
               </span>
               {/* Decorative: the overlay below is the target, and a button inside a button is what
@@ -233,6 +262,7 @@ export function RouteContextCard({
               className={`flex w-full flex-col gap-2 ${
                 leaving ? 'card-leaving pointer-events-none absolute inset-x-0 top-0 px-2' : ''
               }`}
+              style={leaving ? { ['--leave-shift' as string]: `${leaveShift}px` } : undefined}
               aria-hidden={leaving ? 'true' : undefined}
               // `inert` as a boolean: React 19 types it, and an inert subtree is unfocusable and
               // untargetable — which is what "this is on its way out" should mean to a keyboard and to a

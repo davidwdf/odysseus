@@ -131,9 +131,11 @@ export function HeaderLab() {
           <div key={loop.id} data-loop={loop.id} className="w-[390px]">
             <p className="m-0 mb-2 text-caption text-subtle">{loop.caption}</p>
             <div className="rounded-xl border border-border bg-gradient-to-br from-surface-2 via-surface to-surface-2 p-3">
+              {/* **No swap control on a loop.** A circular route carries no reverse in its payload, so
+                  the screen passes none and the card holds no column open for it (ADR-176) — and a
+                  sketch that draws one is a sketch of a header that cannot exist. */}
               <div className="glass-pane flex items-center gap-2 rounded-sheet border border-border px-3 py-2.5">
                 <div className="min-w-0 flex-1">{loop.render()}</div>
-                <SwapStub />
               </div>
             </div>
             <p className="m-0 mt-2 h-20 text-caption text-subtle">{loop.note}</p>
