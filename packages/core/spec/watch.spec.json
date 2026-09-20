@@ -1,0 +1,1985 @@
+{
+  "module": "watch",
+  "source": "src/watch.ts",
+  "version": 1,
+  "doc": "Watching one route at one pole, as a board that outlives the screen it was made on (`proposals/07`). Two rules and one clock. `watchView` composes the pill and its card out of words that already exist and are already pinned elsewhere — `routeStopBoard`, `routeStopEta`, `remarkView`, `feedNotice`, `walkMinutes`, `displayName` — so what these rows pin is the JOINS: which arm a board is in and in what order (ADR-088: pending -> unavailable -> reading -> noService, because a board on its way must never read as nothing due and a board that refused us is not an empty one), which single sentence the pill has room for when several are true at once (offline first, then the refusal, then nothing-due, then the honesty cue that the lead figure is a timetable rather than a sighting), when 'leave in N min' may be said at all, and whether the screen underneath is already drawing this very board. `watchExpired` is the clock: a watch outlives the RIDER's last touch by 90 minutes, never the data's — a watch holds an open subscription, so ageing it on arriving rounds would mean it never expires at all. THE PAYLOADS ARE HAND-BUILT TO THE WIRE SHAPE rather than trimmed from a dataset extract, which is a departure from this package's other corpora and is stated rather than hidden: a watch's inputs are one `EtaReport` plus a record the rider made, and the record has no upstream to be extracted from. Every id is shaped like the dataset's, every name is the real bilingual name of a real KMB 1 pole, and every reading is re-timed against a fixed `now` of 2026-09-20T09:00:00+08:00 so that no row reads a clock. No row here is `knownDefect`.",
+  "groups": {
+    "watchExpired": {
+      "doc": "90 minutes from the rider's last touch, boundary pinned from both sides, and an unreadable timestamp expiring rather than living for ever. The TTL is an argument so a caller — a test today, a setting later — can say how long a journey is.",
+      "cases": [
+        {
+          "name": "inside-the-window",
+          "why": "Eight minutes after the rider last touched it — the ordinary case, and the one a pill is drawn for.",
+          "args": {
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00",
+            "ttlMs": null
+          },
+          "expect": false
+        },
+        {
+          "name": "the-last-minute-inside",
+          "why": "Exactly 90 minutes is NOT expired: the comparison is strictly greater, so the boundary belongs to the rider.",
+          "args": {
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T10:22:00+08:00",
+            "ttlMs": null
+          },
+          "expect": false
+        },
+        {
+          "name": "one-second-past",
+          "why": "A second later it is gone. The pair pins the boundary from both sides, which is where a port fabricates an off-by-one.",
+          "args": {
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T10:22:01+08:00",
+            "ttlMs": null
+          },
+          "expect": true
+        },
+        {
+          "name": "an-unreadable-timestamp-expires",
+          "why": "Fail towards forgetting: a watch that cannot be aged would hold a subscription open for ever. Losing it costs one tap.",
+          "args": {
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "not a date"
+            },
+            "now": "2026-09-20T09:00:00+08:00",
+            "ttlMs": null
+          },
+          "expect": true
+        },
+        {
+          "name": "a-caller-may-shorten-the-window",
+          "why": "The TTL is an argument, not a constant read from inside — so a test, and a future setting, can say how long a journey is.",
+          "args": {
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:10:00+08:00",
+            "ttlMs": 300000
+          },
+          "expect": true
+        }
+      ]
+    },
+    "watchView": {
+      "doc": "The pill and its card: four readout arms in ADR-088's order, a note whose precedence is the only genuinely new decision in the module, the walk arithmetic behind 'leave in N min' (including the two rows where the honest answer is no line at all), the redundancy test a renderer is forbidden to make for itself, and the bilingual read of the labels the rider's watch carries.",
+      "cases": [
+        {
+          "name": "a-board-with-times-leads-with-the-first",
+          "why": "The ordinary arm. The lead is the pill’s figure and the rest is what the card adds, so one board is split once rather than by each renderer.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "no-round-has-landed-yet",
+          "why": "ADR-088’s first arm: a board on its way must never render as “nothing due”. `pending` is what a skeleton is drawn from.",
+          "args": {
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "pending"
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [],
+            "notice": {
+              "kind": "none",
+              "at": ""
+            },
+            "leave": null,
+            "lastUpdatedIso": null,
+            "redundant": false
+          }
+        },
+        {
+          "name": "a-board-that-refused-is-not-an-empty-board",
+          "why": "ADR-073/077. The pole is named in `failed`, so the readout is `unavailable` and the note is a warning — never “no service”.",
+          "args": {
+            "report": {
+              "etas": [],
+              "failed": [
+                {
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "reason": "upstream"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "unavailable"
+            },
+            "subLine": {
+              "kind": "unavailable",
+              "tone": "warn"
+            },
+            "arrivals": [],
+            "notice": {
+              "kind": "none",
+              "at": ""
+            },
+            "leave": null,
+            "lastUpdatedIso": null,
+            "redundant": false
+          }
+        },
+        {
+          "name": "answered-and-nothing-is-due",
+          "why": "The only arm that may say “no service”: we asked, we were answered, and the answer was nothing. Reached only after `failed` is ruled out.",
+          "args": {
+            "report": {
+              "etas": []
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "noService"
+            },
+            "subLine": {
+              "kind": "noService",
+              "tone": "muted"
+            },
+            "arrivals": [],
+            "notice": {
+              "kind": "none",
+              "at": ""
+            },
+            "leave": null,
+            "lastUpdatedIso": null,
+            "redundant": false
+          }
+        },
+        {
+          "name": "offline-outranks-every-other-sentence",
+          "why": "The note’s precedence, top entry: a rider whose network is gone needs that before anything it might explain. The readings stay — ADR-058 replays them aged rather than blanking the pill.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": false,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "offline",
+              "tone": "warn"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "offline",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "a-timetable-is-not-a-sighting",
+          "why": "The honesty cue the pill has room for: `remarkKind: scheduled` means the figure is the published timetable, not a bus anyone has seen (ADR-008). Muted, because nothing is wrong — it is simply a weaker claim.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00",
+                  "remark": {
+                    "en": "Scheduled",
+                    "zh-Hant": "原定班次",
+                    "zh-Hans": "原定班次"
+                  },
+                  "remarkKind": "scheduled"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "scheduled",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "leave-in-subtracts-the-walk-from-the-lead",
+          "why": "P13, finally answerable: 320 m is a 4 min walk and the lead is 11 min away, so the rider has 7 min. The subtraction is the kernel’s because two renderers would round it differently.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": ["2026-09-20T09:11:00+08:00"],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "distanceM": 320,
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": []
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": {
+              "walkMin": 4,
+              "leaveInMin": 7
+            },
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "leave-now-when-the-walk-exactly-fills-the-wait",
+          "why": "Zero is kept and means *leave now* — the boundary between a line worth printing and a false reassurance.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": ["2026-09-20T09:04:00+08:00"],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "distanceM": 320,
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:04:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 4,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": []
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:04:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 4,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": {
+              "walkMin": 4,
+              "leaveInMin": 0
+            },
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "a-bus-you-cannot-catch-says-nothing",
+          "why": "The lead is 3 min away and the rider is a 10 min walk from the kerb. Flooring at zero would print “leave now” to someone who cannot make it; the honest answer is no line at all.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": ["2026-09-20T09:03:00+08:00"],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "distanceM": 800,
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": []
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "due-has-no-minutes-to-subtract",
+          "why": "Falls out of the arithmetic rather than needing an arm: `Due` is 0 minutes and the walk floor is 1, so the leave line is absent without a special case.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": ["2026-09-20T09:00:20+08:00"],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "distanceM": 100,
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:00:20+08:00",
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              },
+              "rest": []
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:00:20+08:00",
+                "label": {
+                  "kind": "due",
+                  "label": "Due"
+                },
+                "urgency": "due",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "the-screen-underneath-is-already-showing-this-board",
+          "why": "A route screen at this pole and this route. The comparison is the kernel’s because comparing ids in a view is the derivation `check-no-derivation` bans.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "showing": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1"
+            },
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": true
+          }
+        },
+        {
+          "name": "a-place-screen-names-no-route-and-still-shows-this-one",
+          "why": "Place detail draws every route at the pole, so a `showing` with no route is redundant too — the asymmetry that would otherwise be re-derived per screen.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "showing": {
+              "poleId": "KMB:HK58-S-1250-0"
+            },
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": true
+          }
+        },
+        {
+          "name": "another-route-at-the-same-pole-is-not-redundant",
+          "why": "Same kerb, different board. Without the route half of the test the pill would hide itself while showing something the screen does not.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "showing": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:6:outbound:1"
+            },
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "the-names-are-read-in-the-riders-language",
+          "why": "The captured labels are `I18nText`, so switching language re-reads them with no fetch — and `displayName` splits the printed code off the Chinese name exactly as it does the English one (ADR-034).",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "zh-Hant",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "彌敦道／佐敦道",
+              "code": "HK58"
+            },
+            "destination": "竹園邨",
+            "stand": "B 站 · 往旺角",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "分鐘"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "分鐘"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "分鐘"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "分鐘"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "分鐘"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "分鐘"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "a-stale-board-still-reads-out-and-says-so",
+          "why": "The board is 20 minutes old: the readings stand — aged, never hidden — and the sentence is `feedNotice`’s, at screen level, because staleness is the board’s and not a mark on a figure (ADR-123/133).",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T08:40:00+08:00",
+                  "observedAt": "2026-09-20T08:40:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "stand": {
+                "en": "Stand B · towards Mong Kok",
+                "zh-Hant": "B 站 · 往旺角",
+                "zh-Hans": "B 站 · 往旺角"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": "Stand B · towards Mong Kok",
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": true
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": true
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": true
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": true
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": true
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": true
+              }
+            ],
+            "notice": {
+              "kind": "lastUpdated",
+              "at": "08:40"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T08:40:00+08:00",
+            "redundant": false
+          }
+        },
+        {
+          "name": "a-lone-pole-has-no-stand-to-name",
+          "why": "ADR-080's line exists to tell two kerbs a metre apart apart, so a stop with one kerb has nothing to say and says nothing — `null`, never an empty string a renderer would draw a blank row for.",
+          "args": {
+            "report": {
+              "etas": [
+                {
+                  "routeId": "KMB:1:outbound:1",
+                  "stopId": "KMB:HK58-S-1250-0",
+                  "operator": "KMB",
+                  "arrivals": [
+                    "2026-09-20T09:03:00+08:00",
+                    "2026-09-20T09:11:00+08:00",
+                    "2026-09-20T09:24:00+08:00"
+                  ],
+                  "dataTimestamp": "2026-09-20T09:00:00+08:00",
+                  "observedAt": "2026-09-20T09:00:00+08:00"
+                }
+              ]
+            },
+            "locale": "en",
+            "online": true,
+            "trouble": "none",
+            "watch": {
+              "poleId": "KMB:HK58-S-1250-0",
+              "routeId": "KMB:1:outbound:1",
+              "routeNo": "1",
+              "operator": "KMB",
+              "stop": {
+                "en": "NATHAN ROAD / JORDAN ROAD (HK58)",
+                "zh-Hant": "彌敦道／佐敦道 (HK58)",
+                "zh-Hans": "弥敦道／佐敦道 (HK58)"
+              },
+              "destination": {
+                "en": "Chuk Yuen Estate",
+                "zh-Hant": "竹園邨",
+                "zh-Hans": "竹园邨"
+              },
+              "startedIso": "2026-09-20T08:52:00+08:00",
+              "touchedIso": "2026-09-20T08:52:00+08:00"
+            },
+            "now": "2026-09-20T09:00:00+08:00"
+          },
+          "expect": {
+            "routeNo": "1",
+            "operator": "KMB",
+            "stop": {
+              "label": "Nathan Road / Jordan Road",
+              "code": "HK58"
+            },
+            "destination": "Chuk Yuen Estate",
+            "stand": null,
+            "readout": {
+              "kind": "reading",
+              "lead": {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              "rest": [
+                {
+                  "iso": "2026-09-20T09:11:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 11,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                },
+                {
+                  "iso": "2026-09-20T09:24:00+08:00",
+                  "label": {
+                    "kind": "mins",
+                    "value": 24,
+                    "unit": "min"
+                  },
+                  "urgency": "normal",
+                  "stale": false
+                }
+              ]
+            },
+            "subLine": {
+              "kind": "destination",
+              "tone": "muted"
+            },
+            "arrivals": [
+              {
+                "iso": "2026-09-20T09:03:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 3,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:11:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 11,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              },
+              {
+                "iso": "2026-09-20T09:24:00+08:00",
+                "label": {
+                  "kind": "mins",
+                  "value": 24,
+                  "unit": "min"
+                },
+                "urgency": "normal",
+                "stale": false
+              }
+            ],
+            "notice": {
+              "kind": "none",
+              "at": "09:00"
+            },
+            "leave": null,
+            "lastUpdatedIso": "2026-09-20T09:00:00+08:00",
+            "redundant": false
+          }
+        }
+      ]
+    }
+  }
+}

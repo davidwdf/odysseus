@@ -14,6 +14,8 @@ import routeDetail from '@nextbus/contract/ui/route-detail.spec.json'
 import search from '@nextbus/contract/ui/search.spec.json'
 import settings from '@nextbus/contract/ui/settings.spec.json'
 import stopRow from '@nextbus/contract/ui/stop-row.spec.json'
+import watchCard from '@nextbus/contract/ui/watch-card.spec.json'
+import watchPill from '@nextbus/contract/ui/watch-pill.spec.json'
 
 export interface GallerySpec {
   component: string
@@ -34,6 +36,10 @@ const specs = [
   settings,
   aboutData,
   faq,
+  // Declared before either renderer exists (`proposals/07`), so the gallery is where a porter — or the
+  // first web implementation — reads what the component owes before writing a line of it.
+  watchPill,
+  watchCard,
 ] as unknown as GallerySpec[]
 
 export default specs

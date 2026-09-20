@@ -1,0 +1,322 @@
+{
+  "component": "WatchCard",
+  "version": 1,
+  "doc": "The expanded watch: the whole board for one route at one pole, plus when to leave for it.",
+  "viewModel": {
+    "module": "watch",
+    "type": "WatchView",
+    "corpus": "watch.spec.json",
+    "group": "watchView"
+  },
+  "slots": [
+    {
+      "name": "routeNo",
+      "text": {
+        "field": "routeNo"
+      }
+    },
+    {
+      "name": "stopName",
+      "invariant": "`displayName`'s, so the card and the pill it grew from cannot spell one pole two ways.",
+      "text": {
+        "field": "stop.label"
+      }
+    },
+    {
+      "name": "stopCode",
+      "when": "stop.code",
+      "why": "A pole whose upstream name carries no printed flag code.",
+      "text": {
+        "field": "stop.code"
+      }
+    },
+    {
+      "name": "destinationArrow",
+      "text": {
+        "literal": "→",
+        "why": "The renderer supplies the glyph, the kernel the destination — as everywhere else in the app."
+      }
+    },
+    {
+      "name": "destination",
+      "invariant": "Unconditional here, unlike on the pill: the card has the width, so the destination is never displaced by a sentence and a rider always knows which direction they are watching.",
+      "text": {
+        "field": "destination"
+      }
+    },
+    {
+      "name": "board",
+      "invariant": "The four arms in ADR-088's order, and the card draws the sentence at full size where the pill could only manage a dash. `readout.rest` is capped by the served `ClientPolicy.maxArrivals` before it gets here (ADR-053) — a card that sliced again would be a second answer to a served question.",
+      "oneOf": "readout.kind",
+      "cases": {
+        "pending": [],
+        "reading": [
+          {
+            "name": "lead",
+            "oneOf": "readout.lead.label.kind",
+            "cases": {
+              "mins": [
+                {
+                  "name": "leadValue",
+                  "text": {
+                    "field": "readout.lead.label.value"
+                  }
+                },
+                {
+                  "name": "leadUnit",
+                  "text": {
+                    "field": "readout.lead.label.unit"
+                  }
+                }
+              ],
+              "due": [
+                {
+                  "name": "leadDue",
+                  "text": {
+                    "field": "readout.lead.label.label"
+                  }
+                }
+              ],
+              "departed": [],
+              "headway": [
+                {
+                  "name": "leadHeadway",
+                  "text": {
+                    "field": "readout.lead.label.text"
+                  }
+                }
+              ],
+              "none": []
+            }
+          },
+          {
+            "name": "rest",
+            "invariant": "Quieter than the lead and in feed order, never re-sorted: the operators publish soonest-first and the whole app reads `arrivals[0]` as the next bus, so a card that sorted would hide a feed that had stopped doing that from the one place a rider would notice.",
+            "each": "readout.rest",
+            "of": [
+              {
+                "name": "restReading",
+                "oneOf": "label.kind",
+                "cases": {
+                  "mins": [
+                    {
+                      "name": "restValue",
+                      "text": {
+                        "field": "label.value"
+                      }
+                    },
+                    {
+                      "name": "restUnit",
+                      "text": {
+                        "field": "label.unit"
+                      }
+                    }
+                  ],
+                  "due": [
+                    {
+                      "name": "restDue",
+                      "text": {
+                        "field": "label.label"
+                      }
+                    }
+                  ],
+                  "departed": [],
+                  "headway": [
+                    {
+                      "name": "restHeadway",
+                      "text": {
+                        "field": "label.text"
+                      }
+                    }
+                  ],
+                  "none": []
+                }
+              }
+            ]
+          }
+        ],
+        "unavailable": [
+          {
+            "name": "boardUnavailable",
+            "text": {
+              "message": "etasUnavailable"
+            }
+          }
+        ],
+        "noService": [
+          {
+            "name": "boardNoService",
+            "text": {
+              "message": "noService"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "stand",
+      "when": "stand",
+      "why": "A lone pole has no second kerb to be told apart from, so there is nothing to say (ADR-080).",
+      "invariant": "Captured with the watch, in the rider's language, and never re-derived here — the sentence is the one the screen that created the watch was already showing.",
+      "text": {
+        "field": "stand"
+      }
+    },
+    {
+      "name": "leave",
+      "when": "leave",
+      "why": "No location fix, no reading, or a bus the rider cannot catch — three absences the kernel decides, and the third is the one that matters: flooring at zero would print \"leave now\" to someone who cannot make it.",
+      "invariant": "**A `oneOf` over a number with one case is deliberate and it is a live trap.** Zero has its own sentence because *\"Leave in 0 min\"* is not something anyone says; every other value must be projected by the `leaveIn` slot below. A renderer that drew \"Leave in 0 min\" fails here, and a future case added to this map is a decision, not a formatting choice.",
+      "oneOf": "leave.leaveInMin",
+      "cases": {
+        "0": [
+          {
+            "name": "leaveNow",
+            "text": {
+              "message": "watchLeaveNow"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "leaveIn",
+      "when": "leave.leaveInMin",
+      "why": "Zero is said by `leaveNow` above, and absent leave has no line at all.",
+      "text": {
+        "message": "watchLeaveIn",
+        "args": {
+          "n": "leave.leaveInMin"
+        }
+      }
+    },
+    {
+      "name": "walk",
+      "when": "leave",
+      "why": "Same absence as the leave line: without a fix there is no walk to estimate, and an invented one would be the fabricated precision ADR-008 rules out.",
+      "invariant": "`walkMinutes` is a straight-line estimate at a fixed pace with a floor of one minute — the same figure every stop card in the app shows, so the card cannot disagree with the list the rider tapped through.",
+      "text": {
+        "message": "watchWalk",
+        "args": {
+          "n": "leave.walkMin"
+        }
+      }
+    },
+    {
+      "name": "feedNotice",
+      "invariant": "The screen-level freshness sentence, said **once per board** and never as a mark on a figure (ADR-123/133/150). `notice.at` is Hong Kong wall-clock from `formatClock` — absolute rather than relative, because \"2 minutes ago\" ages while nothing re-renders, which is the same dishonesty as a client-side countdown.",
+      "oneOf": "notice.kind",
+      "cases": {
+        "none": [],
+        "lastUpdated": [
+          {
+            "name": "noticeLastUpdated",
+            "text": {
+              "message": "feedLastUpdated",
+              "args": {
+                "time": "notice.at"
+              }
+            }
+          }
+        ],
+        "offline": [
+          {
+            "name": "noticeOffline",
+            "text": {
+              "message": "feedOffline"
+            }
+          }
+        ],
+        "unreachable": [
+          {
+            "name": "noticeUnreachable",
+            "text": {
+              "message": "feedUnreachable"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "states": {
+    "loading": {
+      "must": "A skeleton where the board will be, with the stop and route already drawn.",
+      "mustNot": "An empty card, a dash, or \"no service\" — none of which is what \"we have not been told yet\" means.",
+      "why": "ADR-088, and the card inherits the pill's reason: the identity is known from the moment the watch was made, so only the board is ever pending.",
+      "enforcement": {
+        "shows": []
+      }
+    },
+    "empty": {
+      "must": "An explicit \"no service\" where the times would be.",
+      "mustNot": "A card with a stop name and nothing under it — the `StopRow` defect, one component over.",
+      "why": "`stop-row.spec.json` carried this sentence as a `knownDefect` for months and WP6-4 closed it by changing what a card is built *from*. This spec starts where that one ended up.",
+      "enforcement": {
+        "by": "boardNoService"
+      }
+    },
+    "failed": {
+      "must": "An explicit \"could not reach\" line, distinguishable from having no service.",
+      "mustNot": "Reading as \"no buses due\" when the board refused us.",
+      "why": "ADR-073/077.",
+      "enforcement": {
+        "by": "boardUnavailable"
+      }
+    },
+    "stale": {
+      "must": "The readings, plus \"Last updated HH:MM\" — the age said once, for the whole board.",
+      "mustNot": "Colour alone, a per-figure cue, or a value presented as fresh.",
+      "why": "ADR-123/133/150. This is the slot `WatchPill` points at when it declares its own `stale` state unenforced.",
+      "enforcement": {
+        "by": "noticeLastUpdated"
+      }
+    },
+    "offline": {
+      "must": "The last known readings, aged, with the offline sentence.",
+      "mustNot": "A blank card, and never a fresh-looking value.",
+      "why": "ADR-058: what is replayed from the persisted cache is a labelled old reading rather than no reading.",
+      "enforcement": {
+        "by": "noticeOffline"
+      }
+    },
+    "cannotCatch": {
+      "must": "The board, with no leave line at all.",
+      "mustNot": "\"Leave now\" for a bus the rider cannot reach in time — a false reassurance is worse than silence.",
+      "why": "`proposals/07` §6 and `watch#watchView`'s `a-bus-you-cannot-catch-says-nothing` row. The kernel returns no `leave`, and this state is what stops a renderer inventing one from the figures beside it.",
+      "enforcement": {
+        "shows": []
+      }
+    }
+  },
+  "interactions": [
+    {
+      "target": "stopName",
+      "goes": "place-detail"
+    },
+    {
+      "target": "routeNo",
+      "goes": "route-detail-at-this-stop"
+    },
+    {
+      "target": "feedNotice",
+      "goes": "watch-pill",
+      "optional": true,
+      "note": "Collapsing is a gesture on the card rather than a control in it — a tap outside, a downward drag, or the pill's own surface again. Declared `optional` because a renderer may have no explicit control for it; the text is unchanged either way."
+    }
+  ],
+  "a11y": {
+    "role": "dialog or region, whose board is a list and whose actions are buttons",
+    "name": {
+      "fromSlot": "stopName"
+    },
+    "reducedMotion": "The card appears in place rather than growing out of the pill; the content is identical either way."
+  },
+  "idiom": [
+    "material and elevation, and whether the card keeps the pill's glass or moves to a solid surface",
+    "shape: corner radius, and whether the header row is visually the pill that opened it",
+    "motion: the expansion, and whether the card can be dragged between heights",
+    "how the lead figure is emphasised against the rest of the board",
+    "the action row: filled pills, a text row, or a platform toolbar",
+    "the icon set — the walk glyph, the stand glyph, the route and stop shortcuts"
+  ]
+}

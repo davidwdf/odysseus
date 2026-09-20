@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="./favicon.svg">
+<title>Watch — round 2: A without a tab bar, and the card restyled</title>
+<!-- PROTOTYPE ONLY. Raw hex rather than tokens, invented ETAs, no data layer. See ./README.md -->
+<style>
+ :root{--bg:#fbfbfa;--surface:#fff;--text:#1a1a19;--muted:#7a7975;--subtle:#a3a29d;--line:#e6e5e1;
+       --accent:#c8102e;--positive:#0a7d4a;--warn:#a8620a;--route:#3f6fb5;
+       --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.08);--ease:cubic-bezier(.32,.72,0,1)}
+ *{box-sizing:border-box}
+ body{margin:0;background:#f0efec;color:var(--text);
+      font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+ header.page{max-width:1480px;margin:0 auto;padding:26px 20px 4px}
+ header.page h1{font-size:21px;margin:0 0 6px}
+ header.page p{margin:0 0 10px;color:var(--muted);max-width:92ch}
+ header.page code{background:#e7e6e2;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ header.page a{color:var(--text)}
+ .controls{max-width:1480px;margin:0 auto;padding:6px 20px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls b{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:2px}
+ .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;
+       font-size:12.5px;cursor:pointer}
+ .chip[aria-pressed="true"]{background:var(--text);color:#fff;border-color:var(--text)}
+ h2.sec{max-width:1480px;margin:16px auto 0;padding:0 20px;font-size:16px}
+ p.sec{max-width:1480px;margin:4px auto 0;padding:0 20px 8px;color:var(--muted)}
+ .row{max-width:1480px;margin:0 auto;padding:10px 20px 34px;display:flex;flex-wrap:wrap;gap:20px;align-items:start}
+ .cell{width:360px}
+ .cell h3{font-size:14px;margin:0 0 2px}
+ .cell p{margin:0 0 10px;color:var(--muted);font-size:12.5px;min-height:56px}
+ .note{max-width:1480px;margin:0 auto 44px;padding:0 20px;color:var(--muted);font-size:12.5px}
+
+ .phone{width:360px;height:700px;background:var(--bg);border-radius:34px;border:1px solid var(--line);
+        box-shadow:var(--shadow);overflow:hidden;position:relative}
+ .screen{position:absolute;inset:0;overflow:hidden}
+ .appHead{padding:26px 16px 6px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+ .appSub{padding:0 16px 10px;color:var(--muted);font-size:12px}
+ .list{padding:0 12px;display:flex;flex-direction:column;gap:9px}
+ .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:11px 12px}
+ .card .nm{font-size:13.5px;font-weight:650;margin-bottom:2px}
+ .card .mt{font-size:11.5px;color:var(--muted)}
+ .rt{display:flex;align-items:center;gap:8px;margin-top:8px}
+ .badge{background:var(--accent);color:#fff;font-weight:700;border-radius:7px;padding:2px 7px;font-size:12px;flex:none}
+ .badge.ctb{background:#f0b323;color:#231f20}
+ .rt .dest{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .rt .min{font-variant-numeric:tabular-nums;font-weight:650;font-size:13px}
+ .rt .min.soon{color:var(--positive)}
+ .glass{background:rgba(255,255,255,.76);-webkit-backdrop-filter:blur(16px) saturate(1.8);
+        backdrop-filter:blur(16px) saturate(1.8);
+        box-shadow:inset 0 0 0 .5px rgba(255,255,255,.65),0 3px 16px rgba(0,0,0,.14)}
+
+ /* the lens survives the tab bar's removal — the one control that was never navigation */
+ .lens{position:absolute;right:12px;bottom:82px;width:54px;height:54px;border-radius:27px;display:grid;
+       place-items:center;z-index:20;transition:opacity .2s}
+ .phone:has(.watch.open) .lens{opacity:0}
+
+ /* ── the pill ──────────────────────────────────────────────────────────── */
+ .watch{position:absolute;left:12px;right:12px;bottom:12px;z-index:25;cursor:pointer;border-radius:22px;
+        overflow:hidden;transition:right .34s var(--ease),bottom .34s var(--ease),border-radius .34s var(--ease)}
+ .wRow{display:flex;align-items:center;gap:10px;padding:0 13px;height:58px}
+ .wBadge{background:var(--accent);color:#fff;font-weight:700;border-radius:9px;min-width:34px;height:30px;
+         display:grid;place-items:center;font-size:14.5px;padding:0 7px;flex:none}
+ .wText{flex:1;min-width:0}
+ .wStop{display:block;font-size:13.5px;font-weight:650;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;padding-right:8px}
+ .wSub{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);
+       white-space:nowrap;overflow:hidden;padding-right:8px}
+ .wSub svg{width:12px;height:12px;flex:none;opacity:.75}
+ .wSub .sep{opacity:.5}
+ .wFig{display:flex;flex-direction:column;align-items:flex-end;flex:none;font-variant-numeric:tabular-nums}
+ .wFig .lead{display:flex;align-items:baseline;gap:3px}
+ .wFig .v{font-size:23px;font-weight:700;letter-spacing:-.02em;line-height:1.05}
+ .wFig .u{font-size:11.5px;color:var(--muted)}
+ .wFig.soon .v{color:var(--positive)}
+ .wFig.word .v{font-size:15px}
+ .wFig.bad .v{font-size:12.5px;font-weight:600;color:var(--warn);max-width:150px;white-space:normal;text-align:right}
+ .wFig .then{font-size:11px;color:var(--muted);margin-top:1px}
+ .wChev{flex:none;color:var(--subtle);margin-left:2px}
+
+ /* A3 — the pill's own bottom edge is the progress, no dots and no token */
+ .edge{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(0,0,0,.06)}
+ .edge i{position:absolute;left:0;top:0;bottom:0;background:var(--route);border-radius:0 2px 2px 0;
+         transition:width .6s var(--ease)}
+
+ /* ── the card ──────────────────────────────────────────────────────────── */
+ .body{overflow:hidden;max-height:0;opacity:0;transition:max-height .34s var(--ease),opacity .2s}
+ .watch.open .body{max-height:460px;opacity:1}
+ .watch.open .edge{display:none}
+ .watch.open{border-radius:24px}
+ .cardSurface .body{background:var(--surface)}
+
+ /* boxed slots (control) */
+ .slots{display:flex;gap:8px;padding:2px 13px 0}
+ .slot{flex:1;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:12px;padding:8px 6px;
+       text-align:center;font-variant-numeric:tabular-nums}
+ .slot .v{font-size:21px;font-weight:700}
+ .slot .u{font-size:10.5px;color:var(--muted)}
+ .slot.lead .v{color:var(--positive)}
+ .slot .tag{font-size:9.5px;color:var(--warn);margin-top:2px}
+ /* quiet readout */
+ .quiet{display:flex;align-items:baseline;gap:10px;padding:4px 15px 0;font-variant-numeric:tabular-nums}
+ .quiet .v{font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1}
+ .quiet .v.soon{color:var(--positive)}
+ .quiet .v.word{font-size:19px}
+ .quiet .u{font-size:13px;color:var(--muted)}
+ .quiet .then{margin-left:auto;font-size:12.5px;color:var(--muted);text-align:right}
+ .quiet .bad{font-size:13.5px;font-weight:600;color:var(--warn)}
+ .whereLine{padding:7px 15px 0;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+ .whereLine svg{width:13px;height:13px;flex:none;opacity:.8}
+ .notice{padding:8px 15px 0;font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+ .notice svg{width:13px;height:13px;flex:none}
+
+ /* the named next-stops rail: the route line's vocabulary, at card size, with names */
+ .named{padding:13px 15px 2px;position:relative}
+ .named .ln{position:absolute;left:21px;top:20px;bottom:14px;width:2px;background:var(--route);opacity:.5}
+ .named .st{display:flex;align-items:center;gap:13px;height:26px;position:relative;padding-left:2px}
+ .named .nd{width:13px;height:13px;border-radius:7px;background:var(--surface);border:2px solid var(--route);
+            margin-left:2px;flex:none;z-index:1}
+ .named .st.here .nd{background:var(--text);border-color:var(--text)}
+ .named .lbl{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .named .st.here .lbl{color:var(--text);font-weight:600}
+ .named .bus{position:absolute;left:14px;width:17px;height:17px;border-radius:9px;background:var(--accent);
+             display:grid;place-items:center;color:#fff;z-index:2;box-shadow:0 1px 5px rgba(200,16,46,.4)}
+ .named .bus svg{width:12px;height:12px}
+
+ .acts{display:flex;gap:7px;padding:12px 13px 13px;flex-wrap:wrap}
+ .act{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(255,255,255,.85);
+      border-radius:999px;padding:7px 11px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;color:var(--text)}
+ .act svg{width:13px;height:13px;color:var(--muted)}
+ .act.danger{color:var(--accent);border-color:#f0c9cf}
+ .actsText{display:flex;gap:16px;padding:13px 15px 14px;border-top:1px solid var(--line);margin-top:12px}
+ .actsText button{border:0;background:none;font:inherit;font-size:12.5px;cursor:pointer;color:var(--text);
+                  display:flex;align-items:center;gap:6px;padding:0}
+ .actsText button svg{width:14px;height:14px;color:var(--muted)}
+ .actsText .sp{flex:1}
+ .actsText .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Round 2 — A with the tab bar gone, and the card restyled</h1>
+  <p>
+    Two changes since <a href="./index.html">round 1</a>. The tab bar is <b>removed</b>, so the pill owns the
+    bottom edge and sits at the bar's old inset (<code>12</code>); the search lens is kept because it was
+    never navigation — <b>stacked above</b> the pill rather than beside it: a lens on the same row eats the stop
+    name at 360 px. And <b>D's rail is gone</b> — what varies now is how much of D's <i>information</i> A can
+    carry <b>without drawing a second route line</b>.
+  </p>
+</header>
+
+<div class="controls" id="controls">
+  <b>Board says</b>
+  <button class="chip" data-mode="normal">3 min</button>
+  <button class="chip" data-mode="due">Due</button>
+  <button class="chip" data-mode="stale">Stale feed</button>
+  <button class="chip" data-mode="none">Nothing due</button>
+  <button class="chip" data-mode="failed">Board failed</button>
+  <button class="chip" data-mode="offline">Offline</button>
+  <span style="flex:1"></span>
+  <button class="chip" id="expandAll" aria-pressed="false">Expand all</button>
+</div>
+
+<h2 class="sec">1 — The pill, four readings of A</h2>
+<p class="sec">A1 is round 1's A, lowered. A2–A4 are independent and can be combined; each is judged on
+  what a <i>glance</i> answers.</p>
+<div class="row" id="pills"></div>
+
+<h2 class="sec">2 — The card</h2>
+<p class="sec">Same mini-board content, three levels of restraint. All open from A2.</p>
+<div class="row" id="cards"></div>
+
+<p class="note">
+  Deliberately wrong here: raw hex rather than <code>@nextbus/ui</code> tokens (the rail blue is standing in
+  for <code>color.semantic.route</code>), English-only strings, and figures that never change because there
+  is no data layer. The geometry, the arms and their order are the parts meant to be judged.
+</p>
+
+<script>
+const WATCH = { route:'1', dest:'Chuk Yuen Estate', stop:'Nathan Road / Jordan Road',
+                side:'Stand B · towards Mong Kok', stopsAway:2, progress:.66, walkMin:4 }
+const MODES = {
+  normal:  { slots:[{v:'3',u:'min'},{v:'11',u:'min'},{v:'24',u:'min',tag:'Scheduled'}], notice:null },
+  due:     { slots:[{v:'Due',u:''},{v:'7',u:'min'},{v:'18',u:'min'}], notice:null },
+  stale:   { slots:[{v:'3',u:'min'},{v:'11',u:'min'},{v:'24',u:'min'}], notice:'Times last updated 4 minutes ago' },
+  none:    { slots:[], word:'No service', notice:'No more buses on this route today' },
+  failed:  { slots:[], word:'Live times unavailable', bad:true, notice:'This stop’s board did not answer. Trying again.' },
+  offline: { slots:[], word:'Offline', bad:true, notice:'You are offline. Last seen 6 minutes ago.' },
+}
+let mode = 'normal', openAll = false
+
+const I = {
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="m18 15-6-6-6 6"/></svg>',
+  bus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M6 17v2M18 17v2M5 5h14a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1Z"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  walk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="m9 21 2-6 2 2v5M11 9l-2 3 3 1 2 4"/><path d="m15 9 3 2"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><path d="M10.6 6.2A9.6 9.6 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.1 3.7M6.3 8.3C3.8 9.9 2 12 2 12s3.5 6 10 6c1.3 0 2.5-.2 3.5-.6"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  route:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H14a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h5.5"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
+}
+
+function screenHtml(){
+  const row = (no,dest,min,cls='') =>
+    `<div class="rt"><span class="badge ${cls}">${no}</span><span class="dest">${dest}</span>
+     <span class="min ${min==='Due'||parseInt(min)<4?'soon':''}">${min}</span></div>`
+  return `<div class="appHead">Nearby</div>
+  <div class="appSub">4 stops within 300 m · updated just now</div>
+  <div class="list">
+    <div class="card"><div class="nm">Jordan Station</div><div class="mt">60 m · 1 min walk</div>
+      ${row('N241','Tuen Mun Ferry Pier','12')}${row('287X','Sha Tin','5')}</div>
+    <div class="card"><div class="nm">Nathan Road / Jordan Road</div><div class="mt">90 m · 2 min walk</div>
+      ${row('1','Chuk Yuen Estate','3')}${row('6','Star Ferry','9','ctb')}</div>
+    <div class="card"><div class="nm">Kwong Wah Hospital</div><div class="mt">240 m · 3 min walk</div>
+      ${row('12','Hung Hom Station','16')}</div>
+    <div class="card"><div class="nm">Jordan Road / Wui Cheung Road</div><div class="mt">310 m · 4 min walk</div>
+      ${row('8','Whampoa','7')}</div>
+  </div>`
+}
+
+const has = () => MODES[mode].slots.length > 0
+function figure(withThen){
+  const m = MODES[mode]
+  /* The sentence arms ride the SUB-line, never the figure slot: a sentence there squeezes the stop name
+     to "Nathan Roa…", and the stop's identity is the one thing that must not truncate. */
+  if (m.word) return `<span class="wFig word"><span class="lead"><span class="v" style="color:var(--subtle)">—</span></span></span>`
+  const l = m.slots[0], soon = l.v==='Due'||parseInt(l.v)<4
+  const then = withThen && m.slots.length>1
+    ? `<span class="then">then ${m.slots.slice(1).map(s=>s.v).join(' · ')}</span>` : ''
+  return `<span class="wFig ${soon?'soon':''} ${l.u?'':'word'}">
+    <span class="lead"><span class="v">${l.v}</span>${l.u?`<span class="u">${l.u}</span>`:''}</span>${then}</span>`
+}
+function subLine(kind){
+  const dest = `→ ${WATCH.dest}`
+  const m = MODES[mode]
+  if (m.word)
+    return `<span class="wSub" style="color:${m.bad?'var(--warn)':'var(--muted)'};font-weight:${m.bad?600:400}">${m.word}</span>`
+  if (kind === 'away')
+    return has()
+      ? `<span class="wSub"><span>${WATCH.stopsAway} stops away</span><span class="sep">·</span><span>${dest}</span></span>`
+      : `<span class="wSub"><span>${dest}</span></span>`
+  return `<span class="wSub"><span>${dest}</span></span>`
+}
+function head(opts){
+  return `<div class="wRow">
+    <span class="wBadge">${WATCH.route}</span>
+    <span class="wText"><span class="wStop">${WATCH.stop}</span>${subLine(opts.sub)}</span>
+    ${figure(opts.then)}<span class="wChev">${I.chev}</span></div>
+    ${opts.edge && has() ? `<div class="edge"><i style="width:${WATCH.progress*100}%"></i></div>`:''}`
+}
+
+// ── cards ────────────────────────────────────────────────────────────────────
+function noticeHtml(){ const n = MODES[mode].notice
+  return n ? `<div class="notice">${I.clock}<span>${n}</span></div>` : '' }
+function boxedSlots(){
+  const m = MODES[mode]
+  if (!m.slots.length) return `<div class="quiet"><span class="${m.bad?'bad':'v word'}">${m.word}</span></div>`
+  return `<div class="slots">${m.slots.map((s,i)=>`<div class="slot ${i===0?'lead':''}">
+    <div class="v">${s.v}</div>${s.u?`<div class="u">${s.u}</div>`:''}
+    ${s.tag?`<div class="tag">${s.tag}</div>`:''}</div>`).join('')}</div>`
+}
+function quietReadout(){
+  const m = MODES[mode]
+  if (!m.slots.length) return `<div class="quiet"><span class="${m.bad?'bad':'v word'}">${m.word}</span></div>`
+  const l = m.slots[0], soon = l.v==='Due'||parseInt(l.v)<4
+  const rest = m.slots.slice(1)
+  return `<div class="quiet"><span class="v ${soon?'soon':''} ${l.u?'':'word'}">${l.v}</span>
+    ${l.u?`<span class="u">${l.u}</span>`:''}
+    ${rest.length?`<span class="then">then ${rest.map(s=>s.v+(s.u?' '+s.u:'')).join(' · ')}
+      ${rest.some(s=>s.tag)?'<br><span style="opacity:.8">last one scheduled</span>':''}</span>`:''}</div>`
+}
+function namedRail(){
+  if (!has()) return ''
+  const stops = ['Jordan Rd / Canton Rd','Gascoigne Rd','Nathan Rd / Jordan Rd']
+  return `<div class="named"><div class="ln"></div>
+    ${stops.map((s,i)=>`<div class="st ${i===stops.length-1?'here':''}">
+      ${i===0?`<span class="bus" style="top:4px">${I.bus}</span>
+               <span class="nd" style="visibility:hidden"></span>`:'<span class="nd"></span>'}
+      <span class="lbl">${s}${i===stops.length-1?' · you':''}</span></div>`).join('')}</div>`
+}
+function whereLine(){
+  return has() ? `<div class="whereLine">${I.bus}<span>${WATCH.stopsAway} stops away · ${WATCH.side}</span></div>`
+               : `<div class="whereLine">${I.pin}<span>${WATCH.side}</span></div>` }
+function leaveLine(){
+  return has() ? `<div class="whereLine">${I.walk}<span>${WATCH.walkMin} min walk — leave in 1 min</span></div>` : '' }
+const pillActs = `<div class="acts">
+  <button class="act">${I.route}Open route</button>
+  <button class="act">${I.pin}Open stop</button>
+  <button class="act danger">${I.eyeOff}Stop watching</button></div>`
+const textActs = `<div class="actsText">
+  <button>${I.route}Route</button><button>${I.pin}Stop</button>
+  <span class="sp"></span><button class="muted">${I.eyeOff}Stop watching</button></div>`
+
+const CARDS = {
+  c1: () => `<div class="body">${boxedSlots()}${noticeHtml()}${whereLine()}${namedRail()}${pillActs}</div>`,
+  c2: () => `<div class="body">${quietReadout()}${whereLine()}${leaveLine()}${noticeHtml()}${namedRail()}${textActs}</div>`,
+  c3: () => `<div class="body">${quietReadout()}${whereLine()}${leaveLine()}${noticeHtml()}${textActs}</div>`,
+}
+
+const PILLS = {
+  a1:{ t:'A1 — as it was', b:'Round 1’s A, lowered into the space the tab bar left. Stop, destination, lead figure. Nothing else.',
+       o:{sub:'dest'} },
+  a2:{ t:'A2 — “2 stops away” ★', b:'D’s information as a clause on the line that was already there: the live fact first, the static destination after it. Costs nothing, draws no second route line, and simply isn’t there when we don’t know.',
+       o:{sub:'away'} },
+  a3:{ t:'A3 — progress as the pill’s own edge', b:'A2 plus a 3 px fill along the bottom edge — no dots, no token, not a rail. Ambient rather than a diagram. The question is whether an unlabelled bar is honest enough to be worth it.',
+       o:{sub:'away', edge:true} },
+  a4:{ t:'A4 — the next one too', b:'A2 plus “then 11 · 24” under the lead figure. Answers “do I run for this one or wait for the next?” without opening anything — the one question a single figure can’t answer.',
+       o:{sub:'away', then:true} },
+}
+const CARD_T = {
+  c1:['C1 — boxed slots (round 1)','Three bordered boxes, then the stops. Most structured, most chrome — five bordered objects inside a bordered object.'],
+  c2:['C2 — one big figure ★','The lead time at 40 px, the rest as a quiet clause beside it. The named next stops below in the route line’s own colour. Actions demoted to text.'],
+  c3:['C3 — no rail at all','C2 minus the stops. Everything a rider needs in four lines, and the shortest card that still answers “where is it”.'],
+}
+
+function phone(pillKey, cardKey, open){
+  const p = PILLS[pillKey]
+  return `<div class="phone withLens"><div class="screen">${screenHtml()}</div>
+    <div class="lens glass">${I.search}</div>
+    <div class="watch glass cardSurface ${open?'open':''}" tabindex="0" role="button">
+      ${head(p.o)}${CARDS[cardKey]()}</div></div>`
+}
+function render(){
+  document.getElementById('pills').innerHTML = Object.keys(PILLS).map(k=>{
+    const p = PILLS[k]
+    return `<div class="cell"><h3>${p.t}</h3><p>${p.b}</p>${phone(k,'c2',openAll)}</div>`
+  }).join('')
+  document.getElementById('cards').innerHTML = ['c1','c2','c3'].map(k=>{
+    const [t,b] = CARD_T[k]
+    return `<div class="cell"><h3>${t}</h3><p>${b}</p>${phone('a2',k,true)}</div>`
+  }).join('')
+  document.querySelectorAll('.chip[data-mode]').forEach(c=>
+    c.setAttribute('aria-pressed', String(c.dataset.mode===mode)))
+}
+document.addEventListener('click', e=>{
+  const chip = e.target.closest('.chip[data-mode]')
+  if (chip){ mode = chip.dataset.mode; render(); return }
+  if (e.target.closest('#expandAll')){
+    openAll = !openAll
+    document.getElementById('expandAll').setAttribute('aria-pressed', String(openAll))
+    render(); return }
+  const w = e.target.closest('.watch')
+  if (w && !e.target.closest('button')) w.classList.toggle('open')
+})
+render()
+</script>
+</body>
+</html>

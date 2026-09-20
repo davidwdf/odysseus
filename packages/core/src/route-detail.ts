@@ -449,16 +449,41 @@ export function routeStopBoard(
 ): { arrivals: RouteStopArrival[]; incomplete: boolean } {
   const policy = opts.policy ?? CLIENT_POLICY_DEFAULTS
   if (report === undefined) return { arrivals: [], incomplete: false }
-  const forRoute = report.etas.filter((e) => e.routeId === opts.routeId)
-  const exact = forRoute.find((e) => e.stopId === opts.poleId)
-  const only = forRoute.length === 1 ? forRoute[0] : undefined
-  const eta = exact ?? only
+  const eta = routeStopEta(report, { poleId: opts.poleId, routeId: opts.routeId })
   return {
     arrivals: arrivalsFrom(eta, opts.now, opts.locale, policy),
     // Named for the pole we asked about, so a place-wide failure list does not make one kerb's silence
     // look like an outage at another.
     incomplete: (report.failed ?? []).some((f) => f.stopId === opts.poleId),
   }
+}
+
+/**
+ * **Which reading in a report belongs to this route at this pole** — decision 3 of `routeStopBoard`,
+ * now a function of its own because a second caller needs the *reading* and not only its times.
+ *
+ * A board is requested for a pole and the server may resolve that id to a **place** whose alias table
+ * promotes it (ADR-042), so one report can carry two readings for one route at two kerbs — and those are
+ * different rows on a schematic. The rule, unchanged: the reading whose `stopId` matches exactly, or —
+ * when the route has exactly one reading in the report — that one, because a single reading is
+ * unambiguously the answer to the question we asked. **Never a guess between two.**
+ *
+ * Extracted for `watchView`, which needs the `Eta` itself: the pill's honesty cue is whether the lead time
+ * is a *timetable* rather than a sighting (`remarkKind`), and that lives on the reading, not on its
+ * formatted slots. Restating the selection there would have been the failure `arrivalsFrom`'s own docblock
+ * warns about one level down — two callers disagreeing about **which bus** rather than about a name.
+ *
+ * @spec route-detail#routeStopEta
+ */
+export function routeStopEta(
+  report: EtaReport | undefined,
+  opts: { poleId: string; routeId: string },
+): Eta | undefined {
+  if (report === undefined) return undefined
+  const forRoute = report.etas.filter((e) => e.routeId === opts.routeId)
+  const exact = forRoute.find((e) => e.stopId === opts.poleId)
+  const only = forRoute.length === 1 ? forRoute[0] : undefined
+  return exact ?? only
 }
 
 /** What a renderer needs to draw the Route screen, with nothing left to decide. */

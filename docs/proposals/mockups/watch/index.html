@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="./favicon.svg">
+<title>Watch a stop — pill and card designs</title>
+<!-- PROTOTYPE ONLY. Raw hex rather than tokens, invented ETAs, no data layer.
+     See ./README.md and ../../07-watch-a-stop.md -->
+<style>
+ :root{--bg:#fbfbfa;--surface:#fff;--surface2:#f2f1ee;--text:#1a1a19;--muted:#7a7975;--subtle:#a3a29d;
+       --line:#e6e5e1;--accent:#c8102e;--positive:#0a7d4a;--warn:#a8620a;
+       --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.08);
+       --ease:cubic-bezier(.32,.72,0,1)}
+ *{box-sizing:border-box}
+ body{margin:0;background:#f0efec;color:var(--text);
+      font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+ header.page{max-width:1400px;margin:0 auto;padding:26px 20px 4px}
+ header.page h1{font-size:21px;margin:0 0 6px}
+ header.page p{margin:0 0 12px;color:var(--muted);max-width:86ch}
+ header.page code{background:#e7e6e2;border-radius:4px;padding:1px 5px;font-size:12.5px}
+ .controls{max-width:1400px;margin:0 auto;padding:6px 20px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ .controls b{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:2px}
+ .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;
+       font-size:12.5px;cursor:pointer}
+ .chip[aria-pressed="true"]{background:var(--text);color:#fff;border-color:var(--text)}
+ h2.sec{max-width:1400px;margin:14px auto 0;padding:0 20px;font-size:16px}
+ p.sec{max-width:1400px;margin:4px auto 0;padding:0 20px 8px;color:var(--muted)}
+ .row{max-width:1400px;margin:0 auto;padding:10px 20px 34px;display:flex;flex-wrap:wrap;gap:22px;align-items:start}
+ .cell{width:330px}
+ .cell h3{font-size:14px;margin:0 0 2px}
+ .cell p{margin:0 0 10px;color:var(--muted);font-size:12.5px;min-height:52px}
+
+ /* ── the phone ─────────────────────────────────────────────────────────── */
+ .phone{width:330px;height:680px;background:var(--bg);border-radius:34px;border:1px solid var(--line);
+        box-shadow:var(--shadow);overflow:hidden;position:relative}
+ .screen{position:absolute;inset:0;overflow:hidden}
+ .appHead{padding:26px 16px 8px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+ .appSub{padding:0 16px 10px;color:var(--muted);font-size:12px}
+ .list{padding:0 12px;display:flex;flex-direction:column;gap:9px}
+ .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:11px 12px}
+ .card .nm{font-size:13.5px;font-weight:650;margin-bottom:2px}
+ .card .mt{font-size:11.5px;color:var(--muted)}
+ .rt{display:flex;align-items:center;gap:8px;margin-top:8px}
+ .badge{background:var(--accent);color:#fff;font-weight:700;border-radius:7px;padding:2px 7px;font-size:12px;
+        flex:none;box-shadow:0 1px 4px rgba(26,26,25,.2)}
+ .badge.ctb{background:#f0b323;color:#231f20}
+ .rt .dest{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .rt .min{font-variant-numeric:tabular-nums;font-weight:650;font-size:13px}
+ .rt .min.soon{color:var(--positive)}
+
+ .glass{background:rgba(255,255,255,.74);-webkit-backdrop-filter:blur(16px) saturate(1.8);
+        backdrop-filter:blur(16px) saturate(1.8);
+        box-shadow:inset 0 0 0 .5px rgba(255,255,255,.65),0 3px 16px rgba(0,0,0,.14)}
+
+ /* tab bar — the real geometry: 54 tall, 12 inset, 24 radius, lens the same size as the bar */
+ .bar{position:absolute;left:12px;right:12px;bottom:12px;height:54px;display:flex;gap:12px;z-index:20}
+ .bar .pill{flex:1;border-radius:24px;display:flex;align-items:center;justify-content:space-around;padding:0 6px}
+ .bar .lens{width:54px;height:54px;border-radius:27px;display:grid;place-items:center}
+ .tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--muted)}
+ .tab.on{color:var(--text);font-weight:650}
+ .tab i{width:22px;height:22px;display:block;opacity:.85}
+
+ /* ── the watch element, all variants ───────────────────────────────────── */
+ .watch{position:absolute;z-index:25;cursor:pointer;border-radius:22px;overflow:hidden;
+        transition:left .34s var(--ease),right .34s var(--ease),bottom .34s var(--ease),
+                   border-radius .34s var(--ease),width .34s var(--ease),height .34s var(--ease)}
+ .watch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+ .wRow{display:flex;align-items:center;gap:10px;padding:0 12px;height:56px}
+ .wBadge{background:var(--accent);color:#fff;font-weight:700;border-radius:9px;min-width:34px;height:30px;
+         display:grid;place-items:center;font-size:14.5px;padding:0 7px;flex:none;
+         box-shadow:0 1px 5px rgba(26,26,25,.22)}
+ .wText{flex:1;min-width:0}
+ .wStop{display:block;font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
+ .wDest{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
+ .wFig{display:flex;align-items:baseline;gap:3px;flex:none;font-variant-numeric:tabular-nums}
+ .wFig .v{font-size:22px;font-weight:700;letter-spacing:-.02em}
+ .wFig .u{font-size:11.5px;color:var(--muted)}
+ .wFig.soon .v{color:var(--positive)}
+ .wFig.word .v{font-size:15px}
+ .wFig.bad .v{font-size:12.5px;font-weight:600;color:var(--warn)}
+ .wChev{flex:none;color:var(--subtle)}
+ .wNext{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+
+ /* A — boarding pass: full width, above the bar */
+ .v-a .watch{left:12px;right:12px;bottom:78px}
+ /* B — capsule: hugs its content, centred */
+ .v-b .watch{left:50%;transform:translateX(-50%);bottom:78px;border-radius:19px}
+ .v-b .wRow{height:38px;padding:0 6px 0 6px;gap:8px}
+ .v-b .wBadge{height:26px;min-width:28px;font-size:13px;border-radius:7px}
+ .v-b .wFig .v{font-size:16px}
+ /* C — docked: joined to the tab bar, one stack, one material */
+ .v-c .watch{left:12px;right:12px;bottom:66px;border-radius:22px 22px 8px 8px}
+ .v-c .bar .pill{border-radius:8px 8px 24px 24px}
+ .v-c .wRow{height:50px}
+ /* D — progress rail */
+ .v-d .watch{left:12px;right:12px;bottom:78px}
+ .v-d .wRow{height:50px}
+ .rail{height:26px;padding:0 14px 8px;position:relative}
+ .rail .line{position:absolute;left:14px;right:14px;top:5px;height:3px;border-radius:2px;background:var(--line)}
+ .rail .done{position:absolute;left:14px;top:5px;height:3px;border-radius:2px;background:var(--accent);opacity:.35}
+ .rail .dot{position:absolute;top:2.5px;width:8px;height:8px;border-radius:4px;background:#fff;
+            border:2px solid var(--line);margin-left:-4px}
+ .rail .dot.here{background:var(--text);border-color:var(--text)}
+ .rail .bus{position:absolute;top:-2px;width:18px;height:18px;border-radius:9px;background:var(--accent);
+            margin-left:-9px;display:grid;place-items:center;color:#fff;
+            box-shadow:0 1px 5px rgba(200,16,46,.45);transition:left .5s var(--ease)}
+ .rail .bus svg{width:11px;height:11px}
+ .rail .away{position:absolute;left:14px;top:14px;font-size:10.5px;color:var(--muted)}
+ /* E — bubble */
+ .v-e .watch{right:12px;bottom:78px;width:62px;height:62px;border-radius:31px;overflow:visible}
+ .v-e .watch.open{overflow:hidden}
+ .bub{width:62px;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      position:relative;font-variant-numeric:tabular-nums}
+ .bub .v{font-size:21px;font-weight:700;line-height:1}
+ .bub .u{font-size:9.5px;color:var(--muted);margin-top:1px}
+ .bub .v.soon{color:var(--positive)}
+ .bub .v.word{font-size:13px}
+ .bub .rb{position:absolute;top:-3px;left:-3px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+          border-radius:6px;padding:1px 5px;box-shadow:0 1px 4px rgba(26,26,25,.25)}
+
+ /* ── expanded card (shared chrome) ─────────────────────────────────────── */
+ .watch.open{left:12px !important;right:12px !important;width:auto !important;height:auto !important;
+             transform:none !important;border-radius:24px}
+ .v-b .watch.open,.v-c .watch.open,.v-e .watch.open{bottom:78px;border-radius:24px}
+ .v-c .watch.open{bottom:78px}
+ .body{overflow:hidden;transition:max-height .34s var(--ease),opacity .2s;max-height:0;opacity:0}
+ .watch.open .body{max-height:420px;opacity:1}
+ .watch.open .wRow{height:56px}
+ .watch.open .rail,.watch.open .bub{display:none}
+ .watch.open .wBadge{min-width:34px;height:30px;font-size:14.5px}
+ .handle{width:36px;height:4px;border-radius:2px;background:var(--line);margin:7px auto 0}
+ .slots{display:flex;gap:8px;padding:2px 14px 0}
+ .slot{flex:1;background:rgba(255,255,255,.7);border:1px solid var(--line);border-radius:12px;
+       padding:8px 6px;text-align:center;font-variant-numeric:tabular-nums}
+ .slot .v{font-size:21px;font-weight:700;letter-spacing:-.02em}
+ .slot .u{font-size:10.5px;color:var(--muted)}
+ .slot.lead{background:#fff}
+ .slot.lead .v{color:var(--positive)}
+ .slot .tag{font-size:9.5px;color:var(--warn);margin-top:2px}
+ .notice{padding:9px 16px 0;font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+ .notice svg{width:13px;height:13px;flex:none}
+ .leave{margin:10px 14px 0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 11px;
+        display:flex;align-items:center;gap:9px}
+ .leave svg{width:16px;height:16px;color:var(--muted);flex:none}
+ .leave b{font-size:13px}
+ .leave span{font-size:11.5px;color:var(--muted);display:block}
+ .mini{padding:12px 16px 2px;position:relative;height:44px}
+ .mini .line{position:absolute;left:16px;right:16px;top:19px;height:3px;background:var(--line);border-radius:2px}
+ .mini .done{position:absolute;left:16px;top:19px;height:3px;background:var(--accent);opacity:.35;border-radius:2px}
+ .mini .dot{position:absolute;top:16px;width:9px;height:9px;border-radius:5px;background:#fff;border:2px solid var(--line);margin-left:-4.5px}
+ .mini .dot.here{background:var(--text);border-color:var(--text)}
+ .mini .lbl{position:absolute;top:30px;font-size:10px;color:var(--muted);transform:translateX(-50%);white-space:nowrap}
+ .mini .bus{position:absolute;top:11px;width:19px;height:19px;border-radius:10px;background:var(--accent);
+            margin-left:-9.5px;display:grid;place-items:center;color:#fff;box-shadow:0 1px 5px rgba(200,16,46,.45)}
+ .mini .bus svg{width:11px;height:11px}
+ .acts{display:flex;gap:7px;padding:12px 14px 14px;flex-wrap:wrap}
+ .act{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(255,255,255,.8);
+      border-radius:999px;padding:7px 11px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+ .act svg{width:13px;height:13px;color:var(--muted)}
+ .act.stop{color:var(--accent);border-color:#f0c9cf}
+ .full{margin:10px 0 0;border-top:1px solid var(--line);max-height:150px;overflow:auto}
+ .full .r{display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:1px solid var(--line)}
+ .full .r:last-child{border-bottom:0}
+ .full .r .n{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .full .r .m{font-size:12.5px;font-variant-numeric:tabular-nums;font-weight:600}
+ .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+ .note{max-width:1400px;margin:0 auto 40px;padding:0 20px;color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Watch a stop — five pills, three cards</h1>
+  <p>
+    A rider on Route detail opens a stop's sheet and taps <b>Watch</b>. From then on the route-at-stop
+    follows them around the app as a floating element above the tab bar, and a tap expands it. These are
+    the shapes that element could take, with the real bar geometry underneath
+    (<code>54</code> tall, <code>12</code> inset, <code>24</code> radius) so the crowding is honest.
+    Everything here is invented data; the arms are the real ones.
+  </p>
+</header>
+
+<div class="controls" id="controls">
+  <b>Board says</b>
+  <button class="chip" data-mode="normal">3 min</button>
+  <button class="chip" data-mode="due">Due</button>
+  <button class="chip" data-mode="stale">Stale feed</button>
+  <button class="chip" data-mode="none">Nothing due</button>
+  <button class="chip" data-mode="failed">Board failed</button>
+  <button class="chip" data-mode="offline">Offline</button>
+  <span style="flex:1"></span>
+  <button class="chip" id="expandAll" aria-pressed="false">Expand all</button>
+</div>
+
+<h2 class="sec">1 — The pill</h2>
+<p class="sec">What sits there while you browse. Tap any of them to expand.</p>
+<div class="row" id="pills"></div>
+
+<h2 class="sec">2 — The card</h2>
+<p class="sec">
+  What the pill becomes. Independent of the choice above — any pill can open any card.
+</p>
+<div class="row" id="cards"></div>
+
+<p class="note">
+  Deliberately wrong here and not to be copied: raw hex instead of <code>@nextbus/ui</code> tokens,
+  English-only strings, a countdown that never ticks because there is no data behind it, and a
+  <code>max-height</code> expansion (the real one animates a measured height). The arms, their order and
+  the geometry are the parts meant to be judged.
+</p>
+
+<script>
+// ── the one watched thing, and what the board says about it ────────────────────────────────────
+const WATCH = {
+  route: '1', dest: 'Chuk Yuen Estate', stop: 'Nathan Road / Jordan Road',
+  side: 'Stand B · towards Mong Kok', stopsAway: 2, progress: .66, walkMin: 4,
+}
+const MODES = {
+  normal:  { slots:[{v:'3',u:'min'},{v:'11',u:'min'},{v:'24',u:'min',tag:'Scheduled'}], notice:null },
+  due:     { slots:[{v:'Due',u:''},{v:'7',u:'min'},{v:'18',u:'min'}], notice:null },
+  stale:   { slots:[{v:'3',u:'min'},{v:'11',u:'min'},{v:'24',u:'min'}],
+             notice:'Times last updated 4 minutes ago' },
+  none:    { slots:[], word:'No service', notice:'No more buses on this route today' },
+  failed:  { slots:[], word:'Live times unavailable', bad:true,
+             notice:'This stop’s board did not answer. Trying again.' },
+  offline: { slots:[], word:'Offline', bad:true, notice:'You are offline. Last seen 6 minutes ago.' },
+}
+let mode = 'normal'
+
+const ICON = {
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="m18 15-6-6-6 6"/></svg>',
+  bus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M6 17v2M18 17v2M5 5h14a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1Z"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  walk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="m9 21 2-6 2 2v5M11 9l-2 3 3 1 2 4"/><path d="m15 9 3 2"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><path d="M10.6 6.2A9.6 9.6 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.1 3.7M6.3 8.3C3.8 9.9 2 12 2 12s3.5 6 10 6c1.3 0 2.5-.2 3.5-.6"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  route:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H14a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h5.5"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1Z"/></svg>',
+  star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 4 2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8Z"/></svg>',
+  cog:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3 12h2.2M18.8 12H21M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
+}
+
+// ── the fake screen behind everything ──────────────────────────────────────────────────────────
+function screenHtml(){
+  const row = (no, dest, min, cls='') =>
+    `<div class="rt"><span class="badge ${cls}">${no}</span><span class="dest">${dest}</span>
+     <span class="min ${min==='Due'||parseInt(min)<4?'soon':''}">${min}</span></div>`
+  return `
+  <div class="appHead">Nearby</div>
+  <div class="appSub">4 stops within 300 m · updated just now</div>
+  <div class="list">
+    <div class="card"><div class="nm">Jordan Station</div><div class="mt">60 m · 1 min walk</div>
+      ${row('N241','Tuen Mun Ferry Pier','12')}${row('287X','Sha Tin','5')}</div>
+    <div class="card"><div class="nm">Nathan Road / Jordan Road</div><div class="mt">90 m · 2 min walk</div>
+      ${row('1','Chuk Yuen Estate','3')}${row('6','Star Ferry','9','ctb')}</div>
+    <div class="card"><div class="nm">Kwong Wah Hospital</div><div class="mt">240 m · 3 min walk</div>
+      ${row('12','Hung Hom Station','16')}</div>
+  </div>`
+}
+function barHtml(){
+  return `<div class="bar">
+    <div class="pill glass">
+      <span class="tab on"><i>${ICON.home}</i>Nearby</span>
+      <span class="tab"><i>${ICON.star}</i>Favourites</span>
+      <span class="tab"><i>${ICON.cog}</i>Settings</span>
+    </div>
+    <div class="lens glass">${ICON.search}</div>
+  </div>`
+}
+
+// ── the pill's readout, by mode ────────────────────────────────────────────────────────────────
+function figure(){
+  const m = MODES[mode]
+  if (m.word) return `<span class="wFig ${m.bad?'bad':'word'}"><span class="v">${m.word}</span></span>`
+  const lead = m.slots[0]
+  const soon = lead.v === 'Due' || parseInt(lead.v) < 4
+  return `<span class="wFig ${soon?'soon':''} ${lead.u?'':'word'}">
+            <span class="v">${lead.v}</span>${lead.u?`<span class="u">${lead.u}</span>`:''}</span>`
+}
+function nextAfter(){
+  const m = MODES[mode]
+  return m.slots.length > 1 ? `<span class="wNext">then ${m.slots[1].v}${m.slots[1].u?' '+m.slots[1].u:''}</span>` : ''
+}
+
+// ── the three cards ────────────────────────────────────────────────────────────────────────────
+function slotsHtml(){
+  const m = MODES[mode]
+  if (!m.slots.length)
+    return `<div class="slots"><div class="slot lead" style="flex:1">
+              <div class="v" style="font-size:14px;color:${m.bad?'var(--warn)':'var(--muted)'}">${m.word}</div></div></div>`
+  return `<div class="slots">${m.slots.map((s,i)=>`
+    <div class="slot ${i===0?'lead':''}"><div class="v">${s.v}</div>
+      ${s.u?`<div class="u">${s.u}</div>`:''}${s.tag?`<div class="tag">${s.tag}</div>`:''}</div>`).join('')}</div>`
+}
+function noticeHtml(){
+  const n = MODES[mode].notice
+  return n ? `<div class="notice">${ICON.clock}<span>${n}</span></div>` : ''
+}
+function miniHtml(){
+  const stops = ['Austin Rd','Jordan Rd','Nathan/Jordan','Dundas St','Argyle St']
+  const here = 2
+  const pos = MODES[mode].slots.length ? WATCH.progress*100 : 0
+  return `<div class="mini">
+    <div class="line"></div><div class="done" style="width:${pos}%"></div>
+    ${stops.map((s,i)=>{const l=i/(stops.length-1)*100;return`
+      <div class="dot ${i===here?'here':''}" style="left:calc(16px + (100% - 32px) * ${l/100})"></div>
+      ${i===here?`<div class="lbl" style="left:calc(16px + (100% - 32px) * ${l/100})">${s}</div>`:''}`}).join('')}
+    ${MODES[mode].slots.length?`<div class="bus" style="left:calc(16px + (100% - 32px) * ${pos/100})">${ICON.bus}</div>`:''}
+  </div>`
+}
+function actsHtml(extra=''){
+  return `<div class="acts">
+    ${extra}
+    <button class="act">${ICON.route}Open route</button>
+    <button class="act">${ICON.pin}Open stop</button>
+    <button class="act stop">${ICON.eyeOff}Stop watching</button>
+  </div>`
+}
+const CARDS = {
+  board: () => `<div class="body">${slotsHtml()}${noticeHtml()}${miniHtml()}
+      <div class="notice" style="padding-top:2px">${ICON.bus}<span>${WATCH.stopsAway} stops away · ${WATCH.side}</span></div>
+      ${actsHtml()}</div>`,
+  leave: () => `<div class="body">${slotsHtml()}
+      <div class="leave">${ICON.walk}<div><b>Leave in 1 min</b>
+        <span>${WATCH.walkMin} min walk to the stop · arrive 1 min before</span></div></div>
+      ${noticeHtml()}${actsHtml()}</div>`,
+  sheet: () => `<div class="body">${slotsHtml()}${noticeHtml()}
+      ${actsHtml(`<button class="act">${ICON.star}Favourite</button>`)}
+      <div class="full">
+        <div class="r"><span class="badge">1</span><span class="n">Chuk Yuen Estate</span><span class="m">3 min</span></div>
+        <div class="r"><span class="badge ctb">6</span><span class="n">Star Ferry</span><span class="m">9 min</span></div>
+        <div class="r"><span class="badge">1A</span><span class="n">Sau Mau Ping</span><span class="m">14 min</span></div>
+        <div class="r"><span class="badge ctb">102</span><span class="n">Shau Kei Wan</span><span class="m">21 min</span></div>
+      </div></div>`,
+}
+
+// ── the five pills ─────────────────────────────────────────────────────────────────────────────
+const HEAD = `<div class="wRow">
+    <span class="wBadge">${WATCH.route}</span>
+    <span class="wText"><span class="wStop">${WATCH.stop}</span>
+      <span class="wDest">→ ${WATCH.dest}</span></span>
+    FIGURE<span class="wChev">${ICON.chev}</span></div>`
+
+const PILLS = {
+  a: { title:'A — Boarding pass',
+       blurb:'Full width above the bar. Says everything without being opened: which route, which pole, how long. Costs 56 px of every screen.',
+       card:'board',
+       html:()=>HEAD.replace('FIGURE', figure()) },
+  b: { title:'B — Capsule',
+       blurb:'Hugs its content, centred. Cheapest thing that can be there. The stop name only exists inside the card, so two watches would be indistinguishable.',
+       card:'board',
+       html:()=>`<div class="wRow"><span class="wBadge">${WATCH.route}</span>${figure()}
+                 <span class="wChev">${ICON.chev}</span></div>` },
+  c: { title:'C — Docked to the bar',
+       blurb:'Joined to the tab bar: one glass stack, one shadow, no new floating object. Adds no clutter — but it grows the app’s signature chrome, and pushed screens have no bar to dock to.',
+       card:'leave',
+       html:()=>HEAD.replace('FIGURE', figure()) },
+  d: { title:'D — Progress rail',
+       blurb:'A with the schematic the app already owns: where the bus is between the stops, and how many are left. The one variant that answers “is it actually coming?”',
+       card:'board',
+       html:()=>`${HEAD.replace('FIGURE', figure())}
+         <div class="rail"><div class="line"></div>
+           <div class="done" style="width:calc((100% - 28px) * ${MODES[mode].slots.length?WATCH.progress:0})"></div>
+           ${[0,.25,.5,.75,1].map(l=>`<div class="dot ${l===1?'here':''}" style="left:calc(14px + (100% - 28px) * ${l})"></div>`).join('')}
+           ${MODES[mode].slots.length?`<div class="bus" style="left:calc(14px + (100% - 28px) * ${WATCH.progress})">${ICON.bus}</div>`:''}
+           <div class="away">${MODES[mode].slots.length?`${WATCH.stopsAway} stops away`:'&nbsp;'}</div></div>` },
+  e: { title:'E — Bubble',
+       blurb:'A 62 px token in the corner, draggable to any corner. Takes almost nothing and never covers a row — but a bare number with no stop beside it is the least honest readout here.',
+       card:'sheet',
+       html:()=>{
+         const m = MODES[mode], lead = m.slots[0]
+         const v = m.word ? m.word : lead.v, u = m.word ? '' : lead.u
+         const soon = !m.word && (lead.v==='Due'||parseInt(lead.v)<4)
+         return `<div class="bub"><span class="rb">${WATCH.route}</span>
+                   <span class="v ${soon?'soon':''} ${u?'':'word'}">${v}</span>
+                   ${u?`<span class="u">${u}</span>`:''}</div>` } },
+}
+const CARD_TITLES = {
+  board: ['1 — Mini board','Three slots, then the schematic: which stops are left and where the bus is. The pill’s content, plus the one thing it had no room for.'],
+  leave: ['2 — Leave in…','The board plus the only sentence that makes a watch actionable: your walk time against the lead figure. Needs a location fix; says nothing when it has none.'],
+  sheet: ['3 — Drag to the whole stop','A sheet with detents. Card height by default; drag up and it becomes the pole’s full board, so the watch is also a shortcut back to the stop.'],
+}
+
+// ── render ─────────────────────────────────────────────────────────────────────────────────────
+function phone(variant, cardKey, openByDefault){
+  const p = PILLS[variant]
+  return `<div class="phone v-${variant}"><div class="screen">${screenHtml()}</div>
+    <div class="watch glass ${openByDefault?'open':''}" tabindex="0" role="button"
+         data-variant="${variant}" data-card="${cardKey}">
+      ${p.html()}${CARDS[cardKey]()}
+    </div>${barHtml()}</div>`
+}
+function render(){
+  document.getElementById('pills').innerHTML = Object.keys(PILLS).map(k=>{
+    const p = PILLS[k], open = openAll
+    return `<div class="cell"><h3>${p.title}</h3><p>${p.blurb}</p>${phone(k, p.card, open)}</div>`
+  }).join('')
+  document.getElementById('cards').innerHTML = ['board','leave','sheet'].map(k=>{
+    const [t,b] = CARD_TITLES[k]
+    return `<div class="cell"><h3>${t}</h3><p>${b}</p>${phone('a', k, true)}</div>`
+  }).join('')
+  document.querySelectorAll('.chip[data-mode]').forEach(c =>
+    c.setAttribute('aria-pressed', String(c.dataset.mode === mode)))
+}
+let openAll = false
+document.addEventListener('click', e => {
+  const chip = e.target.closest('.chip[data-mode]')
+  if (chip) { mode = chip.dataset.mode; render(); return }
+  if (e.target.closest('#expandAll')) {
+    openAll = !openAll
+    document.getElementById('expandAll').setAttribute('aria-pressed', String(openAll))
+    render(); return
+  }
+  const w = e.target.closest('.watch')
+  if (w && !e.target.closest('.act')) w.classList.toggle('open')
+})
+document.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('watch')) {
+    e.preventDefault(); e.target.classList.toggle('open')
+  }
+})
+render()
+</script>
+</body>
+</html>

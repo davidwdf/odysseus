@@ -13,6 +13,7 @@ import {
   routeDetailView,
   routeFactSheet,
   routeStopBoard,
+  routeStopEta,
   routeTerminusNames,
   routeVehicle,
   stopFares,
@@ -375,6 +376,63 @@ describe('route-detail#stopFares', () => {
       if (!Number.isFinite(adult)) continue
       for (const figure of out.concessions) {
         expect(Number(figure.fare.replace('~$', ''))).toBeLessThanOrEqual(adult)
+      }
+    }
+  })
+})
+
+describe('route-detail#routeStopEta', () => {
+  interface EtaArgs {
+    /** `null` in the corpus is "no report at all" — translated at the boundary, as test/corpus.ts says. */
+    report: EtaReport | null
+    poleId: string
+    routeId: string
+  }
+  type Selected = ReturnType<typeof routeStopEta>
+
+  for (const c of specCases<EtaArgs, Selected>(corpus, 'routeStopEta')) {
+    it(c.name, () => {
+      // JSON `null` is the language's absent value on both sides here: an absent report going in, and
+      // "no reading belongs to this pole" coming back.
+      expect(
+        routeStopEta(c.args.report ?? undefined, {
+          poleId: c.args.poleId,
+          routeId: c.args.routeId,
+        }) ?? null,
+      ).toEqual(c.expect ?? null)
+    })
+  }
+
+  it('answers with a reading the report actually contains, or with nothing', () => {
+    // The property that makes the extraction safe: this function *selects*, it never composes. A port
+    // that built a merged reading out of two kerbs would satisfy every row above and fail here.
+    for (const c of specCases<EtaArgs, Selected>(corpus, 'routeStopEta')) {
+      const got = routeStopEta(c.args.report ?? undefined, {
+        poleId: c.args.poleId,
+        routeId: c.args.routeId,
+      })
+      if (got === undefined) continue
+      expect((c.args.report?.etas ?? []).includes(got), c.name).toBe(true)
+      expect(got.routeId, c.name).toBe(c.args.routeId)
+    }
+  })
+
+  it('is the selection routeStopBoard reads its times from', () => {
+    // The two are one rule with two shapes, and this is what stops them drifting apart: for every row in
+    // the *board's* corpus, the times it prints are the times of the reading this function picks.
+    for (const c of specCases<
+      { report?: EtaReport; poleId: string; routeId: string; now: string; locale: Locale },
+      { arrivals: Array<{ iso: string }> }
+    >(corpus, 'routeStopBoard')) {
+      const picked = routeStopEta(c.args.report, { poleId: c.args.poleId, routeId: c.args.routeId })
+      const board = routeStopBoard(c.args.report, {
+        poleId: c.args.poleId,
+        routeId: c.args.routeId,
+        now: at(c.args.now),
+        locale: c.args.locale,
+      })
+      for (const arrival of board.arrivals) {
+        expect(picked?.arrivals.includes(arrival.iso), c.name).toBe(true)
       }
     }
   })

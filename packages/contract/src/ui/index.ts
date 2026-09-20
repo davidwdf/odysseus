@@ -9,6 +9,8 @@ import { ROUTE_DETAIL_SPEC } from './route-detail'
 import { SEARCH_SPEC } from './search'
 import { SETTINGS_SPEC } from './settings'
 import { STOP_ROW_SPEC } from './stop-row'
+import { WATCH_CARD_SPEC } from './watch-card'
+import { WATCH_PILL_SPEC } from './watch-pill'
 
 /**
  * **NextBus's own component specs** — the instances; `@nextbus/ui-spec` is the format.
@@ -31,6 +33,8 @@ export const UI_SPECS: Record<string, ComponentSpec> = {
   search: SEARCH_SPEC,
   settings: SETTINGS_SPEC,
   'stop-row': STOP_ROW_SPEC,
+  'watch-card': WATCH_CARD_SPEC,
+  'watch-pill': WATCH_PILL_SPEC,
 }
 
 /**
@@ -54,4 +58,6 @@ export {
   SEARCH_SPEC,
   SETTINGS_SPEC,
   STOP_ROW_SPEC,
+  WATCH_CARD_SPEC,
+  WATCH_PILL_SPEC,
 }
