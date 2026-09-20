@@ -431,7 +431,7 @@ export function routeDocFor(index: StaticIndex, id: string): RouteDoc | null {
   // The opposite bound, if the dataset carries a loadable one. Requires a real stop sequence,
   // so the client can always follow the toggle (ADR-046).
   //
-  // **A green minibus is matched on its `gtfsId`, not on its number** (ADR-176), and that is a bug
+  // **A green minibus is matched on its `gtfsId`, not on its number** (ADR-177), and that is a bug
   // fix rather than a refinement: operator + number + opposite bound is **not unique for GMB**,
   // because a `route_code` only identifies a route within its region. The loop below used to match
   // every candidate that shared a number and then tie-break with `preferServiceType` — which for GMB

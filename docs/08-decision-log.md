@@ -184,8 +184,8 @@ next number; we don't delete superseded ones, we mark them `Superseded by ADR-NN
 | [161](#adr-161--the-rail-is-the-route-line-and-the-chevrons-come-with-it) | The rail is the route line, and the chevrons come with it | Accepted |
 | [162](#adr-162--one-focus-seeded-by-where-you-came-from-and-a-direction-flip-that-had-been-crashing) | One focus, seeded by where you came from; and a direction flip that had been crashing | Accepted |
 | [163](#adr-163--a-quieter-colour-is-a-colour-not-an-opacity-and-the-rails-chevrons-become-the-maps) | A quieter colour is a colour, not an opacity; and the rail's chevrons become the map's | Accepted |
-| [175](#adr-175--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table) | A green minibus route number needs its region, and the region is a committed table | Accepted |
-| [176](#adr-176--the-direction-toggle-resolved-a-minibus-by-its-number-and-sent-riders-to-another-region) | The direction toggle resolved a minibus by its number, and sent riders to another region | Accepted |
+| [176](#adr-176--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table) | A green minibus route number needs its region, and the region is a committed table | Accepted |
+| [177](#adr-177--the-direction-toggle-resolved-a-minibus-by-its-number-and-sent-riders-to-another-region) | The direction toggle resolved a minibus by its number, and sent riders to another region | Accepted |
 
 <!-- END ADR INDEX -->
 
@@ -11068,7 +11068,7 @@ pre-existing and unaddressed; it earned its keep here.
 
 ---
 
-## ADR-175 — A green minibus route number needs its region, and the region is a committed table
+## ADR-176 — A green minibus route number needs its region, and the region is a committed table
 
 - **Status:** **Accepted** — **2026-09-20.** Closes the follow-up
   [ADR-047](#adr-047--green-minibus-gmb-a-third-operator-keyed-on-gtfsid-with-per-arrival-livescheduled-honesty) left open, and the `docs/07` row that
@@ -11148,12 +11148,12 @@ pre-existing and unaddressed; it earned its keep here.
 
 ---
 
-## ADR-176 — The direction toggle resolved a minibus by its number, and sent riders to another region
+## ADR-177 — The direction toggle resolved a minibus by its number, and sent riders to another region
 
 - **Status:** **Accepted** — **2026-09-20.** Applies
   [ADR-047](#adr-047--green-minibus-gmb-a-third-operator-keyed-on-gtfsid-with-per-arrival-livescheduled-honesty)'s
   identity rule to a place that had never got it, and is the reason
-  [ADR-175](#adr-175--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table)
+  [ADR-176](#adr-176--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table)
   found it: the region tag made the wrong answer *legible*.
 - **Context — reported from the app, not from a test.** The owner: *"when using the swap/reverse
   direction button on a route, my route was shifting to HK Island from NT and I got a bit confused."*
@@ -11175,7 +11175,7 @@ pre-existing and unaddressed; it earned its keep here.
 - **Decision 1 — match a GMB reverse on `gtfsId`, which *is* the route's identity.** A green
   minibus's two directions are `route_seq` 1 and 2 of one `route_id`, so the opposite of
   `GMB:1:outbound:2002337` is `GMB:1:inbound:2002337` and nothing else. One guard, exact, and it
-  needs no region lookup at all — the region table (ADR-175) explains the bug but is not part of the
+  needs no region lookup at all — the region table (ADR-176) explains the bug but is not part of the
   fix.
 
 - **Decision 2 — 163 route-directions lose their toggle, and that is the correct answer, checked
@@ -11194,6 +11194,6 @@ pre-existing and unaddressed; it earned its keep here.
 
 - **What this says about the class of bug.** Both halves of this wave are the same mistake made twice:
   *a green minibus route number was treated as an identity.* Search showed two of them as one row's
-  worth of information (ADR-175) and the toggle resolved one of them to the other (this ADR). The
+  worth of information (ADR-176) and the toggle resolved one of them to the other (this ADR). The
   canonical id has been right since ADR-047 — every consumer that reaches past it for the number is
   where to look next. `docs/07` carries the sweep.

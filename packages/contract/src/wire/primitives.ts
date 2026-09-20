@@ -70,7 +70,7 @@ export const BoundSchema = z
  * **This is an identity field, not a geography one.** A GMB `route_code` is only unique inside its
  * region, so `1` names two entirely different minibus routes in `HKI` and `NT` and a rider looking
  * at a list of results has, until now, had nothing but the origin and destination to tell them
- * apart (ADR-047 left this open; ADR-175 closes it). It says nothing about where a route *goes* —
+ * apart (ADR-047 left this open; ADR-176 closes it). It says nothing about where a route *goes* —
  * an `NT` route may run into Kowloon — and no other operator carries it, because no other
  * operator's numbers repeat.
  *

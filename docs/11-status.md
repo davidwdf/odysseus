@@ -4,7 +4,7 @@
 
 ## 🔴 Snapshot 2026-09-20 (later) — the swap button was sending riders to a different route
 
-> **Shipped:** [ADR-176](./08-decision-log.md#adr-176--the-direction-toggle-resolved-a-minibus-by-its-number-and-sent-riders-to-another-region).
+> **Shipped:** [ADR-177](./08-decision-log.md#adr-177--the-direction-toggle-resolved-a-minibus-by-its-number-and-sent-riders-to-another-region).
 > Reported from the app while reviewing the region tag: *"the swap/reverse direction button … my route
 > was shifting to HK Island from NT."* It was. `routeDocFor` matched the opposite bound on **operator +
 > number + opposite bound**, which is not unique for GMB, then tie-broke with `preferServiceType` — which
@@ -25,7 +25,7 @@
 
 ## 🔵 Snapshot 2026-09-20 — which `1` is this? A minibus route gets its region
 
-> **Shipped:** [ADR-175](./08-decision-log.md#adr-175--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table).
+> **Shipped:** [ADR-176](./08-decision-log.md#adr-176--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table).
 > A green minibus `route_code` is only unique **within a region**, so `1` is The Peak ↔ Central on Hong
 > Kong Island *and* Sai Kung ↔ Kowloon Bay in the New Territories. Search drew those as two identical `1`
 > chips — across the live dataset, **114 (number, direction) groups spanning more than one region, 294

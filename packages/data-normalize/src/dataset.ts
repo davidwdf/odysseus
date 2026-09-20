@@ -105,7 +105,7 @@ export interface IndexRouteMeta extends IndexRouteRef {
    */
   gtfsId?: string
   /**
-   * GMB only: the region the public route number is unique within (ADR-175).
+   * GMB only: the region the public route number is unique within (ADR-176).
    *
    * Joined on `gtfsId` from `gmb-regions.generated.ts`, a committed table rather than a fetch — see
    * that file's header for why, and `scripts/emit-gmb-regions.mjs` for how it is refreshed. Absent
@@ -904,7 +904,7 @@ export async function fetchConsolidatedIndex(
         // Kept for every operator, not just GMB — it is the CSDI route-geometry join key
         // (ADR-152). `gmbId` above still folds it into the canonical id for GMB only.
         gtfsId: entry.gtfsId ?? undefined,
-        // The region that makes a GMB number mean something (ADR-175). Keyed on `gmbId` rather than
+        // The region that makes a GMB number mean something (ADR-176). Keyed on `gmbId` rather than
         // on `entry.gtfsId`, so the lookup is reachable for GMB alone: a KMB route also carries a
         // `gtfsId`, and it is a TD route id from the same number space — a table hit for one would
         // be a coincidence rendered as a fact.

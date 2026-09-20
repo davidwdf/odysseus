@@ -48,7 +48,7 @@ export async function buildSearchIndex(index: StaticIndex): Promise<SearchIndex>
   // from/to and collapse. The representative is the fullest variant (most stops), tie-broken by
   // id. ADR-047.
   //
-  // **ADR-175 gives every GMB route a `region`, and deliberately does not put it in this key.** It
+  // **ADR-176 gives every GMB route a `region`, and deliberately does not put it in this key.** It
   // is tempting — region is the *real* identity, and `GMB:1:outbound` in HKI and in NT would then
   // key apart without leaning on two name strings. But swapping it in would also merge what the
   // names currently keep separate: within one region a number's variants can run to genuinely
@@ -85,7 +85,7 @@ export async function buildSearchIndex(index: StaticIndex): Promise<SearchIndex>
       origin: meta.origin,
       destination: meta.destination,
       // GMB only, and absent rather than guessed for a route the committed table has not met
-      // (ADR-175). `undefined` is dropped by `JSON.stringify`, so a KMB row costs no bytes for it.
+      // (ADR-176). `undefined` is dropped by `JSON.stringify`, so a KMB row costs no bytes for it.
       region: meta.region,
       // Precomputed here so the *display order* is data the client reads rather than a collator
       // call it makes — the one thing three platforms could not be relied on to agree about

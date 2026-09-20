@@ -198,7 +198,7 @@ the Worker has **no cron trigger and no `scheduled` handler**.
 **To exercise the KV path locally:** `pnpm dataset:publish --local`, then `pnpm dev:edge` — the
 same Miniflare state, so `/v1/health` should report `"dataset":"kv"`.
 
-### The one upstream fact the build does *not* fetch — GMB regions ([ADR-175](./08-decision-log.md#adr-175--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table))
+### The one upstream fact the build does *not* fetch — GMB regions ([ADR-176](./08-decision-log.md#adr-176--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table))
 
 ```bash
 pnpm gmb:regions:emit   # crawl data.etagmb.gov.hk → packages/data-normalize/src/gmb-regions.generated.ts
