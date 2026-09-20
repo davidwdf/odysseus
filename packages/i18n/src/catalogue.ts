@@ -1029,6 +1029,24 @@ export const CATALOGUE = {
     'zh-Hant': '巴士班次頻率 — 為時間表資料，並非即時。',
     'zh-Hans': '巴士班次频率 — 为时间表数据，并非实时。',
   },
+  /**
+   * The mark on the band a rider is standing in, and on today's row — the fact sheets' answer to *"which
+   * of these lines is about me, right now"* (ADR-171).
+   *
+   * Two words rather than one, because the two sheets answer different questions: the frequency table has
+   * a band running **now**, and the service-hours table has a row that is **today**. A single "Now" on a
+   * first/last-bus row would claim the bus is running, which at 03:00 it is not.
+   */
+  now: {
+    en: 'Now',
+    'zh-Hant': '現在',
+    'zh-Hans': '现在',
+  },
+  today: {
+    en: 'Today',
+    'zh-Hant': '今日',
+    'zh-Hans': '今天',
+  },
   hoursTitle: {
     en: 'Service hours',
     'zh-Hant': '服務時間',

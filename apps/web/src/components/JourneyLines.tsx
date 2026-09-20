@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { prefersReducedMotion } from '../lib/motion'
+import { MarqueeText } from './MarqueeText'
 
 /**
  * The route header's from/to lines, and **the lyrics-style swap they run on a direction flip** — the DOM
@@ -88,13 +89,13 @@ export function JourneyLines({
     return (
       <span className="flex w-full flex-col" style={{ gap: GAP }}>
         <span className="flex items-center" style={{ height: SLOT }}>
-          <span className="block max-w-full truncate" style={ORIGIN_TYPE}>
-            {shown.origin}
+          <span className={`block w-full ${NAME_TYPE} text-muted`} style={ORIGIN_TYPE}>
+            <MarqueeText>{shown.origin}</MarqueeText>
           </span>
         </span>
         <span className="flex items-center" style={{ height: SLOT }}>
-          <span className="block max-w-full truncate text-h3 font-semibold text-text">
-            {shown.destination}
+          <span className={`block w-full ${NAME_TYPE} text-text`}>
+            <MarqueeText>{shown.destination}</MarqueeText>
           </span>
         </span>
       </span>
@@ -118,7 +119,7 @@ export function JourneyLines({
       {/* The old origin: up and out. */}
       <span
         aria-hidden
-        className="jl-origin-out absolute inset-x-0 block truncate"
+        className={`jl-origin-out absolute inset-x-0 block truncate ${NAME_TYPE} text-muted`}
         style={{ top: 0, lineHeight: `${SLOT}px`, ...ORIGIN_TYPE }}
       >
         {shown.origin}
@@ -130,14 +131,14 @@ export function JourneyLines({
           `scale`, and a scale about the centre slides the text sideways as it shrinks — invisible while
           both slots were centred, and a lurch the moment they share a left edge. */}
       <span
-        className="jl-rise absolute inset-x-0 flex items-center truncate text-h3 font-semibold"
+        className={`jl-rise absolute inset-x-0 flex items-center truncate ${NAME_TYPE}`}
         style={{ top: 0, height: SLOT, transformOrigin: 'left center' }}
       >
         <span className="truncate">{shown.destination}</span>
       </span>
       {/* The new destination, rising in. */}
       <span
-        className="jl-dest-in absolute inset-x-0 flex items-center truncate text-h3 font-semibold text-text"
+        className={`jl-dest-in absolute inset-x-0 flex items-center truncate ${NAME_TYPE} text-text`}
         style={{ top: DEST_TOP, height: SLOT, transformOrigin: 'left center' }}
       >
         <span className="truncate">{incoming.destination}</span>
@@ -153,23 +154,28 @@ export function JourneyLines({
  * name, a rail between them. Each row is `SLOT` tall, which is the node's own size, so a name is centred
  * against the square that numbers it.
  *
- * The names are **one type — `text-h3` semibold — and the origin is scaled to `SHRINK` rather than set
- * smaller.** That is the owner's note and it is about the flip rather than about the resting picture:
+ * The names are **one type — `text-body` medium — and the origin is scaled to `SHRINK` rather than set
+ * smaller.** The owner's read of the first build was that the destination was heavy: 18 px semibold is a
+ * heading, and this is a line of information under a badge that is already shouting. 16 medium, with the
+ * origin muted, leaves the destination the loudest thing in the block without it being loud. That is the owner's note and it is about the flip rather than about the resting picture:
  * `jl-rise` moves the old destination into the origin slot *and* shrinks it, so two different
  * `font-size`s make the animation reconcile a scale with a size change — a 20 px line becoming a 14 px
  * line by way of a transform that does not agree with either. One size and one weight leaves the rise a
  * pure interpolation of one property, which is what it looked like it was doing all along.
  *
- * `SHRINK` is 0.82 rather than a ratio of two sizes for the same reason: there is no second size to take
- * a ratio of. 18 × 0.82 renders at about 14.8, which is where the old origin line sat.
+ * `SHRINK` is 0.85 rather than a ratio of two sizes for the same reason: there is no second size to take a
+ * ratio of. 16 × 0.85 renders at about 13.6 — near the scale's `caption`, and the origin is muted as well
+ * as smaller, which is the owner's ask that it be *less prominent* rather than merely shorter.
  */
-const SLOT = 24
-const GAP = 18
-const SHRINK = 0.82
+const NAME_TYPE = 'text-body font-medium'
+const SLOT = 22
+const GAP = 14
+const SHRINK = 0.85
 const DEST_TOP = SLOT + GAP
 const BOX_H = DEST_TOP + SLOT
 
-/** The origin's resting appearance: the destination's type, quieter and a shade smaller. */
+/** The origin's resting *geometry*. Its colour is a class (`text-muted`), because a colour that a
+ *  keyframe has to interpolate must be a property the animation can see — see `jl-rise`. */
 const ORIGIN_TYPE: React.CSSProperties = {
   transform: `scale(${SHRINK})`,
   transformOrigin: 'left center',

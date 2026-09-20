@@ -156,6 +156,8 @@
 	<string name="fareElderlyNote">$2 up to a $10 fare, then 20 per cent of it. Needs a JoyYou or eligible Octopus — not cash.</string>
 	<string name="freqTitle">Frequency</string>
 	<string name="freqNote">How often buses run — scheduled frequencies, not live.</string>
+	<string name="now">Now</string>
+	<string name="today">Today</string>
 	<string name="hoursTitle">Service hours</string>
 	<string name="firstBus">First</string>
 	<string name="lastBus">Last</string>

@@ -390,6 +390,12 @@ component is a step every other component then has to reason about.
   collapse to an instant cut under reduced motion. **Two-step reveal:** a page appears *first*, then runs entrance
   work (e.g. the route page's auto-scroll to the originating stop) as a deliberate second beat via
   `usePageRevealReady()`.
+- **A name that does not fit travels; everything else truncates**
+  ([ADR-171](./08-decision-log.md#adr-171--the-headers-second-pass-one-rail-glyph-a-name-that-scrolls-a-bubble-that-morphs-and-a-table-that-knows-the-time)).
+  `MarqueeText` measures its own overflow and animates only when there is some, at a **constant speed** so
+  the duration follows the distance, alternating rather than looping — a destination is a name, not a
+  ticker. Reduced motion restores the ellipsis rather than freezing a clipped name. Reserved for the one
+  line whose job is to say where a bus goes; a list row still truncates.
 - **A box whose two states have different children is a FLIP, not a transition**
   ([ADR-167](./08-decision-log.md#adr-167--the-context-cards-collapse-animates-its-height-and-the-route-headers-open-questions-get-a-lab)):
   the route context card's collapse moves its left edge with a CSS transition and its badge with

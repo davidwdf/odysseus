@@ -3,7 +3,7 @@ import { ArrowLeft, ChevronUp, Clock, MapPin, RotateCw, Ruler } from 'lucide-rea
 import { useRef, useState } from 'react'
 import { JourneyLines } from '../src/components/JourneyLines'
 import { RouteChip } from '../src/components/RouteChip'
-import { useFlip, useHeightFlip } from '../src/hooks/useFlip'
+import { useBoxFlip, useFlip } from '../src/hooks/useFlip'
 import { RouteContextCard } from '../src/screens/route/RouteContextCard'
 
 /**
@@ -275,7 +275,7 @@ function SettledHeader({
   const card = useRef<HTMLDivElement | null>(null)
   const badge = useRef<HTMLSpanElement | null>(null)
   useFlip(badge, collapsed ? 'island' : 'card')
-  useHeightFlip(card, collapsed ? 'island' : 'card')
+  useBoxFlip(card, collapsed ? 'island' : 'card')
 
   if (collapsed) {
     return (

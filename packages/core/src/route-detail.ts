@@ -885,6 +885,89 @@ export interface RouteStatRow {
   estimate: boolean
 }
 
+/**
+ * **Where Hong Kong is in its week**, from an epoch instant: the day of the week Sunday-first, and the
+ * minutes since local midnight.
+ *
+ * ## The fixed offset is a fact about the place, not a shortcut
+ *
+ * Hong Kong has observed **UTC+8 with no daylight saving since 1979**, which is why this repo's ISO
+ * strings carry a hard `+08:00` (`eta.ts`, `favourites.ts`, `route-position.ts` all lean on it for
+ * lexical ordering). So the conversion is one addition rather than a timezone database, and it is
+ * deterministic in a way an `Intl` call with a named zone would also be but a `toLocaleString` without one
+ * would not.
+ *
+ * `1970-01-01` was a **Thursday**, which is where the 4 comes from: day 0 of the epoch is index 4 in a
+ * Sunday-first week, matching `FreqPattern.days`' documented order.
+ *
+ * Absent in, absent out — a caller with no clock marks nothing.
+ */
+function hongKongClock(now: number | undefined): { day: number; minutes: number } | undefined {
+  if (now === undefined) return undefined
+  const localMinutes = Math.floor(now / 60_000) + HK_OFFSET_MIN
+  const days = Math.floor(localMinutes / MINUTES_PER_DAY)
+  return {
+    day: (((days + EPOCH_DAY_INDEX) % 7) + 7) % 7,
+    minutes: localMinutes - days * MINUTES_PER_DAY,
+  }
+}
+
+/** Does this pattern run on the day the rider is in? */
+function runsToday(pattern: FreqPattern, clock: { day: number } | undefined): boolean {
+  return clock !== undefined && pattern.days[clock.day] === true
+}
+
+/**
+ * **Is this the band a rider is standing in?**
+ *
+ * Two tests rather than one, and the second is the whole reason this is a function. A band may run past
+ * midnight — `FreqBand` documents `"25:35"` as 01:35 the next day — so at 01:00 on a Saturday the band
+ * that is actually running is **Friday's** late one, and a check against today's pattern alone would mark
+ * nothing at all on exactly the nights a rider most wants to know. So a band matches if it covers *now* on
+ * a day this pattern runs, or covers *now + 24 h* on a day it ran yesterday.
+ */
+function runningNow(
+  pattern: FreqPattern,
+  band: { start: string; end: string },
+  clock: { day: number; minutes: number } | undefined,
+): boolean {
+  if (clock === undefined) return false
+  const start = hhmmToMinutes(band.start)
+  const end = hhmmToMinutes(band.end)
+  const covers = (minute: number) => minute >= start && minute < end
+  const yesterday = (clock.day + 6) % 7
+  return (
+    (pattern.days[clock.day] === true && covers(clock.minutes)) ||
+    (pattern.days[yesterday] === true && covers(clock.minutes + MINUTES_PER_DAY))
+  )
+}
+
+/**
+ * `"07:30"` → 450, and `"25:35"` → 1535 — the wire's own convention, where a band may run past midnight.
+ *
+ * **A regex rather than a `split(':')`**, which is this file's established way of reading one of these
+ * (`wrapPastMidnight` in `eta.ts` uses the same expression) and is also what keeps `check-no-adhoc-id-parsing`
+ * honest: that gate reads a `split(':')` as somebody taking an id apart by hand, and a clock string happens
+ * to share the delimiter. Its allowlist is empty and the goal is that it stays that way, so the answer is to
+ * not write the shape rather than to excuse it.
+ *
+ * **No validation branch, deliberately.** A value that does not match yields `NaN` through the optional
+ * chain, every comparison against `NaN` is false, and the band simply never matches — the same answer a
+ * guard would produce, with no arm that only a hand-written fixture can reach.
+ */
+function hhmmToMinutes(hhmm: string): number {
+  const parts = HHMM.exec(hhmm)
+  return Number(parts?.[1]) * 60 + Number(parts?.[2])
+}
+
+/** `"HH:mm"`, with the hours allowed past 24 — `FreqBand`'s documented shape. */
+const HHMM = /^(\d{1,3}):(\d{2})$/
+
+const HK_OFFSET_MIN = 8 * 60
+const MINUTES_PER_DAY = 24 * 60
+/** 1970-01-01 was a Thursday; Sunday is 0. */
+const EPOCH_DAY_INDEX = 4
+
 /** One day's frequency bands. */
 export interface FreqDayRow {
   /** What this day is called — a named type, or the running days composed from the mask. */
@@ -894,7 +977,14 @@ export interface FreqDayRow {
     hours: string
     /** Its headway, e.g. "every 4 min". */
     headway: string
+    /**
+     * **This is the band a rider is standing in.** Present only when it is true, and absent entirely
+     * when the caller passed no clock — see `nowIso` on the options.
+     */
+    now?: true
   }>
+  /** …and this is the day they are standing in. Same absence rule. */
+  today?: true
 }
 
 /** One day's first and last departure. */
@@ -902,6 +992,8 @@ export interface HoursDayRow {
   day: string
   first: string
   last: string
+  /** Today, by the same rule `FreqDayRow.today` uses. */
+  today?: true
 }
 
 /** What a renderer needs to draw one fact sheet, with nothing left to decide. */
@@ -973,6 +1065,16 @@ export interface RouteFactLabels {
 export interface RouteFactSheetOptions {
   locale: Locale
   labels: RouteFactLabels
+  /**
+   * **The rider's clock**, in epoch milliseconds — read at the screen and handed in, never read in here.
+   * The `kernel-nondeterminism` gate forbids the kernel its own clock, and the reason is not purity: a
+   * sheet that reads the time is a sheet no corpus can pin, because every run of it is a different case.
+   *
+   * Optional, and its absence is a real answer rather than a default: a caller with no clock gets a table
+   * with nothing marked, which is exactly what the sheet showed before this existed. Every corpus case
+   * written before it is therefore still byte-identical.
+   */
+  now?: number
 }
 
 /**
@@ -994,8 +1096,8 @@ export function routeFactSheet(
 ): RouteFactSheetView {
   const { locale, labels } = opts
   if (kind === 'fare') return fareSheet(view, service, labels)
-  if (kind === 'freq') return freqSheet(service, locale, labels)
-  if (kind === 'hours') return hoursSheet(service, labels)
+  if (kind === 'freq') return freqSheet(service, locale, labels, opts.now)
+  if (kind === 'hours') return hoursSheet(service, labels, opts.now)
   return { kind: 'stops', stats: routeStats(view, service, locale) }
 }
 
@@ -1164,7 +1266,9 @@ function freqSheet(
   service: RouteServiceInfo | undefined,
   locale: Locale,
   labels: RouteFactLabels,
+  now: number | undefined,
 ): RouteFactSheetView {
+  const clock = hongKongClock(now)
   const days = (service?.patterns ?? []).map((pattern) => ({
     day: dayLabel(pattern, labels),
     bands: pattern.bands.map((band) => ({
@@ -1172,7 +1276,9 @@ function freqSheet(
       // A band has one headway, not a range, so it is formatted as a degenerate range rather than with a
       // second rule — which is what keeps "every 4 min" here and "every 4 – 12 min" on the pill in one voice.
       headway: formatHeadway({ min: band.headwayMin, max: band.headwayMin }, locale),
+      ...(runningNow(pattern, band, clock) ? { now: true as const } : {}),
     })),
+    ...(runsToday(pattern, clock) ? { today: true as const } : {}),
   }))
   return {
     kind: 'freq',
@@ -1188,11 +1294,14 @@ function freqSheet(
 function hoursSheet(
   service: RouteServiceInfo | undefined,
   labels: RouteFactLabels,
+  now: number | undefined,
 ): RouteFactSheetView {
+  const clock = hongKongClock(now)
   const days = (service?.patterns ?? []).map((pattern) => ({
     day: dayLabel(pattern, labels),
     first: pattern.first,
     last: pattern.last,
+    ...(runsToday(pattern, clock) ? { today: true as const } : {}),
   }))
   return {
     kind: 'hours',

@@ -2,13 +2,18 @@ import type { RouteDetailView } from '@nextbus/core'
 import { ArrowRight } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
 import { JourneyRail } from '../../components/JourneyRail'
+import { MarqueeText } from '../../components/MarqueeText'
 import { RouteChip } from '../../components/RouteChip'
-import { useFlip, useHeightFlip } from '../../hooks/useFlip'
+import { useBoxFlip } from '../../hooks/useFlip'
 import { BACK_LENS_INSET, BACK_LENS_SIZE } from '../../shell/BackButton'
 import { CONTENT_INSET_TOP } from '../../shell/layout'
 
 /** The direction-swap control's box — 36 px, matching the fact pills' touch height. */
 const SWAP_SIZE = 36
+
+/** The `lg` route chip's rendered height, and how far it laps the island's top edge (the owner's 6 px). */
+const BADGE_H = 34
+const ISLAND_LAP = 6
 
 /**
  * **The route's identity, floating over the map** — round 4 of the mockups, which was the owner's own
@@ -69,151 +74,146 @@ export function RouteContextCard({
   /** The expanded card's chevron is a glyph; this is the whole of what a screen reader gets. */
   collapseLabel: string
 }) {
-  const badge = useRef<HTMLSpanElement | null>(null)
   const card = useRef<HTMLDivElement | null>(null)
-  // The badge travels between the two layouts rather than being re-drawn in each. See `useFlip`.
-  useFlip(badge, collapsed ? 'pill' : 'card')
-  // …and the card's own height travels with it, over the same 500 ms. Without this the box cut from
-  // ~135 px to ~44 px in one frame while the edge and the badge were still moving, which is the thing
-  // the owner read as jarring — see `useHeightFlip`.
-  useHeightFlip(card, collapsed ? 'pill' : 'card')
-
   /**
-   * **Collapsed, the card is an island**: the badge over a compact pill, lapping its top edge — the
-   * iOS-Messages stack, as the *collapsed* state (ADR-170).
+   * **The badge does not move, and the bubble changes shape around it** (ADR-171).
    *
-   * Three things it buys over the pill it replaces, and none of them is the look:
-   *  · **It clears the floating back lens by construction.** Centred, it needs neither the 72 px left
-   *    inset the old pill started at nor "the width that is left" beside the lens — so it takes the width
-   *    its text needs, and the destination that truncated at 46 px of pill fits.
-   *  · **The badge is the subject**, at `lg`. It is the only identity left on the screen at this size.
-   *  · **The chevron stays at the end of the pill**, where it has always been (the owner's ask). It is
-   *    decorative — the overlay behind it is the target, and a button inside a button is what ADR-024
-   *    forbids — but it is the one glyph that says the card opens downward, and moving it would cost a
-   *    rider the thing they already know.
+   * It used to travel: `useFlip` carried it from the centre of the expanded card to the left end of a
+   * pill, and the owner's read of that was *jarring* even once the height was animated with it. The
+   * reason is that three things were moving at once and none of them was the thing being revealed. What
+   * he asked for instead is the motion the shapes already suggest: *"the blurred background bubble
+   * expands to reveal the content behind it and then collapses around the destination."*
    *
-   * The lap is 6 px and the padding is equal top and bottom, which are the owner's numbers and are one
-   * decision rather than two: a deeper lap needs a deeper top padding to clear the badge, and the pill
-   * then reads as having slipped down inside itself.
+   * So the badge is rendered **once, in the same place in both states** — centred, `BADGE_TOP` below the
+   * card's own top edge — and the only thing that animates is the pane: `useBoxFlip` eases its width and
+   * height between the two shapes while `overflow-hidden` does the revealing. Expanding, the content is
+   * already laid out and the box grows past it; collapsing, the box closes around a destination that is
+   * already where it will end up.
+   *
+   * **The key carries the direction as well as the state**, so a flip eases the card's height too. The
+   * reverse direction's names wrap differently and its fare strip is its own, so the block's height
+   * changes under the rider's hands — and a box that animates when they press *collapse* and cuts when
+   * they press *swap* is worse than one that never animates. `useBoxFlip`'s docblock warns against
+   * keying on content for a good reason (a card must not twitch when a fact arrives); a direction flip
+   * is not content arriving, it is the rider asking for a different journey.
+   *
+   * The geometry that makes it work is one number in two places. The container's top is the **badge's**
+   * top, so the badge needs no offset at all; the pane is then pulled up by `BADGE_TOP + BADGE_H` when
+   * expanded (its first row is the back control's box, and the badge sits over it) and pushed down by the
+   * lap when collapsed. Two margins, one badge, no travel.
    */
-  if (collapsed) {
-    return (
+  useBoxFlip(card, collapsed ? 'island' : `card:${header.destination}`)
+
+  return (
+    <div
+      className="pointer-events-none fixed inset-x-0 z-20 flex justify-center"
+      style={{ top: `calc(${CONTENT_INSET_TOP} + 12px + ${BADGE_TOP}px)` }}
+    >
       <div
-        className="pointer-events-none fixed inset-x-0 z-20 flex justify-center"
-        style={{ top: `calc(${CONTENT_INSET_TOP} + 12px)` }}
+        className={`pointer-events-auto relative flex flex-col items-center ${
+          collapsed ? 'max-w-[calc(100%-136px)]' : 'w-full'
+        }`}
+        style={
+          collapsed ? undefined : { paddingLeft: BACK_LENS_INSET, paddingRight: BACK_LENS_INSET }
+        }
       >
-        <div className="pointer-events-auto relative flex max-w-[calc(100%-96px)] flex-col items-center">
-          <span className="relative z-10">
-            <RouteChip
-              operator={header.operator}
-              routeNo={header.routeNo}
-              size="lg"
-              chipRef={badge}
-            />
-          </span>
-          <div
-            ref={card}
-            className="-mt-1.5 glass-pane flex max-w-full items-center gap-1.5 rounded-pill border border-border px-3 py-2"
-          >
-            {/* **An arrow, from the number to where it is going.** A badge beside a place name states
-                two facts and no relation between them, and the relation is the point of a route. Not on
-                a circular service, where an arrow to a destination you are also leaving from would be a
-                claim rather than a shorthand — the same line ADR-160 draws about the $2 Scheme. */}
-            {header.circular ? null : (
-              <ArrowRight size={14} aria-hidden className="shrink-0 text-subtle" />
-            )}
-            <span className="min-w-0 truncate text-label font-semibold text-text">
-              {header.destination}
-            </span>
-            <Chevron direction="down" />
-          </div>
-          {/* The whole island is the target, badge included — it is one object, and a rider who presses
-              the number has pressed the thing. */}
+        {/*
+          **The badge, in one place in both states.** Collapsed it laps the island's top edge; expanded it
+          sits in the middle of the card's first row, which is the back control's own 48 px box. Same
+          coordinates either way, so there is nothing for it to travel between.
+        */}
+        <span className="relative z-10">
+          <RouteChip operator={header.operator} routeNo={header.routeNo} size="lg" />
+        </span>
+
+        <div
+          ref={card}
+          className={`glass-pane relative flex flex-col overflow-hidden border border-border ${
+            collapsed
+              ? 'max-w-full items-center gap-0 rounded-pill px-3 py-2'
+              : 'w-full gap-2 rounded-sheet px-2 pt-0 pb-2'
+          }`}
+          style={{ marginTop: collapsed ? -ISLAND_LAP : -(BADGE_TOP + BADGE_H) }}
+        >
+          {collapsed ? (
+            <div className="flex items-center gap-1.5">
+              {/* **An arrow, from the number to where it is going.** A badge beside a place name states
+                  two facts and no relation between them, and the relation is the point of a route. Not
+                  on a circular service, where an arrow to a destination you are also leaving from would
+                  be a claim rather than a shorthand — the line ADR-160 draws about the $2 Scheme. */}
+              {header.circular ? null : (
+                <ArrowRight size={14} aria-hidden className="shrink-0 text-subtle" />
+              )}
+              <span className="min-w-0 text-label font-semibold text-text">
+                <MarqueeText>{header.destination}</MarqueeText>
+              </span>
+              {/* Decorative: the overlay below is the target, and a button inside a button is what
+                  ADR-024 forbids. It stays at the **end** of the pill, where a rider has always found
+                  it. */}
+              <Chevron direction="down" />
+            </div>
+          ) : (
+            <>
+              {/*
+                **One row, 48 px tall and unpadded at the top** — the box the screen's fixed
+                `<BackButton />` occupies, so the arrow lands exactly where it always does and the card's
+                glass runs *under* it. Both slots are spacers: the back control is drawn by the screen
+                and the badge by the container above. There is one back button on this screen, it never
+                moves, and what changes while the card is open is its material (`BackButton`'s `flat`).
+              */}
+              <div className="flex h-12 w-full items-center gap-2">
+                <span aria-hidden="true" className="shrink-0" style={{ width: BACK_LENS_SIZE }} />
+                <span className="flex-1" />
+                {/* The collapse control, balancing the back lens across the badge. Right-aligned
+                    because that is where its counterpart sits on the island, so the one glyph a rider
+                    learns is always in the same corner. */}
+                <span className="flex shrink-0 justify-end" style={{ width: BACK_LENS_SIZE }}>
+                  <ChevronButton direction="up" label={collapseLabel} onPress={onCollapse} />
+                </span>
+              </div>
+
+              {/* The journey, as two rows of the schematic: a numbered terminus square at each end of a
+                  rail, the two names beside them. The rail is the card's, because the figures are on
+                  `header`; the names are the screen's, because the flip's swap lives with them. */}
+              <div className="flex w-full items-start gap-2 px-1">
+                <JourneyRail
+                  fromSeq={header.originSeq}
+                  toSeq={header.destinationSeq}
+                  circular={header.circular}
+                />
+                <div className="min-w-0 flex-1 text-left">{journey}</div>
+                {/* The direction swap acts **on** the journey, so it shares its row rather than sitting
+                    beside the route number, where it read as a property of the number. */}
+                <span className="flex shrink-0 justify-end" style={{ width: SWAP_SIZE }}>
+                  {swap}
+                </span>
+              </div>
+
+              {/* Left-aligned with the block above it. The strip was centred while the journey was, and
+                  two axes in one card is what made the first left-aligned draft look broken. */}
+              {facts ? <div className="flex w-full justify-start px-1">{facts}</div> : null}
+            </>
+          )}
+        </div>
+
+        {/* The whole island is the target, badge included — it is one object, and a rider who presses
+            the number has pressed the thing. Expanded, the card holds controls of its own and the
+            chevron is the way out, so there is no overlay at all (ADR-024). */}
+        {collapsed ? (
           <button
             type="button"
             onClick={onExpand}
             aria-label={expandLabel}
             className="absolute inset-0 cursor-pointer border-0 bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
           />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div
-      className="pointer-events-none fixed right-3 z-20"
-      style={{ top: `calc(${CONTENT_INSET_TOP} + 12px)`, left: BACK_LENS_INSET }}
-    >
-      {/*
-        **The expanded card is one pane, and the collapsed island is another** (ADR-170). They were one
-        element until the island landed, and the argument for that — a radius, a padding and a `left`
-        that transition rather than cut — stopped applying the moment the two states stopped being the
-        same shape: one is full-width and encloses the back control, the other is a centred pill half the
-        width with a badge over its edge. What still carries the change is the pair of hooks: `useFlip`
-        travels the badge (it keeps the previous *rect*, so a different element on each side is fine) and
-        `useHeightFlip` animates the box's height.
-
-        The card holds controls of its own — the swap link, the fact pills, the collapse chevron — so it
-        cannot itself be a button (ADR-024). It does not need to be: the chevron is the control here, and
-        the overlay target belongs to the island.
-      */}
-      <div
-        ref={card}
-        className="glass-pane pointer-events-auto relative flex w-full flex-col gap-2 overflow-hidden rounded-sheet border border-border px-2 pt-0 pb-2"
-      >
-        {/*
-          **One row, 48 px tall and unpadded at the top** — the box the screen's fixed `<BackButton />`
-          occupies, so the arrow lands exactly where it always does and the card's glass runs *under* it
-          rather than beside it. The left slot is a spacer, not a second control: there is one back button
-          on this screen, it never moves, and what changes while the card is open is its material (it
-          drops its own glass — see `BackButton`'s `flat`).
-
-          The badge is centred in what is left, which is now a choice rather than a workaround: it used to
-          be centred to push the destination clear of the lens it slid under.
-        */}
-        <div className="flex h-12 w-full items-center gap-2">
-          <span aria-hidden="true" className="shrink-0" style={{ width: BACK_LENS_SIZE }} />
-          <span className="flex flex-1 justify-center">
-            <RouteChip
-              operator={header.operator}
-              routeNo={header.routeNo}
-              size="lg"
-              chipRef={badge}
-            />
-          </span>
-          {/* The collapse control, balancing the back lens across the badge. Right-aligned because that
-              is where its counterpart sits on the island, so the one glyph a rider learns is always in
-              the same corner. */}
-          <span className="flex shrink-0 justify-end" style={{ width: BACK_LENS_SIZE }}>
-            <ChevronButton direction="up" label={collapseLabel} onPress={onCollapse} />
-          </span>
-        </div>
-
-        {/* The journey, as two rows of the schematic: a numbered terminus square at each end of a rail,
-            the two names beside them. The rail is the card's, because the figures are on `header`; the
-            names are the screen's, because the flip's lyrics-style swap lives with them. */}
-        <div className="flex w-full items-start gap-2 px-1">
-          <JourneyRail
-            fromSeq={header.originSeq}
-            toSeq={header.destinationSeq}
-            circular={header.circular}
-          />
-          <div className="min-w-0 flex-1 text-left">{journey}</div>
-          {/* The direction swap acts **on** the journey, so it shares its row rather than sitting beside
-              the route number, where it read as a property of the number. */}
-          <span className="flex shrink-0 justify-end" style={{ width: SWAP_SIZE }}>
-            {swap}
-          </span>
-        </div>
-
-        {/* Left-aligned with the block above it. The strip was centred while the journey was, and two
-            axes in one card is what made the first left-aligned draft look broken. */}
-        {facts ? <div className="flex w-full justify-start px-1">{facts}</div> : null}
+        ) : null}
       </div>
     </div>
   )
 }
+
+/** The badge's top, measured from the card's own top edge: centred in a 48 px first row. */
+const BADGE_TOP = (BACK_LENS_SIZE - BADGE_H) / 2
 
 /**
  * The expand/collapse hint — **a normal chevron**, muted, in the same corner in both states.

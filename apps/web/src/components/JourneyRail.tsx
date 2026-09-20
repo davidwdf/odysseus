@@ -1,5 +1,7 @@
 import { RotateCw } from 'lucide-react'
 import { JOURNEY_SLOT } from './JourneyLines'
+import { RAIL_CHEVRON_H, RAIL_CHEVRON_W, railChevronMask } from './railGlyphs'
+import { SlideNumber } from './SlideNumber'
 
 /**
  * **The route header's from/to column: the schematic, two rows tall** (ADR-170).
@@ -7,6 +9,9 @@ import { JOURNEY_SLOT } from './JourneyLines'
  * A terminus square at each end carrying its sequence number, the route line between them, and one double
  * chevron on it. Every mark and every number is `RouteStopRow`'s, at the size a header can hold:
  *
+ *  · **The marks are smaller than the list's**, and that is the one proportion deliberately not copied: a
+ *    26 px node with a 12 px numeral is right in a 64 px row and overpowering in a header, where it is the
+ *    quiet half of a line of type. 18 px with an 11 px figure keeps the *shape* and gives up the weight.
  *  · **A square is a terminus**, and it is the same square three other places draw — the map's marker, the
  *    schematic's node and (since ADR-167) the direction-swap glyph. `NODE_SHAPE.terminus` is where the
  *    shape comes from; a circle here would have been a fourth vocabulary for a fact a rider has learnt
@@ -15,8 +20,17 @@ import { JOURNEY_SLOT } from './JourneyLines'
  *    a node in the line's own colour disappears into it.
  *  · **The stroke is a hairline at 1.5**, where the line is 4. A node is a shape and the line is a stroke
  *    (ADR-163); matching them would put a ring round the numeral and leave it no middle.
- *  · **The chevron's apexes are 5.3 apart for a 2 px stroke**, which is the ratio that keeps the pair
- *    reading as `> >` rather than `>>` — the number the rail arrived at by measuring the map's.
+ *  · **The chevron is the list's**, not a drawing that resembles it: `railGlyphs.ts` holds the one mask and
+ *    both rails wear it (ADR-171). The owner asked for exactly this, and one declaration is the only way to
+ *    promise it — two hand-drawn pairs agree until someone adjusts one.
+ *
+ * ## The numerals slide, because the rail does not
+ *
+ * A direction flip changes both figures (31 → 1, 1 → 31) while the two names are still animating between
+ * their slots, and a numeral that *cuts* mid-flight is the one mark on the screen contradicting the motion
+ * around it. `SlideNumber` is the app's existing answer for a figure that changes — the same component the
+ * arrival times use — so the rail borrows it rather than growing a second one. At rest it is one text
+ * node, which is what keeps these two declared slots projectable.
  *
  * ## The numbers are the point, not a flourish
  *
@@ -75,25 +89,9 @@ export function JourneyRail({
           strokeWidth={4}
           fill="none"
         />
-        {circular ? null : (
-          <g
-            className="stroke-route"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          >
-            <path
-              d={`M${NODE / 2 - 2.8} ${MID - 4.2} ${NODE / 2} ${MID - 1.4} ${NODE / 2 + 2.8} ${MID - 4.2}`}
-            />
-            <path
-              d={`M${NODE / 2 - 2.8} ${MID + 1.1} ${NODE / 2} ${MID + 3.9} ${NODE / 2 + 2.8} ${MID + 1.1}`}
-            />
-          </g>
-        )}
         <rect
           x={0.75}
-          y={0.75}
+          y={TOP_CY - NODE / 2 + 0.75}
           width={NODE - 1.5}
           height={NODE - 1.5}
           className="fill-surface stroke-route"
@@ -101,13 +99,28 @@ export function JourneyRail({
         />
         <rect
           x={0.75}
-          y={JOURNEY_SLOT.height - NODE + 0.75}
+          y={BOTTOM_CY - NODE / 2 + 0.75}
           width={NODE - 1.5}
           height={NODE - 1.5}
           className="fill-surface stroke-route"
           strokeWidth={1.5}
         />
       </svg>
+      {circular ? null : (
+        // The list's own double chevron, on the line rather than cut out of it: the schematic paints its
+        // notch in the row's background colour, and this line sits on glass, which has none.
+        <span
+          aria-hidden="true"
+          className="-translate-x-1/2 absolute bg-route"
+          style={{
+            left: '50%',
+            top: MID - RAIL_CHEVRON_H / 2,
+            width: RAIL_CHEVRON_W,
+            height: RAIL_CHEVRON_H,
+            ...railChevronMask,
+          }}
+        />
+      )}
       {circular ? (
         // The loop, in the line's own colour, on the line's own background — `bg-bg` rather than a
         // transparent glyph so the 4 px rail does not run through the middle of it.
@@ -128,23 +141,34 @@ export function JourneyRail({
         the two names, and no description of a square.
       */}
       <span
-        className="absolute inset-x-0 flex items-center justify-center text-caption font-medium text-route tabular-nums"
-        style={{ top: 0, height: NODE }}
+        className="absolute inset-x-0 flex items-center justify-center font-medium text-route tabular-nums"
+        style={{ top: TOP_CY - NODE / 2, height: NODE, fontSize: SEQ_FONT, lineHeight: 1 }}
       >
-        {fromSeq}
+        <SlideNumber value={String(fromSeq)} />
       </span>
       <span
-        className="absolute inset-x-0 flex items-center justify-center text-caption font-medium text-route tabular-nums"
-        style={{ top: JOURNEY_SLOT.height - NODE, height: NODE }}
+        className="absolute inset-x-0 flex items-center justify-center font-medium text-route tabular-nums"
+        style={{ top: BOTTOM_CY - NODE / 2, height: NODE, fontSize: SEQ_FONT, lineHeight: 1 }}
       >
-        {toSeq}
+        <SlideNumber value={String(toSeq)} />
       </span>
     </span>
   )
 }
 
-/** The node's side, which is also the row's height — one number, from `JourneyLines`. */
-const NODE = JOURNEY_SLOT.slot
-const TOP_CY = NODE / 2
-const BOTTOM_CY = JOURNEY_SLOT.height - NODE / 2
+/**
+ * The node's side. **Smaller than the slot it sits in** — the row is as tall as its type, and the mark is
+ * a mark. It is centred in the slot rather than filling it, which is what stops the column reading as two
+ * boxes with a line between them.
+ */
+const NODE = 18
+/** Where each node's centre sits: the middle of its own slot, so a name lines up with its number. */
+const TOP_CY = JOURNEY_SLOT.slot / 2
+const BOTTOM_CY = JOURNEY_SLOT.height - JOURNEY_SLOT.slot / 2
 const MID = JOURNEY_SLOT.height / 2
+/**
+ * The numeral, in px rather than a type step. The scale's smallest is `caption` at 12, which is the list's
+ * own figure in a 26 px node; at 18 px the same 12 fills the square edge to edge and the node stops
+ * reading as a node. 11 is off the scale on purpose and says so — it is a *mark's* label, not text.
+ */
+const SEQ_FONT = 11

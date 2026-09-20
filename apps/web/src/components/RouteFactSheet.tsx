@@ -214,11 +214,30 @@ function FreqBody({
       <p className="m-0 text-caption text-subtle">{t(locale, 'freqNote')}</p>
       {sheet.days.map((day) => (
         <div key={day.day} className="flex flex-col gap-1.5">
-          <p className="m-0 text-label text-text">{day.day}</p>
+          <p className="m-0 flex items-center gap-2 text-label text-text">
+            <span className={day.today ? 'font-semibold' : undefined}>{day.day}</span>
+            {day.today ? <NowTag label={t(locale, 'today')} /> : null}
+          </p>
           {day.bands.map((band) => (
-            <div key={band.hours} className="flex items-baseline justify-between gap-3 py-0.5">
-              <span className="text-caption text-muted tabular-nums">{band.hours}</span>
-              <span className="text-caption text-text tabular-nums">{band.headway}</span>
+            <div
+              key={band.hours}
+              className={`flex items-baseline justify-between gap-3 py-0.5 ${
+                band.now ? '-mx-2 rounded-md bg-surface-2 px-2 py-1' : ''
+              }`}
+            >
+              <span
+                className={`flex items-center gap-2 text-caption tabular-nums ${
+                  band.now ? 'text-text' : 'text-muted'
+                }`}
+              >
+                {band.hours}
+                {band.now ? <NowTag label={t(locale, 'now')} /> : null}
+              </span>
+              <span
+                className={`text-caption text-text tabular-nums ${band.now ? 'font-semibold' : ''}`}
+              >
+                {band.headway}
+              </span>
             </div>
           ))}
         </div>
@@ -240,8 +259,16 @@ function HoursBody({
   return (
     <div className="flex flex-col gap-3">
       {sheet.days.map((day) => (
-        <div key={day.day} className="flex items-center justify-between gap-3">
-          <span className="text-body text-text">{day.day}</span>
+        <div
+          key={day.day}
+          className={`flex items-center justify-between gap-3 ${
+            day.today ? '-mx-2 rounded-md bg-surface-2 px-2 py-1' : ''
+          }`}
+        >
+          <span className="flex items-center gap-2 text-body text-text">
+            <span className={day.today ? 'font-semibold' : undefined}>{day.day}</span>
+            {day.today ? <NowTag label={t(locale, 'today')} /> : null}
+          </span>
           <span className="flex gap-5">
             <LabelledTime label={t(locale, 'firstBus')} time={day.first} />
             <LabelledTime label={t(locale, 'lastBus')} time={day.last} />
@@ -250,6 +277,25 @@ function HoursBody({
       ))}
       {sheet.span ? <p className="m-0 text-body text-text tabular-nums">{sheet.span}</p> : null}
     </div>
+  )
+}
+
+/**
+ * **The mark on the line that is about right now** — today's row, or the band a rider is standing in.
+ *
+ * A word rather than a colour alone, and that is the accessibility half of the decision: the highlight
+ * behind the row is `surface-2`, which a screen reader cannot read and a rider with low vision may not
+ * see, so the fact is *stated*. It is the same reasoning ADR-008's status rule gives for never using
+ * colour alone — and the reason the two sheets use two different words is in the catalogue.
+ *
+ * `text-accent` rather than a status colour: nothing here is good or bad news, it is simply where the
+ * rider is in the table.
+ */
+function NowTag({ label }: { label: string }) {
+  return (
+    <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-contrast uppercase tracking-wide">
+      {label}
+    </span>
   )
 }
 

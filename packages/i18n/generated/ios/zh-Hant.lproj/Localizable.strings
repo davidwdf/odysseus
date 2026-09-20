@@ -150,6 +150,8 @@
 "fareElderlyNote" = "車費 $10 或以下劃一收 $2，超過則收兩成。須使用「樂悠咭」或合資格八達通，不適用於現金。";
 "freqTitle" = "班次";
 "freqNote" = "巴士班次頻率 — 為時間表資料，並非即時。";
+"now" = "現在";
+"today" = "今日";
 "hoursTitle" = "服務時間";
 "firstBus" = "首班";
 "lastBus" = "尾班";

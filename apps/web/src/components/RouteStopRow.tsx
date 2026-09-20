@@ -4,6 +4,7 @@ import { Star } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { useLocale } from '../providers/LocaleProvider'
 import { NODE, NODE_CENTRE, NODE_TOP, RAIL_WIDTH } from './RailBusToken'
+import { RAIL_CHEVRON_H, RAIL_CHEVRON_W, railChevronMask } from './railGlyphs'
 import { SlideNumber } from './SlideNumber'
 import { StopName } from './StopName'
 
@@ -24,42 +25,10 @@ import { StopName } from './StopName'
 const RAIL_LINE = 4
 
 /**
- * The double chevron's box, in CSS pixels.
- *
- * Proportioned from the map's — `routeChevronImage` uses a 2.6 reach and a 1.9 stroke on a 5 px line.
- * The arms overhang the rail by about a pixel each side, which is what makes the notch read as a cut
- * *through* the line rather than a dent in its middle.
- *
- * ## The gap between the pair is a ratio, not a number
- *
- * Scaling the map's glyph down to a 10 px box but keeping the stroke at 2.0 — which it needs to be, to
- * cut a 4 px line — quietly closed the pair up: the stroke ate the gap. The map's two chevrons sit
- * **5.0 apart with a 1.9 stroke**, so the *visible* whitespace between them is 3.1, or **1.63x the
- * stroke**. The rail's were 3.8 apart with a 2.0 stroke: 0.9x. That is the whole of why they read as
- * `>>` where the map reads `> >`, and it is what the owner saw.
- *
- * Matched on the ratio rather than the number: 1.63 x 2.0 is 3.26 of whitespace, so the apexes are
- * 5.3 apart. Change the stroke and this has to move with it.
+ * The rail's double chevron lives in `railGlyphs.ts` now — the route header draws the same mark, and the
+ * owner's ask was that it *look like this one*, which is a thing one declaration guarantees and two
+ * resembling ones do not (ADR-171). The proportions and the mask-not-`<svg>` argument moved with it.
  */
-const CHEVRON_W = 10
-const CHEVRON_H = 11
-
-/**
- * The glyph, as a mask: a **double** chevron pointing down.
- *
- * A mask rather than an inline `<svg>` so the *shape* is data and the *colour* is a Tailwind class —
- * which matters more here than it did before, because the colour is now the row's own background and
- * has to change with `selected`. A fill baked into the SVG could not follow it.
- *
- * A CSS mask reads the **alpha** channel, so the paint is never seen — only where it is opaque.
- * `currentColor` for exactly that reason: an SVG loaded as an image has no inherited colour, so it
- * resolves to the initial black, and any other opaque value would mask identically. Not a colour
- * literal, because it is not choosing a colour — which is what keeps `check-no-raw-colours` at zero
- * allowlist entries rather than carrying a permanent exception for a value with no visual effect.
- */
-const CHEVRON_MASK = `url("data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${CHEVRON_W}" height="${CHEVRON_H}" viewBox="0 0 ${CHEVRON_W} ${CHEVRON_H}"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 1.2 5 4 7.8 1.2"/><path d="M2.2 6.5 5 9.3 7.8 6.5"/></g></svg>`,
-)}")`
 
 export function RouteStopRow({
   row,
@@ -252,13 +221,10 @@ export function RouteStopRow({
               style={{
                 top: `calc(50% + ${NODE_CENTRE}px)`,
                 transform: 'translateY(-50%)',
-                left: RAIL_WIDTH / 2 - CHEVRON_W / 2,
-                width: CHEVRON_W,
-                height: CHEVRON_H,
-                maskImage: CHEVRON_MASK,
-                WebkitMaskImage: CHEVRON_MASK,
-                maskSize: `${CHEVRON_W}px ${CHEVRON_H}px`,
-                WebkitMaskSize: `${CHEVRON_W}px ${CHEVRON_H}px`,
+                left: RAIL_WIDTH / 2 - RAIL_CHEVRON_W / 2,
+                width: RAIL_CHEVRON_W,
+                height: RAIL_CHEVRON_H,
+                ...railChevronMask,
               }}
             />
           ) : null}

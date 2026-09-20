@@ -453,7 +453,8 @@ describe('route-detail#routeFactSheet', () => {
     kind: RouteFactSheetKind
     detail: RouteDetailPayload
     locale: Locale
-    now: string
+    /** The rider's clock. `null` in a case is a caller that has none — see the sheet's `now` option. */
+    now: string | null
   }
 
   const rows = () => specCases<Args, RouteFactSheetView>(corpus, 'routeFactSheet')
@@ -462,10 +463,21 @@ describe('route-detail#routeFactSheet', () => {
   const sheetFor = (a: Args) =>
     routeFactSheet(
       a.kind,
-      routeDetailView(a.detail, { locale: a.locale, now: at(a.now), labels: VIEW_LABELS }),
+      routeDetailView(a.detail, {
+        locale: a.locale,
+        // The view still needs a clock even where the *sheet* has none: `routeDetailView` reads it for the
+        // arrival times, and a case about an unmarked table is not a case about an empty schematic.
+        now: at(a.now ?? FALLBACK_NOW),
+        labels: VIEW_LABELS,
+      }),
       a.detail.route.service,
-      { locale: a.locale, labels: LABELS },
+      // **The same instant the view was built at.** A sheet marked "now" against a different clock from the
+      // screen behind it would be the drift this repo keeps closing, one function apart.
+      { locale: a.locale, labels: LABELS, ...(a.now === null ? {} : { now: at(a.now) }) },
     )
+
+  /** Only for the view, in the one case that withholds the clock from the sheet. */
+  const FALLBACK_NOW = '2026-07-27T12:00:00+08:00'
 
   /** `routeDetailView`'s own label fixture, reused so the two groups cannot disagree about a stop's name. */
   const VIEW_LABELS = {
@@ -492,7 +504,7 @@ describe('route-detail#routeFactSheet', () => {
     for (const c of rows()) {
       const view = routeDetailView(c.args.detail, {
         locale: c.args.locale,
-        now: at(c.args.now),
+        now: at(c.args.now ?? FALLBACK_NOW),
         labels: VIEW_LABELS,
       })
       const names = new Set(view.stops.map((row) => row.name.label))
@@ -518,7 +530,7 @@ describe('route-detail#routeFactSheet', () => {
     for (const c of rows()) {
       const view = routeDetailView(c.args.detail, {
         locale: c.args.locale,
-        now: at(c.args.now),
+        now: at(c.args.now ?? FALLBACK_NOW),
         labels: VIEW_LABELS,
       })
       const sheet = sheetFor(c.args)
@@ -553,7 +565,7 @@ describe('route-detail#routeFactSheet', () => {
     service.fareFull = '1.5'
     const view = routeDetailView(detail, {
       locale: base.args.locale,
-      now: at(base.args.now),
+      now: at(base.args.now ?? FALLBACK_NOW),
       labels: VIEW_LABELS,
     })
     const sheet = routeFactSheet('fare', view, service, {
@@ -615,7 +627,7 @@ describe('route-detail#routeFactSheet', () => {
     first.fare = ' '
     const view = routeDetailView(detail, {
       locale: base.args.locale,
-      now: at(base.args.now),
+      now: at(base.args.now ?? FALLBACK_NOW),
       labels: VIEW_LABELS,
     })
     const sheet = routeFactSheet('fare', view, detail.route.service, {

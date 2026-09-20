@@ -72,13 +72,20 @@ export function useFlip(ref: RefObject<HTMLElement | null>, key: string | number
 }
 
 /**
- * **Animate an element's HEIGHT from what it just was to what it now is**, whenever `key` changes.
+ * **Animate an element's BOX — width and height — from what it just was to what it now is**, whenever
+ * `key` changes.
  *
  * The companion to `useFlip`, and the reason it is a second hook rather than an option on the first: a
  * FLIP animates a `transform`, and a transform on a card *scales its text*. What the route context card
  * needs is the opposite — the box changes size while the type inside it stays the size it is, and the
- * content that no longer fits is clipped by the card's own `overflow-hidden`. That is a height animation,
- * and height is the one property a FLIP deliberately does not touch.
+ * content that no longer fits is clipped by the card's own `overflow-hidden`. That is a width/height
+ * animation, and neither is a property a FLIP touches.
+ *
+ * **It began as height alone** and grew a second dimension when the collapsed state became an island
+ * (ADR-171): a full-width pane becoming a pill that hugs its text changes both, and animating one of the
+ * two is more jarring than animating neither — the box eases down while its sides cut in. The cost is
+ * honest and worth naming: a width animation **re-flows the content every frame**, which is fine for one
+ * element over 500 ms and would not be for a list.
  *
  * ## What it fixes, and why a CSS transition could not
  *
@@ -95,14 +102,15 @@ export function useFlip(ref: RefObject<HTMLElement | null>, key: string | number
  * a line whenever a fact arrives or a long destination wraps, and animating those would be the card
  * twitching at data rather than at a rider.
  */
-export function useHeightFlip(ref: RefObject<HTMLElement | null>, key: string | number): void {
-  const before = useRef<number | null>(null)
+export function useBoxFlip(ref: RefObject<HTMLElement | null>, key: string | number): void {
+  const before = useRef<{ width: number; height: number } | null>(null)
   const shownFor = useRef<string | number | null>(null)
 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const now = el.getBoundingClientRect().height
+    const rect = el.getBoundingClientRect()
+    const now = { width: rect.width, height: rect.height }
     const was = before.current
     before.current = now
 
@@ -110,13 +118,16 @@ export function useHeightFlip(ref: RefObject<HTMLElement | null>, key: string | 
     const first = shownFor.current === null
     shownFor.current = key
     if (first || was === null || prefersReducedMotion()) return
-    // A sub-pixel change is a reflow, not a transition — `useFlip`'s guard, in one dimension.
-    if (Math.abs(was - now) < 1) return
+    // A sub-pixel change is a reflow, not a transition — `useFlip`'s guard, in two dimensions.
+    if (Math.abs(was.height - now.height) < 1 && Math.abs(was.width - now.width) < 1) return
 
-    el.animate?.([{ height: `${was}px` }, { height: `${now}px` }], {
-      duration: FLIP_MS,
-      easing: FLIP_EASING,
-    })
+    el.animate?.(
+      [
+        { width: `${was.width}px`, height: `${was.height}px` },
+        { width: `${now.width}px`, height: `${now.height}px` },
+      ],
+      { duration: FLIP_MS, easing: FLIP_EASING },
+    )
   })
 }
 

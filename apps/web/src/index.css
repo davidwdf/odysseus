@@ -364,6 +364,41 @@
 }
 
 /*
+  A name that does not fit, travelling (ADR-171) — `MarqueeText` measures the overflow and this says how it
+  moves.
+
+  **Four keyframes rather than two, because the pauses are part of the motion.** The text rests at the
+  start, travels, rests at the end, and the `alternate` direction brings it back the same way. Writing the
+  pauses as plateaus inside one cycle is what keeps this to a single animation with no timer and no second
+  element — an `animation-delay` would only pause the first repetition.
+
+  The two numbers come in as custom properties from the component, because both are measurements: how far
+  this particular name overhangs its box, and the duration that distance takes at a constant speed.
+
+  No reduced-motion rule here, and that is deliberate for the reason `JourneyLines` documents: switching the
+  animation off would leave a name clipped with no ellipsis to say it was. The component checks the
+  preference itself and renders a truncating span instead.
+*/
+@keyframes marquee-text {
+  0% {
+    transform: translateX(0);
+  }
+  18% {
+    transform: translateX(0);
+  }
+  82% {
+    transform: translateX(var(--marquee-travel));
+  }
+  100% {
+    transform: translateX(var(--marquee-travel));
+  }
+}
+
+.marquee-text {
+  animation: marquee-text var(--marquee-duration) ease-in-out infinite alternate;
+}
+
+/*
   The direction flip (ADR-046, identity under ADR-100) — three moves, 380 ms, `Easing.inOut(Easing.quad)`.
 
   The geometry comes in as custom properties from `JourneyLines`, so the slot heights are declared once

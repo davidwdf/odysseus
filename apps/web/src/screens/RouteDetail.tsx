@@ -740,6 +740,10 @@ export function RouteDetail() {
             <RouteFactSheet
               sheet={routeFactSheet(factSheet, view, query.data?.route.service, {
                 locale,
+                // The rider's clock, so the frequency table can mark the band they are standing in and the
+                // hours table today's row (ADR-171). Read here in the render body, as every other clock on
+                // this screen is — the kernel is forbidden one of its own.
+                now: Date.now(),
                 labels: {
                   stopCount: (n) => t(locale, 'stopCount', { n }),
                   dayNames: t(locale, 'daysShort').split(','),

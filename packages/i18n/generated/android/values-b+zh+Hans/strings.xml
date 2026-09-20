@@ -154,6 +154,8 @@
 	<string name="fareElderlyNote">车费 $10 或以下划一收 $2，超过则收两成。须使用「乐悠咭」或合资格八达通，不适用于现金。</string>
 	<string name="freqTitle">班次</string>
 	<string name="freqNote">巴士班次频率 — 为时间表数据，并非实时。</string>
+	<string name="now">现在</string>
+	<string name="today">今天</string>
 	<string name="hoursTitle">服务时间</string>
 	<string name="firstBus">首班</string>
 	<string name="lastBus">尾班</string>
