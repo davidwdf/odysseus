@@ -1,6 +1,6 @@
 import type { RouteDetailView } from '@nextbus/core'
 import { ArrowRight } from 'lucide-react'
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { JourneyRail } from '../../components/JourneyRail'
 import { MarqueeText } from '../../components/MarqueeText'
 import { RouteChip } from '../../components/RouteChip'
@@ -161,34 +161,28 @@ export function RouteContextCard({
   }, [leaving])
 
   /**
-   * **How far the outgoing destination has to travel to become the island's** (ADR-178).
+   * **The collapse, as the owner described it after watching it three times.**
    *
-   * The open card puts the destination on the journey block's second line and the island puts it on the
-   * pill's only line — measured on a 390 px phone, 50 px apart. Two rounds tried to make the *island's*
-   * line arrive from somewhere: first a fade (it appeared where it had never been), then a 14 px lift
-   * (the owner read it as a bounce, and he was right — it was the wrong distance travelled late).
+   * His reading of the previous build was exact, and every line of it was something this component was
+   * doing on purpose: *"card content slides up (not sure why?!) · pill text appears up top instantly ·
+   * card background then collapses in size, sliding down."* The slide was ADR-178's hand-off, carrying
+   * the outgoing destination 85 px onto the island's line; the pill text was at the top because the
+   * island row is the pane's only in-flow child; and the box appeared to slide *down* because its top
+   * edge moves down 37 px while its height loses 174 — with everything inside anchored to that top edge,
+   * the descent is what the eye follows.
    *
-   * The honest choreography is the other way round: **the island's line never moves**, and the card
-   * leaving the screen carries its own destination up onto it while it fades and the box closes. One
-   * thing moves, it moves exactly the distance between the two lines, and the eye follows the name it
-   * was already reading into the pill.
+   * What he asked for instead is simpler and better, and it needs no measurement at all:
    *
-   * Measured rather than derived. The arithmetic *is* available — a row height, two slots, two gaps, a
-   * padding — but it is six constants from three files agreeing, and the first one to change silently
-   * turns a hand-off into a jump. A layout effect runs after the collapse's commit and before its paint,
-   * with both lines in the tree, so the measurement is of the two boxes actually on screen.
+   *  · **the card's content stays exactly where it is** and fades out;
+   *  · **the pill's line is centred in the pane** — so as the box shrinks it sits in the middle of
+   *    whatever the box currently is, and the box closes *around* it;
+   *  · the two cross-fade, so the header is never showing nothing.
+   *
+   * The whole of it is `justify-center` on the pane while it is collapsing plus two fades. The box's
+   * centre travels from 118 to 68 on a 390 px phone and the line rides that — one movement, belonging to
+   * the box, rather than a second one belonging to the text. ADR-178's `--leave-shift` and the layout
+   * effect that measured it are gone.
    */
-  const [leaveShift, setLeaveShift] = useState(0)
-  useLayoutEffect(() => {
-    if (!leaving) return
-    const pane = card.current
-    if (pane === null) return
-    const from = pane.querySelector('[data-journey-destination]')?.getBoundingClientRect()
-    const to = pane.querySelector('[data-island-line]')?.getBoundingClientRect()
-    if (from === undefined || to === undefined) return
-    setLeaveShift(to.top + to.height / 2 - (from.top + from.height / 2))
-  }, [leaving])
-
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-20 flex justify-center"
@@ -215,7 +209,7 @@ export function RouteContextCard({
           ref={card}
           className={`card-morph glass-pane relative flex flex-col overflow-hidden border border-border ${
             collapsed
-              ? 'max-w-full items-center gap-0 rounded-pill px-3 py-2'
+              ? 'max-w-full items-center justify-center gap-0 rounded-pill px-3 py-2'
               : 'w-full gap-2 rounded-sheet px-2 pt-0 pb-2'
           }`}
           // **The top edge travels with the box.** The pane starts *above* the badge when the card is
@@ -236,7 +230,7 @@ export function RouteContextCard({
             // arrow and the chevron, gone, with the destination sitting flush to both edges. It read as a
             // marquee with no furniture rather than as a row that had overflowed, which is how it
             // survived a screenshot.
-            <div className="flex w-full min-w-0 items-center gap-1.5">
+            <div className="island-fade flex w-full min-w-0 items-center gap-1.5">
               {/* **An arrow, from the number to where it is going.** A badge beside a place name states
                   two facts and no relation between them, and the relation is the point of a route. Not
                   on a circular service, where an arrow to a destination you are also leaving from would
@@ -262,7 +256,6 @@ export function RouteContextCard({
               className={`flex w-full flex-col gap-2 ${
                 leaving ? 'card-leaving pointer-events-none absolute inset-x-0 top-0 px-2' : ''
               }`}
-              style={leaving ? { ['--leave-shift' as string]: `${leaveShift}px` } : undefined}
               aria-hidden={leaving ? 'true' : undefined}
               // `inert` as a boolean: React 19 types it, and an inert subtree is unfocusable and
               // untargetable — which is what "this is on its way out" should mean to a keyboard and to a

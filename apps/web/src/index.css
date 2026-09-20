@@ -393,33 +393,44 @@
   what removes it from view — *the other info being hidden as it collapses*, which is what the owner asked
   for twice and what a swap-then-resize could never produce.
 
-  **And it rises by exactly the distance between the two destinations** (`--leave-shift`, measured by the
-  card), so the name the rider was reading travels up and lands on the island's line rather than being
-  replaced by a copy of itself 50 px away. The island's line does not move at all — that was the mistake
-  in the two rounds before this one, and the owner's word for the second was *bouncing*.
-
-  **The curve is the entrance one, and the opacity is held back** — which is the opposite of the first
-  attempt and the reason it did not read. With an exit curve the content sat still for half the duration
-  and then rushed, while the fade ran on its own schedule: by the time the name moved it was already
-  faint, so the hand-off was invisible and all a rider saw was a card dissolving. Here the travel is
-  nearly done by 55 % while the name is still at 85 % opacity — it *visibly* goes to the island's line —
-  and the fade finishes in the last third, under the closing box.
+  **It does not move** (ADR-182). It used to rise by the measured distance to the island's line, on the
+  theory that the eye should follow the name into the pill; the owner watched it and asked the obvious
+  question — *"card content slides up, not sure why?! can't it just stay in place"* — and he is right. The
+  thing that moves is the **box**, and the island's line rides the box's centre; the content that is
+  leaving simply stays where it is and stops being there.
 */
 .card-leaving {
-  animation: card-leaving 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: card-leaving 260ms ease-out both;
 }
 
 @keyframes card-leaving {
   from {
     opacity: 1;
-    transform: translateY(0);
-  }
-  55% {
-    opacity: 0.85;
   }
   to {
     opacity: 0;
-    transform: translateY(var(--leave-shift, 0px));
+  }
+}
+
+/* The island's line, arriving in the middle of whatever the box currently is. A shade slower than the
+   content leaving and starting a shade later, so the two overlap rather than hand over — a header that
+   shows nothing for 60 ms reads as a flicker, which is the thing ADR-176 was about. */
+.island-fade {
+  animation: island-fade 300ms 60ms ease-out both;
+}
+
+@keyframes island-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .island-fade {
+    animation: none;
   }
 }
 
