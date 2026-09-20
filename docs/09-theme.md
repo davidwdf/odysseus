@@ -659,3 +659,34 @@ offset against the history key. So `SCROLL_OWNER` is its own declaration: `page`
 > owner. The two **moving** titles carry `unenforced` in their own rule, and a test asserts that they still
 > say so — so the day someone teaches a suite to see a collapse, the wording has to be updated with it.
 
+## 11. Waiting — a placeholder is the shape of what is coming
+
+A skeleton that is merely *grey and roughly the right size* still moves the layout when it is replaced,
+which is the defect it was drawn to prevent. So the rule, applied on every screen that waits:
+
+1. **Every bar is the line box of the thing it stands in for.** `text-h3` for a stop name is 24 px, so the
+   name bar is 24 px; `text-h2` for an arrival figure is 28 px, so the readout bar is 28 px. The one that
+   matters most is the **readout**, because it is what settles the right-hand column's x-position before any
+   number exists — the finding from Route detail's `arrivalsPending` (`docs/07`, the owner's list,
+   2026-08-12) and the reason `StopCardSkeleton` exists for Nearby and Favourites.
+2. **A placeholder is wordless and `aria-hidden`.** The conformance walker reads *presence*, not visibility,
+   so a labelled placeholder projects into every state that mounts before its data. What tells a screen
+   reader the screen is busy is the screen's own copy ("Locating…"), which is content and lives outside the
+   placeholder.
+3. **It is never drawn for an answer of "nothing".** *"No bus due"* and *"we have not asked yet"* are
+   different facts, and one placeholder for both is the conflation [ADR-073](./08-decision-log.md) spent a
+   wave separating and [ADR-124](./08-decision-log.md) fixed twice. Mount a skeleton in the `isPending` arm
+   only — **`isPending`, never `isLoading`**, which is the narrower claim that excludes a *parked* fetch and
+   is exactly when a rider waits longest.
+4. **Vary the widths down a column.** A stack of identical bars reads as a loading *graphic*; varied ones
+   read as the list that is coming.
+
+Rules 1 and 2 are enforced (`apps/web/test/stop-card-skeleton.test.tsx` holds the skeleton's box against
+`StopCard`'s own, and asserts it projects no text); the per-bar sizes in rule 1 are not, and the component
+says so. See the **`pending`** panel in `/lab/#gallery`, beside the card it stands in for.
+
+> 🟢 **Adding that panel found a rule in the gallery's own gate.** It asserted that a sample "drew
+> something", measured in projected text — right for every panel with words, wrong for a placeholder whose
+> contract is to have none. The fix was not an exemption: a sample now declares `wordless`, and the gate
+> asserts the *stronger* pair — elements on the page **and** no text. The alternative would have been to
+> make the wait announce itself in order to pass its own gallery panel, which is the defect it stands in for.

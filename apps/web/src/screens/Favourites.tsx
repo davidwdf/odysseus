@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { StopCard } from '../components/StopCard'
+import { StopCardSkeleton } from '../components/StopCardSkeleton'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useOnline } from '../hooks/useOnline'
 import { usePreferences } from '../lib/preferences'
@@ -117,10 +118,10 @@ export function Favourites() {
              one query per saved pole, a pole that has exhausted its retries must not answer for one that is
              still trying. Nothing to show and something still pending is a wait, and saying so is true. */
       loading ? (
-        <div className="px-4 py-4">
-          <div className="h-5 w-2/3 animate-pulse rounded-sm bg-surface-2" />
-          <div className="mt-3 h-6 w-full animate-pulse rounded-sm bg-surface-2" />
-        </div>
+        // One card's worth, not the list's: `loading` here means "no card has arrived yet", and a saved
+        // place carries the routes the rider picked at it — usually one or two, not a stop's full board.
+        // Standing in for more than arrives is the same jump in the other direction.
+        <StopCardSkeleton rows={2} />
       ) : failure ? (
         <p className="m-0 px-4 text-body text-danger">{(failure as Error).message}</p>
       ) : (

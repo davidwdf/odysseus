@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router'
 import { dataSource } from '../adapters/datasource'
 import { FeedNotice, feedNotice } from '../components/FeedNotice'
 import { StopCard } from '../components/StopCard'
+import { StopCardSkeleton } from '../components/StopCardSkeleton'
 import { useClientPolicy } from '../hooks/useClientPolicy'
 import { useLiveNearby } from '../hooks/useLiveNearby'
 import { useLocation } from '../hooks/useLocation'
@@ -154,11 +155,17 @@ export function Nearby() {
       loc.status === 'loading' || query.isPending ? (
         <div>
           <p className="m-0 px-4 pb-1 text-label text-muted">{t(locale, 'locating')}</p>
-          {[0, 1, 2].map((i) => (
-            <div key={i} className={`px-4 py-4 ${i === 0 ? '' : 'border-t border-border'}`}>
-              <div className="h-5 w-2/3 animate-pulse rounded-sm bg-surface-2" />
-              <div className="mt-2 h-3 w-24 animate-pulse rounded-sm bg-surface-2" />
-              <div className="mt-3 h-6 w-full animate-pulse rounded-sm bg-surface-2" />
+          {/* Card-shaped, and sized to the boxes the content will occupy — see `StopCardSkeleton`. The
+              three bars this replaces were the right idea at arbitrary sizes, so the list still jumped
+              when the real cards landed; the readout box is the one that settles the right-hand column.
+              The divider is the list's own, so the skeleton has the same rhythm as what follows it. */}
+          {[3, 2, 3].map((rows, i) => (
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: placeholders have no identity to key on.
+              key={i}
+              className={i === 0 ? '' : 'border-t border-border'}
+            >
+              <StopCardSkeleton rows={rows} />
             </div>
           ))}
         </div>
