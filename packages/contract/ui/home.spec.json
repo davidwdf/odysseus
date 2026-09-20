@@ -1,0 +1,815 @@
+{
+  "component": "Home",
+  "version": 1,
+  "doc": "The rider’s board: what they can still catch, what they saved, and what is around them.",
+  "viewModel": {
+    "module": "home",
+    "type": "HomeSections",
+    "corpus": "home.spec.json",
+    "group": "homeView"
+  },
+  "slots": [
+    {
+      "name": "title",
+      "invariant": "Present in every state, including the empty one. A screen that has lost its heading has lost the rider’s place in the app.",
+      "text": {
+        "message": "homeTitle"
+      }
+    }
+  ],
+  "states": {
+    "content": {
+      "must": "The saved section and the nearby section, each under its own heading, each card carrying its saved rows and then its chip strip.",
+      "mustNot": "A reordering of its own, or a section drawn without its heading — the order is `homeView`’s, and an unexplained rank is one the rider has to reverse-engineer.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "savedHeading",
+            "text": {
+              "message": "homeSaved"
+            }
+          },
+          {
+            "name": "savedCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "saved",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "aroundHeading",
+            "text": {
+              "message": "homeAround"
+            }
+          },
+          {
+            "name": "nearbyCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "nearby",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "catchable": {
+      "must": "A \"Catch it\" section, leading the board, with the saved places that have something still makeable in them.",
+      "mustNot": "A number for how long the rider has. The band is `arrival − walk`, both inputs are approximations (ADR-008), and printing the difference claims a precision neither has — so a tight one says \"leave now\" and a comfortable one says nothing at all.",
+      "why": "The reason Home is worth building rather than a tidier Nearby: the rider’s own routes, filtered to the ones they can still get to. A bus they can no longer make is NOT in this section — they are never shown a bus they were told they would catch.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "catchHeading",
+            "text": {
+              "message": "homeCatchIt"
+            }
+          },
+          {
+            "name": "catchCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "catch",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "noSaved": {
+      "must": "The nearby section, and one line saying what saving a route does.",
+      "mustNot": "An onboarding screen, or a heading with nothing under it. The rider is standing next to six stops; the screen has plenty to show and one thing to explain.",
+      "why": "Favourites’ `empty` was an apology on a tab that had nothing else. Here it is a sentence under a full board — which is the merge doing its job, and the reason this spec is shorter than the two it replaces.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "aroundHeading",
+            "text": {
+              "message": "homeAround"
+            }
+          },
+          {
+            "name": "nearbyCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "nearby",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "invitation",
+            "invariant": "Under the list, not above it. It is a footnote about what this screen could become, and a rider who has just opened the app wants the stops first — a sentence between the heading and the board would interrupt the one thing they came for.",
+            "text": {
+              "message": "homeNothingSavedYet"
+            }
+          }
+        ]
+      }
+    },
+    "noPosition": {
+      "must": "The saved section in full, and a line saying what turning on location would add — with the control that asks.",
+      "mustNot": "A permission prompt occupying the screen, a nearby section, or any `Catch it` row. Without a fix there is no walk estimate, and a catchability band computed from a position we do not have is exactly the false claim the band exists to avoid.",
+      "why": "The rider checking a stop they are deliberately NOT at — before leaving the office. Nothing is wrong: the screen simply cannot rank by distance, and says so once.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "noPositionNote",
+            "text": {
+              "message": "homeNoPosition"
+            }
+          },
+          {
+            "name": "enableLocation",
+            "text": {
+              "message": "enableLocation"
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "savedHeading",
+            "text": {
+              "message": "homeSaved"
+            }
+          },
+          {
+            "name": "savedCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "saved",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "denied": {
+      "must": "That location is off, what that costs, and a way to try again — above whatever the rider has saved.",
+      "mustNot": "Telling the rider they refused something they did not. A timeout is not an answer, and the web port reports `canAskAgain: false` regardless, so the copy has to stand on its own.",
+      "why": "Distinct from `noPosition`: we asked and were told no, so the control means \"try again\" rather than \"turn it on\". The saved list is unaffected either way, which is the difference this board makes.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "deniedTitle",
+            "text": {
+              "message": "locationDenied"
+            }
+          },
+          {
+            "name": "deniedHelp",
+            "text": {
+              "message": "locationDeniedHelp"
+            }
+          },
+          {
+            "name": "retry",
+            "text": {
+              "message": "retry"
+            }
+          }
+        ]
+      }
+    },
+    "cold": {
+      "must": "What the app wants location for, and the control that asks for it.",
+      "mustNot": "An empty list, a prompt fired without the rider having asked for one, or a saved section with nothing in it.",
+      "why": "The first thing every new rider sees. Six of the seventeen states the two old specs declared collapse into this one, because five of them were a screen describing its ignorance of the other half and this is the case where there genuinely is no other half.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "primeTitle",
+            "text": {
+              "message": "nearbyPrimeTitle"
+            }
+          },
+          {
+            "name": "primeBody",
+            "text": {
+              "message": "nearbyPrimeBody"
+            }
+          },
+          {
+            "name": "enableLocation",
+            "text": {
+              "message": "enableLocation"
+            }
+          }
+        ]
+      }
+    },
+    "empty": {
+      "must": "An explicit \"no service\" line.",
+      "mustNot": "A heading with nothing under it, which cannot be told from a screen that failed to load.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "noService",
+            "text": {
+              "message": "noService"
+            }
+          }
+        ]
+      }
+    },
+    "loading": {
+      "must": "The word \"locating\", and a skeleton in the shape of the cards beneath it.",
+      "mustNot": "A blank screen, or a spinner with no indication of what is being waited for. Nor a skeleton once a card has arrived: a saved place that has answered is drawn immediately rather than held for its siblings.",
+      "why": "Two waits share this state — the fix and the first fetch — and a rider cannot tell them apart, so neither can the copy. **`isPending`, never `isLoading`** (ADR-124): the narrower claim excludes a *parked* fetch, which is exactly when a rider waits longest.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "locating",
+            "text": {
+              "message": "locating"
+            }
+          }
+        ]
+      }
+    },
+    "failed": {
+      "must": "The reason the board could not be fetched, verbatim.",
+      "mustNot": "An empty list, or a silent absence — the two states ADR-073 spent a wave separating. Nor the reason in place of cards that DID arrive: a refresh that failed is a board we could not update, not a board we do not have.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "fetchError",
+            "invariant": "The error’s own message, not a catalogue string: it names which request failed, and inventing a friendlier sentence would discard the only diagnostic a rider could read out.",
+            "text": {
+              "field": "error"
+            }
+          }
+        ]
+      }
+    },
+    "stale": {
+      "must": "The board, under a line saying the position is the last known one.",
+      "mustNot": "A remembered position presented as a current one.",
+      "why": "ADR-008’s honesty rule applies to the rider’s *position*, not only to the arrival times — and on this screen it also governs the ranking, because \"saved outranks near\" is measured from that position.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "staleNote",
+            "text": {
+              "message": "lastKnownLocation"
+            }
+          },
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "savedHeading",
+            "text": {
+              "message": "homeSaved"
+            }
+          },
+          {
+            "name": "savedCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "saved",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "aroundHeading",
+            "text": {
+              "message": "homeAround"
+            }
+          },
+          {
+            "name": "nearbyCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "nearby",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "offline": {
+      "must": "The last known board, on the remembered position, under the line that says the rider’s own network is gone.",
+      "mustNot": "A blank list, a fresh-looking arrival time, or the same sentence as `stale` — a rider whose network is down can act on that, and one whose fix is old cannot.",
+      "enforcement": {
+        "shows": [
+          {
+            "name": "feedNotice",
+            "invariant": "Once per screen, above the readings, in the muted text token and **never a warning colour** — nothing is wrong with the rider’s stop, and an alarm that fires when their train goes into a tunnel is one they learn to ignore before the day it matters (ADR-122). It is rendered inside the arm that has content to show: when the whole screen *is* a failure, the failure’s own message is the sentence, and a second line above it would be the same fact twice.",
+            "oneOf": "notice.kind",
+            "cases": {
+              "none": [],
+              "lastUpdated": [
+                {
+                  "name": "feedLastUpdated",
+                  "invariant": "An **absolute** time, from the corpus-pinned `formatClock`. ADR-008 prefers it to a fabricated relative one: *\"2 minutes ago\"* ages while nothing re-renders, which is the same dishonesty as a client-side countdown, and it is the reading’s own operator clock (`dataTimestamp`) rather than when we fetched it.",
+                  "text": {
+                    "message": "feedLastUpdated",
+                    "args": {
+                      "time": "notice.at"
+                    }
+                  }
+                }
+              ],
+              "offline": [
+                {
+                  "name": "feedOffline",
+                  "invariant": "Said only where the platform reports **no network**, which is evidence; a platform that reports a network merely has no evidence against one — `true` is `true` behind a captive portal, the ordinary MTR-station case — and the `unreachable` arm is what covers that.",
+                  "text": {
+                    "message": "feedOffline"
+                  }
+                }
+              ],
+              "unreachable": [
+                {
+                  "name": "feedUnreachable",
+                  "invariant": "A failure that reached **us**: our own edge answered and said no, or the request never arrived. It is not an upstream board’s refusal, which the rows and cards say for themselves.",
+                  "text": {
+                    "message": "feedUnreachable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "savedHeading",
+            "text": {
+              "message": "homeSaved"
+            }
+          },
+          {
+            "name": "savedCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "saved",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "aroundHeading",
+            "text": {
+              "message": "homeAround"
+            }
+          },
+          {
+            "name": "nearbyCards",
+            "invariant": "One StopRow per place, in the kernel’s order, each followed by that place’s chip strip. A place appears in exactly one section — `homeView` makes the three exclusive, and a card drawn twice is a rider wondering what the difference is.",
+            "each": "nearby",
+            "of": [
+              {
+                "name": "card",
+                "component": "StopRow"
+              },
+              {
+                "name": "lines",
+                "invariant": "Exactly the chips the card draws — `homeView` caps them at `HOME_CHIPS_COLLAPSED`, which is what lets this slot be `each` and therefore checkable. The cap lives in the kernel for `stopCardView`’s reason: \"show the first N and count the rest\" is arithmetic over rows, and a renderer doing it would be a second declaration of the number.",
+                "each": "chips",
+                "of": [
+                  {
+                    "name": "lineNo",
+                    "text": {
+                      "field": "routeNo"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "moreLines",
+                "when": "chipsMore",
+                "why": "Nothing hidden means no badge. On a board served by `/v1/board` this is what the cap held back; on one served by `/v1/nearby` it also carries the lines the wire never sent (ADR-179).",
+                "text": {
+                  "message": "homeMoreLines",
+                  "args": {
+                    "n": "chipsMore"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "interactions": [
+    {
+      "target": "savedCards",
+      "goes": "StopRow’s own targets — place detail from a card’s heading, and the route from a row. A chip in the strip beneath goes to the same place a saved row does, which is why the strip is a new *source* of this navigation rather than a new destination.",
+      "note": "Declared once, in `StopRow`’s spec. A screen that named the same destinations again would be a second declaration of them."
+    }
+  ],
+  "a11y": {
+    "role": "list of sections, each a list of places",
+    "name": {
+      "fromSlot": "title"
+    },
+    "reducedMotion": "Nothing moves on this screen except the strip’s expansion, which is a height change and is instant under reduced motion. The board itself re-renders when a round lands and never animates between orders — a card sliding to a new rank would be the screen drawing attention to an approximation (ADR-008)."
+  },
+  "idiom": [
+    "how a refresh is offered — pull-to-refresh on the platform with a natural gesture for it, nothing on the web: the arrivals arrive by subscription at the served cadence, so a manual refresh is reassurance rather than how a rider gets fresh data",
+    "whether the collapsed chip strip is one line or two — a measurement of the viewport, not a rule about the data",
+    "material and elevation of the list surface, and the divider between cards",
+    "the skeleton’s shape and whether it shimmers",
+    "how the section headings stick, or whether they stick at all"
+  ]
+}

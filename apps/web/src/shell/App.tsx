@@ -7,8 +7,8 @@ import { LocaleProvider } from '../providers/LocaleProvider'
 import { QueryProvider } from '../providers/QueryProvider'
 import { AboutData } from '../screens/AboutData'
 import { Faq } from '../screens/Faq'
-import { Favourites } from '../screens/Favourites'
-import { Nearby } from '../screens/Nearby'
+import { Home } from '../screens/Home'
+
 import { PlaceDetail } from '../screens/PlaceDetail'
 import { RouteDetail } from '../screens/RouteDetail'
 import { Search } from '../screens/Search'
@@ -17,7 +17,8 @@ import {
   ABOUT_PATH,
   type Destination,
   FAQ_PATH,
-  FAVOURITES_PATH,
+  FAVOURITES_REDIRECT,
+  HOME_PATH,
   NEARBY_PATH,
   PLACE_PATH,
   PUSHED,
@@ -27,7 +28,7 @@ import {
   TABS,
 } from './destinations'
 import { CONTENT_INSET } from './layout'
-import { TabBar } from './TabBar'
+import { ShellChrome } from './ShellChrome'
 
 /**
  * The `apps/web` shell (WP6-0): a router over the declared destination set, the persisted query cache,
@@ -99,6 +100,13 @@ export const routes = [
         element: screenFor(pushed),
         handle: pushed,
       })),
+      /*
+        **The address of a screen that no longer exists** (ADR-181). `/favorites` was a tab; its content
+        is a section of Home now. The path stays because a rider may have bookmarked or installed to it,
+        and a URL a rider kept is a URL that must keep working — the same rule ADR-127 applies to an ADR
+        number, one layer out. `replace`, so Back does not bounce off the forwarding address.
+      */
+      { path: FAVOURITES_REDIRECT, element: <Navigate to={HOME_PATH} replace /> },
       /*
         An unknown path goes to Nearby rather than to a "not found" page, and that is a content decision
         rather than a lazy one: every string in this app comes from `@nextbus/i18n` (CLAUDE.md rule 5), the
@@ -173,13 +181,22 @@ function NavigationMoment() {
 }
 
 /** The tab group: the tab bar, plus the room every screen inside it must leave for the bar. */
+/**
+ * The layout a **root** destination renders inside — one screen, since ADR-181 retired the tab bar.
+ *
+ * It keeps its name and its shape. The bar is gone but the two things this wrapper exists for are not:
+ * a root screen still has to leave the bottom edge clear (the search lens floats there, at exactly the
+ * geometry the bar's own lens used) and it still has no back control, which is what distinguishes it
+ * from every path in `PUSHED`. Collapsing it into the root route would erase that distinction from the
+ * table and put it back in each screen's head.
+ */
 function TabsLayout() {
   return (
     <>
       <div style={{ paddingBottom: CONTENT_INSET }}>
         <Outlet />
       </div>
-      <TabBar />
+      <ShellChrome />
     </>
   )
 }
@@ -199,10 +216,8 @@ function TabsLayout() {
  */
 function screenFor(destination: Destination): ReactNode {
   switch (destination.path) {
-    case NEARBY_PATH:
-      return <Nearby />
-    case FAVOURITES_PATH:
-      return <Favourites />
+    case HOME_PATH:
+      return <Home />
     case SETTINGS_PATH:
       return <Settings />
     case SEARCH.path:

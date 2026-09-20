@@ -5,6 +5,7 @@ import { ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { usePreferences } from '../lib/preferences'
 import { useLocale, useLocaleOverride, useSetLocale } from '../providers/LocaleProvider'
+import { BackButton } from '../shell/BackButton'
 import { ABOUT_PATH, FAQ_PATH } from '../shell/destinations'
 
 /**
@@ -44,8 +45,15 @@ export function Settings() {
 
   return (
     <main className="min-h-dvh bg-bg">
-      <header className="px-4 pb-3 pt-2">
-        <h1 className="m-0 text-h1 text-text">{t(locale, 'tabSettings')}</h1>
+      {/* Settings stopped being a tab when the bar retired (ADR-181): it is pushed from a lens now, so it
+          owes the rider a way back — and on an installed PWA there is no browser chrome to fall back on.
+          `header-taxonomy.test.tsx` caught the omission the moment the destination moved, which is the
+          whole reason that taxonomy is data. */}
+      <BackButton />
+      <header className="pushed-header flex items-center px-4 pb-1">
+        <h1 className="m-0 min-w-0 flex-1 text-h2 font-bold text-text">
+          {t(locale, 'tabSettings')}
+        </h1>
       </header>
 
       <Section title={t(locale, 'settingsLanguage')}>

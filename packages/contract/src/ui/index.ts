@@ -2,6 +2,7 @@ import type { ComponentSpec } from '@nextbus/ui-spec'
 import { ABOUT_DATA_SPEC } from './about-data'
 import { FAQ_SPEC } from './faq'
 import { FAVOURITES_SPEC } from './favourites'
+import { HOME_SPEC } from './home'
 import { NEARBY_SPEC } from './nearby'
 import { PLACE_DETAIL_SPEC } from './place-detail'
 import { PLACE_ROW_SPEC } from './place-row'
@@ -24,6 +25,7 @@ export const UI_SPECS: Record<string, ComponentSpec> = {
   'about-data': ABOUT_DATA_SPEC,
   faq: FAQ_SPEC,
   favourites: FAVOURITES_SPEC,
+  home: HOME_SPEC,
   nearby: NEARBY_SPEC,
   'place-detail': PLACE_DETAIL_SPEC,
   'place-row': PLACE_ROW_SPEC,

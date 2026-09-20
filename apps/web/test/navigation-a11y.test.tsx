@@ -226,25 +226,33 @@ describe('a navigation is announced, and focus goes with it', () => {
     expect(screen().getAttribute('tabindex')).toBe('-1')
   })
 
-  it('leaves focus on a tab, because a tab row is supposed to keep it', () => {
+  it('hands focus to the screen when the control that opened it unmounts', () => {
+    // **This replaces a tab-row assertion, and the swap is the finding.** The old test pinned "a control
+    // that persists across the navigation keeps focus" — true of a tab in a bar that stays mounted, and
+    // no longer reachable: ADR-181's lenses render inside `TabsLayout`, so opening a pushed destination
+    // unmounts the very control that was pressed. Focus falls to `<body>` and the navigation moment
+    // claims it, which is the same path the About row takes and the correct one.
+    //
+    // What still pins the *guard* — the moment moves focus only when nothing already holds it — is
+    // Search, below: its field autofocuses and must not be stolen from. That case is now the only one,
+    // which is worth knowing before anyone edits `focusScreen`.
     mount('/')
-    const tab = container.querySelector<HTMLAnchorElement>('nav a[href="/favorites"]')
-    if (!tab) throw new Error('no favourites tab')
-    press(tab)
-    expect(router.state.location.pathname).toBe('/favorites')
-    expect(document.activeElement).toBe(tab)
-    // …and the rider is still told where they are, which is what the live region is for.
-    expect(announcement()).toBe(t('en', 'tabFavorites'))
+    const lens = container.querySelector<HTMLAnchorElement>('a[href="/settings"]')
+    if (!lens) throw new Error('no settings lens')
+    press(lens)
+    expect(router.state.location.pathname).toBe('/settings')
+    expect(document.activeElement).toBe(screen())
+    expect(announcement()).toBe(t('en', 'tabSettings'))
   })
 
   it('lets Search keep the keyboard it autofocuses', () => {
     // **The pin on the one condition that makes the focus move safe**, and the reason it is a condition
     // rather than a declaration order. The first version of this test claimed the order was what saved the
     // field; swapping `<NavigationMoment/>` across `<Outlet/>` left it green, and deleting the "something
-    // already holds focus" test in `focusScreen` turned it and the tab case red together. So the guard is
+    // already holds focus" test in `focusScreen` turned it and the lens case above red together. So the guard is
     // the mechanism, and this is what would warn anyone before a rider tapped the lens and got no keyboard.
     mount('/')
-    const lens = container.querySelector<HTMLAnchorElement>('nav a[href="/search"]')
+    const lens = container.querySelector<HTMLAnchorElement>('a[href="/search"]')
     if (!lens) throw new Error('no search launcher')
     press(lens)
     expect(router.state.location.pathname).toBe('/search')

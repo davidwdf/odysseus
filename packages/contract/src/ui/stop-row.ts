@@ -96,6 +96,29 @@ export const STOP_ROW_SPEC: ComponentSpec = {
           why: 'Absent when the remark is already standing in as the headline, so the same words never appear twice in one row.',
         },
         {
+          /**
+           * The catchability marker (ADR-177) — on Home, and only on the band that earns it.
+           *
+           * **A `oneOf` rather than a `when`, and the difference is the whole point.** `catch` has two
+           * values and only one of them is drawn: a marker on every catchable row is a marker that says
+           * nothing, so `comfortable` is deliberately silent. `when` is a truthiness path with no way to
+           * say *which* value, so a `when: 'catch'` slot fired on both and failed against a correct
+           * screen — the first draft did exactly that. The discriminant says it exactly, and a third band
+           * added to the kernel becomes a **failure** here rather than a silently ignored variant.
+           *
+           * Twice conditional: `homeView` alone sets `catch`, so on every other screen this projects
+           * nothing at all.
+           */
+          name: 'catchBand',
+          when: 'catch',
+          why: 'Absent on every screen but Home, and on Home absent unless a walk could be measured against a live figure — a bus that can no longer be made carries no band, so a rider is never shown one they were told they would catch.',
+          oneOf: 'catch',
+          cases: {
+            tight: [{ name: 'leaveNow', text: { message: 'homeLeaveNow' } }],
+            comfortable: [],
+          },
+        },
+        {
           name: 'eta',
           oneOf: 'label.kind',
           cases: {

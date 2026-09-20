@@ -7,6 +7,7 @@
 import aboutData from '@nextbus/contract/ui/about-data.spec.json'
 import faq from '@nextbus/contract/ui/faq.spec.json'
 import favourites from '@nextbus/contract/ui/favourites.spec.json'
+import home from '@nextbus/contract/ui/home.spec.json'
 import nearby from '@nextbus/contract/ui/nearby.spec.json'
 import placeDetail from '@nextbus/contract/ui/place-detail.spec.json'
 import placeRow from '@nextbus/contract/ui/place-row.spec.json'
@@ -30,6 +31,7 @@ const specs = [
   placeDetail,
   routeDetail,
   favourites,
+  home,
   search,
   settings,
   aboutData,

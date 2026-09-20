@@ -19,7 +19,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PREFERENCES_STORAGE_KEY, usePreferences } from '../src/lib/preferences'
 import { App } from '../src/shell/App'
-import { DESTINATIONS, PUSHED, TABS } from '../src/shell/destinations'
+import { DESTINATIONS, PUSHED } from '../src/shell/destinations'
 
 /** Every text node in the tree, trimmed, empties dropped — the same projection the WP4-1 suite uses. */
 function renderedText(container: HTMLElement): string[] {
@@ -142,8 +142,10 @@ afterEach(() => {
 
 describe('every declared destination opens, and none of them is blank', () => {
   it('has destinations at all', () => {
-    // The anti-vacuous control: an empty table would make the loop below assert nothing.
-    expect(DESTINATIONS.length).toBeGreaterThanOrEqual(8)
+    // The anti-vacuous control: an empty table would make the loop below assert nothing. Seven since
+    // ADR-181 — Nearby and Favourites merged into one Home, and Settings moved from a tab to a pushed
+    // destination without leaving the set.
+    expect(DESTINATIONS.length).toBeGreaterThanOrEqual(7)
   })
 
   for (const destination of DESTINATIONS) {
@@ -198,38 +200,50 @@ describe('every declared destination opens, and none of them is blank', () => {
   })
 })
 
-describe('the tab bar is on the tabs and nowhere else (ADR-037)', () => {
-  it('names all three tabs, and marks the current one', () => {
-    mount('/settings')
-    const nav = container.querySelector('nav')
-    expect(nav).not.toBeNull()
-    for (const tab of TABS) expect(nav?.textContent).toContain(t('en', tab.titleKey))
-    expect(nav?.querySelector('[aria-current="page"]')?.textContent).toContain(
-      t('en', 'tabSettings'),
-    )
-  })
+describe('the shell chrome, now that the tab bar has gone (ADR-181)', () => {
+  // The bar retired because its destinations dissolved, not because the chrome was disliked — so what
+  // these assert is that the two lenses it left behind still do the three jobs the bar did: reach Search,
+  // reach Settings, and stay off a screen that has its own back control.
 
-  it('offers search as a launcher rather than as a fourth tab', () => {
+  it('offers search and settings as lenses on the root, named for a screen reader', () => {
     mount('/')
-    const nav = container.querySelector('nav')
-    expect(nav?.querySelector('a[href="/search"]')?.getAttribute('aria-label')).toBe(
-      t('en', 'tabSearch'),
-    )
-    // The three tabs print their names; the launcher does not, so a fourth *label* would mean a fourth tab.
-    expect(nav?.textContent).not.toContain(t('en', 'tabSearch'))
+    // Icon-only by the owner's call ("search is a well known icon"), so the name is an attribute rather
+    // than a text node — which is the better assertion anyway: it is what a screen reader is offered.
+    const search = container.querySelector('a[href="/search"]')
+    expect(search?.getAttribute('aria-label')).toBe(t('en', 'tabSearch'))
+    const settings = container.querySelector('a[href="/settings"]')
+    expect(settings?.getAttribute('aria-label')).toBe(t('en', 'tabSettings'))
+    // Neither prints its name. A labelled control here would be a tab by another name.
+    expect(renderedText(container)).not.toContain(t('en', 'tabSearch'))
   })
 
-  it('has no tab bar on a pushed destination, and gives it a way back instead', () => {
+  it('marks neither lens as current — they are places you come back from, not peers', () => {
+    // `aria-current="page"` is what a tab row says about the one you are in. A lens is a destination you
+    // leave and return from, and claiming otherwise would tell a screen-reader rider they are somewhere
+    // they are not.
+    mount('/')
+    expect(container.querySelector('[aria-current="page"]')).toBeNull()
+  })
+
+  it('keeps the lenses off a pushed destination, and gives it a way back instead', () => {
     for (const destination of PUSHED) {
       remount(destination.path.replace(':id', 'KMB%3AAA'))
-      expect(container.querySelector('nav')).toBeNull()
-      // The **accessible name**, not the rendered word. The back control is a floating icon-only lens now,
-      // matching `apps/mobile`'s, so "Back" is an attribute rather than a text node — and reading the name
-      // is the better assertion anyway: it is what a screen reader is offered rather than what a sighted
-      // rider happens to see. Every conformance driver already discarded the word as chrome noise.
+      expect(
+        container.querySelector('a[href="/search"]'),
+        `${destination.path} floats a search lens over a screen that has its own chrome`,
+      ).toBeNull()
+      // The **accessible name**, not the rendered word. The back control is a floating icon-only lens,
+      // matching `apps/mobile`'s, so "Back" is an attribute rather than a text node.
       const back = container.querySelector(`button[aria-label="${t('en', 'back')}"]`)
       expect(back, `${destination.path} offers no way back`).not.toBeNull()
     }
+  })
+
+  it('forwards `/favorites` to Home rather than 404ing on it', () => {
+    // A URL a rider bookmarked or installed to. The tab is gone and its content is a section of Home;
+    // the address outlives the screen (ADR-181), which is ADR-127's rule one layer out.
+    remount('/favorites')
+    expect(renderedText(container)).toContain(t('en', 'homeTitle'))
   })
 
   it('keeps the back control out of the document flow, so scrolling cannot take it away', () => {
@@ -238,10 +252,7 @@ describe('the tab bar is on the tabs and nowhere else (ADR-037)', () => {
     //
     // **Asserted as the class rather than as the computed style, and that is a real limit worth naming.**
     // jsdom parses no stylesheet, so `getComputedStyle(el).position` is `''` here for every element on
-    // every screen — a computed-style assertion would have been the vacuous kind this repo audits for. What
-    // this can honestly check is that the control is a direct child of the screen root carrying `fixed`
-    // rather than a descendant of a `<header>`; that it actually stays put is a browser claim, and it was
-    // measured in one.
+    // every screen — a computed-style assertion would have been the vacuous kind this repo audits for.
     remount('/faq')
     const back = container.querySelector('button[aria-label]')
     if (!back) throw new Error('no back control')

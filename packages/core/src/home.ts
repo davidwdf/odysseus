@@ -3,9 +3,9 @@ import { haversineMeters, walkMinutes } from './geo'
 import { parseRouteId } from './ids'
 import {
   displayName,
-  type StopCardName,
   type StopCardOptions,
   type StopCardRow,
+  type StopCardView,
   stopCardCaption,
 } from './stop-card'
 import type { BoardPlace, LatLng, OperatorId, StopDetail } from './types'
@@ -68,37 +68,30 @@ export interface HomeChip {
 }
 
 /**
- * How comfortably a saved route can still be caught: the arrival, minus the walk.
+ * One place on Home — **a `StopCardView`, plus the strip**.
  *
- * **Three bands and no derived number**, which is the whole of the honesty argument. A walk estimate is
- * straight-line over a snapped position and an arrival is an approximation by ADR-008's own insistence;
- * subtracting one from the other compounds two errors, so printing the difference would claim a precision
- * neither input has. A band degrades to *ordering* instead: `comfortable` says nothing at all, `tight`
- * earns a marker, and a route the rider can no longer make has **no band and does not enter the section**
- * — they never see a bus they were told they would catch.
+ * Extending rather than restating is what lets one component draw it: `StopCard` already renders a
+ * heading, a caption and a list of rows against `stop-row.spec.json`, and `home.spec.json` declares each
+ * of its cards to *be* a `StopRow`. A parallel card type would have made that claim a comment.
  *
- * A pole with no walk estimate — no fix, or a place with no distance — has no band either. Absence of the
- * section is honest; a "catch it" computed from a position we do not have is not.
+ * `rows` is the rider's saved routes here, soonest first — empty on a place they have saved nothing at —
+ * and `remaining` is therefore always **0**: nothing is hidden among the rows, because the rows are the
+ * rider's own choices and Home does not cap those. What is not a saved row is in `chips`.
  */
-export type CatchBand = 'comfortable' | 'tight'
-
-/** A saved row on Home, which is `StopCardRow` plus whether it can still be caught. */
-export interface HomeRow extends StopCardRow {
-  /** Absent when there is no walk estimate, or when the bus cannot be made. */
-  catch?: CatchBand
-}
-
-/** One place on Home. */
-export interface HomeCard {
-  stopId: string
-  name: StopCardName
-  /** Direction · distance · walk, exactly as every other card in the app spells it. */
-  caption: string
-  bearingDeg?: number
-  /** The rider's saved routes here, soonest first. Empty on a place they have saved nothing at. */
-  saved: HomeRow[]
-  /** Every **other** route at this place, in the wire's order, with no readings. */
+export interface HomeCard extends StopCardView {
+  rows: StopCardRow[]
+  /**
+   * The other routes at this place that the card **draws**, in the wire's order, with no readings —
+   * capped at {@link HOME_CHIPS_COLLAPSED}.
+   *
+   * Capped here rather than in the view, and for `stopCardView`'s reason: *"show the first N and count
+   * the rest"* is arithmetic over rows, and a renderer that did it would be a second declaration of the
+   * number. It also makes the published spec exact — a slot can say *these chips* and be checked,
+   * where "the first six of these" is not something the conformance format can express.
+   */
   chips: HomeChip[]
+  /** The rest of them, for the strip's expansion. Empty when nothing is hidden. */
+  moreChips: HomeChip[]
   /**
    * Routes at this place beyond `chips` — the honest remainder, never a silent filter.
    *
@@ -110,8 +103,6 @@ export interface HomeCard {
    * have one name on this wire rather than sometimes being a length.
    */
   chipsMore: number
-  /** True when a boarding point of this place would not answer (ADR-077). */
-  incomplete: boolean
 }
 
 /** The three sections, in board order. Each may be empty; all three empty is a screen with no data. */
@@ -195,8 +186,8 @@ export function homeView(input: HomeInput, opts: StopCardOptions): HomeSections 
   // **Exclusive, and the split is by the card rather than by the row.** A place with one catchable route
   // and two that have already gone is still a place worth walking to, so the whole card moves up and each
   // row says for itself whether it can be made.
-  const catchCards = savedCards.filter((c) => c.saved.some((r) => r.catch !== undefined))
-  const rest = savedCards.filter((c) => !c.saved.some((r) => r.catch !== undefined))
+  const catchCards = savedCards.filter((c) => c.rows.some((r) => r.catch !== undefined))
+  const rest = savedCards.filter((c) => !c.rows.some((r) => r.catch !== undefined))
 
   return {
     catch: [...catchCards].sort(compareBySoonest),
@@ -225,16 +216,21 @@ function savedCard(
     name: displayName(detail.stop.name[opts.locale]),
     caption: stopCardCaption(distanceM, detail.stop.bearingDeg, opts.locale),
     ...(detail.stop.bearingDeg === undefined ? {} : { bearingDeg: detail.stop.bearingDeg }),
-    saved: rows.map((row) => withCatch(row, walk)),
+    rows: rows.map((row) => withCatch(row, walk)),
+    // Always zero: the rows are the rider's own choices at this place and Home does not cap those.
+    // Everything that is not a saved row is a chip, and `chipsMore` is that half's honest remainder.
+    remaining: 0,
     // Everything at the place that is not already a row above it. De-duplicated by route id, because a
     // line boarding at two kerbs is two entries in `routes` and one badge in a strip that carries no
     // kerb — the same collapse `stopCardView` makes for a card with no per-kerb heading.
-    chips: chipsOf(
-      detail.routes.map((r) => ({ routeId: r.route.id, operator: r.route.operator })),
-      savedIds,
+    ...split(
+      chipsOf(
+        detail.routes.map((r) => ({ routeId: r.route.id, operator: r.route.operator })),
+        savedIds,
+      ),
+      // The strip is complete here: `StopDetail.routes` is every line at every kerb.
+      0,
     ),
-    // The strip is complete here: `StopDetail.routes` is every line at every kerb.
-    chipsMore: 0,
     incomplete: (detail.failed ?? []).length > 0,
   }
 }
@@ -250,22 +246,37 @@ function savedCard(
  * to it, and why a client still on the old one degrades rather than breaks.
  */
 function nearbyCard(n: BoardPlace, opts: StopCardOptions): HomeCard {
-  const chips = chipsOf(n.lines ?? n.etas, NOTHING_EXCLUDED)
+  const all = chipsOf(n.lines ?? n.etas, NOTHING_EXCLUDED)
   return {
     stopId: n.stop.id,
     name: displayName(n.stop.name[opts.locale]),
     caption: stopCardCaption(n.distanceM, n.stop.bearingDeg, opts.locale),
     ...(n.stop.bearingDeg === undefined ? {} : { bearingDeg: n.stop.bearingDeg }),
-    saved: [],
-    chips,
-    // **The honest remainder**, in the same unit on both sides of the subtraction: `routeCount` counts
-    // rider lines and so does `chips`, so a line boarding at two kerbs cannot make this understate what
-    // is hidden — the trap `stopCardView`'s own note records. Floored at zero rather than trusted: a
-    // stale static index can publish a count below what the live board answers with, and a negative
-    // remainder would render as a badge promising routes that do not exist.
-    chipsMore: Math.max(0, n.routeCount - chips.length),
+    rows: [],
+    remaining: 0,
+    ...split(all, Math.max(0, n.routeCount - all.length)),
     incomplete: (n.failed ?? []).length > 0,
   }
+}
+
+/**
+ * Split a place's line-up into what the card draws and what its badge stands for.
+ *
+ * `unknown` is what the **wire** could not give — `/v1/nearby` sends a count and not a list, so its
+ * remainder is real and a tap on the place is the only way to see it. It is added to what the cap hid,
+ * because a rider cannot act on the difference and two badges reading "+6" and "+20" beside each other
+ * is arithmetic asked of the wrong person.
+ *
+ * Both sides of that sum are **rider lines**, which is the trap `stopCardView`'s own note records:
+ * `routeCount` counts `operator|route|bound` once however many kerbs a line boards at, so counting
+ * per-pole readings against it would understate what is hidden. Floored at zero rather than trusted — a
+ * stale static index can publish a count below what the live board answers with, and a negative
+ * remainder would render as a badge promising routes that do not exist.
+ */
+function split(all: HomeChip[], unknown: number) {
+  const chips = all.slice(0, HOME_CHIPS_COLLAPSED)
+  const moreChips = all.slice(HOME_CHIPS_COLLAPSED)
+  return { chips, moreChips, chipsMore: moreChips.length + Math.max(0, unknown) }
 }
 
 /** A discovery card excludes nothing: it has no rows for a chip to duplicate. */
@@ -314,7 +325,7 @@ function chipsOf(
  * can be banded: `due` means the bus is at the kerb and a walk cannot be started, a headway is a timetable
  * rather than a sighting, and a dash is nothing at all.
  */
-function withCatch(row: StopCardRow, walk: number | undefined): HomeRow {
+function withCatch(row: StopCardRow, walk: number | undefined): StopCardRow {
   if (walk === undefined || row.label.kind !== 'mins') return row
   const slack = row.label.value - walk
   if (slack < 0) return row
@@ -334,7 +345,7 @@ function compareBySoonest(a: HomeCard, b: HomeCard): number {
 }
 
 function soonestMinutes(card: HomeCard): number {
-  const row = card.saved[0]
+  const row = card.rows[0]
   if (row === undefined) return Number.MAX_SAFE_INTEGER
   if (row.label.kind === 'due') return 0
   if (row.label.kind === 'mins') return row.label.value

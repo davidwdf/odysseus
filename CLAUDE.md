@@ -56,6 +56,12 @@ Full guide incl. deploy: [`docs/10`](./docs/10-scaffold-and-running.md).
 ## Repo map
 ```
 apps/web             Vite + plain React DOM — the renderer that REPLACES the Expo PWA (ADR-075).
+                     **Since ADR-181 the front door is `Home`** — Nearby and Favourites merged into one
+                     ranked board (ADR-177) served by `/v1/board` (ADR-179), and the floating tab bar
+                     retired because its destinations dissolved into it. `Nearby.tsx` and `Favourites.tsx`
+                     are still in the tree and still measured against their published specs, deliberately:
+                     a native porter vendors those specs, so retiring one is a contract change rather than
+                     a tidy-up. They are reachable by no route. Settings and Search are floating lenses.
                      Since WP6-0 it is a whole shell: react-router over a declared destination set
                      (`src/shell/destinations.ts`), a persisted query cache, a locale override, an
                      appearance store, a service worker and an installable manifest (ADR-082).

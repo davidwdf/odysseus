@@ -131,6 +131,92 @@ export const CATALOGUE = {
     'zh-Hant': '附近的車站',
     'zh-Hans': '附近的车站',
   },
+
+  // ── Home (proposals/07, ADR-177) ───────────────────────────────────────────────────────────────
+  // The merged board. Nearby's and Favourites' own strings stay where they are: both screens keep
+  // their published specs until the redesign retires them, and a string shared by a screen that is
+  // going away and one that is arriving is a string that cannot be reworded for either.
+  homeTitle: {
+    en: 'Buses',
+    'zh-Hant': '巴士',
+    'zh-Hans': '巴士',
+  },
+  /**
+   * The three section headings.
+   *
+   * Each names a **job**, not a data source, which is the whole reason the merge is legible: one
+   * section is buses you can still make, one is your own list, one is what happens to be around you.
+   * A rider who cannot tell which is which is reading a ranked list with no explanation of the rank.
+   */
+  homeCatchIt: {
+    en: 'Catch it',
+    'zh-Hant': '趕得上',
+    'zh-Hans': '赶得上',
+  },
+  homeSaved: {
+    en: 'Saved',
+    'zh-Hant': '已收藏',
+    'zh-Hans': '已收藏',
+  },
+  homeAround: {
+    en: 'Around you',
+    'zh-Hant': '附近',
+    'zh-Hans': '附近',
+  },
+  /**
+   * The marker on a saved route whose bus can still be caught — but only just (ADR-177 decision 4).
+   *
+   * **Words, not a number.** The band is `arrival − walk` and both inputs are approximations, so
+   * printing the difference would claim a precision neither has. This says the one thing the
+   * arithmetic supports: go now.
+   */
+  homeLeaveNow: {
+    en: 'leave now',
+    'zh-Hant': '要出發了',
+    'zh-Hans': '要出发了',
+  },
+  /**
+   * The chip strip's overflow badge — a **tappable** count that expands the strip in place.
+   *
+   * Bare `+N` rather than `moreRoutes`' "+N more routes": the badge sits in a row of route badges
+   * where the noun is already obvious, and the row has no room for it. `moreRoutes` stays the wording
+   * for a card's *row* overflow, which is a different affordance on a different screen.
+   */
+  homeMoreLines: {
+    en: '+{n}',
+    'zh-Hant': '+{n}',
+    'zh-Hans': '+{n}',
+    untranslated:
+      'A plus sign and a numeral. There is nothing to translate, and a localized digit would disagree with every other figure on the screen — which is tabular and Latin by design (ADR-008).',
+  },
+  /** Collapses an expanded chip strip. Icon-only in both renderers; this is its accessible name. */
+  homeFewerLines: {
+    en: 'Show fewer routes',
+    'zh-Hant': '顯示較少路線',
+    'zh-Hans': '显示较少路线',
+  },
+  /**
+   * The invitation shown under the nearby half when the rider has saved nothing.
+   *
+   * Not an empty state — the screen is full of stops. It is the one place Home says what saving is
+   * *for*, which Favourites used to say by being blank.
+   */
+  homeNothingSavedYet: {
+    en: 'Save a route and it will lead this screen.',
+    'zh-Hant': '收藏路線後，它會顯示在此頁最前。',
+    'zh-Hans': '收藏路线后，它会显示在此页最前。',
+  },
+  /**
+   * The line above the saved list when there is no position.
+   *
+   * The office case (`proposals/07 §0`): a rider checking a stop they are deliberately not at. The
+   * screen is not broken and must not apologise — it simply cannot rank by distance, and says so.
+   */
+  homeNoPosition: {
+    en: 'Showing your saved stops. Turn on location to see what is around you.',
+    'zh-Hant': '顯示你收藏的車站。開啟定位即可查看附近。',
+    'zh-Hans': '显示你收藏的车站。开启定位即可查看附近。',
+  },
   noService: {
     en: 'No scheduled service',
     'zh-Hant': '暫無班次',

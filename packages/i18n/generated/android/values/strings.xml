@@ -22,6 +22,16 @@
 	<string name="filterAirport">Airport</string>
 	<string name="filterExpress">Express</string>
 	<string name="nearbyTitle">Stops near you</string>
+	<string name="homeTitle">Buses</string>
+	<string name="homeCatchIt">Catch it</string>
+	<string name="homeSaved">Saved</string>
+	<string name="homeAround">Around you</string>
+	<string name="homeLeaveNow">leave now</string>
+	<!-- {n} → %1$s -->
+	<string name="homeMoreLines">+%1$s</string>
+	<string name="homeFewerLines">Show fewer routes</string>
+	<string name="homeNothingSavedYet">Save a route and it will lead this screen.</string>
+	<string name="homeNoPosition">Showing your saved stops. Turn on location to see what is around you.</string>
 	<string name="noService">No scheduled service</string>
 	<!-- {s} → %1$s -->
 	<string name="updatedAgo">updated %1$ss ago</string>

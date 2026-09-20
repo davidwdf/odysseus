@@ -22,6 +22,16 @@
 "filterAirport" = "机场";
 "filterExpress" = "特快";
 "nearbyTitle" = "附近的车站";
+"homeTitle" = "巴士";
+"homeCatchIt" = "赶得上";
+"homeSaved" = "已收藏";
+"homeAround" = "附近";
+"homeLeaveNow" = "要出发了";
+/* {n} → %1$@ */
+"homeMoreLines" = "+%1$@";
+"homeFewerLines" = "显示较少路线";
+"homeNothingSavedYet" = "收藏路线后，它会显示在此页最前。";
+"homeNoPosition" = "显示你收藏的车站。开启定位即可查看附近。";
 "noService" = "暂无班次";
 /* {s} → %1$@ */
 "updatedAgo" = "%1$@ 秒前更新";

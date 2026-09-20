@@ -61,7 +61,24 @@ export interface StopCardName {
 /** One route's row within a card: which line, where it is headed, and how long until it arrives.
  *  Extends `EtaReadout` so the Place screen's row and this one are the same three fields derived by
  *  the same function — they had been two hand-written copies. */
+/**
+ * How comfortably a saved route can still be caught: the arrival, minus the walk (ADR-177).
+ *
+ * **Three outcomes and no derived number.** A walk estimate is straight-line over a snapped position and
+ * an arrival is an approximation by ADR-008's own insistence, so printing the difference would claim a
+ * precision neither input has. `comfortable` says nothing at all, `tight` earns a marker, and a bus that
+ * can no longer be made carries **no band** — a rider is never shown a bus they were told they would
+ * catch. No position, or no live figure, means no band either.
+ *
+ * It lives on the row rather than beside it because a renderer draws it *in* the row, and the band → word
+ * mapping is the same shape as `etaUrgency` → colour: the kernel names the band, each platform owns what
+ * that looks like. Only `homeView` produces it; every other producer of a row leaves it absent.
+ */
+export type CatchBand = 'comfortable' | 'tight'
+
 export interface StopCardRow extends EtaReadout {
+  /** Set by `homeView` alone — see {@link CatchBand}. Absent on every other screen's rows. */
+  catch?: CatchBand
   routeId: string
   operator: OperatorId
   /** The number on the chip — the whole id when it cannot be parsed, so an unreadable id still shows

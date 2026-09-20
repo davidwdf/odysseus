@@ -2,7 +2,6 @@ import {
   ABOUT_PATH,
   type Destination,
   FAQ_PATH,
-  FAVOURITES_PATH,
   NEARBY_PATH,
   PLACE_PATH,
   ROUTE_PATH,
@@ -126,9 +125,13 @@ export const HEADER_RULES: Record<HeaderKind, HeaderRule> = {
  * declared it becomes eight independent decisions.
  */
 export const HEADER_KIND = {
+  // Home. `root` still, and it stays `root` until it gets a map (`proposals/07` rung 3) — which is the
+  // one empty cell of the table above worth revisiting, and a deliberate edit when it comes.
   [NEARBY_PATH]: 'root',
-  [FAVOURITES_PATH]: 'root',
-  [SETTINGS_PATH]: 'root',
+  // Settings stopped being a tab when the bar retired (ADR-181) and is pushed from a lens now, so it
+  // owes the rider a way back. The taxonomy caught this the moment the destination moved: a screen that
+  // changes how it is reached changes what it owes, and nothing else in the codebase says so.
+  [SETTINGS_PATH]: 'pushed',
   [SEARCH.path]: 'pushed',
   [ABOUT_PATH]: 'pushed',
   [FAQ_PATH]: 'pushed',
@@ -152,7 +155,6 @@ export const HEADER_KIND = {
  */
 export const SCROLL_OWNER = {
   [NEARBY_PATH]: 'page',
-  [FAVOURITES_PATH]: 'page',
   [SETTINGS_PATH]: 'page',
   [SEARCH.path]: 'inner',
   [ABOUT_PATH]: 'page',

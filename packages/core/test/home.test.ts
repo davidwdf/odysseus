@@ -46,7 +46,7 @@ describe('home#homeView', () => {
   it('never puts a route in both a card’s rows and its chips', () => {
     for (const c of cases()) {
       for (const card of every(run(c.args))) {
-        const rows = new Set(card.saved.map((r) => r.routeId))
+        const rows = new Set(card.rows.map((r) => r.routeId))
         for (const chip of card.chips) {
           expect(
             rows.has(chip.routeId),
@@ -63,7 +63,7 @@ describe('home#homeView', () => {
   it('bands a row only when there is a position and a live figure', () => {
     for (const c of cases()) {
       const banded = every(run(c.args)).flatMap((card) =>
-        card.saved.filter((r) => r.catch !== undefined),
+        card.rows.filter((r) => r.catch !== undefined),
       )
       if (c.args.at === undefined) {
         expect(banded, `${c.name}: banded a row with no position`).toEqual([])
@@ -83,12 +83,12 @@ describe('home#homeView', () => {
       const s = run(c.args)
       for (const card of s.catch)
         expect(
-          card.saved.some((r) => r.catch !== undefined),
+          card.rows.some((r) => r.catch !== undefined),
           `${c.name}/${card.stopId}: in catch with nothing catchable`,
         ).toBe(true)
       for (const card of s.saved)
         expect(
-          card.saved.some((r) => r.catch !== undefined),
+          card.rows.some((r) => r.catch !== undefined),
           `${c.name}/${card.stopId}: catchable but filed under saved`,
         ).toBe(false)
     }

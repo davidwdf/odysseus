@@ -1,5 +1,5 @@
 import type { PlainMessageKey } from '@nextbus/i18n'
-import { type LucideIcon, MapPin, Search, Settings, Star } from 'lucide-react'
+import { type LucideIcon, MapPin, Search, Settings } from 'lucide-react'
 
 /**
  * **The destination set, as data.**
@@ -43,18 +43,41 @@ export interface ChromeDestination extends Destination {
   readonly icon: LucideIcon
 }
 
-/** The bottom tabs, in tab order — the same three, in the same order, as `apps/mobile/app/(tabs)`. */
+/**
+ * **The roots — and since ADR-181 there is exactly one.**
+ *
+ * The bottom tab bar is gone, and not because the chrome was disliked: its destinations dissolved. With
+ * Nearby and Favourites merged into Home, *Saved* became a section of the screen a tab for it would
+ * navigate to, *Map* became the sheet dragged down, and Home was the only root left. A one-tab bar is not
+ * a bar. See `ShellChrome`, which keeps the material and drops the row.
+ *
+ * It stays a **list** rather than becoming a constant, because the shape is what the router and the
+ * chrome agree on and a second root is a plausible future (a full-city map, ferries). A set of one is a
+ * declared set of one.
+ */
 export const TABS: readonly ChromeDestination[] = [
-  { path: '/', titleKey: 'tabNearby', icon: MapPin },
-  { path: '/favorites', titleKey: 'tabFavorites', icon: Star },
-  { path: '/settings', titleKey: 'tabSettings', icon: Settings },
+  { path: '/', titleKey: 'homeTitle', icon: MapPin },
 ]
 
-/** Nearby's path — the first screen ported (WP6-0), and the shell's fallback for an unknown one. */
+/** Home's path — the merged board (ADR-177), and the shell's fallback for an unknown one. */
 export const NEARBY_PATH = '/'
+export const HOME_PATH = NEARBY_PATH
 
 /** Settings' path — the sixth ported screen (WP6-7), and the one that retired `ShellPreferences`. */
 export const SETTINGS_PATH = '/settings'
+
+/**
+ * Settings as a **pushed** destination with a floating lens, since ADR-181 took the tab bar away.
+ *
+ * It was a tab because there were three of them and it was the third. It is reached from a lens now, and
+ * that is a demotion it earns: it is the least-opened screen in the app, and it was taking a third of the
+ * bar's width from two screens a rider uses every day.
+ */
+export const SETTINGS: ChromeDestination = {
+  path: SETTINGS_PATH,
+  titleKey: 'tabSettings',
+  icon: Settings,
+}
 
 /** "About the data" — the attribution page, and the app's only screen of outbound links. */
 export const ABOUT_PATH = '/about-data'
@@ -92,11 +115,24 @@ export const SEARCH: ChromeDestination = {
 /** Everything reached by a push rather than by the tab row. */
 export const PUSHED: readonly Destination[] = [
   SEARCH,
+  SETTINGS,
   { path: '/stop/:id' },
   { path: ROUTE_PATH },
   { path: '/about-data', titleKey: 'aboutData' },
   { path: '/faq', titleKey: 'settingsFaq' },
 ]
+
+/**
+ * **`/favorites` outlives the screen it named.**
+ *
+ * The tab is gone and its content is a section of Home, but the path is one a rider may have bookmarked
+ * or installed to, and a URL a rider kept is a URL that must keep working (the same rule ADR-127 applies
+ * to an ADR number, one layer out). It redirects to Home, with `replace`, so Back does not bounce off it.
+ *
+ * Deliberately **not** in `DESTINATIONS`: it is not somewhere a rider can be, so it owes no header kind,
+ * no scroll owner and no name — it is a forwarding address.
+ */
+export const FAVOURITES_REDIRECT = FAVOURITES_PATH
 
 /**
  * Every destination the router serves. A spread rather than a `.filter` over one flat list: which

@@ -71,6 +71,23 @@
           }
         },
         {
+          "name": "catchBand",
+          "when": "catch",
+          "why": "Absent on every screen but Home, and on Home absent unless a walk could be measured against a live figure — a bus that can no longer be made carries no band, so a rider is never shown one they were told they would catch.",
+          "oneOf": "catch",
+          "cases": {
+            "tight": [
+              {
+                "name": "leaveNow",
+                "text": {
+                  "message": "homeLeaveNow"
+                }
+              }
+            ],
+            "comfortable": []
+          }
+        },
+        {
           "name": "eta",
           "invariant": "Tabular figures, and no client-side countdown — the value changes only when fresh data arrives (ADR-008). A `label.kind` with no case here is a hard failure rather than a silent skip, so growing the union goes red instead of quietly dropping the readout.",
           "oneOf": "label.kind",

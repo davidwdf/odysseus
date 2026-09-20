@@ -22,6 +22,16 @@
 	<string name="filterAirport">机场</string>
 	<string name="filterExpress">特快</string>
 	<string name="nearbyTitle">附近的车站</string>
+	<string name="homeTitle">巴士</string>
+	<string name="homeCatchIt">赶得上</string>
+	<string name="homeSaved">已收藏</string>
+	<string name="homeAround">附近</string>
+	<string name="homeLeaveNow">要出发了</string>
+	<!-- {n} → %1$s -->
+	<string name="homeMoreLines">+%1$s</string>
+	<string name="homeFewerLines">显示较少路线</string>
+	<string name="homeNothingSavedYet">收藏路线后，它会显示在此页最前。</string>
+	<string name="homeNoPosition">显示你收藏的车站。开启定位即可查看附近。</string>
 	<string name="noService">暂无班次</string>
 	<!-- {s} → %1$s -->
 	<string name="updatedAgo">%1$s 秒前更新</string>

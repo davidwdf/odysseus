@@ -1,5 +1,5 @@
-import type { Locale, StopCardRow, StopCardView } from '@nextbus/core'
-import { t } from '@nextbus/i18n'
+import type { CatchBand, Locale, StopCardRow, StopCardView } from '@nextbus/core'
+import { type PlainMessageKey, t } from '@nextbus/i18n'
 import { ChevronRight, MapPin } from 'lucide-react'
 import { BearingArrow } from './BearingArrow'
 import { EtaBadge } from './EtaBadge'
@@ -16,8 +16,33 @@ import { StopName } from './StopName'
 // renderers would agree only until someone edited one of them. `scripts/check-no-derivation.mjs`
 // fails the build on the shapes that would signal it.
 
+/**
+ * What each catchability band says, and the answer for one of them is **nothing**.
+ *
+ * The client half of ADR-177 decision 4, and the same shape as `EtaBadge`'s `TONE`: the kernel names the
+ * band, this maps the name to what this platform shows for it. What must never live here is the
+ * arithmetic that picks the band — that is `arrival − walk`, it happens once, in `homeView`.
+ *
+ * `comfortable` is deliberately silent. A marker on every catchable row is a marker that says nothing;
+ * the one worth printing is the one that changes what a rider does in the next few seconds.
+ */
+const CATCH_LABEL: Record<CatchBand, PlainMessageKey | null> = {
+  comfortable: null,
+  tight: 'homeLeaveNow',
+}
+
 /** One route's row: chip, "→ destination", and the next-ETA badge. */
-function RouteRow({ row, onPress }: { row: StopCardRow; onPress?: (routeId: string) => void }) {
+function RouteRow({
+  row,
+  locale,
+  onPress,
+}: {
+  row: StopCardRow
+  locale: Locale
+  onPress?: (routeId: string) => void
+}) {
+  // Absent on every screen but Home, where it is absent too unless the bus can only just be made.
+  const catchLabel = row.catch === undefined ? null : CATCH_LABEL[row.catch]
   const content = (
     // **`min-w-0` on BOTH flex levels, and the outer one is the whole bug.** `truncate` cannot shrink a
     // flex item whose `min-width` is `auto` — the default — so this row grew to its content width and
@@ -43,6 +68,9 @@ function RouteRow({ row, onPress }: { row: StopCardRow; onPress?: (routeId: stri
   const inner = (
     <>
       {content}
+      {catchLabel === null ? null : (
+        <span className="shrink-0 text-label text-warning">{t(locale, catchLabel)}</span>
+      )}
       <EtaBadge label={row.label} urgency={row.urgency} />
     </>
   )
@@ -125,7 +153,7 @@ export function StopCard({
       )}
       <div className="mt-2">
         {view.rows.map((row) => (
-          <RouteRow key={row.routeId} row={row} onPress={onRoutePress} />
+          <RouteRow key={row.routeId} row={row} locale={locale} onPress={onRoutePress} />
         ))}
         {/* **A boarding point that would not answer** (ADR-077). Rendered *below* the rows, because the
             readings that did arrive are true and this is a statement about the ones that are missing —

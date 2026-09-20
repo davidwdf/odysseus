@@ -22,6 +22,16 @@
 "filterAirport" = "Airport";
 "filterExpress" = "Express";
 "nearbyTitle" = "Stops near you";
+"homeTitle" = "Buses";
+"homeCatchIt" = "Catch it";
+"homeSaved" = "Saved";
+"homeAround" = "Around you";
+"homeLeaveNow" = "leave now";
+/* {n} → %1$@ */
+"homeMoreLines" = "+%1$@";
+"homeFewerLines" = "Show fewer routes";
+"homeNothingSavedYet" = "Save a route and it will lead this screen.";
+"homeNoPosition" = "Showing your saved stops. Turn on location to see what is around you.";
 "noService" = "No scheduled service";
 /* {s} → %1$@ */
 "updatedAgo" = "updated %1$@s ago";

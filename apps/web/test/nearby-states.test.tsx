@@ -31,7 +31,12 @@ import {
 import corpus from '@nextbus/core/spec/stop-card.spec.json'
 import { CATALOGUE, type MessageKey, t } from '@nextbus/i18n'
 import type { LocationState } from '@nextbus/ports'
-import { conformStates, type RenderedTree, type StatefulHarness } from '@nextbus/ui-spec'
+import {
+  type ComponentSpec,
+  conformStates,
+  type RenderedTree,
+  type StatefulHarness,
+} from '@nextbus/ui-spec'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -292,7 +297,14 @@ describe('apps/web conforms to Nearby’s published spec, state by state', () =>
       // Only this state is offered, so `conformStates` reports every *other* projected state as
       // unreachable — filter to the one under test. The loop as a whole covers them all, and the control
       // above is what keeps the set honest.
-      const findings = conformStates(specs, harness, { StopRow: stopRowSpec }).filter(
+      // **The imported spec is cast, and that is not a loosening.** A `.spec.json` is validated against
+      // `ComponentSpecSchema` when it is *emitted* — `pnpm test` in `packages/contract` fails on a file that
+      // does not parse — so the schema is the gate and TypeScript's inference of a JSON literal is not. That
+      // inference also cannot see through a discriminated node (`oneOf` with a case that draws nothing), which
+      // is a real shape in `stop-row.spec.json` since ADR-177's catchability marker.
+      const findings = conformStates(specs as ComponentSpec, harness, {
+        StopRow: stopRowSpec as ComponentSpec,
+      }).filter(
         (f) => !f.message.includes('cannot be put into it') || f.message.includes(`\`${state}\``),
       )
       expect(findings).toEqual([])
