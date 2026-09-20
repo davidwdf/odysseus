@@ -1,4 +1,3 @@
-import { ArrowDown, RotateCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { prefersReducedMotion } from '../lib/motion'
 
@@ -26,21 +25,21 @@ import { prefersReducedMotion } from '../lib/motion'
  *    under the media query and the resting markup is correct without it — but a swap puts *four* lines in
  *    the tree at once, and killing the keyframes would leave two origins and two destinations stacked for
  *    380 ms. So a rider who asked for less motion never enters the swap state at all.
- *  · **The arrow hands over rather than riding along.** On the RN header the direction glyph sits outside
- *    the name box; here it is inside the destination line, so a destination rising into the origin slot
- *    would carry an arrow into a slot that has none. It fades with its own line and fades in with the new
- *    one — which is the honest reading anyway: the glyph belongs to the destination.
+ *  · **The direction is no longer drawn in here at all.** It used to be an `ArrowDown` inside the
+ *    destination's own line, which had to hand over on a flip — a destination rising into the origin slot
+ *    would otherwise have carried an arrow into a slot that has none. ADR-170 moves the direction into
+ *    `JourneyRail`, a column of the schematic's own marks beside these two names: a terminus square at
+ *    each end with its sequence number, and one double chevron on the line between them. The rail does
+ *    not move on a flip, so there is nothing left to hand over — the numerals it prints simply become the
+ *    new direction's. `jl-glyph-out` is retired with the arm it animated.
  */
 export function JourneyLines({
   origin,
   destination,
-  circular,
   nonce,
 }: {
   origin: string
   destination: string
-  /** A loop glyph for a circular service, a direction-of-travel arrow otherwise. */
-  circular: boolean
   /** Advances on each flip — arms a swap. */
   nonce: number
 }) {
@@ -82,24 +81,21 @@ export function JourneyLines({
     return () => clearTimeout(timer)
   }, [incoming])
 
-  const glyph = circular ? (
-    <RotateCw size={GLYPH_SIZE} className="shrink-0 text-subtle" aria-hidden />
-  ) : (
-    <ArrowDown size={GLYPH_SIZE} className="shrink-0 text-subtle" aria-hidden />
-  )
-
   // At rest: two lines in flow, no layers and no animation machinery at all — the same discipline
   // `SlideNumber` keeps, and for the same reason. A conformance projection reads text by presence
   // (ADR-097), so a header that kept both journeys mounted would project four lines for one route.
   if (incoming === null) {
     return (
-      <span className="flex flex-col items-center gap-0.5">
-        <span className="block max-w-full truncate text-label font-normal text-muted">
-          {shown.origin}
+      <span className="flex w-full flex-col" style={{ gap: GAP }}>
+        <span className="flex items-center" style={{ height: SLOT }}>
+          <span className="block max-w-full truncate" style={ORIGIN_TYPE}>
+            {shown.origin}
+          </span>
         </span>
-        <span className="flex max-w-full items-center gap-1.5">
-          {glyph}
-          <span className="truncate">{shown.destination}</span>
+        <span className="flex items-center" style={{ height: SLOT }}>
+          <span className="block max-w-full truncate text-h3 font-semibold text-text">
+            {shown.destination}
+          </span>
         </span>
       </span>
     )
@@ -112,36 +108,38 @@ export function JourneyLines({
         height: BOX_H,
         // The keyframes read these, so the geometry is declared once, here, beside the markup it describes.
         ...({
-          '--jl-origin-lh': `${ORIGIN_LINE}px`,
+          '--jl-origin-lh': `${SLOT}px`,
           '--jl-dest-top': `${DEST_TOP}px`,
-          '--jl-dest-lh': `${DEST_LINE}px`,
-          '--jl-shrink': `${ORIGIN_SIZE / DEST_SIZE}`,
+          '--jl-dest-lh': `${SLOT}px`,
+          '--jl-shrink': `${SHRINK}`,
         } as React.CSSProperties),
       }}
     >
       {/* The old origin: up and out. */}
       <span
         aria-hidden
-        className="jl-origin-out absolute inset-x-0 block truncate text-center text-label font-normal text-muted"
-        style={{ top: 0, lineHeight: `${ORIGIN_LINE}px` }}
+        className="jl-origin-out absolute inset-x-0 block truncate"
+        style={{ top: 0, lineHeight: `${SLOT}px`, ...ORIGIN_TYPE }}
       >
         {shown.origin}
       </span>
       {/* The old destination, becoming the new origin. Not `aria-hidden`: it is the one line of the four
-          that is still true at both ends of the animation. */}
+          that is still true at both ends of the animation.
+
+          **`transformOrigin: left` is the whole reason the names are one size now.** The shrink is a
+          `scale`, and a scale about the centre slides the text sideways as it shrinks — invisible while
+          both slots were centred, and a lurch the moment they share a left edge. */}
       <span
-        className="jl-rise absolute inset-x-0 flex items-center justify-center gap-1.5 truncate"
-        style={{ top: 0, height: DEST_LINE }}
+        className="jl-rise absolute inset-x-0 flex items-center truncate text-h3 font-semibold"
+        style={{ top: 0, height: SLOT, transformOrigin: 'left center' }}
       >
-        <span className="jl-glyph-out flex shrink-0">{glyph}</span>
         <span className="truncate">{shown.destination}</span>
       </span>
       {/* The new destination, rising in. */}
       <span
-        className="jl-dest-in absolute inset-x-0 flex items-center justify-center gap-1.5 truncate"
-        style={{ top: DEST_TOP, height: DEST_LINE }}
+        className="jl-dest-in absolute inset-x-0 flex items-center truncate text-h3 font-semibold text-text"
+        style={{ top: DEST_TOP, height: SLOT, transformOrigin: 'left center' }}
       >
-        {glyph}
         <span className="truncate">{incoming.destination}</span>
       </span>
     </span>
@@ -149,18 +147,40 @@ export function JourneyLines({
 }
 
 /**
- * The name box's geometry, measured off the resting header rather than guessed: the origin line is
- * `text-label` at 14/20 and the destination inherits `--ch-label-size` at 20/25, two pixels apart. The RN
- * header's numbers are 13/18 and 15/22 — different type scale, same three slots, which is exactly the split
- * ADR-100 draws between the motion (identity) and its metrics (idiom).
+ * **The two slots, and why they are the same size.**
+ *
+ * The header's from/to block is two rows of a schematic now (ADR-167/169): a terminus node beside each
+ * name, a rail between them. Each row is `SLOT` tall, which is the node's own size, so a name is centred
+ * against the square that numbers it.
+ *
+ * The names are **one type — `text-h3` semibold — and the origin is scaled to `SHRINK` rather than set
+ * smaller.** That is the owner's note and it is about the flip rather than about the resting picture:
+ * `jl-rise` moves the old destination into the origin slot *and* shrinks it, so two different
+ * `font-size`s make the animation reconcile a scale with a size change — a 20 px line becoming a 14 px
+ * line by way of a transform that does not agree with either. One size and one weight leaves the rise a
+ * pure interpolation of one property, which is what it looked like it was doing all along.
+ *
+ * `SHRINK` is 0.82 rather than a ratio of two sizes for the same reason: there is no second size to take
+ * a ratio of. 18 × 0.82 renders at about 14.8, which is where the old origin line sat.
  */
-const ORIGIN_SIZE = 14
-const DEST_SIZE = 20
-const ORIGIN_LINE = 20
-const DEST_LINE = 25
-const GAP = 2
-const DEST_TOP = ORIGIN_LINE + GAP
-const BOX_H = DEST_TOP + DEST_LINE
-const GLYPH_SIZE = 14
+const SLOT = 24
+const GAP = 18
+const SHRINK = 0.82
+const DEST_TOP = SLOT + GAP
+const BOX_H = DEST_TOP + SLOT
+
+/** The origin's resting appearance: the destination's type, quieter and a shade smaller. */
+const ORIGIN_TYPE: React.CSSProperties = {
+  transform: `scale(${SHRINK})`,
+  transformOrigin: 'left center',
+}
+
+/**
+ * The geometry the header's rail is drawn from, so the nodes and the names cannot disagree about where a
+ * row is. Exported rather than duplicated: `JourneyRail` draws a square at each slot's centre and a line
+ * between them, and it has no other way to know where those centres are.
+ */
+export const JOURNEY_SLOT = { slot: SLOT, gap: GAP, height: BOX_H } as const
+
 /** `apps/mobile`'s swap duration, value for value. */
 const SWAP_MS = 380

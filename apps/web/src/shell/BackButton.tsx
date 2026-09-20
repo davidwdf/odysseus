@@ -42,11 +42,23 @@ export const BACK_LENS_INSET = 12
  * instead of the rendered text. That is a better assertion than the one it replaces — it is what a screen
  * reader is offered rather than what a sighted rider happens to see.
  *
+ * ## `flat` is a material, not a second control (ADR-170)
+ *
+ * Route detail's context card encloses this control when it is open: the card's first row **is** this
+ * button's box, so the glass runs under the arrow rather than beside it. Two panes of glass stacked read
+ * as two objects, so `flat` takes this one's glass, border and shadow off — and nothing else. Same
+ * position, same size, same navigation rule, same accessible name, same component.
+ *
+ * That is deliberately the whole of it. The alternative the owner rejected was a back control **inside**
+ * the card, which would have been a second button with its own copy of the `PUSH`/`POP` decision below,
+ * and two of those is how they get out of step. There is one back button on every pushed screen, and on
+ * this one it changes clothes.
+ *
  * `useNavigationType()` still distinguishes the two behaviours: `PUSH` means this app put the entry there
  * and a pop returns inside it; `POP` or `REPLACE` means a cold arrival from a bookmark or a shared link,
  * so the control goes *up* to Nearby rather than out of the app.
  */
-export function BackButton() {
+export function BackButton({ flat = false }: { flat?: boolean }) {
   const locale = useLocale()
   const navigate = useNavigate()
   const mode = useAppearance()
@@ -56,18 +68,24 @@ export function BackButton() {
       type="button"
       aria-label={t(locale, 'back')}
       onClick={() => (cameFromInsideTheApp ? navigate(-1) : navigate('/'))}
-      className="glass-pane fixed left-3 z-30 flex items-center justify-center rounded-full border border-border text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+      className={`fixed left-3 z-30 flex items-center justify-center rounded-full text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
+        flat ? '' : 'glass-pane border border-border'
+      }`}
       style={{
         top: `calc(${CONTENT_INSET_TOP} + 12px)`,
         width: SIZE,
         height: SIZE,
         // ADR-035: a drop shadow has almost no contrast budget on a near-black field, so dark leans on the
         // rim and the border alone — the same branch the tab bar and `elevationStyle` make.
-        boxShadow: webBoxShadow(
-          mode === 'dark'
-            ? [GLASS_RIM.top.dark, GLASS_RIM.bottom.dark]
-            : [GLASS_RIM.top.light, GLASS_RIM.bottom.light, ELEVATION.e3],
-        ),
+        ...(flat
+          ? {}
+          : {
+              boxShadow: webBoxShadow(
+                mode === 'dark'
+                  ? [GLASS_RIM.top.dark, GLASS_RIM.bottom.dark]
+                  : [GLASS_RIM.top.light, GLASS_RIM.bottom.light, ELEVATION.e3],
+              ),
+            }),
       }}
     >
       <ArrowLeft aria-hidden width={22} height={22} />

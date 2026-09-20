@@ -76,12 +76,7 @@ export function HeaderLab() {
             onCollapse={() => setCollapsed(true)}
             onExpand={() => setCollapsed(false)}
             journey={
-              <JourneyLines
-                origin={header.origin}
-                destination={header.destination}
-                circular={header.circular}
-                nonce={0}
-              />
+              <JourneyLines origin={header.origin} destination={header.destination} nonce={0} />
             }
             swap={header.circular ? undefined : <SwapStub />}
           />

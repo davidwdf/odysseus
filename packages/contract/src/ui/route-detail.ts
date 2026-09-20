@@ -235,6 +235,26 @@ export const ROUTE_DETAIL_SPEC: ComponentSpec = {
         'The number on the bus, verbatim from the wire. **Where it appears in the tree is idiom and where it appears on screen is not:** `apps/mobile` floats a collapsing header over its scroll content and therefore renders it last; `apps/web` puts it first, in flow, where a keyboard and a screen reader meet it. Each driver reads its own chrome first for that reason and says so.',
     },
     {
+      name: 'originSeq',
+      text: { field: 'header.originSeq' },
+      when: 'header.originSeq',
+      why: 'A payload with no stop sequence has no numbered ends to draw — the same emptiness `origin` answers by naming nothing.',
+      invariant:
+        'The **sequence number of the first stop**, drawn in the terminus node beside its name, and it is the *wire\u2019s* number rather than a count of the rows: a payload whose sequence does not start at 1 is a real thing (ADR-162), and a header that counted would print a figure the list beside it disagrees with. Where it is drawn is idiom — a node on a rail here, and a native header may say it another way — but that the header states it is not: it is what ties the two ends of the journey to the two ends of the schematic.',
+    },
+    {
+      name: 'destinationSeq',
+      text: { field: 'header.destinationSeq' },
+      when: 'header.destinationSeq',
+      why: 'As `originSeq` — an empty payload has no numbered far end.',
+      // Declared **beside** `originSeq` rather than beside the name it belongs to, because the two
+      // figures are drawn as one column of marks: `apps/web` puts a rail between them, so document order
+      // is 1 · N · origin · destination. Where a figure sits in the tree is idiom, exactly as it is for
+      // `routeNo`; that both are stated is not.
+      invariant:
+        'The **last stop\u2019s** sequence number, and it is stated even for a loop, where the first and last rows are the same pole: the figure belongs to the *row*, not to the place, and the list prints both. What a circular service changes is not its ends but what happens between them — `apps/web` keeps both numbered nodes and swaps the mark on the line for a loop — which is the same substitution the kernel makes in words when the destination becomes \u201cCircular via \u2026\u201d (ADR-046).',
+    },
+    {
       name: 'origin',
       text: { field: 'header.origin' },
       when: 'header.origin',

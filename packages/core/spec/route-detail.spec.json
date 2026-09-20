@@ -849,7 +849,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -1151,7 +1153,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -1434,6 +1438,8 @@
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
               "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5,
               "reverseId": "KMB:264X:inbound:1"
             },
             "facts": [
@@ -1704,7 +1710,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -1991,7 +1999,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -2279,7 +2289,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -2591,7 +2603,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -2864,7 +2878,9 @@
               "destination": "Circular via Tin Shui Wai",
               "circular": true,
               "label": "Circular via Tin Shui Wai",
-              "collapsedLabel": "Circular via Tin Shui Wai"
+              "collapsedLabel": "Circular via Tin Shui Wai",
+              "originSeq": 1,
+              "destinationSeq": 4
             },
             "facts": [
               {
@@ -3131,6 +3147,8 @@
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
               "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5,
               "reverseId": "KMB:264X:inbound:1"
             },
             "facts": [
@@ -3394,7 +3412,9 @@
               "destination": "中環（交易廣場）",
               "circular": false,
               "label": "天水圍站 → 中環（交易廣場）",
-              "collapsedLabel": "→ 中環（交易廣場）"
+              "collapsedLabel": "→ 中環（交易廣場）",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -3722,7 +3742,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -3974,7 +3996,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -4214,7 +4238,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [],
             "stops": [
@@ -4463,7 +4489,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -4772,7 +4800,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -5101,7 +5131,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -5384,7 +5416,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -5661,7 +5695,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -5905,7 +5941,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -6169,7 +6207,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -6478,7 +6518,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -6838,7 +6880,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {
@@ -7196,7 +7240,9 @@
               "destination": "Central",
               "circular": false,
               "label": "Tin Shui Wai Station → Central",
-              "collapsedLabel": "→ Central"
+              "collapsedLabel": "→ Central",
+              "originSeq": 1,
+              "destinationSeq": 5
             },
             "facts": [
               {

@@ -29,9 +29,7 @@ const layers = () => container.querySelectorAll('.jl-origin-out, .jl-rise, .jl-d
 
 function render(origin: string, destination: string, nonce: number): void {
   act(() => {
-    root?.render(
-      <JourneyLines origin={origin} destination={destination} circular={false} nonce={nonce} />,
-    )
+    root?.render(<JourneyLines origin={origin} destination={destination} nonce={nonce} />)
   })
 }
 

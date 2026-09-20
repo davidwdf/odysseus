@@ -376,6 +376,18 @@ export interface RouteJourneyHeader {
   /** …and once collapsed, where one line fits. */
   collapsedLabel: string
   /**
+   * **The sequence numbers of the two ends** — the figures the schematic prints in its first and last
+   * node, so a header that draws those two nodes draws the same numerals the list does.
+   *
+   * Here rather than read off `stops[0]` and `stops[stops.length - 1]` by whoever is drawing, for the
+   * reason this interface exists at all: a renderer that indexes the list itself is a renderer that can
+   * disagree with it, and the wire's `seq` is **not** the array index (a payload whose sequence does not
+   * start at 1 is a real thing, ADR-162). Absent together when the payload carries no stop sequence —
+   * which is the same emptiness `origin` and `destination` answer by naming nothing.
+   */
+  originSeq?: number
+  destinationSeq?: number
+  /**
    * The opposite direction's route id, where the dataset carries one.
    *
    * Absent **is** the answer to "should there be a toggle" — the RN screen spelled that
@@ -677,6 +689,11 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
   // schematic. `newestBoard` is the one rule; this is only the payload adapter for it.
   const lastUpdatedIso = newestBoard(stops.map((st) => st.eta?.dataTimestamp))
 
+  // The two ends of the sequence, for the header's nodes. `at(-1)` rather than an index expression so an
+  // empty list is `undefined` rather than a lookup at -1.
+  const firstRow = rows[0]
+  const lastRow = rows.at(-1)
+
   return {
     lastUpdatedIso,
     vehicle: routeVehicle(route.operator),
@@ -690,6 +707,10 @@ export function routeDetailView(detail: RouteDetail, opts: RouteDetailOptions): 
       // pointing an arrow at it would read as travelling *to* the loop rather than around it.
       label: circular ? destination : `${ends.origin} ${JOURNEY_ARROW} ${destination}`,
       collapsedLabel: circular ? destination : `${JOURNEY_ARROW} ${destination}`,
+      // The rows' own numerals, taken from the rows rather than counted here — `rows` is already the
+      // stop list this view hands over, and its `seq` is the wire's.
+      ...(firstRow === undefined ? {} : { originSeq: firstRow.seq }),
+      ...(lastRow === undefined ? {} : { destinationSeq: lastRow.seq }),
       ...(detail.reverse === undefined ? {} : { reverseId: detail.reverse.id }),
     },
     facts: routeFacts(route.service, stops, locale, labels),

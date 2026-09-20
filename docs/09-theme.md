@@ -457,6 +457,13 @@ instant swap; the rendered text stays exposed to screen readers.
 
 ## 8. Iconography & accessibility
 
+- **A square is a terminus, everywhere**
+  ([ADR-170](./08-decision-log.md#adr-170--the-route-header-ships-one-enclosing-card-a-numbered-rail-and-an-island-for-the-collapse)).
+  Four places draw one from the same `routeMarkers` answer: the map marker, the schematic's node, the route
+  header's from/to rail and the swap glyph's two nodes. The header's rail carries the **sequence numbers**
+  too, so the figure a rider reads beside the destination is the figure in that stop's node in the list and
+  on the focused marker. A circular service keeps both numbered nodes and swaps the chevron between them
+  for the loop glyph — the ends are the list's, the mark between them is the journey's.
 - **The direction-swap glyph is lucide's `git-compare-arrows` with square nodes**
   ([ADR-167](./08-decision-log.md#adr-167--the-context-cards-collapse-animates-its-height-and-the-route-headers-open-questions-get-a-lab)).
   A square is this app's terminus — the map marker, the schematic's node and the route header all draw one

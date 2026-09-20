@@ -571,7 +571,10 @@ export function RouteDetail() {
     <main className="fixed inset-0 overflow-hidden bg-bg">
       {/* The chrome, in flow and first — see the note above. The back control does not wait for the payload,
           deliberately, so a rider can leave a screen that is still loading. */}
-      <BackButton />
+      {/* One back control, always in the same place. It goes **flat** while the context card is open,
+          because the card's first row is this control's own box and it is then standing on glass —
+          ADR-170. Not a second button inside the card: one component, one navigation rule. */}
+      <BackButton flat={!chromeCollapsed} />
       {/* Round 4's context card, in place of the collapsing header (`proposals/06 §8`, ADR-156).
           `CollapsingHeader` is still Place detail's and is untouched — the two screens stop being one
           family here on purpose, because only this one has a map underneath to get out of the way of. */}
@@ -592,7 +595,6 @@ export function RouteDetail() {
             <JourneyLines
               origin={view.header.origin}
               destination={view.header.destination}
-              circular={view.header.circular}
               nonce={swapNonce}
             />
           }
