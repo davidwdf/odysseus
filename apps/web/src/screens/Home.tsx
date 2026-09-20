@@ -166,7 +166,18 @@ export function Home() {
               onPress={() => openPlace(card.stopId)}
               onRoutePress={(routeId) => openRoute(routeId, card.stopId)}
             />
-            <div className="px-4 pb-3">
+            {/*
+              **The strip sits 14 px under the last row, not 30.** `StopCard` is a self-contained card
+              with `py-4`, so stacking a sibling under it added its 16 px bottom padding to the row's own
+              6 px and the strip's 8 px — half again more air than anything else on the board, which read
+              as the chips belonging to the *next* place rather than this one.
+              `-mt-2` gives back half of the card's padding, which lands exactly on the 14 px the approved
+              mockup uses (`mockups/home/q4c`: a row's 5 px plus the strip's 9 px). A negative margin
+              rather than a prop on `StopCard`, because the spacing is a fact about this composition —
+              a card followed by a strip — and not about the card, which three other screens still draw
+              on its own.
+            */}
+            <div className="-mt-2 px-4 pb-3">
               <LineStrip
                 chips={card.chips}
                 moreChips={card.moreChips}

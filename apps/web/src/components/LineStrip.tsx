@@ -55,7 +55,9 @@ export function LineStrip({
   const hidden = expanded ? more - moreChips.length : more
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+    // No outer margin: the gap above the strip belongs to whoever puts it under a card, because only
+    // that caller knows what it is sitting under. `Home` sets it; see the note there for the arithmetic.
+    <div className="flex flex-wrap items-center gap-1.5">
       {shown.map((chip) =>
         onPress ? (
           <button
