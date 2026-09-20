@@ -9,8 +9,19 @@ the `DataSource` interface and the UI do not change.
 - [ ] **New Lantao Bus (NLB)** — `data.gov.hk` realtime dataset.
 - [ ] **MTR Bus / Feeder Bus** — `data.gov.hk` realtime schedule dataset.
 - [x] **Green Minibus (GMB)** — **shipped in v1** (ADR-047): `data.etagmb.gov.hk` live stop board + consolidated-dataset
-  static geometry/fares/frequency. Follow-ups: friendlier "Minibus" label, a region/area tag in search (numbers repeat
-  across regions), GMB route-level live ETAs (static-only today), GMB stop-merge edge cases.
+  static geometry/fares/frequency. The **region tag is done** ([ADR-176](./08-decision-log.md#adr-176--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table)):
+  a committed `route_id` → `HKI`/`KLN`/`NT` table (`pnpm gmb:regions:emit`) rides through `RouteLite` to a word on the
+  Search row, which is what tells the 294 result rows whose number repeats across regions apart. Writing it
+  surfaced a 🔴 the owner had already hit — **the direction toggle resolved a minibus by its number**, so
+  335 of 1,154 route-directions flipped to a *different* route, some into another region; fixed in
+  [ADR-177](./08-decision-log.md#adr-177--the-direction-toggle-resolved-a-minibus-by-its-number-and-sent-riders-to-another-region).
+  Remaining follow-ups: friendlier "Minibus" label, GMB route-level live ETAs (static-only today),
+  GMB stop-merge edge cases.
+- [ ] **Sweep for other places a GMB route is resolved by number** (follow-up to ADR-177). Two bugs in one
+      wave were the same mistake — *a minibus route number treated as an identity*. The canonical id has
+      been right since ADR-047; the thing to audit is every consumer that reaches past it for `route`.
+      Known-clean: the search index's collapse key (keyed on termini, ADR-047) and the live-ETA resolution
+      (`gmbCanonicalByLive`, keyed on `gtfsId`). Not yet audited: `stop-route.ts`, favourites keys.
 - [ ] **Light Rail (LRT) & MTR heavy rail** — different domain (rail), but the canonical model can host it.
 - [ ] **Ferries** (Star Ferry / franchised ferries) — if scope expands beyond buses.
 

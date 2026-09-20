@@ -34,6 +34,7 @@ import type {
   EtaSchema,
   FreqBandSchema,
   FreqPatternSchema,
+  GmbRegionSchema,
   I18nTextSchema,
   LatLngSchema,
   LiveStateSchema,
@@ -77,6 +78,9 @@ export type OperatorId = z.infer<typeof OperatorIdSchema>
 
 /** Direction of travel. */
 export type Bound = z.infer<typeof BoundSchema>
+
+/** The region a green-minibus route number is unique within (ADR-176). GMB only; see the schema. */
+export type GmbRegion = z.infer<typeof GmbRegionSchema>
 
 /** A geographic coordinate (WGS84). */
 export type LatLng = z.infer<typeof LatLngSchema>

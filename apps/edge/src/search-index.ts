@@ -43,10 +43,19 @@ export async function buildSearchIndex(index: StaticIndex): Promise<SearchIndex>
   // GMB needs a different key: its public numbers repeat across regions (route "1" exists in
   // HKI *and* NT — genuinely different routes we must keep separate), yet within a region a
   // number can have several route_ids that are just variants ("Normal"/"Special" departures of
-  // one route). Region isn't in the dataset, so we key GMB on **number + direction + origin +
-  // destination** — the rider-facing identity: cross-region routes differ in from/to and stay
-  // split; same-route variants share from/to and collapse. The representative is the fullest
-  // variant (most stops), tie-broken by id. A true region/area tag is a follow-up. ADR-047.
+  // one route). So we key GMB on **number + direction + origin + destination** — the rider-facing
+  // identity: cross-region routes differ in from/to and stay split; same-route variants share
+  // from/to and collapse. The representative is the fullest variant (most stops), tie-broken by
+  // id. ADR-047.
+  //
+  // **ADR-176 gives every GMB route a `region`, and deliberately does not put it in this key.** It
+  // is tempting — region is the *real* identity, and `GMB:1:outbound` in HKI and in NT would then
+  // key apart without leaning on two name strings. But swapping it in would also merge what the
+  // names currently keep separate: within one region a number's variants can run to genuinely
+  // different termini, and a key of number+bound+region would drop all but one of them from
+  // Search. The tag's job is to tell a rider which `1` they are looking at; it is not a licence to
+  // show them fewer routes. (No collapse key spans two regions in the live dataset — checked over
+  // all 1,154 GMB route-directions — so the `region` a representative carries is the whole group's.)
   const byNumber = new Map<string, RouteLite>()
   for (const meta of index.routeMeta.values()) {
     const id = canonicalRouteId(meta.operator, meta.route, meta.bound, meta.serviceType)
@@ -75,6 +84,9 @@ export async function buildSearchIndex(index: StaticIndex): Promise<SearchIndex>
       bound: meta.bound,
       origin: meta.origin,
       destination: meta.destination,
+      // GMB only, and absent rather than guessed for a route the committed table has not met
+      // (ADR-176). `undefined` is dropped by `JSON.stringify`, so a KMB row costs no bytes for it.
+      region: meta.region,
       // Precomputed here so the *display order* is data the client reads rather than a collator
       // call it makes — the one thing three platforms could not be relied on to agree about
       // (ADR-063). `routeSortKey` is the definition; the client can still derive it.

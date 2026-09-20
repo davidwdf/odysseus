@@ -257,11 +257,15 @@ class CorpusConformanceTest {
     /**
      * **The one test in this file that no gate in the TypeScript repo can stand in for.**
      *
-     * `openapi.json` marks seven enums `x-unknown-tolerant`, meaning the server will add members
-     * without a major version bump. The web client is unaffected — its schemas erase at build time and
-     * it does no runtime validation at all — so *this* is where the obligation actually lands: a
-     * generated Kotlin `enum class` with four entries **throws on decode**, and one new operator
-     * bricks every installed copy of your app until the next release reaches devices.
+    // BEGIN GENERATED: tolerant-enums
+     * `openapi.json` marks **8** enums `x-unknown-tolerant`: `Bound`, `DatasetOrigin`, `ErrorCode`, `GmbRegion`, `Locale`, `OperatorId`, `RemarkKind`, `ServiceDayType`.
+    // END GENERATED: tolerant-enums
+     *
+     * The server will add members to them without a major version bump. The web client is
+     * unaffected — its schemas erase at build time and it does no runtime validation at all — so
+     * *this* is where the obligation actually lands: a generated Kotlin `enum class` with four
+     * entries **throws on decode**, and one new operator bricks every installed copy of your app
+     * until the next release reaches devices.
      *
      * `apps/edge/test/unknown-enum-tolerance.test.ts` gates the half that can be gated there (that
      * every enum in the document carries the flag, and that a decoder honouring the flag accepts an

@@ -430,10 +430,33 @@ export function routeDocFor(index: StaticIndex, id: string): RouteDoc | null {
 
   // The opposite bound, if the dataset carries a loadable one. Requires a real stop sequence,
   // so the client can always follow the toggle (ADR-046).
+  //
+  // **A green minibus is matched on its `gtfsId`, not on its number** (ADR-177), and that is a bug
+  // fix rather than a refinement: operator + number + opposite bound is **not unique for GMB**,
+  // because a `route_code` only identifies a route within its region. The loop below used to match
+  // every candidate that shared a number and then tie-break with `preferServiceType` — which for GMB
+  // is comparing two *route ids*, since ADR-047 folds `route_id` into the service-type slot. So it
+  // returned the numerically lowest one: **335 of 1,154 GMB route-directions flipped to a different
+  // route**, some of them into another region. Reported by the owner as *"the swap button moved me
+  // from NT to Hong Kong Island"*, which is exactly what it did.
+  //
+  // A GMB route's two directions are `route_seq` 1 and 2 of **one `route_id`**, so the id is the
+  // identity and the match is exact. The 163 route-directions that lose their toggle under this rule
+  // lose it **correctly**: upstream has no return leg for them either (`/route-stop/<id>/2` answers
+  // an empty list — verified against `data.etagmb.gov.hk`, not inferred), and ADR-046 already says
+  // that an absent `reverse` *is* the answer to "should there be a toggle".
+  //
+  // KMB/CTB keep the number match, deliberately: their numbers are unique, ~9% of their
+  // route-directions carry no `gtfsId` at all (ADR-152 — racecourse and school variants the TD does
+  // not register), and requiring one would delete a working toggle from all of them.
   let best: typeof meta | undefined
   const opposite = meta.bound === 'inbound' ? 'outbound' : 'inbound'
   for (const m of index.routeMeta.values()) {
     if (m.operator !== meta.operator || m.route !== meta.route || m.bound !== opposite) continue
+    // `undefined === undefined` would quietly restore the old ambiguity for a GMB route with no
+    // `route_id`, so the id must be *present* as well as equal. Every GMB route-direction in the live
+    // dataset carries one (checked over all 1,154); this is what happens the day one does not.
+    if (meta.operator === 'GMB' && (meta.gtfsId === undefined || m.gtfsId !== meta.gtfsId)) continue
     const rid = canonicalRouteId(m.operator, m.route, m.bound, m.serviceType)
     if (!index.routeToStops.get(rid)?.length) continue
     if (!best || preferServiceType(m.serviceType, best.serviceType) === m.serviceType) best = m

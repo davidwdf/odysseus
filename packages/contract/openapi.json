@@ -861,6 +861,16 @@
         ],
         "x-unknown-tolerant": true
       },
+      "GmbRegion": {
+        "$id": "#/components/schemas/GmbRegion",
+        "type": "string",
+        "enum": [
+          "HKI",
+          "KLN",
+          "NT"
+        ],
+        "x-unknown-tolerant": true
+      },
       "LatLng": {
         "$id": "#/components/schemas/LatLng",
         "type": "object",
@@ -1631,6 +1641,10 @@
           },
           "destination": {
             "$ref": "#/components/schemas/I18nText"
+          },
+          "region": {
+            "description": "GMB only, and **optional even there** — the region the public route number is unique within (ADR-176). Two minibus `1`s are two different routes; this is what tells them apart. Absent for KMB/CTB/LWB, whose numbers are already unique, and absent for a GMB route the committed `route_id` → region table has not met yet, because a route the table does not know must be *untagged*, never wrongly tagged.",
+            "$ref": "#/components/schemas/GmbRegion"
           },
           "sortKey": {
             "description": "Byte-comparable ordering key for `routeNo`, zero-padded per numeric run: `10A` → `0010A`, so `9` < `10A` < `11`. Sort by this and every platform agrees; `localeCompare(numeric:true)` has no faithful Swift/Kotlin equivalent (ADR-063). Optional per ADR-052 §5: a client that receives none derives the identical value with `routeSortKey` in `@nextbus/core`.",

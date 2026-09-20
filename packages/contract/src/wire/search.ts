@@ -1,7 +1,7 @@
 // The compact on-device search index (ADR-037). See the three rules at the top of `primitives.ts`.
 
 import { z } from 'zod'
-import { BoundSchema, I18nTextSchema, OperatorIdSchema } from './primitives'
+import { BoundSchema, GmbRegionSchema, I18nTextSchema, OperatorIdSchema } from './primitives'
 
 /**
  * One searchable route, collapsed to a single record per (operator, route number, direction) —
@@ -16,6 +16,9 @@ export const RouteLiteSchema = z
     bound: BoundSchema,
     origin: I18nTextSchema,
     destination: I18nTextSchema,
+    region: GmbRegionSchema.optional().describe(
+      'GMB only, and **optional even there** — the region the public route number is unique within (ADR-176). Two minibus `1`s are two different routes; this is what tells them apart. Absent for KMB/CTB/LWB, whose numbers are already unique, and absent for a GMB route the committed `route_id` → region table has not met yet, because a route the table does not know must be *untagged*, never wrongly tagged.',
+    ),
     sortKey: z
       .string()
       .optional()

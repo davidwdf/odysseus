@@ -126,6 +126,32 @@ export const CATALOGUE = {
     'zh-Hant': '特快',
     'zh-Hans': '特快',
   },
+  // The three regions a green-minibus number is unique within (ADR-176). They tag a **search row**,
+  // not a filter chip: a rider looking at two minibus `1`s needs to know which is which, not a
+  // fourth axis to narrow by — and the axis would be dead for every KMB and Citybus route.
+  //
+  // **The postal short forms, not the full names, and that was measured rather than chosen.** The tag
+  // shares a row with a journey — "Kowloon Bay (Telford Gardens) → Sai Kung" — and at 390 px a
+  // 15-character *New Territories* pushed the destination off the row entirely, which is a bad trade:
+  // the tag exists to help a rider tell two `1`s apart, not to take away the other thing that did.
+  // `HK Island` / `Kowloon` / `NT` are what a Hong Kong postal address writes, so they are short
+  // *and* idiomatic; the `HKI`/`KLN`/`NT` codes the wire carries are neither, and never reach a screen.
+  // `港島` / `九龍` / `新界` are the ordinary HK words and are already two characters.
+  regionHki: {
+    en: 'HK Island',
+    'zh-Hant': '港島',
+    'zh-Hans': '港岛',
+  },
+  regionKln: {
+    en: 'Kowloon',
+    'zh-Hant': '九龍',
+    'zh-Hans': '九龙',
+  },
+  regionNt: {
+    en: 'NT',
+    'zh-Hant': '新界',
+    'zh-Hans': '新界',
+  },
   nearbyTitle: {
     en: 'Stops near you',
     'zh-Hant': '附近的車站',

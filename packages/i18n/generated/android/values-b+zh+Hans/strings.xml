@@ -21,6 +21,9 @@
 	<string name="filterNight">通宵</string>
 	<string name="filterAirport">机场</string>
 	<string name="filterExpress">特快</string>
+	<string name="regionHki">港岛</string>
+	<string name="regionKln">九龙</string>
+	<string name="regionNt">新界</string>
 	<string name="nearbyTitle">附近的车站</string>
 	<string name="noService">暂无班次</string>
 	<!-- {s} → %1$s -->

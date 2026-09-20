@@ -2,6 +2,53 @@
 
 > **Living handoff doc — update it at the end of each working session.**
 
+## 🔴 Snapshot 2026-09-20 (later) — the swap button was sending riders to a different route
+
+> **Shipped:** [ADR-177](./08-decision-log.md#adr-177--the-direction-toggle-resolved-a-minibus-by-its-number-and-sent-riders-to-another-region).
+> Reported from the app while reviewing the region tag: *"the swap/reverse direction button … my route
+> was shifting to HK Island from NT."* It was. `routeDocFor` matched the opposite bound on **operator +
+> number + opposite bound**, which is not unique for GMB, then tie-broke with `preferServiceType` — which
+> for GMB is comparing two *route ids*, since ADR-047 folds `route_id` into that slot. It therefore
+> picked the numerically lowest one, deterministically. **335 of 1,154 GMB route-directions flipped to a
+> different route.** Now matched on `gtfsId`, which *is* the route's identity: a minibus's two directions
+> are `route_seq` 1 and 2 of one `route_id`.
+>
+> **163 route-directions correctly lose their toggle**, and that was checked rather than assumed —
+> `data.etagmb.gov.hk/route-stop/<id>/2` is empty for them, so upstream has no return leg either. ADR-046
+> already held the rule: an absent `reverse` *is* the answer to "should there be a toggle". The old code
+> answered it with another route, which is the one answer a rider cannot audit.
+>
+> **The pattern, and it is the thing to carry:** both halves of this wave are *a minibus route number
+> treated as an identity* — Search collapsed two routes into one row's worth of information, the toggle
+> resolved one to the other. **The region tag is what made the second one legible**: the bug had been
+> shipping silently because "1 → 1" looks like a successful flip. `docs/07` carries a sweep for the rest.
+
+## 🔵 Snapshot 2026-09-20 — which `1` is this? A minibus route gets its region
+
+> **Shipped:** [ADR-176](./08-decision-log.md#adr-176--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table).
+> A green minibus `route_code` is only unique **within a region**, so `1` is The Peak ↔ Central on Hong
+> Kong Island *and* Sai Kung ↔ Kowloon Bay in the New Territories. Search drew those as two identical `1`
+> chips — across the live dataset, **114 (number, direction) groups spanning more than one region, 294
+> result rows.** ADR-047 solved the machine's half of this in 2026 by folding `route_id` into the
+> canonical id; the rider's half had been a `docs/07` follow-up ever since.
+>
+> The region now rides the whole vertical: a committed `route_id` → `HKI`/`KLN`/`NT` table →
+> `IndexRouteMeta` → `RouteLite` → a word on `SearchRouteRow` → a tag in `search.spec.json`, with a new
+> `minibusRegions` state that an injected defect confirmed bites.
+>
+> **Three things worth carrying forward.** (1) **Some upstream facts belong in the repo, not in a
+> fetch.** Learning the region costs 572 requests — more than a Worker's 50 subrequests, and more
+> failure surface than the daily build should take on for a fact that changes a few times a year. So
+> `pnpm gmb:regions:emit` crawls it deliberately and the result is committed, which is also what makes
+> `pnpm dev:edge`'s inline tier and production tag *the same routes*. It is **not** drift-gated, and the
+> asymmetry with the five emit-and-gate artefacts is the honest one: their source is this repo, its
+> source is a government API. (2) **A tag follows the field, not the operator** — `routeRow` asks whether
+> the index sent a `region`, never whether the operator is GMB, and the corpus asserts that as an *iff*
+> over every case, because the tempting implementation passes the new case and fails the old ones.
+> (3) **Region is deliberately not in the search index's collapse key**, tempting as it is: within one
+> region a number's variants run to different termini, and keying on region would show a rider *fewer*
+> routes to make a tag unnecessary.
+
 ## 🔵 Snapshot 2026-09-09 (later) — a quieter colour is a colour, not an opacity
 
 > **Shipped:** [ADR-163](./08-decision-log.md#adr-163--a-quieter-colour-is-a-colour-not-an-opacity-and-the-rails-chevrons-become-the-maps).

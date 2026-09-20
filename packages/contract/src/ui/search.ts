@@ -31,6 +31,28 @@ const CHIPS: SlotNode = {
     'Every operator the **index** carries, then the categories the mode filters by. Which operators exist is the index’s answer, not a hard-coded list (ADR-037), so a fifth operator’s chip appears the day its adapter lands — and a chip is never offered for an operator that cannot produce a result.',
 }
 
+/**
+ * The tag that says **which `1` this is** (ADR-176).
+ *
+ * A green-minibus route number is only unique within its region, so the index carries one and the
+ * model turns it into a word; on every KMB and Citybus row the field is simply absent, which is what
+ * `when` says here. It is declared on *every* list that draws route rows rather than on the one state
+ * that shows it, because a renderer that tagged search results and not recents would be showing a
+ * rider two different answers to the same question about the same route.
+ *
+ * **Its position is declared, and that is the point of declaring order at all**: it sits immediately
+ * after the number it qualifies, because the region is part of what the route is *called* rather than
+ * a trailing attribute of the row — and two `1`s are then compared down one column instead of two.
+ */
+const REGION_TAG: SlotNode = {
+  name: 'regionTag',
+  text: { field: 'region' },
+  when: 'region',
+  why: 'Absent for every operator whose numbers are already unique — and absent for a minibus route the region table has not met yet, because an untagged row is honest where a guessed one is not (ADR-176).',
+  invariant:
+    'A **word from the catalogue, never the wire code**: the model is handed the label (ADR-054), so neither renderer owns a three-way `HKI`/`KLN`/`NT` table and neither can drift from the other. It also never replaces the journey — the origin and destination stay, because two riders can want the same region and different ends.',
+}
+
 const KEYPAD: SlotNode[] = [
   {
     name: 'keypadLetters',
@@ -83,6 +105,7 @@ export const SEARCH_SPEC: ComponentSpec = {
             each: 'list.routes',
             of: [
               { name: 'routeNo', text: { field: 'routeNo' } },
+              REGION_TAG,
               {
                 name: 'origin',
                 text: { field: 'origin' },
@@ -94,6 +117,44 @@ export const SEARCH_SPEC: ComponentSpec = {
                 text: {
                   literal: '→',
                   why: 'The renderer supplies the glyph and the kernel supplies both ends. A direction marker rather than a word, so it is not in the catalogue — the same literal `StopRow` declares. It is its **own** node in both renderers, which they were changed to make true: `{origin} → ` as one string is a composition the kernel did not perform, and the projection would have had to spell it out to see it.',
+                },
+              },
+              { name: 'destination', text: { field: 'destination' } },
+            ],
+          },
+          ...KEYPAD,
+        ],
+      },
+    },
+
+    /**
+     * A minibus number that names two different routes — the state the tag exists for.
+     *
+     * `1` is a real green-minibus route on Hong Kong Island *and* a real one in the New Territories,
+     * and until ADR-176 Search drew them as two identical chips whose only difference was the pair of
+     * place names beside them. A rider who knows they want "the 1" knows which region they are
+     * standing in; they do not necessarily know its termini.
+     */
+    minibusRegions: {
+      must: 'Each minibus row tagged with the region its number is unique within, as a word.',
+      mustNot:
+        'Two rows a rider cannot tell apart — and equally, a tag on a route whose number is already unique, which would be a label that never varies and so says nothing.',
+      why: 'The identity quirk is ADR-047’s (`route_code` is unique per region, `route_id` globally), and it had been carried as a follow-up ever since: the canonical id disambiguates, the *screen* did not. ADR-176 closes it.',
+      enforcement: {
+        shows: [
+          CHIPS,
+          {
+            name: 'routes',
+            each: 'list.routes',
+            of: [
+              { name: 'routeNo', text: { field: 'routeNo' } },
+              REGION_TAG,
+              { name: 'origin', text: { field: 'origin' } },
+              {
+                name: 'journeyArrow',
+                text: {
+                  literal: '→',
+                  why: 'As in `content` — the renderer’s glyph, in its own node.',
                 },
               },
               { name: 'destination', text: { field: 'destination' } },
@@ -146,6 +207,7 @@ export const SEARCH_SPEC: ComponentSpec = {
             each: 'list.routes',
             of: [
               { name: 'routeNo', text: { field: 'routeNo' } },
+              REGION_TAG,
               { name: 'origin', text: { field: 'origin' } },
               {
                 name: 'journeyArrow',

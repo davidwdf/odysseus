@@ -198,6 +198,19 @@ the Worker has **no cron trigger and no `scheduled` handler**.
 **To exercise the KV path locally:** `pnpm dataset:publish --local`, then `pnpm dev:edge` — the
 same Miniflare state, so `/v1/health` should report `"dataset":"kv"`.
 
+### The one upstream fact the build does *not* fetch — GMB regions ([ADR-176](./08-decision-log.md#adr-176--a-green-minibus-route-number-needs-its-region-and-the-region-is-a-committed-table))
+
+```bash
+pnpm gmb:regions:emit   # crawl data.etagmb.gov.hk → packages/data-normalize/src/gmb-regions.generated.ts
+```
+A green minibus route number is only unique within its region, and learning which region costs **572
+requests** — too many for the Worker's inline tier (50 subrequests) and too much new failure surface
+for the daily build. So it is crawled **deliberately**, committed, and read identically by every tier.
+Takes ~20 s. Run it when a minibus route appears in Search with no region tag; a route the table has
+not met is untagged rather than mis-tagged, so a stale table is a missing label and never a wrong one.
+It is **not** drift-gated — unlike the five emit-and-gate artefacts, its source is a government API,
+and a gate that reached for the network would fail `pnpm test` whenever that API was down.
+
 ### Read `/v1/health` after every deploy
 ```bash
 curl "http://localhost:8787/v1/health"
