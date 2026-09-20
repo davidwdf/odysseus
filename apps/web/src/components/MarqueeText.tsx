@@ -61,7 +61,7 @@ export function MarqueeText({
   const inner = useRef<HTMLSpanElement | null>(null)
   const travelling = useRef<Animation | null>(null)
   const [overflow, setOverflow] = useState(0)
-  /** True only while a lap is actually running — the mask reads it. See `EDGE_FADE`. */
+  /** True while a lap is in flight — which is not the same as the name being displaced. See below. */
   const [running, setRunning] = useState(false)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the effect measures the DOM the text was just written into, so `children` is the trigger rather than a value it reads — re-measure whenever the name changes
@@ -142,6 +142,47 @@ export function MarqueeText({
     }
   }, [overflow])
 
+  /**
+   * **The leading fade is the displacement, not the animation's existence.**
+   *
+   * Switching the mask on when the animation was created was wrong in a way the owner spotted at once:
+   * a lap opens with a 1.4 s rest, so for that whole rest the name sat still at home with its first
+   * letter dimmed — a fade over nothing, which is the exact thing the mask was supposed to avoid. What
+   * the leading edge should say is *there is name to the left of here*, and that is true only in
+   * proportion to how far the text has actually moved.
+   *
+   * So while a lap runs, each frame reads the **real** translation off the element and sets the fade to
+   * it, capped at `LEAD_PX`. At home it is zero and the first letter is crisp; a few pixels in, the edge
+   * is soft. A `requestAnimationFrame` loop for the ten seconds a lap lasts is cheap, and it needs no
+   * registered custom property, no second animation to keep in step, and no arithmetic about phases —
+   * the matrix is the source of truth for where the text is.
+   */
+  useEffect(() => {
+    const outer = box.current
+    const node = inner.current
+    if (!running || outer === null || node === null) return
+    let frame = 0
+    const paint = () => {
+      // `m41` is the matrix's x translation. Negative while travelling; a bare sign flip rather than
+      // `Math.abs`, and a cap by comparison rather than `Math.min` — this is a mask width in pixels, and
+      // the derivation gate is right to want arithmetic that *decides* something to live in the kernel.
+      const shifted = new DOMMatrix(getComputedStyle(node).transform).m41
+      const travelled = shifted < 0 ? -shifted : shifted
+      const lead = travelled > LEAD_PX ? LEAD_PX : travelled
+      outer.style.maskImage = maskWith(lead)
+      outer.style.webkitMaskImage = maskWith(lead)
+      frame = requestAnimationFrame(paint)
+    }
+    frame = requestAnimationFrame(paint)
+    return () => {
+      cancelAnimationFrame(frame)
+      // Back to the resting mask: a trailing fade, because there is always more name off to the right of
+      // a box it does not fit in, and nothing at the leading edge, because the name starts there.
+      outer.style.maskImage = maskWith(0)
+      outer.style.webkitMaskImage = maskWith(0)
+    }
+  }, [running])
+
   if (overflow === 0) {
     return (
       <span ref={box} className={`block truncate ${className}`}>
@@ -158,8 +199,9 @@ export function MarqueeText({
       // fault; a fade reads as *there is more of this*. It is here rather than on every name because a
       // name that fits has no edge to soften — fading the last letter of a name that ends inside its box
       // would be a lie about it.
-      // The mask is only on while the name is moving — see `EDGE_FADE`.
-      style={running ? EDGE_FADE : REST_FADE}
+      // The resting mask. While a lap runs, the effect above rewrites the leading stop every frame from
+      // the name's real displacement — see its note.
+      style={REST_FADE}
       // **A touch brings the travel forward**, which is the owner's ask: a rider who wants the rest of a
       // name should not have to wait out the pause. `pointerdown` rather than `onClick`, deliberately —
       // this is not a control and must not become one. There is nothing here to operate: the animation
@@ -201,20 +243,15 @@ const END_HOLD_MS = 1600
 /** Ease into the travel and out of it; the plateau either side is what makes that readable. */
 const TRAVEL_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /**
- * The soft edges — **and the leading one exists only while the name is moving**.
+ * The soft edges. The **trailing** one is constant — there is always more name off to the right of a box
+ * the name does not fit in — and the **leading** one is a function of how far the name has travelled, so
+ * at home it is not there at all.
  *
- * The owner's worry, and he was right to have it: *"the mask is covering up the text when it's not
- * scrolling"*. At home the name begins exactly at the left edge, so a fade there dims its first letter to
- * hide nothing at all. The trailing edge is different — there is always more name off to the right of a
- * box the name does not fit in — so that fade is on whether it is moving or not.
- *
- * Two masks, then, switched on the animation's own state: a trailing fade at rest, both edges in motion.
- * `running` comes from the animation rather than from a timer, so the two cannot disagree about whether
- * the name is travelling.
+ * 8 px rather than the 10 it started at: the fade only has to say *this edge is a window, not the end of
+ * the word*, and a wide one at a small size reads as a blur on the letter rather than an edge.
  */
 const TRAIL_PX = 16
-const LEAD_PX = 10
-const REST_MASK = `linear-gradient(to right, black 0, black calc(100% - ${TRAIL_PX}px), transparent 100%)`
-const EDGE_MASK = `linear-gradient(to right, transparent 0, black ${LEAD_PX}px, black calc(100% - ${TRAIL_PX}px), transparent 100%)`
-const REST_FADE: React.CSSProperties = { maskImage: REST_MASK, WebkitMaskImage: REST_MASK }
-const EDGE_FADE: React.CSSProperties = { maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }
+const LEAD_PX = 8
+const maskWith = (lead: number) =>
+  `linear-gradient(to right, transparent 0, black ${lead}px, black calc(100% - ${TRAIL_PX}px), transparent 100%)`
+const REST_FADE: React.CSSProperties = { maskImage: maskWith(0), WebkitMaskImage: maskWith(0) }

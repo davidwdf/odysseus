@@ -364,6 +364,29 @@
 }
 
 /*
+  The context card's pane, whose **top edge moves between the two states** (ADR-175).
+
+  Open, the pane starts above the badge, because its first row is the back control's box; collapsed, it
+  starts below the badge, lapped by 6 px. That is a 35 px difference in the margin, and it used to be
+  applied in the frame the state changed — the box dropped to the pill's position and *then* animated its
+  size, which reads as a jump followed by an animation.
+
+  Only the margin is here. The width and the height are measured and animated by `useBoxFlip`, because
+  both states are content-sized and there is nothing for CSS to interpolate between; the margin is two
+  numbers this component already knows, so it is a transition and needs no measurement. The easing comes
+  in as a custom property so the same rule serves both directions.
+*/
+.card-morph {
+  transition: margin-top 500ms var(--morph-ease, ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-morph {
+    transition: none;
+  }
+}
+
+/*
   The expanded card's content, on its way out (ADR-174).
 
   It stays mounted for the length of the morph and is taken out of flow, so the box closing over it is

@@ -26,6 +26,15 @@ const ISLAND_LAP = 6
 const MORPH_MS = 500
 
 /**
+ * The two curves, restated from `useFlip` for the one property the hook cannot animate: the pane's own
+ * offset from the badge. Growing decelerates, shrinking accelerates (`docs/09 §5`), and the exit curve is
+ * the entrance curve mirrored through the diagonal — so the top edge arrives with the rest of the box
+ * rather than on a schedule of its own.
+ */
+const MORPH_EASE_IN = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const MORPH_EASE_OUT = 'cubic-bezier(0.64, 0, 0.78, 0)'
+
+/**
  * **The route's identity, floating over the map** — round 4 of the mockups, which was the owner's own
  * counter-proposal and the shape the design settled on (`docs/proposals/06 §8`).
  *
@@ -169,12 +178,21 @@ export function RouteContextCard({
 
         <div
           ref={card}
-          className={`glass-pane relative flex flex-col overflow-hidden border border-border ${
+          className={`card-morph glass-pane relative flex flex-col overflow-hidden border border-border ${
             collapsed
               ? 'max-w-full items-center gap-0 rounded-pill px-3 py-2'
               : 'w-full gap-2 rounded-sheet px-2 pt-0 pb-2'
           }`}
-          style={{ marginTop: collapsed ? -ISLAND_LAP : -(BADGE_TOP + BADGE_H) }}
+          // **The top edge travels with the box.** The pane starts *above* the badge when the card is
+          // open (its first row is the back control's box) and *below* it when collapsed, lapped by 6 px
+          // — a real 35 px difference, and it used to be applied in one frame: the box dropped to where
+          // the pill would sit and only then began to shrink. The owner saw it as a jump of "about
+          // 40 px", which is the number exactly. A transition on the margin, sharing the morph's duration
+          // and its direction-dependent easing, makes the top edge part of the same movement.
+          style={{
+            marginTop: collapsed ? -ISLAND_LAP : -(BADGE_TOP + BADGE_H),
+            ['--morph-ease' as string]: collapsed ? MORPH_EASE_OUT : MORPH_EASE_IN,
+          }}
         >
           {collapsed ? (
             // **`w-full min-w-0`, and both halves are load-bearing.** A flex item does not shrink below
